@@ -37,6 +37,7 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
     [ObservableProperty] private int _omittedCount;
     public string WorkspaceRoot { get; private set; } = "";
     public bool HasEntries => Entries.Count > 0;
+    public bool HasSelection => SelectedEntry is not null;
     public bool IsTruncated => OmittedCount > 0;
     public bool IsAttentionFilter => Filter == "Attention";
     public bool IsAllFilter => Filter == "All";
@@ -58,6 +59,7 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
 
     partial void OnSelectedEntryChanged(WorkspaceActivityEntry? value)
     {
+        OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(CanOpenSelected));
         OnPropertyChanged(nameof(CanOpenSelectedRelease));
         OnPropertyChanged(nameof(CanMuteSelected));

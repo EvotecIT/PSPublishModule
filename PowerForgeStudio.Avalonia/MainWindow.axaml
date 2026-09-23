@@ -397,26 +397,42 @@
               </StackPanel>
             </ScrollViewer>
           </Grid>
-          <ScrollViewer IsVisible="{Binding IsActivityPage}">
-            <StackPanel Spacing="14" DataContext="{Binding Activity}">
+          <ScrollViewer x:Name="ActivityInspectorScroll" IsVisible="{Binding IsActivityPage}">
+            <StackPanel Spacing="12" DataContext="{Binding Activity}">
               <TextBlock Text="Activity evidence" FontWeight="SemiBold" FontSize="16" />
-              <TextBlock Text="{Binding SelectedEntry.Project}" Foreground="#0865FF" TextWrapping="Wrap" />
-              <TextBlock Text="{Binding SelectedEntry.Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
-              <TextBlock Text="{Binding SelectedEntry.State}" />
-              <TextBlock Text="Detail" Classes="muted" />
-              <TextBlock Text="{Binding SelectedEntry.Detail}" TextWrapping="Wrap" />
-              <TextBlock Text="Provider" Classes="muted" />
-              <TextBlock Text="{Binding SelectedEntry.Provider}" />
-              <TextBlock Text="Observed" Classes="muted" />
-              <TextBlock Text="{Binding SelectedEntry.ObservedDisplay}" />
-              <TextBlock Text="Source" Classes="muted" />
-              <TextBlock Text="{Binding SelectedEntry.SourceDisplay}" ToolTip.Tip="{Binding SelectedEntry.Source}" FontSize="11" TextWrapping="Wrap" />
-              <Button Content="Open source" Command="{Binding OpenSelectedCommand}" IsEnabled="{Binding CanOpenSelected}" />
-              <Button Content="Hide for this session" Command="{Binding MuteSelectedCommand}" IsEnabled="{Binding CanMuteSelected}" />
+              <TextBlock Text="Select an activity item to inspect its source and next action." Classes="muted"
+                         TextWrapping="Wrap" IsVisible="{Binding !HasSelection}" />
+              <StackPanel Spacing="12" IsVisible="{Binding HasSelection}">
+                <Grid ColumnDefinitions="20,*" ColumnSpacing="8">
+                  <controls:StatusIcon IsError="{Binding SelectedEntry.IsCritical}" IsWarning="{Binding SelectedEntry.IsWarning}"
+                                       IsReview="{Binding SelectedEntry.IsReview}" Width="18" Height="18" VerticalAlignment="Top" />
+                  <TextBlock Grid.Column="1" Text="{Binding SelectedEntry.Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                </Grid>
+                <TextBlock Text="{Binding SelectedEntry.Project}" Foreground="#0865FF" TextWrapping="Wrap" />
+                <Border BorderBrush="#DDE5EF" BorderThickness="0,0,0,1" />
+                <Grid ColumnDefinitions="72,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="9">
+                  <TextBlock Text="Kind" Classes="muted" />
+                  <TextBlock Grid.Column="1" Text="{Binding SelectedEntry.Kind}" TextWrapping="Wrap" />
+                  <TextBlock Grid.Row="1" Text="State" Classes="muted" />
+                  <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedEntry.State}" TextWrapping="Wrap" />
+                  <TextBlock Grid.Row="2" Text="Provider" Classes="muted" />
+                  <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedEntry.Provider}" TextWrapping="Wrap" />
+                  <TextBlock Grid.Row="3" Text="Observed" Classes="muted" />
+                  <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedEntry.ObservedDisplay}" TextWrapping="Wrap" />
+                </Grid>
+                <Border BorderBrush="#DDE5EF" BorderThickness="0,0,0,1" />
+                <TextBlock Text="Detail" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding SelectedEntry.Detail}" TextWrapping="Wrap" />
+                <TextBlock Text="Source" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding SelectedEntry.SourceDisplay}" ToolTip.Tip="{Binding SelectedEntry.Source}"
+                           FontSize="11" TextWrapping="Wrap" />
+                <Button Content="Open source" Command="{Binding OpenSelectedCommand}" IsEnabled="{Binding CanOpenSelected}" />
+                <Button Content="Hide for this session" Command="{Binding MuteSelectedCommand}" IsEnabled="{Binding CanMuteSelected}" />
+                <Border Background="#FFF7E6" BorderBrush="#F4C96B" BorderThickness="1" CornerRadius="6" Padding="10">
+                  <TextBlock Text="Hiding changes only this local view. It never closes, resolves, reruns or acknowledges provider content." TextWrapping="Wrap" />
+                </Border>
+              </StackPanel>
               <Button Content="Restore hidden items" Command="{Binding RestoreMutedCommand}" IsVisible="{Binding HasMuted}" />
-              <Border Background="#FFF7E6" BorderBrush="#F4C96B" BorderThickness="1" CornerRadius="6" Padding="10">
-                <TextBlock Text="Hiding changes only this local view. It never closes, resolves, reruns or acknowledges provider content." TextWrapping="Wrap" />
-              </Border>
             </StackPanel>
           </ScrollViewer>
           <ScrollViewer IsVisible="{Binding IsStoragePage}">

@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using PowerForge;
@@ -217,11 +218,24 @@ public sealed class WorkspaceActivityTests
 
                 await model.Activity.RefreshAsync();
                 model.Activity.SelectedEntry = null;
+                Assert.False(model.Activity.HasSelection);
                 var compact = new MainWindow { DataContext = model, Width = 1050, Height = 720 };
                 compact.Show();
                 try
                 {
                     Capture(compact, "activity-attention-compact.png");
+                    var details = compact.FindControl<Button>("CompactContextButton")!;
+                    Assert.True(details.IsVisible);
+                    details.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Capture(compact, "activity-evidence-compact-empty.png");
+                    model.Activity.SelectedEntry = model.Activity.Entries[0];
+                    Assert.True(model.Activity.HasSelection);
+                    Capture(compact, "activity-evidence-compact-details.png");
+                    var inspectorScroll = compact.FindControl<ScrollViewer>("ActivityInspectorScroll")!;
+                    inspectorScroll.Offset = new global::Avalonia.Vector(0, inspectorScroll.Extent.Height);
+                    Capture(compact, "activity-evidence-compact-bottom.png");
+                    details.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    model.Activity.SelectedEntry = null;
                     var githubSource = model.Activity.Sources[1];
                     model.Activity.Sources[1] = githubSource with { State = "Authentication required" };
                     Capture(compact, "activity-auth-required-compact.png");
@@ -272,7 +286,7 @@ public sealed class WorkspaceActivityTests
             var now = DateTimeOffset.UtcNow;
             WorkspaceActivityEntry[] entries =
             [
-                Entry("ci", "PowerForge", "CI", "Critical", "Failed", "Release workflow failed", "Latest run exited with failure.", "GitHub", now, "https://github.com/EvotecIT/PSPublishModule/actions"),
+                Entry("ci", "PowerForge", "CI", "Critical", "Failed", "Release workflow failed", "The latest release workflow exited with failure after publishing its first artifact. Review the upstream run and reconcile any completed destination before retrying the remaining steps.", "GitHub", now, "https://github.com/EvotecIT/PSPublishModule/actions"),
                 Entry("schedule", "OfficeIMO", "Schedule", "Critical", "Failed", "Nightly release", "Last task result was 1.", "Windows Task Scheduler", now.AddMinutes(-8), null),
                 Entry("release", "Mailozaurr", "Release", "Warning", "Release Drift", "Release drift detected", "Local branch is ahead of the latest release.", "PowerForge portfolio", now.AddMinutes(-2), workspaceRoot),
                 Entry("issue", "PowerForge", "Issue", "Review", "Open", "#812 MSI release metadata", "Assigned issue awaiting action.", "GitHub", now.AddHours(-1), "https://github.com/EvotecIT/PSPublishModule/issues/812"),
