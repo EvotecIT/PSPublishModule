@@ -25,6 +25,7 @@ public sealed partial class GitChangesViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _read;
     private int _contextVersion, _diffVersion;
     private bool _disposed;
+    private DateTimeOffset? _observedAtUtc;
     private readonly Dictionary<string, string> _drafts = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private readonly Dictionary<string, string> _branchDrafts = new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     public ObservableCollection<GitChangeRow> Files { get; } = [];
@@ -38,10 +39,11 @@ public sealed partial class GitChangesViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _lastOperation = "";
     [ObservableProperty] private bool _isLoading;
     [ObservableProperty] private bool _isMutating;
+    [ObservableProperty] private bool _isStale;
     [ObservableProperty] private ProjectGitStatus? _snapshot;
     [ObservableProperty] private GitChangeRow? _selected;
     public bool HasSelection => Selected is not null;
-    public bool CanAct => !IsLoading && !IsMutating && Snapshot?.IsGitRepository == true && !_disposed;
+    public bool CanAct => !IsLoading && !IsMutating && !IsStale && Snapshot?.IsGitRepository == true && !_disposed;
     public bool CanStage => CanAct && Selected is { Staged: false };
     public bool CanUnstage => CanAct && Selected is { Staged: true };
     public bool CanCommit => CanAct && Snapshot is { StagedCount: > 0, HasConflicts: false } && !string.IsNullOrWhiteSpace(CommitMessage);
@@ -56,6 +58,7 @@ public sealed partial class GitChangesViewModel : ObservableObject, IDisposable
     }
     partial void OnIsLoadingChanged(bool value) => NotifyActions();
     partial void OnIsMutatingChanged(bool value) => NotifyActions();
+    partial void OnIsStaleChanged(bool value) => NotifyActions();
     partial void OnSnapshotChanged(ProjectGitStatus? value) => NotifyActions();
     partial void OnCommitMessageChanged(string value) => NotifyActions();
     partial void OnNewBranchNameChanged(string value) => NotifyActions();
@@ -70,7 +73,7 @@ public sealed partial class GitChangesViewModel : ObservableObject, IDisposable
             _drafts[Root] = CommitMessage;
             _branchDrafts[Root] = NewBranchName;
         }
-        Selected = null;
+        ClearSnapshot();
         Root = root;
         CommitMessage = _drafts.GetValueOrDefault(root, "");
         NewBranchName = _branchDrafts.GetValueOrDefault(root, "");
@@ -82,22 +85,24 @@ public sealed partial class GitChangesViewModel : ObservableObject, IDisposable
     public async Task RefreshAsync()
     {
         if (_disposed) return;
-        var selectedPath = Selected?.Path;
-        var selectedStaged = Selected?.Staged;
         var version = ++_contextVersion;
         _read?.Cancel();
         using var read = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _read = read;
-        Snapshot = null; Selected = null; Files.Clear(); Branches.Clear(); Diff = "Select a change to review.";
-        if (string.IsNullOrEmpty(Root)) { IsLoading = false; Status = "Select a working copy."; _read = null; return; }
+        if (string.IsNullOrEmpty(Root)) { ClearSnapshot(); IsLoading = false; Status = "Select a working copy."; _read = null; return; }
         var root = Root;
         IsLoading = true;
-        Status = "Reading Git status…";
+        Status = Snapshot is null ? "Reading Git status…"
+            : $"Refreshing Git state… showing the observation from {_observedAtUtc:yyyy-MM-dd HH:mm:ss} UTC.";
         try
         {
             var snapshot = await _git.GetStatusAsync(root, read.Token);
             if (_disposed || version != _contextVersion) return;
+            var selectedPath = Selected?.Path;
+            var selectedStaged = Selected?.Staged;
+            Selected = null;
             Snapshot = snapshot;
+            Files.Clear(); Branches.Clear(); Diff = "Select a change to review.";
             foreach (var branch in snapshot.Branches) Branches.Add(branch);
             SelectedBranch = snapshot.Branches.Contains(SelectedBranch, StringComparer.Ordinal)
                 ? SelectedBranch
@@ -108,13 +113,31 @@ public sealed partial class GitChangesViewModel : ObservableObject, IDisposable
             if (selectedPath is not null)
                 Selected = Files.FirstOrDefault(row => row.Staged == selectedStaged &&
                     string.Equals(row.Path, selectedPath, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+            _observedAtUtc = DateTimeOffset.UtcNow;
+            IsStale = false;
             Status = !snapshot.IsGitRepository ? "This folder is not a Git working copy."
                 : snapshot.HasConflicts ? "Merge conflicts need resolution before committing."
-                : $"{snapshot.BranchDisplay} · {snapshot.StatusSummary}";
+                : $"{snapshot.BranchDisplay} · {snapshot.StatusSummary} · observed {_observedAtUtc:yyyy-MM-dd HH:mm:ss} UTC";
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { if (version == _contextVersion) Status = StudioOutputSanitizer.Sanitize(ex.Message); }
+        catch (Exception ex)
+        {
+            if (version != _contextVersion) return;
+            IsStale = true;
+            var error = StudioOutputSanitizer.Sanitize(ex.Message);
+            Status = Snapshot is null ? error
+                : $"Git refresh failed; showing the observation from {_observedAtUtc:yyyy-MM-dd HH:mm:ss} UTC. {error}";
+        }
         finally { if (version == _contextVersion) { IsLoading = false; _read = null; } }
+    }
+
+    private void ClearSnapshot()
+    {
+        Snapshot = null;
+        Selected = null;
+        Files.Clear(); Branches.Clear(); Diff = "Select a change to review.";
+        _observedAtUtc = null;
+        IsStale = false;
     }
 
     private async Task LoadDiffAsync(GitChangeRow? row)

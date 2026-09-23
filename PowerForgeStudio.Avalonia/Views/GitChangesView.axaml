@@ -7,7 +7,10 @@
     <StackPanel Spacing="6">
       <TextBlock Text="Changes" FontSize="22" FontWeight="SemiBold" />
       <SelectableTextBlock Text="{Binding Root}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Root}" FontSize="12" />
-      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Status}" TextWrapping="Wrap" IsVisible="{Binding !IsStale}" />
+      <Border Background="#FFF4E5" BorderBrush="#F2D093" BorderThickness="1" CornerRadius="5" Padding="8,6" IsVisible="{Binding IsStale}">
+        <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Foreground="#8A4B0B" />
+      </Border>
     </StackPanel>
     <Expander Grid.Row="1" Header="Branch actions" IsExpanded="False">
     <Border Background="#F7F9FC" BorderBrush="#DCE3ED" BorderThickness="1" CornerRadius="6" Padding="10">
