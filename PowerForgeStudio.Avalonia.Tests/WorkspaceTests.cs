@@ -53,10 +53,10 @@ public sealed class WorkspaceTests
                 await model.OpenEntryAsync(build);
                 Assert.Equal(root, model.ActiveWorkingCopyRoot);
                 Assert.Equal(Path.Combine(root, "Build"), model.CurrentDirectory);
-                Assert.Equal("Project folder / Build", model.CurrentDirectoryDisplay);
+                Assert.Equal(Path.GetFileName(root) + " / " + model.Branch + " / Build", model.CurrentDirectoryDisplay);
                 await model.NavigateUpCommand.ExecuteAsync(null);
                 Assert.Equal(root, model.CurrentDirectory);
-                Assert.Equal("Project folder", model.CurrentDirectoryDisplay);
+                Assert.Equal(Path.GetFileName(root) + " / " + model.Branch, model.CurrentDirectoryDisplay);
                 // Exercise consecutive navigation requests and verify the winning folder.
                 await Task.WhenAll(model.SelectAsync(Assert.Single(checkout.Children, x => x.Name == "Build")), model.SelectAsync(checkout));
                 Assert.Equal(root, model.CurrentDirectory);

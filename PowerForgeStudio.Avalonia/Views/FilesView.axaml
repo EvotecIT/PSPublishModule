@@ -2,10 +2,12 @@
              xmlns:vm="using:PowerForgeStudio.Avalonia.ViewModels"
              xmlns:controls="using:PowerForgeStudio.Avalonia.Controls"
              x:Class="PowerForgeStudio.Avalonia.Views.FilesView" x:DataType="vm:WorkspaceViewModel">
-  <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="22,18">
-    <TextBlock Text="Files" Classes="heading" />
-    <TextBlock Grid.Row="1" Text="{Binding CurrentDirectoryDisplay}" Classes="muted" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CurrentDirectory}" Margin="0,9,0,13" />
-    <Border Grid.Row="2" Background="#F5F8FD" BorderBrush="#DDE7F3" BorderThickness="1" CornerRadius="7"
+  <Grid RowDefinitions="Auto,Auto,*" Margin="22,18">
+    <Grid ColumnDefinitions="20,*" ColumnSpacing="9" Margin="0,0,0,13" ToolTip.Tip="{Binding CurrentDirectory}">
+      <controls:ProjectIcon Kind="folder" Width="20" Height="20" />
+      <TextBlock Grid.Column="1" Text="{Binding CurrentDirectoryDisplay}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+    </Grid>
+    <Border Grid.Row="1" Background="#F5F8FD" BorderBrush="#DDE7F3" BorderThickness="1" CornerRadius="7"
             Padding="7,5" Margin="0,0,0,13" IsEnabled="{Binding CanManageFiles}" IsVisible="{Binding IsPreviewVisible}">
       <WrapPanel ItemSpacing="3" LineSpacing="3">
         <Button Classes="fileAction" Command="{Binding NavigateUpCommand}" IsEnabled="{Binding HasWorkingCopy}" ToolTip.Tip="Parent folder" AutomationProperties.Name="Parent folder">
@@ -43,7 +45,7 @@
         </Button>
       </WrapPanel>
     </Border>
-    <Grid Grid.Row="3" ColumnDefinitions="0.85*,14,1.15*">
+    <Grid Grid.Row="2" ColumnDefinitions="0.85*,14,1.15*">
       <Border Classes="card" IsVisible="{Binding IsPreviewVisible}">
         <Grid RowDefinitions="42,*">
           <Border Background="#F4F8FD" BorderBrush="#DDE7F3" BorderThickness="0,0,0,1" CornerRadius="7,7,0,0">

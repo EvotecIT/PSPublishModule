@@ -215,11 +215,14 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         get
         {
             if (!HasWorkingCopy) return "Choose a project";
-            if (string.IsNullOrEmpty(CurrentDirectory) || SamePath(CurrentDirectory, ActiveWorkingCopyRoot)) return "Project folder";
+            var project = string.IsNullOrWhiteSpace(ProjectName) ? Path.GetFileName(ActiveWorkingCopyRoot) : ProjectName;
+            var workingCopy = string.IsNullOrWhiteSpace(Branch) ? "Working copy" : Branch == "Local project" ? "Local files" : Branch;
+            var location = project + " / " + workingCopy;
+            if (string.IsNullOrEmpty(CurrentDirectory) || SamePath(CurrentDirectory, ActiveWorkingCopyRoot)) return location;
             var relative = Path.GetRelativePath(ActiveWorkingCopyRoot, CurrentDirectory).Replace('\\', '/');
             return relative == ".." || relative.StartsWith("../", StringComparison.Ordinal)
-                ? "Project folder"
-                : "Project folder / " + relative;
+                ? location
+                : location + " / " + relative;
         }
     }
     public bool CanManageFiles => HasWorkingCopy && !IsSelectionLoading && !IsFileOperationRunning;
@@ -249,6 +252,8 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CanManageFiles));
     }
     partial void OnCurrentDirectoryChanged(string value) => OnPropertyChanged(nameof(CurrentDirectoryDisplay));
+    partial void OnProjectNameChanged(string value) => OnPropertyChanged(nameof(CurrentDirectoryDisplay));
+    partial void OnBranchChanged(string value) => OnPropertyChanged(nameof(CurrentDirectoryDisplay));
     partial void OnIsFileOperationRunningChanged(bool value) { OnPropertyChanged(nameof(CanManageFiles)); NotifyEditorChanged(); }
     partial void OnIsSelectionLoadingChanged(bool value) { OnPropertyChanged(nameof(CanManageFiles)); NotifyEditorChanged(); }
     partial void OnSelectedFileChanged(FileItemViewModel? value)

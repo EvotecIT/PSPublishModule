@@ -38,6 +38,7 @@ public sealed class LocalProjectTreeTests
                 Assert.True(model.IsOverviewPage);
                 Assert.False(model.HasGitWorkingCopy);
                 Assert.Equal("Local project", model.Branch);
+                Assert.Equal("LocalBuild / Local files", model.CurrentDirectoryDisplay);
                 Assert.Equal("No Git working copy", model.GitSummary);
                 Assert.Equal(projectRoot, model.Build.WorkingCopyRoot);
                 Assert.True(model.Build.CanPlan);
