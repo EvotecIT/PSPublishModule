@@ -67,12 +67,12 @@ public sealed class ReleaseSigningHostSettingsResolver
     /// <summary>Uses a project-declared certificate when present, otherwise host settings.</summary>
     public ReleaseSigningHostSettings Resolve(ProjectBuildSigningConfiguration? project)
     {
-        if (string.IsNullOrWhiteSpace(project?.CertificateThumbprint))
+        if (project is null || string.IsNullOrWhiteSpace(project.CertificateThumbprint))
             return Resolve();
 
         return new ReleaseSigningHostSettings {
             IsConfigured = true,
-            Thumbprint = project.CertificateThumbprint.Trim(),
+            Thumbprint = project.CertificateThumbprint!.Trim(),
             StoreName = ValidatedStoreName(project.CertificateStore),
             TimeStampServer = TrimOrDefault(project.TimeStampServer, "http://timestamp.digicert.com"),
             ModulePath = ResolveModulePath()

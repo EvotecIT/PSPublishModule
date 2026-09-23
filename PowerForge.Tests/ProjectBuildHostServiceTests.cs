@@ -5,6 +5,14 @@ namespace PowerForge.Tests;
 public sealed class ProjectBuildHostServiceTests
 {
     [Fact]
+    public void LoadSigningConfiguration_PreservesNullPathContract()
+    {
+        var service = new ProjectBuildHostService();
+        var exception = Assert.Throws<ArgumentNullException>(() => service.LoadSigningConfiguration(null!));
+        Assert.Equal("configPath", exception.ParamName);
+    }
+
+    [Fact]
     public void Execute_WritesPlanAndUsesRequestedActionOverrides()
     {
         using var scope = new TemporaryDirectoryScope();

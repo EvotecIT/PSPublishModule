@@ -156,7 +156,7 @@ internal sealed class WingetSubmissionService
 
     private static string? FindPullRequestUrl(string? output)
     {
-        if (string.IsNullOrEmpty(output)) return null;
+        if (output is null || output.Length == 0) return null;
 
         const string prefix = "https://github.com/microsoft/winget-pkgs/pull/";
         var searchFrom = 0;
@@ -169,13 +169,14 @@ internal sealed class WingetSubmissionService
                 continue;
 
             var end = searchFrom;
-            while (end < output.Length && char.IsAsciiDigit(output[end]) && end - searchFrom < 15) end++;
+            while (end < output.Length && output[end] is >= '0' and <= '9' && end - searchFrom < 15) end++;
             if (end == searchFrom || end < output.Length &&
                 (char.IsLetterOrDigit(output[end]) || output[end] is '-' or '_'))
                 continue;
 
-            var number = output.AsSpan(searchFrom, end - searchFrom);
-            if (!long.TryParse(number, out var value) || value <= 0) continue;
+            var number = output.Substring(searchFrom, end - searchFrom);
+            if (!long.TryParse(number, System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out var value) || value <= 0) continue;
             return prefix + value.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
 
