@@ -42,9 +42,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
-          key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+          key: ${{ runner.os }}-nuget-publish-sdk-locked-v1-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
 
       - name: Restore focused test graph
         shell: pwsh
@@ -77,9 +75,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
-          key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+          key: ${{ runner.os }}-nuget-publish-sdk-locked-v1-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
 
       - name: Restore deep test graph
         shell: pwsh
