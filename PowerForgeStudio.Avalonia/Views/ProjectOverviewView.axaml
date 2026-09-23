@@ -19,8 +19,8 @@
       <WrapPanel ItemSpacing="8" LineSpacing="8">
         <Button Content="Build &amp; Run" Command="{ReflectionBinding DataContext.ShowBuildCommand, RelativeSource={RelativeSource AncestorType=Window}}" IsEnabled="{Binding HasProject}" Background="#0865FF" Foreground="White" />
         <Button Content="Files" Command="{ReflectionBinding DataContext.ShowFilesCommand, RelativeSource={RelativeSource AncestorType=Window}}" IsEnabled="{Binding HasProject}" />
-        <Button Content="Changes" Command="{ReflectionBinding DataContext.ShowChangesCommand, RelativeSource={RelativeSource AncestorType=Window}}" IsEnabled="{Binding HasProject}" />
-        <Button Content="GitHub" Command="{ReflectionBinding DataContext.ShowGitHubCommand, RelativeSource={RelativeSource AncestorType=Window}}" IsEnabled="{Binding HasProject}" />
+        <Button Content="Changes" Command="{ReflectionBinding DataContext.ShowChangesCommand, RelativeSource={RelativeSource AncestorType=Window}}" IsEnabled="{Binding HasGitWorkingCopy}" ToolTip.Tip="Requires a Git working copy" />
+        <Button Content="GitHub" Command="{ReflectionBinding DataContext.ShowGitHubCommand, RelativeSource={RelativeSource AncestorType=Window}}" IsEnabled="{Binding HasGitWorkingCopy}" ToolTip.Tip="Requires a Git working copy with a GitHub origin" />
         <Button Content="Releases" Command="{ReflectionBinding DataContext.ShowReleaseCommand, RelativeSource={RelativeSource AncestorType=Window}}" IsEnabled="{Binding HasProject}" />
         <Button Content="Open README" Command="{Binding OpenReadmeCommand}" IsEnabled="{Binding HasReadme}" />
       </WrapPanel>
@@ -29,7 +29,7 @@
         <StackPanel Spacing="4">
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
             <TextBlock Text="{Binding WorkspaceKind}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" IsVisible="{Binding HasGitWorkingCopy}">
               <TextBlock Text="Working copies" Classes="muted" FontSize="12" />
               <TextBlock Text="{Binding WorkingCopyCount}" FontWeight="SemiBold" FontSize="12" />
             </StackPanel>

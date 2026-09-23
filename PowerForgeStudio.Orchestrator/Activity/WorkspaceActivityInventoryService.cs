@@ -5,7 +5,6 @@ using PowerForgeStudio.Domain.Hub;
 using PowerForgeStudio.Domain.Portfolio;
 using PowerForgeStudio.Orchestrator.Automation;
 using PowerForgeStudio.Orchestrator.Catalog;
-using PowerForgeStudio.Orchestrator.Git;
 using PowerForgeStudio.Orchestrator.Hub;
 using PowerForgeStudio.Orchestrator.Host;
 using PowerForgeStudio.Orchestrator.Portfolio;
@@ -87,19 +86,20 @@ public sealed class WorkspaceActivityInventoryService : IWorkspaceActivityInvent
 
         var automationTask = InspectAutomationsSafelyAsync(root, cancellationToken);
         var journalTask = InspectReleaseJournalSafelyAsync(root, cancellationToken);
-        var entries = await Task.Run(() => _catalog.Scan(root), cancellationToken).ConfigureAwait(false);
+        var entries = await Task.Run(() => WorkspaceRepositorySource.Discover(root, _catalog, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         var managed = entries.Where(static entry => entry.IsReleaseManaged).ToArray();
         var managedPortfolio = await _portfolio.BuildPortfolioAsync(managed, cancellationToken).ConfigureAwait(false);
         // Ordinary repositories are eligible for GitHub evidence too. Avoid a full Git status scan over
         // every project merely to order the bounded remote probe; inspect only selected candidates.
         var unmanagedCandidates = entries.Where(static entry => !entry.IsReleaseManaged
-                && GitRepositoryOwnership.HasOwnWorkingCopy(entry.RootPath))
+                && WorktreeDetector.IsGitRepository(entry.RootPath))
             .Select(static entry => new RepositoryPortfolioItem(entry,
                 new RepositoryGitSnapshot(false, null, null, 0, 0, 0, 0),
                 new RepositoryReadiness(RepositoryReadinessKind.Blocked, "No release contract detected.")));
         var priorityOrder = PrioritizeGitHubProbes(root, managedPortfolio
-            .Where(static item => GitRepositoryOwnership.HasOwnWorkingCopy(item.RootPath))
+            .Where(static item => WorktreeDetector.IsGitRepository(item.RootPath))
             .Concat(unmanagedCandidates).ToArray());
         var selectedUnmanaged = priorityOrder.Take(options.MaxGitHubRepositories)
             .Where(static item => !item.Repository.IsReleaseManaged)

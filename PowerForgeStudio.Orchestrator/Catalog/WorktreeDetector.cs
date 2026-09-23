@@ -37,7 +37,7 @@ public static class WorktreeDetector
 
     /// <summary>
     /// Returns true if the directory has a .git entry (either directory or file).
-    /// Use this to filter out non-git directories from project lists.
+    /// Use this to keep Git-only operations scoped to a folder's own working copy.
     /// </summary>
     public static bool IsGitRepository(string directoryPath)
     {

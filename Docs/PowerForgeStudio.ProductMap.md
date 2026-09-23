@@ -8,7 +8,9 @@ At compact widths, Details temporarily shows the same context panel in place of 
 
 ## Navigation model
 
-The left rail is workspace-wide. Project tabs are scoped to the selected working copy. A rail entry must never silently behave like a project tab.
+The left rail is workspace-wide. Project tabs are scoped to the selected project folder. A rail entry must never silently behave like a project tab.
+
+The tree discovers immediate Git checkouts and folders with a supported PowerForge build contract, including local JSON or PowerShell projects before they have Git metadata. A selected local project keeps Files, Build & Run and release planning available. Changes, History and project GitHub require a Git working copy and are disabled until one exists; workspace Activity still separates local build evidence from GitHub evidence.
 
 | Scope | Entry | Purpose | Main owner |
 |---|---|---|---|
@@ -31,9 +33,9 @@ Projects in the rail returns to the selected project's Overview. It remains high
 
 Releases distinguishes submission from verified availability. WinGet shows a receipt for each attempted package command, including its package ID, version, manifest and command outcome. When Studio captures a recognized `microsoft/winget-pkgs` pull-request URL from WinGetCreate output, the receipt retains a safe Open PR action for reviewing upstream progress. Interactive authentication keeps the console attached for prompts, so Studio cannot capture its PR URL; use the upstream repository to find that submission. A failed command requires external reconciliation before retrying, even when it is the first package attempted. A successful command or open PR does not prove upstream manifest acceptance or catalog availability, so verification remains incomplete until that evidence can be checked.
 
-The title-bar field is a Ctrl+K repository jump over the loaded workspace catalog. It shows bounded matching repositories without changing the sidebar tree while typing; choosing one clears any tree filter and opens that project's Overview. The sidebar field only filters project names in the tree. The title-bar field does not search files, commits, issues or remote providers.
+The title-bar field is a Ctrl+K project jump over the loaded workspace catalog. It shows bounded matching projects without changing the sidebar tree while typing; choosing one clears any tree filter and opens that project's Overview. The sidebar field only filters project names in the tree. The title-bar field does not search files, commits, issues or remote providers.
 
-The Changed tree chip performs an explicit read-only local Git scan over primary checkouts and registered worktrees. The completed observation filters project groups and shows its UTC time plus any working copies that could not be inspected. A refresh keeps the previous result visible until the new scan completes. It does not fetch remotes, measure workspace storage or classify a worktree as safe to remove.
+The Changed tree chip performs an explicit read-only local Git scan over primary checkouts and registered worktrees. It is unavailable when the catalog contains only local build folders without Git. The completed observation filters project groups and shows its UTC time plus any Git working copies that could not be inspected. A refresh keeps the previous result visible until the new scan completes. It does not fetch remotes, measure workspace storage or classify a worktree as safe to remove.
 
 Archiving a project is reversible machine-local tree organization. It records the repository root in the existing workspace JSON and moves the project under a counted Archived group. It does not move, delete, clean or rewrite repository content. Restoring returns the project to the active groups and preserves its favorite state.
 

@@ -171,6 +171,7 @@ public sealed class WorkspaceActivityTests
                 Assert.True(model.Activity.IsAttentionFilter);
                 Assert.True(model.IsActivityRailSelected);
 
+                await model.SelectAsync(Assert.Single(model.Projects));
                 model.ShowChangesCommand.Execute(null);
                 Assert.True(model.IsProjectRoute);
                 model.ShowBuildCommand.Execute(null);

@@ -13,12 +13,12 @@
       </StackPanel>
       <Border Classes="card" Padding="10,7">
         <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*" ColumnSpacing="9" RowSpacing="3">
-          <TextBlock Text="Working copy" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+          <TextBlock Text="Project folder" Classes="muted" FontSize="11" VerticalAlignment="Center" />
           <SelectableTextBlock Grid.Column="1" Text="{Binding WorkingCopyRoot}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding WorkingCopyRoot}" FontSize="12" />
           <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Status}" TextWrapping="Wrap" />
         </Grid>
       </Border>
-      <TextBlock Text="Save or discard this working copy's drafts before inspecting or building. Build commands use files on disk." IsVisible="{Binding HasUnsavedChanges}" Foreground="#B45309" TextWrapping="Wrap" />
+      <TextBlock Text="Save or discard this project's drafts before inspecting or building. Build commands use files on disk." IsVisible="{Binding HasUnsavedChanges}" Foreground="#B45309" TextWrapping="Wrap" />
       <Border Background="#EEF4FF" CornerRadius="6" Padding="10,7" IsVisible="{Binding ShowBuildContractSection}">
         <TextBlock Text="{Binding PlanningNotice}" TextWrapping="Wrap" Foreground="#263E67" FontSize="12" />
       </Border>
@@ -124,19 +124,19 @@
         <StackPanel Spacing="8">
           <TextBlock x:Name="TaskResultHeading" Text="Task run" FontSize="18" FontWeight="SemiBold" />
           <TextBlock Text="{Binding TaskStatus}" TextWrapping="Wrap" />
-          <TextBlock Text="Captured working copy" Classes="muted" FontSize="11" />
+          <TextBlock Text="Captured project folder" Classes="muted" FontSize="11" />
           <SelectableTextBlock Text="{Binding TaskRoot}" TextWrapping="Wrap" FontSize="12" />
           <ProgressBar IsVisible="{Binding IsTaskRunning}" IsIndeterminate="True" Height="3" />
           <Button Content="Cancel task" Command="{Binding CancelTaskCommand}" IsVisible="{Binding IsTaskRunning}" HorizontalAlignment="Left" />
           <SelectableTextBlock Text="{Binding TaskOutput}" FontFamily="Cascadia Code, Consolas, monospace" FontSize="12" TextWrapping="Wrap" />
         </StackPanel>
       </Border>
-      <TextBlock Text="Studio requests a build with publishing disabled. JSON-backed PowerForge builds enforce this; project scripts and build hooks execute code and may ignore switches or have external effects. Changing projects leaves an active build running; its working copy is shown below." Classes="muted" TextWrapping="Wrap" IsVisible="{Binding ShowBuildContractSection}" />
+      <TextBlock Text="Studio requests a build with publishing disabled. JSON-backed PowerForge builds enforce this; project scripts and build hooks execute code and may ignore switches or have external effects. Changing projects leaves an active build running; its project folder is shown below." Classes="muted" TextWrapping="Wrap" IsVisible="{Binding ShowBuildContractSection}" />
       <Border IsVisible="{Binding HasBuild}" BorderBrush="#DDE5EF" BorderThickness="1" CornerRadius="6" Padding="14">
         <StackPanel Spacing="10">
           <TextBlock x:Name="BuildResultHeading" Text="Build result" FontSize="18" FontWeight="SemiBold" />
           <TextBlock Text="{Binding BuildStatus}" TextWrapping="Wrap" />
-          <TextBlock Text="Captured working copy" Classes="muted" FontSize="11" />
+          <TextBlock Text="Captured project folder" Classes="muted" FontSize="11" />
           <SelectableTextBlock Text="{Binding BuildRoot}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding BuildRoot}" FontSize="12" />
           <ProgressBar IsVisible="{Binding IsBuilding}" IsIndeterminate="True" Height="3" />
           <Button Content="Cancel build" Command="{Binding CancelBuildCommand}" IsVisible="{Binding IsBuilding}" HorizontalAlignment="Left" />

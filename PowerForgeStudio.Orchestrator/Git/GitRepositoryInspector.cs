@@ -1,5 +1,6 @@
 using PowerForge;
 using PowerForgeStudio.Domain.Portfolio;
+using PowerForgeStudio.Orchestrator.Catalog;
 
 namespace PowerForgeStudio.Orchestrator.Git;
 
@@ -24,7 +25,7 @@ public sealed class GitRepositoryInspector
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryRoot);
 
-        if (!GitRepositoryOwnership.HasOwnWorkingCopy(repositoryRoot))
+        if (!WorktreeDetector.IsGitRepository(repositoryRoot))
         {
             return new RepositoryGitSnapshot(false, null, null, 0, 0, 0, 0);
         }

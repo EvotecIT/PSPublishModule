@@ -1,5 +1,5 @@
 using PowerForge;
-using PowerForgeStudio.Orchestrator.Git;
+using PowerForgeStudio.Orchestrator.Catalog;
 
 namespace PowerForgeStudio.Orchestrator.Portfolio;
 
@@ -19,7 +19,7 @@ internal sealed class GitRemoteResolver : IGitRemoteResolver
 
     public async Task<string?> ResolveOriginUrlAsync(string repositoryRoot, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(repositoryRoot) || !GitRepositoryOwnership.HasOwnWorkingCopy(repositoryRoot))
+        if (string.IsNullOrWhiteSpace(repositoryRoot) || !WorktreeDetector.IsGitRepository(repositoryRoot))
         {
             return null;
         }

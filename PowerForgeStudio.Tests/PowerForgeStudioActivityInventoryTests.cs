@@ -4,6 +4,7 @@ using PowerForge;
 using PowerForgeStudio.Domain.Activity;
 using PowerForgeStudio.Domain.Automation;
 using PowerForgeStudio.Domain.Hub;
+using PowerForgeStudio.Domain.Portfolio;
 using PowerForgeStudio.Domain.Queue;
 using PowerForgeStudio.Orchestrator.Activity;
 using PowerForgeStudio.Orchestrator.Automation;
@@ -97,11 +98,42 @@ public sealed class PowerForgeStudioActivityInventoryTests
 
             var snapshot = await service.InspectAsync(root, new WorkspaceActivityOptions(1, 1, 50));
 
-            Assert.Equal(2, snapshot.RepositoryCount);
+            Assert.Equal(1, snapshot.RepositoryCount);
             Assert.NotEmpty(requests);
             Assert.All(requests, path => Assert.Contains("/repos/EvotecIT/Beta", path, StringComparison.Ordinal));
             Assert.Contains(snapshot.Entries, entry => entry.Kind == "Issue" && entry.Project == "Beta");
             Assert.Equal("Available", Assert.Single(snapshot.Sources, source => source.Provider == "GitHub").State);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public async Task InspectAsync_LocalBuildProjectDoesNotRaiseGitGuardWarning()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(),
+            "studio-activity-local-build-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var project = Directory.CreateDirectory(Path.Combine(root, "LocalBuild")).FullName;
+            var build = Directory.CreateDirectory(Path.Combine(project, "Build")).FullName;
+            await File.WriteAllTextAsync(Path.Combine(build, "project.build.json"), "{}");
+            using var http = new HttpClient(new StubHttpMessageHandler(_ => throw new InvalidOperationException("No HTTP expected.")))
+                { BaseAddress = new Uri("https://api.github.com") };
+            using var service = new WorkspaceActivityInventoryService(
+                new RepositoryCatalogScanner(), new RepositoryPortfolioService(),
+                new GitHubInboxService(http, new StubGitRemoteResolver(null)),
+                new RepositoryReleaseDriftService(), new RepositoryReleaseInboxService(),
+                new FakeAutomationInventory(), new FakeGitHubProjectService(),
+                new ReleaseHistoryService(Path.Combine(root, "history.db")));
+
+            var snapshot = await service.InspectAsync(root, new WorkspaceActivityOptions(0, 0, 50));
+            var portfolio = Assert.Single(await new RepositoryPortfolioService().BuildPortfolioAsync(
+                await new WorkspaceRepositorySource().DiscoverAsync(root)));
+
+            Assert.Equal(1, snapshot.RepositoryCount);
+            Assert.Equal(RepositoryReadinessKind.Ready, portfolio.ReadinessKind);
+            Assert.Empty(portfolio.Git.GitDiagnostics);
+            Assert.DoesNotContain(snapshot.Entries, entry => entry.Project == "LocalBuild" && entry.Provider == "PowerForge portfolio");
         }
         finally { Directory.Delete(root, recursive: true); }
     }

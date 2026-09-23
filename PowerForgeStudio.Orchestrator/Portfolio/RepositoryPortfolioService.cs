@@ -1,5 +1,6 @@
 using PowerForgeStudio.Domain.Catalog;
 using PowerForgeStudio.Domain.Portfolio;
+using PowerForgeStudio.Orchestrator.Catalog;
 using PowerForgeStudio.Orchestrator.Git;
 
 namespace PowerForgeStudio.Orchestrator.Portfolio;
@@ -33,7 +34,11 @@ public sealed class RepositoryPortfolioService
             cancellationToken.ThrowIfCancellationRequested();
             var gitSnapshot = await _gitRepositoryInspector.InspectAsync(entry.RootPath, cancellationToken)
                 .ConfigureAwait(false);
-            var gitDiagnostics = _gitPreflightService.Assess(entry, gitSnapshot);
+            // A build-enabled local folder has no Git contract. Keep a broken Git checkout
+            // diagnostic, but do not turn an intentionally local project into a Git warning.
+            var gitDiagnostics = WorktreeDetector.IsGitRepository(entry.RootPath)
+                ? _gitPreflightService.Assess(entry, gitSnapshot)
+                : [];
             gitSnapshot = gitSnapshot with {
                 Diagnostics = gitDiagnostics
             };
@@ -69,7 +74,9 @@ public sealed class RepositoryPortfolioService
 
         if (!gitSnapshot.IsGitRepository)
         {
-            return new RepositoryReadiness(RepositoryReadinessKind.Blocked, "Git metadata unavailable.");
+            return WorktreeDetector.IsGitRepository(entry.RootPath)
+                ? new RepositoryReadiness(RepositoryReadinessKind.Blocked, "Git metadata unavailable.")
+                : new RepositoryReadiness(RepositoryReadinessKind.Ready, "Local build project; Git workflows are unavailable.");
         }
 
         var blockedDiagnostic = gitSnapshot.GitDiagnostics.FirstOrDefault(diagnostic => diagnostic.Severity == RepositoryGitDiagnosticSeverity.Blocked);

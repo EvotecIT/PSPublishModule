@@ -2,7 +2,7 @@ using PowerForgeStudio.Domain.Catalog;
 
 namespace PowerForgeStudio.Orchestrator.Catalog;
 
-/// <summary>Asynchronous repository discovery for a selected workspace or single checkout.</summary>
+/// <summary>Asynchronous project discovery for a workspace, checkout, or build-enabled local folder.</summary>
 public interface IWorkspaceRepositorySource
 {
     Task<IReadOnlyList<RepositoryCatalogEntry>> DiscoverAsync(string root, CancellationToken cancellationToken = default);
@@ -13,11 +13,25 @@ public sealed class WorkspaceRepositorySource : IWorkspaceRepositorySource
     public Task<IReadOnlyList<RepositoryCatalogEntry>> DiscoverAsync(string root, CancellationToken cancellationToken = default)
         => Task.Run<IReadOnlyList<RepositoryCatalogEntry>>(() =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!Directory.Exists(root)) throw new DirectoryNotFoundException(root);
-            var scanner = new RepositoryCatalogScanner();
-            return WorktreeDetector.IsGitRepository(root)
-                ? [scanner.InspectRepository(root, cancellationToken: cancellationToken)]
-                : scanner.Scan(root, cancellationToken).Where(entry => WorktreeDetector.IsGitRepository(entry.RootPath)).ToArray();
+            return Discover(root, new RepositoryCatalogScanner(), cancellationToken);
         }, cancellationToken);
+
+    internal static IReadOnlyList<RepositoryCatalogEntry> Discover(string root, RepositoryCatalogScanner scanner,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!Directory.Exists(root)) throw new DirectoryNotFoundException(root);
+        if (WorktreeDetector.IsGitRepository(root))
+            return [scanner.InspectRepository(root, cancellationToken: cancellationToken)];
+        // A workspace can contain many child projects. Do not mistake one child's Build folder
+        // for a build contract owned by the workspace root itself.
+        var rootEntry = scanner.InspectRepository(root, includeImmediateChildBuildFolders: false,
+            cancellationToken: cancellationToken);
+        return rootEntry.IsReleaseManaged
+            ? [rootEntry]
+            : scanner.Scan(root, cancellationToken).Where(IsDiscoverableProject).ToArray();
+    }
+
+    internal static bool IsDiscoverableProject(RepositoryCatalogEntry entry)
+        => entry.IsReleaseManaged || WorktreeDetector.IsGitRepository(entry.RootPath);
 }

@@ -2,6 +2,7 @@ using PowerForge;
 using PowerForgeStudio.Domain.Catalog;
 using PowerForgeStudio.Domain.Hub;
 using PowerForgeStudio.Domain.Workspace;
+using PowerForgeStudio.Orchestrator.Catalog;
 using PowerForgeStudio.Orchestrator.Hub;
 
 namespace PowerForgeStudio.Orchestrator.Workspace;
@@ -68,6 +69,8 @@ public sealed class WorkspaceProjectChangeService : IWorkspaceProjectChangeServi
     {
         var copies = new List<WorkspaceWorkingCopyChange>();
         var unavailable = new HashSet<string>(comparer);
+        if (!WorktreeDetector.IsGitRepository(project.RootPath))
+            return new(project.RootPath, copies, unavailable.ToArray());
         try
         {
             var primary = await ReadChangeCountAsync(project.RootPath, cancellationToken).ConfigureAwait(false);

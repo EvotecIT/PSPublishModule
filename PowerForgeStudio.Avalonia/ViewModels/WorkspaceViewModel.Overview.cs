@@ -68,8 +68,8 @@ public sealed partial class WorkspaceViewModel
         {
             var git = await _git.GetStatusAsync(root, _lifetime.Token);
             if (!IsActiveOverviewRoot(root)) return;
-            Branch = git.BranchDisplay;
-            GitSummary = git.IsGitRepository ? git.StatusSummary : "Git status unavailable";
+            Branch = git.IsGitRepository ? git.BranchDisplay : "Local project";
+            GitSummary = git.IsGitRepository ? git.StatusSummary : "No Git working copy";
             UpdateGitDecorations(root, git);
             Overview.SetProject(catalogEntry, root, git);
             await Overview.RefreshAsync();

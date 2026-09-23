@@ -16,7 +16,7 @@
             <TextBlock Grid.Column="1" Text="{Binding Stage}" FontWeight="SemiBold" TextWrapping="Wrap" />
           </Grid>
           <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
-          <TextBlock Text="Captured working copy" Classes="muted" FontSize="11" />
+          <TextBlock Text="Captured project folder" Classes="muted" FontSize="11" />
           <SelectableTextBlock Text="{Binding BuildRoot}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding BuildRoot}" FontSize="11" />
         </StackPanel>
       </Border>

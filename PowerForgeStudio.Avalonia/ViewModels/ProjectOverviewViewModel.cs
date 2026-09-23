@@ -39,6 +39,8 @@ public sealed partial class ProjectOverviewViewModel : ObservableObject, IDispos
     [ObservableProperty] private string _status = "Select a project to open its overview.";
     [ObservableProperty] private string _output = "Project overview has not run.";
     public bool HasProject => _repository is not null;
+    public bool HasGitWorkingCopy => _git?.IsGitRepository == true;
+    public string WorkingCopyLabel => HasGitWorkingCopy ? "Working copy" : "Workspace type";
     public bool HasReadme => !string.IsNullOrWhiteSpace(ReadmePath);
     public bool HasWarnings => Warnings.Count > 0;
 
@@ -67,7 +69,7 @@ public sealed partial class ProjectOverviewViewModel : ObservableObject, IDispos
         WorkingCopyRoot = root;
         ProjectName = repository.Name;
         ProjectKind = repository.RepositoryKind.ToString();
-        WorkspaceKind = repository.WorkspaceKind.ToString();
+        WorkspaceKind = git.IsGitRepository ? repository.WorkspaceKind.ToString() : "Local project";
         ApplyGit(git);
         Purpose = "Refresh the overview to read bounded project metadata.";
         ReadmePath = "";
@@ -85,6 +87,7 @@ public sealed partial class ProjectOverviewViewModel : ObservableObject, IDispos
         _inspection?.Cancel();
         _repository = null;
         _git = null;
+        NotifyGitContext();
         WorkingCopyRoot = "";
         ProjectName = "Select a project";
         ProjectKind = "Unclassified";
@@ -195,10 +198,17 @@ public sealed partial class ProjectOverviewViewModel : ObservableObject, IDispos
 
     private void ApplyGit(ProjectGitStatus git)
     {
-        Branch = git.BranchDisplay;
-        GitState = git.IsGitRepository ? git.StatusSummary : "Git metadata unavailable";
+        Branch = git.IsGitRepository ? git.BranchDisplay : "Local project";
+        GitState = git.IsGitRepository ? git.StatusSummary : "No Git working copy";
         AheadBehind = git.AheadBehindDisplay;
         WorkingCopyCount = Math.Max(1, git.Worktrees.Count);
+        NotifyGitContext();
+    }
+
+    private void NotifyGitContext()
+    {
+        OnPropertyChanged(nameof(HasGitWorkingCopy));
+        OnPropertyChanged(nameof(WorkingCopyLabel));
     }
 
     public void Dispose()

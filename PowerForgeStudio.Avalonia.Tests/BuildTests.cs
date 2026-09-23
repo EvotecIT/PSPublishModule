@@ -59,7 +59,7 @@ public sealed class BuildTests
                 RepositoryPlanStatus.Succeeded, "Old result", null, 0, 0)]);
             await pending;
             Assert.Empty(model.Results);
-            Assert.Equal("Ready to inspect and plan this working copy.", model.Status);
+        Assert.Equal("Ready to inspect and plan this project.", model.Status);
             Assert.False(model.IsBusy);
         }
         finally

@@ -145,120 +145,127 @@ public sealed class GitHubWorkspaceTests
     [Fact]
     public async Task ShellRendersDiscussionAndFailedChecksAtWideAndCompactSizes()
     {
-        await TestAppBuilder.RunAsync(async () =>
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(),
+            "studio-github-shell-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
         {
-            var service = new FakeGitHub();
-            using var workspace = new WorkspaceViewModel(Path.GetTempPath(), gitHub: service);
-            workspace.ProjectName = "PowerForge";
-            workspace.ActiveWorkingCopyRoot = Path.GetTempPath();
-            workspace.ShowGitHubCommand.Execute(null);
-            await workspace.GitHub.RefreshAsync();
-            workspace.GitHub.Selected = workspace.GitHub.Items[0];
-            await workspace.GitHub.SelectionLoad;
-            Assert.False(workspace.IsFilesPage); Assert.True(workspace.IsGitHubPage);
-            Assert.Equal(40, workspace.GitHub.HeadSha.Length);
-            Assert.True(Assert.Single(workspace.GitHub.Checks).IsFailure);
-            Assert.Contains("1 need attention", workspace.GitHub.ChecksStatus);
-            var window = new MainWindow { DataContext = workspace, Width = 1600, Height = 1000 };
-            window.Show();
-            try
+            Assert.True((await new PowerForge.GitClient().RunRawAsync(root, ["init", "-b", "main"])).Succeeded);
+            await TestAppBuilder.RunAsync(async () =>
             {
-                foreach (var compact in new[] { false, true })
-                {
-                    window.Width = compact ? 1050 : 1600; window.Height = compact ? 700 : 1000;
-                    window.UpdateLayout(); Dispatcher.UIThread.RunJobs();
-                    using var frame = window.CaptureRenderedFrame(); Assert.NotNull(frame);
-                    var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
-                    if (!string.IsNullOrWhiteSpace(output))
-                    {
-                        Directory.CreateDirectory(output);
-                        frame.Save(Path.Combine(output, compact ? "workspace-github-compact.png" : "workspace-github.png"), PngBitmapEncoderOptions.Default);
-                    }
-                    var actionPanel = Assert.Single(window.GetVisualDescendants().OfType<Expander>(),
-                        panel => panel.Name == "ReviewActionPanel");
-                    Assert.False(actionPanel.IsExpanded);
-                    Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(),
-                        block => block.Text == "Checks at PR head" && block.IsEffectivelyVisible);
-                    if (compact)
-                    {
-                        actionPanel.IsExpanded = true;
-                        window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-                        Assert.Contains(actionPanel.GetVisualDescendants().OfType<TextBox>(),
-                            box => box.PlaceholderText == "Comment or review summary" && box.IsEffectivelyVisible);
-                        using var actionFrame = window.CaptureRenderedFrame(); Assert.NotNull(actionFrame);
-                        if (!string.IsNullOrWhiteSpace(output)) actionFrame.Save(Path.Combine(output, "workspace-github-action-form-compact.png"), PngBitmapEncoderOptions.Default);
-                        actionPanel.IsExpanded = false;
-                    }
-                }
-                workspace.GitHub.SelectedAction = Assert.Single(workspace.GitHub.AvailableActions,
-                    option => option.Kind == GitHubProjectActionKind.RequestPullRequestChanges);
-                workspace.GitHub.ActionBody = "Keep the cancellation receipt with the final build evidence.";
-                Assert.True(workspace.GitHub.PrepareActionReview());
-                var review = new PowerForgeStudio.Avalonia.Views.GitHubActionReviewDialog { DataContext = workspace.GitHub };
-                review.Show();
+                var service = new FakeGitHub();
+                using var workspace = new WorkspaceViewModel(root, gitHub: service);
+                workspace.ProjectName = "PowerForge";
+                workspace.ActiveWorkingCopyRoot = root;
+                workspace.ShowGitHubCommand.Execute(null);
+                await workspace.GitHub.RefreshAsync();
+                workspace.GitHub.Selected = workspace.GitHub.Items[0];
+                await workspace.GitHub.SelectionLoad;
+                Assert.False(workspace.IsFilesPage); Assert.True(workspace.IsGitHubPage);
+                Assert.Equal(40, workspace.GitHub.HeadSha.Length);
+                Assert.True(Assert.Single(workspace.GitHub.Checks).IsFailure);
+                Assert.Contains("1 need attention", workspace.GitHub.ChecksStatus);
+                var window = new MainWindow { DataContext = workspace, Width = 1600, Height = 1000 };
+                window.Show();
                 try
                 {
-                    review.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-                    using var frame = review.CaptureRenderedFrame(); Assert.NotNull(frame);
-                    var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
-                    if (!string.IsNullOrWhiteSpace(output))
-                        frame.Save(Path.Combine(output, "workspace-github-action-review.png"), PngBitmapEncoderOptions.Default);
-                }
-                finally { review.Close(); }
-                await workspace.GitHub.ReviewFilesAsync();
-                Assert.True(workspace.GitHub.IsFilesReview);
-                Assert.Equal(2, workspace.GitHub.ChangedFiles.Count);
-                Assert.Contains("Release", workspace.GitHub.PatchPreview);
-                foreach (var compact in new[] { false, true })
-                {
-                    window.Width = compact ? 1050 : 1600; window.Height = compact ? 700 : 1000;
-                    window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-                    using var frame = window.CaptureRenderedFrame(); Assert.NotNull(frame);
-                    var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
-                    if (!string.IsNullOrWhiteSpace(output)) frame.Save(Path.Combine(output, compact ? "workspace-pr-files-compact.png" : "workspace-pr-files.png"), PngBitmapEncoderOptions.Default);
-                    if (compact)
+                    foreach (var compact in new[] { false, true })
                     {
-                        var pageScroll = Assert.Single(window.GetVisualDescendants().OfType<ScrollViewer>(),
-                            viewer => viewer.Name == "FilesPageScroll");
-                        Assert.True(pageScroll.Extent.Height - pageScroll.Viewport.Height > 100);
-                        Assert.True(Assert.Single(window.GetVisualDescendants().OfType<DiffPreview>()).Bounds.Height >= 250);
-                        pageScroll.Offset = new Vector(0, pageScroll.Extent.Height - pageScroll.Viewport.Height);
-                        window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-                        using var scrolledFrame = window.CaptureRenderedFrame(); Assert.NotNull(scrolledFrame);
-                        if (!string.IsNullOrWhiteSpace(output)) scrolledFrame.Save(Path.Combine(output, "workspace-pr-files-compact-scrolled.png"), PngBitmapEncoderOptions.Default);
+                        window.Width = compact ? 1050 : 1600; window.Height = compact ? 700 : 1000;
+                        window.UpdateLayout(); Dispatcher.UIThread.RunJobs();
+                        using var frame = window.CaptureRenderedFrame(); Assert.NotNull(frame);
+                        var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
+                        if (!string.IsNullOrWhiteSpace(output))
+                        {
+                            Directory.CreateDirectory(output);
+                            frame.Save(Path.Combine(output, compact ? "workspace-github-compact.png" : "workspace-github.png"), PngBitmapEncoderOptions.Default);
+                        }
+                        var actionPanel = Assert.Single(window.GetVisualDescendants().OfType<Expander>(),
+                            panel => panel.Name == "ReviewActionPanel");
+                        Assert.False(actionPanel.IsExpanded);
+                        Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(),
+                            block => block.Text == "Checks at PR head" && block.IsEffectivelyVisible);
+                        if (compact)
+                        {
+                            actionPanel.IsExpanded = true;
+                            window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                            Assert.Contains(actionPanel.GetVisualDescendants().OfType<TextBox>(),
+                                box => box.PlaceholderText == "Comment or review summary" && box.IsEffectivelyVisible);
+                            using var actionFrame = window.CaptureRenderedFrame(); Assert.NotNull(actionFrame);
+                            if (!string.IsNullOrWhiteSpace(output)) actionFrame.Save(Path.Combine(output, "workspace-github-action-form-compact.png"), PngBitmapEncoderOptions.Default);
+                            actionPanel.IsExpanded = false;
+                        }
                     }
+                    workspace.GitHub.SelectedAction = Assert.Single(workspace.GitHub.AvailableActions,
+                        option => option.Kind == GitHubProjectActionKind.RequestPullRequestChanges);
+                    workspace.GitHub.ActionBody = "Keep the cancellation receipt with the final build evidence.";
+                    Assert.True(workspace.GitHub.PrepareActionReview());
+                    var review = new PowerForgeStudio.Avalonia.Views.GitHubActionReviewDialog { DataContext = workspace.GitHub };
+                    review.Show();
+                    try
+                    {
+                        review.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                        using var frame = review.CaptureRenderedFrame(); Assert.NotNull(frame);
+                        var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
+                        if (!string.IsNullOrWhiteSpace(output))
+                            frame.Save(Path.Combine(output, "workspace-github-action-review.png"), PngBitmapEncoderOptions.Default);
+                    }
+                    finally { review.Close(); }
+                    await workspace.GitHub.ReviewFilesAsync();
+                    Assert.True(workspace.GitHub.IsFilesReview);
+                    Assert.Equal(2, workspace.GitHub.ChangedFiles.Count);
+                    Assert.Contains("Release", workspace.GitHub.PatchPreview);
+                    foreach (var compact in new[] { false, true })
+                    {
+                        window.Width = compact ? 1050 : 1600; window.Height = compact ? 700 : 1000;
+                        window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                        using var frame = window.CaptureRenderedFrame(); Assert.NotNull(frame);
+                        var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
+                        if (!string.IsNullOrWhiteSpace(output)) frame.Save(Path.Combine(output, compact ? "workspace-pr-files-compact.png" : "workspace-pr-files.png"), PngBitmapEncoderOptions.Default);
+                        if (compact)
+                        {
+                            var pageScroll = Assert.Single(window.GetVisualDescendants().OfType<ScrollViewer>(),
+                                viewer => viewer.Name == "FilesPageScroll");
+                            Assert.True(pageScroll.Extent.Height - pageScroll.Viewport.Height > 100);
+                            Assert.True(Assert.Single(window.GetVisualDescendants().OfType<DiffPreview>()).Bounds.Height >= 250);
+                            pageScroll.Offset = new Vector(0, pageScroll.Extent.Height - pageScroll.Viewport.Height);
+                            window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                            using var scrolledFrame = window.CaptureRenderedFrame(); Assert.NotNull(scrolledFrame);
+                            if (!string.IsNullOrWhiteSpace(output)) scrolledFrame.Save(Path.Combine(output, "workspace-pr-files-compact-scrolled.png"), PngBitmapEncoderOptions.Default);
+                        }
+                    }
+                    workspace.GitHub.SelectedChangedFile = workspace.GitHub.ChangedFiles[1];
+                    Assert.Contains("binary", workspace.GitHub.PatchNotice);
+                    workspace.GitHub.ShowDiscussionCommand.Execute(null);
+                    Assert.False(workspace.GitHub.IsFilesReview);
+                    service.CheckError = true;
+                    await workspace.GitHub.LoadSelectionAsync();
+                    Assert.NotEmpty(workspace.GitHub.Discussion);
+                    Assert.Empty(workspace.GitHub.Checks);
+                    Assert.Contains("denied", workspace.GitHub.ChecksStatus);
+                    workspace.GitHub.ShowIssueListCommand.Execute(null);
+                    await workspace.GitHub.RefreshAsync();
+                    workspace.GitHub.Selected = Assert.Single(workspace.GitHub.Items);
+                    await workspace.GitHub.SelectionLoad;
+                    Assert.False(workspace.GitHub.HasChecks);
+                    window.Width = 1600; window.Height = 1000;
+                    window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                    var context = Assert.Single(window.GetVisualDescendants().OfType<Border>(), border => border.Name == "ContextPanel");
+                    Assert.Contains(context.GetVisualDescendants().OfType<TextBlock>(), block => block.Text == "Issue" && block.IsEffectivelyVisible);
+                    Assert.DoesNotContain(context.GetVisualDescendants().OfType<TextBlock>(), block => block.Text == "PR head and checks" && block.IsEffectivelyVisible);
+                    using (var issueFrame = window.CaptureRenderedFrame())
+                    {
+                        Assert.NotNull(issueFrame);
+                        var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
+                        if (!string.IsNullOrWhiteSpace(output)) issueFrame.Save(Path.Combine(output, "workspace-github-issue.png"), PngBitmapEncoderOptions.Default);
+                    }
+                    workspace.ShowFilesCommand.Execute(null);
+                    Assert.True(workspace.IsFilesPage); Assert.False(workspace.IsGitHubPage);
                 }
-                workspace.GitHub.SelectedChangedFile = workspace.GitHub.ChangedFiles[1];
-                Assert.Contains("binary", workspace.GitHub.PatchNotice);
-                workspace.GitHub.ShowDiscussionCommand.Execute(null);
-                Assert.False(workspace.GitHub.IsFilesReview);
-                service.CheckError = true;
-                await workspace.GitHub.LoadSelectionAsync();
-                Assert.NotEmpty(workspace.GitHub.Discussion);
-                Assert.Empty(workspace.GitHub.Checks);
-                Assert.Contains("denied", workspace.GitHub.ChecksStatus);
-                workspace.GitHub.ShowIssueListCommand.Execute(null);
-                await workspace.GitHub.RefreshAsync();
-                workspace.GitHub.Selected = Assert.Single(workspace.GitHub.Items);
-                await workspace.GitHub.SelectionLoad;
-                Assert.False(workspace.GitHub.HasChecks);
-                window.Width = 1600; window.Height = 1000;
-                window.UpdateLayout(); Dispatcher.UIThread.RunJobs(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-                var context = Assert.Single(window.GetVisualDescendants().OfType<Border>(), border => border.Name == "ContextPanel");
-                Assert.Contains(context.GetVisualDescendants().OfType<TextBlock>(), block => block.Text == "Issue" && block.IsEffectivelyVisible);
-                Assert.DoesNotContain(context.GetVisualDescendants().OfType<TextBlock>(), block => block.Text == "PR head and checks" && block.IsEffectivelyVisible);
-                using (var issueFrame = window.CaptureRenderedFrame())
-                {
-                    Assert.NotNull(issueFrame);
-                    var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
-                    if (!string.IsNullOrWhiteSpace(output)) issueFrame.Save(Path.Combine(output, "workspace-github-issue.png"), PngBitmapEncoderOptions.Default);
-                }
-                workspace.ShowFilesCommand.Execute(null);
-                Assert.True(workspace.IsFilesPage); Assert.False(workspace.IsGitHubPage);
-            }
-            finally { window.Close(); }
-            return true;
-        });
+                finally { window.Close(); }
+                return true;
+            });
+        }
+        finally { Directory.Delete(root, recursive: true); }
     }
 
     [Fact]

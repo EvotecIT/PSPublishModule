@@ -19,6 +19,8 @@ public sealed class ChangedProjectFilterTests
         var newRoot = Directory.CreateDirectory(Path.Combine(parent, "New")).FullName;
         var oldProject = Directory.CreateDirectory(Path.Combine(oldRoot, "OldProject")).FullName;
         var newProject = Directory.CreateDirectory(Path.Combine(newRoot, "NewProject")).FullName;
+        Directory.CreateDirectory(Path.Combine(oldProject, ".git"));
+        Directory.CreateDirectory(Path.Combine(newProject, ".git"));
         try
         {
             await TestAppBuilder.RunAsync(async () =>
@@ -56,6 +58,8 @@ public sealed class ChangedProjectFilterTests
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "studio-changed-filter-" + Guid.NewGuid().ToString("N"))).FullName;
         var first = Directory.CreateDirectory(Path.Combine(root, "First")).FullName;
         var second = Directory.CreateDirectory(Path.Combine(root, "Second")).FullName;
+        Directory.CreateDirectory(Path.Combine(first, ".git"));
+        Directory.CreateDirectory(Path.Combine(second, ".git"));
         try
         {
             await TestAppBuilder.RunAsync(async () =>

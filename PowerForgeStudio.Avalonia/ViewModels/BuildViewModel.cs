@@ -28,7 +28,7 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
     }
     public ObservableCollection<RepositoryPlanResult> Results { get; } = [];
     [ObservableProperty] private string _workingCopyRoot = "";
-    [ObservableProperty] private string _status = "Select a working copy to inspect its build contract.";
+    [ObservableProperty] private string _status = "Select a project to inspect its build contract.";
     [ObservableProperty] private bool _planningUsesScript = true;
     public string PlanningNotice => PlanningUsesScript ? ScriptPlanningNotice : JsonPlanningNotice;
     public string ContextSafetyNotice => PlanningUsesScript
@@ -75,7 +75,7 @@ public sealed partial class BuildViewModel : ObservableObject, IDisposable
         HasDetectedBuildContract = false;
         PlanningUsesScript = true;
         Contracts = "No contract inspected.";
-        Status = string.IsNullOrEmpty(root) ? "Select a working copy to inspect its build contract." : "Ready to inspect and plan this working copy.";
+        Status = string.IsNullOrEmpty(root) ? "Select a project to inspect its build contract." : "Ready to inspect and plan this project.";
         OnPropertyChanged(nameof(CanPlan));
         OnPropertyChanged(nameof(EmphasizePlan));
     }

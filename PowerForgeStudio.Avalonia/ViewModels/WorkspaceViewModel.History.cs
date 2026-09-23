@@ -20,7 +20,7 @@ public sealed partial class WorkspaceViewModel
     [RelayCommand]
     private async Task ShowHistoryAsync()
     {
-        if (KeepReleaseVisible()) return;
+        if (KeepReleaseVisible() || !HasGitWorkingCopy) return;
         IsOverviewPage = false;
         IsSettingsPage = false;
         IsActivityPage = false;

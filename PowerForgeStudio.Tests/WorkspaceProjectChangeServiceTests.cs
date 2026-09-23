@@ -35,26 +35,54 @@ public sealed class WorkspaceProjectChangeServiceTests
     [Fact]
     public async Task InspectionUsesBoundedPurposeSpecificGitProbes()
     {
-        var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "studio-change-bounds"));
-        var runner = new RecordingRunner(request => request.Arguments[0] switch
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(),
+            "studio-change-bounds-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
         {
-            "status" => new ProcessRunResult(0, "# branch.head main\0? large-tree\0", "", "git", TimeSpan.Zero,
-                timedOut: false, standardOutputLimitExceeded: true),
-            "worktree" => new ProcessRunResult(0, $"worktree {root}\0HEAD {new string('a', 40)}\0branch refs/heads/main\0", "", "git", TimeSpan.Zero, false),
-            _ => throw new InvalidOperationException("Unexpected Git command: " + string.Join(' ', request.Arguments))
-        });
+            Directory.CreateDirectory(Path.Combine(root, ".git"));
+            var runner = new RecordingRunner(request => request.Arguments[0] switch
+            {
+                "status" => new ProcessRunResult(0, "# branch.head main\0? large-tree\0", "", "git", TimeSpan.Zero,
+                    timedOut: false, standardOutputLimitExceeded: true),
+                "worktree" => new ProcessRunResult(0, $"worktree {root}\0HEAD {new string('a', 40)}\0branch refs/heads/main\0", "", "git", TimeSpan.Zero, false),
+                _ => throw new InvalidOperationException("Unexpected Git command: " + string.Join(' ', request.Arguments))
+            });
 
-        var snapshot = await new WorkspaceProjectChangeService(new GitClient(runner)).InspectAsync([Entry("Product", root)]);
+            var snapshot = await new WorkspaceProjectChangeService(new GitClient(runner)).InspectAsync([Entry("Product", root)]);
 
-        var changed = Assert.Single(snapshot.ChangedProjects);
-        Assert.Equal(1, Assert.Single(changed.Value).ChangeCount);
-        Assert.Equal(2, runner.Requests.Count);
-        var status = Assert.Single(runner.Requests, request => request.Arguments[0] == "status");
-        Assert.Equal(WorkspaceProjectChangeService.StatusOutputLimit, status.MaxCapturedOutputCharacters);
-        Assert.Contains("--untracked-files=normal", status.Arguments);
-        var worktrees = Assert.Single(runner.Requests, request => request.Arguments[0] == "worktree");
-        Assert.Equal(WorkspaceProjectChangeService.WorktreeOutputLimit, worktrees.MaxCapturedOutputCharacters);
-        Assert.DoesNotContain(runner.Requests, request => request.Arguments[0] == "branch");
+            var changed = Assert.Single(snapshot.ChangedProjects);
+            Assert.Equal(1, Assert.Single(changed.Value).ChangeCount);
+            Assert.Equal(2, runner.Requests.Count);
+            var status = Assert.Single(runner.Requests, request => request.Arguments[0] == "status");
+            Assert.Equal(WorkspaceProjectChangeService.StatusOutputLimit, status.MaxCapturedOutputCharacters);
+            Assert.Contains("--untracked-files=normal", status.Arguments);
+            var worktrees = Assert.Single(runner.Requests, request => request.Arguments[0] == "worktree");
+            Assert.Equal(WorkspaceProjectChangeService.WorktreeOutputLimit, worktrees.MaxCapturedOutputCharacters);
+            Assert.DoesNotContain(runner.Requests, request => request.Arguments[0] == "branch");
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public async Task InspectionSkipsLocalProjectsWithoutBorrowingParentGitState()
+    {
+        var fixture = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(),
+            "studio-change-local-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var standalone = Directory.CreateDirectory(Path.Combine(fixture, "Standalone")).FullName;
+            var parent = Directory.CreateDirectory(Path.Combine(fixture, "ParentGit")).FullName;
+            InitializeRepository(parent);
+            var nested = Directory.CreateDirectory(Path.Combine(parent, "NestedLocal")).FullName;
+            await File.AppendAllTextAsync(Path.Combine(parent, "tracked.txt"), "parent change\n");
+
+            var snapshot = await new WorkspaceProjectChangeService().InspectAsync(
+                [Entry("Standalone", standalone), Entry("NestedLocal", nested)]);
+
+            Assert.Empty(snapshot.ChangedProjects);
+            Assert.Empty(snapshot.UnavailableWorkingCopies);
+        }
+        finally { DeleteFixture(fixture); }
     }
 
     [Fact]

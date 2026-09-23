@@ -54,8 +54,8 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             if (args.PropertyName == nameof(GitChangesViewModel.Snapshot) && Changes.Snapshot is { } snapshot)
             {
                 UpdateGitDecorations(Changes.Root, snapshot);
-                Branch = snapshot.BranchDisplay;
-                GitSummary = !snapshot.IsGitRepository ? "Not a Git working copy" : snapshot.HasConflicts ? "Merge conflicts need resolution" : snapshot.StatusSummary;
+                Branch = snapshot.IsGitRepository ? snapshot.BranchDisplay : "Local project";
+                GitSummary = !snapshot.IsGitRepository ? "No Git working copy" : snapshot.HasConflicts ? "Merge conflicts need resolution" : snapshot.StatusSummary;
                 var selectedProject = _projectNodes.Values.FirstOrDefault(project => project.IsContextProject);
                 var catalogEntry = selectedProject is null
                     ? null
@@ -154,7 +154,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         IsGitHubPage || IsReleasePage ? 0
         : IsOutputPaneExpanded ? CompactViewport ? 250 : 300
         : IsHistoryPage || CompactViewport ? 110 : 170);
-    [RelayCommand] private void ShowGitHub() { if (KeepReleaseVisible()) return; IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsPackagesPage = false; IsReleasePage = false; IsBuildPage = false; IsChangesPage = false; IsGitHubPage = true; }
+    [RelayCommand] private void ShowGitHub() { if (KeepReleaseVisible() || !HasGitWorkingCopy) return; IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsPackagesPage = false; IsReleasePage = false; IsBuildPage = false; IsChangesPage = false; IsGitHubPage = true; }
     public BuildViewModel Build { get; } = new();
     public GitChangesViewModel Changes { get; } = new();
     [ObservableProperty] private bool _isChangesPage;
@@ -173,7 +173,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     partial void OnOutputChanged(string value) => OnPropertyChanged(nameof(DisplayedOutput));
     [RelayCommand] private void ShowFiles() { if (KeepReleaseVisible()) return; IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsPackagesPage = false; IsReleasePage = false; IsGitHubPage = false; IsBuildPage = false; IsChangesPage = false; }
     [RelayCommand] private void ShowBuild() { if (KeepReleaseVisible()) return; IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsPackagesPage = false; IsReleasePage = false; IsGitHubPage = false; IsChangesPage = false; IsBuildPage = true; }
-    [RelayCommand] private void ShowChanges() { if (KeepReleaseVisible()) return; IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsPackagesPage = false; IsReleasePage = false; IsGitHubPage = false; IsBuildPage = false; IsChangesPage = true; }
+    [RelayCommand] private void ShowChanges() { if (KeepReleaseVisible() || !HasGitWorkingCopy) return; IsOverviewPage = false; IsHistoryPage = false; IsSettingsPage = false; IsActivityPage = false; IsStoragePage = false; IsAutomationsPage = false; IsConnectionsPage = false; IsPackagesPage = false; IsReleasePage = false; IsGitHubPage = false; IsBuildPage = false; IsChangesPage = true; }
 
     private bool KeepReleaseVisible()
     {
@@ -204,6 +204,9 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isFileOperationRunning;
     [ObservableProperty] private bool _isSelectionLoading;
     public bool HasWorkingCopy => !string.IsNullOrEmpty(ActiveWorkingCopyRoot);
+    public bool HasGitWorkingCopy => HasWorkingCopy && WorktreeDetector.IsGitRepository(ActiveWorkingCopyRoot);
+    public string BranchLabel => HasGitWorkingCopy ? "Branch" : "Project";
+    public string HeaderContextIconKind => HasGitWorkingCopy ? "branch" : "projects";
     public bool HasSelectedFile => SelectedFile is not null;
     public string SelectedFileRelativePath => SelectedFile is null || string.IsNullOrEmpty(ActiveWorkingCopyRoot)
         ? "" : Path.GetRelativePath(ActiveWorkingCopyRoot, SelectedFile.FullPath);
@@ -211,12 +214,12 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     {
         get
         {
-            if (!HasWorkingCopy) return "Choose a working copy";
-            if (string.IsNullOrEmpty(CurrentDirectory) || SamePath(CurrentDirectory, ActiveWorkingCopyRoot)) return "Working copy";
+            if (!HasWorkingCopy) return "Choose a project";
+            if (string.IsNullOrEmpty(CurrentDirectory) || SamePath(CurrentDirectory, ActiveWorkingCopyRoot)) return "Project folder";
             var relative = Path.GetRelativePath(ActiveWorkingCopyRoot, CurrentDirectory).Replace('\\', '/');
             return relative == ".." || relative.StartsWith("../", StringComparison.Ordinal)
-                ? "Working copy"
-                : "Working copy / " + relative;
+                ? "Project folder"
+                : "Project folder / " + relative;
         }
     }
     public bool CanManageFiles => HasWorkingCopy && !IsSelectionLoading && !IsFileOperationRunning;
@@ -238,6 +241,9 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         GitHub.SetWorkingCopy(value);
         if (_sessionReady || !string.IsNullOrEmpty(value)) Release.SetHistoryScope(value);
         OnPropertyChanged(nameof(HasWorkingCopy));
+        OnPropertyChanged(nameof(HasGitWorkingCopy));
+        OnPropertyChanged(nameof(BranchLabel));
+        OnPropertyChanged(nameof(HeaderContextIconKind));
         OnPropertyChanged(nameof(SelectedFileRelativePath));
         OnPropertyChanged(nameof(CurrentDirectoryDisplay));
         OnPropertyChanged(nameof(CanManageFiles));
@@ -274,7 +280,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         {
             CaptureSessionBeforeRefresh();
             _sessionReady = false;
-            Status = "Discovering local repositories…";
+            Status = "Discovering local projects…";
             var selection = ++_selectionVersion;
             SelectedNode = null;
             SelectedFile = null;
@@ -301,7 +307,10 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             ApplyFilter();
             RefreshQuickProjectMatches();
             CompleteProjectCatalogRefresh(root);
-            RepositoryCount = found.Count == 1 ? "1 repository" : $"{found.Count} repositories";
+            var hasLocalProjects = found.Any(static entry => !WorktreeDetector.IsGitRepository(entry.RootPath));
+            RepositoryCount = hasLocalProjects
+                ? found.Count == 1 ? "1 project" : $"{found.Count} projects"
+                : found.Count == 1 ? "1 repository" : $"{found.Count} repositories";
             Status = "Local discovery complete";
             AppendOutput($"Discovered {RepositoryCount} in {root}.");
             await RestoreSessionAsync(refresh, root, selection);
@@ -342,7 +351,9 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         var git = await _git.GetStatusAsync(node.Path, _lifetime.Token);
         _lifetime.Token.ThrowIfCancellationRequested();
         node.Children.Clear();
-        var primary = new ExplorerNode(git.BranchDisplay, node.Path, "branch", node.Path, LoadDirectoryAsync) { Detail = "primary" };
+        var primary = git.IsGitRepository
+            ? new ExplorerNode(git.BranchDisplay, node.Path, "branch", node.Path, LoadDirectoryAsync) { Detail = "primary" }
+            : new ExplorerNode("Local files", node.Path, "folder", node.Path, LoadDirectoryAsync) { Detail = "no Git" };
         node.Children.Add(primary);
         var linked = git.Worktrees.Where(x => !SamePath(x.Path, node.Path) && !x.IsBare).ToArray();
         if (linked.Length > 0)
@@ -423,9 +434,9 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             Preview = preview;
             var git = await _git.GetStatusAsync(node.RepositoryRoot, _lifetime.Token);
             if (_disposed || version != _selectionVersion) return;
-            Branch = git.BranchDisplay;
+            Branch = git.IsGitRepository ? git.BranchDisplay : "Local project";
             UpdateGitDecorations(node.RepositoryRoot, git);
-            GitSummary = git.IsGitRepository ? git.StatusSummary : "Git status unavailable";
+            GitSummary = git.IsGitRepository ? git.StatusSummary : "No Git working copy";
             var selectedProject = _projectNodes.Values.FirstOrDefault(project => project.IsContextProject);
             var catalogEntry = selectedProject is null
                 ? null

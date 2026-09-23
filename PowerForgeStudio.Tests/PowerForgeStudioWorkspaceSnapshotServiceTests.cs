@@ -35,7 +35,7 @@ public sealed class PowerForgeStudioWorkspaceSnapshotServiceTests
             Assert.Equal(databasePath, snapshot.DatabasePath);
             Assert.Equal(2, snapshot.PortfolioItems.Count);
             Assert.Equal(2, snapshot.Summary.TotalRepositories);
-            Assert.All(snapshot.PortfolioItems, item => Assert.Equal(RepositoryReadinessKind.Blocked, item.ReadinessKind));
+            Assert.All(snapshot.PortfolioItems, item => Assert.Equal(RepositoryReadinessKind.Ready, item.ReadinessKind));
             Assert.NotEmpty(snapshot.ReleaseInboxItems);
             Assert.Equal(5, snapshot.DashboardCards.Count);
             Assert.Equal(2, snapshot.RepositoryFamilies.Count);
@@ -45,7 +45,8 @@ public sealed class PowerForgeStudioWorkspaceSnapshotServiceTests
             Assert.Contains(snapshot.RepositoryFamilyLanes, lane => lane.DisplayName == "LibraryRepo");
             Assert.Contains(snapshot.RepositoryFamilyLanes, lane => lane.DisplayName == "ModuleRepo");
             Assert.Equal(2, snapshot.QueueSession.Items.Count);
-            Assert.Equal(2, snapshot.QueueSession.Summary.BlockedItems);
+            Assert.Equal(2, snapshot.QueueSession.Summary.PreparePendingItems);
+            Assert.Equal(0, snapshot.QueueSession.Summary.BlockedItems);
             Assert.Equal("No signing batch waiting.", snapshot.SigningStation.Headline);
             Assert.Equal("No publish batch ready.", snapshot.PublishStation.Headline);
             Assert.Equal("No verification batch ready.", snapshot.VerificationStation.Headline);

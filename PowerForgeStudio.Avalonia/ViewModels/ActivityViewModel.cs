@@ -132,9 +132,10 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
             OmittedCount = snapshot.OmittedEntryCount;
             ApplyFilter();
             NotifyCounts();
+            var projectLabel = snapshot.RepositoryCount == 1 ? "project" : "projects";
             Status = snapshot.IsTruncated
-                ? $"Showing {_allEntries.Count} of {snapshot.TotalEntryCount} activity signals across {snapshot.RepositoryCount} repository groups."
-                : $"Observed {_allEntries.Count} activity signals across {snapshot.RepositoryCount} repository groups.";
+                ? $"Showing {_allEntries.Count} of {snapshot.TotalEntryCount} activity signals across {snapshot.RepositoryCount} {projectLabel}."
+                : $"Observed {_allEntries.Count} activity signals across {snapshot.RepositoryCount} {projectLabel}.";
             Output = $"[{snapshot.InspectedAtUtc:HH:mm:ss}] Activity refresh complete — {_allEntries.Count} signals, " +
                      $"{ActionableCount} actionable, {CriticalCount} critical, {ReviewCount} awaiting review, " +
                      $"{UnavailableSourceCount} provider source(s) unavailable" +

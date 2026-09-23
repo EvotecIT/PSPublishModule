@@ -1,6 +1,7 @@
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using PowerForgeStudio.Orchestrator.Catalog;
 using PowerForgeStudio.Orchestrator.Workspace;
 
 namespace PowerForgeStudio.Avalonia.ViewModels;
@@ -21,7 +22,9 @@ public sealed partial class WorkspaceViewModel
     [ObservableProperty] private string _projectChangeStatus = "";
     public bool HasProjectChangeStatus => ProjectChangeStatus.Length > 0 && (ChangedProjectsOnly || IsProjectChangeLoading);
     public bool CanCancelProjectChangeRefresh => IsProjectChangeLoading;
-    public bool CanShowChangedProjects => !_isProjectCatalogRefreshing && _catalog.Count > 0 && CatalogMatchesWorkspace();
+    public bool CanShowChangedProjects => !_isProjectCatalogRefreshing &&
+                                          _catalog.Any(static entry => WorktreeDetector.IsGitRepository(entry.RootPath)) &&
+                                          CatalogMatchesWorkspace();
 
     partial void OnChangedProjectsOnlyChanged(bool value)
     {

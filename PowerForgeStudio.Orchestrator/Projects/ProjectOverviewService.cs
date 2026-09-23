@@ -55,13 +55,14 @@ public sealed class ProjectOverviewService : IProjectOverviewService
             DateTimeOffset.UtcNow,
             repository.Name,
             repository.RepositoryKind.ToString(),
-            SamePath(repository.RootPath, workingCopyRoot) ? WorkspaceKindDisplay(repository.WorkspaceKind) : "Worktree",
+            !git.IsGitRepository ? "Local project"
+                : SamePath(repository.RootPath, workingCopyRoot) ? WorkspaceKindDisplay(repository.WorkspaceKind) : "Worktree",
             repository.RootPath,
             workingCopyRoot,
             purpose,
             readme,
-            git.BranchDisplay,
-            git.IsGitRepository ? git.StatusSummary : "Git metadata unavailable",
+            git.IsGitRepository ? git.BranchDisplay : "Local project",
+            git.IsGitRepository ? git.StatusSummary : "No Git working copy",
             git.AheadBehindDisplay,
             Math.Max(1, git.Worktrees.Count),
             products,
@@ -241,7 +242,8 @@ public sealed class ProjectOverviewService : IProjectOverviewService
     {
         var prerequisites = new List<ProjectOverviewItem>
         {
-            new("Git", git.IsGitRepository ? "Available for the selected working copy." : "Required; Git metadata was not available.")
+            new("Git", git.IsGitRepository ? "Available for the selected working copy." :
+                "Not configured; local files and builds remain available, while Git workflows require a repository.")
         };
         if (entryPoints.Any(item => item.SourcePath?.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase) == true))
             prerequisites.Add(new("PowerShell", "Required by a detected PowerShell entrypoint; verify the runtime under Connections."));

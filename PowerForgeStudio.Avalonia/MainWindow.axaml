@@ -11,7 +11,7 @@
       <Grid ColumnDefinitions="360,*,205,138" Margin="22,0,0,0">
         <TextBlock Text="Project workspace" Foreground="White" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
         <Grid Grid.Column="1" MaxWidth="550" HorizontalAlignment="Stretch" VerticalAlignment="Center">
-          <TextBox x:Name="QuickProjectSearchBox" AutomationProperties.Name="Repository jump" WindowDecorationProperties.ElementRole="User" Text="{Binding QuickProjectQuery}" PlaceholderText="Jump to a repository…" Padding="32,6,70,6" Background="#EEF3FA" BorderBrush="#B8CAE0" KeyDown="QuickProjectSearchKeyDown" GotFocus="QuickProjectSearchGotFocus" />
+          <TextBox x:Name="QuickProjectSearchBox" AutomationProperties.Name="Project jump" WindowDecorationProperties.ElementRole="User" Text="{Binding QuickProjectQuery}" PlaceholderText="Jump to a project…" Padding="32,6,70,6" Background="#EEF3FA" BorderBrush="#B8CAE0" KeyDown="QuickProjectSearchKeyDown" GotFocus="QuickProjectSearchGotFocus" />
           <controls:NavigationIcon Kind="search" Width="17" Height="17" Ink="#617189" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" IsHitTestVisible="False" />
           <Border HorizontalAlignment="Right" VerticalAlignment="Center" Background="#F7FAFE" BorderBrush="#CBD7E7" BorderThickness="1" CornerRadius="3" Padding="5,1" Margin="0,0,7,0" IsHitTestVisible="False">
             <TextBlock Text="Ctrl + K" Foreground="#677892" FontSize="11" />
@@ -35,7 +35,7 @@
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock Text="No matching repositories in this workspace." Classes="muted" Margin="8" IsVisible="{Binding !HasQuickProjectMatches}" />
+                <TextBlock Text="No matching projects in this workspace." Classes="muted" Margin="8" IsVisible="{Binding !HasQuickProjectMatches}" />
               </StackPanel>
             </Border>
           </Popup>
@@ -66,7 +66,7 @@
           <Grid ColumnDefinitions="*,Auto,Auto" Margin="17,8">
             <TextBlock Text="Projects" FontSize="20" FontWeight="SemiBold" Foreground="#101B30" VerticalAlignment="Center" />
             <Button Grid.Column="1" ToolTip.Tip="Choose workspace folder" Click="ChooseWorkspace" Classes="toolbar"><controls:NavigationIcon Kind="plus" Width="18" Height="18" Ink="#25354E" /></Button>
-            <Button Grid.Column="2" ToolTip.Tip="Refresh repositories" Command="{Binding RefreshCommand}" Classes="toolbar"><controls:NavigationIcon Kind="refresh" Width="18" Height="18" Ink="#25354E" /></Button>
+            <Button Grid.Column="2" ToolTip.Tip="Refresh projects" Command="{Binding RefreshCommand}" Classes="toolbar"><controls:NavigationIcon Kind="refresh" Width="18" Height="18" Ink="#25354E" /></Button>
           </Grid>
           <TextBox x:Name="ProjectTreeFilterBox" Grid.Row="1" Text="{Binding Filter}" PlaceholderText="Filter projects…" Margin="16,0,16,7" />
           <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="16,0,16,5">
@@ -134,7 +134,7 @@
               <Border Grid.Column="2" Background="#F7FAFE" BorderBrush="#D6E2F1" BorderThickness="1" CornerRadius="16" Padding="10,5"
                       IsVisible="{Binding HasWorkingCopy}" VerticalAlignment="Center">
                 <StackPanel Orientation="Horizontal" Spacing="7">
-                  <controls:NavigationIcon Kind="branch" Ink="#0865FF" Width="16" Height="16" VerticalAlignment="Center" />
+                  <controls:NavigationIcon Kind="{Binding HeaderContextIconKind}" Ink="#0865FF" Width="16" Height="16" VerticalAlignment="Center" />
                   <TextBlock Text="{Binding Branch}" Foreground="#26334B" VerticalAlignment="Center" MaxWidth="180" TextTrimming="CharacterEllipsis" />
                   <Border Background="#CBD7E7" Width="1" Margin="2,2" />
                   <TextBlock Text="{Binding GitSummary}" Foreground="#64748B" VerticalAlignment="Center" MaxWidth="150" TextTrimming="CharacterEllipsis" />
@@ -157,10 +157,10 @@
             <WrapPanel ItemSpacing="20" LineSpacing="8">
               <Button Content="Overview" Command="{Binding ShowOverviewCommand}" Classes="pageTab" Classes.active="{Binding IsOverviewPage}" />
               <Button Content="Files" Command="{Binding ShowFilesCommand}" Classes="pageTab" Classes.active="{Binding IsFilesPage}" />
-              <Button Content="Changes" Command="{Binding ShowChangesCommand}" Classes="pageTab" Classes.active="{Binding IsChangesPage}" />
-              <Button Content="History" Command="{Binding ShowHistoryCommand}" Classes="pageTab" Classes.active="{Binding IsHistoryPage}" />
+              <Button Content="Changes" Command="{Binding ShowChangesCommand}" IsEnabled="{Binding HasGitWorkingCopy}" ToolTip.Tip="Requires a Git working copy" Classes="pageTab" Classes.active="{Binding IsChangesPage}" />
+              <Button Content="History" Command="{Binding ShowHistoryCommand}" IsEnabled="{Binding HasGitWorkingCopy}" ToolTip.Tip="Requires a Git working copy" Classes="pageTab" Classes.active="{Binding IsHistoryPage}" />
               <Button Content="Build &amp; Run" Command="{Binding ShowBuildCommand}" Classes="pageTab" Classes.active="{Binding IsBuildPage}" />
-              <Button Content="GitHub" Command="{Binding ShowGitHubCommand}" Classes="pageTab" Classes.active="{Binding IsGitHubPage}" />
+              <Button Content="GitHub" Command="{Binding ShowGitHubCommand}" IsEnabled="{Binding HasGitWorkingCopy}" ToolTip.Tip="Requires a Git working copy with a GitHub origin" Classes="pageTab" Classes.active="{Binding IsGitHubPage}" />
               <Button Content="Releases" Command="{Binding ShowReleaseCommand}" Classes="pageTab" Classes.active="{Binding IsReleasePage}" />
             </WrapPanel>
           </StackPanel>
@@ -197,11 +197,11 @@
           <Grid IsVisible="{Binding !IsWorkspaceUtilityPage}">
             <Grid IsVisible="{Binding !IsFilesPage}">
             <StackPanel Spacing="18" IsVisible="{Binding ShowGenericProjectContext}">
-            <TextBlock Text="Selected working copy" FontWeight="SemiBold" FontSize="16" />
+            <TextBlock Text="Selected project" FontWeight="SemiBold" FontSize="16" />
             <Button Content="{Binding FavoriteActionLabel}" Command="{Binding ToggleFavoriteCommand}" IsEnabled="{Binding HasActiveProject}" />
             <Button Content="{Binding ArchiveActionLabel}" Command="{Binding ToggleProjectArchivedCommand}" IsEnabled="{Binding HasActiveProject}" />
             <TextBlock Text="{Binding StateError}" IsVisible="{Binding HasStateError}" TextWrapping="Wrap" Foreground="#B45309" />
-            <TextBlock Text="Working copy" Classes="muted" />
+            <TextBlock Text="{Binding BranchLabel}" Classes="muted" />
             <TextBlock Text="{Binding Branch}" />
             <TextBlock Text="Git state" Classes="muted" />
             <TextBlock Text="{Binding GitSummary}" TextWrapping="Wrap" />
@@ -250,18 +250,18 @@
                 <Grid ColumnDefinitions="105,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="12" ColumnSpacing="8">
                   <TextBlock Text="Project type" Classes="muted" FontSize="12" />
                   <TextBlock Grid.Column="1" Text="{Binding ProjectKind}" TextWrapping="Wrap" />
-                  <TextBlock Grid.Row="1" Text="Working copy" Classes="muted" FontSize="12" />
+                  <TextBlock Grid.Row="1" Text="{Binding WorkingCopyLabel}" Classes="muted" FontSize="12" />
                   <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding WorkspaceKind}" TextWrapping="Wrap" />
-                  <TextBlock Grid.Row="2" Text="Branch" Classes="muted" FontSize="12" />
-                  <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Branch}" TextWrapping="Wrap" />
+                  <TextBlock Grid.Row="2" Text="Branch" Classes="muted" FontSize="12" IsVisible="{Binding HasGitWorkingCopy}" />
+                  <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Branch}" TextWrapping="Wrap" IsVisible="{Binding HasGitWorkingCopy}" />
                   <TextBlock Grid.Row="3" Text="Git state" Classes="muted" FontSize="12" />
                   <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding GitState}" TextWrapping="Wrap" />
                 </Grid>
-                <TextBlock Text="Working copies" Classes="muted" FontSize="12" />
-                <TextBlock Text="{Binding WorkingCopyCount}" FontWeight="SemiBold" FontSize="20" />
+                <TextBlock Text="Working copies" Classes="muted" FontSize="12" IsVisible="{Binding HasGitWorkingCopy}" />
+                <TextBlock Text="{Binding WorkingCopyCount}" FontWeight="SemiBold" FontSize="20" IsVisible="{Binding HasGitWorkingCopy}" />
                 <TextBlock Text="Path" Classes="muted" FontSize="12" />
                 <TextBox Text="{Binding WorkingCopyRoot}" IsReadOnly="True" TextWrapping="NoWrap" Height="23" FontSize="11"
-                         BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="{Binding WorkingCopyRoot}" AutomationProperties.Name="Working copy path" />
+                         BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="{Binding WorkingCopyRoot}" AutomationProperties.Name="Project folder path" />
                 <Border Background="#F3F7FD" BorderBrush="#DDE5EF" BorderThickness="1" CornerRadius="6" Padding="10">
                   <StackPanel Spacing="5">
                     <TextBlock Text="Local observation" FontWeight="SemiBold" />
@@ -275,9 +275,9 @@
             <ScrollViewer IsVisible="{Binding IsBuildPage}">
               <StackPanel Spacing="12" DataContext="{Binding Build}">
                 <TextBlock Text="Build context" FontWeight="SemiBold" FontSize="16" />
-                <TextBlock Text="Working copy" Classes="muted" FontSize="12" />
+                <TextBlock Text="Project folder" Classes="muted" FontSize="12" />
                 <TextBox Text="{Binding WorkingCopyRoot}" IsReadOnly="True" TextWrapping="NoWrap" Height="23" FontSize="11"
-                         BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="{Binding WorkingCopyRoot}" AutomationProperties.Name="Build working copy path" />
+                         BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="{Binding WorkingCopyRoot}" AutomationProperties.Name="Build project folder path" />
                 <Border BorderBrush="#DDE5EF" BorderThickness="0,1,0,0" />
                 <TextBlock Text="Detected contracts" FontWeight="SemiBold" />
                 <SelectableTextBlock Text="{Binding ContractDisplay}" TextWrapping="Wrap" ToolTip.Tip="{Binding Contracts}" FontSize="12" />
@@ -288,18 +288,18 @@
                   <StackPanel Spacing="6">
                     <TextBlock Text="Captured build" FontWeight="SemiBold" />
                     <TextBlock Text="{Binding BuildStatus}" TextWrapping="Wrap" FontSize="12" />
-                    <TextBlock Text="Source working copy" Classes="muted" FontSize="11" />
+                    <TextBlock Text="Source project folder" Classes="muted" FontSize="11" />
                     <TextBox Text="{Binding BuildRoot}" IsReadOnly="True" TextWrapping="NoWrap" Height="23" FontSize="11"
-                             BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="{Binding BuildRoot}" AutomationProperties.Name="Captured build working copy path" />
+                             BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="{Binding BuildRoot}" AutomationProperties.Name="Captured build project folder path" />
                   </StackPanel>
                 </Border>
                 <Border Background="#F3F7FD" BorderBrush="#DDE5EF" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding HasTaskRun}">
                   <StackPanel Spacing="5">
                     <TextBlock Text="Captured task" FontWeight="SemiBold" />
                     <TextBlock Text="{Binding TaskStatus}" TextWrapping="Wrap" FontSize="12" />
-                    <TextBlock Text="Source working copy" Classes="muted" FontSize="11" />
+                    <TextBlock Text="Source project folder" Classes="muted" FontSize="11" />
                     <TextBox Text="{Binding TaskRoot}" IsReadOnly="True" TextWrapping="NoWrap" Height="23" FontSize="11"
-                             BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="{Binding TaskRoot}" AutomationProperties.Name="Captured task working copy path" />
+                             BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="{Binding TaskRoot}" AutomationProperties.Name="Captured task project folder path" />
                   </StackPanel>
                 </Border>
                 <Border Background="#EFF5FF" BorderBrush="#A9C8FF" BorderThickness="1" CornerRadius="6" Padding="10" IsVisible="{Binding ShowBuildContractSection}">
@@ -318,9 +318,9 @@
                 <TextBlock Text="{Binding Status}" Classes="muted" TextWrapping="Wrap" FontSize="12" />
                 <Border BorderBrush="#DDE5EF" BorderThickness="0,1,0,0" />
                 <StackPanel Spacing="5" IsVisible="{Binding HasBuildRoot}">
-                  <TextBlock Text="Captured working copy" Classes="muted" FontSize="12" />
+                  <TextBlock Text="Captured project folder" Classes="muted" FontSize="12" />
                   <TextBox Text="{Binding BuildRoot}" IsReadOnly="True" TextWrapping="NoWrap" Height="23" FontSize="11"
-                           BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="{Binding BuildRoot}" AutomationProperties.Name="Release working copy path" />
+                           BorderThickness="0" Background="Transparent" Padding="0" ToolTip.Tip="{Binding BuildRoot}" AutomationProperties.Name="Release project folder path" />
                 </StackPanel>
                 <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="12" ColumnSpacing="8">
                   <TextBlock Text="Prepared artifacts" Classes="muted" FontSize="12" />
@@ -555,7 +555,7 @@
                    AutomationProperties.LiveSetting="Polite" />
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
           <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasWorkingCopy}">
-            <controls:NavigationIcon Kind="branch" Ink="#52647D" Width="14" Height="14" VerticalAlignment="Center" />
+            <controls:NavigationIcon Kind="{Binding HeaderContextIconKind}" Ink="#52647D" Width="14" Height="14" VerticalAlignment="Center" />
             <TextBlock x:Name="StatusBranch" Text="{Binding Branch}" Classes="muted" FontSize="12" MaxWidth="130" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
           </StackPanel>
           <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{ReflectionBinding !DataContext.CompactViewport, RelativeSource={RelativeSource AncestorType=Window}}">
