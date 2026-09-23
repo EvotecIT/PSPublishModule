@@ -14,7 +14,7 @@ namespace PowerForgeStudio.Avalonia.Tests;
 public sealed class BuildExecutionTests
 {
     [Fact]
-    public async Task JsonBuildProducesARealNuGetPackageAndRenderedReceipt()
+    public async Task JsonBuildFromDiscoveredLocalProjectProducesARealNuGetPackageAndRenderedReceipt()
     {
         var root = Path.Combine(Path.GetTempPath(), "studio-execution-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "Build"));
@@ -37,7 +37,11 @@ public sealed class BuildExecutionTests
                 """);
             await TestAppBuilder.RunAsync(async () =>
             {
-                using var workspace = new WorkspaceViewModel(root) { ActiveWorkingCopyRoot = root, ProjectName = "StudioFixture" };
+                using var workspace = new WorkspaceViewModel(root);
+                await workspace.RefreshAsync();
+                await workspace.SelectAsync(Assert.Single(workspace.Projects));
+                Assert.False(workspace.HasGitWorkingCopy);
+                Assert.Equal(root, workspace.ActiveWorkingCopyRoot);
                 workspace.ShowBuildCommand.Execute(null);
                 await workspace.Build.PlanAsync();
                 Assert.True(workspace.Build.CanBuild, workspace.Build.Status);
