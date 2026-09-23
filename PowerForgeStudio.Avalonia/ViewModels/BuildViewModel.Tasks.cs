@@ -86,8 +86,10 @@ public sealed partial class BuildViewModel
             OnPropertyChanged(nameof(ShowTaskSection));
             OnPropertyChanged(nameof(ShowBuildContractSection));
             TaskCatalogStatus = catalog.Tasks.Count == 0
-                ? "No local tasks declared. Add Build/powerforge.tasks.json to this working copy."
-                : $"{catalog.Tasks.Count} local task(s) from Build/powerforge.tasks.json. Select one to review its command.";
+                ? "No local tasks found. Add Build/powerforge.tasks.json to this working copy."
+                : catalog.Tasks[0].ConfigurationPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+                    ? $"{catalog.Tasks.Count} local task(s) from Build/powerforge.tasks.json. Select one to review its command."
+                    : $"{catalog.Tasks.Count} build script shortcut(s) found. Select one to review its command and script before running.";
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)

@@ -1,6 +1,6 @@
 namespace PowerForge;
 
-/// <summary>A reviewed task declared by one working copy's Build/powerforge.tasks.json file.</summary>
+/// <summary>A reviewed task declared by JSON or discovered from a conventional build script.</summary>
 public sealed class ProjectTaskPlan
 {
     internal ProjectTaskPlan(string repositoryRoot, string configurationPath, string configurationSha256,
@@ -19,11 +19,11 @@ public sealed class ProjectTaskPlan
         Timeout = timeout;
     }
 
-    /// <summary>Working copy containing the task config.</summary>
+    /// <summary>Working copy containing the task definition or discovered script.</summary>
     public string RepositoryRoot { get; }
-    /// <summary>JSON file that declared the task.</summary>
+    /// <summary>JSON file that declared the task, or the discovered script itself.</summary>
     public string ConfigurationPath { get; }
-    /// <summary>Fingerprint of the inspected JSON file.</summary>
+    /// <summary>Fingerprint of the inspected JSON file or script.</summary>
     public string ConfigurationSha256 { get; }
     /// <summary>Stable task ID.</summary>
     public string Id { get; }
@@ -41,7 +41,7 @@ public sealed class ProjectTaskPlan
     public TimeSpan Timeout { get; }
 }
 
-/// <summary>The local tasks discovered for a working copy. An absent config produces an empty catalog.</summary>
+/// <summary>The local tasks discovered for a working copy. An absent config can expose build script shortcuts.</summary>
 public sealed class ProjectTaskCatalog
 {
     internal ProjectTaskCatalog(string configurationPath, IReadOnlyList<ProjectTaskPlan> tasks)

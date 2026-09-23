@@ -25,7 +25,7 @@ public sealed class ProjectTaskService
         var root = Path.GetFullPath(repositoryRoot);
         if (!Directory.Exists(root)) throw new DirectoryNotFoundException($"Working copy does not exist: {root}");
         var path = Path.Combine(root, "Build", "powerforge.tasks.json");
-        if (!File.Exists(path)) return new ProjectTaskCatalog(path, []);
+        if (!File.Exists(path)) return LoadScriptShortcuts(root, path);
 
         var bytes = ReadBounded(path);
         ValidateShape(bytes);
@@ -89,7 +89,31 @@ public sealed class ProjectTaskService
 
     private static bool FingerprintMatches(ProjectTaskPlan plan, ProjectTaskCatalog catalog)
         => catalog.Tasks.Any(task => task.Id.Equals(plan.Id, StringComparison.OrdinalIgnoreCase)
-            && task.ConfigurationSha256.Equals(plan.ConfigurationSha256, StringComparison.OrdinalIgnoreCase));
+            && task.ConfigurationSha256.Equals(plan.ConfigurationSha256, StringComparison.OrdinalIgnoreCase)
+            && task.ConfigurationPath.Equals(plan.ConfigurationPath,
+                Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+
+    private static ProjectTaskCatalog LoadScriptShortcuts(string root, string configurationPath)
+    {
+        var tasks = new List<ProjectTaskPlan>();
+        foreach (var (relativePath, id, name) in new[]
+        {
+            ("build.ps1", "root-build", "Run root build script"),
+            (Path.Combine("Build", "build.ps1"), "build-folder", "Run Build folder script"),
+            (Path.Combine("Website", "build.ps1"), "website-build", "Run website build script")
+        })
+        {
+            var script = Path.Combine(root, relativePath);
+            if (!File.Exists(script)) continue;
+            using var stream = File.OpenRead(script);
+            using var sha = SHA256.Create();
+            var fingerprint = BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", string.Empty);
+            tasks.Add(new ProjectTaskPlan(root, script, fingerprint, id, name,
+                "Discovered local script. Review its contents before running; it may change files or publish.",
+                "pwsh", ["-NoProfile", "-NonInteractive", "-File", script], root, TimeSpan.FromMinutes(30)));
+        }
+        return new ProjectTaskCatalog(configurationPath, tasks);
+    }
 
     private static byte[] ReadBounded(string path)
     {

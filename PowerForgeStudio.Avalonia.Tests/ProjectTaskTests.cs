@@ -12,6 +12,48 @@ namespace PowerForgeStudio.Avalonia.Tests;
 public sealed class ProjectTaskTests
 {
     [Fact]
+    public async Task DiscoveredScriptShortcutAppearsWithReviewedCommand()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "studio-script-shortcut-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        await File.WriteAllTextAsync(Path.Combine(root, "build.ps1"), "Write-Output 'build'");
+        try
+        {
+            await TestAppBuilder.RunAsync(async () =>
+            {
+                using var model = new BuildViewModel();
+                model.SetWorkingCopy(root);
+                await model.PlanAsync();
+                var task = Assert.Single(model.Tasks);
+                Assert.Contains("build script shortcut", model.TaskCatalogStatus);
+                model.SelectedTask = task;
+                Assert.True(model.CanRunTask);
+                Assert.Contains("build.ps1", model.SelectedTaskArguments);
+
+                var view = new BuildView { DataContext = model };
+                var window = new Window { Content = view, Width = 1050, Height = 720 };
+                try
+                {
+                    window.Show();
+                    window.UpdateLayout();
+                    AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+                    using var frame = window.CaptureRenderedFrame();
+                    Assert.NotNull(frame);
+                    var output = Environment.GetEnvironmentVariable("POWERFORGE_STUDIO_VISUAL_OUTPUT");
+                    if (!string.IsNullOrEmpty(output))
+                    {
+                        Directory.CreateDirectory(output);
+                        frame.Save(Path.Combine(output, "script-shortcut.png"), PngBitmapEncoderOptions.Default);
+                    }
+                }
+                finally { window.Close(); }
+                return true;
+            });
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public async Task InvalidTaskConfigurationRemainsVisibleAfterInspection()
     {
         var root = Path.Combine(Path.GetTempPath(), "studio-task-invalid-" + Guid.NewGuid().ToString("N"));

@@ -1,6 +1,6 @@
 # Project tasks in PowerForge Studio
 
-Studio can run explicit commands from a repository's `Build/powerforge.tasks.json`. Use this for project-specific PowerShell, .NET, executable, or other command-line steps that do not already have a PowerForge package-build contract. The file is optional; a repository without it still uses the usual Build & Run inspection.
+Studio can run explicit commands from a repository's `Build/powerforge.tasks.json`. Use this for project-specific PowerShell, .NET, executable, or other command-line steps that do not already have a PowerForge package-build contract. The file is optional. Without it, Studio offers reviewed shortcuts for `build.ps1` at the repository root, `Build/build.ps1`, and `Website/build.ps1` when those files exist. These shortcuts run `pwsh -NoProfile -NonInteractive -File` with no script arguments. A declared task file replaces the discovered shortcuts.
 
 ```json
 {
@@ -28,6 +28,8 @@ Studio can run explicit commands from a repository's `Build/powerforge.tasks.jso
 ```
 
 Open the repository in Studio, choose **Build & Run**, then **Inspect & plan**. Select a task to review its exact executable, each separate argument, working directory and timeout. **Run selected task** starts only that task and displays its output, result and captured working-copy path. **Cancel task** requests process cancellation; an interrupted command may leave partial project changes.
+
+The discovered script shortcuts are for ordinary local build entrypoints, including a website build in a repository that also has a PowerForge package contract. Package build and release operations still use **Build current configuration** and **Releases**. Before running a shortcut, open the script in **Files** and review what it does. A script may ignore the apparent build intent and publish or change external state. Studio fingerprints the script during inspection and refuses the old selection if its contents change before execution.
 
 `Id`, `Name` and `Executable` are required. `Description`, `Arguments`, `WorkingDirectory` and `TimeoutSeconds` are optional; the defaults are no arguments, the repository root and 600 seconds. Use an executable name available on `PATH`, an absolute executable path, or a relative executable path inside the working copy. The working directory must exist inside the working copy. Arguments are passed as individual process arguments, without shell expansion. For PowerShell scripts, invoke `pwsh` explicitly as above; JSON task configuration does not interpret `.ps1` files itself.
 
