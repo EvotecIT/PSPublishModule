@@ -80,8 +80,15 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 case "startup": Assert.Equal("startup1", first.GetProperty("Caption").GetString()); break;
             }
         }
-        Assert.True(expected.SequenceEqual(actual), string.Join(Environment.NewLine, expected.Zip(actual)
-            .Where(pair => pair.First != pair.Second).Take(5).Select(pair => "Original: " + pair.First + Environment.NewLine + "Generated: " + pair.Second)));
+        Assert.True(expected.SequenceEqual(actual),
+            $"Original JSON lines: {expected.Length}; generated JSON lines: {actual.Length}." + Environment.NewLine +
+            string.Join(Environment.NewLine, expected.Zip(actual)
+                .Where(pair => pair.First != pair.Second).Take(5)
+                .Select(pair => "Original: " + pair.First + Environment.NewLine + "Generated: " + pair.Second)) +
+            Environment.NewLine + "Generated output tail: " + compiled.StandardOutput.Substring(
+                Math.Max(0, compiled.StandardOutput.Length - 1200)) +
+            Environment.NewLine + "Generated error tail: " + compiled.StandardError.Substring(
+                Math.Max(0, compiled.StandardError.Length - 1200)));
         Assert.Equal(expected.Length, actual.Length);
         Assert.Equal(original.StandardError, compiled.StandardError);
         var cancellation = "; $providerSetup=@'" + Environment.NewLine + setup + Environment.NewLine + "'@" + Environment.NewLine +

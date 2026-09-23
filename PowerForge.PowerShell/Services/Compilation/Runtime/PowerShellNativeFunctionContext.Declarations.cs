@@ -78,8 +78,15 @@ namespace PowerForge.Generated.Runtime
             {
                 VariableExpressionAst => true,
                 MemberExpressionAst { Static: false } member => IsNativeAssignmentAccess(member.Expression),
-                IndexExpressionAst { Index: ConstantExpressionAst or StringConstantExpressionAst or VariableExpressionAst } index => IsNativeAssignmentAccess(index.Target),
+                IndexExpressionAst index when IsNativeAssignmentIndex(index.Index) => IsNativeAssignmentAccess(index.Target),
                 _ => false
             };
+
+        private static bool IsNativeAssignmentIndex(ExpressionAst index)
+            => index is ConstantExpressionAst or StringConstantExpressionAst or VariableExpressionAst ||
+               index is MemberExpressionAst { Static: false, Expression: VariableExpressionAst receiver, Member: StringConstantExpressionAst } member &&
+               member is not InvokeMemberExpressionAst &&
+               member.GetType().GetProperty("NullConditional")?.GetValue(member) is not true &&
+               receiver.VariablePath.IsUnqualified;
     }
 }

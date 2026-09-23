@@ -45,6 +45,71 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains(unit.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.ParameterType);
     }
 
+    [Theory]
+    [InlineData("net10.0")]
+    [InlineData("net472")]
+    public void Analyze_HybridModuleRetainsFunctionWithUnresolvedAuthoredParameterType(string targetFramework)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Read-OptionalType { param([Contoso.Optional.Runtime.Type] $Value) return 42 }", ".psm1");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Hybrid,
+            targetFramework: targetFramework,
+            capabilities: PowerShellCompilationCapabilities.HybridModule));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.False(unit.IsCompilable);
+        Assert.Contains(unit.Diagnostics, diagnostic =>
+            diagnostic.Code == PowerShellCompilationDiagnosticCode.UnsupportedParameterType &&
+            diagnostic.Message.Contains("Contoso.Optional.Runtime.Type", StringComparison.Ordinal));
+        Assert.True(plan.CanProceed);
+
+        var strict = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Strict,
+            targetFramework: targetFramework,
+            capabilities: PowerShellCompilationCapabilities.BinaryModule));
+        Assert.False(strict.CanProceed);
+    }
+
+    [Theory]
+    [InlineData("net10.0")]
+    [InlineData("net472")]
+    public void Analyze_HybridModuleRetainsUnresolvedHostTypeWithoutNativeBinding(string targetFramework)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Read-Session { param([Microsoft.PowerShell.Commands.WebRequestSession] $Session) return 42 }", ".psm1");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Hybrid,
+            targetFramework: targetFramework,
+            capabilities: PowerShellCompilationCapabilities.HybridModule));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.False(unit.IsCompilable);
+        Assert.Contains(unit.Diagnostics, diagnostic =>
+            diagnostic.Code == PowerShellCompilationDiagnosticCode.UnsupportedParameterType);
+    }
+
+    [Theory]
+    [InlineData("net10.0")]
+    [InlineData("net472")]
+    public void Analyze_HybridModuleAllowsKnownHostTypeWithNativeBinding(string targetFramework)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Read-Session { param([Microsoft.PowerShell.Commands.WebRequestSession] $Session,$Name) return $Session.$Name }", ".psm1");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Hybrid,
+            targetFramework: targetFramework,
+            capabilities: PowerShellCompilationCapabilities.HybridModule));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.DoesNotContain(unit.Diagnostics, diagnostic =>
+            diagnostic.Code == PowerShellCompilationDiagnosticCode.UnsupportedParameterType);
+    }
+
     [Fact]
     public void Analyze_BinaryModuleDoesNotTreatUntypedObjectAsDynamicMemberContract()
     {

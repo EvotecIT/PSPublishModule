@@ -7,6 +7,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [InlineData("$Receiver.Value=$Value", false)]
     [InlineData("$Receiver.Nested[$Key]=$Value", true)]
+    [InlineData("$Receiver[$Key.Name]=$Value", true)]
     [InlineData("$Receiver[$Key].Value+=$Value", true)]
     public void NativeTargetAssignments_DescribeReceiverAndIndexDependencies(string body, bool readsKey)
     {
@@ -26,6 +27,34 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Theory]
+    [InlineData("$Receiver[$Key.Get()]=$Value")]
+    [InlineData("$Receiver[$Key.$Property]=$Value")]
+    [InlineData("$Receiver[${Key}?.Name]=$Value")]
+    public void NativeTargetAssignments_KeepComputedIndexesHosted(string body)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Write-Target { param([ValidateRange(1,9)][int]$Seed=1,$Receiver,$Key,$Property,$Value) " + body + " }", ".psm1");
+        var hybrid = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.NativeTargetGraph", "CompiledPowerShell", "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+        Assert.Empty(hybrid.Methods);
+    }
+
+    [Fact]
+    public void NativeTargetAssignments_DirectMemberIndexRemainsHybridOnlyForUntypedReceiver()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Write-Target { param([ValidateRange(1,9)][int]$Seed=1,[object]$Receiver,[object]$Key,$Value) $Receiver[$Key.Name]=$Value }", ".psm1");
+        var transpiler = new PowerShellTypedCompilationTranspiler();
+        var hybrid = transpiler.TranspileForBinaryModule(new[] { fixture.ScriptPath },
+            "PowerForge.NativeTargetGraph", "CompiledPowerShell", "net10.0", PowerShellCompilationCapabilities.HybridModule);
+        var strict = transpiler.TranspileForBinaryModule(new[] { fixture.ScriptPath },
+            "PowerForge.NativeTargetGraph", "CompiledPowerShell", "net10.0", PowerShellCompilationCapabilities.BinaryModule);
+        Assert.Single(hybrid.Methods);
+        Assert.Empty(strict.Methods);
+    }
+
+    [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
     public void NativeTargetAssignments_PreserveAliasesConversionsAndErrors(string framework, string host)
@@ -35,6 +64,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             ("NestedMember", "$inner=[pscustomobject]@{Value=1}; $box=@{Nested=$inner}; $box['Nested'].Value+=$Limit; $observed=$inner.Value; \"value=$observed\""),
             ("ReceiverReplacement", "$box=@{Value=1}; $alias=$box; $box.Value=$($box=@{Value=9}; $Limit); $before=$alias.Value; $after=$box.Value; \"before=$before;after=$after\""),
             ("IndexReplacement", "$box=@{Value=1;Other=9}; $key='Value'; $box[$key]=$($key='Other'; $Limit); $before=$box.Value; $after=$box.Other; \"before=$before;after=$after\""),
+            ("MemberIndexReplacement", "$box=@{Value=1;Other=9}; $key=[pscustomobject]@{Name='Value'}; $box[$key.Name]=$($key=[pscustomobject]@{Name='Other'}; $Limit); $before=$box.Value; $after=$box.Other; \"before=$before;after=$after\""),
+            ("MemberIndexNull", "$box=@{Value=1}; $key=[pscustomobject]@{Name=$null}; $box[$key.Name]=$Limit; 'after'"),
             ("CompoundReplacement", "$box=@{Value=1}; $alias=$box; $box.Value+=$($box=@{Value=9}; $Limit); $before=$alias.Value; $after=$box.Value; \"before=$before;after=$after\""),
             ("MemberWrite", "$box=[pscustomobject]@{Value='old'}; $alias=$box; $box.Value=$Limit; $observed=$alias.Value; \"value=$observed\""),
             ("MemberCompound", "$box=[pscustomobject]@{Value=1}; $alias=$box; $box.Value+=$Limit; $observed=$alias.Value; \"value=$observed\""),

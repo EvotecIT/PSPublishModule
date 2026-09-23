@@ -29,6 +29,13 @@ internal static class PowerShellParameterSemanticValidator
             var name = parameter.Name.VariablePath.UserPath;
             var span = PowerShellSourceParser.GetSpan(document, parameter.Extent);
             var hasAuthoredType = parameter.Attributes.OfType<TypeConstraintAst>().Any();
+            if (PowerShellCompilationParameterTypePolicy.FindUnresolvedAuthoredType(parameter) is { } unresolvedType)
+            {
+                Add(diagnostics, PowerShellCompilationFeatureIds.ParameterType,
+                    $"Parameter '${name}' uses authored type '{unresolvedType.TypeName.FullName}', which cannot be resolved in the selected compilation environment.",
+                    PowerShellSourceParser.GetSpan(document, unresolvedType.Extent));
+                valid = false;
+            }
             if (capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) &&
                 capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&
                 !capabilities.HasFlag(PowerShellCompilationCapability.ClrPipelineCollectionBinding) &&

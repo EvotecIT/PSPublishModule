@@ -51,6 +51,22 @@ internal sealed partial class PowerShellSemanticBinder
         ClearFunctionRegionEvidence(regionCandidates, regionOpportunities, document.Path, functionSymbol.Name);
         var nativeFunctionBinding = PowerShellNativeFunctionBindingPolicy.Select(
             function, capabilities, targetFramework, requiresNativeInvocation);
+        // Native invocation re-evaluates the authored parameter declaration at import.
+        // Keep an unresolved type out of the emitted method, but let the ordinary
+        // binder discover independent regions inside the retained function first.
+        PowerShellSemanticDiagnostic? unresolvedParameterTypeDiagnostic = null;
+        foreach (var parameter in PowerShellParameterSyntax.GetParameters(function.Body))
+        {
+            if (PowerShellCompilationParameterTypePolicy.FindUnresolvedAuthoredType(parameter) is not { } unresolvedType ||
+                nativeFunctionBinding is not null &&
+                PowerShellCompilationParameterTypePolicy.IsHostProvidedParameterType(unresolvedType.TypeName.FullName))
+                continue;
+            unresolvedParameterTypeDiagnostic = new PowerShellSemanticDiagnostic(
+                PowerShellCompilationFeatureIds.ParameterType,
+                $"Parameter '${parameter.Name.VariablePath.UserPath}' uses authored type '{unresolvedType.TypeName.FullName}', which cannot be resolved in the selected compilation environment.",
+                PowerShellSourceParser.GetSpan(document, unresolvedType.Extent));
+            break;
+        }
         if (new[] { function.Body.BeginBlock, function.Body.ProcessBlock, function.Body.EndBlock, GetCleanBlock(function.Body) }
             .FirstOrDefault(block => block?.Traps is { Count: > 0 }) is { } trappedBlock)
         {
@@ -95,6 +111,13 @@ internal sealed partial class PowerShellSemanticBinder
         if (_runtimeFreeModule is not null)
             foreach (var field in _runtimeFreeModule.Fields)
                 symbols.Add("script:" + field.Symbol.Name, new PowerShellSemanticSymbolBinding(field.Symbol, field.Type));
+        if (unresolvedParameterTypeDiagnostic is not null &&
+            (nativeFunctionBinding is not null && PowerShellRuntimeFreePipelineLifecyclePolicy.HasNamedLifecycle(function.Body) ||
+             hasRuntimeFreeLifecycle))
+        {
+            diagnostics.Add(unresolvedParameterTypeDiagnostic);
+            return null;
+        }
         if (nativeFunctionBinding is not null && PowerShellRuntimeFreePipelineLifecyclePolicy.HasNamedLifecycle(function.Body))
             return BindNativeLifecycleFunction(document, function, functionSymbol, functions, diagnostics, targetFramework,
                 capabilities, symbols, parameters, nativeFunctionBinding, outputTypeContract.SemanticType,
@@ -251,6 +274,8 @@ internal sealed partial class PowerShellSemanticBinder
                          document, function, functionSymbol, parameters, locals, authoredStatements,
                          statementBindings, guardedPrefixCandidate))
                 regionCandidates[detachedContinuationCandidate.RegionId] = detachedContinuationCandidate;
+        if (unresolvedParameterTypeDiagnostic is not null)
+            diagnostics.Add(unresolvedParameterTypeDiagnostic);
         if (!bodyIsValid || diagnostics.Count > functionDiagnosticStart)
         {
             if (regionCandidates is not null && lastFailedStatementIndex >= 0 &&

@@ -1,10 +1,20 @@
 using System.Management.Automation;
+using System.Management.Automation.Language;
 
 namespace PowerForge;
 
 /// <summary>Classifies parameter types by the generated surface that can preserve them.</summary>
 internal static class PowerShellCompilationParameterTypePolicy
 {
+    internal static TypeConstraintAst? FindUnresolvedAuthoredType(ParameterAst parameter)
+        => parameter.Attributes.OfType<TypeConstraintAst>()
+            .FirstOrDefault(static constraint => constraint.TypeName.GetReflectionType() is null);
+
+    internal static bool IsHostProvidedParameterType(string name)
+        // Microsoft.PowerShell.Commands.Utility supplies this public type on both
+        // supported PowerShell hosts even when the compiler process has not loaded it.
+        => name.Equals("Microsoft.PowerShell.Commands.WebRequestSession", StringComparison.OrdinalIgnoreCase);
+
     private static readonly HashSet<string> PowerShellHostTypeNames = new(StringComparer.Ordinal)
     {
         typeof(PSCredential).FullName!,

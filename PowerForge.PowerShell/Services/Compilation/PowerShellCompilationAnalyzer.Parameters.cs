@@ -159,6 +159,18 @@ public sealed partial class PowerShellCompilationAnalyzer
             }
             var type = parameter.StaticType;
             var hasExplicitType = parameter.Attributes.OfType<TypeConstraintAst>().Any();
+            if (PowerShellCompilationParameterTypePolicy.FindUnresolvedAuthoredType(parameter) is { } unresolvedType &&
+                !(unitRoot.Parent is FunctionDefinitionAst function &&
+                  PowerShellCompilationParameterTypePolicy.IsHostProvidedParameterType(unresolvedType.TypeName.FullName) &&
+                  PowerShellNativeFunctionBindingPolicy.Select(function, capabilities, targetFramework) is not null))
+            {
+                diagnostics.Add(CreateDiagnostic(
+                    PowerShellCompilationDiagnosticCode.UnsupportedParameterType,
+                    $"Parameter '${parameterName}' uses authored type '{unresolvedType.TypeName.FullName}', which cannot be resolved in the selected compilation environment.",
+                    file,
+                    unresolvedType.Extent,
+                    PowerShellCompilationFeatureIds.ParameterType));
+            }
             var isSwitch = type == typeof(System.Management.Automation.SwitchParameter);
             var typeCapabilities = hasExplicitType
                 ? PowerShellCompilationParameterTypePolicy.Classify(isSwitch ? typeof(bool) : type, targetFramework)
