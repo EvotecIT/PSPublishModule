@@ -24,6 +24,31 @@ public sealed partial class DotNetPublishPipelineRunner
             evaluatedProperties,
             definingProjectPath);
 
+        IEnumerable<XDocument> assignmentDocuments = relatedDocuments ?? Enumerable.Empty<XDocument>();
+        if (target.Document is not null)
+            assignmentDocuments = assignmentDocuments.Prepend(target.Document);
+        XElement[] otherTargetElements = assignmentDocuments
+            .SelectMany(document => document.Descendants())
+            .Where(candidate =>
+            {
+                XElement? candidateTarget = candidate.AncestorsAndSelf().FirstOrDefault(ancestor =>
+                    ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase));
+                return candidateTarget is not null && !ReferenceEquals(candidateTarget, target);
+            })
+            .ToArray();
+
+        if (targetIsDefinitelyInactive)
+        {
+            // Assignments inside this target cannot run before its own condition is checked.
+            // Only another target can make an evaluated-false target guard reachable.
+            HashSet<string> targetConditionProperties = ReadControlledBuildConditionPropertyNames(
+                target,
+                target,
+                includeTargetCondition: true);
+            if (!CanAssignTargetTimeConditionProperty(otherTargetElements, targetConditionProperties))
+                return true;
+        }
+
         HashSet<string> conditionProperties = ReadControlledBuildConditionPropertyNames(
             element,
             target,
@@ -33,18 +58,6 @@ public sealed partial class DotNetPublishPipelineRunner
 
         IEnumerable<XElement> precedingTargetElements = target.Descendants()
             .TakeWhile(candidate => !ReferenceEquals(candidate, element));
-        IEnumerable<XDocument> assignmentDocuments = relatedDocuments ?? Enumerable.Empty<XDocument>();
-        if (target.Document is not null)
-            assignmentDocuments = assignmentDocuments.Prepend(target.Document);
-        IEnumerable<XElement> otherTargetElements = assignmentDocuments
-            .SelectMany(document => document.Descendants())
-            .Where(candidate =>
-            {
-                XElement? candidateTarget = candidate.AncestorsAndSelf().FirstOrDefault(ancestor =>
-                    ancestor.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase));
-                return candidateTarget is not null && !ReferenceEquals(candidateTarget, target);
-            });
-
         return !CanAssignTargetTimeConditionProperty(
             precedingTargetElements.Concat(otherTargetElements),
             conditionProperties);

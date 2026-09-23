@@ -259,6 +259,78 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
+    public void ControlledBuildInputs_IgnoreAssignmentsInsideInactiveTarget()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string projectPath = Path.Combine(root, "App.proj");
+            File.WriteAllText(
+                projectPath,
+                """
+                <Project>
+                  <Target Name="CopyNative" Condition="'$(IsCertNoobProject)' == 'true' and '$(TargetFramework)' == 'net472'">
+                    <PropertyGroup>
+                      <NativeRid>win-x64</NativeRid>
+                    </PropertyGroup>
+                    <ItemGroup>
+                      <NativeFile Include="$(OutDir)native.dll" Condition="Exists('$(NativeRid)/native.dll')" />
+                    </ItemGroup>
+                    <Copy SourceFiles="@(NativeFile)" DestinationFiles="$(OutDir)native.dll" />
+                  </Target>
+                </Project>
+                """);
+
+            Assert.True(DotNetPublishPipelineRunner.HasOnlyControlledBuildFileInputs(
+                root,
+                [projectPath],
+                [projectPath],
+                evaluatedGlobalProperties: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["IsCertNoobProject"] = "false",
+                    ["TargetFramework"] = "net10.0-windows"
+                }));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    public void InactiveTarget_ConsidersAssignmentsInOtherTargets()
+    {
+        var document = System.Xml.Linq.XDocument.Parse(
+            """
+                <Project>
+                  <Target Name="EnableCopy" BeforeTargets="CopyNative">
+                    <PropertyGroup><EnableNativeCopy>true</EnableNativeCopy></PropertyGroup>
+                  </Target>
+                  <Target Name="CopyNative" Condition="'$(EnableNativeCopy)' == 'true'">
+                    <PropertyGroup><NativeRid>win-x64</NativeRid></PropertyGroup>
+                    <Copy SourceFiles="payload.txt" Condition="'$(NativeRid)' == 'win-x64'" DestinationFolder="output" />
+                  </Target>
+                </Project>
+                """);
+        System.Xml.Linq.XElement copy = document.Descendants("Copy").Single();
+        MethodInfo method = typeof(DotNetPublishPipelineRunner).GetMethod(
+            "IsDefinitelyInactiveControlledBuildOperation",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+
+        Assert.False((bool)method.Invoke(null,
+        [
+            copy,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["EnableNativeCopy"] = "false",
+                ["NativeRid"] = ""
+            },
+            "App.proj",
+            new[] { document }
+        ])!);
+    }
+
+    [Fact]
     public void ControlledBuildInputs_RejectTargetTimeActivationOfEvaluatedInactiveCopyInput()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
