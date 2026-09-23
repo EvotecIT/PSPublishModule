@@ -34,7 +34,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         Assert.Empty(windows.UpstreamCommit);
         Assert.Equal("Core", current.PowerShellEdition);
         Assert.Equal(7, current.PowerShellMajorVersion);
-        Assert.Equal("7acb29279dd64e646d821f75d1cc8ad59455a9a6", current.UpstreamCommit);
+        Assert.Equal("f260eb9c31ec72c5282f98e5ea24d9be4f8d7536", current.UpstreamCommit);
         Assert.All(PowerShellCompilationSemanticOracleCatalog.Profiles, profile =>
         {
             Assert.NotEmpty(profile.ProfileId);
