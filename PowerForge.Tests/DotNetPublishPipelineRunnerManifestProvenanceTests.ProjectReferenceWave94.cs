@@ -98,7 +98,60 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         }
     }
 
-    private static void WriteControlledAnalyzerPackage(string packagePath)
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void VerifiedPackageArchive_RejectsTargetActivatedAfterEvaluation()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string projectPath = Path.Combine(root, "App.csproj");
+            string packagePath = Path.Combine(root, "Controlled.Analyzers.1.0.0.nupkg");
+            File.WriteAllText(projectPath, "<Project />");
+            WriteControlledAnalyzerPackage(
+                packagePath,
+                """
+                <Project>
+                  <Target Name="SetFlavor" BeforeTargets="Build">
+                    <PropertyGroup><Flavor>Signed</Flavor></PropertyGroup>
+                  </Target>
+                  <Target Name="Danger" BeforeTargets="Build" Condition="'$(Flavor)' == 'Signed'">
+                    <Exec Command="unsafe" />
+                  </Target>
+                </Project>
+                """);
+
+            string contentHash;
+            using (FileStream packageStream = File.OpenRead(packagePath))
+            using (var packageReader = new PackageArchiveReader(packageStream, leaveStreamOpen: false))
+                contentHash = packageReader.GetContentHash(CancellationToken.None);
+
+            Type archiveType = typeof(DotNetPublishPipelineRunner).GetNestedType(
+                "VerifiedPackageArchive", BindingFlags.NonPublic)!;
+            using IDisposable archive = (IDisposable)archiveType.GetMethod(
+                    "TryOpen", BindingFlags.Static | BindingFlags.NonPublic)!
+                .Invoke(null, [packagePath, contentHash])!;
+            bool accepted = (bool)archiveType.GetMethod(
+                    "HasOnlyControlledBuildInputs", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(archive, [
+                    new[] { "buildTransitive/Controlled.Analyzers.targets" },
+                    root,
+                    projectPath,
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["Flavor"] = "Plain"
+                    }
+                ])!;
+
+            Assert.False(accepted);
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    private static void WriteControlledAnalyzerPackage(string packagePath, string? targetsXml = null)
     {
         using FileStream stream = File.Open(packagePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None);
         using var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: false);
@@ -108,7 +161,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         WriteEntry("buildTransitive/Controlled.Analyzers.props", "<Project />");
         WriteEntry(
             "buildTransitive/Controlled.Analyzers.targets",
-            """
+            targetsXml ?? """
             <Project>
               <Target Name="AddControlledAnalyzerInputs" BeforeTargets="CoreCompile">
                 <PropertyGroup>

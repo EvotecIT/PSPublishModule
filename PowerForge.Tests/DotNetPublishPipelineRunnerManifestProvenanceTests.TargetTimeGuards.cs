@@ -38,6 +38,24 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Theory]
+    [InlineData("'01' == '1'")]
+    [InlineData("'0x1' == '1'")]
+    [InlineData("'On' == 'true'")]
+    [InlineData("'!false' == 'true'")]
+    [InlineData("'!true' == 'false'")]
+    [InlineData("'Pl%61in' == 'Plain'")]
+    [InlineData("!('01' != '1')")]
+    public void ControlledBuildTasks_KeepTargetsWithUnmodeledMsBuildComparison(string condition)
+    {
+        XDocument document = XDocument.Parse(
+            $"<Project><Target Name='Danger' BeforeTargets='Build' Condition=\"{condition}\"><Exec Command='unsafe' /></Target></Project>");
+        var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        Assert.True(DotNetPublishPipelineRunner.ContainsUncontrolledControlledBuildTask(
+            document, [document], properties, properties));
+    }
+
+    [Theory]
     [InlineData("DependsOnTargets='Missing$(Unknown)'")]
     [InlineData("")]
     public void ControlledBuildTasks_SkipInactiveTargetDestinations(string targetAttributes)

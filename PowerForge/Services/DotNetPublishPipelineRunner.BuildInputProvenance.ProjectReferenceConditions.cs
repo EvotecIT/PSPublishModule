@@ -362,12 +362,72 @@ public sealed partial class DotNetPublishPipelineRunner
             return false;
         }
 
+        // MSBuild may compare numbers, boolean aliases, and escaped values by their
+        // converted value. A string comparison could incorrectly prove a condition
+        // false and hide a target or a file input. Keep those cases unknown until
+        // the full MSBuild comparison semantics can be reproduced here.
+        if (HasPotentialMsBuildComparisonConversion(
+                comparison.Groups[2].Value,
+                comparison.Groups[5].Value))
+        {
+            result = false;
+            return false;
+        }
+
         bool equal = string.Equals(
             comparison.Groups[2].Value,
             comparison.Groups[5].Value,
             StringComparison.OrdinalIgnoreCase);
         result = comparison.Groups[3].Value == "==" ? equal : !equal;
         return true;
+    }
+
+    private static bool HasPotentialMsBuildComparisonConversion(string left, string right)
+    {
+        if (left.IndexOf('%') >= 0 || right.IndexOf('%') >= 0)
+            return true;
+
+        bool leftNumeric = HasPotentialMsBuildNumericValue(left);
+        bool rightNumeric = HasPotentialMsBuildNumericValue(right);
+        bool leftBoolean = IsMsBuildBooleanValue(left);
+        bool rightBoolean = IsMsBuildBooleanValue(right);
+        if (leftNumeric && (rightNumeric || rightBoolean ||
+                            right.Trim().Equals("current", StringComparison.OrdinalIgnoreCase)) ||
+            rightNumeric && (leftBoolean ||
+                             left.Trim().Equals("current", StringComparison.OrdinalIgnoreCase)))
+            return true;
+
+        // Canonical true/false spellings have the same equality result as strings.
+        if (leftBoolean && rightBoolean &&
+            (!bool.TryParse(left.Trim(), out _) || !bool.TryParse(right.Trim(), out _)))
+            return true;
+
+        return false;
+    }
+
+    private static bool HasPotentialMsBuildNumericValue(string value)
+    {
+        string trimmed = value.Trim();
+        if (trimmed.Length == 0)
+            return false;
+        if (trimmed.Equals("nan", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("infinity", StringComparison.OrdinalIgnoreCase))
+            return true;
+        char first = trimmed[0];
+        return char.IsDigit(first) || first == '+' || first == '-' || first == '.';
+    }
+
+    private static bool IsMsBuildBooleanValue(string value)
+    {
+        string trimmed = value.Trim();
+        while (trimmed.StartsWith("!", StringComparison.Ordinal))
+            trimmed = trimmed.Substring(1).TrimStart();
+        return trimmed.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.Equals("false", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.Equals("on", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.Equals("off", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.Equals("yes", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.Equals("no", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TrySplitTopLevelCondition(

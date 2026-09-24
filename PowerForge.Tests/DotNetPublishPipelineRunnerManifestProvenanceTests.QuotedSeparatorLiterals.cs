@@ -454,6 +454,42 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         }
     }
 
+    [Fact]
+    public void ControlledBuildInputs_DoNotSkipExistsAfterNumericInequality()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        string externalRoot = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string projectPath = Path.Combine(root, "App.proj");
+            string externalPath = Path.Combine(externalRoot, "payload.txt");
+            File.WriteAllText(externalPath, "external payload");
+            File.WriteAllText(
+                projectPath,
+                """
+                <Project>
+                  <ItemGroup Condition="'01' != '1' or Exists('$(OutsidePath)')">
+                    <Compile Include="Program.cs" />
+                  </ItemGroup>
+                </Project>
+                """);
+
+            Assert.False(DotNetPublishPipelineRunner.HasOnlyControlledBuildFileInputs(
+                root,
+                [projectPath],
+                [projectPath],
+                evaluatedGlobalProperties: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["OutsidePath"] = externalPath
+                }));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+            DeleteTestRepository(externalRoot);
+        }
+    }
+
     [Theory]
     [InlineData("true")]
     [InlineData(null)]

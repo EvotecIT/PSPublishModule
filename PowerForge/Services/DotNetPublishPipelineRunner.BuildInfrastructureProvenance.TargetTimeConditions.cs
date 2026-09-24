@@ -4,6 +4,9 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
+    private static readonly IReadOnlyDictionary<string, string> EmptyTargetGuardProperties =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
     private sealed class TargetGuardEvaluationContext
     {
         internal TargetGuardEvaluationContext(
@@ -70,7 +73,7 @@ public sealed partial class DotNetPublishPipelineRunner
             return false;
         return IsDefinitelyInactiveMsBuildElement(
             element,
-            immutableGlobalProperties ?? evaluatedProperties,
+            immutableGlobalProperties ?? EmptyTargetGuardProperties,
             definingProjectPath);
     }
 
