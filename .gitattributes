@@ -1,5 +1,7 @@
 Module/PSPublishModule.Tests.ps1 text eol=crlf
 Benchmarks/PowerShellCompilation/Corpus/*.json text eol=lf
+# The Windows assessment runner writes this pinned baseline with CRLF.
+Benchmarks/PowerShellCompilation/Corpus/external-assessment-baseline.net10.json -text -eol whitespace=cr-at-eol
 Benchmarks/PowerShellCompilation/Corpus/**/*.ps1 text eol=lf
 Benchmarks/PowerShellCompilation/Corpus/**/*.psm1 text eol=lf
 # Preserve the pinned upstream module snapshot, including its original whitespace.

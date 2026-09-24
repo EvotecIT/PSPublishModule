@@ -96,6 +96,27 @@ internal sealed partial class PowerShellSemanticBinder
                         ? regionOpportunities
                         : null,
                     declaration.Symbol.Kind == PowerShellSymbolKind.NativeScriptBlock || nativeInvocationClosure.Contains(declaration.Syntax.Name));
+                // An unresolved authored parameter keeps the function hosted. Its native
+                // binding may still yield safe prefix regions, while an ordinary hosted
+                // binding can independently prove a detached terminal region. Evaluate
+                // that second view in isolation so neither binding erases the other's
+                // candidates or promotes the unresolved function as a whole.
+                if (bound is null &&
+                    capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions) &&
+                    capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                    functionDiagnostics.Any(static diagnostic => diagnostic.Code == PowerShellCompilationFeatureIds.ParameterType) &&
+                    PowerShellParameterSyntax.GetParameters(declaration.Syntax.Body).Any(static parameter =>
+                        PowerShellCompilationParameterTypePolicy.FindUnresolvedAuthoredType(parameter) is not null))
+                {
+                    var hostedRegions = new Dictionary<string, PowerShellBoundRegionCandidate>(StringComparer.Ordinal);
+                    BindFunction(declaration.Document, declaration.Syntax, declaration.Symbol, functionsByName,
+                        new List<PowerShellSemanticDiagnostic>(), targetFramework,
+                        capabilities & ~PowerShellCompilationCapability.NativeFunctionBinding,
+                        hostedRegions);
+                    foreach (var region in hostedRegions)
+                        if (!regionCandidates.ContainsKey(region.Key))
+                            regionCandidates.Add(region.Key, region.Value);
+                }
                 if (bound is not null && numericErrorObservedCallees.Contains(declaration.Syntax.Name) &&
                     PowerShellRuntimeExceptionCatchPolicy.RequiresNumericErrorWrapping(bound))
                 {

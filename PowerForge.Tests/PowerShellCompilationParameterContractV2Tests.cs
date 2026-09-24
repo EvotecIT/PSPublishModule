@@ -76,6 +76,89 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [InlineData("net10.0")]
     [InlineData("net472")]
+    public void Analyze_HybridModuleKeepsDetachedRegionForUnresolvedCalleeInNativeInvocationClosure(string targetFramework)
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Test-Exists {
+                param([Contoso.Optional.Issue] $Issue, [string] $Name)
+                data Barrier { }
+                return $false
+            }
+            function Invoke-Check {
+                param($Issue)
+                $result = Test-Exists -Issue $Issue -Name 'missing'
+                return $result
+            }
+            """, ".psm1");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Hybrid,
+            targetFramework: targetFramework,
+            capabilities: PowerShellCompilationCapabilities.HybridModule));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units, static unit => unit.Name == "Test-Exists");
+        Assert.False(unit.IsCompilable);
+        Assert.Contains(unit.Diagnostics, static diagnostic =>
+            diagnostic.Code == PowerShellCompilationDiagnosticCode.UnsupportedParameterType);
+        Assert.True(plan.CanProceed);
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "UnresolvedCalleeMethods",
+            targetFramework, PowerShellCompilationCapabilities.HybridModule);
+        var region = Assert.Single(typed.PromotedRegions, static item => item.SourceName == "Test-Exists");
+        Assert.Equal(4, region.StartLine);
+    }
+
+    [Theory]
+    [InlineData("net10.0")]
+    [InlineData("net472")]
+    public void Analyze_HybridModuleKeepsNativeInitializerRegionForUnresolvedIntrinsicBinding(string targetFramework)
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Read-Optional {
+                param([Contoso.Optional.Issue] $Issue)
+                $credentialSplat = @{}
+                foreach ($key in $credentialSplat.Keys) { [void] $key }
+                return $false
+            }
+            """, ".psm1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "UnresolvedIntrinsicMethods",
+            targetFramework, PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.Contains(typed.PromotedRegions, static region =>
+            region.SourceName == "Read-Optional" && region.StartLine == 3);
+        Assert.DoesNotContain(typed.Methods, static method => method.SourceName == "Read-Optional");
+    }
+
+    [Fact]
+    public void Analyze_HybridExecutableDoesNotPromoteDetachedRegionWithoutRegionOwner()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Test-Exists {
+                param([Contoso.Optional.Issue] $Issue)
+                data Barrier { }
+                return $false
+            }
+            function Invoke-Check {
+                param($Issue)
+                Test-Exists -Issue $Issue
+            }
+            """, ".ps1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "UnresolvedExecutableMethods",
+            "net10.0", PowerShellCompilationCapabilities.HybridExecutable);
+
+        Assert.DoesNotContain(typed.PromotedRegions, static region => region.SourceName == "Test-Exists");
+        Assert.DoesNotContain(typed.Methods, static method => method.SourceName == "Test-Exists");
+    }
+
+    [Theory]
+    [InlineData("net10.0")]
+    [InlineData("net472")]
     public void Analyze_HybridModuleRetainsUnresolvedHostTypeWithoutNativeBinding(string targetFramework)
     {
         using var fixture = ArtifactFixture.Create(
