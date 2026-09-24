@@ -1149,7 +1149,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.6.6, )",
-          "PowerForge": "[3.0.150, )",
+          "PowerForge": "[3.0.151, )",
           "System.Security.Cryptography.Xml": "[10.0.12, )"
         }
       },
@@ -1162,8 +1162,8 @@
       "powerforge.powershell.provider.directory.runtime": {
         "type": "Project",
         "dependencies": {
-          "PowerForge.PowerShell.Provider.Directory": "[3.0.150, )",
-          "PowerForge.PowerShell.ProviderSdk": "[3.0.150, )"
+          "PowerForge.PowerShell.Provider.Directory": "[3.0.151, )",
+          "PowerForge.PowerShell.ProviderSdk": "[3.0.151, )"
         }
       },
       "powerforge.powershell.provider.management": {
@@ -1175,14 +1175,14 @@
       "powerforge.powershell.provider.management.runtime": {
         "type": "Project",
         "dependencies": {
-          "PowerForge.PowerShell.Provider.Management": "[3.0.150, )",
-          "PowerForge.PowerShell.ProviderSdk": "[3.0.150, )"
+          "PowerForge.PowerShell.Provider.Management": "[3.0.151, )",
+          "PowerForge.PowerShell.ProviderSdk": "[3.0.151, )"
         }
       },
       "powerforge.powershell.providersdk": {
         "type": "Project",
         "dependencies": {
-          "PowerForge": "[3.0.150, )"
+          "PowerForge": "[3.0.151, )"
         }
       },
       "powerforge.web": {
@@ -1192,7 +1192,7 @@
           "HtmlTinkerX": "[3.0.1, )",
           "Magick.NET-Q8-AnyCPU": "[14.17.1, )",
           "OfficeIMO.Markdown": "[3.4.3, )",
-          "PowerForge": "[3.0.150, )",
+          "PowerForge": "[3.0.151, )",
           "Scriban": "[7.4.0, )",
           "YamlDotNet": "[18.1.0, )"
         }
@@ -1202,7 +1202,7 @@
         "dependencies": {
           "DBAClientX.SQLite": "[1.0.8, )",
           "NuGet.Versioning": "[7.9.0, )",
-          "PowerForge.Web": "[3.0.150, )"
+          "PowerForge.Web": "[3.0.151, )"
         }
       },
       "powerforgestudio.domain": {
@@ -1214,8 +1214,8 @@
           "HtmlForgeX": "[0.56.0, )",
           "HtmlForgeX.Markdown": "[0.56.0, )",
           "OfficeIMO.Markdown": "[3.4.3, )",
-          "PowerForge": "[3.0.150, )",
-          "PowerForge.PowerShell": "[3.0.150, )",
+          "PowerForge": "[3.0.151, )",
+          "PowerForge.PowerShell": "[3.0.151, )",
           "Spectre.Console": "[0.57.2, )",
           "Spectre.Console.Json": "[0.57.2, )",
           "System.IO.Packaging": "[10.0.12, )",
