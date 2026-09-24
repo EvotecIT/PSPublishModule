@@ -2,6 +2,34 @@ namespace PowerForge;
 
 internal static class DotNetPublishSigningProfileResolver
 {
+    internal static void DisableSelectedTargetSigning(DotNetPublishSpec spec)
+    {
+        if (spec is null)
+            throw new ArgumentNullException(nameof(spec));
+
+        // Resolve the active profile first so bundles for excluded targets do not block a smoke run.
+        if (DotNetPublishPipelineRunner.ResolveProfile(spec).Bundles is { Length: > 0 })
+            throw new InvalidOperationException("NoPublishSign cannot be used when bundles are selected because bundle signing follows the source publish target. Select a publish-only configuration for an unsigned smoke run.");
+
+        foreach (var target in spec.Targets ?? Array.Empty<DotNetPublishTarget>())
+        {
+            if (target is null)
+                continue;
+
+            target.Publish ??= new DotNetPublishPublishOptions();
+            if (target.Publish.Sign is not null)
+            {
+                target.Publish.Sign.Enabled = false;
+            }
+            else if (!string.IsNullOrWhiteSpace(target.Publish.SignProfile)
+                || target.Publish.SignOverrides is not null)
+            {
+                target.Publish.SignOverrides ??= new DotNetPublishSignPatch();
+                target.Publish.SignOverrides.Enabled = false;
+            }
+        }
+    }
+
     internal static DotNetPublishSignOptions? ResolveConfiguredSignOptions(
         IReadOnlyDictionary<string, DotNetPublishSignOptions>? signingProfiles,
         string? signProfile,

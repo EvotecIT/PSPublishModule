@@ -132,6 +132,13 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
     public SwitchParameter SkipBuild { get; set; }
 
     /// <summary>
+    /// Disables signing for selected publish targets in this invocation. The configuration remains unchanged.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetSettings)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public SwitchParameter NoPublishSign { get; set; }
+
+    /// <summary>
     /// Exports JSON config and exits without running the engine.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetSettings)]
@@ -204,6 +211,7 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
                     SkipInstallers = SkipInstallers.IsPresent,
                     SkipRestore = SkipRestore.IsPresent,
                     SkipBuild = SkipBuild.IsPresent,
+                    NoPublishSign = NoPublishSign.IsPresent,
                     JsonOnly = JsonOnly.IsPresent,
                     JsonPath = JsonPath,
                     Plan = Plan.IsPresent,

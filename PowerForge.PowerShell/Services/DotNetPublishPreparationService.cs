@@ -259,6 +259,9 @@ internal sealed class DotNetPublishPreparationService
             spec.DotNet.Build = false;
             spec.DotNet.NoBuildInPublish = true;
         }
+
+        if (request.NoPublishSign)
+            DotNetPublishSigningProfileResolver.DisableSelectedTargetSigning(spec);
     }
 
     private static string? ResolveActiveProfileName(DotNetPublishSpec spec)
