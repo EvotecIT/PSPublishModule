@@ -12,7 +12,8 @@ public sealed partial class DotNetPublishPipelineRunner
             IReadOnlyDictionary<string, string> evaluatedProperties,
             IReadOnlyCollection<string> evaluatedImports,
             IReadOnlyCollection<string>? generatedImportRoots = null,
-            bool conservativeSdkHooks = false)
+            bool conservativeSdkHooks = false,
+            IReadOnlyCollection<string>? unstableGuardProperties = null)
         {
             ProjectPath = Path.GetFullPath(projectPath);
             GlobalProperties = globalProperties;
@@ -20,6 +21,7 @@ public sealed partial class DotNetPublishPipelineRunner
             EvaluatedImports = evaluatedImports;
             GeneratedImportRoots = generatedImportRoots ?? Array.Empty<string>();
             ConservativeSdkHooks = conservativeSdkHooks;
+            UnstableGuardProperties = unstableGuardProperties ?? Array.Empty<string>();
         }
 
         internal string ProjectPath { get; }
@@ -28,6 +30,7 @@ public sealed partial class DotNetPublishPipelineRunner
         internal IReadOnlyCollection<string> EvaluatedImports { get; }
         internal IReadOnlyCollection<string> GeneratedImportRoots { get; }
         internal bool ConservativeSdkHooks { get; }
+        internal IReadOnlyCollection<string> UnstableGuardProperties { get; }
     }
 
     private sealed class TargetGuardDocumentProof
@@ -38,9 +41,9 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             Context = context;
             ImmutableProperties = immutableProperties;
-            var properties = new Dictionary<string, string>(
-                context.GlobalProperties,
-                StringComparer.OrdinalIgnoreCase);
+            var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, string> property in context.GlobalProperties)
+                properties[property.Key] = property.Value;
             foreach (KeyValuePair<string, string> property in context.EvaluatedProperties)
                 properties[property.Key] = property.Value;
             EvaluatedProperties = properties;
@@ -58,25 +61,36 @@ public sealed partial class DotNetPublishPipelineRunner
         IEnumerable<XDocument>? relatedDocuments = null,
         IReadOnlyDictionary<string, string>? immutableGlobalProperties = null)
     {
-        if (!IsDefinitelyInactiveMsBuildElement(element, evaluatedProperties, definingProjectPath))
+        // A controlled checkout relocates project files and selected global values.
+        // Only immutable properties whose meaning survives that relocation can prove
+        // an operation inactive. MSBuildThisFile* expands from the declaring path,
+        // which also changes in the detached checkout.
+        if (definingProjectPath is not null &&
+            HasFileScopedTargetGuardCondition(element))
             return false;
-
-        XElement? target = element.AncestorsAndSelf().FirstOrDefault(candidate =>
-            candidate.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase));
-        if (target is null)
-            return true;
-
-        // Evaluation values can change before or during a target, including through SDK
-        // targets and engine-managed properties. Only a false condition proven from
-        // immutable global properties can make a target-time operation unreachable.
-        return immutableGlobalProperties is not null &&
-               IsDefinitelyInactiveMsBuildElement(
-                   element,
-                   immutableGlobalProperties,
-                   definingProjectPath);
+        return IsDefinitelyInactiveMsBuildElement(
+            element,
+            immutableGlobalProperties ?? evaluatedProperties,
+            definingProjectPath);
     }
 
-    private static IReadOnlyDictionary<string, string> ReadImmutableTargetGuardProperties(
+    private static bool HasFileScopedTargetGuardCondition(XElement element)
+    {
+        IEnumerable<string> conditions = element.AncestorsAndSelf()
+            .Select(candidate => candidate.Attribute("Condition")?.Value)
+            .OfType<string>();
+        IEnumerable<string> precedingWhenConditions = element.AncestorsAndSelf()
+            .Where(candidate => candidate.Name.LocalName.Equals("When", StringComparison.OrdinalIgnoreCase) ||
+                                candidate.Name.LocalName.Equals("Otherwise", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(branch => branch.ElementsBeforeSelf()
+                .Where(candidate => candidate.Name.LocalName.Equals("When", StringComparison.OrdinalIgnoreCase))
+                .Select(candidate => candidate.Attribute("Condition")?.Value)
+                .OfType<string>());
+        return conditions.Concat(precedingWhenConditions).Any(value =>
+            value.Contains("$(MSBuildThisFile", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static Dictionary<string, string> ReadImmutableTargetGuardProperties(
         IReadOnlyDictionary<string, string>? globalProperties,
         IEnumerable<string> evaluatedMsBuildInputs)
     {

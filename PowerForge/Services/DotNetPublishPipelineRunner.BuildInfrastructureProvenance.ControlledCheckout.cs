@@ -788,6 +788,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
 
                 var controlledGlobals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                var unstableGuardProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (KeyValuePair<string, string> property in context.GlobalProperties)
                 {
                     if (!TryRemapControlledBuildValue(
@@ -801,6 +802,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         return false;
                     }
                     controlledGlobals[property.Key] = controlledValue;
+                    if (!string.Equals(controlledValue, property.Value, StringComparison.Ordinal))
+                        unstableGuardProperties.Add(property.Key);
                 }
 
                 var controlledProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -871,7 +874,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledImports,
                     // The source project can select its own SDK path. Its target list
                     // cannot prove which hooks the isolated dotnet host will execute.
-                    conservativeSdkHooks: true));
+                    conservativeSdkHooks: true,
+                    unstableGuardProperties: unstableGuardProperties));
             }
 
             if (!HasOnlyControlledBuildFileInputs(

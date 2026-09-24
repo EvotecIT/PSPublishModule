@@ -798,9 +798,27 @@ public sealed partial class DotNetPublishPipelineRunner
             }
 
             string controlledProjectDirectory = Path.GetDirectoryName(controlledProjectPath)!;
+            string sourceProjectPath = Path.GetFullPath(Path.Combine(
+                gitRoot,
+                FrameworkCompatibility.GetRelativePath(controlledSourceRoot, controlledProjectPath)));
+            var stableGuardGlobals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, string> property in evaluatedGlobalProperties)
+            {
+                if (!TryRemapControlledBuildValue(
+                        property.Value,
+                        gitRoot,
+                        controlledSourceRoot,
+                        Path.GetDirectoryName(sourceProjectPath)!,
+                        out string controlledValue))
+                {
+                    return false;
+                }
+                if (string.Equals(controlledValue, property.Value, StringComparison.Ordinal))
+                    stableGuardGlobals[property.Key] = property.Value;
+            }
             IReadOnlyDictionary<string, string> immutableGlobalProperties =
                 ReadImmutableTargetGuardProperties(
-                    evaluatedGlobalProperties,
+                    stableGuardGlobals,
                     executableMsBuildInputs.Concat(documents.Select(source => source.DeclaringPath)));
             foreach ((XDocument document, string declaringPath) in documents)
             {

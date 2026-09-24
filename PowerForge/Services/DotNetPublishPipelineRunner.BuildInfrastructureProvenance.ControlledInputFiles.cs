@@ -114,11 +114,14 @@ public sealed partial class DotNetPublishPipelineRunner
             foreach (TargetGuardEvaluationContext context in targetGuardContexts ??
                      Array.Empty<TargetGuardEvaluationContext>())
             {
+                Dictionary<string, string> immutableProperties = ReadImmutableTargetGuardProperties(
+                    context.GlobalProperties,
+                    context.EvaluatedImports.Append(context.ProjectPath));
+                foreach (string propertyName in context.UnstableGuardProperties)
+                    immutableProperties.Remove(propertyName);
                 var proof = new TargetGuardDocumentProof(
                     context,
-                    ReadImmutableTargetGuardProperties(
-                        context.GlobalProperties,
-                        context.EvaluatedImports.Append(context.ProjectPath)));
+                    immutableProperties);
                 foreach (string path in context.EvaluatedImports
                              .Append(context.ProjectPath)
                              .Select(Path.GetFullPath)

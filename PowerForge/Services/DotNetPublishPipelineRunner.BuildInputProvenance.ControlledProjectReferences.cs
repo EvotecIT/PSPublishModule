@@ -156,9 +156,10 @@ public sealed partial class DotNetPublishPipelineRunner
                     .ToArray();
                 IReadOnlyDictionary<string, string> guardEvaluation =
                     ReadEvaluatedProjectProperties(contextRequest, guardPropertyNames);
-                var guardProperties = new Dictionary<string, string>(
-                    contextRequest.BuildControlledEvaluationProperties(guardEvaluation),
-                    StringComparer.OrdinalIgnoreCase);
+                var guardProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (KeyValuePair<string, string> property in
+                         contextRequest.BuildControlledEvaluationProperties(guardEvaluation))
+                    guardProperties[property.Key] = property.Value;
                 if (isRoot)
                 {
                     foreach (KeyValuePair<string, string> property in rootContext)

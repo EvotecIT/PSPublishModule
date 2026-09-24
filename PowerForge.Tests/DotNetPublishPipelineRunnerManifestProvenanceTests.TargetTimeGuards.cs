@@ -375,6 +375,82 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             reason.Contains("untrusted evaluated build input", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Theory]
+    [InlineData("'$(GatePath)' == '__SOURCE_ROOT__'")]
+    [InlineData("'$(GuardAlias)' == '__SOURCE_ROOT__'")]
+    [InlineData("'$(MSBuildThisFileDirectory)' == '__APP_DIR_WITH_SEPARATOR__'")]
+    public void ReadSourceProvenance_DoesNotHideActivePathGuardAfterCheckoutRelocation(
+        string condition)
+    {
+        DotNetPublishPipelineRunner.SourceProvenance provenance =
+            ReadProjectReferencePropertyRecoveryFixture(
+                appProjectXml: $"""
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup>
+                        <TargetFramework>net8.0</TargetFramework>
+                        <GuardAlias>$(GatePath)</GuardAlias>
+                      </PropertyGroup>
+                      <ItemGroup><ProjectReference Include="../Library/Library.csproj" /></ItemGroup>
+                      <Target Name="PathGuard" BeforeTargets="CoreCompile" Condition="{condition}">
+                        <Exec Command="echo fixture" />
+                      </Target>
+                    </Project>
+                    """,
+                libraryProjectXml: """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                    </Project>
+                    """,
+                repositoryFiles: new Dictionary<string, string>
+                {
+                    ["src/Library/Selected.cs"] = "public static class SelectedInput { }"
+                },
+                mutatedPath: "src/Library/Selected.cs",
+                buildProperties: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["GatePath"] = "__SOURCE_ROOT__"
+                },
+                buildFramework: "net8.0");
+
+        Assert.Contains(provenance.DirtyReasons, reason =>
+            reason.Contains("untrusted evaluated build input", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ReadSourceProvenance_DoesNotHideChildPathGuardAfterCheckoutRelocation()
+    {
+        DotNetPublishPipelineRunner.SourceProvenance provenance =
+            ReadProjectReferencePropertyRecoveryFixture(
+                appProjectXml: """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                      <ItemGroup><ProjectReference Include="../Library/Library.csproj" /></ItemGroup>
+                    </Project>
+                    """,
+                libraryProjectXml: """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                      <Target Name="ChildPathGuard" BeforeTargets="CoreCompile"
+                              Condition="'$(GatePath)' == '__SOURCE_ROOT__'">
+                        <Exec Command="echo fixture" />
+                      </Target>
+                    </Project>
+                    """,
+                repositoryFiles: new Dictionary<string, string>
+                {
+                    ["src/Library/Selected.cs"] = "public static class SelectedInput { }"
+                },
+                mutatedPath: "src/Library/Selected.cs",
+                buildProperties: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["GatePath"] = "__SOURCE_ROOT__"
+                },
+                buildFramework: "net8.0");
+
+        Assert.Contains(provenance.DirtyReasons, reason =>
+            reason.Contains("untrusted evaluated build input", StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public void ControlledBuildInputs_AcceptEmptySourceItemFromInactiveTaskOutput()
     {
