@@ -61,7 +61,10 @@ public sealed partial class DotNetPublishPipelineRunner
             .Where(element =>
                 element.Parent is not null &&
                 element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) &&
-                ControlledSdkEnvironmentProperties.Contains(element.Name.LocalName))
+                ControlledSdkEnvironmentProperties.Contains(element.Name.LocalName) &&
+                !IsDefinitelyInactiveControlledBuildOperation(
+                    element, evaluatedProperties, definingProjectPath: null,
+                    immutableGlobalProperties: immutableGlobalProperties))
             .Any(element => ContainsUncontrolledEnvironmentAssignments(element.Value)))
             return true;
 
@@ -99,7 +102,10 @@ public sealed partial class DotNetPublishPipelineRunner
             .Where(element =>
                 element.Parent is not null &&
                 element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) &&
-                ControlledSdkTaskInputProperties.Contains(element.Name.LocalName))
+                ControlledSdkTaskInputProperties.Contains(element.Name.LocalName) &&
+                !IsDefinitelyInactiveControlledBuildOperation(
+                    element, evaluatedProperties, definingProjectPath: null,
+                    immutableGlobalProperties: immutableGlobalProperties))
             .Select(element => element.Value);
         var pending = new Queue<string>(taskInputs.Concat(sdkTaskInputs).Concat(conditions));
         var inspected = new HashSet<string>(StringComparer.Ordinal);
@@ -136,7 +142,10 @@ public sealed partial class DotNetPublishPipelineRunner
                              .Where(element =>
                                  element.Name.LocalName.Equals(propertyName, StringComparison.OrdinalIgnoreCase) &&
                                  element.Parent is not null &&
-                                 element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase)))
+                                 element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) &&
+                                 !IsDefinitelyInactiveControlledBuildOperation(
+                                     element, evaluatedProperties, definingProjectPath: null,
+                                     immutableGlobalProperties: immutableGlobalProperties)))
                 {
                     pending.Enqueue(property.Value);
                     foreach (XAttribute attribute in property.Attributes())
@@ -163,7 +172,10 @@ public sealed partial class DotNetPublishPipelineRunner
                                  element.Name.LocalName.Equals(itemName, StringComparison.OrdinalIgnoreCase) &&
                                  element.Parent is not null &&
                                  (element.Parent.Name.LocalName.Equals("ItemGroup", StringComparison.OrdinalIgnoreCase) ||
-                                  element.Parent.Name.LocalName.Equals("ItemDefinitionGroup", StringComparison.OrdinalIgnoreCase))))
+                                  element.Parent.Name.LocalName.Equals("ItemDefinitionGroup", StringComparison.OrdinalIgnoreCase)) &&
+                                 !IsDefinitelyInactiveControlledBuildOperation(
+                                     element, evaluatedProperties, definingProjectPath: null,
+                                     immutableGlobalProperties: immutableGlobalProperties)))
                 {
                     pending.Enqueue(item.Value);
                     foreach (XAttribute attribute in item.DescendantsAndSelf().Attributes())
@@ -184,7 +196,10 @@ public sealed partial class DotNetPublishPipelineRunner
                                  element.Name.LocalName.Equals(metadataName, StringComparison.OrdinalIgnoreCase) &&
                                  (itemName.Length == 0 ||
                                   element.Ancestors().Any(ancestor =>
-                                      ancestor.Name.LocalName.Equals(itemName, StringComparison.OrdinalIgnoreCase)))))
+                                      ancestor.Name.LocalName.Equals(itemName, StringComparison.OrdinalIgnoreCase))) &&
+                                 !IsDefinitelyInactiveControlledBuildOperation(
+                                     element, evaluatedProperties, definingProjectPath: null,
+                                     immutableGlobalProperties: immutableGlobalProperties)))
                 {
                     pending.Enqueue(metadata.Value);
                     foreach (XAttribute attribute in metadata.Attributes())
@@ -210,7 +225,7 @@ public sealed partial class DotNetPublishPipelineRunner
                          element.Parent is not null &&
                          IsControlledBuildTaskElement(element.Parent) &&
                          !IsDefinitelyInactiveControlledBuildOperation(
-                             element.Parent,
+                             element,
                              evaluatedProperties,
                              definingProjectPath: null,
                              relatedDocuments,

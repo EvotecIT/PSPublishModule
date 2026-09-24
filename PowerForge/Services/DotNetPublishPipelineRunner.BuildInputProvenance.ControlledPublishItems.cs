@@ -69,13 +69,15 @@ public sealed partial class DotNetPublishPipelineRunner
                 failureReason = "the controlled build environment could not be created.";
                 return false;
             }
-            if (!TryCreateControlledPublishInputPlaceholders(
+            if (!TryCreateControlledPublishInputPlaceholdersForContexts(
                     controlledGitRoot!,
                     controlledSourceRoot,
                     controlledProjectPath!,
                     executableMsBuildInputs,
                     request.ReadEffectiveGlobalProperties(),
-                    ReadControlledFrameworkMatrixProjects(graphBuildNodes).Count > 0))
+                    ReadControlledFrameworkMatrixProjects(graphBuildNodes).Count > 0,
+                    BuildControlledPublishTargetGuardContexts(
+                        request, evaluatedProperties, evaluatedImports, graphBuildNodes)))
             {
                 failureReason = "controlled publish-input placeholders could not be created.";
                 return false;
@@ -804,6 +806,23 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyCollection<string> executableMsBuildInputs,
         IReadOnlyDictionary<string, string> evaluatedGlobalProperties,
         bool hasControlledFrameworkMatrix)
+        => TryCreateControlledPublishInputPlaceholdersForContexts(
+            gitRoot,
+            controlledSourceRoot,
+            controlledProjectPath,
+            executableMsBuildInputs,
+            evaluatedGlobalProperties,
+            hasControlledFrameworkMatrix,
+            targetGuardContexts: null);
+
+    internal static bool TryCreateControlledPublishInputPlaceholdersForContexts(
+        string gitRoot,
+        string controlledSourceRoot,
+        string controlledProjectPath,
+        IReadOnlyCollection<string> executableMsBuildInputs,
+        IReadOnlyDictionary<string, string> evaluatedGlobalProperties,
+        bool hasControlledFrameworkMatrix,
+        IReadOnlyCollection<TargetGuardEvaluationContext>? targetGuardContexts)
     {
         try
         {
@@ -823,81 +842,158 @@ public sealed partial class DotNetPublishPipelineRunner
                 documents.Add((XDocument.Load(controlledPath, LoadOptions.None), controlledPath));
             }
 
-            string controlledProjectDirectory = Path.GetDirectoryName(controlledProjectPath)!;
             string sourceProjectPath = Path.GetFullPath(Path.Combine(
                 gitRoot,
                 FrameworkCompatibility.GetRelativePath(controlledSourceRoot, controlledProjectPath)));
-            var stableGuardGlobals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (KeyValuePair<string, string> property in evaluatedGlobalProperties)
+            var proofsByDocument = new Dictionary<string, List<TargetGuardDocumentProof>>(
+                FileSystemPathSafety.ExistingPathComparer);
+            foreach (TargetGuardEvaluationContext sourceContext in targetGuardContexts ??
+                     [new TargetGuardEvaluationContext(
+                         sourceProjectPath,
+                         evaluatedGlobalProperties,
+                         evaluatedGlobalProperties,
+                         executableMsBuildInputs)])
             {
-                if (!TryRemapControlledBuildValue(
-                        property.Value,
-                        gitRoot,
-                        controlledSourceRoot,
-                        Path.GetDirectoryName(sourceProjectPath)!,
-                        out string controlledValue))
-                {
+                if (!IsSameOrBelowBuildInputPath(sourceContext.ProjectPath, gitRoot))
                     return false;
+                string contextProjectPath = Path.GetFullPath(Path.Combine(
+                    controlledSourceRoot,
+                    FrameworkCompatibility.GetRelativePath(gitRoot, sourceContext.ProjectPath)));
+                var stableGuardGlobals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (KeyValuePair<string, string> property in sourceContext.GlobalProperties)
+                {
+                    if (!TryRemapControlledBuildValue(
+                            property.Value,
+                            gitRoot,
+                            controlledSourceRoot,
+                            Path.GetDirectoryName(sourceContext.ProjectPath)!,
+                            out string controlledValue))
+                    {
+                        return false;
+                    }
+                    if (string.Equals(controlledValue, property.Value, StringComparison.Ordinal))
+                        stableGuardGlobals[property.Key] = property.Value;
                 }
-                if (string.Equals(controlledValue, property.Value, StringComparison.Ordinal))
-                    stableGuardGlobals[property.Key] = property.Value;
-            }
-            Dictionary<string, string> immutableGlobalProperties =
-                ReadImmutableTargetGuardProperties(
+                Dictionary<string, string> immutableProperties = ReadImmutableTargetGuardProperties(
                     stableGuardGlobals,
                     executableMsBuildInputs.Concat(documents.Select(source => source.DeclaringPath)));
-            RemoveControlledInvocationGuardProperties(
-                immutableGlobalProperties,
-                hasControlledFrameworkMatrix ? new[] { "TargetFramework" } : null);
+                RemoveControlledInvocationGuardProperties(
+                    immutableProperties,
+                    sourceContext.UnstableGuardProperties.Concat(
+                        hasControlledFrameworkMatrix ? new[] { "TargetFramework" } : Array.Empty<string>()));
+                var controlledContext = new TargetGuardEvaluationContext(
+                    contextProjectPath,
+                    stableGuardGlobals,
+                    stableGuardGlobals,
+                    sourceContext.EvaluatedImports.Select(import =>
+                        IsSameOrBelowBuildInputPath(import, controlledSourceRoot) ||
+                        !IsSameOrBelowBuildInputPath(import, gitRoot)
+                            ? Path.GetFullPath(import)
+                            : Path.GetFullPath(Path.Combine(
+                                controlledSourceRoot,
+                                FrameworkCompatibility.GetRelativePath(gitRoot, import))))
+                        .ToArray());
+                var proof = new TargetGuardDocumentProof(controlledContext, immutableProperties);
+                foreach (string sourcePath in sourceContext.EvaluatedImports.Append(sourceContext.ProjectPath))
+                {
+                    if (!IsSameOrBelowBuildInputPath(sourcePath, gitRoot))
+                        continue;
+                    string controlledPath = Path.GetFullPath(Path.Combine(
+                        controlledSourceRoot,
+                        FrameworkCompatibility.GetRelativePath(gitRoot, sourcePath)));
+                    if (!proofsByDocument.TryGetValue(controlledPath, out List<TargetGuardDocumentProof>? proofs))
+                    {
+                        proofs = new List<TargetGuardDocumentProof>();
+                        proofsByDocument[controlledPath] = proofs;
+                    }
+                    proofs.Add(proof);
+                }
+            }
             foreach ((XDocument document, string declaringPath) in documents)
             {
+                if (!proofsByDocument.TryGetValue(declaringPath, out List<TargetGuardDocumentProof>? proofs))
+                {
+                    // A candidate import without an authoritative loading instance cannot
+                    // borrow the root project's global properties or path resolution.
+                    proofs = [new TargetGuardDocumentProof(
+                        new TargetGuardEvaluationContext(
+                            declaringPath,
+                            EmptyTargetGuardProperties,
+                            EmptyTargetGuardProperties,
+                            [declaringPath]),
+                        EmptyTargetGuardProperties)];
+                }
                 foreach (XElement item in document.Descendants().Where(IsTargetTimePublishFileItem))
                 {
+                    if (proofs.All(proof => IsDefinitelyInactiveControlledBuildOperation(
+                            item,
+                            proof.EvaluatedProperties,
+                            declaringPath,
+                            immutableGlobalProperties: proof.ImmutableProperties)))
+                    {
+                        continue;
+                    }
                     foreach (XAttribute include in item.Attributes().Where(attribute =>
                                  attribute.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase)))
                     {
-                        if (!TryExpandControlledTaskInputValues(
-                                include.Value,
-                                declaringPath,
-                                controlledProjectDirectory,
-                                documents,
-                                evaluatedGlobalProperties,
-                                out string[] expandedValues,
-                                consumingElement: item,
-                                immutableGlobalProperties: immutableGlobalProperties))
+                        foreach (TargetGuardDocumentProof proof in proofs)
                         {
-                            return false;
-                        }
-                        foreach (string value in expandedValues.SelectMany(expanded =>
-                                     DecodeMsBuildEscapes(expanded).Split(';')))
-                        {
-                            string candidate = value.Trim().Trim('\'', '"');
-                            if (candidate.Length == 0)
-                                continue;
-                            if (!TryResolveControlledTaskInputPath(
-                                    candidate,
+                            if (IsDefinitelyInactiveControlledBuildOperation(
+                                    item,
+                                    proof.EvaluatedProperties,
                                     declaringPath,
-                                    controlledProjectDirectory,
-                                    controlledSourceRoot,
-                                    controlledSourceRoot,
-                                    out string inputPath))
-                            {
-                                return false;
-                            }
-                            if (File.Exists(inputPath))
-                            {
-                                if (HasReparsePointBelowRoot(inputPath, controlledSourceRoot))
-                                    return false;
+                                    immutableGlobalProperties: proof.ImmutableProperties))
                                 continue;
-                            }
-                            if (Directory.Exists(inputPath))
+                            string contextProjectDirectory = Path.GetDirectoryName(proof.Context.ProjectPath)!;
+                            var contextDocumentPaths = new HashSet<string>(
+                                proof.Context.EvaluatedImports.Append(proof.Context.ProjectPath),
+                                FileSystemPathSafety.ExistingPathComparer);
+                            (XDocument Document, string DeclaringPath)[] contextDocuments = documents
+                                .Where(source => contextDocumentPaths.Contains(source.DeclaringPath))
+                                .ToArray();
+                            if (contextDocuments.Length == 0)
                                 return false;
-                            string parentDirectory = Directory.CreateDirectory(
-                                Path.GetDirectoryName(inputPath)!).FullName;
-                            if (HasReparsePointBelowRoot(parentDirectory, controlledSourceRoot))
+                            if (!TryExpandControlledTaskInputValues(
+                                    include.Value,
+                                    declaringPath,
+                                    contextProjectDirectory,
+                                    contextDocuments,
+                                    proof.EvaluatedProperties,
+                                    out string[] expandedValues,
+                                    consumingElement: item,
+                                    immutableGlobalProperties: proof.ImmutableProperties))
                                 return false;
-                            using (File.Create(inputPath))
+                            foreach (string value in expandedValues.SelectMany(expanded =>
+                                     DecodeMsBuildEscapes(expanded).Split(';')))
                             {
+                                string candidate = value.Trim().Trim('\'', '"');
+                                if (candidate.Length == 0)
+                                    continue;
+                                if (!TryResolveControlledTaskInputPath(
+                                        candidate,
+                                        declaringPath,
+                                        contextProjectDirectory,
+                                        controlledSourceRoot,
+                                        controlledSourceRoot,
+                                        out string inputPath))
+                                {
+                                    return false;
+                                }
+                                if (File.Exists(inputPath))
+                                {
+                                    if (HasReparsePointBelowRoot(inputPath, controlledSourceRoot))
+                                        return false;
+                                    continue;
+                                }
+                                if (Directory.Exists(inputPath))
+                                    return false;
+                                string parentDirectory = Directory.CreateDirectory(
+                                    Path.GetDirectoryName(inputPath)!).FullName;
+                                if (HasReparsePointBelowRoot(parentDirectory, controlledSourceRoot))
+                                    return false;
+                                using (File.Create(inputPath))
+                                {
+                                }
                             }
                         }
                     }

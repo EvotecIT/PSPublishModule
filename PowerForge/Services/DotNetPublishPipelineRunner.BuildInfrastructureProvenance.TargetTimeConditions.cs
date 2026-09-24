@@ -46,7 +46,7 @@ public sealed partial class DotNetPublishPipelineRunner
             immutableProperties.Remove(name);
     }
 
-    private sealed class TargetGuardEvaluationContext
+    internal sealed class TargetGuardEvaluationContext
     {
         internal TargetGuardEvaluationContext(
             string projectPath,
@@ -109,7 +109,7 @@ public sealed partial class DotNetPublishPipelineRunner
         // which also changes in the detached checkout.
         if (definingProjectPath is not null &&
             HasFileScopedTargetGuardCondition(element))
-            return false;
+            definingProjectPath = null;
         return IsDefinitelyInactiveMsBuildElement(
             element,
             immutableGlobalProperties ?? EmptyTargetGuardProperties,

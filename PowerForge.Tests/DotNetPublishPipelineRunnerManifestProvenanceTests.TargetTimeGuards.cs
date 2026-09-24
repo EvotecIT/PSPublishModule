@@ -8,6 +8,40 @@ namespace PowerForge.Tests;
 public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
     [Fact]
+    public void ControlledBuildTasks_SkipImmutableInactiveOperationInsideActiveTarget()
+    {
+        XDocument document = XDocument.Parse(
+            "<Project><Target Name='Build'><Exec Command='unsafe' Condition=\"'$(Flavor)' == 'Signed'\" /></Target></Project>");
+        var inactive = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Flavor"] = "Plain"
+        };
+
+        Assert.False(DotNetPublishPipelineRunner.ContainsUncontrolledControlledBuildTask(
+            document, [document], inactive, inactive));
+        Assert.True(DotNetPublishPipelineRunner.ContainsUncontrolledControlledBuildTask(
+            document, [document], new Dictionary<string, string> { ["Flavor"] = "Signed" },
+            new Dictionary<string, string> { ["Flavor"] = "Signed" }));
+    }
+
+    [Fact]
+    public void ControlledBuildTasks_SkipImmutableInactiveSdkOverrideInsideActiveTarget()
+    {
+        XDocument document = XDocument.Parse(
+            "<Project><Target Name='Build'><PropertyGroup Condition=\"'$(Flavor)' == 'Signed'\"><ResGenToolPath>outside</ResGenToolPath></PropertyGroup></Target></Project>");
+        var inactive = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Flavor"] = "Plain"
+        };
+
+        Assert.False(DotNetPublishPipelineRunner.ContainsUncontrolledControlledBuildTask(
+            document, [document], inactive, inactive));
+        Assert.True(DotNetPublishPipelineRunner.ContainsUncontrolledControlledBuildTask(
+            document, [document], new Dictionary<string, string> { ["Flavor"] = "Signed" },
+            new Dictionary<string, string> { ["Flavor"] = "Signed" }));
+    }
+
+    [Fact]
     public void ControlledBuildTasks_IgnorePropertyFunctionInsideImmutableInactiveTarget()
     {
         XDocument document = XDocument.Parse(
@@ -586,6 +620,56 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             reason.Contains("untrusted evaluated build input", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Theory]
+    [InlineData("Activated.targets")]
+    [InlineData("activated/*.targets")]
+    public void ReadSourceProvenance_DoesNotTrustImportsActivatedByControlledBuildOverrides(
+        string importPath)
+    {
+        DotNetPublishPipelineRunner.SourceProvenance provenance =
+            ReadProjectReferencePropertyRecoveryFixture(
+                appProjectXml: $$"""
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                      <Import Project="{{importPath}}" Condition="'$(RunAnalyzers)' == 'false'" />
+                      <ItemGroup><ProjectReference Include="../Library/Library.csproj" /></ItemGroup>
+                      <Target Name="ControlledImportGuard" BeforeTargets="CoreCompile"
+                              Condition="'$(Flavor)' == 'Signed'">
+                        <Exec Command="echo unsafe" />
+                      </Target>
+                    </Project>
+                    """,
+                libraryProjectXml: """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                    </Project>
+                    """,
+                repositoryFiles: new Dictionary<string, string>
+                {
+                    ["src/App/Activated.targets"] = """
+                        <Project TreatAsLocalProperty="Flavor">
+                          <PropertyGroup><Flavor>Signed</Flavor></PropertyGroup>
+                        </Project>
+                        """,
+                    ["src/App/activated/Guard.targets"] = """
+                        <Project TreatAsLocalProperty="Flavor">
+                          <PropertyGroup><Flavor>Signed</Flavor></PropertyGroup>
+                        </Project>
+                        """,
+                    ["src/Library/Selected.cs"] = "public static class SelectedInput { }"
+                },
+                mutatedPath: "src/Library/Selected.cs",
+                buildProperties: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["RunAnalyzers"] = "true",
+                    ["Flavor"] = "Plain"
+                },
+                buildFramework: "net8.0");
+
+        Assert.Contains(provenance.DirtyReasons, reason =>
+            reason.Contains("untrusted evaluated build input", StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public void ReadSourceProvenance_DoesNotHideChildBuildProjectReferencesOverride()
     {
@@ -695,6 +779,90 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             Assert.True(Evaluate("Plain"));
             Assert.False(Evaluate("Signed"));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    public void ControlledPublishPlaceholders_DoNotCreateInactivePublishItemFile()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string sourceRoot = Path.Combine(root, "controlled");
+            Directory.CreateDirectory(sourceRoot);
+            const string project = "<Project><Target Name='Build'><ItemGroup><Content Include='generated.txt' Condition=\"'$(Flavor)' == 'Signed'\"><CopyToPublishDirectory>Always</CopyToPublishDirectory></Content></ItemGroup></Target></Project>";
+            string originalPath = Path.Combine(root, "App.proj");
+            string controlledPath = Path.Combine(sourceRoot, "App.proj");
+            File.WriteAllText(originalPath, project);
+            File.WriteAllText(controlledPath, project);
+            MethodInfo method = typeof(DotNetPublishPipelineRunner).GetMethod(
+                "TryCreateControlledPublishInputPlaceholders",
+                BindingFlags.Static | BindingFlags.NonPublic)!;
+            bool Evaluate(string flavor) => (bool)method.Invoke(
+                null,
+                [root, sourceRoot, controlledPath, new[] { originalPath },
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["Flavor"] = flavor
+                    }, false])!;
+
+            Assert.True(Evaluate("Plain"));
+            Assert.False(File.Exists(Path.Combine(sourceRoot, "generated.txt")));
+            Assert.True(Evaluate("Signed"));
+            Assert.True(File.Exists(Path.Combine(sourceRoot, "generated.txt")));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    public void ControlledPublishPlaceholders_ResolveChildProjectDirectoryInItsOwnContext()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string sourceRoot = Path.Combine(root, "controlled");
+            string appPath = Path.Combine(root, "App", "App.proj");
+            string childPath = Path.Combine(root, "Child", "Child.proj");
+            string controlledAppPath = Path.Combine(sourceRoot, "App", "App.proj");
+            string controlledChildPath = Path.Combine(sourceRoot, "Child", "Child.proj");
+            Directory.CreateDirectory(Path.GetDirectoryName(appPath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(childPath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(controlledAppPath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(controlledChildPath)!);
+            const string appXml = "<Project><PropertyGroup><PayloadPath>root.txt</PayloadPath></PropertyGroup><Target Name='Build'><ItemGroup><Content Include='$(PayloadPath)' CopyToPublishDirectory='Always' /></ItemGroup></Target></Project>";
+            const string childXml = "<Project><PropertyGroup><PayloadPath>child.txt</PayloadPath></PropertyGroup><Target Name='Build'><ItemGroup><Content Include='$(PayloadPath)' CopyToPublishDirectory='Always' /></ItemGroup></Target></Project>";
+            File.WriteAllText(appPath, appXml);
+            File.WriteAllText(childPath, childXml);
+            File.WriteAllText(controlledAppPath, appXml);
+            File.WriteAllText(controlledChildPath, childXml);
+            var appGlobals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Flavor"] = "Plain"
+            };
+            var childGlobals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Flavor"] = "Signed"
+            };
+            var contexts = new DotNetPublishPipelineRunner.TargetGuardEvaluationContext[]
+            {
+                new(appPath, appGlobals, appGlobals, [appPath]),
+                new(childPath, childGlobals, childGlobals, [childPath])
+            };
+
+            Assert.True(DotNetPublishPipelineRunner.TryCreateControlledPublishInputPlaceholdersForContexts(
+                root, sourceRoot, controlledAppPath, [appPath, childPath], appGlobals,
+                hasControlledFrameworkMatrix: false, targetGuardContexts: contexts));
+            Assert.True(File.Exists(Path.Combine(sourceRoot, "App", "root.txt")));
+            Assert.True(File.Exists(Path.Combine(sourceRoot, "Child", "child.txt")));
+            Assert.False(File.Exists(Path.Combine(sourceRoot, "App", "child.txt")));
+            Assert.False(File.Exists(Path.Combine(sourceRoot, "Child", "root.txt")));
         }
         finally
         {

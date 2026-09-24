@@ -208,10 +208,19 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     ]
                 };
 
+            Assert.False(DotNetPublishPipelineRunner.HasOnlyControlledBuildFileInputs(
+                root,
+                [projectPath],
+                [projectPath],
+                evaluatedProjectContexts: contexts));
             Assert.True(DotNetPublishPipelineRunner.HasOnlyControlledBuildFileInputs(
                 root,
                 [projectPath],
                 [projectPath],
+                evaluatedGlobalProperties: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["UseLocalDependency"] = "false"
+                },
                 evaluatedProjectContexts: contexts));
         }
         finally

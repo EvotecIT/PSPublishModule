@@ -68,12 +68,27 @@ public sealed partial class DotNetPublishPipelineRunner
                 : evaluatedProjectContexts.SelectMany(project => project.Value.Select(properties =>
                     new TargetGuardEvaluationContext(
                         project.Key,
-                        evaluatedGlobalProperties ??
-                            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                        ReadDirectHelperStableGuardGlobals(
+                            evaluatedGlobalProperties, properties),
                         properties,
                         executableMsBuildInputs)))
                     .ToArray(),
             out _);
+
+    private static IReadOnlyDictionary<string, string> ReadDirectHelperStableGuardGlobals(
+        IReadOnlyDictionary<string, string>? globalProperties,
+        IReadOnlyDictionary<string, string> evaluatedProperties)
+    {
+        var stable = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (KeyValuePair<string, string> property in globalProperties ??
+                     new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!evaluatedProperties.TryGetValue(property.Key, out string? evaluatedValue) ||
+                string.Equals(property.Value, evaluatedValue, StringComparison.Ordinal))
+                stable[property.Key] = property.Value;
+        }
+        return stable;
+    }
 
     private static bool HasOnlyControlledBuildFileInputs(
         string checkoutRoot,
@@ -116,7 +131,12 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 Dictionary<string, string> immutableProperties = ReadImmutableTargetGuardProperties(
                     context.GlobalProperties,
-                    context.EvaluatedImports.Append(context.ProjectPath));
+                    // The source evaluation is not authoritative for the isolated invocation:
+                    // its global overrides can activate a declared import that was inactive in
+                    // the source. A candidate can revoke proof, but can never grant it.
+                    context.EvaluatedImports
+                        .Append(context.ProjectPath)
+                        .Concat(executableMsBuildInputs));
                 RemoveControlledInvocationGuardProperties(
                     immutableProperties,
                     context.UnstableGuardProperties);
@@ -593,9 +613,14 @@ public sealed partial class DotNetPublishPipelineRunner
             reachableDocuments,
             evaluatedProperties,
             immutableGlobalProperties);
-        bool sdkOverride = ContainsUncontrolledSdkTaskExecutionOverride(reachableDocument);
-        bool compilerOverride = ContainsUncontrolledCompilerOptionOverride(reachableDocument);
+        bool sdkOverride = ContainsUncontrolledSdkTaskExecutionOverride(
+            reachableDocument, immutableGlobalProperties);
+        bool compilerOverride = ContainsUncontrolledCompilerOptionOverride(
+            reachableDocument, immutableGlobalProperties);
         XElement? uncontrolledElement = reachableDocument.Descendants().FirstOrDefault(element =>
+            !IsDefinitelyInactiveControlledBuildOperation(
+                element, evaluatedProperties, definingProjectPath: null,
+                immutableGlobalProperties: immutableGlobalProperties) && (
             element.Name.LocalName.Equals("UsingTask", StringComparison.OrdinalIgnoreCase) ||
             (IsControlledBuildTaskElement(element) &&
              (!IsModeledControlledBuildTask(element.Name.LocalName) ||
@@ -610,7 +635,7 @@ public sealed partial class DotNetPublishPipelineRunner
               element.Name.LocalName.Equals("Exec", StringComparison.OrdinalIgnoreCase) ||
               element.Name.LocalName.Equals("MSBuild", StringComparison.OrdinalIgnoreCase) ||
               element.Name.LocalName.Equals("XmlPeek", StringComparison.OrdinalIgnoreCase) ||
-              element.Name.LocalName.Equals("JsonPeek", StringComparison.OrdinalIgnoreCase))));
+              element.Name.LocalName.Equals("JsonPeek", StringComparison.OrdinalIgnoreCase)))));
         return importActivation || taskPropertyFunction || sdkOverride || compilerOverride ||
                uncontrolledElement is not null;
     }
@@ -651,7 +676,9 @@ public sealed partial class DotNetPublishPipelineRunner
         => !string.IsNullOrWhiteSpace(value) &&
            !value.Trim().Equals("false", StringComparison.OrdinalIgnoreCase);
 
-    private static bool ContainsUncontrolledSdkTaskExecutionOverride(XDocument document)
+    private static bool ContainsUncontrolledSdkTaskExecutionOverride(
+        XDocument document,
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties)
     {
         string[] booleanProperties =
         {
@@ -676,6 +703,9 @@ public sealed partial class DotNetPublishPipelineRunner
         };
 
         return document.Descendants().Any(element =>
+            !IsDefinitelyInactiveControlledBuildOperation(
+                element, EmptyTargetGuardProperties, definingProjectPath: null,
+                immutableGlobalProperties: immutableGlobalProperties) &&
             element.Parent is not null &&
             element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) &&
             ((booleanProperties.Contains(element.Name.LocalName, StringComparer.OrdinalIgnoreCase) &&
@@ -684,7 +714,9 @@ public sealed partial class DotNetPublishPipelineRunner
               !string.IsNullOrWhiteSpace(element.Value))));
     }
 
-    private static bool ContainsUncontrolledCompilerOptionOverride(XDocument document)
+    private static bool ContainsUncontrolledCompilerOptionOverride(
+        XDocument document,
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties)
     {
         string[] propertyNames =
         {
@@ -695,6 +727,9 @@ public sealed partial class DotNetPublishPipelineRunner
             "OtherFlags"
         };
         if (document.Descendants().Any(element =>
+                !IsDefinitelyInactiveControlledBuildOperation(
+                    element, EmptyTargetGuardProperties, definingProjectPath: null,
+                    immutableGlobalProperties: immutableGlobalProperties) &&
                 element.Parent is not null &&
                 element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) &&
                 propertyNames.Contains(element.Name.LocalName, StringComparer.OrdinalIgnoreCase) &&
@@ -704,11 +739,17 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return document.Descendants().Any(element =>
+            !IsDefinitelyInactiveControlledBuildOperation(
+                element, EmptyTargetGuardProperties, definingProjectPath: null,
+                immutableGlobalProperties: immutableGlobalProperties) &&
             element.Parent is not null &&
             element.Parent.Name.LocalName.Equals("ItemGroup", StringComparison.OrdinalIgnoreCase) &&
             (element.Name.LocalName.Equals("CompilerTools", StringComparison.OrdinalIgnoreCase) ||
              element.Name.LocalName.Equals("FscCompilerTools", StringComparison.OrdinalIgnoreCase))) ||
                document.Descendants().Any(element =>
+                   !IsDefinitelyInactiveControlledBuildOperation(
+                       element, EmptyTargetGuardProperties, definingProjectPath: null,
+                       immutableGlobalProperties: immutableGlobalProperties) &&
                    IsControlledBuildTaskElement(element) &&
                    IsCompilerOrLinkerTask(element.Name.LocalName) &&
                    element.Attributes().Any(attribute =>
@@ -741,6 +782,10 @@ public sealed partial class DotNetPublishPipelineRunner
                     "Project",
                     StringComparison.OrdinalIgnoreCase))?
                 .Value ?? string.Empty;
+            // A wildcard can select a new file after controlled overrides change an
+            // import condition. The declared-input inventory cannot enumerate that file.
+            if (DecodeMsBuildEscapes(project).IndexOfAny(new[] { '*', '?' }) >= 0)
+                return true;
             string unresolved = ReplaceOrdinalIgnoreCase(
                 DecodeMsBuildEscapes(project),
                 "$(MSBuildThisFileDirectory)",
