@@ -136,9 +136,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     // the source. A candidate can revoke proof, but can never grant it.
                     context.EvaluatedImports
                         .Append(context.ProjectPath)
-                        .Concat(executableMsBuildInputs));
-                RemoveControlledInvocationGuardProperties(
-                    immutableProperties,
+                        .Concat(executableMsBuildInputs),
                     context.UnstableGuardProperties);
                 var proof = new TargetGuardDocumentProof(
                     context,

@@ -876,9 +876,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
                 Dictionary<string, string> immutableProperties = ReadImmutableTargetGuardProperties(
                     stableGuardGlobals,
-                    executableMsBuildInputs.Concat(documents.Select(source => source.DeclaringPath)));
-                RemoveControlledInvocationGuardProperties(
-                    immutableProperties,
+                    executableMsBuildInputs.Concat(documents.Select(source => source.DeclaringPath)),
                     sourceContext.UnstableGuardProperties.Concat(
                         hasControlledFrameworkMatrix ? new[] { "TargetFramework" } : Array.Empty<string>()));
                 var controlledContext = new TargetGuardEvaluationContext(

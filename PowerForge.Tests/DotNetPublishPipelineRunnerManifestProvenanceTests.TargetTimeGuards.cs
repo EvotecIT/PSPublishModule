@@ -390,6 +390,54 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Theory]
+    [Trait("Category", "DotNetPublishPrGate")]
+    [InlineData("false", true)]
+    [InlineData("true", false)]
+    public void ReadSourceProvenance_UsesInactiveImportedMutatorToProveLaterTarget(
+        string enableMutator,
+        bool safe)
+    {
+        DotNetPublishPipelineRunner.SourceProvenance provenance =
+            ReadProjectReferencePropertyRecoveryFixture(
+                appProjectXml: """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                      <ItemGroup><ProjectReference Include="../Library/Library.csproj" /></ItemGroup>
+                    </Project>
+                    """,
+                libraryProjectXml: """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                    </Project>
+                    """,
+                repositoryFiles: new Dictionary<string, string>
+                {
+                    ["src/Directory.Build.targets"] = """
+                        <Project>
+                          <Target Name="MutateFlavor" BeforeTargets="CoreCompile" Condition="'$(EnableMutator)' == 'true'">
+                            <PropertyGroup><Flavor>Signed</Flavor></PropertyGroup>
+                          </Target>
+                          <Target Name="PotentialInput" BeforeTargets="CoreCompile" Condition="'$(Flavor)' == 'Signed'">
+                            <PropertyGroup><ApplicationIcon>../../../outside.ico</ApplicationIcon></PropertyGroup>
+                          </Target>
+                        </Project>
+                        """,
+                    ["src/Library/Selected.cs"] = "public static class SelectedInput { }"
+                },
+                mutatedPath: "src/Library/Selected.cs",
+                buildProperties: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["EnableMutator"] = enableMutator,
+                    ["Flavor"] = "Plain"
+                },
+                buildFramework: "net8.0");
+
+        Assert.True(safe == !provenance.DirtyReasons.Any(reason =>
+            reason.Contains("untrusted evaluated build input", StringComparison.OrdinalIgnoreCase)),
+            "Reasons: " + string.Join(" | ", provenance.DirtyReasons));
+    }
+
+    [Theory]
     [InlineData("Plain", "Plain", true)]
     [InlineData("Plain", "Signed", false)]
     [InlineData("Signed", "Plain", true)]
@@ -1078,7 +1126,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             var immutable = (IReadOnlyDictionary<string, string>)method.Invoke(
                 null,
-                [globals, new[] { importPath }])!;
+                [globals, new[] { importPath }, null])!;
             Assert.False(immutable.ContainsKey("BuildingProject"));
             Assert.Equal("net10.0-windows", immutable["TargetFramework"]);
         }
@@ -1108,7 +1156,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             var immutable = (IReadOnlyDictionary<string, string>)method.Invoke(
                 null,
-                [globals, new[] { importPath }])!;
+                [globals, new[] { importPath }, null])!;
             Assert.Empty(immutable);
         }
         finally
@@ -1138,8 +1186,220 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             var immutable = (IReadOnlyDictionary<string, string>)method.Invoke(
                 null,
-                [globals, new[] { projectPath }])!;
+                [globals, new[] { projectPath }, null])!;
             Assert.Equal("Plain", immutable["Flavor"]);
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Theory]
+    [Trait("Category", "DotNetPublishPrGate")]
+    [InlineData("<PropertyGroup><Flavor>Signed</Flavor></PropertyGroup>")]
+    [InlineData("<Message Text='Signed'><Output TaskParameter='Text' PropertyName='Flavor' /></Message>")]
+    public void ControlledBuildInputs_PreserveGuardChangedOnlyByInactiveTarget(string mutation)
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string projectPath = Path.Combine(root, "App.proj");
+            File.WriteAllText(projectPath,
+                "<Project><Target Name='Mutate' Condition=\"'$(EnableMutator)' == 'true'\">" +
+                mutation +
+                "</Target><Target Name='Danger' BeforeTargets='Build' Condition=\"'$(Flavor)' == 'Signed'\"><Exec Command='unsafe' /></Target></Project>");
+
+            bool IsControlled(string enableMutator) => DotNetPublishPipelineRunner.HasOnlyControlledBuildFileInputs(
+                root,
+                [projectPath],
+                [projectPath],
+                evaluatedGlobalProperties: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["EnableMutator"] = enableMutator,
+                    ["Flavor"] = "Plain"
+                });
+
+            Assert.True(IsControlled("false"));
+            Assert.False(IsControlled("true"));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Theory]
+    [Trait("Category", "DotNetPublishPrGate")]
+    [InlineData("<Target Name='Activate'><PropertyGroup><EnableMutator>true</EnableMutator></PropertyGroup></Target>", null)]
+    [InlineData("", "EnableMutator")]
+    public void ImmutableTargetGuardProperties_RevokeDependentGuardWhenActivatorCanChange(
+        string activator,
+        string? unstableProperty)
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string projectPath = Path.Combine(root, "App.proj");
+            File.WriteAllText(projectPath,
+                "<Project>" + activator +
+                "<Target Name='Mutate' Condition=\"'$(EnableMutator)' == 'true'\"><PropertyGroup><Flavor>Signed</Flavor></PropertyGroup></Target></Project>");
+            MethodInfo method = typeof(DotNetPublishPipelineRunner).GetMethod(
+                "ReadImmutableTargetGuardProperties",
+                BindingFlags.Static | BindingFlags.NonPublic)!;
+            var globals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["EnableMutator"] = "false",
+                ["Flavor"] = "Plain"
+            };
+
+            var immutable = (IReadOnlyDictionary<string, string>)method.Invoke(
+                null,
+                [globals, new[] { projectPath }, unstableProperty is null ? null : new[] { unstableProperty }])!;
+            Assert.False(immutable.ContainsKey("EnableMutator"));
+            Assert.False(immutable.ContainsKey("Flavor"));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void ImmutableTargetGuardProperties_IgnoreDynamicOutputOnlyWhenInactive()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string projectPath = Path.Combine(root, "App.proj");
+            File.WriteAllText(projectPath,
+                "<Project><Target Name='Output' Condition=\"'$(EnableMutator)' == 'true'\"><Message Text='x'><Output TaskParameter='Text' PropertyName='$(UnknownName)' /></Message></Target></Project>");
+            MethodInfo method = typeof(DotNetPublishPipelineRunner).GetMethod(
+                "ReadImmutableTargetGuardProperties",
+                BindingFlags.Static | BindingFlags.NonPublic)!;
+            var globals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["EnableMutator"] = "false",
+                ["Flavor"] = "Plain"
+            };
+
+            var immutable = (IReadOnlyDictionary<string, string>)method.Invoke(
+                null,
+                [globals, new[] { projectPath }, null])!;
+            Assert.Equal("Plain", immutable["Flavor"]);
+
+            var unstable = (IReadOnlyDictionary<string, string>)method.Invoke(
+                null,
+                [globals, new[] { projectPath }, new[] { "EnableMutator" }])!;
+            Assert.Empty(unstable);
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Theory]
+    [Trait("Category", "DotNetPublishPrGate")]
+    [InlineData("BuildingProject", "<Project>")]
+    [InlineData("EnableMutator", "<Project TreatAsLocalProperty='EnableMutator'>")]
+    public void ImmutableTargetGuardProperties_DoNotTrustExcludedGuardForInactiveMutation(
+        string guardName,
+        string projectStart)
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string projectPath = Path.Combine(root, "App.proj");
+            File.WriteAllText(projectPath,
+                projectStart + "<Target Name='Mutate' Condition=\"'$(" + guardName + ")' == 'true'\"><PropertyGroup><Flavor>Signed</Flavor></PropertyGroup></Target></Project>");
+            MethodInfo method = typeof(DotNetPublishPipelineRunner).GetMethod(
+                "ReadImmutableTargetGuardProperties",
+                BindingFlags.Static | BindingFlags.NonPublic)!;
+            var globals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [guardName] = "false",
+                ["Flavor"] = "Plain"
+            };
+
+            var immutable = (IReadOnlyDictionary<string, string>)method.Invoke(
+                null,
+                [globals, new[] { projectPath }, null])!;
+            Assert.False(immutable.ContainsKey("Flavor"));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Theory]
+    [Trait("Category", "DotNetPublishPrGate")]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ImmutableTargetGuardProperties_PropagatePotentialActivationThroughMutationCycle(
+        bool hasActivator)
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string projectPath = Path.Combine(root, "App.proj");
+            string activator = hasActivator
+                ? "<Target Name='Activate'><PropertyGroup><Left>true</Left></PropertyGroup></Target>"
+                : string.Empty;
+            File.WriteAllText(projectPath,
+                "<Project>" + activator +
+                "<Target Name='ChangeLeft' Condition=\"'$(Right)' == 'true'\"><PropertyGroup><Left>true</Left></PropertyGroup></Target>" +
+                "<Target Name='ChangeRight' Condition=\"'$(Left)' == 'true'\"><PropertyGroup><Right>true</Right></PropertyGroup></Target></Project>");
+            MethodInfo method = typeof(DotNetPublishPipelineRunner).GetMethod(
+                "ReadImmutableTargetGuardProperties",
+                BindingFlags.Static | BindingFlags.NonPublic)!;
+            var globals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Left"] = "false",
+                ["Right"] = "false"
+            };
+
+            var immutable = (IReadOnlyDictionary<string, string>)method.Invoke(
+                null,
+                [globals, new[] { projectPath }, null])!;
+            Assert.Equal(!hasActivator, immutable.ContainsKey("Left"));
+            Assert.Equal(!hasActivator, immutable.ContainsKey("Right"));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void ControlledPublishPlaceholders_KeepInactiveMutatorFromActivatingPublishItem()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string sourceRoot = Path.Combine(root, "controlled");
+            Directory.CreateDirectory(sourceRoot);
+            const string project = "<Project><Target Name='Mutate' Condition=\"'$(EnableMutator)' == 'true'\"><PropertyGroup><Flavor>Signed</Flavor></PropertyGroup></Target><Target Name='Build'><ItemGroup><Content Include='generated.txt' Condition=\"'$(Flavor)' == 'Signed'\" CopyToPublishDirectory='Always' /></ItemGroup></Target></Project>";
+            string originalPath = Path.Combine(root, "App.proj");
+            string controlledPath = Path.Combine(sourceRoot, "App.proj");
+            File.WriteAllText(originalPath, project);
+            File.WriteAllText(controlledPath, project);
+            MethodInfo method = typeof(DotNetPublishPipelineRunner).GetMethod(
+                "TryCreateControlledPublishInputPlaceholders",
+                BindingFlags.Static | BindingFlags.NonPublic)!;
+            var globals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["EnableMutator"] = "false",
+                ["Flavor"] = "Plain"
+            };
+
+            Assert.True((bool)method.Invoke(
+                null,
+                [root, sourceRoot, controlledPath, new[] { originalPath }, globals, false])!);
+            Assert.False(File.Exists(Path.Combine(sourceRoot, "generated.txt")));
         }
         finally
         {

@@ -34,18 +34,6 @@ public sealed partial class DotNetPublishPipelineRunner
         return names;
     }
 
-    private static void RemoveControlledInvocationGuardProperties(
-        IDictionary<string, string> immutableProperties,
-        IEnumerable<string>? additionalUnstableProperties = null)
-    {
-        foreach (string name in ControlledInvocationGuardProperties)
-            immutableProperties.Remove(name);
-        if (additionalUnstableProperties is null)
-            return;
-        foreach (string name in additionalUnstableProperties)
-            immutableProperties.Remove(name);
-    }
-
     internal sealed class TargetGuardEvaluationContext
     {
         internal TargetGuardEvaluationContext(
@@ -134,7 +122,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static Dictionary<string, string> ReadImmutableTargetGuardProperties(
         IReadOnlyDictionary<string, string>? globalProperties,
-        IEnumerable<string> evaluatedMsBuildInputs)
+        IEnumerable<string> evaluatedMsBuildInputs,
+        IEnumerable<string>? additionalUnstableProperties = null)
     {
         var immutable = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (globalProperties is null)
@@ -143,6 +132,15 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach (KeyValuePair<string, string> property in globalProperties)
             immutable[property.Key] = property.Value;
         immutable.Remove("MSBuildLastTaskResult");
+        foreach (string name in ControlledInvocationGuardProperties)
+            immutable.Remove(name);
+        if (additionalUnstableProperties is not null)
+        {
+            foreach (string name in additionalUnstableProperties)
+                immutable.Remove(name);
+        }
+
+        var assignments = new List<(string? PropertyName, XElement Element, string Path)>();
 
         foreach (string path in evaluatedMsBuildInputs.Distinct(FileSystemPathSafety.ExistingPathComparer))
         {
@@ -184,7 +182,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             "PropertyGroup",
                             StringComparison.OrdinalIgnoreCase) == true)
                     {
-                        immutable.Remove(assignment.Name.LocalName);
+                        assignments.Add((assignment.Name.LocalName, assignment, path));
                     }
 
                     if (!assignment.Name.LocalName.Equals("Output", StringComparison.OrdinalIgnoreCase))
@@ -199,13 +197,40 @@ public sealed partial class DotNetPublishPipelineRunner
                     propertyName = DecodeMsBuildEscapes(propertyName!);
                     if (ContainsUnresolvedBuildExpression(propertyName))
                     {
-                        immutable.Clear();
-                        return immutable;
+                        assignments.Add((null, assignment, path));
+                        continue;
                     }
-                    immutable.Remove(propertyName.Trim());
+                    assignments.Add((propertyName.Trim(), assignment, path));
                 }
             }
         }
+
+        // A target-time write matters only if it can execute while the guard values
+        // still hold. Prune the proof set to a fixed point: removing one property
+        // may activate another target that was previously known to be inactive.
+        bool changed;
+        do
+        {
+            changed = false;
+            foreach ((string? propertyName, XElement assignment, string path) in assignments)
+            {
+                if (propertyName is not null && !immutable.ContainsKey(propertyName))
+                    continue;
+                if (IsDefinitelyInactiveControlledBuildOperation(
+                        assignment,
+                        immutable,
+                        path,
+                        immutableGlobalProperties: immutable))
+                    continue;
+                if (propertyName is null)
+                {
+                    immutable.Clear();
+                    return immutable;
+                }
+                immutable.Remove(propertyName);
+                changed = true;
+            }
+        } while (changed);
 
         return immutable;
     }
