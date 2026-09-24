@@ -8,7 +8,7 @@ using System.Linq;
 internal static partial class Program
 {
     private const string DotNetPublishUsage =
-        "Usage: powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--profile <name>] [--plan] [--validate] [--output json] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|SelfContained|FrameworkDependent|AotSpeed|AotSize>] [--matrix <runtime|framework|style=value[,value][;...]>] [--skip-restore] [--skip-build]";
+        "Usage: powerforge dotnet publish [--config <DotNetPublish.json>] [--project-root <path>] [--profile <name>] [--plan] [--validate] [--output json] [--target <Name[,Name...]>] [--rid <Rid[,Rid...]>] [--framework <tfm[,tfm...]>] [--style <Portable|PortableCompat|PortableSize|SelfContained|FrameworkDependent|AotSpeed|AotSize>] [--matrix <runtime|framework|style=value[,value][;...]>] [--skip-restore] [--skip-build] [--no-publish-sign]";
     private const string DotNetBundlePostProcessUsage =
         "Usage: powerforge dotnet bundle-postprocess [--config <DotNetPublish.json>] --bundle <Id> --bundle-root <path> [--project-root <path>] [--target <Name>] [--rid <Rid>] [--framework <tfm>] [--style <Portable|PortableCompat|PortableSize|SelfContained|FrameworkDependent|AotSpeed|AotSize>] [--configuration <Release|Debug>] [--zip-path <path>] [--source-output <path>] [--delete-pattern <glob>] [--skip-archive] [--skip-metadata] [--token <name=value>] [--plan] [--output json]";
     private const string DotNetScaffoldUsage =
@@ -52,6 +52,7 @@ internal static partial class Program
                 var overrideProjectRoot = TryGetProjectRoot(subArgs);
                 var skipRestore = subArgs.Any(a => a.Equals("--skip-restore", StringComparison.OrdinalIgnoreCase));
                 var skipBuild = subArgs.Any(a => a.Equals("--skip-build", StringComparison.OrdinalIgnoreCase));
+                var noPublishSign = subArgs.Any(a => a.Equals("--no-publish-sign", StringComparison.OrdinalIgnoreCase));
 
                 var configPath = TryGetOptionValue(subArgs, "--config");
                 if (string.IsNullOrWhiteSpace(configPath))
@@ -109,6 +110,8 @@ internal static partial class Program
                     if (effectiveStyles.Length > 1 && GetActiveDotNetPublishProfile(spec) is not null)
                         cmdLogger.Warn("Multiple --style values were provided with an active profile; the single-value profile style filter is ignored and target styles drive matrix expansion.");
                     ApplyDotNetPublishSpecOverrides(spec, overrideTargets, effectiveRids, effectiveFrameworks, effectiveStyles);
+                    if (noPublishSign)
+                        DotNetPublishSigningProfileResolver.DisableSelectedTargetSigning(spec);
                     var plan = runner.Plan(spec, specPath, enforceRequiredEnvironmentVariables: runPipeline);
                     ApplyDotNetPublishSkipFlags(plan, skipRestore, skipBuild);
 
