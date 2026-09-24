@@ -9,7 +9,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string declaringPath,
         string taskInputBaseDirectory,
         IReadOnlyCollection<(XDocument Document, string DeclaringPath)> relatedDocuments,
-        IReadOnlyDictionary<string, string>? evaluatedGlobalProperties)
+        IReadOnlyDictionary<string, string>? evaluatedGlobalProperties,
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties)
     {
         var controlledTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (XElement target in relatedDocuments
@@ -46,7 +47,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     relatedDocuments,
                     evaluatedGlobalProperties,
                     out string[] expandedTargets,
-                    consumingElement: callTarget))
+                    consumingElement: callTarget,
+                    immutableGlobalProperties: immutableGlobalProperties))
             {
                 return false;
             }

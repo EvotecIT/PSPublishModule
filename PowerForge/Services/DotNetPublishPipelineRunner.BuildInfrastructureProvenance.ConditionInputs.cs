@@ -43,7 +43,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     relatedDocuments,
                     evaluatedGlobalProperties,
                     out string[] expandedConditions,
-                    consumingElement: conditionAttribute.Parent))
+                    consumingElement: conditionAttribute.Parent,
+                    immutableGlobalProperties: immutableGlobalProperties))
             {
                 // Conditions without an Exists call do not consume file-system state.
                 // Preserve ordinary unevaluated feature conditions, but fail closed when
@@ -67,7 +68,8 @@ public sealed partial class DotNetPublishPipelineRunner
                             relatedDocuments,
                             evaluatedGlobalProperties,
                             out string[] expandedValues,
-                            consumingElement: conditionAttribute.Parent) ||
+                            consumingElement: conditionAttribute.Parent,
+                            immutableGlobalProperties: immutableGlobalProperties) ||
                         expandedValues.Length == 0)
                         return false;
 

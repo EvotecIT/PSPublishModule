@@ -53,7 +53,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool ContainsUncontrolledTaskInputPropertyFunction(
         XDocument document,
         IReadOnlyCollection<XDocument> relatedDocuments,
-        IReadOnlyDictionary<string, string> evaluatedProperties)
+        IReadOnlyDictionary<string, string> evaluatedProperties,
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties)
     {
         if (relatedDocuments
             .SelectMany(related => related.Descendants())
@@ -71,7 +72,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     element,
                     evaluatedProperties,
                     definingProjectPath: null,
-                    relatedDocuments))
+                    relatedDocuments,
+                    immutableGlobalProperties))
             .SelectMany(element => element.Attributes())
             .Where(attribute =>
                 !attribute.Name.LocalName.Equals("ContinueOnError", StringComparison.OrdinalIgnoreCase))
@@ -83,7 +85,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     element,
                     evaluatedProperties,
                     definingProjectPath: null,
-                    relatedDocuments))
+                    relatedDocuments,
+                    immutableGlobalProperties))
             .SelectMany(task => task.AncestorsAndSelf())
             .SelectMany(element => element.Attributes())
             .Where(attribute => attribute.Name.LocalName.Equals(
@@ -125,7 +128,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         relatedDocuments,
                         "PropertyName",
                         propertyName,
-                        evaluatedProperties))
+                        evaluatedProperties,
+                        immutableGlobalProperties))
                     return true;
                 foreach (XElement property in relatedDocuments
                              .SelectMany(related => related.Descendants())
@@ -150,7 +154,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         relatedDocuments,
                         "ItemName",
                         itemName,
-                        evaluatedProperties))
+                        evaluatedProperties,
+                        immutableGlobalProperties))
                     return true;
                 foreach (XElement item in relatedDocuments
                              .SelectMany(related => related.Descendants())
@@ -195,7 +200,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyCollection<XDocument> relatedDocuments,
         string assignmentAttributeName,
         string referencedName,
-        IReadOnlyDictionary<string, string> evaluatedProperties)
+        IReadOnlyDictionary<string, string> evaluatedProperties,
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties = null)
     {
         foreach (XElement output in relatedDocuments
                      .SelectMany(related => related.Descendants())
@@ -207,7 +213,8 @@ public sealed partial class DotNetPublishPipelineRunner
                              element.Parent,
                              evaluatedProperties,
                              definingProjectPath: null,
-                             relatedDocuments) &&
+                             relatedDocuments,
+                             immutableGlobalProperties) &&
                          !element.Parent.Name.LocalName.Equals(
                              "ReadLinesFromFile",
                              StringComparison.OrdinalIgnoreCase)))

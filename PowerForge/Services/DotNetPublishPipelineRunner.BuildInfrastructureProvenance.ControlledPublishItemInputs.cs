@@ -68,7 +68,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         relatedDocuments,
                         evaluatedGlobalProperties,
                         out string[] expandedValues,
-                        consumingElement: item))
+                        consumingElement: item,
+                        immutableGlobalProperties: immutableGlobalProperties))
                 {
                     return false;
                 }
@@ -127,6 +128,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     evaluatedGlobalProperties,
                     resolvedItemInputs,
                     isControlledInput,
+                    immutableGlobalProperties,
                     out bool hasReferenceHintPath) ||
                 (hasReferenceInclude &&
                  !hasControlledReferenceInclude &&
@@ -153,7 +155,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         relatedDocuments,
                         evaluatedGlobalProperties,
                         out string[] expandedValues,
-                        consumingElement: item) ||
+                        consumingElement: item,
+                        immutableGlobalProperties: immutableGlobalProperties) ||
                     expandedValues.Any(value => !IsControlledPublishRelativePath(value)))
                 {
                     return false;
@@ -174,6 +177,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string>? evaluatedGlobalProperties,
         IReadOnlyCollection<string> resolvedItemInputs,
         Func<string, bool>? isControlledInput,
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties,
         out bool hasReferenceHintPath)
     {
         hasReferenceHintPath = false;
@@ -234,7 +238,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     relatedDocuments,
                     evaluatedGlobalProperties,
                     out string[] expandedValues,
-                    consumingElement: item))
+                    consumingElement: item,
+                    immutableGlobalProperties: immutableGlobalProperties))
             {
                 return false;
             }

@@ -273,7 +273,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 ContainsUncontrolledControlledBuildTask(
                     document,
                     controlledDocuments,
-                    evaluatedGlobalProperties));
+                    evaluatedGlobalProperties,
+                    immutableGlobalProperties));
             if (!controlled)
                 failureReason = "MSBuild graph contains an uncontrolled build task";
             return controlled;
@@ -499,7 +500,8 @@ public sealed partial class DotNetPublishPipelineRunner
     internal static bool ContainsUncontrolledControlledBuildTask(
         XDocument document,
         IReadOnlyCollection<XDocument> relatedDocuments,
-        IReadOnlyDictionary<string, string>? evaluatedProperties = null)
+        IReadOnlyDictionary<string, string>? evaluatedProperties = null,
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties = null)
     {
         evaluatedProperties ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (!TryCreateReachableControlledBuildDocuments(
@@ -516,7 +518,8 @@ public sealed partial class DotNetPublishPipelineRunner
         bool taskPropertyFunction = ContainsUncontrolledTaskInputPropertyFunction(
             reachableDocument,
             reachableDocuments,
-            evaluatedProperties);
+            evaluatedProperties,
+            immutableGlobalProperties);
         bool sdkOverride = ContainsUncontrolledSdkTaskExecutionOverride(reachableDocument);
         bool compilerOverride = ContainsUncontrolledCompilerOptionOverride(reachableDocument);
         XElement? uncontrolledElement = reachableDocument.Descendants().FirstOrDefault(element =>

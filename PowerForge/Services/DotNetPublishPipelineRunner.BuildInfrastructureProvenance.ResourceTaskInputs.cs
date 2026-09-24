@@ -42,7 +42,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     relatedDocuments,
                     evaluatedGlobalProperties,
                     out string[] expandedSources,
-                    consumingElement: task))
+                    consumingElement: task,
+                    immutableGlobalProperties: immutableGlobalProperties))
             {
                 return false;
             }
@@ -104,7 +105,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     relatedDocuments,
                     evaluatedGlobalProperties,
                     out string[] expandedValues,
-                    consumingElement: task) ||
+                    consumingElement: task,
+                    immutableGlobalProperties: immutableGlobalProperties) ||
                 expandedValues.Length != 1 ||
                 !bool.TryParse(DecodeMsBuildEscapes(expandedValues[0]).Trim(), out bool enabled) ||
                 !enabled)

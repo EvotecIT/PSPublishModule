@@ -31,7 +31,8 @@ public sealed partial class DotNetPublishPipelineRunner
                declaringPath,
                taskInputBaseDirectory,
                relatedDocuments,
-               evaluatedGlobalProperties) &&
+               evaluatedGlobalProperties,
+               immutableGlobalProperties) &&
            HasOnlyControlledSdkTaskPropertyFileInputs(
                document,
                declaringPath,
@@ -41,7 +42,8 @@ public sealed partial class DotNetPublishPipelineRunner
                relatedDocuments,
                evaluatedGlobalProperties,
                isControlledInput,
-               readLines ?? ReadControlledCheckoutTextInput) &&
+               readLines ?? ReadControlledCheckoutTextInput,
+               immutableGlobalProperties) &&
            HasOnlyControlledGenerateResourceSourcePaths(
                document,
                declaringPath,

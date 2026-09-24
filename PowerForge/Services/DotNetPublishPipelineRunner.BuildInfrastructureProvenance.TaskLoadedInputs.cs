@@ -121,7 +121,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         relatedDocuments,
                         evaluatedGlobalProperties,
                         out string[] expandedValues,
-                        consumingElement: task))
+                        consumingElement: task,
+                        immutableGlobalProperties: immutableGlobalProperties))
                 {
                     return false;
                 }

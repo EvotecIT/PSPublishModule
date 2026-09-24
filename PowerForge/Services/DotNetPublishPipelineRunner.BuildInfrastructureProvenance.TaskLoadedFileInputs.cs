@@ -44,7 +44,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     relatedDocuments,
                     evaluatedGlobalProperties,
                     out string[] expandedFileValues,
-                    consumingElement: task) ||
+                    consumingElement: task,
+                    immutableGlobalProperties: immutableGlobalProperties) ||
                 expandedFileValues.Length == 0)
             {
                 return false;

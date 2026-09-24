@@ -77,6 +77,26 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 foreach (XElement assignment in target.Descendants())
                 {
+                    if (assignment.Name.LocalName.Equals("MSBuild", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string? projects = assignment.Attributes()
+                            .FirstOrDefault(attribute => attribute.Name.LocalName.Equals(
+                                "Projects", StringComparison.OrdinalIgnoreCase))?.Value;
+                        // Child project items can carry dynamic property metadata. Even a
+                        // literal override can activate imports absent from this evaluation,
+                        // and those imports may localize otherwise unchanged global values.
+                        if (projects?.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+                            projects?.IndexOf("%(", StringComparison.Ordinal) >= 0 ||
+                            assignment.Attributes().Any(attribute =>
+                                (attribute.Name.LocalName.Equals("Properties", StringComparison.OrdinalIgnoreCase) ||
+                                 attribute.Name.LocalName.Equals("RemoveProperties", StringComparison.OrdinalIgnoreCase)) &&
+                                !string.IsNullOrWhiteSpace(attribute.Value)))
+                        {
+                            immutable.Clear();
+                            return immutable;
+                        }
+                    }
+
                     if (assignment.Parent?.Name.LocalName.Equals(
                             "PropertyGroup",
                             StringComparison.OrdinalIgnoreCase) == true)

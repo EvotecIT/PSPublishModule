@@ -766,6 +766,10 @@ public sealed partial class DotNetPublishPipelineRunner
             }
 
             string controlledProjectDirectory = Path.GetDirectoryName(controlledProjectPath)!;
+            IReadOnlyDictionary<string, string> immutableGlobalProperties =
+                ReadImmutableTargetGuardProperties(
+                    evaluatedGlobalProperties,
+                    executableMsBuildInputs.Concat(documents.Select(source => source.DeclaringPath)));
             foreach ((XDocument document, string declaringPath) in documents)
             {
                 foreach (XElement item in document.Descendants().Where(IsTargetTimePublishFileItem))
@@ -780,7 +784,8 @@ public sealed partial class DotNetPublishPipelineRunner
                                 documents,
                                 evaluatedGlobalProperties,
                                 out string[] expandedValues,
-                                consumingElement: item))
+                                consumingElement: item,
+                                immutableGlobalProperties: immutableGlobalProperties))
                         {
                             return false;
                         }

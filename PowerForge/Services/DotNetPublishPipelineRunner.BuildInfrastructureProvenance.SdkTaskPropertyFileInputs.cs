@@ -45,7 +45,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyCollection<(XDocument Document, string DeclaringPath)> relatedDocuments,
         IReadOnlyDictionary<string, string>? evaluatedGlobalProperties,
         Func<string, bool>? isControlledInput,
-        Func<string, string[]?> readLines)
+        Func<string, string[]?> readLines,
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties)
     {
         foreach (XElement property in document.Descendants().Where(element =>
                      element.Parent is not null &&
@@ -61,7 +62,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     relatedDocuments,
                     evaluatedGlobalProperties,
                     out string[] expandedValues,
-                    consumingElement: property))
+                    consumingElement: property,
+                    immutableGlobalProperties: immutableGlobalProperties))
             {
                 return false;
             }
