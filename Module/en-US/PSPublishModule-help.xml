@@ -20538,6 +20538,20 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NoPublishSign</maml:name>
+          <maml:description>
+            <maml:para>Disables signing only for targets selected by this invocation. The configuration remains unchanged.&#xD;
+Use for a temporary runtime smoke, not a signed release. Bundles selected by the effective profile are rejected&#xD;
+because bundle signing follows the source publish target.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>OutputPath</maml:name>
           <maml:description>
             <maml:para>Optional publish output-path override applied to selected targets.</maml:para>
@@ -20778,6 +20792,20 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NoPublishSign</maml:name>
+          <maml:description>
+            <maml:para>Disables signing only for targets selected by this invocation. The configuration remains unchanged.&#xD;
+Use for a temporary runtime smoke, not a signed release. Bundles selected by the effective profile are rejected&#xD;
+because bundle signing follows the source publish target.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>OutputPath</maml:name>
           <maml:description>
             <maml:para>Optional publish output-path override applied to selected targets.</maml:para>
@@ -20997,6 +21025,20 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
         <maml:name>NoInteractive</maml:name>
         <maml:description>
           <maml:para>Disables interactive output mode. Reserved for future UI parity.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NoPublishSign</maml:name>
+        <maml:description>
+          <maml:para>Disables signing only for targets selected by this invocation. The configuration remains unchanged.&#xD;
+Use for a temporary runtime smoke, not a signed release. Bundles selected by the effective profile are rejected&#xD;
+because bundle signing follows the source publish target.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -48203,9 +48245,9 @@ into the built module internals and are not emitted as manifest dependencies. Ap
 used by merge/missing-function workflows and are not emitted as manifest dependencies.</maml:para>
       <maml:para>Built-in Microsoft.PowerShell.* modules are ignored during manifest refresh because they are inbox runtime&#xD;
 modules, not gallery-resolvable dependencies.</maml:para>
-      <maml:para>Version and Guid values set to Auto or Latest are resolved from installed modules by default. When&#xD;
-New-ConfigurationBuild -ResolveMissingModulesOnline is enabled, repository results can be used without&#xD;
-installing the dependency first.</maml:para>
+      <maml:para>Dependencies resolve from installed modules by default. Select -VersionSource PSGallery or&#xD;
+-VersionSource PublishRepository when repository state must be authoritative. Select&#xD;
+-VersionSource Auto explicitly when an installed-first, repository-fallback policy is desired.</maml:para>
       <maml:para>Choose only one versioning style per dependency: a minimum version (-Version or&#xD;
 -MinimumVersion) or an exact version (-RequiredVersion). Mixing them for the same module is treated&#xD;
 as invalid input.</maml:para>
@@ -48302,7 +48344,7 @@ is merge-only.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>VersionSource</maml:name>
           <maml:description>
-            <maml:para>Source used when resolving Auto/Latest version values.</maml:para>
+            <maml:para>Source used when resolving dependency versions. Installed modules are used by default.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">ModuleDependencyVersionSource</command:parameterValue>
           <command:parameterValueGroup>
@@ -48409,7 +48451,7 @@ is merge-only.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>VersionSource</maml:name>
         <maml:description>
-          <maml:para>Source used when resolving Auto/Latest version values.</maml:para>
+          <maml:para>Source used when resolving dependency versions. Installed modules are used by default.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">ModuleDependencyVersionSource</command:parameterValue>
         <command:parameterValueGroup>
@@ -48494,9 +48536,9 @@ is merge-only.</maml:para>
         <maml:introduction>
           <maml:para>PS&gt; </maml:para>
         </maml:introduction>
-        <dev:code>New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'</dev:code>
+        <dev:code>New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto' -VersionSource PSGallery</dev:code>
         <dev:remarks>
-          <maml:para>Pairs well with New-ConfigurationBuild -ResolveMissingModulesOnline when the module is not installed locally.</maml:para>
+          <maml:para>Resolves repository metadata explicitly instead of allowing an installed local build to win.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>

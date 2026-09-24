@@ -5,6 +5,140 @@ namespace PowerForge.Tests;
 public sealed class DotNetPublishPreparationServiceTests
 {
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void Prepare_no_sign_disables_only_selected_publish_target_signing()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-dotnet-publish-no-sign-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            var configPath = Path.Combine(root.FullName, "publish.json");
+            File.WriteAllText(configPath, """
+{
+  "dotNet": { "projectRoot": "." },
+  "signingProfiles": {
+    "Release": { "enabled": true, "thumbprint": "0123456789ABCDEF0123456789ABCDEF01234567" }
+  },
+  "targets": [
+    { "name": "Inline", "publish": { "sign": { "enabled": true, "thumbprint": "0123456789ABCDEF0123456789ABCDEF01234567" } } },
+    { "name": "Profile", "publish": { "signProfile": "Release" } },
+    { "name": "OverridesOnly", "publish": { "signOverrides": { "enabled": true, "thumbprint": "0123456789ABCDEF0123456789ABCDEF01234567" } } }
+  ],
+  "installers": [
+    { "id": "Installer", "prepareFromTarget": "Inline", "sign": { "enabled": true } }
+  ]
+}
+""");
+
+            DotNetPublishPreparedContext Prepare(string target, bool noPublishSign) =>
+                new DotNetPublishPreparationService(new NullLogger()).Prepare(new DotNetPublishPreparationRequest
+                {
+                    ParameterSetName = "Config",
+                    CurrentPath = root.FullName,
+                    ResolvePath = path => Path.IsPathRooted(path) ? path : Path.GetFullPath(Path.Combine(root.FullName, path)),
+                    ConfigPath = configPath,
+                    Target = [target],
+                    NoPublishSign = noPublishSign
+                });
+
+            var configured = Prepare("Inline", noPublishSign: false);
+            Assert.True(Assert.Single(configured.Spec.Targets).Publish.Sign!.Enabled);
+
+            var inlineSmoke = Prepare("Inline", noPublishSign: true);
+            Assert.False(Assert.Single(inlineSmoke.Spec.Targets).Publish.Sign!.Enabled);
+            Assert.True(Assert.Single(inlineSmoke.Spec.Installers).Sign!.Enabled);
+
+            var profileSmoke = Prepare("Profile", noPublishSign: true);
+            var profileTarget = Assert.Single(profileSmoke.Spec.Targets);
+            Assert.True(profileSmoke.Spec.SigningProfiles!["Release"].Enabled);
+            Assert.False(DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+                profileSmoke.Spec.SigningProfiles,
+                profileTarget.Publish.SignProfile,
+                profileTarget.Publish.Sign,
+                profileTarget.Publish.SignOverrides,
+                "Profile")!.Enabled);
+
+            var overridesOnlySmoke = Prepare("OverridesOnly", noPublishSign: true);
+            var overridesOnlyTarget = Assert.Single(overridesOnlySmoke.Spec.Targets);
+            Assert.False(DotNetPublishSigningProfileResolver.ResolveConfiguredSignOptions(
+                overridesOnlySmoke.Spec.SigningProfiles,
+                overridesOnlyTarget.Publish.SignProfile,
+                overridesOnlyTarget.Publish.Sign,
+                overridesOnlyTarget.Publish.SignOverrides,
+                "OverridesOnly")!.Enabled);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void Prepare_no_sign_rejects_selected_bundle_before_changing_signing()
+    {
+        var spec = new DotNetPublishSpec
+        {
+            Targets = [new DotNetPublishTarget { Name = "App", Publish = new DotNetPublishPublishOptions { Sign = new DotNetPublishSignOptions { Enabled = true } } }],
+            Bundles = [new DotNetPublishBundle { Id = "AppBundle", PrepareFromTarget = "App" }]
+        };
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            DotNetPublishSigningProfileResolver.DisableSelectedTargetSigning(spec));
+        Assert.Contains("bundle signing", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(spec.Targets[0].Publish.Sign!.Enabled);
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void Prepare_no_sign_allows_bundle_excluded_by_active_profile()
+    {
+        var spec = new DotNetPublishSpec
+        {
+            Profile = "Smoke",
+            Profiles = [new DotNetPublishProfile { Name = "Smoke", Targets = ["Monitoring"] }],
+            Targets =
+            [
+                new DotNetPublishTarget { Name = "Monitoring", Publish = new DotNetPublishPublishOptions { Sign = new DotNetPublishSignOptions { Enabled = true } } },
+                new DotNetPublishTarget { Name = "Agent", Publish = new DotNetPublishPublishOptions { Sign = new DotNetPublishSignOptions { Enabled = true } } }
+            ],
+            Bundles = [new DotNetPublishBundle { Id = "AgentBundle", PrepareFromTarget = "Agent" }]
+        };
+
+        var originalMonitoring = spec.Targets[0];
+        var originalAgent = spec.Targets[1];
+        DotNetPublishSigningProfileResolver.DisableSelectedTargetSigning(spec);
+
+        var selected = DotNetPublishPipelineRunner.ResolveProfile(spec);
+        Assert.Empty(selected.Bundles);
+        Assert.False(Assert.Single(selected.Targets).Publish.Sign!.Enabled);
+        Assert.False(spec.Targets[0].Publish.Sign!.Enabled);
+        Assert.True(spec.Targets[1].Publish.Sign!.Enabled);
+        Assert.True(originalMonitoring.Publish.Sign!.Enabled);
+        Assert.Same(originalAgent, spec.Targets[1]);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void Prepare_no_sign_rejects_null_publish_settings(bool useProfile)
+    {
+        var target = new DotNetPublishTarget { Name = "Monitoring", Publish = null! };
+        var spec = new DotNetPublishSpec
+        {
+            Profile = useProfile ? "Smoke" : null,
+            Profiles = useProfile ? [new DotNetPublishProfile { Name = "Smoke", Targets = ["Monitoring"] }] : [],
+            Targets = [target]
+        };
+
+        var error = Assert.Throws<ArgumentException>(() =>
+            DotNetPublishSigningProfileResolver.DisableSelectedTargetSigning(spec));
+        Assert.Contains("Target.Publish is required", error.Message, StringComparison.Ordinal);
+        Assert.Same(target, Assert.Single(spec.Targets));
+        Assert.Null(target.Publish);
+    }
+
+    [Fact]
     public void Prepare_from_config_applies_overrides_and_generated_json_path()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-dotnet-publish-prepare-" + Guid.NewGuid().ToString("N")));
