@@ -1661,7 +1661,7 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToArray();
     }
 
-    private static DotNetPublishTarget[] CloneTargets(DotNetPublishTarget[] targets)
+    internal static DotNetPublishTarget[] CloneTargets(DotNetPublishTarget[] targets)
     {
         return (targets ?? Array.Empty<DotNetPublishTarget>())
             .Where(t => t is not null)

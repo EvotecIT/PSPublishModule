@@ -101,11 +101,17 @@ public sealed class DotNetPublishPreparationServiceTests
             Bundles = [new DotNetPublishBundle { Id = "AgentBundle", PrepareFromTarget = "Agent" }]
         };
 
+        var originalMonitoring = spec.Targets[0];
+        var originalAgent = spec.Targets[1];
         DotNetPublishSigningProfileResolver.DisableSelectedTargetSigning(spec);
 
         var selected = DotNetPublishPipelineRunner.ResolveProfile(spec);
         Assert.Empty(selected.Bundles);
         Assert.False(Assert.Single(selected.Targets).Publish.Sign!.Enabled);
+        Assert.False(spec.Targets[0].Publish.Sign!.Enabled);
+        Assert.True(spec.Targets[1].Publish.Sign!.Enabled);
+        Assert.True(originalMonitoring.Publish.Sign!.Enabled);
+        Assert.Same(originalAgent, spec.Targets[1]);
     }
 
     [Fact]

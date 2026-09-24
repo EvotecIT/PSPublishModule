@@ -7,15 +7,23 @@ internal static class DotNetPublishSigningProfileResolver
         if (spec is null)
             throw new ArgumentNullException(nameof(spec));
 
-        // Resolve the active profile first so bundles for excluded targets do not block a smoke run.
-        if (DotNetPublishPipelineRunner.ResolveProfile(spec).Bundles is { Length: > 0 })
+        // Resolve the active profile first so bundles and targets outside it remain unchanged.
+        var selected = DotNetPublishPipelineRunner.ResolveProfile(spec);
+        if (selected.Bundles is { Length: > 0 })
             throw new InvalidOperationException("NoPublishSign cannot be used when bundles are selected because bundle signing follows the source publish target. Select a publish-only configuration for an unsigned smoke run.");
 
-        foreach (var target in spec.Targets ?? Array.Empty<DotNetPublishTarget>())
+        var selectedNames = new HashSet<string>(
+            (selected.Targets ?? Array.Empty<DotNetPublishTarget>()).Select(target => target.Name),
+            StringComparer.OrdinalIgnoreCase);
+        var originalTargets = spec.Targets ?? Array.Empty<DotNetPublishTarget>();
+        var targets = originalTargets.ToArray();
+        for (var index = 0; index < originalTargets.Length; index++)
         {
-            if (target is null)
+            var originalTarget = originalTargets[index];
+            if (originalTarget is null || !selectedNames.Contains(originalTarget.Name))
                 continue;
 
+            var target = DotNetPublishPipelineRunner.CloneTargets([originalTarget])[0];
             target.Publish ??= new DotNetPublishPublishOptions();
             if (target.Publish.Sign is not null)
             {
@@ -27,7 +35,10 @@ internal static class DotNetPublishSigningProfileResolver
                 target.Publish.SignOverrides ??= new DotNetPublishSignPatch();
                 target.Publish.SignOverrides.Enabled = false;
             }
+            targets[index] = target;
         }
+
+        spec.Targets = targets;
     }
 
     internal static DotNetPublishSignOptions? ResolveConfiguredSignOptions(
