@@ -53,6 +53,15 @@ public sealed partial class DotNetPublishPipelineRunner
                      element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) &&
                      ControlledSdkTaskFileInputProperties.Contains(element.Name.LocalName)))
         {
+            if (IsDefinitelyInactiveControlledBuildOperation(
+                    property,
+                    evaluatedGlobalProperties ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                    declaringPath,
+                    immutableGlobalProperties: immutableGlobalProperties))
+            {
+                continue;
+            }
+
             if (string.IsNullOrWhiteSpace(property.Value))
                 continue;
             if (!TryExpandControlledTaskInputValues(

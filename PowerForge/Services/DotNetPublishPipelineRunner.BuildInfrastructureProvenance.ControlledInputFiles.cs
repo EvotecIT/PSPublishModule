@@ -63,6 +63,16 @@ public sealed partial class DotNetPublishPipelineRunner
             controlledProjectPath,
             evaluatedProjectContexts,
             executableMsBuildInputs,
+            targetGuardContexts: evaluatedProjectContexts is null
+                ? null
+                : evaluatedProjectContexts.SelectMany(project => project.Value.Select(properties =>
+                    new TargetGuardEvaluationContext(
+                        project.Key,
+                        evaluatedGlobalProperties ??
+                            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                        properties,
+                        executableMsBuildInputs)))
+                    .ToArray(),
             out _);
 
     private static bool HasOnlyControlledBuildFileInputs(
@@ -74,6 +84,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string? controlledProjectPath,
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>[]>? evaluatedProjectContexts,
         IReadOnlyCollection<string> allEvaluatedMsBuildInputs,
+        IReadOnlyCollection<TargetGuardEvaluationContext>? targetGuardContexts,
         out string? failureReason)
     {
         failureReason = null;
@@ -89,10 +100,38 @@ public sealed partial class DotNetPublishPipelineRunner
             var executableInputs = new HashSet<string>(
                 executableMsBuildInputs.Select(Path.GetFullPath),
                 FileSystemPathSafety.ExistingPathComparer);
+            // Direct helper callers have one known project context. Production checkouts
+            // supply the evaluated import set for each project instance below; a missing
+            // instance must not inherit proof from the release root.
             IReadOnlyDictionary<string, string> immutableGlobalProperties =
-                ReadImmutableTargetGuardProperties(
-                    evaluatedGlobalProperties,
-                    allEvaluatedMsBuildInputs.Concat(executableMsBuildInputs));
+                evaluatedProjectContexts is null
+                    ? ReadImmutableTargetGuardProperties(
+                        evaluatedGlobalProperties,
+                        allEvaluatedMsBuildInputs.Concat(executableMsBuildInputs))
+                    : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var proofsByDocument = new Dictionary<string, List<TargetGuardDocumentProof>>(
+                FileSystemPathSafety.ExistingPathComparer);
+            foreach (TargetGuardEvaluationContext context in targetGuardContexts ??
+                     Array.Empty<TargetGuardEvaluationContext>())
+            {
+                var proof = new TargetGuardDocumentProof(
+                    context,
+                    ReadImmutableTargetGuardProperties(
+                        context.GlobalProperties,
+                        context.EvaluatedImports.Append(context.ProjectPath)));
+                foreach (string path in context.EvaluatedImports
+                             .Append(context.ProjectPath)
+                             .Select(Path.GetFullPath)
+                             .Distinct(FileSystemPathSafety.ExistingPathComparer))
+                {
+                    if (!proofsByDocument.TryGetValue(path, out List<TargetGuardDocumentProof>? proofs))
+                    {
+                        proofs = new List<TargetGuardDocumentProof>();
+                        proofsByDocument[path] = proofs;
+                    }
+                    proofs.Add(proof);
+                }
+            }
             if (!string.IsNullOrWhiteSpace(controlledProjectPath))
             {
                 controlledProjectPath = Path.GetFullPath(controlledProjectPath!);
@@ -224,7 +263,9 @@ public sealed partial class DotNetPublishPipelineRunner
                             entry.Node,
                             path,
                             evaluatedGlobalProperties,
-                            evaluatedProjectContexts))
+                            evaluatedProjectContexts,
+                            proofsByDocument,
+                            immutableGlobalProperties))
                     {
                         continue;
                     }
@@ -240,19 +281,69 @@ public sealed partial class DotNetPublishPipelineRunner
                     failureReason = $"MSBuild document contains a property escape: '{Path.GetFileName(path)}'";
                     return false;
                 }
+                if (proofsByDocument.TryGetValue(path, out List<TargetGuardDocumentProof>? proofs) &&
+                    proofs.Count > 0)
+                {
+                    foreach (TargetGuardDocumentProof proof in proofs)
+                    {
+                        var importedPaths = new HashSet<string>(
+                            proof.Context.EvaluatedImports.Append(proof.Context.ProjectPath)
+                                .Select(Path.GetFullPath),
+                            FileSystemPathSafety.ExistingPathComparer);
+                        (XDocument Document, string DeclaringPath)[] relatedSources =
+                            controlledDocumentSources
+                                .Where(source => importedPaths.Contains(Path.GetFullPath(source.DeclaringPath)))
+                                .ToArray();
+                        XDocument[] relatedDocuments = relatedSources
+                            .Select(source => source.Document)
+                            .ToArray();
+                        if (!HasOnlyControlledDocumentTaskFileInputs(
+                                document,
+                                path,
+                                normalizedTaskInputBaseDirectory,
+                                checkoutRoot,
+                                checkoutRoot,
+                                relatedSources,
+                                proof.EvaluatedProperties,
+                                proof.Context.ProjectPath,
+                                readLines: ReadControlledCheckoutTextInput,
+                                immutableGlobalProperties: proof.ImmutableProperties))
+                        {
+                            failureReason = $"MSBuild document contains an uncontrolled task file input: '{Path.GetFileName(path)}'";
+                            return false;
+                        }
+                        if (ContainsUncontrolledControlledBuildTask(
+                                document,
+                                relatedDocuments,
+                                proof.EvaluatedProperties,
+                                proof.ImmutableProperties,
+                                proof.Context.ConservativeSdkHooks))
+                        {
+                            failureReason = "MSBuild graph contains an uncontrolled build task";
+                            return false;
+                        }
+                    }
+                    continue;
+                }
+
+                // A declared candidate without an authoritative loading context is still
+                // checked, but cannot inherit the release root's inactive-target proof.
                 IReadOnlyDictionary<string, string>[] propertyContexts =
                     evaluatedProjectContexts is not null &&
                     evaluatedProjectContexts.TryGetValue(
                         Path.GetFullPath(path),
                         out IReadOnlyDictionary<string, string>[]? contexts)
                         ? contexts
-                        : [evaluatedGlobalProperties ??
-                           new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)];
+                        : [evaluatedProjectContexts is null
+                            ? evaluatedGlobalProperties ??
+                              new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)];
                 string outputProjectPath = IsControlledProjectPath(path)
                     ? path
                     : controlledProjectPath!;
-                if (propertyContexts.Any(properties =>
-                        !HasOnlyControlledDocumentTaskFileInputs(
+                foreach (IReadOnlyDictionary<string, string> properties in propertyContexts)
+                {
+                    if (!HasOnlyControlledDocumentTaskFileInputs(
                             document,
                             path,
                             normalizedTaskInputBaseDirectory,
@@ -262,22 +353,24 @@ public sealed partial class DotNetPublishPipelineRunner
                             properties,
                             outputProjectPath,
                             readLines: ReadControlledCheckoutTextInput,
-                            immutableGlobalProperties: immutableGlobalProperties)))
-                {
-                    failureReason = $"MSBuild document contains an uncontrolled task file input: '{Path.GetFileName(path)}'";
-                    return false;
+                            immutableGlobalProperties: immutableGlobalProperties))
+                    {
+                        failureReason = $"MSBuild document contains an uncontrolled task file input: '{Path.GetFileName(path)}'";
+                        return false;
+                    }
+                    if (ContainsUncontrolledControlledBuildTask(
+                            document,
+                            controlledDocuments,
+                            properties,
+                            immutableGlobalProperties))
+                    {
+                        failureReason = "MSBuild graph contains an uncontrolled build task";
+                        return false;
+                    }
                 }
             }
 
-            bool controlled = !controlledDocuments.Any(document =>
-                ContainsUncontrolledControlledBuildTask(
-                    document,
-                    controlledDocuments,
-                    evaluatedGlobalProperties,
-                    immutableGlobalProperties));
-            if (!controlled)
-                failureReason = "MSBuild graph contains an uncontrolled build task";
-            return controlled;
+            return true;
         }
         catch (Exception exception)
         {
@@ -321,63 +414,36 @@ public sealed partial class DotNetPublishPipelineRunner
         XObject node,
         string declaringPath,
         IReadOnlyDictionary<string, string>? evaluatedGlobalProperties,
-        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>[]>? evaluatedProjectContexts)
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>[]>? evaluatedProjectContexts,
+        IReadOnlyDictionary<string, List<TargetGuardDocumentProof>> proofsByDocument,
+        IReadOnlyDictionary<string, string> immutableGlobalProperties)
     {
-        if (node is not XText text || text.Parent is null)
+        XElement? element = node switch
+        {
+            XText text => text.Parent,
+            XAttribute attribute => attribute.Parent,
+            _ => null
+        };
+        if (element is null)
             return false;
-
-        XAttribute[] conditions = text.Parent
-            .AncestorsAndSelf()
-            .SelectMany(element => element.Attributes())
-            .Where(attribute => attribute.Name.LocalName.Equals(
-                "Condition",
-                StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        if (conditions.Length == 0)
-            return false;
-
-        IReadOnlyDictionary<string, string>[] contexts;
-        if (evaluatedProjectContexts is not null &&
-            evaluatedProjectContexts.TryGetValue(
+        if (proofsByDocument.TryGetValue(
                 Path.GetFullPath(declaringPath),
-                out IReadOnlyDictionary<string, string>[]? projectContexts))
+                out List<TargetGuardDocumentProof>? proofs) && proofs.Count > 0)
         {
-            contexts = projectContexts;
-        }
-        else if (evaluatedProjectContexts is not null)
-        {
-            contexts = evaluatedProjectContexts.Values
-                .SelectMany(value => value)
-                .ToArray();
-        }
-        else if (evaluatedGlobalProperties is not null)
-        {
-            contexts = [evaluatedGlobalProperties];
-        }
-        else
-        {
-            return false;
+            return proofs.All(proof => IsDefinitelyInactiveControlledBuildOperation(
+                element,
+                proof.EvaluatedProperties,
+                declaringPath,
+                immutableGlobalProperties: proof.ImmutableProperties));
         }
 
-        if (evaluatedGlobalProperties is not null && evaluatedProjectContexts is not null)
-        {
-            contexts = contexts.Select(context =>
-            {
-                var merged = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (KeyValuePair<string, string> property in evaluatedGlobalProperties)
-                    merged[property.Key] = property.Value;
-                foreach (KeyValuePair<string, string> property in context)
-                    merged[property.Key] = property.Value;
-                return (IReadOnlyDictionary<string, string>)merged;
-            }).ToArray();
-        }
-
-        if (contexts.Length == 0)
-            return false;
-
-        return contexts.All(properties => conditions.Any(condition =>
-            TryEvaluateSimpleMsBuildCondition(condition.Value, properties, out bool active) &&
-            !active));
+        return evaluatedProjectContexts is null &&
+               evaluatedGlobalProperties is not null &&
+               IsDefinitelyInactiveControlledBuildOperation(
+                   element,
+                   evaluatedGlobalProperties,
+                   declaringPath,
+                   immutableGlobalProperties: immutableGlobalProperties);
     }
 
     private static bool IsProjectReferenceItemOperationAttribute(XAttribute attribute)
@@ -501,13 +567,16 @@ public sealed partial class DotNetPublishPipelineRunner
         XDocument document,
         IReadOnlyCollection<XDocument> relatedDocuments,
         IReadOnlyDictionary<string, string>? evaluatedProperties = null,
-        IReadOnlyDictionary<string, string>? immutableGlobalProperties = null)
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties = null,
+        bool conservativeSdkHooks = false)
     {
         evaluatedProperties ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (!TryCreateReachableControlledBuildDocuments(
                 document,
                 relatedDocuments,
                 evaluatedProperties,
+                immutableGlobalProperties,
+                conservativeSdkHooks,
                 out XDocument reachableDocument,
                 out XDocument[] reachableDocuments))
         {

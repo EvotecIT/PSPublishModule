@@ -34,6 +34,15 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach (XElement callTarget in document.Descendants().Where(element =>
                      element.Name.LocalName.Equals("CallTarget", StringComparison.OrdinalIgnoreCase)))
         {
+            if (IsDefinitelyInactiveControlledBuildOperation(
+                    callTarget,
+                    evaluatedGlobalProperties ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                    declaringPath,
+                    immutableGlobalProperties: immutableGlobalProperties))
+            {
+                continue;
+            }
+
             string? targets = callTarget.Attributes()
                 .FirstOrDefault(attribute => attribute.Name.LocalName.Equals(
                     "Targets",

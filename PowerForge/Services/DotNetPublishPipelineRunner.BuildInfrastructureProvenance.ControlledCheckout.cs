@@ -543,6 +543,29 @@ public sealed partial class DotNetPublishPipelineRunner
         out string? gitRoot,
         out string? controlledProjectPath,
         out string? failureReason)
+        => TryCreateControlledSourceCheckout(
+            projectPath,
+            checkoutRoot,
+            evaluatedBuildInputs,
+            evaluatedMsBuildInputs,
+            evaluatedGlobalProperties,
+            evaluatedProjectContexts,
+            targetGuardContexts: null,
+            out gitRoot,
+            out controlledProjectPath,
+            out failureReason);
+
+    private static bool TryCreateControlledSourceCheckout(
+        string projectPath,
+        string checkoutRoot,
+        IReadOnlyCollection<string> evaluatedBuildInputs,
+        IReadOnlyCollection<string> evaluatedMsBuildInputs,
+        IReadOnlyDictionary<string, string> evaluatedGlobalProperties,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>[]>? evaluatedProjectContexts,
+        IReadOnlyCollection<TargetGuardEvaluationContext>? targetGuardContexts,
+        out string? gitRoot,
+        out string? controlledProjectPath,
+        out string? failureReason)
     {
         gitRoot = null;
         controlledProjectPath = null;
@@ -746,6 +769,111 @@ public sealed partial class DotNetPublishPipelineRunner
                 controlledProjectContexts[controlledContextProjectPath] = contexts.ToArray();
             }
 
+            var controlledTargetGuardContexts = new List<TargetGuardEvaluationContext>();
+            foreach (TargetGuardEvaluationContext context in targetGuardContexts ??
+                     Array.Empty<TargetGuardEvaluationContext>())
+            {
+                if (!IsSameOrBelowBuildInputPath(context.ProjectPath, gitRoot!))
+                {
+                    failureReason = "target guard project context was outside the Git root";
+                    return false;
+                }
+                string controlledContextProjectPath = Path.GetFullPath(Path.Combine(
+                    checkoutRoot,
+                    FrameworkCompatibility.GetRelativePath(gitRoot!, context.ProjectPath)));
+                if (!controlledMsBuildInputs.Contains(controlledContextProjectPath))
+                {
+                    failureReason = "target guard project context was not an evaluated MSBuild input";
+                    return false;
+                }
+
+                var controlledGlobals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (KeyValuePair<string, string> property in context.GlobalProperties)
+                {
+                    if (!TryRemapControlledBuildValue(
+                            property.Value,
+                            gitRoot!,
+                            checkoutRoot,
+                            Path.GetDirectoryName(context.ProjectPath)!,
+                            out string controlledValue))
+                    {
+                        failureReason = $"target guard global property '{property.Key}' could not be mapped";
+                        return false;
+                    }
+                    controlledGlobals[property.Key] = controlledValue;
+                }
+
+                var controlledProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (KeyValuePair<string, string> property in context.EvaluatedProperties)
+                {
+                    if (!controlledPropertyNames.Contains(property.Key))
+                        continue;
+                    if (property.Key.Equals("MSBuildToolsPath", StringComparison.OrdinalIgnoreCase) ||
+                        property.Key.Equals("MSBuildSDKsPath", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+                    if (!TryRemapControlledBuildValue(
+                            property.Value,
+                            gitRoot!,
+                            checkoutRoot,
+                            Path.GetDirectoryName(context.ProjectPath)!,
+                            out string controlledValue))
+                    {
+                        failureReason = $"target guard evaluated property '{property.Key}' could not be mapped";
+                        return false;
+                    }
+                    controlledProperties[property.Key] = controlledValue;
+                }
+
+                var controlledImports = new List<string>();
+                string importGitRoot = gitRoot!;
+                string[] generatedImportRoots = context.GeneratedImportRoots
+                    .Where(root => IsSameOrBelowBuildInputPath(root, importGitRoot))
+                    .ToArray();
+                foreach (string import in context.EvaluatedImports)
+                {
+                    string importPath = Path.GetFullPath(import);
+                    if (IsSameOrBelowBuildInputPath(importPath, gitRoot!))
+                    {
+                        importPath = Path.GetFullPath(Path.Combine(
+                            checkoutRoot,
+                            FrameworkCompatibility.GetRelativePath(gitRoot!, importPath)));
+                    }
+                    if (!File.Exists(importPath) &&
+                        IsSameOrBelowBuildInputPath(import, gitRoot!) &&
+                        IsGeneratedBuildInfrastructurePath(import, generatedImportRoots) &&
+                        File.Exists(import) &&
+                        !HasReparsePointBelowRoot(import, gitRoot!) &&
+                        HasSinglePhysicalLink(import) &&
+                        IsGuardInertGeneratedImportWrapper(import))
+                    {
+                        // NuGet's generated import wrapper is absent before the isolated
+                        // restore. Its evaluated source copy can still disprove immutable
+                        // globals; package imports remain separate authoritative entries.
+                        importPath = Path.GetFullPath(import);
+                    }
+                    if (File.Exists(importPath) &&
+                        IsSameOrBelowBuildInputPath(importPath, checkoutRoot) &&
+                        HasReparsePointBelowRoot(importPath, checkoutRoot))
+                    {
+                        failureReason = "target guard import was linked outside the controlled checkout";
+                        return false;
+                    }
+                    // Generated imports can be absent before the controlled restore. The
+                    // proof reader then clears immutable evidence for this instance.
+                    controlledImports.Add(importPath);
+                }
+                controlledTargetGuardContexts.Add(new TargetGuardEvaluationContext(
+                    controlledContextProjectPath,
+                    controlledGlobals,
+                    controlledProperties,
+                    controlledImports,
+                    // The source project can select its own SDK path. Its target list
+                    // cannot prove which hooks the isolated dotnet host will execute.
+                    conservativeSdkHooks: true));
+            }
+
             if (!HasOnlyControlledBuildFileInputs(
                     checkoutRoot,
                     controlledBuildInputs,
@@ -755,6 +883,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledProjectPath,
                     controlledProjectContexts,
                     evaluatedMsBuildInputs,
+                    controlledTargetGuardContexts,
                     out string? buildInputFailureReason))
             {
                 failureReason = "controlled checkout contains an unverified build file input: " +

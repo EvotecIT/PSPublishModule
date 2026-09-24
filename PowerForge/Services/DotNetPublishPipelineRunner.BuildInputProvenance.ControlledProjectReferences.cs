@@ -11,6 +11,7 @@ public sealed partial class DotNetPublishPipelineRunner
         VerifiedPackageInputCatalog? verifiedPackages,
         IReadOnlyCollection<string> evaluatedBuildInputs,
         IReadOnlyCollection<string> executableMsBuildInputs,
+        IReadOnlyCollection<string> evaluatedImports,
         IReadOnlyCollection<EvaluatedProjectReference> evaluatedProjectReferences,
         IReadOnlyCollection<string> taskWidePropertyRemovals,
         IReadOnlyList<PreprocessedProjectReferenceDeclaration> projectReferenceDeclarations,
@@ -133,6 +134,72 @@ public sealed partial class DotNetPublishPipelineRunner
                     .Select(context => (IReadOnlyDictionary<string, string>)context.First())
                     .ToArray()
                 : [rootContext];
+            var targetGuardContexts = new List<TargetGuardEvaluationContext>();
+            var seenGuardEvaluations = new HashSet<string>(StringComparer.Ordinal);
+            foreach (ProjectEvaluationRequest contextRequest in evaluatedProjectReferences
+                         .Where(reference => File.Exists(reference.ProjectPath))
+                         .Select(request.ForProject)
+                         .Append(request))
+            {
+                if (!seenGuardEvaluations.Add(contextRequest.BuildVisitKey()))
+                    continue;
+                bool isRoot = contextRequest.BuildVisitKey().Equals(
+                    request.BuildVisitKey(), StringComparison.Ordinal);
+                string[] guardPropertyNames = controlledConditionPropertyNames
+                    .Concat([
+                        "MSBuildAllProjects",
+                        "MSBuildToolsPath",
+                        "MSBuildSDKsPath",
+                        "MSBuildProjectExtensionsPath",
+                        "BaseIntermediateOutputPath"])
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                IReadOnlyDictionary<string, string> guardEvaluation =
+                    ReadEvaluatedProjectProperties(contextRequest, guardPropertyNames);
+                var guardProperties = new Dictionary<string, string>(
+                    contextRequest.BuildControlledEvaluationProperties(guardEvaluation),
+                    StringComparer.OrdinalIgnoreCase);
+                if (isRoot)
+                {
+                    foreach (KeyValuePair<string, string> property in rootContext)
+                        guardProperties[property.Key] = property.Value;
+                }
+                var guardImports = new HashSet<string>(FileSystemPathSafety.ExistingPathComparer);
+                if (isRoot)
+                    guardImports.UnionWith(evaluatedImports);
+                if (guardEvaluation.TryGetValue("MSBuildAllProjects", out string? allProjects))
+                {
+                    foreach (string candidate in allProjects.Split(
+                                 new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        string path = Path.GetFullPath(Path.IsPathRooted(candidate)
+                            ? candidate
+                            : Path.Combine(
+                                Path.GetDirectoryName(contextRequest.ProjectPath)!,
+                                candidate));
+                        if (File.Exists(path))
+                            guardImports.Add(path);
+                    }
+                }
+                if (!TryReadPreprocessedProjectImports(
+                        contextRequest,
+                        out string[] preprocessedImports,
+                        out _,
+                        out _,
+                        out _,
+                        out _))
+                {
+                    failureReason = $"target guard imports could not be evaluated for '{Path.GetFileName(contextRequest.ProjectPath)}'";
+                    return false;
+                }
+                guardImports.UnionWith(preprocessedImports);
+                targetGuardContexts.Add(new TargetGuardEvaluationContext(
+                    contextRequest.ProjectPath,
+                    contextRequest.ReadEffectiveGlobalProperties(),
+                    guardProperties,
+                    guardImports.ToArray(),
+                    ReadTargetGuardGeneratedImportRoots(contextRequest.ProjectPath, guardEvaluation)));
+            }
             if (!TryCreateControlledSourceCheckout(
                     request.ProjectPath,
                     controlledSourceRoot,
@@ -140,6 +207,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     executableMsBuildInputs,
                     request.ReadEffectiveGlobalProperties(),
                     projectContexts,
+                    targetGuardContexts,
                     out originalGitRoot,
                     out string? controlledProjectPath,
                     out string? checkoutFailureReason))

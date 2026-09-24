@@ -15,6 +15,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyCollection<string> trustedBuildInfrastructureRoots,
         IReadOnlyCollection<string> evaluatedBuildInputs,
         IReadOnlyCollection<string> executableMsBuildInputs,
+        IReadOnlyCollection<string> evaluatedImports,
         string? evaluatedPathMap,
         bool proveControlledGeneratedInputs,
         IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes,
@@ -42,10 +43,19 @@ public sealed partial class DotNetPublishPipelineRunner
                         request,
                         evaluatedProperties,
                         graphBuildNodes),
+                    BuildControlledPublishTargetGuardContexts(
+                        request,
+                        evaluatedProperties,
+                        evaluatedImports,
+                        graphBuildNodes),
                     out controlledGitRoot,
-                    out string? controlledProjectPath))
+                    out string? controlledProjectPath,
+                    out string? checkoutFailureReason))
             {
-                failureReason = "the controlled source checkout could not be created.";
+                failureReason = "the controlled source checkout could not be created" +
+                    (string.IsNullOrWhiteSpace(checkoutFailureReason)
+                        ? "."
+                        : ": " + checkoutFailureReason);
                 return false;
             }
             if (!TryCreateControlledBuildEnvironment(
@@ -529,6 +539,28 @@ public sealed partial class DotNetPublishPipelineRunner
                     .Select(context => (IReadOnlyDictionary<string, string>)context.First())
                     .ToArray(),
                 FileSystemPathSafety.ExistingPathComparer);
+    }
+
+    private static TargetGuardEvaluationContext[] BuildControlledPublishTargetGuardContexts(
+        ProjectEvaluationRequest rootRequest,
+        IReadOnlyDictionary<string, string> rootEvaluatedProperties,
+        IReadOnlyCollection<string> rootEvaluatedImports,
+        IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes)
+    {
+        return graphBuildNodes
+            .Select(node => new TargetGuardEvaluationContext(
+                node.Request.ProjectPath,
+                node.Request.ReadEffectiveGlobalProperties(),
+                node.Request.BuildControlledEvaluationProperties(node.EvaluatedProperties),
+                node.EvaluatedImports,
+                ReadTargetGuardGeneratedImportRoots(node.Request.ProjectPath, node.EvaluatedProperties)))
+            .Append(new TargetGuardEvaluationContext(
+                rootRequest.ProjectPath,
+                rootRequest.ReadEffectiveGlobalProperties(),
+                rootRequest.BuildControlledEvaluationProperties(rootEvaluatedProperties),
+                rootEvaluatedImports,
+                ReadTargetGuardGeneratedImportRoots(rootRequest.ProjectPath, rootEvaluatedProperties)))
+            .ToArray();
     }
 
     private static bool TryBuildControlledPublishProjectGraph(

@@ -4,6 +4,53 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
+    private sealed class TargetGuardEvaluationContext
+    {
+        internal TargetGuardEvaluationContext(
+            string projectPath,
+            IReadOnlyDictionary<string, string> globalProperties,
+            IReadOnlyDictionary<string, string> evaluatedProperties,
+            IReadOnlyCollection<string> evaluatedImports,
+            IReadOnlyCollection<string>? generatedImportRoots = null,
+            bool conservativeSdkHooks = false)
+        {
+            ProjectPath = Path.GetFullPath(projectPath);
+            GlobalProperties = globalProperties;
+            EvaluatedProperties = evaluatedProperties;
+            EvaluatedImports = evaluatedImports;
+            GeneratedImportRoots = generatedImportRoots ?? Array.Empty<string>();
+            ConservativeSdkHooks = conservativeSdkHooks;
+        }
+
+        internal string ProjectPath { get; }
+        internal IReadOnlyDictionary<string, string> GlobalProperties { get; }
+        internal IReadOnlyDictionary<string, string> EvaluatedProperties { get; }
+        internal IReadOnlyCollection<string> EvaluatedImports { get; }
+        internal IReadOnlyCollection<string> GeneratedImportRoots { get; }
+        internal bool ConservativeSdkHooks { get; }
+    }
+
+    private sealed class TargetGuardDocumentProof
+    {
+        internal TargetGuardDocumentProof(
+            TargetGuardEvaluationContext context,
+            IReadOnlyDictionary<string, string> immutableProperties)
+        {
+            Context = context;
+            ImmutableProperties = immutableProperties;
+            var properties = new Dictionary<string, string>(
+                context.GlobalProperties,
+                StringComparer.OrdinalIgnoreCase);
+            foreach (KeyValuePair<string, string> property in context.EvaluatedProperties)
+                properties[property.Key] = property.Value;
+            EvaluatedProperties = properties;
+        }
+
+        internal TargetGuardEvaluationContext Context { get; }
+        internal IReadOnlyDictionary<string, string> ImmutableProperties { get; }
+        internal IReadOnlyDictionary<string, string> EvaluatedProperties { get; }
+    }
+
     private static bool IsDefinitelyInactiveControlledBuildOperation(
         XElement element,
         IReadOnlyDictionary<string, string> evaluatedProperties,
@@ -77,26 +124,6 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 foreach (XElement assignment in target.Descendants())
                 {
-                    if (assignment.Name.LocalName.Equals("MSBuild", StringComparison.OrdinalIgnoreCase))
-                    {
-                        string? projects = assignment.Attributes()
-                            .FirstOrDefault(attribute => attribute.Name.LocalName.Equals(
-                                "Projects", StringComparison.OrdinalIgnoreCase))?.Value;
-                        // Child project items can carry dynamic property metadata. Even a
-                        // literal override can activate imports absent from this evaluation,
-                        // and those imports may localize otherwise unchanged global values.
-                        if (projects?.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
-                            projects?.IndexOf("%(", StringComparison.Ordinal) >= 0 ||
-                            assignment.Attributes().Any(attribute =>
-                                (attribute.Name.LocalName.Equals("Properties", StringComparison.OrdinalIgnoreCase) ||
-                                 attribute.Name.LocalName.Equals("RemoveProperties", StringComparison.OrdinalIgnoreCase)) &&
-                                !string.IsNullOrWhiteSpace(attribute.Value)))
-                        {
-                            immutable.Clear();
-                            return immutable;
-                        }
-                    }
-
                     if (assignment.Parent?.Name.LocalName.Equals(
                             "PropertyGroup",
                             StringComparison.OrdinalIgnoreCase) == true)
@@ -125,5 +152,54 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         return immutable;
+    }
+
+    private static string[] ReadTargetGuardGeneratedImportRoots(
+        string projectPath,
+        IReadOnlyDictionary<string, string> evaluatedProperties)
+    {
+        var roots = new HashSet<string>(FileSystemPathSafety.ExistingPathComparer);
+        foreach (string name in new[] { "MSBuildProjectExtensionsPath", "BaseIntermediateOutputPath" })
+        {
+            if (!evaluatedProperties.TryGetValue(name, out string? value) ||
+                string.IsNullOrWhiteSpace(value) ||
+                ContainsUnresolvedBuildExpression(value))
+            {
+                continue;
+            }
+
+            try
+            {
+                roots.Add(Path.GetFullPath(Path.IsPathRooted(value)
+                    ? value
+                    : Path.Combine(Path.GetDirectoryName(projectPath)!, value)));
+            }
+            catch
+            {
+                // An unresolved generated path cannot support immutable proof.
+            }
+        }
+        return roots.ToArray();
+    }
+
+    internal static bool IsGuardInertGeneratedImportWrapper(string path)
+    {
+        try
+        {
+            XDocument document = XDocument.Load(path, LoadOptions.None);
+            XElement? root = document.Root;
+            return root is not null &&
+                   root.Name.LocalName.Equals("Project", StringComparison.OrdinalIgnoreCase) &&
+                   !root.Attributes().Any(attribute =>
+                       attribute.Name.LocalName.Equals("TreatAsLocalProperty", StringComparison.OrdinalIgnoreCase) ||
+                       attribute.Name.LocalName.Equals("InitialTargets", StringComparison.OrdinalIgnoreCase)) &&
+                   !root.Descendants().Any(element =>
+                       element.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase) ||
+                       element.Name.LocalName.Equals("UsingTask", StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

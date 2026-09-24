@@ -12,6 +12,8 @@ public sealed partial class DotNetPublishPipelineRunner
         XDocument document,
         IReadOnlyCollection<XDocument> relatedDocuments,
         IReadOnlyDictionary<string, string> evaluatedProperties,
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties,
+        bool conservativeSdkHooks,
         out XDocument reachableDocument,
         out XDocument[] reachableDocuments)
     {
@@ -31,6 +33,8 @@ public sealed partial class DotNetPublishPipelineRunner
             reachableDocuments = Array.Empty<XDocument>();
             return false;
         }
+        // The selected source SDK path can differ from the isolated dotnet host.
+        // Its inventory is insufficient to exclude a hook destination.
 
         var reachable = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -76,7 +80,10 @@ public sealed partial class DotNetPublishPipelineRunner
                     .Concat(ReadExpandedMsBuildTargetList(after, evaluatedProperties))
                     .Any(externalTargets.Contains);
                 if (!reachable.Contains(entry.Key) &&
-                    (unresolvedHook || hooksReachable || hooksExternalTarget))
+                    (unresolvedHook || hooksReachable || hooksExternalTarget ||
+                     (conservativeSdkHooks &&
+                      (!string.IsNullOrWhiteSpace(before) ||
+                       !string.IsNullOrWhiteSpace(after)))))
                     changed |= reachable.Add(entry.Key);
             }
 
@@ -84,6 +91,16 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 if (!effectiveTargets.TryGetValue(targetName, out XElement? target))
                     continue;
+                // A false target condition suppresses its dependencies and body. The target
+                // name stays reachable so BeforeTargets/AfterTargets hooks can still run.
+                if (IsDefinitelyInactiveControlledBuildOperation(
+                        target,
+                        evaluatedProperties,
+                        definingProjectPath: null,
+                        immutableGlobalProperties: immutableGlobalProperties))
+                {
+                    continue;
+                }
                 string? dependsOn = target.Attribute("DependsOnTargets")?.Value;
                 if (HasUnresolvedMsBuildTargetList(dependsOn, evaluatedProperties))
                 {
@@ -97,6 +114,14 @@ public sealed partial class DotNetPublishPipelineRunner
                 foreach (XElement callTarget in target.Descendants().Where(element =>
                              element.Name.LocalName.Equals("CallTarget", StringComparison.OrdinalIgnoreCase)))
                 {
+                    if (IsDefinitelyInactiveControlledBuildOperation(
+                            callTarget,
+                            evaluatedProperties,
+                            definingProjectPath: null,
+                            immutableGlobalProperties: immutableGlobalProperties))
+                    {
+                        continue;
+                    }
                     string? destinations = callTarget.Attribute("Targets")?.Value;
                     if (HasUnresolvedMsBuildTargetList(destinations, evaluatedProperties))
                     {
@@ -111,6 +136,14 @@ public sealed partial class DotNetPublishPipelineRunner
                 foreach (XElement onError in target.Descendants().Where(element =>
                              element.Name.LocalName.Equals("OnError", StringComparison.OrdinalIgnoreCase)))
                 {
+                    if (IsDefinitelyInactiveControlledBuildOperation(
+                            onError,
+                            evaluatedProperties,
+                            definingProjectPath: null,
+                            immutableGlobalProperties: immutableGlobalProperties))
+                    {
+                        continue;
+                    }
                     string? destinations = onError.Attribute("ExecuteTargets")?.Value;
                     if (HasUnresolvedMsBuildTargetList(destinations, evaluatedProperties))
                     {
@@ -138,7 +171,13 @@ public sealed partial class DotNetPublishPipelineRunner
                          element.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)).ToArray())
             {
                 string? name = target.Attribute("Name")?.Value?.Trim();
-                if (string.IsNullOrWhiteSpace(name) || !reachable.Contains(name!))
+                if (string.IsNullOrWhiteSpace(name) ||
+                    !reachable.Contains(name!) ||
+                    IsDefinitelyInactiveControlledBuildOperation(
+                        target,
+                        evaluatedProperties,
+                        definingProjectPath: null,
+                        immutableGlobalProperties: immutableGlobalProperties))
                     target.Remove();
             }
         }
