@@ -75,6 +75,64 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public void ControlledBuildTasks_KeepDependencyFromActiveDuplicateTarget(
+        bool inactiveLast,
+        bool useCallTarget)
+    {
+        string activeBuild = useCallTarget
+            ? "<Target Name='Build'><CallTarget Targets='Danger' /></Target>"
+            : "<Target Name='Build' DependsOnTargets='Danger' />";
+        XDocument activeDefinition = XDocument.Parse(
+            "<Project>" + activeBuild +
+            "<Target Name='Danger'><Exec Command='unsafe' /></Target></Project>");
+        XDocument inactiveDefinition = XDocument.Parse("""
+            <Project>
+              <Target Name="Build" Condition="'$(Flavor)' == 'Signed'" />
+            </Project>
+            """);
+        var immutable = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Flavor"] = "Plain"
+        };
+
+        Assert.True(DotNetPublishPipelineRunner.ContainsUncontrolledControlledBuildTask(
+            activeDefinition,
+            inactiveLast
+                ? [activeDefinition, inactiveDefinition]
+                : [inactiveDefinition, activeDefinition],
+            immutable,
+            immutable));
+    }
+
+    [Fact]
+    public void ControlledBuildTasks_KeepHookFromActiveDuplicateTarget()
+    {
+        XDocument activeDefinition = XDocument.Parse("""
+            <Project>
+              <Target Name="Hook" BeforeTargets="Build"><Exec Command="unsafe" /></Target>
+            </Project>
+            """);
+        XDocument inactiveDefinition = XDocument.Parse("""
+            <Project>
+              <Target Name="Hook" Condition="'$(Flavor)' == 'Signed'" />
+            </Project>
+            """);
+        var immutable = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Flavor"] = "Plain"
+        };
+
+        Assert.True(DotNetPublishPipelineRunner.ContainsUncontrolledControlledBuildTask(
+            activeDefinition,
+            [activeDefinition, inactiveDefinition],
+            immutable,
+            immutable));
+    }
+
+    [Theory]
     [InlineData("DependsOnTargets='Missing$(Unknown)'")]
     [InlineData("")]
     public void ControlledBuildTasks_SkipInactiveTargetDestinations(string targetAttributes)

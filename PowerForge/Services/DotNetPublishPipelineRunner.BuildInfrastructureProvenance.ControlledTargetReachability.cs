@@ -17,14 +17,23 @@ public sealed partial class DotNetPublishPipelineRunner
         out XDocument reachableDocument,
         out XDocument[] reachableDocuments)
     {
-        var effectiveTargets = new Dictionary<string, XElement>(StringComparer.OrdinalIgnoreCase);
+        // The document collection is an inventory, not MSBuild's evaluated import order.
+        // Retain every definition of a target name when establishing reachability so an
+        // inactive shadowed definition cannot hide dependencies of the effective one.
+        var targetDefinitions = new Dictionary<string, List<XElement>>(StringComparer.OrdinalIgnoreCase);
         foreach (XDocument relatedDocument in relatedDocuments)
         {
             foreach (XElement target in relatedDocument.Descendants().Where(element =>
                          element.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase) &&
                          !string.IsNullOrWhiteSpace(element.Attribute("Name")?.Value)))
             {
-                effectiveTargets[target.Attribute("Name")!.Value.Trim()] = target;
+                string name = target.Attribute("Name")!.Value.Trim();
+                if (!targetDefinitions.TryGetValue(name, out List<XElement>? definitions))
+                {
+                    definitions = new List<XElement>();
+                    targetDefinitions[name] = definitions;
+                }
+                definitions.Add(target);
             }
         }
         if (!TryReadExternalSdkTargetNames(evaluatedProperties, out HashSet<string> externalTargets))
@@ -65,94 +74,99 @@ public sealed partial class DotNetPublishPipelineRunner
         do
         {
             changed = false;
-            foreach (KeyValuePair<string, XElement> entry in effectiveTargets)
+            foreach (KeyValuePair<string, List<XElement>> entry in targetDefinitions)
             {
-                XElement target = entry.Value;
-                string? before = target.Attribute("BeforeTargets")?.Value;
-                string? after = target.Attribute("AfterTargets")?.Value;
-                bool unresolvedHook =
-                    HasUnresolvedMsBuildTargetList(before, evaluatedProperties) ||
-                    HasUnresolvedMsBuildTargetList(after, evaluatedProperties);
-                bool hooksReachable = ReadExpandedMsBuildTargetList(before, evaluatedProperties)
-                    .Concat(ReadExpandedMsBuildTargetList(after, evaluatedProperties))
-                    .Any(reachable.Contains);
-                bool hooksExternalTarget = ReadExpandedMsBuildTargetList(before, evaluatedProperties)
-                    .Concat(ReadExpandedMsBuildTargetList(after, evaluatedProperties))
-                    .Any(externalTargets.Contains);
-                if (!reachable.Contains(entry.Key) &&
-                    (unresolvedHook || hooksReachable || hooksExternalTarget ||
-                     (conservativeSdkHooks &&
-                      (!string.IsNullOrWhiteSpace(before) ||
-                       !string.IsNullOrWhiteSpace(after)))))
-                    changed |= reachable.Add(entry.Key);
+                foreach (XElement target in entry.Value)
+                {
+                    string? before = target.Attribute("BeforeTargets")?.Value;
+                    string? after = target.Attribute("AfterTargets")?.Value;
+                    bool unresolvedHook =
+                        HasUnresolvedMsBuildTargetList(before, evaluatedProperties) ||
+                        HasUnresolvedMsBuildTargetList(after, evaluatedProperties);
+                    bool hooksReachable = ReadExpandedMsBuildTargetList(before, evaluatedProperties)
+                        .Concat(ReadExpandedMsBuildTargetList(after, evaluatedProperties))
+                        .Any(reachable.Contains);
+                    bool hooksExternalTarget = ReadExpandedMsBuildTargetList(before, evaluatedProperties)
+                        .Concat(ReadExpandedMsBuildTargetList(after, evaluatedProperties))
+                        .Any(externalTargets.Contains);
+                    if (!reachable.Contains(entry.Key) &&
+                        (unresolvedHook || hooksReachable || hooksExternalTarget ||
+                         (conservativeSdkHooks &&
+                          (!string.IsNullOrWhiteSpace(before) ||
+                           !string.IsNullOrWhiteSpace(after)))))
+                        changed |= reachable.Add(entry.Key);
+                }
             }
 
             foreach (string targetName in reachable.ToArray())
             {
-                if (!effectiveTargets.TryGetValue(targetName, out XElement? target))
+                if (!targetDefinitions.TryGetValue(targetName, out List<XElement>? definitions))
                     continue;
-                // A false target condition suppresses its dependencies and body. The target
-                // name stays reachable so BeforeTargets/AfterTargets hooks can still run.
-                if (IsDefinitelyInactiveControlledBuildOperation(
-                        target,
-                        evaluatedProperties,
-                        definingProjectPath: null,
-                        immutableGlobalProperties: immutableGlobalProperties))
+                foreach (XElement target in definitions)
                 {
-                    continue;
-                }
-                string? dependsOn = target.Attribute("DependsOnTargets")?.Value;
-                if (HasUnresolvedMsBuildTargetList(dependsOn, evaluatedProperties))
-                {
-                    reachableDocument = new XDocument();
-                    reachableDocuments = Array.Empty<XDocument>();
-                    return false;
-                }
-                foreach (string dependency in ReadExpandedMsBuildTargetList(dependsOn, evaluatedProperties))
-                    changed |= reachable.Add(dependency);
-
-                foreach (XElement callTarget in target.Descendants().Where(element =>
-                             element.Name.LocalName.Equals("CallTarget", StringComparison.OrdinalIgnoreCase)))
-                {
+                    // A false target condition suppresses its dependencies and body. The target
+                    // name stays reachable so BeforeTargets/AfterTargets hooks can still run.
                     if (IsDefinitelyInactiveControlledBuildOperation(
-                            callTarget,
+                            target,
                             evaluatedProperties,
                             definingProjectPath: null,
                             immutableGlobalProperties: immutableGlobalProperties))
                     {
                         continue;
                     }
-                    string? destinations = callTarget.Attribute("Targets")?.Value;
-                    if (HasUnresolvedMsBuildTargetList(destinations, evaluatedProperties))
+                    string? dependsOn = target.Attribute("DependsOnTargets")?.Value;
+                    if (HasUnresolvedMsBuildTargetList(dependsOn, evaluatedProperties))
                     {
                         reachableDocument = new XDocument();
                         reachableDocuments = Array.Empty<XDocument>();
                         return false;
                     }
-                    foreach (string destination in ReadExpandedMsBuildTargetList(destinations, evaluatedProperties))
-                        changed |= reachable.Add(destination);
-                }
+                    foreach (string dependency in ReadExpandedMsBuildTargetList(dependsOn, evaluatedProperties))
+                        changed |= reachable.Add(dependency);
 
-                foreach (XElement onError in target.Descendants().Where(element =>
-                             element.Name.LocalName.Equals("OnError", StringComparison.OrdinalIgnoreCase)))
-                {
-                    if (IsDefinitelyInactiveControlledBuildOperation(
-                            onError,
-                            evaluatedProperties,
-                            definingProjectPath: null,
-                            immutableGlobalProperties: immutableGlobalProperties))
+                    foreach (XElement callTarget in target.Descendants().Where(element =>
+                                 element.Name.LocalName.Equals("CallTarget", StringComparison.OrdinalIgnoreCase)))
                     {
-                        continue;
+                        if (IsDefinitelyInactiveControlledBuildOperation(
+                                callTarget,
+                                evaluatedProperties,
+                                definingProjectPath: null,
+                                immutableGlobalProperties: immutableGlobalProperties))
+                        {
+                            continue;
+                        }
+                        string? destinations = callTarget.Attribute("Targets")?.Value;
+                        if (HasUnresolvedMsBuildTargetList(destinations, evaluatedProperties))
+                        {
+                            reachableDocument = new XDocument();
+                            reachableDocuments = Array.Empty<XDocument>();
+                            return false;
+                        }
+                        foreach (string destination in ReadExpandedMsBuildTargetList(destinations, evaluatedProperties))
+                            changed |= reachable.Add(destination);
                     }
-                    string? destinations = onError.Attribute("ExecuteTargets")?.Value;
-                    if (HasUnresolvedMsBuildTargetList(destinations, evaluatedProperties))
+
+                    foreach (XElement onError in target.Descendants().Where(element =>
+                                 element.Name.LocalName.Equals("OnError", StringComparison.OrdinalIgnoreCase)))
                     {
-                        reachableDocument = new XDocument();
-                        reachableDocuments = Array.Empty<XDocument>();
-                        return false;
+                        if (IsDefinitelyInactiveControlledBuildOperation(
+                                onError,
+                                evaluatedProperties,
+                                definingProjectPath: null,
+                                immutableGlobalProperties: immutableGlobalProperties))
+                        {
+                            continue;
+                        }
+                        string? destinations = onError.Attribute("ExecuteTargets")?.Value;
+                        if (HasUnresolvedMsBuildTargetList(destinations, evaluatedProperties))
+                        {
+                            reachableDocument = new XDocument();
+                            reachableDocuments = Array.Empty<XDocument>();
+                            return false;
+                        }
+                        foreach (string destination in ReadExpandedMsBuildTargetList(destinations, evaluatedProperties))
+                            changed |= reachable.Add(destination);
                     }
-                    foreach (string destination in ReadExpandedMsBuildTargetList(destinations, evaluatedProperties))
-                        changed |= reachable.Add(destination);
                 }
             }
         }
