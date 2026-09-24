@@ -13,7 +13,7 @@ internal static class PowerShellHybridModuleComposer
         string sourcePath,
         PowerShellTypedCompilationResult typed)
     {
-        var ast = Parser.ParseInput(source, out _, out var errors);
+        var ast = Parser.ParseInput(source, out var tokens, out var errors);
         if (errors.Length > 0)
             throw new InvalidOperationException("Hybrid executable source could not be parsed while composing retained fallback code.");
         var compiledNames = typed.Methods
@@ -27,7 +27,11 @@ internal static class PowerShellHybridModuleComposer
                      .Cast<FunctionDefinitionAst>()
                      .Where(function => compiledNames.Contains(function.Name))
                      .OrderByDescending(static function => function.Extent.StartOffset))
+        {
             result.Remove(function.Extent.StartOffset, function.Extent.EndOffset - function.Extent.StartOffset);
+            result.Insert(function.Extent.StartOffset,
+                GetNativeFunctionRegistration(typed, sourcePath, function, tokens, executable: true));
+        }
         return result.ToString();
     }
 
@@ -263,7 +267,8 @@ internal static class PowerShellHybridModuleComposer
     internal static string? ComposeDependency(
         string sourcePath,
         PowerShellTypedCompilationResult typed,
-        ISet<string> wrappedCompiledMethods)
+        ISet<string> wrappedCompiledMethods,
+        bool executable = false)
     {
         var compiled = typed.Methods
             .Where(method => PowerShellCompilationPathSafety.PathEquals(
@@ -292,7 +297,7 @@ internal static class PowerShellHybridModuleComposer
             edits.Add(new PowerShellHybridSourceEdit(
                 function.Extent.StartOffset,
                 function.Extent.EndOffset - function.Extent.StartOffset,
-                GetNativeFunctionRegistration(typed, sourcePath, function, tokens),
+                GetNativeFunctionRegistration(typed, sourcePath, function, tokens, executable, executableDependency: executable),
                 "function:" + function.Name));
         }
         edits.AddRange(PowerShellHybridRegionRewriter.CreateEdits(sourcePath, ast, typed, wrappedCompiledMethods));
@@ -378,11 +383,12 @@ internal static class PowerShellHybridModuleComposer
     internal static string GetCompiledMethodKey(string sourcePath, string name, int line)
         => Path.GetFullPath(sourcePath) + "\0" + name + "\0" + line;
 
-    private static string GetNativeFunctionRegistration(PowerShellTypedCompilationResult typed, string sourcePath, FunctionDefinitionAst function, Token[] tokens)
+    private static string GetNativeFunctionRegistration(PowerShellTypedCompilationResult typed, string sourcePath,
+        FunctionDefinitionAst function, Token[] tokens, bool executable = false, bool executableDependency = false)
     {
         var method = typed.Methods.SingleOrDefault(method => method.NativeFunctionBinding is not null &&
             method.SourceName.Equals(function.Name, StringComparison.OrdinalIgnoreCase) &&
-            method.SourceLine == function.Body.Extent.StartLineNumber &&
+            (executable || method.SourceLine == function.Body.Extent.StartLineNumber) &&
             PowerShellCompilationPathSafety.PathEquals(string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath, sourcePath));
         if (method is null) return string.Empty;
         // Preserve the authored keyword and escaped name token. Inline parameters are
@@ -392,7 +398,7 @@ internal static class PowerShellHybridModuleComposer
                 token.Kind != TokenKind.Comment && token.Kind != TokenKind.NewLine)
             .Skip(1).First();
         var declaration = function.Extent.Text.Substring(0, name.Extent.EndOffset - function.Extent.StartOffset);
-        return PowerShellNativeFunctionSourceGenerator.Registration(typed, method, declaration);
+        return PowerShellNativeFunctionSourceGenerator.Registration(typed, method, declaration, executable, executableDependency);
     }
 
     private static string JoinPowerShellNames(IEnumerable<string> names)

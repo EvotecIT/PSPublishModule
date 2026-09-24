@@ -16,10 +16,18 @@ namespace PowerForge.Generated.Runtime
         public static void InstallDeclaredFunction(PSModuleInfo module, string name, ScriptBlock script)
         {
             if (module == null) throw new ArgumentNullException(nameof(module));
+            InstallDeclaredFunction(module.SessionState, name, script);
+        }
+
+        /// <summary>Installs a compiled body into a function declared in the current executable session.</summary>
+        /// <remarks>The declaration remains the owner of its native parameter and command metadata.</remarks>
+        public static void InstallDeclaredFunction(SessionState sessionState, string name, ScriptBlock script)
+        {
+            if (sessionState == null) throw new ArgumentNullException(nameof(sessionState));
             if (string.IsNullOrEmpty(name)) throw new ArgumentException("A function name is required.", nameof(name));
             if (script == null) throw new ArgumentNullException(nameof(script));
             var contract = NativeContract.Shared;
-            var session = contract.NativeSessionState.GetValue(module.SessionState, null)!;
+            var session = contract.NativeSessionState.GetValue(sessionState, null)!;
             var function = (FunctionInfo?)Invoke(contract.GetFunction, session, new object[] { name });
             if (function == null || (function.Options & (ScopedItemOptions.ReadOnly | ScopedItemOptions.Constant)) != 0)
                 return;
@@ -59,6 +67,17 @@ namespace PowerForge.Generated.Runtime
             if (module == null) throw new ArgumentNullException(nameof(module));
             if (localNames == null) throw new ArgumentNullException(nameof(localNames));
             return module.NewBoundScriptBlock(CreateCore(parameterDeclaration, sourcePath, localNames, begin, process, end, clean, localTypeDeclarations));
+        }
+
+        /// <summary>Creates a compiled function body for the executable's current PowerShell session.</summary>
+        public static ScriptBlock Create(string parameterDeclaration, string sourcePath, string[] localNames,
+            Action<PowerShellNativeFunctionContext>? begin,
+            Action<PowerShellNativeFunctionContext>? process,
+            Action<PowerShellNativeFunctionContext>? end,
+            Action<PowerShellNativeFunctionContext>? clean = null, string[]? localTypeDeclarations = null)
+        {
+            if (localNames == null) throw new ArgumentNullException(nameof(localNames));
+            return CreateCore(parameterDeclaration, sourcePath, localNames, begin, process, end, clean, localTypeDeclarations);
         }
 
         /// <summary>Creates a fresh function block containing parameter metadata and compiled callbacks.</summary>

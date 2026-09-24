@@ -40,6 +40,10 @@ public static class PowerShellCompilationCapabilities
         PowerShellCompilationCapability.HybridTypedRegions |
         PowerShellCompilationCapability.NativeFunctionBinding;
 
+    /// <summary>A hosted executable can bind native functions but has no module-state or region owner.</summary>
+    public const PowerShellCompilationCapability HybridExecutable =
+        BinaryModule | PowerShellCompilationCapability.NativeFunctionBinding;
+
     /// <summary>Capabilities supplied by a runtime-independent typed executable.</summary>
     public const PowerShellCompilationCapability TypedExecutable =
         PowerShellCompilationCapability.RuntimeFreeProviderOperations |

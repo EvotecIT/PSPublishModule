@@ -11,6 +11,9 @@ internal static class PowerShellNativeFunctionSourceGenerator
     internal static string FactoryMethod(PowerShellCompiledMethod method)
         => PowerShellCSharpSymbolRenderer.Identifier("Create_" + method.GeneratedName.TrimStart('@'));
 
+    internal static string ExecutableFactoryMethod(PowerShellCompiledMethod method)
+        => PowerShellCSharpSymbolRenderer.Identifier("CreateExecutable_" + method.GeneratedName.TrimStart('@'));
+
     internal static void Validate(PowerShellCompiledMethod method)
     {
         if (method.RequiresPowerShellRuntimeState ||
@@ -28,10 +31,22 @@ internal static class PowerShellNativeFunctionSourceGenerator
         foreach (var method in functions)
         {
             Validate(method);
-            builder.Append("    public static global::System.Management.Automation.ScriptBlock ")
-                .Append(FactoryMethod(method)).AppendLine("(global::System.Management.Automation.PSModuleInfo module, string sourcePath)")
-                .AppendLine("    {")
-                .AppendLine("        return global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.Create(module,")
+            AppendFactory(builder, typed, method, executable: false);
+            AppendFactory(builder, typed, method, executable: true);
+        }
+        builder.AppendLine("}");
+    }
+
+    private static void AppendFactory(StringBuilder builder, PowerShellTypedCompilationResult typed,
+        PowerShellCompiledMethod method, bool executable)
+    {
+        builder.Append("    public static global::System.Management.Automation.ScriptBlock ")
+            .Append(executable ? ExecutableFactoryMethod(method) : FactoryMethod(method))
+            .AppendLine(executable ? "(string sourcePath)" : "(global::System.Management.Automation.PSModuleInfo module, string sourcePath)")
+            .AppendLine("    {")
+            .Append(executable
+                ? "        return global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.Create(\n"
+                : "        return global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.Create(module,\n")
                 .Append("            ").Append(PowerShellCSharpLiteral.QuoteString(method.NativeFunctionBinding!.ParameterDeclaration))
                 .Append(", sourcePath, new string[] { ")
                 .Append(string.Join(", ", method.NativeFunctionBinding.LocalNames.Select(PowerShellCSharpLiteral.QuoteString)))
@@ -49,15 +64,17 @@ internal static class PowerShellNativeFunctionSourceGenerator
                 PowerShellCSharpSymbolRenderer.Identifier(typed.TypeName) + "." + method.GeneratedName, method.SourceName,
                 method.RequiresPowerShellStatementErrors, method.RequiresPowerShellStopping, method.RequiresPowerShellStreams,
                 method.ReturnType == typeof(void).FullName, method.OutputScalarization == "EnumerateCollection");
-            builder.AppendLine("            }").AppendLine("    }");
-        }
-        builder.AppendLine("}");
+        builder.AppendLine("            }").AppendLine("    }");
     }
 
     private static string Callback(bool present, int clause)
         => PowerShellNativeCallbackSource.Callback(present, clause);
 
     internal static string Registration(PowerShellTypedCompilationResult typed, PowerShellCompiledMethod method, string declaration)
+        => Registration(typed, method, declaration, executable: false);
+
+    internal static string Registration(PowerShellTypedCompilationResult typed, PowerShellCompiledMethod method,
+        string declaration, bool executable, bool executableDependency = false)
     {
         // A function declaration can share its line with another declaration or command.
         // Its replacement must provide statement separators on both sides, including aliases.
@@ -65,10 +82,15 @@ internal static class PowerShellNativeFunctionSourceGenerator
             .AppendLine(method.NativeFunctionBinding!.ParameterDeclaration)
             .AppendLine("throw 'Compiled function body was not installed.'")
             .AppendLine("}")
-            .Append("if ([PowerForge.Generated.Runtime.PowerShellNativeFunctionHost]::InstallDeclaredFunction($ExecutionContext.SessionState.Module, '");
+            .Append("if ([PowerForge.Generated.Runtime.PowerShellNativeFunctionHost]::InstallDeclaredFunction($ExecutionContext.SessionState")
+            .Append(executable ? string.Empty : ".Module")
+            .Append(", '");
         builder.Append(method.SourceName.Replace("'", "''"))
             .Append("', [").Append(typed.NamespaceName).Append('.').Append(FactoryType(typed))
-            .Append("]::").Append(FactoryMethod(method)).Append("($ExecutionContext.SessionState.Module, $PSCommandPath))) { }");
+            .Append("]::").Append(executable ? ExecutableFactoryMethod(method) : FactoryMethod(method))
+            .Append(executable
+                ? executableDependency ? "($PSCommandPath))) { }" : "([PowerForge.Compiled.PowerForgePackagedEntryPoint]::Path))) { }"
+                : "($ExecutionContext.SessionState.Module, $PSCommandPath))) { }");
         return builder.AppendLine().ToString();
     }
 }

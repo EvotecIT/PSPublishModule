@@ -85,7 +85,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             ValidatePackagedDependency(dependency, scriptDependencies.Prepend(fullSourcePath).ToArray());
             var fileName = $"Dependency{index:D4}.ps1";
             var target = Path.Combine(dependencyDirectory, fileName);
-            var composed = hybrid is null ? null : PowerShellHybridModuleComposer.ComposeDependency(dependency, hybrid, hybridCompiledMethods!);
+            var composed = hybrid is null ? null : PowerShellHybridModuleComposer.ComposeDependency(dependency, hybrid, hybridCompiledMethods!, executable: true);
             if (composed is null)
                 File.Copy(dependency, target, overwrite: false);
             else
