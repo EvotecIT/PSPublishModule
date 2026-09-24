@@ -5,6 +5,7 @@ namespace PowerForge.Tests;
 public sealed class DotNetPublishPreparationServiceTests
 {
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void Prepare_no_sign_disables_only_selected_publish_target_signing()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-dotnet-publish-no-sign-" + Guid.NewGuid().ToString("N")));
@@ -72,6 +73,7 @@ public sealed class DotNetPublishPreparationServiceTests
     }
 
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void Prepare_no_sign_rejects_selected_bundle_before_changing_signing()
     {
         var spec = new DotNetPublishSpec
@@ -87,6 +89,7 @@ public sealed class DotNetPublishPreparationServiceTests
     }
 
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void Prepare_no_sign_allows_bundle_excluded_by_active_profile()
     {
         var spec = new DotNetPublishSpec
@@ -112,6 +115,27 @@ public sealed class DotNetPublishPreparationServiceTests
         Assert.True(spec.Targets[1].Publish.Sign!.Enabled);
         Assert.True(originalMonitoring.Publish.Sign!.Enabled);
         Assert.Same(originalAgent, spec.Targets[1]);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void Prepare_no_sign_rejects_null_publish_settings(bool useProfile)
+    {
+        var target = new DotNetPublishTarget { Name = "Monitoring", Publish = null! };
+        var spec = new DotNetPublishSpec
+        {
+            Profile = useProfile ? "Smoke" : null,
+            Profiles = useProfile ? [new DotNetPublishProfile { Name = "Smoke", Targets = ["Monitoring"] }] : [],
+            Targets = [target]
+        };
+
+        var error = Assert.Throws<ArgumentException>(() =>
+            DotNetPublishSigningProfileResolver.DisableSelectedTargetSigning(spec));
+        Assert.Contains("Target.Publish is required", error.Message, StringComparison.Ordinal);
+        Assert.Same(target, Assert.Single(spec.Targets));
+        Assert.Null(target.Publish);
     }
 
     [Fact]

@@ -8,6 +8,7 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeCliDotNetPublishTests
 {
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public async Task DotNetPublish_NoPublishSignDisablesSelectedTargetWithoutChangingConfig()
     {
         string repoRoot = FindRepositoryRoot();

@@ -13,7 +13,9 @@ internal static class DotNetPublishSigningProfileResolver
             throw new InvalidOperationException("NoPublishSign cannot be used when bundles are selected because bundle signing follows the source publish target. Select a publish-only configuration for an unsigned smoke run.");
 
         var selectedNames = new HashSet<string>(
-            (selected.Targets ?? Array.Empty<DotNetPublishTarget>()).Select(target => target.Name),
+            (selected.Targets ?? Array.Empty<DotNetPublishTarget>())
+                .Where(target => target is not null && !string.IsNullOrWhiteSpace(target.Name))
+                .Select(target => target.Name),
             StringComparer.OrdinalIgnoreCase);
         var originalTargets = spec.Targets ?? Array.Empty<DotNetPublishTarget>();
         var targets = originalTargets.ToArray();
@@ -23,8 +25,10 @@ internal static class DotNetPublishSigningProfileResolver
             if (originalTarget is null || !selectedNames.Contains(originalTarget.Name))
                 continue;
 
+            if (originalTarget.Publish is null)
+                throw new ArgumentException($"Target.Publish is required for '{originalTarget.Name}'.", nameof(spec));
+
             var target = DotNetPublishPipelineRunner.CloneTargets([originalTarget])[0];
-            target.Publish ??= new DotNetPublishPublishOptions();
             if (target.Publish.Sign is not null)
             {
                 target.Publish.Sign.Enabled = false;
