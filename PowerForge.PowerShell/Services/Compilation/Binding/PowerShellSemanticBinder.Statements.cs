@@ -77,6 +77,11 @@ internal sealed partial class PowerShellSemanticBinder
             if (TryBindStableScalarVectorCapture(document, assignment, symbols, functions, diagnostics,
                     targetFramework, capabilities, out var stableVectorCapture))
                 return stableVectorCapture;
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                UnwrapExpression(assignment.Right) is ArrayExpressionAst { SubExpression: { } collectedStatements } collectedArray &&
+                collectedStatements.FindAll(static node => node is ForEachStatementAst, searchNestedScriptBlocks: false).Any())
+                return BindOutputCapture(document, assignment, symbols, functions, diagnostics, targetFramework,
+                    capabilities, collectedArray);
             if (assignment.Right is IfStatementAst or ForStatementAst or ForEachStatementAst or WhileStatementAst or DoWhileStatementAst or DoUntilStatementAst)
                 return BindOutputCapture(document, assignment, symbols, functions, diagnostics, targetFramework, capabilities);
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&

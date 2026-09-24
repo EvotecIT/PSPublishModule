@@ -3,7 +3,8 @@ namespace PowerForge;
 internal enum PowerShellOutputCaptureKind
 {
     CollapsedPowerShellValue,
-    StableScalarVector
+    StableScalarVector,
+    NativeObjectArray
 }
 
 /// <summary>Collects an authored statement's success records before assigning its collapsed result.</summary>
@@ -11,7 +12,8 @@ internal sealed class PowerShellBoundOutputCaptureStatement : PowerShellBoundSta
 {
     internal PowerShellBoundOutputCaptureStatement(SourceSpan span, PowerShellSymbolId? target, PowerShellBoundBlock body,
         PowerShellNativeAssignmentTarget? nativeTarget = null, PowerShellBoundMutationOperator operation = PowerShellBoundMutationOperator.Assign,
-        PowerShellOutputCaptureKind kind = PowerShellOutputCaptureKind.CollapsedPowerShellValue, Type? capturedElementType = null)
+        PowerShellOutputCaptureKind kind = PowerShellOutputCaptureKind.CollapsedPowerShellValue, Type? capturedElementType = null,
+        bool shareEmptyArray = false)
         : base(span, (body.Effects & ~PowerShellSemanticEffect.SuccessOutput) | PowerShellSemanticEffect.Mutation |
             (nativeTarget is not null ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.TerminatingError : 0),
             (kind == PowerShellOutputCaptureKind.StableScalarVector
@@ -28,12 +30,15 @@ internal sealed class PowerShellBoundOutputCaptureStatement : PowerShellBoundSta
             throw new ArgumentException("A stable scalar vector capture requires one local target and a stable scalar element type.");
         if (kind == PowerShellOutputCaptureKind.CollapsedPowerShellValue && capturedElementType is not null)
             throw new ArgumentException("A collapsed PowerShell capture cannot declare a vector element type.");
+        if (kind == PowerShellOutputCaptureKind.NativeObjectArray && (nativeTarget is null || capturedElementType is not null))
+            throw new ArgumentException("A native object-array capture requires one native assignment target.");
         Target = target;
         Body = body;
         NativeTarget = nativeTarget;
         Operation = operation;
         Kind = kind;
         CapturedElementType = capturedElementType;
+        ShareEmptyArray = shareEmptyArray;
     }
 
     internal PowerShellSymbolId? Target { get; }
@@ -42,6 +47,7 @@ internal sealed class PowerShellBoundOutputCaptureStatement : PowerShellBoundSta
     internal PowerShellBoundMutationOperator Operation { get; }
     internal PowerShellOutputCaptureKind Kind { get; }
     internal Type? CapturedElementType { get; }
+    internal bool ShareEmptyArray { get; }
     internal Type? CapturedVectorType => CapturedElementType?.MakeArrayType();
     internal bool UsesNativeInvocation => NativeTarget is not null;
     internal bool CapturesStableScalarVector => Kind == PowerShellOutputCaptureKind.StableScalarVector;

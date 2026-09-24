@@ -94,7 +94,7 @@ internal sealed class PowerShellBoundOptimizer
         {
             PowerShellBoundOutputCaptureStatement capture => new PowerShellBoundOutputCaptureStatement(
                 capture.Span, capture.Target, OptimizeBlock(capture.Body), capture.NativeTarget, capture.Operation,
-                capture.Kind, capture.CapturedElementType),
+                capture.Kind, capture.CapturedElementType, capture.ShareEmptyArray),
             PowerShellBoundStatementErrorBoundary boundary => new PowerShellBoundStatementErrorBoundary(
                 OptimizeBlock(boundary.Body), boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus, boundary.NativeSequencePoint),
             PowerShellBoundAssignmentStatement assignment => new PowerShellBoundAssignmentStatement(

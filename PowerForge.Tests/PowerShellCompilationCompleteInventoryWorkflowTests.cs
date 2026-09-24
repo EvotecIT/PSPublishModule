@@ -31,8 +31,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             Assert.True(unit.UsesNativeFunctionBinding);
             Assert.False(unit.RetainedHostedSource);
         }
-        foreach (var name in new[] { "Get-CimData", "Get-ComputerSMBInfo" })
-            Assert.True(Assert.Single(units, item => item.Name == name).RetainedHostedSource);
+        var cimData = Assert.Single(units, item => item.Name == "Get-CimData");
+        Assert.True(cimData.EmittedClrMethod);
+        Assert.True(cimData.UsesNativeFunctionBinding);
+        Assert.False(cimData.RetainedHostedSource);
+        Assert.True(Assert.Single(units, item => item.Name == "Get-ComputerSMBInfo").RetainedHostedSource);
         var observerRoot = Path.Combine(AppContext.BaseDirectory, "Fixtures", "PowerShellCompilationInventoryWorkflow");
         var setup = File.ReadAllText(Path.Combine(observerRoot, "Providers.ps1"));
         var observer = setup + Environment.NewLine + File.ReadAllText(Path.Combine(observerRoot, "Observe.ps1"));

@@ -49,10 +49,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
             builder.Append("object? ").Append(value).Append(" = ");
         else
             builder.Append(RenderStorage(capture.Target!)).Append(" = ");
-        builder
-            .Append(records).Append(".Count == 0 ? global::System.Management.Automation.Internal.AutomationNull.Value : ").Append(records).Append(".Count == 1 ? ")
-            .Append(records).Append("[0] : ").Append(records).Append(".ToArray()")
-            .AppendLine(";");
+        if (capture.Kind == PowerShellOutputCaptureKind.NativeObjectArray)
+            builder.Append(records).Append(".Count == 0 ? ")
+                .Append(capture.ShareEmptyArray ? "global::System.Array.Empty<object>()" : "new object?[0]")
+                .Append(" : ").Append(records).AppendLine(".ToArray();");
+        else
+            builder.Append(records).Append(".Count == 0 ? global::System.Management.Automation.Internal.AutomationNull.Value : ").Append(records).Append(".Count == 1 ? ")
+                .Append(records).Append("[0] : ").Append(records).Append(".ToArray()")
+                .AppendLine(";");
         builder.Append(prefix).Append("    ").Append(records).AppendLine(".Clear();");
         if (value is not null)
             builder.Append(prefix).Append("    return ").Append(value).AppendLine(";");

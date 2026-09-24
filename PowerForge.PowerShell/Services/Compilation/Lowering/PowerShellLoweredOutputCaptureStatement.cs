@@ -7,7 +7,7 @@ internal sealed class PowerShellLoweredOutputCaptureStatement : PowerShellLowere
         PowerShellLoweredStatement[] statements, string recordsTemporary, string sinkTemporary,
         PowerShellNativeAssignmentTarget? nativeTarget = null, PowerShellBoundMutationOperator operation = PowerShellBoundMutationOperator.Assign,
         PowerShellOutputCaptureKind kind = PowerShellOutputCaptureKind.CollapsedPowerShellValue, Type? capturedElementType = null,
-        bool declareTarget = false)
+        bool declareTarget = false, bool shareEmptyArray = false)
         : base(span)
     {
         if (nativeTarget is null && (target is null || operation != PowerShellBoundMutationOperator.Assign))
@@ -21,6 +21,7 @@ internal sealed class PowerShellLoweredOutputCaptureStatement : PowerShellLowere
         Kind = kind;
         CapturedElementType = capturedElementType;
         DeclareTarget = declareTarget;
+        ShareEmptyArray = shareEmptyArray;
     }
 
     internal PowerShellSymbolId? Target { get; }
@@ -32,6 +33,7 @@ internal sealed class PowerShellLoweredOutputCaptureStatement : PowerShellLowere
     internal PowerShellOutputCaptureKind Kind { get; }
     internal Type? CapturedElementType { get; }
     internal bool DeclareTarget { get; }
+    internal bool ShareEmptyArray { get; }
     internal bool UsesNativeInvocation => NativeTarget is not null;
     internal bool CapturesStableScalarVector => Kind == PowerShellOutputCaptureKind.StableScalarVector;
 }

@@ -502,7 +502,7 @@ internal sealed partial class PowerShellSemanticBinder
             nativePostTestCondition: nativePostTestCondition);
     }
 
-    private static Ast UnwrapExpression(Ast syntax, bool preservePipeline = false)
+    internal static Ast UnwrapExpression(Ast syntax, bool preservePipeline = false)
     {
         while (true)
         {

@@ -93,6 +93,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
            function.Body.Find(static node => node is ArrayExpressionAst array &&
                array.SubExpression.Statements.Any(static statement => statement is AssignmentStatementAst),
                searchNestedScriptBlocks: false) is not null ||
+           RequiresNativeStatementArrayCapture(function) ||
            function.Body.Find(node => node is ConvertExpressionAst conversion &&
                conversion.Type.TypeName.GetReflectionType() is { } targetType &&
                !PowerShellCompilationParameterTypePolicy.CanUseInMethod(targetType, targetFramework, capabilities),
@@ -118,6 +119,34 @@ internal static class PowerShellNativeFunctionBindingPolicy
             (conditional.Parent is HashtableAst ||
              conditional.Parent is StatementBlockAst { Parent: ArrayExpressionAst or SubExpressionAst }),
             searchNestedScriptBlocks: false) is not null;
+
+    private static bool RequiresNativeStatementArrayCapture(FunctionDefinitionAst function)
+        => function.Body.Find(static node => node is AssignmentStatementAst { Operator: TokenKind.Equals } assignment &&
+            PowerShellSemanticBinder.UnwrapExpression(assignment.Right) is ArrayExpressionAst collection &&
+            collection.SubExpression.FindAll(static nested => nested is ForEachStatementAst,
+                searchNestedScriptBlocks: false).Any() &&
+            !IsPotentialStableScalarVectorCapture(assignment, collection),
+            searchNestedScriptBlocks: false) is not null;
+
+    // The existing guarded stable-vector region owns this narrower shape. Merely
+    // selecting native function binding would remove its safe region promotion.
+    private static bool IsPotentialStableScalarVectorCapture(AssignmentStatementAst assignment, ArrayExpressionAst collection)
+    {
+        if (collection.SubExpression.Traps is { Count: > 0 } ||
+            collection.SubExpression.Statements.Count != 1 ||
+            collection.SubExpression.Statements[0] is not ForEachStatementAst ||
+            assignment.Left is not AttributedExpressionAst
+            {
+                Attribute: TypeConstraintAst constraint,
+                Child: VariableExpressionAst variable
+            } || !variable.VariablePath.IsUnqualified)
+            return false;
+        var type = constraint.TypeName.GetReflectionType();
+        return type is { IsArray: true } && type.GetArrayRank() == 1 &&
+               type.GetElementType() is { } elementType &&
+               PowerShellRegionTransferTypePolicy.IsSupported(type) &&
+               PowerShellStableScalarTypePolicy.IsSupported(elementType);
+    }
 
     private static bool RequiresNativeObjectParameterForEach(FunctionDefinitionAst function)
     {

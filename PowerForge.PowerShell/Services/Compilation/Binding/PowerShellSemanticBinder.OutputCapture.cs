@@ -114,10 +114,17 @@ internal sealed partial class PowerShellSemanticBinder
     private PowerShellBoundStatement? BindOutputCapture(ParsedSourceDocument document, AssignmentStatementAst assignment,
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics, string? targetFramework, PowerShellCompilationCapability capabilities)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics, string? targetFramework, PowerShellCompilationCapability capabilities,
+        ArrayExpressionAst? collectedArray = null)
     {
         var span = PowerShellSourceParser.GetSpan(document, assignment.Extent);
         var usesNativeInvocation = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding);
+        if (collectedArray is not null && assignment.Operator != TokenKind.Equals)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2939",
+                "Native statement arrays require simple assignment so collection ownership is explicit.", span));
+            return null;
+        }
         var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, usesNativeInvocation);
         var operation = PowerShellMutationSemanticBinder.GetAssignmentOperator(assignment.Operator);
         PowerShellSemanticSymbolBinding? target = null;
@@ -149,8 +156,16 @@ internal sealed partial class PowerShellSemanticBinder
         // The assignment owns errors that escape the captured statement (including
         // conditions and iterators). Handling them inside the collector would assign partial
         // records after a failed RHS. Inner authored statements keep their boundaries.
-        var body = BindStatementCore(document, assignment.Right, symbols, functions, diagnostics, false, targetFramework, capabilities,
-            allowNonTerminalSuccessOutput: true);
+        PowerShellBoundBlock? body;
+        if (collectedArray is null)
+        {
+            var statement = BindStatementCore(document, assignment.Right, symbols, functions, diagnostics, false,
+                targetFramework, capabilities, allowNonTerminalSuccessOutput: true);
+            body = statement is null ? null : new PowerShellBoundBlock(statement.Span, new[] { statement });
+        }
+        else
+            body = BindBlock(document, collectedArray.SubExpression, symbols, functions, diagnostics, targetFramework,
+                capabilities, allowNonTerminalSuccessOutput: true);
         if (body is null) return null;
         // Binding the body can merge assignments and declarations back into its enclosing
         // symbol table. The capture destination must still accept its collapsed result.
@@ -169,16 +184,19 @@ internal sealed partial class PowerShellSemanticBinder
         }
         if (usesNativeInvocation)
             return new PowerShellBoundOutputCaptureStatement(span, target?.Symbol,
-                new PowerShellBoundBlock(body.Span, new[] { body }),
+                body,
                 new PowerShellNativeAssignmentTarget(assignment.Left.Extent.Text, document.Path, document.Text,
                     PowerShellSourceParser.GetSpan(document, assignment.Left.Extent),
-                    assignment.Left.Extent.StartOffset, assignment.Left.Extent.EndOffset), operation.Value);
+                    assignment.Left.Extent.StartOffset, assignment.Left.Extent.EndOffset), operation.Value,
+                collectedArray is null ? PowerShellOutputCaptureKind.CollapsedPowerShellValue : PowerShellOutputCaptureKind.NativeObjectArray,
+                shareEmptyArray: collectedArray is not null &&
+                                 _semanticProfile.Family == PowerShellCompilationSemanticHostFamily.PowerShell7);
         target!.Refine(new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.Inferred,
             "Captured success output collapses to null, a single record, or an Object array."), PowerShellValueState.Unknown);
         target.SetModuleStateDerived(target.IsModuleStateDerived ||
-            PowerShellSemanticAnalyzer.EnumerateStatements(new PowerShellBoundBlock(body.Span, new[] { body }))
+            PowerShellSemanticAnalyzer.EnumerateStatements(body)
                 .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
                 .Any(PowerShellModuleStateOriginPolicy.IsDerived));
-        return new PowerShellBoundOutputCaptureStatement(span, target.Symbol, new PowerShellBoundBlock(body.Span, new[] { body }));
+        return new PowerShellBoundOutputCaptureStatement(span, target.Symbol, body);
     }
 }
