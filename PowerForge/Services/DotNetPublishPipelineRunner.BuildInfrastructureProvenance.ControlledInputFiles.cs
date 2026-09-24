@@ -117,8 +117,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 Dictionary<string, string> immutableProperties = ReadImmutableTargetGuardProperties(
                     context.GlobalProperties,
                     context.EvaluatedImports.Append(context.ProjectPath));
-                foreach (string propertyName in context.UnstableGuardProperties)
-                    immutableProperties.Remove(propertyName);
+                RemoveControlledInvocationGuardProperties(
+                    immutableProperties,
+                    context.UnstableGuardProperties);
                 var proof = new TargetGuardDocumentProof(
                     context,
                     immutableProperties);

@@ -788,7 +788,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
 
                 var controlledGlobals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                var unstableGuardProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var unstableGuardProperties = new HashSet<string>(
+                    context.UnstableGuardProperties,
+                    StringComparer.OrdinalIgnoreCase);
                 foreach (KeyValuePair<string, string> property in context.GlobalProperties)
                 {
                     if (!TryRemapControlledBuildValue(

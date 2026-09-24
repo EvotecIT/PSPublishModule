@@ -362,22 +362,29 @@ public sealed partial class DotNetPublishPipelineRunner
             return false;
         }
 
+        string left = comparison.Groups[2].Value;
+        string right = comparison.Groups[5].Value;
+        bool equal = string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+        // Identical finite operands stay equal under MSBuild's supported
+        // conversions. Escapes can change expression syntax, and NaN is not
+        // reflexive under numeric comparison, so keep those cases unknown.
+        if (equal && left.IndexOf('%') < 0 &&
+            !IsMsBuildNaNValue(left))
+        {
+            result = comparison.Groups[3].Value == "==";
+            return true;
+        }
+
         // MSBuild may compare numbers, boolean aliases, and escaped values by their
         // converted value. A string comparison could incorrectly prove a condition
         // false and hide a target or a file input. Keep those cases unknown until
         // the full MSBuild comparison semantics can be reproduced here.
-        if (HasPotentialMsBuildComparisonConversion(
-                comparison.Groups[2].Value,
-                comparison.Groups[5].Value))
+        if (HasPotentialMsBuildComparisonConversion(left, right))
         {
             result = false;
             return false;
         }
 
-        bool equal = string.Equals(
-            comparison.Groups[2].Value,
-            comparison.Groups[5].Value,
-            StringComparison.OrdinalIgnoreCase);
         result = comparison.Groups[3].Value == "==" ? equal : !equal;
         return true;
     }
@@ -415,6 +422,15 @@ public sealed partial class DotNetPublishPipelineRunner
             return true;
         char first = trimmed[0];
         return char.IsDigit(first) || first == '+' || first == '-' || first == '.';
+    }
+
+    private static bool IsMsBuildNaNValue(string value)
+    {
+        string trimmed = value.Trim();
+        if (trimmed.StartsWith("+", StringComparison.Ordinal) ||
+            trimmed.StartsWith("-", StringComparison.Ordinal))
+            trimmed = trimmed.Substring(1);
+        return trimmed.Equals("nan", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsMsBuildBooleanValue(string value)

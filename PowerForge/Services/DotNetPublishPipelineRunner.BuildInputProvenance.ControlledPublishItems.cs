@@ -74,7 +74,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledSourceRoot,
                     controlledProjectPath!,
                     executableMsBuildInputs,
-                    request.GlobalProperties))
+                    request.ReadEffectiveGlobalProperties(),
+                    ReadControlledFrameworkMatrixProjects(graphBuildNodes).Count > 0))
             {
                 failureReason = "controlled publish-input placeholders could not be created.";
                 return false;
@@ -547,20 +548,44 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyCollection<string> rootEvaluatedImports,
         IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes)
     {
+        HashSet<string> matrixProjects = ReadControlledFrameworkMatrixProjects(graphBuildNodes);
         return graphBuildNodes
             .Select(node => new TargetGuardEvaluationContext(
                 node.Request.ProjectPath,
                 node.Request.ReadEffectiveGlobalProperties(),
                 node.Request.BuildControlledEvaluationProperties(node.EvaluatedProperties),
                 node.EvaluatedImports,
-                ReadTargetGuardGeneratedImportRoots(node.Request.ProjectPath, node.EvaluatedProperties)))
+                ReadTargetGuardGeneratedImportRoots(node.Request.ProjectPath, node.EvaluatedProperties),
+                unstableGuardProperties: matrixProjects.Contains(Path.GetFullPath(node.Request.ProjectPath))
+                    ? new[] { "TargetFramework" }
+                    : Array.Empty<string>()))
             .Append(new TargetGuardEvaluationContext(
                 rootRequest.ProjectPath,
                 rootRequest.ReadEffectiveGlobalProperties(),
                 rootRequest.BuildControlledEvaluationProperties(rootEvaluatedProperties),
                 rootEvaluatedImports,
-                ReadTargetGuardGeneratedImportRoots(rootRequest.ProjectPath, rootEvaluatedProperties)))
+                ReadTargetGuardGeneratedImportRoots(rootRequest.ProjectPath, rootEvaluatedProperties),
+                unstableGuardProperties: matrixProjects.Contains(Path.GetFullPath(rootRequest.ProjectPath))
+                    ? new[] { "TargetFramework" }
+                    : Array.Empty<string>()))
             .ToArray();
+    }
+
+    private static HashSet<string> ReadControlledFrameworkMatrixProjects(
+        IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes)
+    {
+        var matrixProjects = new HashSet<string>(FileSystemPathSafety.ExistingPathComparer);
+        foreach (IGrouping<string, ControlledPublishGraphNode> project in graphBuildNodes.GroupBy(
+                     node => Path.GetFullPath(node.Request.ProjectPath),
+                     FileSystemPathSafety.ExistingPathComparer))
+        {
+            string?[] selectedFrameworks = project.Select(node => node.Request.TargetFramework).ToArray();
+            if (project.Any(node => SelectControlledMultiFrameworkRestoreFrameworks(
+                    node.EvaluatedProperties,
+                    selectedFrameworks).Length > 1))
+                matrixProjects.Add(project.Key);
+        }
+        return matrixProjects;
     }
 
     private static bool TryBuildControlledPublishProjectGraph(
@@ -777,7 +802,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string controlledSourceRoot,
         string controlledProjectPath,
         IReadOnlyCollection<string> executableMsBuildInputs,
-        IReadOnlyDictionary<string, string> evaluatedGlobalProperties)
+        IReadOnlyDictionary<string, string> evaluatedGlobalProperties,
+        bool hasControlledFrameworkMatrix)
     {
         try
         {
@@ -816,10 +842,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (string.Equals(controlledValue, property.Value, StringComparison.Ordinal))
                     stableGuardGlobals[property.Key] = property.Value;
             }
-            IReadOnlyDictionary<string, string> immutableGlobalProperties =
+            Dictionary<string, string> immutableGlobalProperties =
                 ReadImmutableTargetGuardProperties(
                     stableGuardGlobals,
                     executableMsBuildInputs.Concat(documents.Select(source => source.DeclaringPath)));
+            RemoveControlledInvocationGuardProperties(
+                immutableGlobalProperties,
+                hasControlledFrameworkMatrix ? new[] { "TargetFramework" } : null);
             foreach ((XDocument document, string declaringPath) in documents)
             {
                 foreach (XElement item in document.Descendants().Where(IsTargetTimePublishFileItem))

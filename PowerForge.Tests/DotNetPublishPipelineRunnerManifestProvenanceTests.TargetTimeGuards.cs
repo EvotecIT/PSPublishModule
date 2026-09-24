@@ -44,6 +44,11 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("'!false' == 'true'")]
     [InlineData("'!true' == 'false'")]
     [InlineData("'Pl%61in' == 'Plain'")]
+    [InlineData("'NaN' == 'NaN'")]
+    [InlineData("'NaN' != 'NaN'")]
+    [InlineData("'+NaN' != '+NaN'")]
+    [InlineData("'-NaN' != '-NaN'")]
+    [InlineData("'%4e%61%4e' == '%4e%61%4e'")]
     [InlineData("!('01' != '1')")]
     public void ControlledBuildTasks_KeepTargetsWithUnmodeledMsBuildComparison(string condition)
     {
@@ -53,6 +58,20 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
         Assert.True(DotNetPublishPipelineRunner.ContainsUncontrolledControlledBuildTask(
             document, [document], properties, properties));
+    }
+
+    [Fact]
+    public void ControlledBuildTasks_SkipIdenticalNumericGuardOperands()
+    {
+        XDocument document = XDocument.Parse(
+            "<Project><Target Name='Inactive' BeforeTargets='Build' Condition=\"'$(TargetFrameworkVersion)' != '8.0'\"><Exec Command='unsafe' /></Target></Project>");
+        var immutable = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["TargetFrameworkVersion"] = "8.0"
+        };
+
+        Assert.False(DotNetPublishPipelineRunner.ContainsUncontrolledControlledBuildTask(
+            document, [document], immutable, immutable));
     }
 
     [Theory]
@@ -469,6 +488,81 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             reason.Contains("untrusted evaluated build input", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Theory]
+    [InlineData("BuildProjectReferences", "false", "true")]
+    [InlineData("RunAnalyzers", "true", "false")]
+    public void ReadSourceProvenance_DoesNotHideControlledOverrideGuard(
+        string propertyName,
+        string originalValue,
+        string controlledValue)
+    {
+        DotNetPublishPipelineRunner.SourceProvenance provenance =
+            ReadProjectReferencePropertyRecoveryFixture(
+                appProjectXml: $"""
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                      <ItemGroup><ProjectReference Include="../Library/Library.csproj" /></ItemGroup>
+                      <Target Name="ControlledOverrideGuard" BeforeTargets="CoreCompile"
+                              Condition="'$({propertyName})' == '{controlledValue}'">
+                        <Exec Command="echo fixture" />
+                      </Target>
+                    </Project>
+                    """,
+                libraryProjectXml: """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                    </Project>
+                    """,
+                repositoryFiles: new Dictionary<string, string>
+                {
+                    ["src/Library/Selected.cs"] = "public static class SelectedInput { }"
+                },
+                mutatedPath: "src/Library/Selected.cs",
+                buildProperties: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [propertyName] = originalValue
+                },
+                buildFramework: "net8.0");
+
+        Assert.Contains(provenance.DirtyReasons, reason =>
+            reason.Contains("untrusted evaluated build input", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ReadSourceProvenance_DoesNotHideChildBuildProjectReferencesOverride()
+    {
+        DotNetPublishPipelineRunner.SourceProvenance provenance =
+            ReadProjectReferencePropertyRecoveryFixture(
+                appProjectXml: """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                      <ItemGroup><ProjectReference Include="../Library/Library.csproj" /></ItemGroup>
+                    </Project>
+                    """,
+                libraryProjectXml: """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+                      <Target Name="ChildControlledOverride" BeforeTargets="CoreCompile"
+                              Condition="'$(BuildProjectReferences)' == 'false'">
+                        <Exec Command="echo fixture" />
+                      </Target>
+                    </Project>
+                    """,
+                repositoryFiles: new Dictionary<string, string>
+                {
+                    ["src/Library/Selected.cs"] = "public static class SelectedInput { }"
+                },
+                mutatedPath: "src/Library/Selected.cs",
+                buildProperties: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["BuildProjectReferences"] = "true"
+                },
+                buildFramework: "net8.0");
+
+        Assert.Contains(provenance.DirtyReasons, reason =>
+            reason.Contains("untrusted evaluated build input", StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public void ControlledBuildInputs_AcceptEmptySourceItemFromInactiveTaskOutput()
     {
@@ -539,10 +633,103 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                     {
                         ["Flavor"] = flavor
-                    }])!;
+                    }, false])!;
 
             Assert.True(Evaluate("Plain"));
             Assert.False(Evaluate("Signed"));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("TargetFramework", "net8.0", "net9.0")]
+    [InlineData("Configuration", "Release", "Debug")]
+    public void ControlledPublishPlaceholders_UseEffectiveRequestGuardProperties(
+        string propertyName,
+        string selectedValue,
+        string activeValue)
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string sourceRoot = Path.Combine(root, "controlled");
+            Directory.CreateDirectory(sourceRoot);
+            string project = $"""
+                <Project>
+                  <Target Name="GenerateSources" Condition="'$({propertyName})' == '{activeValue}'">
+                    <Message Text="generated">
+                      <Output TaskParameter="Text" ItemName="Compile" />
+                    </Message>
+                  </Target>
+                  <Target Name="Build">
+                    <ItemGroup><ResolvedFileToPublish Include="@(Compile)" /></ItemGroup>
+                  </Target>
+                </Project>
+                """;
+            string originalPath = Path.Combine(root, "App.proj");
+            string controlledPath = Path.Combine(sourceRoot, "App.proj");
+            File.WriteAllText(originalPath, project);
+            File.WriteAllText(controlledPath, project);
+            MethodInfo method = typeof(DotNetPublishPipelineRunner).GetMethod(
+                "TryCreateControlledPublishInputPlaceholders",
+                BindingFlags.Static | BindingFlags.NonPublic)!;
+            bool Evaluate(string selected, bool hasMatrix) => (bool)method.Invoke(
+                null,
+                [root, sourceRoot, controlledPath, new[] { originalPath },
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        [propertyName] = selected
+                    }, hasMatrix])!;
+
+            Assert.True(Evaluate(selectedValue, false));
+            Assert.False(Evaluate(activeValue, false));
+        }
+        finally
+        {
+            DeleteTestRepository(root);
+        }
+    }
+
+    [Fact]
+    public void ControlledPublishPlaceholders_DoNotUseInnerFrameworkProofForMatrixRestore()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string sourceRoot = Path.Combine(root, "controlled");
+            Directory.CreateDirectory(sourceRoot);
+            const string project = """
+                <Project>
+                  <Target Name="GenerateSources" Condition="'$(TargetFramework)' == ''">
+                    <Message Text="generated">
+                      <Output TaskParameter="Text" ItemName="Compile" />
+                    </Message>
+                  </Target>
+                  <Target Name="Build">
+                    <ItemGroup><ResolvedFileToPublish Include="@(Compile)" /></ItemGroup>
+                  </Target>
+                </Project>
+                """;
+            string originalPath = Path.Combine(root, "App.proj");
+            string controlledPath = Path.Combine(sourceRoot, "App.proj");
+            File.WriteAllText(originalPath, project);
+            File.WriteAllText(controlledPath, project);
+            MethodInfo method = typeof(DotNetPublishPipelineRunner).GetMethod(
+                "TryCreateControlledPublishInputPlaceholders",
+                BindingFlags.Static | BindingFlags.NonPublic)!;
+            bool Evaluate(bool hasMatrix) => (bool)method.Invoke(
+                null,
+                [root, sourceRoot, controlledPath, new[] { originalPath },
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["TargetFramework"] = "net8.0"
+                    }, hasMatrix])!;
+
+            Assert.True(Evaluate(false));
+            Assert.False(Evaluate(true));
         }
         finally
         {

@@ -7,6 +7,45 @@ public sealed partial class DotNetPublishPipelineRunner
     private static readonly IReadOnlyDictionary<string, string> EmptyTargetGuardProperties =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+    // These values are supplied or replaced by the isolated MSBuild invocations. A value
+    // observed during source evaluation cannot prove a target inactive in those builds.
+    private static readonly IReadOnlyCollection<string> ControlledInvocationGuardProperties =
+        ReadControlledInvocationGuardProperties();
+
+    private static IReadOnlyCollection<string> ReadControlledInvocationGuardProperties()
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "BuildProjectReferences", "RestoreRecursive", "PathMap", "RuntimeIdentifiers",
+            "BuildingProject", "TargetFrameworks", "_TargetFrameworkOverride",
+            "_DisableNuGetRestoreTargetFrameworksOverride", "BaseIntermediateOutputPath",
+            "MSBuildProjectExtensionsPath", "IntermediateOutputPath",
+            "CustomAfterMicrosoftCommonTargets"
+        };
+        var arguments = new List<string>();
+        AppendControlledProofSafeguards(arguments, string.Empty, string.Empty, "lockfile");
+        foreach (string argument in arguments.Where(value =>
+                     value.StartsWith("-p:", StringComparison.OrdinalIgnoreCase)))
+        {
+            int equals = argument.IndexOf('=');
+            if (equals > 3)
+                names.Add(argument.Substring(3, equals - 3));
+        }
+        return names;
+    }
+
+    private static void RemoveControlledInvocationGuardProperties(
+        IDictionary<string, string> immutableProperties,
+        IEnumerable<string>? additionalUnstableProperties = null)
+    {
+        foreach (string name in ControlledInvocationGuardProperties)
+            immutableProperties.Remove(name);
+        if (additionalUnstableProperties is null)
+            return;
+        foreach (string name in additionalUnstableProperties)
+            immutableProperties.Remove(name);
+    }
+
     private sealed class TargetGuardEvaluationContext
     {
         internal TargetGuardEvaluationContext(
