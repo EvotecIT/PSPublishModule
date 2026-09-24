@@ -351,7 +351,7 @@ public sealed class PowerShellCompilationInputResolverTests
     }
 
     [Theory]
-    [InlineData("-Exclude Disabled.ps1", "Exclude")]
+    [InlineData("-Exclude $Excluded", "Exclude")]
     [InlineData("-Recurse:$false", "Recurse")]
     public void Resolve_RejectsUnmodeledConventionalLoaderOptions(string option, string expectedOption)
     {
@@ -367,6 +367,82 @@ public sealed class PowerShellCompilationInputResolverTests
 
         Assert.Contains("does not support loader option", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(expectedOption, exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_PipelineLoaderStagesOnlyNonExcludedFiles()
+    {
+        using var fixture = ResolverFixture.Create("PipelineLoaderModule");
+        fixture.Write("PipelineLoaderModule.psd1", "@{ RootModule = 'PipelineLoaderModule.psm1' }");
+        var root = fixture.Write(
+            "PipelineLoaderModule.psm1",
+            "Get-ChildItem -Path $PSScriptRoot/Public/*.ps1 -Exclude 'Skip-*.ps1', 'Disabled.ps1' | " +
+            "ForEach-Object -Process { Write-Verbose $_.FullName; . $_.FullName }");
+        var loaded = fixture.Write("Public/Get-Proof.ps1", "function Get-Proof { return 1 }");
+        var excluded = fixture.Write("Public/Skip-Other.ps1", "function Get-Other { return 2 }");
+        fixture.Write("Public/Disabled.ps1", "function Get-Disabled { return 3 }");
+
+        var resolved = new PowerShellCompilationInputResolver().Resolve(fixture.Root);
+
+        Assert.Equal(new[] { loaded, root }.OrderBy(static path => path),
+            resolved.CompilationSourceFiles.OrderBy(static path => path));
+        Assert.DoesNotContain(excluded, resolved.SourceFiles);
+    }
+
+    [Theory]
+    [InlineData("$loaded = $false -and (Get-ChildItem -Path $PSScriptRoot/Public/*.ps1 | ForEach-Object -Process { . $_.FullName })")]
+    [InlineData("Get-ChildItem -Path $PSScriptRoot/Public/*.ps1 | OtherModule\\ForEach-Object -Process { . $_.FullName }")]
+    [InlineData("OtherModule\\Get-ChildItem -Path $PSScriptRoot/Public/*.ps1 | ForEach-Object -Process { . $_.FullName }")]
+    [InlineData("function ForEach-Object { param($Process) }; Get-ChildItem -Path $PSScriptRoot/Public/*.ps1 | ForEach-Object -Process { . $_.FullName }")]
+    [InlineData("Set-Alias ForEach-Object Write-Output; Get-ChildItem -Path $PSScriptRoot/Public/*.ps1 | ForEach-Object -Process { . $_.FullName }")]
+    [InlineData("return; Get-ChildItem -Path $PSScriptRoot/Public/*.ps1 | ForEach-Object -Process { . $_.FullName }")]
+    [InlineData("if ($true) { throw 'stop' }; Get-ChildItem -Path $PSScriptRoot/Public/*.ps1 | ForEach-Object -Process { . $_.FullName }")]
+    [InlineData("New-Item Function:\\ForEach-Object -Value { param($Process) }; Get-ChildItem -Path $PSScriptRoot/Public/*.ps1 | ForEach-Object -Process { . $_.FullName }")]
+    public void Resolve_RejectsPipelineSourceWhoseExecutionOrIntrinsicBindingIsNotProven(string loader)
+    {
+        using var fixture = ResolverFixture.Create("AmbiguousPipelineLoader");
+        fixture.Write("AmbiguousPipelineLoader.psd1", "@{ RootModule = 'AmbiguousPipelineLoader.psm1' }");
+        fixture.Write("AmbiguousPipelineLoader.psm1", loader);
+        fixture.Write("Public/Get-Unloaded.ps1", "function Get-Unloaded { return 2 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCompilationInputResolver().Resolve(fixture.Root));
+
+        Assert.Contains("literal $PSScriptRoot path", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_RejectsPipelineLoaderWhoseDotSourceCanBeSkipped()
+    {
+        using var fixture = ResolverFixture.Create("SkippedPipelineLoader");
+        fixture.Write("SkippedPipelineLoader.psd1", "@{ RootModule = 'SkippedPipelineLoader.psm1' }");
+        fixture.Write(
+            "SkippedPipelineLoader.psm1",
+            "Get-ChildItem -Path $PSScriptRoot/Public/*.ps1 | " +
+            "ForEach-Object -Process { if ($false) { . $_.FullName } }");
+        fixture.Write("Public/Get-Unloaded.ps1", "function Get-Unloaded { return 2 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCompilationInputResolver().Resolve(fixture.Root));
+
+        Assert.Contains("literal $PSScriptRoot path", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Resolve_RejectsExcludeWithoutWildcardFileSelection()
+    {
+        using var fixture = ResolverFixture.Create("LiteralExcludedLoader");
+        fixture.Write("LiteralExcludedLoader.psd1", "@{ RootModule = 'LiteralExcludedLoader.psm1' }");
+        fixture.Write(
+            "LiteralExcludedLoader.psm1",
+            "Get-ChildItem -Path $PSScriptRoot/Public/Get-Proof.ps1 -Exclude Get-Proof.ps1 | " +
+            "ForEach-Object -Process { . $_.FullName }");
+        fixture.Write("Public/Get-Proof.ps1", "function Get-Proof { return 1 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new PowerShellCompilationInputResolver().Resolve(fixture.Root));
+
+        Assert.Contains("requires a wildcard file pattern", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -100,7 +100,10 @@ internal static class PowerShellHybridDependencyResolver
             ParseError[] errors;
             var ast = Parser.ParseFile(current, out tokens, out errors);
             if (errors.Length > 0)
-                throw new InvalidOperationException($"Dot-sourced hybrid module dependency '{current}' could not be parsed.");
+                throw new InvalidOperationException(
+                    $"Dot-sourced hybrid module dependency '{current}' could not be parsed: " +
+                    string.Join("; ", errors.Take(3).Select(error =>
+                        $"{error.Extent.StartLineNumber}:{error.Extent.StartColumnNumber} {error.Message}")));
             var dotSourceCommands = moduleScopeOnly
                 ? (ast.EndBlock is null ? Enumerable.Empty<StatementAst>() : ast.EndBlock.Statements)
                     .OfType<PipelineAst>()
