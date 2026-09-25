@@ -400,8 +400,12 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string appDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "App")).FullName;
             string libraryDirectory = Directory.CreateDirectory(Path.Combine(root, "src", "Library")).FullName;
             string appProject = Path.Combine(appDirectory, "App.csproj");
-            File.WriteAllText(appProject, appProjectXml);
-            File.WriteAllText(Path.Combine(libraryDirectory, "Library.csproj"), libraryProjectXml);
+            string ExpandFixturePaths(string value) => value
+                .Replace("__SOURCE_ROOT__", root)
+                .Replace("__APP_DIR_WITH_SEPARATOR__", appDirectory + Path.DirectorySeparatorChar);
+            File.WriteAllText(appProject, ExpandFixturePaths(appProjectXml));
+            File.WriteAllText(Path.Combine(libraryDirectory, "Library.csproj"),
+                ExpandFixturePaths(libraryProjectXml));
             File.WriteAllText(
                 Path.Combine(appDirectory, "Program.cs"),
                 "internal static class Program { private static void Main() { } }");
@@ -462,7 +466,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             foreach (KeyValuePair<string, string> property in buildProperties ??
                      new Dictionary<string, string>())
             {
-                plan.MsBuildProperties[property.Key] = property.Value;
+                plan.MsBuildProperties[property.Key] = ExpandFixturePaths(property.Value);
             }
             return DotNetPublishPipelineRunner.ReadSourceProvenance(root, buildPlan: plan);
         }

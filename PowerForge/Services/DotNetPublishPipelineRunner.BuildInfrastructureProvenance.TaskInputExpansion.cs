@@ -28,7 +28,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyCollection<(XDocument Document, string DeclaringPath)> relatedDocuments,
         IReadOnlyDictionary<string, string>? evaluatedGlobalProperties,
         out string[] expandedValues,
-        XElement? consumingElement = null)
+        XElement? consumingElement = null,
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties = null)
     {
         var pending = new Queue<string>();
         var inspected = new HashSet<string>(StringComparer.Ordinal);
@@ -142,7 +143,8 @@ public sealed partial class DotNetPublishPipelineRunner
                             relatedDocuments.Select(related => related.Document).ToArray(),
                             "ItemName",
                             itemName,
-                            evaluatedProperties))
+                            evaluatedProperties,
+                            immutableGlobalProperties))
                     {
                         expandedValues = Array.Empty<string>();
                         return false;

@@ -108,6 +108,7 @@ public sealed partial class DotNetPublishPipelineRunner
             ProjectEvaluationRequest request,
             string? pathMap,
             IReadOnlyDictionary<string, string> evaluatedProperties,
+            string[] evaluatedImports,
             string? packageId,
             string? packageVersion,
             string? packageValidationBaselineVersion)
@@ -115,6 +116,7 @@ public sealed partial class DotNetPublishPipelineRunner
             Request = request;
             PathMap = pathMap;
             EvaluatedProperties = evaluatedProperties;
+            EvaluatedImports = evaluatedImports;
             PackageId = packageId;
             PackageVersion = packageVersion;
             PackageValidationBaselineVersion = packageValidationBaselineVersion;
@@ -125,6 +127,8 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string? PathMap { get; }
 
         internal IReadOnlyDictionary<string, string> EvaluatedProperties { get; }
+
+        internal string[] EvaluatedImports { get; }
 
         internal string? PackageId { get; }
 
@@ -282,6 +286,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyCollection<string> trustedBuildInfrastructureRoots,
         IReadOnlyCollection<string> evaluatedBuildInputs,
         IReadOnlyCollection<string> executableMsBuildInputs,
+        IReadOnlyCollection<string> evaluatedImports,
         string? evaluatedPathMap,
         bool proveControlledGeneratedInputs,
         IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes,
@@ -308,6 +313,7 @@ public sealed partial class DotNetPublishPipelineRunner
             trustedBuildInfrastructureRoots,
             evaluatedBuildInputs,
             executableMsBuildInputs,
+            evaluatedImports,
             evaluatedPathMap,
             proveControlledGeneratedInputs,
             graphBuildNodes,
@@ -345,6 +351,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 requestsByEvaluation[key],
                 pathMapsByEvaluation[key],
                 evaluationsByEvaluation[key].EvaluatedProperties,
+                evaluationsByEvaluation[key].EvaluatedImports,
                 evaluationsByEvaluation[key].PackageId,
                 evaluationsByEvaluation[key].PackageVersion,
                 evaluationsByEvaluation[key].PackageValidationBaselineVersion))

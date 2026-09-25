@@ -129,6 +129,7 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyCollection<string> candidatePaths,
         IReadOnlyCollection<string> evaluatedBuildInputs,
         IReadOnlyCollection<string> evaluatedMsBuildInputs,
+        IReadOnlyCollection<string> evaluatedImports,
         IReadOnlyDictionary<string, string> evaluatedProperties,
         string? evaluatedPathMap,
         VerifiedPackageInputCatalog? verifiedPackages,
@@ -181,8 +182,15 @@ public sealed partial class DotNetPublishPipelineRunner
                     {
                         [Path.GetFullPath(request.ProjectPath)] = [controlledEvaluationProperties]
                     },
+                    [new TargetGuardEvaluationContext(
+                        request.ProjectPath,
+                        effectiveGlobalProperties,
+                        controlledEvaluationProperties,
+                        evaluatedImports,
+                        ReadTargetGuardGeneratedImportRoots(request.ProjectPath, evaluatedProperties))],
                     out controlledGitRoot,
-                    out string? controlledProjectPath))
+                    out string? controlledProjectPath,
+                    out _))
             {
                 return CacheAll(false);
             }
@@ -947,6 +955,7 @@ public sealed partial class DotNetPublishPipelineRunner
         internal EvaluatedProjectInputs(
             string[] buildInputs,
             string[] msBuildInputs,
+            string[] evaluatedImports,
             string[] sourceInputs,
             EvaluatedProjectReference[] projectReferences,
             string[] targetFrameworks,
@@ -969,6 +978,7 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             BuildInputs = buildInputs;
             MsBuildInputs = msBuildInputs;
+            EvaluatedImports = evaluatedImports;
             SourceInputs = sourceInputs;
             ProjectReferences = projectReferences;
             TargetFrameworks = targetFrameworks;
@@ -992,6 +1002,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         internal string[] BuildInputs { get; }
         internal string[] MsBuildInputs { get; }
+        internal string[] EvaluatedImports { get; }
         internal string[] SourceInputs { get; }
         internal EvaluatedProjectReference[] ProjectReferences { get; }
         internal string[] TargetFrameworks { get; }

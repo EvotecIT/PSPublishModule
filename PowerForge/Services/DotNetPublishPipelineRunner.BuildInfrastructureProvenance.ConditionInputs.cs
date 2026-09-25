@@ -13,7 +13,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string taskInputAllowedRoot,
         IReadOnlyCollection<(XDocument Document, string DeclaringPath)> relatedDocuments,
         IReadOnlyDictionary<string, string>? evaluatedGlobalProperties,
-        Func<string, bool>? isControlledInput)
+        Func<string, bool>? isControlledInput,
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties)
     {
         foreach (XAttribute conditionAttribute in document.Descendants()
                      .SelectMany(element => element.Attributes())
@@ -27,7 +28,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     conditionAttribute.Parent,
                     evaluatedGlobalProperties,
                     declaringPath,
-                    relatedDocuments.Select(related => related.Document)))
+                    relatedDocuments.Select(related => related.Document),
+                    immutableGlobalProperties))
             {
                 continue;
             }
@@ -41,7 +43,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     relatedDocuments,
                     evaluatedGlobalProperties,
                     out string[] expandedConditions,
-                    consumingElement: conditionAttribute.Parent))
+                    consumingElement: conditionAttribute.Parent,
+                    immutableGlobalProperties: immutableGlobalProperties))
             {
                 // Conditions without an Exists call do not consume file-system state.
                 // Preserve ordinary unevaluated feature conditions, but fail closed when
@@ -65,7 +68,8 @@ public sealed partial class DotNetPublishPipelineRunner
                             relatedDocuments,
                             evaluatedGlobalProperties,
                             out string[] expandedValues,
-                            consumingElement: conditionAttribute.Parent) ||
+                            consumingElement: conditionAttribute.Parent,
+                            immutableGlobalProperties: immutableGlobalProperties) ||
                         expandedValues.Length == 0)
                         return false;
 
