@@ -254,10 +254,11 @@ public sealed partial class DotNetPublishPipelineRunner
         if (process.ExitCode == 0 && !process.TimedOut)
             return true;
 
-        string? detail = TailLines(
-            string.IsNullOrWhiteSpace(process.StdErr) ? process.StdOut : process.StdErr,
-            maxLines: 8,
-            maxChars: 2000);
+        string? detail = string.Join(" ", new[]
+        {
+            TailLines(process.StdOut, maxLines: 8, maxChars: 2000),
+            TailLines(process.StdErr, maxLines: 4, maxChars: 500)
+        }.Where(value => !string.IsNullOrWhiteSpace(value)));
         failureReason = process.TimedOut
             ? $"project '{originalProjectPath}' timed out."
             : $"project '{originalProjectPath}' exited with code {process.ExitCode}.";

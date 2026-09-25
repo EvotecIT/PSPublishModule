@@ -220,7 +220,15 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("computed-late-path-mutation")]
     [InlineData("reference-props-override")]
     [InlineData("rid-list-context")]
-    [Trait("Category", "DotNetPublishPrGate")]
+    [InlineData("inactive-pack-path-target")]
+    [InlineData("inactive-context-target")]
+    [InlineData("pack-hook-called-by-build")]
+    [InlineData("uppercase-context-paths")]
+    [InlineData("context-activated-import")]
+    [InlineData("context-activated-indirect-import")]
+    [InlineData("context-activated-external-alias-import")]
+    [InlineData("context-activated-property-method-import")]
+    [InlineData("context-activated-chained-import")]
     public void ReadSourceProvenance_RestoresEverySelectedFrameworkForSharedMultiTargetReference(string scenario)
     {
         bool distinctRestoreContexts = scenario != "single-context";
@@ -255,9 +263,24 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         bool computedLatePathMutation = scenario == "computed-late-path-mutation";
         bool referencePropsOverride = scenario == "reference-props-override";
         bool ridListContext = scenario == "rid-list-context";
-        if (caseSensitiveContextValues || externalIntermediatePath || ridListContext)
+        bool inactivePackPathTarget = scenario == "inactive-pack-path-target";
+        bool inactiveContextTarget = scenario == "inactive-context-target";
+        bool packHookCalledByBuild = scenario == "pack-hook-called-by-build";
+        bool uppercaseContextPaths = scenario == "uppercase-context-paths";
+        bool contextActivatedImport = scenario == "context-activated-import" ||
+            scenario == "context-activated-indirect-import" ||
+            scenario == "context-activated-external-alias-import" ||
+            scenario == "context-activated-property-method-import" ||
+            scenario == "context-activated-chained-import";
+        bool indirectContextActivatedImport = scenario == "context-activated-indirect-import";
+        bool externalAliasContextImport = scenario == "context-activated-external-alias-import";
+        bool propertyMethodContextImport = scenario == "context-activated-property-method-import";
+        bool chainedContextImport = scenario == "context-activated-chained-import";
+        if (caseSensitiveContextValues || externalIntermediatePath || ridListContext ||
+            inactivePackPathTarget || inactiveContextTarget || packHookCalledByBuild || uppercaseContextPaths ||
+            contextActivatedImport)
             unselectedContextPackage = false;
-        if (caseVariantSymbols && !OperatingSystem.IsWindows())
+        if ((caseVariantSymbols || uppercaseContextPaths) && !OperatingSystem.IsWindows())
             return;
         string root = Directory.CreateTempSubdirectory().FullName;
         string? externalIntermediateDirectory = null;
@@ -372,6 +395,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 : string.Empty;
             string outputOverride = overrideSharedOutputPath
                 ? "<OutputPath>$(BaseOutputPath)../shared/</OutputPath>"
+                : uppercaseContextPaths
+                    ? "<BaseOutputPath Condition=\"$([System.String]::Copy('$(BaseOutputPath)').Contains('powerforge-context'))\">$(BaseOutputPath.ToUpperInvariant())</BaseOutputPath>"
                 : string.Empty;
             string outDirOverride = overrideSharedOutDir
                 ? "<OutDir>$(BaseOutputPath)../shared/</OutDir>"
@@ -388,7 +413,35 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 ? "<Target Name=\"MutateContextIntermediate\" BeforeTargets=\"Build\" Condition=\"$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))\"><PropertyGroup><IntermediateOutputPath>$(MSBuildProjectDirectory)/../shared-obj/</IntermediateOutputPath></PropertyGroup></Target>"
                 : computedLatePathMutation
                     ? "<PropertyGroup><DestinationProperty>IntermediateOutputPath</DestinationProperty></PropertyGroup><Target Name=\"MutateContextIntermediate\" BeforeTargets=\"Build\"><CreateProperty Value=\"$(MSBuildProjectDirectory)/../shared-obj/\"><Output TaskParameter=\"Value\" PropertyName=\"$(DestinationProperty)\" /></CreateProperty></Target>"
+                : inactivePackPathTarget || packHookCalledByBuild
+                    ? "<Target Name=\"PrepareUnusedPackPath\" BeforeTargets=\"Pack\"><PropertyGroup><PublishDir>$(MSBuildProjectDirectory)/../pack-output/</PublishDir></PropertyGroup></Target>"
+                : inactiveContextTarget
+                    ? "<Target Name=\"DisabledContextPath\" BeforeTargets=\"CoreCompile\" Condition=\"'false' == 'true'\"><PropertyGroup><IntermediateOutputPath>$(MSBuildProjectDirectory)/../shared-obj/</IntermediateOutputPath></PropertyGroup></Target>"
                 : string.Empty;
+            string callPackHookDuringBuild = packHookCalledByBuild
+                ? "<BuildDependsOn>$(BuildDependsOn);PrepareUnusedPackPath</BuildDependsOn>"
+                : string.Empty;
+            string contextualImport = externalAliasContextImport
+                ? "<Import Project=\"Context.aliases.props\" /><Import Project=\"Context.targets\" Condition=\"'$(ContextImportEnabled)' == 'true'\" />"
+                : chainedContextImport
+                    ? "<Import Project=\"Context.aliases.props\" Condition=\"$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))\" /><Import Project=\"Context.targets\" Condition=\"'$(ContextImportEnabled)' == 'true'\" />"
+                : indirectContextActivatedImport
+                ? "<PropertyGroup><ContextImportEnabled>$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))</ContextImportEnabled></PropertyGroup><Import Project=\"Context.targets\" Condition=\"'$(ContextImportEnabled)' == 'true'\" />"
+                : propertyMethodContextImport
+                    ? "<Import Project=\"Context.targets\" Condition=\"$(BaseIntermediateOutputPath.Contains('powerforge-context'))\" />"
+                : contextActivatedImport
+                    ? "<Import Project=\"Context.targets\" Condition=\"$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))\" />"
+                    : string.Empty;
+            if (contextActivatedImport)
+            {
+                if (externalAliasContextImport || chainedContextImport)
+                    File.WriteAllText(Path.Combine(sharedDirectory, "Context.aliases.props"),
+                        "<Project><PropertyGroup><ContextImportEnabled>$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))</ContextImportEnabled></PropertyGroup></Project>");
+                File.WriteAllText(Path.Combine(sharedDirectory, "Context.targets"),
+                    "<Project><Target Name=\"MutateImportedContext\" BeforeTargets=\"CoreCompile\"><PropertyGroup><IntermediateOutputPath>$(MSBuildProjectDirectory)/../shared-obj/</IntermediateOutputPath></PropertyGroup></Target></Project>");
+                File.WriteAllText(Path.Combine(Directory.CreateDirectory(
+                    Path.Combine(root, "shared-obj")).FullName, ".keep"), string.Empty);
+            }
             string isolationMarkerOverride = mutatedIsolationMarker
                 ? "<_PowerForgeRequiresContextIsolation>false</_PowerForgeRequiresContextIsolation><_PowerForgeRestoreContextMatched>false</_PowerForgeRestoreContextMatched>"
                 : string.Empty;
@@ -415,6 +468,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     {assetsOverride}
                     {defaultItemExcludesOverride}
                     {isolationMarkerOverride}
+                    {callPackHookDuringBuild}
                   </PropertyGroup>
                   <Target Name="RequireCustomProps" BeforeTargets="Restore;Build" Condition="'$(Flavor)' != '' and '{(customDirectoryBuildProps || environmentProps && scenario != "missing-props-environment").ToString().ToLowerInvariant()}' == 'true'">
                     <Error Condition="'$(ContextPropsMarker)' != 'Loaded'" Text="Custom DirectoryBuildPropsPath was not imported." />
@@ -430,6 +484,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                   {contextPackages}
                   {verifierCollision}
                   {latePathTarget}
+                  {contextualImport}
                 {sharedProjectEnd}
                 """);
             File.WriteAllText(leafProject, """
@@ -558,7 +613,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             if (overrideSharedOutputPath || overrideSharedOutDir || overrideSharedAssets ||
                 disabledPropsEnvironment || disabledPropsProject || removedOutputExcludes ||
                 partialOutputExcludes || latePathMutation || computedLatePathMutation || referencePropsOverride ||
-                ridListContext)
+                ridListContext || contextActivatedImport || packHookCalledByBuild)
             {
                 Assert.True(provenance.Dirty);
                 string expected = disabledPropsEnvironment || disabledPropsProject && !resetDisabledPropsProject
@@ -571,6 +626,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                         ? "MSBuild graph contains an uncontrolled build task"
                     : ridListContext
                         ? "different RuntimeIdentifiers lists"
+                    : contextActivatedImport
+                        ? "isolation-sensitive property"
+                    : packHookCalledByBuild
+                        ? "target-time assignment to an isolation-sensitive property"
                     : latePathMutation
                         ? "target-time assignment to an isolation-sensitive property"
                     : referencePropsOverride
@@ -602,6 +661,23 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             }
         }
     }
+
+    // The full matrix above is available in DotNetPublishDeepTests. Keep the PR gate
+    // representative so its hosted runner finishes within the job timeout.
+    [Theory]
+    [InlineData("single-context")]
+    [InlineData("two-contexts")]
+    [InlineData("custom-props")]
+    [InlineData("target-frameworks-context")]
+    [InlineData("removed-output-excludes")]
+    [InlineData("late-path-mutation")]
+    [InlineData("apostrophe-project-path")]
+    [InlineData("inactive-pack-path-target")]
+    [InlineData("context-activated-import")]
+    [InlineData("context-activated-indirect-import")]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void ReadSourceProvenance_PrGateSharedMultiTargetReference(string scenario)
+        => ReadSourceProvenance_RestoresEverySelectedFrameworkForSharedMultiTargetReference(scenario);
 
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]

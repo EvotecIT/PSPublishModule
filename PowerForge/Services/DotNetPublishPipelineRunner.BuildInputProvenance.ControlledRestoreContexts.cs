@@ -52,7 +52,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Distinct(StringComparer.Ordinal).Skip(1).Any()))
             return true;
 
-        if (!TryValidateControlledRestoreContextSources(graphNodes, rootRequest,
+        if (!TryValidateControlledRestoreContextSources(graphNodes, rootRequest, originalGitRoot,
                 rootProjectReferences,
                 rootEvaluatedImports, rootEvaluatedProperties, out failureReason))
             return false;
@@ -74,6 +74,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string actualOutputProperty = "_PowerForgeActualOutput_" + nonce;
         string actualOutDirProperty = "_PowerForgeActualOutDir_" + nonce;
         string actualTargetProperty = "_PowerForgeActualTarget_" + nonce;
+        string pathComparison = IsWindows() ? "OrdinalIgnoreCase" : "Ordinal";
         var isolatedProjectConditions = new List<string>();
 
         // The wrapper is supplied as a global property. Restore the original observable
@@ -171,7 +172,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     "$(" + originalPropsProperty + ")"),
                 new XElement("DirectoryBuildPropsPath",
                     new XAttribute("Condition", "'$(" + originalPropsSuppliedProperty + ")' != 'true'"),
-                    defaultProps ?? string.Empty)));
+                    EscapeMsBuildPropertyValue(defaultProps ?? string.Empty))));
             // An explicitly empty global path suppresses SDK discovery, unlike an absent
             // global path. The private presence flag retains that distinction.
             // The controlled wrapper replaces the directory-props entry point. Import the
@@ -184,7 +185,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     " and Exists($(" + originalPropsProperty + "))")));
             if (defaultProps is not null)
                 project.Add(new XElement("Import",
-                    new XAttribute("Project", defaultProps),
+                    new XAttribute("Project", EscapeMsBuildPropertyValue(defaultProps)),
                     new XAttribute("Condition", projectCondition +
                         " and '$(" + originalPropsSuppliedProperty + ")' != 'true'" +
                         " and Exists($(DirectoryBuildPropsPath))")));
@@ -262,24 +263,28 @@ public sealed partial class DotNetPublishPipelineRunner
                     Path.DirectorySeparatorChar;
                 string output = Path.Combine(projectDirectory, "bin", "powerforge-context", suffix) +
                     Path.DirectorySeparatorChar;
+                string escapedIntermediate = EscapeMsBuildPropertyValue(intermediate);
+                string escapedOutput = EscapeMsBuildPropertyValue(output);
+                string escapedObjExclusion = EscapeMsBuildPropertyValue(
+                    Path.Combine(projectDirectory, "obj", "**"));
+                string escapedBinExclusion = EscapeMsBuildPropertyValue(
+                    Path.Combine(projectDirectory, "bin", "**"));
                 project.Add(new XElement("PropertyGroup",
                     new XAttribute("Condition", condition.ToString()),
-                    new XElement("BaseIntermediateOutputPath", intermediate),
-                    new XElement("MSBuildProjectExtensionsPath", intermediate),
-                    new XElement("BaseOutputPath", output),
-                    new XElement(expectedIntermediateProperty, intermediate),
-                    new XElement(expectedExtensionsProperty, intermediate),
-                    new XElement(expectedOutputProperty, output),
-                    new XElement(expectedObjExclusionProperty,
-                        Path.Combine(projectDirectory, "obj", "**")),
-                    new XElement(expectedBinExclusionProperty,
-                        Path.Combine(projectDirectory, "bin", "**")),
+                    new XElement("BaseIntermediateOutputPath", escapedIntermediate),
+                    new XElement("MSBuildProjectExtensionsPath", escapedIntermediate),
+                    new XElement("BaseOutputPath", escapedOutput),
+                    new XElement(expectedIntermediateProperty, escapedIntermediate),
+                    new XElement(expectedExtensionsProperty, escapedIntermediate),
+                    new XElement(expectedOutputProperty, escapedOutput),
+                    new XElement(expectedObjExclusionProperty, escapedObjExclusion),
+                    new XElement(expectedBinExclusionProperty, escapedBinExclusion),
                     // The SDK excludes BaseIntermediateOutputPath from default Compile items.
                     // Once those paths are contextual, exclude both whole output trees so
                     // another context's generated files cannot become default items.
                     new XElement("DefaultItemExcludes",
-                        "$(DefaultItemExcludes);" + Path.Combine(projectDirectory, "obj", "**") +
-                        ";" + Path.Combine(projectDirectory, "bin", "**")),
+                        "$(DefaultItemExcludes);" + escapedObjExclusion +
+                        ";" + escapedBinExclusion),
                     new XElement(matchedProperty, "true")));
             }
         }
@@ -294,15 +299,18 @@ public sealed partial class DotNetPublishPipelineRunner
                 new XAttribute("Text", "The controlled project restore context did not match the evaluated graph.")),
             new XElement("Error",
                 new XAttribute("Condition",
-                    "$(BaseIntermediateOutputPath.Equals($(" + expectedIntermediateProperty + "))) != 'True'"),
+                    "$(BaseIntermediateOutputPath.Equals($(" + expectedIntermediateProperty +
+                    "), System.StringComparison." + pathComparison + ")) != 'True'"),
                 new XAttribute("Text", "The project overrides the controlled intermediate output path.")),
             new XElement("Error",
                 new XAttribute("Condition",
-                    "$(MSBuildProjectExtensionsPath.Equals($(" + expectedExtensionsProperty + "))) != 'True'"),
+                    "$(MSBuildProjectExtensionsPath.Equals($(" + expectedExtensionsProperty +
+                    "), System.StringComparison." + pathComparison + ")) != 'True'"),
                 new XAttribute("Text", "The project overrides the controlled restore assets path.")),
             new XElement("Error",
                 new XAttribute("Condition",
-                    "$(BaseOutputPath.Equals($(" + expectedOutputProperty + "))) != 'True'"),
+                    "$(BaseOutputPath.Equals($(" + expectedOutputProperty +
+                    "), System.StringComparison." + pathComparison + ")) != 'True'"),
                 new XAttribute("Text", "The project overrides the controlled context output path.")),
             new XElement("Error",
                 new XAttribute("Condition",
@@ -327,27 +335,31 @@ public sealed partial class DotNetPublishPipelineRunner
             new XElement("Error",
                 new XAttribute("Condition",
                     "$(IntermediateOutputPath.Length) != 0 and $(" + actualIntermediateProperty +
-                    ".StartsWith($(" + expectedIntermediateProperty + "), System.StringComparison.Ordinal)) != 'True'"),
+                    ".StartsWith($(" + expectedIntermediateProperty + "), System.StringComparison." +
+                    pathComparison + ")) != 'True'"),
                 new XAttribute("Text", "The project intermediate output path is outside its controlled context.")),
             new XElement("Error",
                 new XAttribute("Condition",
                     "$(ProjectAssetsFile.Length) != 0 and $(" + actualAssetsProperty +
-                    ".StartsWith($(" + expectedIntermediateProperty + "), System.StringComparison.Ordinal)) != 'True'"),
+                    ".StartsWith($(" + expectedIntermediateProperty + "), System.StringComparison." +
+                    pathComparison + ")) != 'True'"),
                 new XAttribute("Text", "The project assets path is outside its controlled context.")),
             new XElement("Error",
                 new XAttribute("Condition",
                     "$(" + actualOutputProperty + ".StartsWith($(" + expectedOutputProperty +
-                    "), System.StringComparison.Ordinal)) != 'True'"),
+                    "), System.StringComparison." + pathComparison + ")) != 'True'"),
                 new XAttribute("Text", "The project output path is outside its controlled context.")),
             new XElement("Error",
                 new XAttribute("Condition",
                     "$(OutDir.Length) != 0 and $(" + actualOutDirProperty +
-                    ".StartsWith($(" + expectedOutputProperty + "), System.StringComparison.Ordinal)) != 'True'"),
+                    ".StartsWith($(" + expectedOutputProperty + "), System.StringComparison." +
+                    pathComparison + ")) != 'True'"),
                 new XAttribute("Text", "The project OutDir is outside its controlled context.")),
             new XElement("Error",
                 new XAttribute("Condition",
                     "$(TargetPath.Length) != 0 and $(" + actualTargetProperty +
-                    ".StartsWith($(" + expectedOutputProperty + "), System.StringComparison.Ordinal)) != 'True'"),
+                    ".StartsWith($(" + expectedOutputProperty + "), System.StringComparison." +
+                    pathComparison + ")) != 'True'"),
                 new XAttribute("Text", "The project TargetPath is outside its controlled context."))));
         propsPath = Path.Combine(controlledOutputRoot, "PowerForge.ControlledRestoreContexts." + nonce + ".props");
         new XDocument(project).Save(propsPath);
@@ -359,8 +371,9 @@ public sealed partial class DotNetPublishPipelineRunner
            "', System.StringComparison." + (IsWindows() ? "OrdinalIgnoreCase" : "Ordinal") + "))";
 
     private static string BuildControlledExactExclusionCondition(string expectedProperty)
-        => "$([System.String]::Concat(';', $(DefaultItemExcludes), ';').Contains(" +
-           "$([System.String]::Concat(';', $(" + expectedProperty + "), ';')))) != 'True'";
+        => "$([System.String]::Concat(';', $(DefaultItemExcludes), ';').IndexOf(" +
+           "$([System.String]::Concat(';', $(" + expectedProperty + "), ';')), " +
+           "System.StringComparison." + (IsWindows() ? "OrdinalIgnoreCase" : "Ordinal") + ")) == -1";
 
     internal static string ComputeControlledRestoreContextDirectoryName(string controlledProjectPath, string contextKey)
         => ComputeSha256Hex(Encoding.UTF8.GetBytes(

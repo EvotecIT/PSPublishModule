@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
@@ -15,6 +16,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryValidateControlledRestoreContextSources(
         IReadOnlyCollection<ControlledPublishGraphNode> graphNodes,
         ProjectEvaluationRequest rootRequest,
+        string originalGitRoot,
         IReadOnlyCollection<EvaluatedProjectReference> rootProjectReferences,
         IReadOnlyCollection<string> rootEvaluatedImports,
         IReadOnlyDictionary<string, string> rootEvaluatedProperties,
@@ -61,19 +63,59 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         var isolatedPaths = new HashSet<string>(FileSystemPathSafety.ExistingPathComparer);
+        var pendingImports = new Queue<(string Path, string ProjectDirectory,
+            IReadOnlyDictionary<string, string> Properties)>();
+        var queuedImports = new HashSet<string>(StringComparer.Ordinal);
+        var sourceContextByImport = new Dictionary<string, IReadOnlyDictionary<string, string>>(
+            StringComparer.Ordinal);
+        var sourceProperties = new Dictionary<string, List<IReadOnlyDictionary<string, string>>>(
+            FileSystemPathSafety.ExistingPathComparer);
+        var projectSources = new Dictionary<string, HashSet<string>>(
+            FileSystemPathSafety.ExistingPathComparer);
+        void AddSource(string path, string projectDirectory,
+            IReadOnlyDictionary<string, string> properties)
+        {
+            isolatedPaths.Add(path);
+            if (!projectSources.TryGetValue(projectDirectory, out HashSet<string>? paths))
+            {
+                paths = new HashSet<string>(FileSystemPathSafety.ExistingPathComparer);
+                projectSources[projectDirectory] = paths;
+            }
+            else
+            {
+                projectDirectory = projectSources.Keys.First(existing =>
+                    FileSystemPathSafety.ExistingPathComparer.Equals(existing, projectDirectory));
+            }
+            paths.Add(path);
+            if (!sourceProperties.TryGetValue(path, out List<IReadOnlyDictionary<string, string>>? contexts))
+            {
+                contexts = new List<IReadOnlyDictionary<string, string>>();
+                sourceProperties[path] = contexts;
+            }
+            if (!contexts.Contains(properties))
+                contexts.Add(properties);
+            string key = Path.GetFullPath(path) + "\0" + projectDirectory;
+            if (!sourceContextByImport.ContainsKey(key))
+                sourceContextByImport[key] = properties;
+            if (queuedImports.Add(key))
+                pendingImports.Enqueue((path, projectDirectory, properties));
+        }
         if (isolatedProjects.Contains(Path.GetFullPath(rootRequest.ProjectPath)))
-            isolatedPaths.Add(rootRequest.ProjectPath);
+            AddSource(rootRequest.ProjectPath, Path.GetDirectoryName(rootRequest.ProjectPath)!,
+                rootRequest.ReadEffectiveGlobalProperties());
         foreach (string import in rootEvaluatedImports)
         {
             if (isolatedProjects.Contains(Path.GetFullPath(rootRequest.ProjectPath)) &&
                 !IsControlledToolchainImport(import, rootEvaluatedProperties))
-                isolatedPaths.Add(import);
+                AddSource(import, Path.GetDirectoryName(rootRequest.ProjectPath)!,
+                    rootRequest.ReadEffectiveGlobalProperties());
         }
         foreach (ControlledPublishGraphNode node in graphNodes)
         {
             bool isolated = isolatedProjects.Contains(Path.GetFullPath(node.Request.ProjectPath));
             if (isolated)
-                isolatedPaths.Add(node.Request.ProjectPath);
+                AddSource(node.Request.ProjectPath, Path.GetDirectoryName(node.Request.ProjectPath)!,
+                    node.Request.ReadEffectiveGlobalProperties());
             foreach (string import in node.EvaluatedImports)
             {
                 // The installed SDK supplies its own target-time output defaults. Custom
@@ -81,30 +123,112 @@ public sealed partial class DotNetPublishPipelineRunner
                 if (IsControlledToolchainImport(import, node.EvaluatedProperties))
                     continue;
                 if (isolated)
-                    isolatedPaths.Add(import);
+                    AddSource(import, Path.GetDirectoryName(node.Request.ProjectPath)!,
+                        node.Request.ReadEffectiveGlobalProperties());
             }
         }
 
-        // A later imported target can mutate an output path after the verifier has
-        // already run. Fail before controlled execution for custom target writes.
-        foreach (string path in isolatedPaths)
+        var documents = new Dictionary<string, XDocument>(FileSystemPathSafety.ExistingPathComparer);
+        foreach (string path in isolatedPaths.Where(File.Exists))
         {
-            if (!File.Exists(path))
-                continue;
-            XDocument document;
             try
             {
-                document = XDocument.Load(path, LoadOptions.None);
+                documents[path] = XDocument.Load(path, LoadOptions.None);
             }
             catch
             {
                 failureReason = $"controlled restore context source '{path}' could not be inspected.";
                 return false;
             }
+        }
+        bool discoveredContextImport;
+        do
+        {
+            discoveredContextImport = false;
+            while (pendingImports.Count > 0)
+            {
+                (string path, string projectDirectory, IReadOnlyDictionary<string, string> properties) =
+                    pendingImports.Dequeue();
+                if (!File.Exists(path))
+                    continue;
+                if (!documents.TryGetValue(path, out XDocument? document))
+                {
+                    try
+                    {
+                        document = XDocument.Load(path, LoadOptions.None);
+                        documents[path] = document;
+                    }
+                    catch
+                    {
+                        failureReason = $"controlled restore context source '{path}' could not be inspected.";
+                        return false;
+                    }
+                }
+
+                foreach (XElement import in document.Descendants().Where(element =>
+                             element.Name.LocalName.Equals("Import", StringComparison.OrdinalIgnoreCase)))
+                {
+                    bool contextDependent = import.AncestorsAndSelf()
+                        .SelectMany(element => element.Attributes())
+                        .Where(attribute => attribute.Name.LocalName.Equals("Condition", StringComparison.OrdinalIgnoreCase))
+                        .Any(attribute => ConditionDependsOnControlledContextPath(attribute.Value,
+                            projectSources[projectDirectory].Where(documents.ContainsKey)
+                                .Select(source => documents[source])));
+                    if (!contextDependent)
+                        continue;
+                    if (!TryResolveControlledContextImport(path, projectDirectory,
+                            import.Attribute("Project")?.Value, originalGitRoot, out string? importedPath))
+                    {
+                        failureReason = $"context-dependent import '{import.Attribute("Project")?.Value}' in '{path}' cannot be inspected safely.";
+                        return false;
+                    }
+                    if (File.Exists(importedPath))
+                    {
+                        if (HasReparsePointBelowRoot(importedPath!, originalGitRoot))
+                        {
+                            failureReason = $"context-dependent import '{importedPath}' traverses a link in the source checkout.";
+                            return false;
+                        }
+                        discoveredContextImport |= !projectSources[projectDirectory].Contains(importedPath!);
+                        AddSource(importedPath!, projectDirectory, properties);
+                    }
+                }
+            }
+            // A newly discovered props file may define an alias used by a later import
+            // condition in a source document already scanned above.
+            if (discoveredContextImport)
+            {
+                queuedImports.Clear();
+                foreach (KeyValuePair<string, HashSet<string>> project in projectSources)
+                    foreach (string path in project.Value)
+                    {
+                        string key = Path.GetFullPath(path) + "\0" + project.Key;
+                        if (queuedImports.Add(key))
+                            pendingImports.Enqueue((path, project.Key, sourceContextByImport[key]));
+                    }
+            }
+        }
+        while (discoveredContextImport);
+
+        // A later imported target can mutate an output path after the verifier has
+        // already run. Fail before controlled execution for custom target writes.
+        foreach (string path in isolatedPaths)
+        {
+            if (!documents.TryGetValue(path, out XDocument? document))
+                continue;
 
             foreach (XElement target in document.Descendants().Where(element =>
                          element.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)))
             {
+                if (!ConditionDependsOnControlledContextPath(
+                        target.Attribute("Condition")?.Value, new[] { document }) &&
+                    sourceProperties[path].All(properties =>
+                        IsDefinitelyInactiveControlledBuildOperation(target, properties,
+                            definingProjectPath: null, immutableGlobalProperties: properties)))
+                    continue;
+                if (IsDefinitelyUninvokedControlledContextTarget(target, documents,
+                        sourceProperties[path]))
+                    continue;
                 foreach (XElement assignment in target.Descendants())
                 {
                     string? propertyName = assignment.Parent?.Name.LocalName.Equals(
@@ -136,6 +260,123 @@ public sealed partial class DotNetPublishPipelineRunner
                 return true;
         }
         return false;
+    }
+
+    private static bool ConditionDependsOnControlledContextPath(
+        string? condition, IEnumerable<XDocument> documents)
+    {
+        if (string.IsNullOrWhiteSpace(condition))
+            return false;
+        var pending = new Queue<string>();
+        var inspected = new HashSet<string>(StringComparer.Ordinal);
+        pending.Enqueue(condition!);
+        while (pending.Count > 0)
+        {
+            if (inspected.Count >= 128)
+                return true;
+            string expression = pending.Dequeue();
+            if (!inspected.Add(expression))
+                continue;
+            foreach (Match match in Regex.Matches(expression,
+                         @"\$\(([A-Za-z_][A-Za-z0-9_.-]*)", RegexOptions.CultureInvariant))
+            {
+                string name = match.Groups[1].Value.Split('.')[0];
+                if (ControlledContextPathProperties.Contains(name))
+                    return true;
+                foreach (XElement property in documents.SelectMany(document => document.Descendants())
+                             .Where(element => element.Parent?.Name.LocalName.Equals(
+                                 "PropertyGroup", StringComparison.OrdinalIgnoreCase) == true &&
+                             element.Name.LocalName.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                    pending.Enqueue(property.Value);
+            }
+        }
+        return false;
+    }
+
+    private static bool TryResolveControlledContextImport(
+        string declaringPath,
+        string projectDirectory,
+        string? projectExpression,
+        string originalGitRoot,
+        out string? path)
+    {
+        path = null;
+        if (string.IsNullOrWhiteSpace(projectExpression))
+            return false;
+        try
+        {
+            string directory = Path.GetDirectoryName(declaringPath)!;
+            string expression = ReplaceOrdinalIgnoreCase(
+                DecodeMsBuildEscapes(projectExpression!),
+                "$(MSBuildThisFileDirectory)", directory + Path.DirectorySeparatorChar);
+            expression = ReplaceOrdinalIgnoreCase(expression,
+                "$(MSBuildProjectDirectory)", projectDirectory);
+            if (ContainsUnresolvedBuildExpression(expression) ||
+                expression.IndexOfAny(new[] { '*', '?' }) >= 0)
+                return false;
+            path = Path.GetFullPath(Path.IsPathRooted(expression)
+                ? expression
+                : Path.Combine(directory, expression));
+            return IsSameOrBelowBuildInputPath(path, originalGitRoot);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsDefinitelyUninvokedControlledContextTarget(
+        XElement target,
+        IReadOnlyDictionary<string, XDocument> documents,
+        IReadOnlyCollection<IReadOnlyDictionary<string, string>> contexts)
+    {
+        string? name = target.Attribute("Name")?.Value;
+        if (string.IsNullOrWhiteSpace(name) ||
+            new[] { "Restore", "Build", "GetTargetPath", "ComputeFilesToPublish" }
+                .Contains(name, StringComparer.OrdinalIgnoreCase))
+            return false;
+        string[] hooks = new[] { target.Attribute("BeforeTargets")?.Value,
+                target.Attribute("AfterTargets")?.Value }
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .SelectMany(value => value!.Split(';'))
+            .Select(value => value.Trim())
+            .Where(value => value.Length > 0)
+            .ToArray();
+        if (hooks.Length == 0 || hooks.Any(hook =>
+                !new[] { "Pack", "Clean", "Rebuild", "VSTest", "Test" }
+                    .Contains(hook, StringComparer.OrdinalIgnoreCase)))
+            return false;
+        if (hooks.Contains("Pack", StringComparer.OrdinalIgnoreCase) &&
+            (contexts.Any(properties => properties.TryGetValue(
+                 "GeneratePackageOnBuild", out string? value) &&
+                 !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase)) ||
+             documents.Values.SelectMany(document => document.Descendants()).Any(element =>
+                 element.Name.LocalName.Equals("GeneratePackageOnBuild", StringComparison.OrdinalIgnoreCase) &&
+                 !string.Equals(element.Value.Trim(), "false", StringComparison.OrdinalIgnoreCase))))
+            return false;
+        if (contexts.Any(properties => properties.Values.Any(value =>
+                value.Split(';').Any(candidate =>
+                    candidate.Trim().Equals(name, StringComparison.OrdinalIgnoreCase)))) ||
+            documents.Values.SelectMany(document => document.Descendants())
+                .Where(element => element.Parent?.Name.LocalName.Equals(
+                    "PropertyGroup", StringComparison.OrdinalIgnoreCase) == true)
+                .Any(element => element.Value.Split(';').Any(candidate =>
+                    candidate.Trim().Equals(name, StringComparison.OrdinalIgnoreCase))))
+            return false;
+
+        foreach (XAttribute attribute in documents.Values
+                     .SelectMany(document => document.Descendants().Attributes())
+                     .Where(attribute => new[] { "DependsOnTargets", "Targets", "ExecuteTargets",
+                         "InitialTargets", "DefaultTargets" }.Contains(
+                         attribute.Name.LocalName, StringComparer.OrdinalIgnoreCase)))
+        {
+            string value = attribute.Value;
+            if (ContainsUnresolvedBuildExpression(value) ||
+                value.Split(';').Any(candidate =>
+                    candidate.Trim().Equals(name, StringComparison.OrdinalIgnoreCase)))
+                return false;
+        }
+        return true;
     }
 
     private static bool RemovesControlledWrapperPath(string value)
