@@ -187,18 +187,28 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Theory]
-    [InlineData(false, false, false, false)]
-    [InlineData(true, false, false, false)]
-    [InlineData(true, true, false, false)]
-    [InlineData(true, true, true, false)]
-    [InlineData(true, true, false, true)]
+    [InlineData("single-context")]
+    [InlineData("two-contexts")]
+    [InlineData("conditional-packages")]
+    [InlineData("custom-props")]
+    [InlineData("escaped-output")]
+    [InlineData("escaped-outdir")]
+    [InlineData("escaped-assets")]
+    [InlineData("shadowed-verifier")]
+    [InlineData("controlled-properties")]
+    [InlineData("disabled-props-environment")]
     [Trait("Category", "DotNetPublishPrGate")]
-    public void ReadSourceProvenance_RestoresEverySelectedFrameworkForSharedMultiTargetReference(
-        bool distinctRestoreContexts,
-        bool unselectedContextPackage,
-        bool customDirectoryBuildProps,
-        bool overrideSharedOutputPath)
+    public void ReadSourceProvenance_RestoresEverySelectedFrameworkForSharedMultiTargetReference(string scenario)
     {
+        bool distinctRestoreContexts = scenario != "single-context";
+        bool unselectedContextPackage = scenario != "single-context" && scenario != "two-contexts";
+        bool customDirectoryBuildProps = scenario == "custom-props";
+        bool overrideSharedOutputPath = scenario == "escaped-output" || scenario == "shadowed-verifier";
+        bool overrideSharedOutDir = scenario == "escaped-outdir";
+        bool overrideSharedAssets = scenario == "escaped-assets";
+        bool shadowVerifier = scenario == "shadowed-verifier";
+        bool controlledProperties = scenario == "controlled-properties";
+        bool disabledPropsEnvironment = scenario == "disabled-props-environment";
         string root = Directory.CreateTempSubdirectory().FullName;
         try
         {
@@ -263,18 +273,30 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string outputOverride = overrideSharedOutputPath
                 ? "<OutputPath>$(BaseOutputPath)../shared/</OutputPath>"
                 : string.Empty;
+            string outDirOverride = overrideSharedOutDir
+                ? "<OutDir>$(BaseOutputPath)../shared/</OutDir>"
+                : string.Empty;
+            string assetsOverride = overrideSharedAssets
+                ? "<ProjectAssetsFile Condition=\"'$(_PowerForgeRequiresContextIsolation)' == 'true'\">$(MSBuildProjectDirectory)/../shared-assets/$(Flavor)/project.assets.json</ProjectAssetsFile>"
+                : string.Empty;
+            string verifierCollision = shadowVerifier
+                ? "<Target Name=\"PowerForgeVerifyRestoreContext\" />"
+                : string.Empty;
             File.WriteAllText(sharedProject, $"""
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
                     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
                     <NuGetLockFilePath Condition="'$(Flavor)' != ''">packages.$(Flavor).lock.json</NuGetLockFilePath>
                     {outputOverride}
+                    {outDirOverride}
+                    {assetsOverride}
                   </PropertyGroup>
                   <Target Name="RequireCustomProps" BeforeTargets="Restore;Build" Condition="'$(Flavor)' != '' and '{customDirectoryBuildProps.ToString().ToLowerInvariant()}' == 'true'">
                     <Error Condition="'$(ContextPropsMarker)' != 'Loaded'" Text="Custom DirectoryBuildPropsPath was not imported." />
                   </Target>
                   <ItemGroup><ProjectReference Include="../Leaf/Leaf.csproj" /></ItemGroup>
                   {contextPackages}
+                  {verifierCollision}
                 </Project>
                 """);
             File.WriteAllText(leafProject, """
@@ -290,7 +312,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 "public static class Shared { public static int Value => Leaf.Value; }");
             File.WriteAllText(Path.Combine(leafDirectory, "Leaf.cs"),
                 "public static class Leaf { public const int Value = 1; }");
-            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\nshared-assets/\n");
             if (unselectedContextPackage)
             {
                 RunDotNet(root,
@@ -343,15 +365,32 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             if (customPropsPath is not null)
                 plan.MsBuildProperties["DirectoryBuildPropsPath"] = customPropsPath;
+            if (controlledProperties)
+            {
+                plan.MsBuildProperties["BuildProjectReferences"] = "true";
+                plan.MsBuildProperties["RestoreRecursive"] = "true";
+            }
+            if (disabledPropsEnvironment)
+            {
+                plan.EnvironmentVariables["ImportDirectoryBuildProps"] = "false";
+                plan.ControlledBuildEnvironmentVariableNames = ["ImportDirectoryBuildProps"];
+            }
 
             DotNetPublishPipelineRunner.SourceProvenance provenance =
                 DotNetPublishPipelineRunner.ReadSourceProvenance(root, buildPlan: plan);
 
-            if (overrideSharedOutputPath)
+            if (overrideSharedOutputPath || overrideSharedOutDir || overrideSharedAssets || disabledPropsEnvironment)
             {
                 Assert.True(provenance.Dirty);
+                string expected = disabledPropsEnvironment
+                    ? "disables Directory.Build.props imports"
+                    : overrideSharedOutDir
+                        ? "OutDir is outside its controlled context"
+                        : overrideSharedAssets
+                            ? "assets path is outside its controlled context"
+                        : "output path is outside its controlled context";
                 Assert.Contains(provenance.DirtyReasons,
-                    reason => reason.Contains("outside its controlled context", StringComparison.Ordinal));
+                    reason => reason.Contains(expected, StringComparison.Ordinal));
             }
             else
             {

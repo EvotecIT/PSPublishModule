@@ -147,6 +147,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledGitRoot!,
                     controlledSourceRoot,
                     controlledOutputRoot,
+                    controlledEnvironment,
                     out string? restoreContextProps,
                     out string? restoreContextFailureReason))
             {

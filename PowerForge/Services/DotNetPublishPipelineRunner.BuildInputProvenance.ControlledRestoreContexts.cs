@@ -12,6 +12,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string originalGitRoot,
         string controlledSourceRoot,
         string controlledOutputRoot,
+        IReadOnlyDictionary<string, string?> controlledEnvironment,
         out string? propsPath,
         out string? failureReason)
     {
@@ -25,6 +26,8 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!contexts.Any(group => group.Select(BuildControlledRestoreContextKey)
                 .Distinct(StringComparer.Ordinal).Skip(1).Any()))
             return true;
+
+        var controlledPropertyNames = ReadControlledRestoreContextOverriddenPropertyNames();
 
         var project = new XElement("Project");
         foreach (IGrouping<string, ProjectEvaluationRequest> group in contexts)
@@ -71,10 +74,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 .ToArray();
             if (representatives.Length <= 1)
                 continue;
-            if (representatives.Any(request =>
+            if ((controlledEnvironment.TryGetValue("ImportDirectoryBuildProps", out string? environmentImportProps) &&
+                 !string.IsNullOrEmpty(environmentImportProps) &&
+                 !string.Equals(environmentImportProps, "true", StringComparison.OrdinalIgnoreCase)) ||
+                representatives.Any(request =>
                     request.ReadEffectiveGlobalProperties().TryGetValue(
                         "ImportDirectoryBuildProps", out string? importProps) &&
-                    importProps.Equals("false", StringComparison.OrdinalIgnoreCase)))
+                    !string.Equals(importProps, "true", StringComparison.OrdinalIgnoreCase)))
             {
                 failureReason = $"project '{group.Key}' disables Directory.Build.props imports, so its restore contexts cannot be isolated.";
                 return false;
@@ -86,7 +92,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
             string[] propertyNames = representatives
                 .SelectMany(request => request.ReadEffectiveGlobalProperties().Keys)
-                .Where(name => !name.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase))
+                .Where(name => !controlledPropertyNames.Contains(name))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
@@ -144,6 +150,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     new XElement("BaseIntermediateOutputPath", intermediate),
                     new XElement("MSBuildProjectExtensionsPath", intermediate),
                     new XElement("BaseOutputPath", output),
+                    new XElement("_PowerForgeExpectedBaseIntermediateOutputPath", intermediate),
                     new XElement("_PowerForgeExpectedProjectExtensionsPath", intermediate),
                     new XElement("_PowerForgeExpectedBaseOutputPath", output),
                     // The SDK excludes BaseIntermediateOutputPath from default Compile items.
@@ -155,12 +162,16 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
         project.Add(new XElement("Target",
-            new XAttribute("Name", "PowerForgeVerifyRestoreContext"),
+            new XAttribute("Name", "PowerForgeVerifyRestoreContext_" + Guid.NewGuid().ToString("N")),
             new XAttribute("BeforeTargets", "Restore;Build;GetTargetPath;ComputeFilesToPublish"),
             new XAttribute("Condition", "'$(_PowerForgeRequiresContextIsolation)' == 'true'"),
             new XElement("Error",
                 new XAttribute("Condition", "'$(_PowerForgeRestoreContextMatched)' != 'true'"),
                 new XAttribute("Text", "The controlled project restore context did not match the evaluated graph.")),
+            new XElement("Error",
+                new XAttribute("Condition",
+                    "'$(BaseIntermediateOutputPath)' != '$(_PowerForgeExpectedBaseIntermediateOutputPath)'"),
+                new XAttribute("Text", "The project overrides the controlled intermediate output path.")),
             new XElement("Error",
                 new XAttribute("Condition",
                     "'$(MSBuildProjectExtensionsPath)' != '$(_PowerForgeExpectedProjectExtensionsPath)'"),
@@ -170,12 +181,40 @@ public sealed partial class DotNetPublishPipelineRunner
                     "'$(BaseOutputPath)' != '$(_PowerForgeExpectedBaseOutputPath)'"),
                 new XAttribute("Text", "The project overrides the controlled context output path.")),
             new XElement("PropertyGroup",
+                new XElement("_PowerForgeActualIntermediateOutputPath",
+                    new XAttribute("Condition", "'$(IntermediateOutputPath)' != ''"),
+                    "$([System.IO.Path]::GetFullPath('$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)'))'))"),
+                new XElement("_PowerForgeActualProjectAssetsFile",
+                    new XAttribute("Condition", "'$(ProjectAssetsFile)' != ''"),
+                    "$([System.IO.Path]::GetFullPath('$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(ProjectAssetsFile)'))'))"),
                 new XElement("_PowerForgeActualOutputPath",
-                    "$([System.IO.Path]::GetFullPath('$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(OutputPath)'))'))")),
+                    "$([System.IO.Path]::GetFullPath('$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(OutputPath)'))'))"),
+                new XElement("_PowerForgeActualOutDir",
+                    new XAttribute("Condition", "'$(OutDir)' != ''"),
+                    "$([System.IO.Path]::GetFullPath('$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(OutDir)'))'))"),
+                new XElement("_PowerForgeActualTargetPath",
+                    new XAttribute("Condition", "'$(TargetPath)' != ''"),
+                    "$([System.IO.Path]::GetFullPath('$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(TargetPath)'))'))")),
+            new XElement("Error",
+                new XAttribute("Condition",
+                    "'$(IntermediateOutputPath)' != '' and $([System.String]::Copy('$(_PowerForgeActualIntermediateOutputPath)').StartsWith('$(_PowerForgeExpectedBaseIntermediateOutputPath)', System.StringComparison.Ordinal)) != 'True'"),
+                new XAttribute("Text", "The project intermediate output path is outside its controlled context.")),
+            new XElement("Error",
+                new XAttribute("Condition",
+                    "'$(ProjectAssetsFile)' != '' and $([System.String]::Copy('$(_PowerForgeActualProjectAssetsFile)').StartsWith('$(_PowerForgeExpectedBaseIntermediateOutputPath)', System.StringComparison.Ordinal)) != 'True'"),
+                new XAttribute("Text", "The project assets path is outside its controlled context.")),
             new XElement("Error",
                 new XAttribute("Condition",
                     "$([System.String]::Copy('$(_PowerForgeActualOutputPath)').StartsWith('$(_PowerForgeExpectedBaseOutputPath)', System.StringComparison.Ordinal)) != 'True'"),
-                new XAttribute("Text", "The project output path is outside its controlled context."))));
+                new XAttribute("Text", "The project output path is outside its controlled context.")),
+            new XElement("Error",
+                new XAttribute("Condition",
+                    "'$(OutDir)' != '' and $([System.String]::Copy('$(_PowerForgeActualOutDir)').StartsWith('$(_PowerForgeExpectedBaseOutputPath)', System.StringComparison.Ordinal)) != 'True'"),
+                new XAttribute("Text", "The project OutDir is outside its controlled context.")),
+            new XElement("Error",
+                new XAttribute("Condition",
+                    "'$(TargetPath)' != '' and $([System.String]::Copy('$(_PowerForgeActualTargetPath)').StartsWith('$(_PowerForgeExpectedBaseOutputPath)', System.StringComparison.Ordinal)) != 'True'"),
+                new XAttribute("Text", "The project TargetPath is outside its controlled context."))));
         propsPath = Path.Combine(controlledOutputRoot, "PowerForge.ControlledRestoreContexts.props");
         new XDocument(project).Save(propsPath);
         return true;
@@ -198,6 +237,31 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             return false;
         }
+    }
+
+    private static HashSet<string> ReadControlledRestoreContextOverriddenPropertyNames()
+    {
+        var arguments = new List<string>();
+        AppendControlledProofSafeguards(arguments, string.Empty, string.Empty, "unused.lock.json");
+        AppendControlledRootGraphRestoreOverrides(arguments, "unused.lock.json");
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "TargetFramework",
+            "TargetFrameworks",
+            "RuntimeIdentifiers",
+            "PathMap",
+            "_TargetFrameworkOverride",
+            "_DisableNuGetRestoreTargetFrameworksOverride"
+        };
+        foreach (string argument in arguments)
+        {
+            if (!argument.StartsWith("-p:", StringComparison.OrdinalIgnoreCase))
+                continue;
+            int separator = argument.IndexOf('=');
+            if (separator > 3)
+                names.Add(argument.Substring(3, separator - 3));
+        }
+        return names;
     }
 
     private static void AppendControlledRestoreContextProps(
