@@ -203,6 +203,11 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("spoofed-original-props")]
     [InlineData("target-frameworks-context")]
     [InlineData("keep-symbols")]
+    [InlineData("case-variant-symbols")]
+    [InlineData("disabled-props-project")]
+    [InlineData("disabled-props-project-reset")]
+    [InlineData("single-context-empty-base")]
+    [InlineData("removed-output-excludes")]
     [Trait("Category", "DotNetPublishPrGate")]
     public void ReadSourceProvenance_RestoresEverySelectedFrameworkForSharedMultiTargetReference(string scenario)
     {
@@ -222,7 +227,15 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         bool mutatedIsolationMarker = scenario == "mutated-isolation-marker";
         bool spoofedOriginalProps = scenario == "spoofed-original-props";
         bool targetFrameworksContext = scenario == "target-frameworks-context";
-        bool keepSymbols = scenario == "keep-symbols";
+        bool caseVariantSymbols = scenario == "case-variant-symbols";
+        bool keepSymbols = scenario == "keep-symbols" || caseVariantSymbols;
+        bool disabledPropsProject = scenario == "disabled-props-project" ||
+            scenario == "disabled-props-project-reset";
+        bool resetDisabledPropsProject = scenario == "disabled-props-project-reset";
+        bool emptySingleContextBase = scenario == "single-context-empty-base";
+        bool removedOutputExcludes = scenario == "removed-output-excludes";
+        if (caseVariantSymbols && !OperatingSystem.IsWindows())
+            return;
         string root = Directory.CreateTempSubdirectory().FullName;
         try
         {
@@ -233,10 +246,12 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string bridgeDirectory = Directory.CreateDirectory(Path.Combine(root, "Bridge")).FullName;
             string sharedDirectory = Directory.CreateDirectory(Path.Combine(root, "Shared")).FullName;
             string leafDirectory = Directory.CreateDirectory(Path.Combine(root, "Leaf")).FullName;
+            string utilityDirectory = Directory.CreateDirectory(Path.Combine(root, "Utility")).FullName;
             string appProject = Path.Combine(appDirectory, "App.csproj");
             string bridgeProject = Path.Combine(bridgeDirectory, "Bridge.csproj");
             string sharedProject = Path.Combine(sharedDirectory, "Shared.csproj");
             string leafProject = Path.Combine(leafDirectory, "Leaf.csproj");
+            string utilityProject = Path.Combine(utilityDirectory, "Utility.csproj");
             string? customPropsPath = null;
             string customPropsArgument = string.Empty;
             if (customDirectoryBuildProps || environmentProps || spoofedOriginalProps)
@@ -264,6 +279,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 : distinctRestoreContexts
                 ? " AdditionalProperties=\"Flavor=Bridge\""
                 : string.Empty;
+            string bridgeSharedReference = caseVariantSymbols
+                ? "../shared/Shared.csproj"
+                : "../Shared/Shared.csproj";
             File.WriteAllText(appProject, $"""
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
@@ -274,13 +292,14 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                   <ItemGroup>
                     <ProjectReference Include="../Bridge/Bridge.csproj" />
                     <ProjectReference Include="../Shared/Shared.csproj"{directContext} />
+                    {(emptySingleContextBase ? "<ProjectReference Include=\"../Utility/Utility.csproj\" />" : string.Empty)}
                   </ItemGroup>
                 </Project>
                 """);
             File.WriteAllText(bridgeProject, $"""
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
-                  <ItemGroup><ProjectReference Include="../Shared/Shared.csproj"{bridgeContext} /></ItemGroup>
+                  <ItemGroup><ProjectReference Include="{bridgeSharedReference}"{bridgeContext} /></ItemGroup>
                 </Project>
                 """);
             string contextPackages = unselectedContextPackage
@@ -305,20 +324,34 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string assetsOverride = overrideSharedAssets
                 ? "<ProjectAssetsFile Condition=\"$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))\">$(MSBuildProjectDirectory)/../shared-assets/$(Flavor)/project.assets.json</ProjectAssetsFile>"
                 : string.Empty;
+            string defaultItemExcludesOverride = removedOutputExcludes
+                ? "<DefaultItemExcludes Condition=\"$([System.String]::Copy('$(BaseOutputPath)').Contains('powerforge-context'))\">$(BaseIntermediateOutputPath)**</DefaultItemExcludes>"
+                : string.Empty;
             string isolationMarkerOverride = mutatedIsolationMarker
                 ? "<_PowerForgeRequiresContextIsolation>false</_PowerForgeRequiresContextIsolation><_PowerForgeRestoreContextMatched>false</_PowerForgeRestoreContextMatched>"
                 : string.Empty;
             string verifierCollision = shadowVerifier
                 ? "<Target Name=\"PowerForgeVerifyRestoreContext\" />"
                 : string.Empty;
+            string sharedProjectStart = disabledPropsProject
+                ? "<Project><PropertyGroup><ImportDirectoryBuildProps>false</ImportDirectoryBuildProps></PropertyGroup>" +
+                  "<Import Project=\"Sdk.props\" Sdk=\"Microsoft.NET.Sdk\" />" +
+                  (resetDisabledPropsProject
+                      ? "<PropertyGroup><ImportDirectoryBuildProps>true</ImportDirectoryBuildProps></PropertyGroup>"
+                      : string.Empty)
+                : "<Project Sdk=\"Microsoft.NET.Sdk\">";
+            string sharedProjectEnd = disabledPropsProject
+                ? "<Import Project=\"Sdk.targets\" Sdk=\"Microsoft.NET.Sdk\" /></Project>"
+                : "</Project>";
             File.WriteAllText(sharedProject, $"""
-                <Project Sdk="Microsoft.NET.Sdk">
+                {sharedProjectStart}
                   <PropertyGroup>
                     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
                     <NuGetLockFilePath Condition="'$(Flavor)' != ''">packages.$(Flavor).lock.json</NuGetLockFilePath>
                     {outputOverride}
                     {outDirOverride}
                     {assetsOverride}
+                    {defaultItemExcludesOverride}
                     {isolationMarkerOverride}
                   </PropertyGroup>
                   <Target Name="RequireCustomProps" BeforeTargets="Restore;Build" Condition="'$(Flavor)' != '' and '{(customDirectoryBuildProps || environmentProps).ToString().ToLowerInvariant()}' == 'true'">
@@ -331,15 +364,31 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                   {(targetFrameworksContext ? string.Empty : "<ItemGroup><ProjectReference Include=\"../Leaf/Leaf.csproj\" /></ItemGroup>")}
                   {contextPackages}
                   {verifierCollision}
-                </Project>
+                {sharedProjectEnd}
                 """);
             File.WriteAllText(leafProject, """
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
                 </Project>
                 """);
+            if (emptySingleContextBase)
+            {
+                File.WriteAllText(utilityProject, """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup>
+                        <TargetFramework>net10.0</TargetFramework>
+                        <BaseIntermediateOutputPath></BaseIntermediateOutputPath>
+                        <IntermediateOutputPath>obj/</IntermediateOutputPath>
+                      </PropertyGroup>
+                    </Project>
+                    """);
+                File.WriteAllText(Path.Combine(utilityDirectory, "Utility.cs"),
+                    "public static class Utility { public const int Value = 1; }");
+            }
             File.WriteAllText(Path.Combine(appDirectory, "Program.cs"),
-                "internal static class Program { private static void Main() { _ = Bridge.Value + Shared.Value; } }");
+                emptySingleContextBase
+                    ? "internal static class Program { private static void Main() { _ = Bridge.Value + Shared.Value + Utility.Value; } }"
+                    : "internal static class Program { private static void Main() { _ = Bridge.Value + Shared.Value; } }");
             File.WriteAllText(Path.Combine(bridgeDirectory, "Bridge.cs"),
                 "public static class Bridge { public static int Value => Shared.Value; }");
             File.WriteAllText(Path.Combine(sharedDirectory, "Shared.cs"), targetFrameworksContext
@@ -437,11 +486,16 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             DotNetPublishPipelineRunner.SourceProvenance provenance =
                 DotNetPublishPipelineRunner.ReadSourceProvenance(root, buildPlan: plan);
 
-            if (overrideSharedOutputPath || overrideSharedOutDir || overrideSharedAssets || disabledPropsEnvironment)
+            if (overrideSharedOutputPath || overrideSharedOutDir || overrideSharedAssets ||
+                disabledPropsEnvironment || disabledPropsProject || removedOutputExcludes)
             {
                 Assert.True(provenance.Dirty);
-                string expected = disabledPropsEnvironment
+                string expected = disabledPropsEnvironment || disabledPropsProject && !resetDisabledPropsProject
                     ? "disables Directory.Build.props imports"
+                    : resetDisabledPropsProject
+                        ? "PowerForgeVerifyRestoreContext_"
+                    : removedOutputExcludes
+                        ? "removes controlled output-tree exclusions"
                     : overrideSharedOutDir
                         ? "OutDir is outside its controlled context"
                         : overrideSharedAssets

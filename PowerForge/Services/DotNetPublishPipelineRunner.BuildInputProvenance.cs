@@ -1054,6 +1054,7 @@ public sealed partial class DotNetPublishPipelineRunner
             "-getProperty:TargetDir",
             "-getProperty:TargetPath",
             "-getProperty:BuildProjectReferences",
+            "-getProperty:ImportDirectoryBuildProps",
             "-getProperty:_GlobalPropertiesToRemoveFromProjectReferences",
             "-getProperty:BaseIntermediateOutputPath",
             "-getProperty:MSBuildProjectExtensionsPath",

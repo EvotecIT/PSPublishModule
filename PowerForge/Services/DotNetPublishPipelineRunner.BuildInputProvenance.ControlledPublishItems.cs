@@ -627,9 +627,20 @@ public sealed partial class DotNetPublishPipelineRunner
         out string? failureReason)
     {
         failureReason = null;
+        var projectContexts = graphBuildNodes
+            .GroupBy(node => Path.GetFullPath(node.Request.ProjectPath),
+                FileSystemPathSafety.ExistingPathComparer)
+            .ToDictionary(group => group.Key, group => (
+                Isolated: group.Select(BuildControlledRestoreContextKey)
+                    .Distinct(StringComparer.Ordinal).Skip(1).Any(),
+                CanonicalControlledProjectPath: Path.GetFullPath(Path.Combine(
+                    controlledSourceRoot,
+                    FrameworkCompatibility.GetRelativePath(originalGitRoot, group.Key)))),
+                FileSystemPathSafety.ExistingPathComparer);
         foreach (ControlledPublishGraphNode node in graphBuildNodes)
         {
             string projectPath = Path.GetFullPath(node.Request.ProjectPath);
+            var projectContext = projectContexts[projectPath];
             string contextKey = BuildControlledRestoreContextKey(node);
             string?[] selectedFrameworks = graphBuildNodes
                 .Where(candidate =>
@@ -681,6 +692,8 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!TryBuildControlledPublishGraphNode(
                     node,
                     restore: !restoreWithFrameworkMatrix,
+                    projectContext.Isolated,
+                    projectContext.CanonicalControlledProjectPath,
                     originalGitRoot,
                     controlledSourceRoot,
                     controlledEnvironment,

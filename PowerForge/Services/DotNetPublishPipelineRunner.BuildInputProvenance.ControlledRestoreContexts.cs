@@ -36,6 +36,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string expectedIntermediateProperty = "_PowerForgeExpectedIntermediate_" + nonce;
         string expectedExtensionsProperty = "_PowerForgeExpectedExtensions_" + nonce;
         string expectedOutputProperty = "_PowerForgeExpectedOutput_" + nonce;
+        string expectedObjExclusionProperty = "_PowerForgeExpectedObjExclusion_" + nonce;
+        string expectedBinExclusionProperty = "_PowerForgeExpectedBinExclusion_" + nonce;
         string actualIntermediateProperty = "_PowerForgeActualIntermediate_" + nonce;
         string actualAssetsProperty = "_PowerForgeActualAssets_" + nonce;
         string actualOutputProperty = "_PowerForgeActualOutput_" + nonce;
@@ -155,7 +157,14 @@ public sealed partial class DotNetPublishPipelineRunner
                 representatives.Any(request =>
                     request.ReadEffectiveGlobalProperties().TryGetValue(
                         "ImportDirectoryBuildProps", out string? importProps) &&
-                    !string.Equals(importProps, "true", StringComparison.OrdinalIgnoreCase)))
+                    !string.Equals(importProps, "true", StringComparison.OrdinalIgnoreCase)) ||
+                graphNodes.Any(node =>
+                    FileSystemPathSafety.ExistingPathComparer.Equals(
+                        Path.GetFullPath(node.Request.ProjectPath), group.Key) &&
+                    node.EvaluatedProperties.TryGetValue(
+                        "ImportDirectoryBuildProps", out string? evaluatedImportProps) &&
+                    !string.IsNullOrEmpty(evaluatedImportProps) &&
+                    !string.Equals(evaluatedImportProps, "true", StringComparison.OrdinalIgnoreCase)))
             {
                 failureReason = $"project '{group.Key}' disables Directory.Build.props imports, so its restore contexts cannot be isolated.";
                 return false;
@@ -215,16 +224,21 @@ public sealed partial class DotNetPublishPipelineRunner
                     new XElement(expectedIntermediateProperty, intermediate),
                     new XElement(expectedExtensionsProperty, intermediate),
                     new XElement(expectedOutputProperty, output),
+                    new XElement(expectedObjExclusionProperty,
+                        Path.Combine(projectDirectory, "obj", "**")),
+                    new XElement(expectedBinExclusionProperty,
+                        Path.Combine(projectDirectory, "bin", "**")),
                     // The SDK excludes BaseIntermediateOutputPath from default Compile items.
-                    // Once that path is contextual, exclude the containing obj directory too,
-                    // or another context's generated AssemblyInfo becomes a source input.
+                    // Once those paths are contextual, exclude both whole output trees so
+                    // another context's generated files cannot become default items.
                     new XElement("DefaultItemExcludes",
-                        "$(DefaultItemExcludes);" + Path.Combine(projectDirectory, "obj", "**")),
+                        "$(DefaultItemExcludes);" + Path.Combine(projectDirectory, "obj", "**") +
+                        ";" + Path.Combine(projectDirectory, "bin", "**")),
                     new XElement(matchedProperty, "true")));
             }
         }
         project.Add(new XElement("Target",
-            new XAttribute("Name", "PowerForgeVerifyRestoreContext_" + Guid.NewGuid().ToString("N")),
+            new XAttribute("Name", BuildControlledRestoreContextVerifierTargetName(nonce)),
             new XAttribute("BeforeTargets", "Restore;Build;GetTargetPath;ComputeFilesToPublish"),
             new XAttribute("Condition", string.Join(" Or ", isolatedProjectConditions.Select(condition => "(" + condition + ")"))),
             new XElement("Error",
@@ -242,6 +256,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 new XAttribute("Condition",
                     "'$(BaseOutputPath)' != '$(" + expectedOutputProperty + ")'"),
                 new XAttribute("Text", "The project overrides the controlled context output path.")),
+            new XElement("Error",
+                new XAttribute("Condition",
+                    "$([System.String]::Copy('$(DefaultItemExcludes)').Contains('$(" + expectedObjExclusionProperty + ")')) != 'True' or " +
+                    "$([System.String]::Copy('$(DefaultItemExcludes)').Contains('$(" + expectedBinExclusionProperty + ")')) != 'True'"),
+                new XAttribute("Text", "The project removes controlled output-tree exclusions.")),
             new XElement("PropertyGroup",
                 new XElement(actualIntermediateProperty,
                     new XAttribute("Condition", "'$(IntermediateOutputPath)' != ''"),
@@ -291,6 +310,16 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static string BuildControlledOriginalPropsPropertyName(string nonce)
         => "_PowerForgeOriginalDirectoryBuildPropsPath_" + nonce;
+
+    private static string BuildControlledRestoreContextVerifierTargetName(string nonce)
+        => "PowerForgeVerifyRestoreContext_" + nonce;
+
+    private static string BuildControlledRestoreContextVerifierTargetNameFromProps(string propsPath)
+    {
+        string fileName = Path.GetFileNameWithoutExtension(propsPath);
+        return BuildControlledRestoreContextVerifierTargetName(
+            fileName.Substring(fileName.LastIndexOf('.') + 1));
+    }
 
     private static string BuildControlledOriginalFrameworksPropertyName(string nonce)
         => "_PowerForgeOriginalTargetFrameworks_" + nonce;

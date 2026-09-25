@@ -164,6 +164,8 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryBuildControlledPublishGraphNode(
         ControlledPublishGraphNode node,
         bool restore,
+        bool isolatedRestoreContext,
+        string canonicalControlledProjectPath,
         string originalGitRoot,
         string controlledSourceRoot,
         IReadOnlyDictionary<string, string?> controlledEnvironment,
@@ -198,7 +200,9 @@ public sealed partial class DotNetPublishPipelineRunner
             "-maxCpuCount:1",
             "-nodeReuse:false",
             "-verbosity:quiet",
-            "-target:Build"
+            "-target:Build" + (isolatedRestoreContext && restoreContextProps is not null
+                ? ";" + BuildControlledRestoreContextVerifierTargetNameFromProps(restoreContextProps)
+                : string.Empty)
         };
         if (restore)
             arguments.Add("-restore");
@@ -223,9 +227,9 @@ public sealed partial class DotNetPublishPipelineRunner
             failureReason = $"PathMap for controlled project '{originalProjectPath}' could not be constructed.";
             return false;
         }
-        if (restoreContextProps is not null &&
+        if (restoreContextProps is not null && isolatedRestoreContext &&
             !TryPrependControlledContextIntermediatePathMap(node, originalGitRoot,
-                controlledProjectPath, ref controlledPathMap))
+                canonicalControlledProjectPath, ref controlledPathMap))
         {
             failureReason = $"the original intermediate path for project '{originalProjectPath}' could not be mapped.";
             return false;
