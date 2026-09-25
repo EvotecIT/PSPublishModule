@@ -187,13 +187,17 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
+    [InlineData(false, false, false, false)]
+    [InlineData(true, false, false, false)]
+    [InlineData(true, true, false, false)]
+    [InlineData(true, true, true, false)]
+    [InlineData(true, true, false, true)]
     [Trait("Category", "DotNetPublishPrGate")]
     public void ReadSourceProvenance_RestoresEverySelectedFrameworkForSharedMultiTargetReference(
         bool distinctRestoreContexts,
-        bool unselectedContextPackage)
+        bool unselectedContextPackage,
+        bool customDirectoryBuildProps,
+        bool overrideSharedOutputPath)
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
@@ -209,6 +213,15 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string bridgeProject = Path.Combine(bridgeDirectory, "Bridge.csproj");
             string sharedProject = Path.Combine(sharedDirectory, "Shared.csproj");
             string leafProject = Path.Combine(leafDirectory, "Leaf.csproj");
+            string? customPropsPath = null;
+            string customPropsArgument = string.Empty;
+            if (customDirectoryBuildProps)
+            {
+                customPropsPath = Path.Combine(root, "Custom.Build.props");
+                File.WriteAllText(customPropsPath,
+                    "<Project><PropertyGroup><ContextPropsMarker>Loaded</ContextPropsMarker></PropertyGroup></Project>");
+                customPropsArgument = $" -p:DirectoryBuildPropsPath=\"{customPropsPath}\"";
+            }
             string directContext = distinctRestoreContexts
                 ? " AdditionalProperties=\"Flavor=Direct\""
                 : string.Empty;
@@ -247,12 +260,19 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                   </ItemGroup>
                   """
                 : string.Empty;
+            string outputOverride = overrideSharedOutputPath
+                ? "<OutputPath>$(BaseOutputPath)../shared/</OutputPath>"
+                : string.Empty;
             File.WriteAllText(sharedProject, $"""
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
                     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
                     <NuGetLockFilePath Condition="'$(Flavor)' != ''">packages.$(Flavor).lock.json</NuGetLockFilePath>
+                    {outputOverride}
                   </PropertyGroup>
+                  <Target Name="RequireCustomProps" BeforeTargets="Restore;Build" Condition="'$(Flavor)' != '' and '{customDirectoryBuildProps.ToString().ToLowerInvariant()}' == 'true'">
+                    <Error Condition="'$(ContextPropsMarker)' != 'Loaded'" Text="Custom DirectoryBuildPropsPath was not imported." />
+                  </Target>
                   <ItemGroup><ProjectReference Include="../Leaf/Leaf.csproj" /></ItemGroup>
                   {contextPackages}
                 </Project>
@@ -274,16 +294,18 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             if (unselectedContextPackage)
             {
                 RunDotNet(root,
-                    $"restore \"{sharedProject}\" --use-lock-file --nologo -p:Flavor=Direct -p:TargetFrameworks=net10.0");
+                    $"restore \"{sharedProject}\" --use-lock-file --nologo -p:Flavor=Direct -p:TargetFrameworks=net10.0{customPropsArgument}");
                 RunDotNet(root,
-                    $"restore \"{sharedProject}\" --use-lock-file --nologo -p:Flavor=Bridge -p:TargetFrameworks=net8.0");
+                    $"restore \"{sharedProject}\" --use-lock-file --nologo -p:Flavor=Bridge -p:TargetFrameworks=net8.0{customPropsArgument}");
             }
             RunDotNet(root,
-                $"restore \"{appProject}\" -r linux-x64 --use-lock-file --nologo -p:SelfContained=false");
+                $"restore \"{appProject}\" -r linux-x64 --use-lock-file --nologo -p:SelfContained=false{customPropsArgument}");
             if (unselectedContextPackage)
             {
                 Assert.Contains("Newtonsoft.Json", File.ReadAllText(Path.Combine(sharedDirectory, "packages.Direct.lock.json")));
                 Assert.Contains("System.Text.Json", File.ReadAllText(Path.Combine(sharedDirectory, "packages.Bridge.lock.json")));
+                Assert.DoesNotContain("NuGet.Versioning", File.ReadAllText(Path.Combine(sharedDirectory, "packages.Direct.lock.json")));
+                Assert.DoesNotContain("NuGet.Versioning", File.ReadAllText(Path.Combine(sharedDirectory, "packages.Bridge.lock.json")));
             }
             RunGit(root, "add .");
             RunGit(root, "commit -m \"approved multi-framework graph\"");
@@ -292,7 +314,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 $"build \"{appProject}\" -c Release -f net10.0 -r linux-x64 --no-restore --nologo " +
                 "-m:1 -p:BuildInParallel=false " +
                 $"/p:SourceRevisionId={revision} /p:IncludeSourceRevisionInInformationalVersion=true " +
-                "/p:ContinuousIntegrationBuild=true /p:DebugType=None /p:DebugSymbols=false");
+                $"/p:ContinuousIntegrationBuild=true /p:DebugType=None /p:DebugSymbols=false{customPropsArgument}");
             var plan = new DotNetPublishPlan
             {
                 ProjectRoot = root,
@@ -319,10 +341,22 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 ]
             };
 
+            if (customPropsPath is not null)
+                plan.MsBuildProperties["DirectoryBuildPropsPath"] = customPropsPath;
+
             DotNetPublishPipelineRunner.SourceProvenance provenance =
                 DotNetPublishPipelineRunner.ReadSourceProvenance(root, buildPlan: plan);
 
-            Assert.False(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
+            if (overrideSharedOutputPath)
+            {
+                Assert.True(provenance.Dirty);
+                Assert.Contains(provenance.DirtyReasons,
+                    reason => reason.Contains("outside its controlled context", StringComparison.Ordinal));
+            }
+            else
+            {
+                Assert.False(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
+            }
         }
         finally
         {
