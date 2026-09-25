@@ -192,6 +192,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("conditional-packages")]
     [InlineData("custom-props")]
     [InlineData("missing-props-path")]
+    [InlineData("missing-props-environment")]
+    [InlineData("empty-props-path")]
+    [InlineData("case-sensitive-context-values")]
+    [InlineData("external-intermediate-path")]
     [InlineData("apostrophe-project-path")]
     [InlineData("apostrophe-escaped-output")]
     [InlineData("escaped-output")]
@@ -218,6 +222,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         bool unselectedContextPackage = scenario != "single-context" && scenario != "two-contexts" &&
             scenario != "defaulted-property";
         bool customDirectoryBuildProps = scenario == "custom-props";
+        bool emptyDirectoryBuildPropsPath = scenario == "empty-props-path";
+        bool caseSensitiveContextValues = scenario == "case-sensitive-context-values";
+        bool externalIntermediatePath = scenario == "external-intermediate-path";
         bool overrideSharedOutputPath = scenario == "escaped-output" || scenario == "shadowed-verifier" ||
             scenario == "mutated-isolation-marker" || scenario == "apostrophe-escaped-output";
         bool overrideSharedOutDir = scenario == "escaped-outdir";
@@ -226,20 +233,24 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         bool controlledProperties = scenario == "controlled-properties";
         bool disabledPropsEnvironment = scenario == "disabled-props-environment";
         bool defaultedProperty = scenario == "defaulted-property";
-        bool environmentProps = scenario == "environment-props";
+        bool environmentProps = scenario == "environment-props" ||
+            scenario == "missing-props-environment";
         bool mutatedIsolationMarker = scenario == "mutated-isolation-marker";
         bool spoofedOriginalProps = scenario == "spoofed-original-props";
         bool targetFrameworksContext = scenario == "target-frameworks-context";
         bool caseVariantSymbols = scenario == "case-variant-symbols";
-        bool keepSymbols = scenario == "keep-symbols" || caseVariantSymbols;
+        bool keepSymbols = scenario == "keep-symbols" || caseVariantSymbols || externalIntermediatePath;
         bool disabledPropsProject = scenario == "disabled-props-project" ||
             scenario == "disabled-props-project-reset";
         bool resetDisabledPropsProject = scenario == "disabled-props-project-reset";
         bool emptySingleContextBase = scenario == "single-context-empty-base";
         bool removedOutputExcludes = scenario == "removed-output-excludes";
+        if (caseSensitiveContextValues || externalIntermediatePath)
+            unselectedContextPackage = false;
         if (caseVariantSymbols && !OperatingSystem.IsWindows())
             return;
         string root = Directory.CreateTempSubdirectory().FullName;
+        string? externalIntermediateDirectory = null;
         try
         {
             RunGit(root, "init");
@@ -264,7 +275,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 scenario == "missing-props-path")
             {
                 customPropsPath = Path.Combine(root, "Custom.Build.props");
-                if (scenario != "missing-props-path")
+                if (scenario != "missing-props-path" && scenario != "missing-props-environment")
                     File.WriteAllText(customPropsPath,
                         "<Project><PropertyGroup><ContextPropsMarker>Loaded</ContextPropsMarker>" +
                         "<ContextPropsPathMarker Condition=\"'$(DirectoryBuildPropsPath)' == '$(MSBuildThisFileFullPath)'\">Loaded</ContextPropsPathMarker>" +
@@ -274,17 +285,33 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 else if (spoofedOriginalProps)
                     customPropsArgument = $" -p:_PowerForgeOriginalDirectoryBuildPropsPath=\"{customPropsPath}\"";
             }
-            if (scenario == "missing-props-path")
+            if (scenario == "missing-props-path" || scenario == "missing-props-environment")
                 Assert.False(File.Exists(customPropsPath));
+            if (emptyDirectoryBuildPropsPath)
+            {
+                File.WriteAllText(Path.Combine(sharedDirectory, "Directory.Build.props"),
+                    "<Project><PropertyGroup><UnexpectedPropsMarker>Loaded</UnexpectedPropsMarker></PropertyGroup></Project>");
+                customPropsArgument = " -p:DirectoryBuildPropsPath=";
+            }
+            if (externalIntermediatePath)
+            {
+                externalIntermediateDirectory = Directory.CreateTempSubdirectory("pf-original-obj-").FullName;
+                File.WriteAllText(Path.Combine(sharedDirectory, "Directory.Build.props"),
+                    $"<Project><PropertyGroup><BaseIntermediateOutputPath>{externalIntermediateDirectory}{Path.DirectorySeparatorChar}</BaseIntermediateOutputPath></PropertyGroup></Project>");
+            }
             if (defaultedProperty)
                 File.WriteAllText(Path.Combine(sharedDirectory, "Directory.Build.props"),
                     "<Project><PropertyGroup><Flavor Condition=\"'$(Flavor)' == ''\">Direct</Flavor></PropertyGroup></Project>");
-            string directContext = targetFrameworksContext
+            string directContext = caseSensitiveContextValues
+                ? " AdditionalProperties=\"DefineConstants=FOO\""
+                : targetFrameworksContext
                 ? " AdditionalProperties=\"TargetFrameworks=net10.0\""
                 : distinctRestoreContexts && !defaultedProperty
                 ? " AdditionalProperties=\"Flavor=Direct\""
                 : string.Empty;
-            string bridgeContext = targetFrameworksContext
+            string bridgeContext = caseSensitiveContextValues
+                ? " AdditionalProperties=\"DefineConstants=foo\""
+                : targetFrameworksContext
                 ? " AdditionalProperties=\"TargetFrameworks=net8.0\""
                 : distinctRestoreContexts
                 ? " AdditionalProperties=\"Flavor=Bridge\""
@@ -364,12 +391,15 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     {defaultItemExcludesOverride}
                     {isolationMarkerOverride}
                   </PropertyGroup>
-                  <Target Name="RequireCustomProps" BeforeTargets="Restore;Build" Condition="'$(Flavor)' != '' and '{(customDirectoryBuildProps || environmentProps).ToString().ToLowerInvariant()}' == 'true'">
+                  <Target Name="RequireCustomProps" BeforeTargets="Restore;Build" Condition="'$(Flavor)' != '' and '{(customDirectoryBuildProps || environmentProps && scenario != "missing-props-environment").ToString().ToLowerInvariant()}' == 'true'">
                     <Error Condition="'$(ContextPropsMarker)' != 'Loaded'" Text="Custom DirectoryBuildPropsPath was not imported." />
                     <Error Condition="'$(ContextPropsPathMarker)' != 'Loaded'" Text="Original props observed a substituted DirectoryBuildPropsPath." />
                   </Target>
                   <Target Name="RejectSpoofedProps" BeforeTargets="Restore;Build" Condition="'{spoofedOriginalProps.ToString().ToLowerInvariant()}' == 'true'">
                     <Error Condition="'$(ContextPropsMarker)' == 'Loaded'" Text="A caller property redirected the original props import." />
+                  </Target>
+                  <Target Name="RejectUnexpectedProps" BeforeTargets="Restore;Build" Condition="'{emptyDirectoryBuildPropsPath.ToString().ToLowerInvariant()}' == 'true'">
+                    <Error Condition="'$(UnexpectedPropsMarker)' == 'Loaded'" Text="An explicitly empty DirectoryBuildPropsPath imported discovered props." />
                   </Target>
                   {(targetFrameworksContext || apostropheProjectPath ? string.Empty : "<ItemGroup><ProjectReference Include=\"../Leaf/Leaf.csproj\" /></ItemGroup>")}
                   {contextPackages}
@@ -483,6 +513,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 else
                     plan.MsBuildProperties["_PowerForgeOriginalDirectoryBuildPropsPath"] = customPropsPath;
             }
+            if (emptyDirectoryBuildPropsPath)
+                plan.MsBuildProperties["DirectoryBuildPropsPath"] = string.Empty;
             if (controlledProperties)
             {
                 plan.MsBuildProperties["BuildProjectReferences"] = "true";
@@ -522,7 +554,15 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         }
         finally
         {
-            DeleteTestRepository(root);
+            try
+            {
+                DeleteTestRepository(root);
+            }
+            finally
+            {
+                if (externalIntermediateDirectory is not null)
+                    DeleteTestRepository(externalIntermediateDirectory);
+            }
         }
     }
 

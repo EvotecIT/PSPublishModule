@@ -228,7 +228,7 @@ public sealed partial class DotNetPublishPipelineRunner
             return false;
         }
         if (restoreContextProps is not null && isolatedRestoreContext &&
-            !TryPrependControlledContextIntermediatePathMap(node, originalGitRoot,
+            !TryPrependControlledContextIntermediatePathMap(node,
                 canonicalControlledProjectPath, ref controlledPathMap))
         {
             failureReason = $"the original intermediate path for project '{originalProjectPath}' could not be mapped.";

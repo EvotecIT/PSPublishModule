@@ -30,6 +30,7 @@ public sealed partial class DotNetPublishPipelineRunner
         var controlledPropertyNames = ReadControlledRestoreContextOverriddenPropertyNames();
         string nonce = Guid.NewGuid().ToString("N");
         string originalPropsProperty = BuildControlledOriginalPropsPropertyName(nonce);
+        string originalPropsSuppliedProperty = BuildControlledOriginalPropsSuppliedPropertyName(nonce);
         string originalFrameworksProperty = BuildControlledOriginalFrameworksPropertyName(nonce);
         string useOriginalFrameworksProperty = BuildControlledUseOriginalFrameworksPropertyName(nonce);
         string matchedProperty = "_PowerForgeMatched_" + nonce;
@@ -71,9 +72,14 @@ public sealed partial class DotNetPublishPipelineRunner
                     return false;
                 }
                 defaultProps = Path.GetFullPath(environmentProps);
-                if (!IsSameOrBelowBuildInputPath(defaultProps, controlledSourceRoot) || !File.Exists(defaultProps))
+                bool originalEnvironmentPropsExists =
+                    rootRequest.EnvironmentVariables.TryGetValue("DirectoryBuildPropsPath", out string? originalEnvironmentProps) &&
+                    !string.IsNullOrWhiteSpace(originalEnvironmentProps) &&
+                    File.Exists(originalEnvironmentProps);
+                if (!IsSameOrBelowBuildInputPath(defaultProps, controlledSourceRoot) ||
+                    originalEnvironmentPropsExists && !File.Exists(defaultProps))
                 {
-                    failureReason = $"project '{group.Key}' has a DirectoryBuildPropsPath outside the controlled checkout or missing from it.";
+                    failureReason = $"project '{group.Key}' has a DirectoryBuildPropsPath outside the controlled checkout or an existing props file missing from it.";
                     return false;
                 }
             }
@@ -131,23 +137,27 @@ public sealed partial class DotNetPublishPipelineRunner
             project.Add(new XElement("PropertyGroup",
                 new XAttribute("Condition", projectCondition),
                 new XElement("DirectoryBuildPropsPath",
-                    new XAttribute("Condition", "$(" + originalPropsProperty + ".Length) != 0"),
+                    new XAttribute("Condition", "'$(" + originalPropsSuppliedProperty + ")' == 'true'"),
                     "$(" + originalPropsProperty + ")"),
                 new XElement("DirectoryBuildPropsPath",
-                    new XAttribute("Condition", "$(" + originalPropsProperty + ".Length) == 0"),
+                    new XAttribute("Condition", "'$(" + originalPropsSuppliedProperty + ")' != 'true'"),
                     defaultProps ?? string.Empty)));
+            // An explicitly empty global path suppresses SDK discovery, unlike an absent
+            // global path. The private presence flag retains that distinction.
             // The controlled wrapper replaces the directory-props entry point. Import the
             // project's original props first so its build settings retain their normal order.
             // The SDK skips a nonexistent DirectoryBuildPropsPath rather than failing the build.
             project.Add(new XElement("Import",
                 new XAttribute("Project", "$(" + originalPropsProperty + ")"),
                 new XAttribute("Condition", projectCondition +
+                    " and '$(" + originalPropsSuppliedProperty + ")' == 'true'" +
                     " and Exists($(" + originalPropsProperty + "))")));
             if (defaultProps is not null)
                 project.Add(new XElement("Import",
                     new XAttribute("Project", defaultProps),
                     new XAttribute("Condition", projectCondition +
-                        " and $(" + originalPropsProperty + ".Length) == 0")));
+                        " and '$(" + originalPropsSuppliedProperty + ")' != 'true'" +
+                        " and Exists($(DirectoryBuildPropsPath))")));
 
             if (representatives.Length <= 1)
                 continue;
@@ -171,7 +181,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 return false;
             }
 
-            var matchedConditions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var matchedConditions = new HashSet<string>(StringComparer.Ordinal);
             var contextDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (ProjectEvaluationRequest request in representatives)
             {
@@ -200,7 +210,11 @@ public sealed partial class DotNetPublishPipelineRunner
                     string matchedName = capturedProperties[name];
                     condition.Append(" and $(").Append(matchedName).Append(".Equals('")
                         .Append(EscapeControlledMsBuildConditionLiteral(value))
-                        .Append("', System.StringComparison.OrdinalIgnoreCase))");
+                        .Append("', System.StringComparison.Ordinal))");
+                    if (name.Equals("DirectoryBuildPropsPath", StringComparison.OrdinalIgnoreCase))
+                        condition.Append(" and '$(").Append(originalPropsSuppliedProperty)
+                            .Append(")' == '").Append(suppliedByGraph ? "true" : "false")
+                            .Append("'");
                 }
                 if (!matchedConditions.Add(condition.ToString()))
                 {
@@ -321,6 +335,9 @@ public sealed partial class DotNetPublishPipelineRunner
     private static string BuildControlledOriginalPropsPropertyName(string nonce)
         => "_PowerForgeOriginalDirectoryBuildPropsPath_" + nonce;
 
+    private static string BuildControlledOriginalPropsSuppliedPropertyName(string nonce)
+        => "_PowerForgeOriginalDirectoryBuildPropsSupplied_" + nonce;
+
     private static string BuildControlledRestoreContextVerifierTargetName(string nonce)
         => "PowerForgeVerifyRestoreContext_" + nonce;
 
@@ -364,7 +381,6 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool TryPrependControlledContextIntermediatePathMap(
         ControlledPublishGraphNode node,
-        string originalGitRoot,
         string controlledProjectPath,
         ref string pathMap)
     {
@@ -375,8 +391,9 @@ public sealed partial class DotNetPublishPipelineRunner
         string originalIntermediate = NormalizeBuildInputPathRoot(Path.IsPathRooted(basePath)
             ? basePath
             : Path.Combine(originalProjectDirectory, basePath));
-        if (!IsSameOrBelowBuildInputPath(originalIntermediate, originalGitRoot))
-            return false;
+        // The original intermediate directory is a PathMap destination only. The
+        // controlled build writes to its isolated checkout directory, even when the
+        // approved build used a centralized intermediate directory outside Git.
         string originalMappedIntermediate = originalIntermediate;
         string? bestSource = null;
         if (!string.IsNullOrWhiteSpace(node.PathMap))
@@ -462,6 +479,7 @@ public sealed partial class DotNetPublishPipelineRunner
             string fileName = Path.GetFileNameWithoutExtension(propsPath);
             string nonce = fileName.Substring(fileName.LastIndexOf('.') + 1);
             string originalPropsProperty = BuildControlledOriginalPropsPropertyName(nonce);
+            string originalPropsSuppliedProperty = BuildControlledOriginalPropsSuppliedPropertyName(nonce);
             string? original = arguments.FirstOrDefault(argument =>
                 argument.StartsWith(originalPrefix, StringComparison.OrdinalIgnoreCase));
             if (original is not null)
@@ -470,6 +488,8 @@ public sealed partial class DotNetPublishPipelineRunner
             // controlled environment variables from redirecting this private import hook.
             arguments.Add("-p:" + originalPropsProperty + "=" +
                 (original is null ? string.Empty : original.Substring(originalPrefix.Length)));
+            arguments.Add("-p:" + originalPropsSuppliedProperty + "=" +
+                (original is null ? "false" : "true"));
             arguments.Add(originalPrefix + EscapeMsBuildPropertyValue(propsPath));
         }
     }
