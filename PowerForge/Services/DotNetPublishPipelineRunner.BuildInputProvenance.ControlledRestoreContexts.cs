@@ -131,22 +131,23 @@ public sealed partial class DotNetPublishPipelineRunner
             project.Add(new XElement("PropertyGroup",
                 new XAttribute("Condition", projectCondition),
                 new XElement("DirectoryBuildPropsPath",
-                    new XAttribute("Condition", "'$(" + originalPropsProperty + ")' != ''"),
+                    new XAttribute("Condition", "$(" + originalPropsProperty + ".Length) != 0"),
                     "$(" + originalPropsProperty + ")"),
                 new XElement("DirectoryBuildPropsPath",
-                    new XAttribute("Condition", "'$(" + originalPropsProperty + ")' == ''"),
+                    new XAttribute("Condition", "$(" + originalPropsProperty + ".Length) == 0"),
                     defaultProps ?? string.Empty)));
             // The controlled wrapper replaces the directory-props entry point. Import the
             // project's original props first so its build settings retain their normal order.
+            // The SDK skips a nonexistent DirectoryBuildPropsPath rather than failing the build.
             project.Add(new XElement("Import",
                 new XAttribute("Project", "$(" + originalPropsProperty + ")"),
                 new XAttribute("Condition", projectCondition +
-                    " and '$(" + originalPropsProperty + ")' != ''")));
+                    " and Exists($(" + originalPropsProperty + "))")));
             if (defaultProps is not null)
                 project.Add(new XElement("Import",
                     new XAttribute("Project", defaultProps),
                     new XAttribute("Condition", projectCondition +
-                        " and '$(" + originalPropsProperty + ")' == ''")));
+                        " and $(" + originalPropsProperty + ".Length) == 0")));
 
             if (representatives.Length <= 1)
                 continue;
@@ -197,8 +198,9 @@ public sealed partial class DotNetPublishPipelineRunner
                         return false;
                     }
                     string matchedName = capturedProperties[name];
-                    condition.Append(" and '$(").Append(matchedName).Append(")' == '")
-                        .Append(EscapeControlledMsBuildConditionLiteral(value)).Append("'");
+                    condition.Append(" and $(").Append(matchedName).Append(".Equals('")
+                        .Append(EscapeControlledMsBuildConditionLiteral(value))
+                        .Append("', System.StringComparison.OrdinalIgnoreCase))");
                 }
                 if (!matchedConditions.Add(condition.ToString()))
                 {
@@ -237,6 +239,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     new XElement(matchedProperty, "true")));
             }
         }
+        // Property instance methods keep apostrophes in paths out of MSBuild's quoted
+        // condition and property-function argument syntax.
         project.Add(new XElement("Target",
             new XAttribute("Name", BuildControlledRestoreContextVerifierTargetName(nonce)),
             new XAttribute("BeforeTargets", "Restore;Build;GetTargetPath;ComputeFilesToPublish"),
@@ -246,55 +250,60 @@ public sealed partial class DotNetPublishPipelineRunner
                 new XAttribute("Text", "The controlled project restore context did not match the evaluated graph.")),
             new XElement("Error",
                 new XAttribute("Condition",
-                    "'$(BaseIntermediateOutputPath)' != '$(" + expectedIntermediateProperty + ")'"),
+                    "$(BaseIntermediateOutputPath.Equals($(" + expectedIntermediateProperty + "))) != 'True'"),
                 new XAttribute("Text", "The project overrides the controlled intermediate output path.")),
             new XElement("Error",
                 new XAttribute("Condition",
-                    "'$(MSBuildProjectExtensionsPath)' != '$(" + expectedExtensionsProperty + ")'"),
+                    "$(MSBuildProjectExtensionsPath.Equals($(" + expectedExtensionsProperty + "))) != 'True'"),
                 new XAttribute("Text", "The project overrides the controlled restore assets path.")),
             new XElement("Error",
                 new XAttribute("Condition",
-                    "'$(BaseOutputPath)' != '$(" + expectedOutputProperty + ")'"),
+                    "$(BaseOutputPath.Equals($(" + expectedOutputProperty + "))) != 'True'"),
                 new XAttribute("Text", "The project overrides the controlled context output path.")),
             new XElement("Error",
                 new XAttribute("Condition",
-                    "$([System.String]::Copy('$(DefaultItemExcludes)').Contains('$(" + expectedObjExclusionProperty + ")')) != 'True' or " +
-                    "$([System.String]::Copy('$(DefaultItemExcludes)').Contains('$(" + expectedBinExclusionProperty + ")')) != 'True'"),
+                    "$(DefaultItemExcludes.Contains($(" + expectedObjExclusionProperty + "))) != 'True' or " +
+                    "$(DefaultItemExcludes.Contains($(" + expectedBinExclusionProperty + "))) != 'True'"),
                 new XAttribute("Text", "The project removes controlled output-tree exclusions.")),
             new XElement("PropertyGroup",
                 new XElement(actualIntermediateProperty,
-                    new XAttribute("Condition", "'$(IntermediateOutputPath)' != ''"),
-                    "$([System.IO.Path]::GetFullPath('$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)'))'))"),
+                    new XAttribute("Condition", "$(IntermediateOutputPath.Length) != 0"),
+                    "$([System.IO.Path]::GetFullPath($([System.IO.Path]::Combine($(MSBuildProjectDirectory), $(IntermediateOutputPath)))))"),
                 new XElement(actualAssetsProperty,
-                    new XAttribute("Condition", "'$(ProjectAssetsFile)' != ''"),
-                    "$([System.IO.Path]::GetFullPath('$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(ProjectAssetsFile)'))'))"),
+                    new XAttribute("Condition", "$(ProjectAssetsFile.Length) != 0"),
+                    "$([System.IO.Path]::GetFullPath($([System.IO.Path]::Combine($(MSBuildProjectDirectory), $(ProjectAssetsFile)))))"),
                 new XElement(actualOutputProperty,
-                    "$([System.IO.Path]::GetFullPath('$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(OutputPath)'))'))"),
+                    "$([System.IO.Path]::GetFullPath($([System.IO.Path]::Combine($(MSBuildProjectDirectory), $(OutputPath)))))"),
                 new XElement(actualOutDirProperty,
-                    new XAttribute("Condition", "'$(OutDir)' != ''"),
-                    "$([System.IO.Path]::GetFullPath('$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(OutDir)'))'))"),
+                    new XAttribute("Condition", "$(OutDir.Length) != 0"),
+                    "$([System.IO.Path]::GetFullPath($([System.IO.Path]::Combine($(MSBuildProjectDirectory), $(OutDir)))))"),
                 new XElement(actualTargetProperty,
-                    new XAttribute("Condition", "'$(TargetPath)' != ''"),
-                    "$([System.IO.Path]::GetFullPath('$([System.IO.Path]::Combine('$(MSBuildProjectDirectory)', '$(TargetPath)'))'))")),
+                    new XAttribute("Condition", "$(TargetPath.Length) != 0"),
+                    "$([System.IO.Path]::GetFullPath($([System.IO.Path]::Combine($(MSBuildProjectDirectory), $(TargetPath)))))")),
             new XElement("Error",
                 new XAttribute("Condition",
-                    "'$(IntermediateOutputPath)' != '' and $([System.String]::Copy('$(" + actualIntermediateProperty + ")').StartsWith('$(" + expectedIntermediateProperty + ")', System.StringComparison.Ordinal)) != 'True'"),
+                    "$(IntermediateOutputPath.Length) != 0 and $(" + actualIntermediateProperty +
+                    ".StartsWith($(" + expectedIntermediateProperty + "), System.StringComparison.Ordinal)) != 'True'"),
                 new XAttribute("Text", "The project intermediate output path is outside its controlled context.")),
             new XElement("Error",
                 new XAttribute("Condition",
-                    "'$(ProjectAssetsFile)' != '' and $([System.String]::Copy('$(" + actualAssetsProperty + ")').StartsWith('$(" + expectedIntermediateProperty + ")', System.StringComparison.Ordinal)) != 'True'"),
+                    "$(ProjectAssetsFile.Length) != 0 and $(" + actualAssetsProperty +
+                    ".StartsWith($(" + expectedIntermediateProperty + "), System.StringComparison.Ordinal)) != 'True'"),
                 new XAttribute("Text", "The project assets path is outside its controlled context.")),
             new XElement("Error",
                 new XAttribute("Condition",
-                    "$([System.String]::Copy('$(" + actualOutputProperty + ")').StartsWith('$(" + expectedOutputProperty + ")', System.StringComparison.Ordinal)) != 'True'"),
+                    "$(" + actualOutputProperty + ".StartsWith($(" + expectedOutputProperty +
+                    "), System.StringComparison.Ordinal)) != 'True'"),
                 new XAttribute("Text", "The project output path is outside its controlled context.")),
             new XElement("Error",
                 new XAttribute("Condition",
-                    "'$(OutDir)' != '' and $([System.String]::Copy('$(" + actualOutDirProperty + ")').StartsWith('$(" + expectedOutputProperty + ")', System.StringComparison.Ordinal)) != 'True'"),
+                    "$(OutDir.Length) != 0 and $(" + actualOutDirProperty +
+                    ".StartsWith($(" + expectedOutputProperty + "), System.StringComparison.Ordinal)) != 'True'"),
                 new XAttribute("Text", "The project OutDir is outside its controlled context.")),
             new XElement("Error",
                 new XAttribute("Condition",
-                    "'$(TargetPath)' != '' and $([System.String]::Copy('$(" + actualTargetProperty + ")').StartsWith('$(" + expectedOutputProperty + ")', System.StringComparison.Ordinal)) != 'True'"),
+                    "$(TargetPath.Length) != 0 and $(" + actualTargetProperty +
+                    ".StartsWith($(" + expectedOutputProperty + "), System.StringComparison.Ordinal)) != 'True'"),
                 new XAttribute("Text", "The project TargetPath is outside its controlled context."))));
         propsPath = Path.Combine(controlledOutputRoot, "PowerForge.ControlledRestoreContexts." + nonce + ".props");
         new XDocument(project).Save(propsPath);
@@ -302,7 +311,8 @@ public sealed partial class DotNetPublishPipelineRunner
     }
 
     private static string BuildControlledProjectPathCondition(string path)
-        => "'$(MSBuildProjectFullPath)' == '" + EscapeControlledMsBuildConditionLiteral(path) + "'";
+        => "$(MSBuildProjectFullPath.Equals('" + EscapeControlledMsBuildConditionLiteral(path) +
+           "', System.StringComparison." + (IsWindows() ? "OrdinalIgnoreCase" : "Ordinal") + "))";
 
     internal static string ComputeControlledRestoreContextDirectoryName(string controlledProjectPath, string contextKey)
         => ComputeSha256Hex(Encoding.UTF8.GetBytes(

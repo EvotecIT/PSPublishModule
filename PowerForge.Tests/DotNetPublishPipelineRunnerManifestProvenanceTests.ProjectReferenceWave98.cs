@@ -191,6 +191,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("two-contexts")]
     [InlineData("conditional-packages")]
     [InlineData("custom-props")]
+    [InlineData("missing-props-path")]
+    [InlineData("apostrophe-project-path")]
+    [InlineData("apostrophe-escaped-output")]
     [InlineData("escaped-output")]
     [InlineData("escaped-outdir")]
     [InlineData("escaped-assets")]
@@ -216,7 +219,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             scenario != "defaulted-property";
         bool customDirectoryBuildProps = scenario == "custom-props";
         bool overrideSharedOutputPath = scenario == "escaped-output" || scenario == "shadowed-verifier" ||
-            scenario == "mutated-isolation-marker";
+            scenario == "mutated-isolation-marker" || scenario == "apostrophe-escaped-output";
         bool overrideSharedOutDir = scenario == "escaped-outdir";
         bool overrideSharedAssets = scenario == "escaped-assets";
         bool shadowVerifier = scenario == "shadowed-verifier";
@@ -244,7 +247,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
             string appDirectory = Directory.CreateDirectory(Path.Combine(root, "App")).FullName;
             string bridgeDirectory = Directory.CreateDirectory(Path.Combine(root, "Bridge")).FullName;
-            string sharedDirectory = Directory.CreateDirectory(Path.Combine(root, "Shared")).FullName;
+            bool apostropheProjectPath = scenario == "apostrophe-project-path" ||
+                scenario == "apostrophe-escaped-output";
+            string sharedDirectoryName = apostropheProjectPath ? "Bob'sShared" : "Shared";
+            string sharedDirectory = Directory.CreateDirectory(Path.Combine(root, sharedDirectoryName)).FullName;
             string leafDirectory = Directory.CreateDirectory(Path.Combine(root, "Leaf")).FullName;
             string utilityDirectory = Directory.CreateDirectory(Path.Combine(root, "Utility")).FullName;
             string appProject = Path.Combine(appDirectory, "App.csproj");
@@ -254,18 +260,22 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string utilityProject = Path.Combine(utilityDirectory, "Utility.csproj");
             string? customPropsPath = null;
             string customPropsArgument = string.Empty;
-            if (customDirectoryBuildProps || environmentProps || spoofedOriginalProps)
+            if (customDirectoryBuildProps || environmentProps || spoofedOriginalProps ||
+                scenario == "missing-props-path")
             {
                 customPropsPath = Path.Combine(root, "Custom.Build.props");
-                File.WriteAllText(customPropsPath,
-                    "<Project><PropertyGroup><ContextPropsMarker>Loaded</ContextPropsMarker>" +
-                    "<ContextPropsPathMarker Condition=\"'$(DirectoryBuildPropsPath)' == '$(MSBuildThisFileFullPath)'\">Loaded</ContextPropsPathMarker>" +
-                    "</PropertyGroup></Project>");
-                if (customDirectoryBuildProps)
+                if (scenario != "missing-props-path")
+                    File.WriteAllText(customPropsPath,
+                        "<Project><PropertyGroup><ContextPropsMarker>Loaded</ContextPropsMarker>" +
+                        "<ContextPropsPathMarker Condition=\"'$(DirectoryBuildPropsPath)' == '$(MSBuildThisFileFullPath)'\">Loaded</ContextPropsPathMarker>" +
+                        "</PropertyGroup></Project>");
+                if (customDirectoryBuildProps || scenario == "missing-props-path")
                     customPropsArgument = $" -p:DirectoryBuildPropsPath=\"{customPropsPath}\"";
                 else if (spoofedOriginalProps)
                     customPropsArgument = $" -p:_PowerForgeOriginalDirectoryBuildPropsPath=\"{customPropsPath}\"";
             }
+            if (scenario == "missing-props-path")
+                Assert.False(File.Exists(customPropsPath));
             if (defaultedProperty)
                 File.WriteAllText(Path.Combine(sharedDirectory, "Directory.Build.props"),
                     "<Project><PropertyGroup><Flavor Condition=\"'$(Flavor)' == ''\">Direct</Flavor></PropertyGroup></Project>");
@@ -281,7 +291,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 : string.Empty;
             string bridgeSharedReference = caseVariantSymbols
                 ? "../shared/Shared.csproj"
-                : "../Shared/Shared.csproj";
+                : $"../{sharedDirectoryName}/Shared.csproj";
             File.WriteAllText(appProject, $"""
                 <Project Sdk="Microsoft.NET.Sdk">
                   <PropertyGroup>
@@ -291,7 +301,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                   </PropertyGroup>
                   <ItemGroup>
                     <ProjectReference Include="../Bridge/Bridge.csproj" />
-                    <ProjectReference Include="../Shared/Shared.csproj"{directContext} />
+                    <ProjectReference Include="../{sharedDirectoryName}/Shared.csproj"{directContext} />
                     {(emptySingleContextBase ? "<ProjectReference Include=\"../Utility/Utility.csproj\" />" : string.Empty)}
                   </ItemGroup>
                 </Project>
@@ -361,7 +371,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                   <Target Name="RejectSpoofedProps" BeforeTargets="Restore;Build" Condition="'{spoofedOriginalProps.ToString().ToLowerInvariant()}' == 'true'">
                     <Error Condition="'$(ContextPropsMarker)' == 'Loaded'" Text="A caller property redirected the original props import." />
                   </Target>
-                  {(targetFrameworksContext ? string.Empty : "<ItemGroup><ProjectReference Include=\"../Leaf/Leaf.csproj\" /></ItemGroup>")}
+                  {(targetFrameworksContext || apostropheProjectPath ? string.Empty : "<ItemGroup><ProjectReference Include=\"../Leaf/Leaf.csproj\" /></ItemGroup>")}
                   {contextPackages}
                   {verifierCollision}
                 {sharedProjectEnd}
@@ -391,7 +401,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     : "internal static class Program { private static void Main() { _ = Bridge.Value + Shared.Value; } }");
             File.WriteAllText(Path.Combine(bridgeDirectory, "Bridge.cs"),
                 "public static class Bridge { public static int Value => Shared.Value; }");
-            File.WriteAllText(Path.Combine(sharedDirectory, "Shared.cs"), targetFrameworksContext
+            File.WriteAllText(Path.Combine(sharedDirectory, "Shared.cs"), targetFrameworksContext ||
+                apostropheProjectPath
                 ? "public static class Shared { public const int Value = 1; }"
                 : "public static class Shared { public static int Value => Leaf.Value; }");
             File.WriteAllText(Path.Combine(leafDirectory, "Leaf.cs"),
