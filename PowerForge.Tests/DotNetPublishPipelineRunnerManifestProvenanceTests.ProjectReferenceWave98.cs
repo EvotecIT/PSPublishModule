@@ -187,11 +187,13 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
     [Trait("Category", "DotNetPublishPrGate")]
     public void ReadSourceProvenance_RestoresEverySelectedFrameworkForSharedMultiTargetReference(
-        bool distinctRestoreContexts)
+        bool distinctRestoreContexts,
+        bool unselectedContextPackage)
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
@@ -232,10 +234,27 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                   <ItemGroup><ProjectReference Include="../Shared/Shared.csproj"{bridgeContext} /></ItemGroup>
                 </Project>
                 """);
-            File.WriteAllText(sharedProject, """
+            string contextPackages = unselectedContextPackage
+                ? """
+                  <ItemGroup Condition="'$(Flavor)' == 'Direct' and '$(TargetFramework)' == 'net10.0'">
+                    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+                  </ItemGroup>
+                  <ItemGroup Condition="'$(Flavor)' == 'Bridge' and '$(TargetFramework)' == 'net8.0'">
+                    <PackageReference Include="System.Text.Json" Version="10.0.10" />
+                  </ItemGroup>
+                  <ItemGroup Condition="'$(Flavor)' == 'Direct' and '$(TargetFramework)' == 'net8.0'">
+                    <PackageReference Include="NuGet.Versioning" Version="7.9.0" />
+                  </ItemGroup>
+                  """
+                : string.Empty;
+            File.WriteAllText(sharedProject, $"""
                 <Project Sdk="Microsoft.NET.Sdk">
-                  <PropertyGroup><TargetFrameworks>net8.0;net10.0</TargetFrameworks></PropertyGroup>
+                  <PropertyGroup>
+                    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+                    <NuGetLockFilePath Condition="'$(Flavor)' != ''">packages.$(Flavor).lock.json</NuGetLockFilePath>
+                  </PropertyGroup>
                   <ItemGroup><ProjectReference Include="../Leaf/Leaf.csproj" /></ItemGroup>
+                  {contextPackages}
                 </Project>
                 """);
             File.WriteAllText(leafProject, """
@@ -252,8 +271,20 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(Path.Combine(leafDirectory, "Leaf.cs"),
                 "public static class Leaf { public const int Value = 1; }");
             File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
+            if (unselectedContextPackage)
+            {
+                RunDotNet(root,
+                    $"restore \"{sharedProject}\" --use-lock-file --nologo -p:Flavor=Direct -p:TargetFrameworks=net10.0");
+                RunDotNet(root,
+                    $"restore \"{sharedProject}\" --use-lock-file --nologo -p:Flavor=Bridge -p:TargetFrameworks=net8.0");
+            }
             RunDotNet(root,
                 $"restore \"{appProject}\" -r linux-x64 --use-lock-file --nologo -p:SelfContained=false");
+            if (unselectedContextPackage)
+            {
+                Assert.Contains("Newtonsoft.Json", File.ReadAllText(Path.Combine(sharedDirectory, "packages.Direct.lock.json")));
+                Assert.Contains("System.Text.Json", File.ReadAllText(Path.Combine(sharedDirectory, "packages.Bridge.lock.json")));
+            }
             RunGit(root, "add .");
             RunGit(root, "commit -m \"approved multi-framework graph\"");
             string revision = RunGit(root, "rev-parse HEAD").Trim();

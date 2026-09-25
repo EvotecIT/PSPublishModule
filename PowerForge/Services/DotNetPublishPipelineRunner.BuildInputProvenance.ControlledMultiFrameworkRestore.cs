@@ -56,6 +56,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string controlledNuGetConfig,
         string offlinePackageSourceList,
         string controlledOutputRoot,
+        string? restoreContextProps,
         out string? failureReason)
     {
         failureReason = null;
@@ -100,6 +101,7 @@ public sealed partial class DotNetPublishPipelineRunner
         arguments.Add("-p:_DisableNuGetRestoreTargetFrameworksOverride=true");
         arguments.Add("-p:BuildProjectReferences=false");
         arguments.Add("-p:RestoreRecursive=false");
+        AppendControlledRestoreContextProps(arguments, restoreContextProps);
         AppendControlledProofSafeguards(
             arguments,
             controlledNuGetConfig,
@@ -137,14 +139,21 @@ public sealed partial class DotNetPublishPipelineRunner
     }
 
     private static string BuildControlledRestoreContextKey(ControlledPublishGraphNode node)
-        => string.Join(
-            "\n",
-            node.Request.ReadEffectiveGlobalProperties()
-                .Where(property =>
-                    !property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) &&
-                    !property.Key.Equals("TargetFrameworks", StringComparison.OrdinalIgnoreCase))
-                .OrderBy(property => property.Key, StringComparer.OrdinalIgnoreCase)
-                .Select(property => property.Key.ToUpperInvariant() + "=" + property.Value));
+        => BuildControlledRestoreContextKey(node.Request);
+
+    private static string BuildControlledRestoreContextKey(ProjectEvaluationRequest request)
+    {
+        var key = new System.Text.StringBuilder();
+        foreach (KeyValuePair<string, string> property in request.ReadEffectiveGlobalProperties()
+                     .Where(property =>
+                         !property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase))
+                     .OrderBy(property => property.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            AppendProjectReferenceKeySegment(key, property.Key.ToUpperInvariant());
+            AppendProjectReferenceKeySegment(key, property.Value);
+        }
+        return key.ToString();
+    }
 
     private static bool TryBuildControlledPublishGraphNode(
         ControlledPublishGraphNode node,
@@ -155,6 +164,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string controlledNuGetConfig,
         string offlinePackageSourceList,
         string controlledOutputRoot,
+        string? restoreContextProps,
         out string? failureReason)
     {
         failureReason = null;
@@ -197,6 +207,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
         arguments.Add("-p:BuildProjectReferences=false");
         arguments.Add("-p:RestoreRecursive=false");
+        AppendControlledRestoreContextProps(arguments, restoreContextProps);
         if (!TryBuildControlledPathMap(
                 controlledSourceRoot,
                 originalGitRoot,
