@@ -94,6 +94,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
                array.SubExpression.Statements.Any(static statement => statement is AssignmentStatementAst),
                searchNestedScriptBlocks: false) is not null ||
            RequiresNativeStatementArrayCapture(function) ||
+           RequiresNativeDirectForEachCapture(function) ||
            function.Body.Find(node => node is ConvertExpressionAst conversion &&
                conversion.Type.TypeName.GetReflectionType() is { } targetType &&
                !PowerShellCompilationParameterTypePolicy.CanUseInMethod(targetType, targetFramework, capabilities),
@@ -126,6 +127,22 @@ internal static class PowerShellNativeFunctionBindingPolicy
             collection.SubExpression.FindAll(static nested => nested is ForEachStatementAst,
                 searchNestedScriptBlocks: false).Any() &&
             !IsPotentialStableScalarVectorCapture(assignment, collection),
+            searchNestedScriptBlocks: false) is not null;
+
+    // A direct foreach assigned to [Array] is statement-output capture, not
+    // a CLR array expression. Select native binding so the existing collector
+    // can preserve zero/one/many success records and the authored constraint.
+    private static bool RequiresNativeDirectForEachCapture(FunctionDefinitionAst function)
+        => function.Body.Find(static node => node is AssignmentStatementAst
+            {
+                Operator: TokenKind.Equals,
+                Right: ForEachStatementAst,
+                Left: AttributedExpressionAst
+                {
+                    Attribute: TypeConstraintAst constraint,
+                    Child: VariableExpressionAst { VariablePath.IsUnqualified: true }
+                }
+            } && constraint.TypeName.GetReflectionType() == typeof(Array),
             searchNestedScriptBlocks: false) is not null;
 
     // The existing guarded stable-vector region owns this narrower shape. Merely

@@ -7,6 +7,65 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
+    public void NativeDirectForEachArrayCapture_PreservesZeroOneAndManyRecords(string framework, string host)
+    {
+        using var fixture = ArtifactFixture.Create(
+            """
+            function Get-DirectCapture {
+                [CmdletBinding()]
+                param([object[]] $Items)
+                [Array] $Output = foreach ($Item in $Items) { $Item }
+                return ,$Output
+            }
+            function Get-DirectCaptureFailure {
+                [CmdletBinding()]
+                param([object[]] $Items)
+                [Array] $Output = @('before')
+                try {
+                    [Array] $Output = foreach ($Item in $Items) {
+                        if ($Item -eq 'bad') { throw 'failed' }
+                        $Item
+                    }
+                } catch { }
+                return ,$Output
+            }
+            """, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.DirectForEachCapture",
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(2, result.Manifest!.CompiledMethods);
+
+        const string probe = """
+            foreach ($case in @(@(), @('one'), @('one', $null, 'three'))) {
+                $result = Get-DirectCapture -Items $case
+                [pscustomobject]@{
+                    Type = if ($null -eq $result) { '<null>' } else { $result.GetType().FullName }
+                    Count = if ($null -eq $result) { -1 } else { $result.Count }
+                    Values = @($result | ForEach-Object { if ($null -eq $_) { '<null>' } else { [string] $_ } })
+                } | ConvertTo-Json -Compress -Depth 5
+            }
+            foreach ($case in @(@('one', 'two'), @('one', 'bad', 'three'))) {
+                $result = Get-DirectCaptureFailure -Items $case
+                [pscustomobject]@{FailureCase = $case -join '|'; Values = @($result)} |
+                    ConvertTo-Json -Compress -Depth 5
+            }
+            """;
+        var original = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+            fixture.RootPath, "original-direct-foreach-capture");
+        var compiled = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
+            fixture.RootPath, "compiled-direct-foreach-capture");
+        Assert.True(original.ExitCode == 0 && compiled.ExitCode == 0,
+            original.StandardError + compiled.StandardError);
+        Assert.Equal(original.StandardOutput, compiled.StandardOutput);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
     public void NativeOutputCapture_PreservesRecordsAndAssignmentFailures(string framework, string host)
     {
         var loops = new[] {
