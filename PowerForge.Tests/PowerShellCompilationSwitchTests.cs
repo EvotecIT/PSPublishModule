@@ -7,6 +7,60 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void NativeStringParameterSwitch_PreservesOriginalMatchingAndInvocationStorage(string framework, string host)
+    {
+        using var fixture = ArtifactFixture.Create(
+            """
+            function Get-NativeStringSwitch {
+                [CmdletBinding()]
+                param([string] $Value)
+                $suffix = "$($Value)"
+                switch ($Value) {
+                    'ONE' { return "hit:$suffix" }
+                    default { return "miss:$suffix" }
+                }
+            }
+            function Get-ReboundNativeSwitch {
+                [CmdletBinding()]
+                param([string] $Value)
+                $suffix = "$($Value)"
+                Remove-Variable Value
+                Set-Variable Value @(1, 2)
+                switch ($Value) {
+                    1 { 'one' }
+                    2 { 'two' }
+                }
+            }
+            """, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.NativeStringSwitch",
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+
+        const string probe = """
+            foreach ($inputValue in @('one', 'ONE', 'missing', '', $null)) {
+                $output = @(Get-NativeStringSwitch -Value $inputValue)
+                'count=' + $output.Count + ';value=' + ($output -join '|')
+            }
+            $rebound = @(Get-ReboundNativeSwitch -Value 'original')
+            'rebound=' + ($rebound -join '|')
+            """;
+        var original = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+            fixture.RootPath, "original-native-string-switch");
+        var compiled = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
+            fixture.RootPath, "compiled-native-string-switch");
+        Assert.True(original.ExitCode == 0 && compiled.ExitCode == 0,
+            original.StandardError + compiled.StandardError);
+        Assert.Equal(original.StandardOutput, compiled.StandardOutput);
+    }
+
     [Fact]
     public void Build_TypedLibraryPreservesScalarSwitchMultipleMatchBreakAndDefaultSemantics()
     {

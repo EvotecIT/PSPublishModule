@@ -52,6 +52,26 @@ internal sealed partial class PowerShellSemanticBinder
             targetFramework: targetFramework,
             capabilities: capabilities);
         if (value is null) return null;
+        // Native invocation storage is intentionally object-valued. An authored
+        // [string] parameter still has a PowerShell-owned conversion constraint,
+        // so a read of that exact parameter can be used as a scalar string here.
+        // Do not infer a CLR type for untyped or merely inferred native locals.
+        if (matchMode == PowerShellBoundSwitchMatchMode.Exact &&
+            value is PowerShellBoundNativeVariableExpression nativeValue &&
+            UnwrapExpression(statement.Condition, preservePipeline: true) is VariableExpressionAst variable &&
+            variable.VariablePath.IsUnqualified &&
+            nativeValue.Name.Equals(variable.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase) &&
+            symbols.TryGetValue(nativeValue.Name, out var nativeSymbol) &&
+            nativeSymbol.Symbol.Kind == PowerShellSymbolKind.Parameter &&
+            CanRecoverNativeStringParameter(statement, nativeValue.Name, out var functionBody) &&
+            PowerShellParameterSyntax.GetParameters(functionBody).Any(parameter =>
+                parameter.Name.VariablePath.UserPath.Equals(nativeValue.Name, StringComparison.OrdinalIgnoreCase) &&
+                parameter.StaticType == typeof(string) &&
+                parameter.Attributes.OfType<TypeConstraintAst>().Any()))
+            value = new PowerShellBoundConversionExpression(value.Span,
+                new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Explicit,
+                    "The invocation-owned parameter retains its authored String constraint."), value);
+
         var valueType = value.Type.ClrType;
         if (matchMode == PowerShellBoundSwitchMatchMode.Regex && valueType != typeof(string))
         {
@@ -130,5 +150,29 @@ internal sealed partial class PowerShellSemanticBinder
             defaultBlock,
             matchMode,
             (statement.Flags & SwitchFlags.CaseSensitive) != 0);
+    }
+
+    private static bool CanRecoverNativeStringParameter(SwitchStatementAst statement, string name,
+        out ScriptBlockAst functionBody)
+    {
+        functionBody = FindOwningFunctionBody(statement)!;
+        if (functionBody is null || functionBody.BeginBlock is not null || functionBody.ProcessBlock is not null ||
+            functionBody.GetType().GetProperty("CleanBlock")?.GetValue(functionBody) is not null ||
+            functionBody.EndBlock is not { } endBlock || !endBlock.Statements.Contains(statement))
+            return false;
+
+        // A command, member call, or script block can remove and recreate even
+        // a constrained parameter variable in the active scope. The constraint
+        // then no longer proves that the switch input is scalar or a String.
+        foreach (var preceding in endBlock.Statements.TakeWhile(item => !ReferenceEquals(item, statement)))
+            if (preceding.Find(static node => node is CommandAst or InvokeMemberExpressionAst or
+                    ScriptBlockExpressionAst or FunctionDefinitionAst,
+                    searchNestedScriptBlocks: true) is not null ||
+                preceding.Find(node => node is AssignmentStatementAst assignment &&
+                    PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } target &&
+                    target.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase),
+                    searchNestedScriptBlocks: true) is not null)
+                return false;
+        return true;
     }
 }
