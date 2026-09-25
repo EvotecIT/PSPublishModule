@@ -164,6 +164,30 @@ function Assert-LiteralAgeRecipient {
     }
 }
 
+function Assert-GitBackupBranch {
+    param([Parameter(Mandatory)][string] $Branch)
+    & git -C / check-ref-format --branch $Branch > $null 2> $null
+    if ($LASTEXITCODE -ne 0) { throw 'Host backup branch is not a valid Git branch name.' }
+}
+
+function Assert-PublisherIdentityLocation {
+    param(
+        [Parameter(Mandatory)][string] $IdentityFile,
+        [Parameter(Mandatory)][string] $SshDirectory
+    )
+    if ([IO.Path]::GetDirectoryName($IdentityFile) -cne $SshDirectory) {
+        throw 'Backup repository key must be directly inside the private publisher SSH directory.'
+    }
+}
+
+function Get-HostCaptureName {
+    param([DateTimeOffset] $Now = [DateTimeOffset]::UtcNow)
+    $stamp = $Now.ToString('yyyyMMddTHHmmssZ')
+    $randomA = [Security.Cryptography.RandomNumberGenerator]::GetInt32(0, 1000000000)
+    $randomB = [Security.Cryptography.RandomNumberGenerator]::GetInt32(0, 1000000000)
+    '{0}-{1}{2:D9}{3:D9}-1' -f $stamp, $Now.ToUnixTimeMilliseconds(), $randomA, $randomB
+}
+
 function Assert-PinnedBackupDestination {
     param(
         [Parameter(Mandatory)][string] $Repository,
@@ -280,12 +304,13 @@ $accountUid = (& id -u).Trim()
 foreach ($path in @($accountFields[5], "$($accountFields[5])/.ssh", $workRoot)) {
     Assert-PrivatePublisherDirectory -Path $path -AccountUid $accountUid
 }
+Assert-PublisherIdentityLocation -IdentityFile $identityFile -SshDirectory "$($accountFields[5])/.ssh"
 $keyStat = @(& stat -c '%u %a' -- $identityFile)
 Assert-ExitCode 'Inspecting backup repository key'
 if (-not (Test-Path -LiteralPath $identityFile -PathType Leaf) -or
     ((Get-Item -LiteralPath $identityFile -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) -or
     $keyStat[0] -ne "$accountUid 600") {
-    throw 'Backup repository key must be a real mode-0600 file owned by the capture account.'
+    throw 'Backup repository key must be a real mode-0600 file owned by the publisher account.'
 }
 $engineStat = @(& stat -c '%u %a' -- $engineRoot)
 Assert-ExitCode 'Inspecting PowerForge checkout'
@@ -373,6 +398,7 @@ if ($backupRepository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' -or
 }
 Assert-PinnedBackupDestination -Repository $backupRepository -Branch $backupBranch `
     -ExpectedRepository $expectedRepository -ExpectedBranch $expectedBranch
+Assert-GitBackupBranch $backupBranch
 Assert-BackupRelativePath $backupPath
 Assert-LiteralAgeRecipient ([string]$manifest.backupTarget.recipient)
 if ($null -ne $manifest.backupTarget.retention.keepDays -or
@@ -387,8 +413,8 @@ if ($ValidateOnly) {
     return
 }
 
-$stamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ')
-$captureName = '{0}-{1}-1' -f $stamp, [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+$captureName = Get-HostCaptureName
+$stamp = $captureName.Split('-')[0]
 $stage = Join-Path $workRoot "stage-$captureName"
 $captureRoot = Join-Path $stage 'capture'
 $checkout = Join-Path $stage 'repository'

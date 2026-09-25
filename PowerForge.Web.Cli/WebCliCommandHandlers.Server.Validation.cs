@@ -578,7 +578,7 @@ internal static partial class WebCliCommandHandlers
             errors.Add("backupTarget.type must be github.");
         if (!IsRepositoryName(backupTarget.Repository))
             errors.Add("backupTarget.repository must be an owner/repository name.");
-        if (!IsSafeRepositoryRelativeValue(backupTarget.Branch, allowSlash: true))
+        if (!IsSafeGitBranchName(backupTarget.Branch))
             errors.Add("backupTarget.branch contains unsupported characters.");
         if (!IsSafeRepositoryRelativeValue(backupTarget.Path, allowSlash: true) ||
             backupTarget.Path!.Split('/').Any(static part => part.Length == 0 || part == "." || part == ".git"))
@@ -787,6 +787,15 @@ internal static partial class WebCliCommandHandlers
            !value.StartsWith("/", StringComparison.Ordinal) &&
            !value.Contains("..", StringComparison.Ordinal) &&
            value.All(character => IsAsciiLetterOrDigit(character) || character is '_' or '.' or '-' || (allowSlash && character == '/'));
+
+    private static bool IsSafeGitBranchName(string? value)
+        => IsSafeRepositoryRelativeValue(value, allowSlash: true) &&
+           !string.Equals(value, "HEAD", StringComparison.Ordinal) &&
+           !value!.StartsWith("-", StringComparison.Ordinal) &&
+           !value.EndsWith(".", StringComparison.Ordinal) &&
+           value.Split('/').All(static part => part.Length > 0 &&
+               !part.StartsWith(".", StringComparison.Ordinal) &&
+               !part.EndsWith(".lock", StringComparison.Ordinal));
 
     private static bool IsEnvironmentVariableName(string value)
         => value.Length > 0 &&

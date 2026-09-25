@@ -76,6 +76,24 @@ $recipientSafety = $ast.Find({ param($node)
 }, $true)
 if ($null -eq $recipientSafety) { throw 'Host publisher recipient function is missing.' }
 . ([scriptblock]::Create($recipientSafety.Extent.Text))
+$branchSafety = $ast.Find({ param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Assert-GitBackupBranch'
+}, $true)
+if ($null -eq $branchSafety) { throw 'Host publisher Git branch function is missing.' }
+. ([scriptblock]::Create($branchSafety.Extent.Text))
+$identityLocationSafety = $ast.Find({ param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Assert-PublisherIdentityLocation'
+}, $true)
+if ($null -eq $identityLocationSafety) { throw 'Host publisher identity-location function is missing.' }
+. ([scriptblock]::Create($identityLocationSafety.Extent.Text))
+$captureNameBuilder = $ast.Find({ param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Get-HostCaptureName'
+}, $true)
+if ($null -eq $captureNameBuilder) { throw 'Host publisher capture-name function is missing.' }
+. ([scriptblock]::Create($captureNameBuilder.Extent.Text))
 $workRootSafety = $ast.Find({ param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
     $node.Name -eq 'Assert-WorkRootLocation'
@@ -119,6 +137,31 @@ try {
         } catch {
             if ($_.Exception.Message -eq 'Uppercase age recipient passed preflight.') { throw }
         }
+    }
+    Assert-GitBackupBranch 'main'
+    foreach ($invalid in @('main/', 'main//daily', 'main.lock', 'main.', '-main', 'HEAD')) {
+        try {
+            Assert-GitBackupBranch $invalid
+            throw 'Git-invalid backup branch passed preflight.'
+        } catch {
+            if ($_.Exception.Message -eq 'Git-invalid backup branch passed preflight.') { throw }
+        }
+    }
+    $privateSsh = '/var/lib/powerforge-example-publisher/.ssh'
+    Assert-PublisherIdentityLocation -IdentityFile "$privateSsh/backup_ed25519" -SshDirectory $privateSsh
+    foreach ($invalid in @('/tmp/backup_ed25519', '/var/lib/powerforge-example-publisher/work/backup_ed25519')) {
+        try {
+            Assert-PublisherIdentityLocation -IdentityFile $invalid -SshDirectory $privateSsh
+            throw 'Publisher key outside private SSH directory passed preflight.'
+        } catch {
+            if ($_.Exception.Message -eq 'Publisher key outside private SSH directory passed preflight.') { throw }
+        }
+    }
+    $fixedTime = [DateTimeOffset]::Parse('2026-09-25T04:00:00Z')
+    $captureNames = @(1..25 | ForEach-Object { Get-HostCaptureName -Now $fixedTime })
+    if (@($captureNames | Sort-Object -Unique).Count -ne $captureNames.Count -or
+        @($captureNames | Where-Object { $_ -cnotmatch '^20260925T040000Z-\d+-1$' }).Count -ne 0) {
+        throw 'Concurrent host captures did not receive distinct catalog-compatible names.'
     }
 
     New-Item -ItemType SymbolicLink -Path (Join-Path $checkout 'ovh') -Target $outside | Out-Null

@@ -691,6 +691,32 @@ public sealed partial class ServerRecoverySecurityTests
         Assert.Contains(errors, error => error.Contains("backupTarget.recipient must be a lowercase literal age public recipient", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("main/")]
+    [InlineData("main//daily")]
+    [InlineData("main.lock")]
+    [InlineData("main.")]
+    [InlineData("-main")]
+    [InlineData("HEAD")]
+    public void ManifestValidation_RejectsGitInvalidBackupBranches(string branch)
+    {
+        var manifest = CreateManifest();
+        manifest.BackupTarget = new PowerForgeServerBackupTarget
+        {
+            Type = "github",
+            Repository = "EvotecIT/Backups",
+            Branch = branch,
+            Path = "ovh/example",
+            Encryption = "age",
+            Recipient = "age1example",
+            Retention = new PowerForgeServerBackupRetention { KeepLatestInTree = 24 }
+        };
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("backupTarget.branch contains unsupported characters", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void ManifestValidation_RequiresCompleteStrictSshRepositoryPrerequisites()
     {

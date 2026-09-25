@@ -80,6 +80,8 @@ if ($backupRepository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
 if ($backupBranch -notmatch '^[A-Za-z0-9._/-]+$' -or $backupBranch.Contains('..') -or $backupBranch.StartsWith('/')) {
     throw 'backupTarget.branch contains unsupported characters.'
 }
+& git -C / check-ref-format --branch $backupBranch > $null 2> $null
+Assert-LastExitCode 'Validating the backup Git branch'
 if ($backupPath -notmatch '^[A-Za-z0-9._/-]+$' -or $backupPath.Contains('..') -or $backupPath.StartsWith('/') -or
     @($backupPath.Split('/') | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -in @('.', '..') -or $_ -ceq '.git' }).Count -ne 0) {
     throw 'backupTarget.path must be a safe repository-relative path.'

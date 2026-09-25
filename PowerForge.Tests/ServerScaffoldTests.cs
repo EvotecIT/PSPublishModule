@@ -314,6 +314,13 @@ public sealed class ServerScaffoldTests
         unsafeBackupLocation["backupTarget"]!["path"] = "/absolute";
         Assert.False(EvaluateSchema(schema, unsafeBackupLocation));
 
+        foreach (var invalidBranch in new[] { "main/", "main//daily", "main.lock", "main.", "-main", "HEAD" })
+        {
+            var invalidBackupBranch = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+            invalidBackupBranch["backupTarget"]!["branch"] = invalidBranch;
+            Assert.False(EvaluateSchema(schema, invalidBackupBranch));
+        }
+
         foreach (var invalidPath in new[] { "backups/", "backups//daily", ".git/backups", "backups/.git/daily", "backups\n" })
         {
             var invalidBackupPath = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
