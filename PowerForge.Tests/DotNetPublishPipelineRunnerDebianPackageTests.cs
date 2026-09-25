@@ -194,6 +194,7 @@ public sealed class DotNetPublishPipelineRunnerDebianPackageTests
             string package = Path.Combine(root, "artifacts", "officeimo-studio_0.1.0_amd64.deb");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Installers = new[]
                 {
@@ -277,6 +278,7 @@ public sealed class DotNetPublishPipelineRunnerDebianPackageTests
         options.IconPath = null;
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             ProjectRoot = root,
             Installers = new[]
             {

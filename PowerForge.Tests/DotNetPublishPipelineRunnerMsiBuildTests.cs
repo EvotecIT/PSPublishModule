@@ -412,6 +412,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             };
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>(StringComparer.OrdinalIgnoreCase)
                 {
@@ -452,6 +453,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             File.WriteAllText(statePath, "{ malformed");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>(StringComparer.OrdinalIgnoreCase)
@@ -1830,6 +1832,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release"
             };
@@ -1873,6 +1876,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release"
             };
@@ -1938,6 +1942,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release"
             };
@@ -2331,6 +2336,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Installers = new[]
                 {
@@ -2378,6 +2384,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Installers = new[]
                 {
@@ -2429,6 +2436,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 AllowOutputOutsideProjectRoot = false,
                 Configuration = "Release"
@@ -2480,6 +2488,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 AllowOutputOutsideProjectRoot = false,
                 Configuration = "Release"
@@ -2532,6 +2541,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 AllowOutputOutsideProjectRoot = false,
                 Configuration = "Release"
@@ -2579,6 +2589,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 AllowOutputOutsideProjectRoot = false,
                 Configuration = "Release"
@@ -2626,6 +2637,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 AllowOutputOutsideProjectRoot = false,
                 Configuration = "Release"
@@ -2670,6 +2682,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 AllowOutputOutsideProjectRoot = false,
                 Configuration = "Release"
@@ -2794,6 +2807,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release"
             };
@@ -2837,6 +2851,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release"
             };
@@ -2895,6 +2910,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Debug",
                 Installers = new[]
@@ -2961,6 +2977,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release"
             };

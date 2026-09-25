@@ -260,6 +260,7 @@ public sealed class DotNetPublishPipelineRunnerHookTests
             new DotNetPublishPipelineRunner(new NullLogger()).RunCommandHook(
                 new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Configuration = "Release"
                 },
@@ -561,6 +562,7 @@ public sealed class DotNetPublishPipelineRunnerHookTests
                 new DotNetPublishPipelineRunner(new NullLogger()).RunCommandHook(
                     new DotNetPublishPlan
                     {
+                        UseControlledSourceProvenance = true,
                         ProjectRoot = root,
                         Configuration = "Release"
                     },

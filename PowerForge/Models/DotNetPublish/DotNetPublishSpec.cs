@@ -1207,6 +1207,12 @@ public sealed class DotNetPublishDotNetOptions
     public bool NoBuildInPublish { get; set; } = true;
 
     /// <summary>
+    /// Opts into the controlled-checkout build-input proof. Normal publishing uses the selected
+    /// working tree and still verifies the resulting signed artifacts and source state.
+    /// </summary>
+    public bool UseControlledSourceProvenance { get; set; }
+
+    /// <summary>
     /// Default runtime identifiers to publish for (when a target does not specify its own runtimes).
     /// </summary>
     public string[] Runtimes { get; set; } = Array.Empty<string>();

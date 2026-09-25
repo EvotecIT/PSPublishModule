@@ -65,6 +65,9 @@ public sealed class DotNetPublishPlan
     /// <summary>When true, uses --no-build during publish.</summary>
     public bool NoBuildInPublish { get; set; }
 
+    /// <summary>Opt-in controlled-checkout verification of evaluated build inputs.</summary>
+    public bool UseControlledSourceProvenance { get; set; }
+
     /// <summary>Resolved MSBuild properties.</summary>
     public Dictionary<string, string> MsBuildProperties { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 

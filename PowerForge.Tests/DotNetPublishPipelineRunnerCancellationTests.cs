@@ -10,6 +10,7 @@ public sealed class DotNetPublishPipelineRunnerCancellationTests
         var runner = new DotNetPublishPipelineRunner(new NullLogger(), processRunner);
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             ProjectRoot = Directory.GetCurrentDirectory(),
             SolutionPath = "Sample.sln",
             Steps =
@@ -51,6 +52,7 @@ public sealed class DotNetPublishPipelineRunnerCancellationTests
             var startedPath = Path.Combine(root, "hook-started.txt");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 Steps =

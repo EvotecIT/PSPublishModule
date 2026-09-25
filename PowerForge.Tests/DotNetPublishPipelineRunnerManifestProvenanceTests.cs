@@ -24,6 +24,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(scriptPath, "param($InputPath)");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Bundles =
                 [
@@ -79,6 +80,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(commandPath, "param()");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Steps =
                 [
@@ -142,6 +144,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(Path.Combine(generatedProjectDirectory, "Product.wxs"), "<Wix />");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Outputs = new DotNetPublishOutputs
                 {
@@ -266,6 +269,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             var manifestPath = Path.Combine(root, "Artifacts", "manifest.json");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Outputs = new DotNetPublishOutputs { ManifestJsonPath = manifestPath },
                 Installers =
@@ -328,6 +332,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             var manifestPath = Path.Combine(root, "Artifacts", "manifest.json");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Outputs = new DotNetPublishOutputs { ManifestJsonPath = manifestPath },
                 MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>
@@ -407,6 +412,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             var manifestPath = Path.Combine(root, "Artifacts", "manifest.json");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Outputs = new DotNetPublishOutputs { ManifestJsonPath = manifestPath },
                 MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>
@@ -461,6 +467,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             var manifestPath = Path.Combine(root, "Artifacts", "manifest.json");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Outputs = new DotNetPublishOutputs { ManifestJsonPath = manifestPath },
                 Steps =
@@ -638,6 +645,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunGit(root, "commit -m \"test source\"");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>
                 {
@@ -726,6 +734,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             var versionStatePath = Path.Combine(root, "Build", "versioning", "app.msi.state.json");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Installers =
                 [
@@ -807,6 +816,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string checksumsPath = Path.Combine(root, "Artifacts", "SHA256SUMS.txt");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 ConfigurationInputPaths = new[] { releaseConfig, publishConfig },
                 GeneratedConfigurationInputPaths = new[] { releaseConfig },
@@ -938,6 +948,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string manifestPath = Path.Combine(root, "Artifacts", "manifest.json");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Targets =
                 [
@@ -1143,6 +1154,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string outputDirectory = Directory.CreateDirectory(Path.Combine(root, "Artifacts", "app")).FullName;
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 SourceRevision = plannedRevision
             };
@@ -1433,6 +1445,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(generatorOutput, "stale generated analyzer");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 Targets =
@@ -1508,6 +1521,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunGit(root, "commit -m \"approved source\"");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 Targets =
@@ -1851,6 +1865,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string outputDirectory = Path.Combine(root, "Artifacts", "app");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 SourceRevision = revision
             };
@@ -1899,6 +1914,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 }));
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 SourceRevision = revision,
                 Targets =
@@ -2318,6 +2334,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             };
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Targets =
                 [

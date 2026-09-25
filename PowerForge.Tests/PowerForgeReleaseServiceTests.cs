@@ -2042,6 +2042,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     plannedToolTargets = request.Targets;
                     return new DotNetPublishPlan
                     {
+                        UseControlledSourceProvenance = true,
                         ProjectRoot = root,
                         Configuration = "Release",
                         Targets = new[]
@@ -2257,6 +2258,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     plannedToolTargets = request.Targets;
                     return new DotNetPublishPlan
                     {
+                        UseControlledSourceProvenance = true,
                         ProjectRoot = root,
                         Configuration = "Release",
                         Targets = new[]
@@ -2349,6 +2351,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     plannedToolTargets = request.Targets;
                     return new DotNetPublishPlan
                     {
+                        UseControlledSourceProvenance = true,
                         ProjectRoot = root,
                         Configuration = "Release",
                         Targets = new[]
@@ -3152,6 +3155,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 }, configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Configuration = "Release",
                     MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -4534,6 +4538,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = Path.GetTempPath(),
                     Configuration = "Release",
                     Targets = new[]
@@ -4742,6 +4747,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
             planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = Path.GetTempPath(),
                 Configuration = "Release"
             },
@@ -4807,6 +4813,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
             planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release"
             },
@@ -4917,6 +4924,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Targets =
                     [
@@ -4976,6 +4984,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Targets = [new DotNetPublishTargetPlan { Name = "Studio", Version = "0.1.1" }]
                 },
@@ -5121,6 +5130,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Configuration = "Release",
                     Targets = new[]
@@ -5258,6 +5268,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = Path.GetTempPath(),
                     Configuration = "Release",
                     Targets = new[]
@@ -5398,6 +5409,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Configuration = "Release",
                     Targets = new[]
@@ -5548,6 +5560,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Configuration = "Release",
                     ConfigurationInputPaths = new[] { authorizedConfig },
@@ -5735,6 +5748,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Configuration = "Release",
                     Targets = new[]
@@ -5867,6 +5881,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Configuration = "Release",
                     Targets = new[]
@@ -6057,6 +6072,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Configuration = "Release",
                     Targets = Array.Empty<DotNetPublishTargetPlan>()
@@ -6132,6 +6148,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Configuration = "Release",
                     Targets = new[]
@@ -6275,6 +6292,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Configuration = "Release",
                     Targets = new[]
@@ -6426,6 +6444,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Configuration = "Release",
                     Targets = new[]
@@ -6607,6 +6626,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Configuration = "Release",
                     Targets = new[]
@@ -6777,6 +6797,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Configuration = "Release",
                     Targets = new[]
@@ -6911,6 +6932,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Configuration = "Release",
                     Targets = new[]
@@ -7034,6 +7056,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Configuration = "Release",
                     Targets = new[]
@@ -7157,6 +7180,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Configuration = "Release",
                     Targets = new[]
@@ -7357,6 +7381,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Configuration = "Release"
                 },

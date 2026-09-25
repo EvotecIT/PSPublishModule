@@ -52,6 +52,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             EnvironmentVariables = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
             {
                 ["PATH"] = "untrusted-native-toolchain"

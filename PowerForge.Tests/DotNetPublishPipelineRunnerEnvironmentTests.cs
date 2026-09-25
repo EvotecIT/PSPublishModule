@@ -40,6 +40,7 @@ public sealed class DotNetPublishPipelineRunnerEnvironmentTests
                 configPath: null);
 
             Assert.Equal("token-value", plan.EnvironmentVariables["LICENSING_PACKAGES_TOKEN"]);
+            Assert.False(plan.UseControlledSourceProvenance);
         }
         finally
         {
@@ -64,6 +65,7 @@ public sealed class DotNetPublishPipelineRunnerEnvironmentTests
                         Restore = false,
                         Build = false,
                         Runtimes = new[] { "win-x64" },
+                        UseControlledSourceProvenance = true,
                         EnvironmentVariables = new Dictionary<string, DotNetPublishEnvironmentVariable>(StringComparer.OrdinalIgnoreCase)
                         {
                             ["DETERMINISTIC_BUILD_VALUE"] = new()
@@ -84,6 +86,7 @@ public sealed class DotNetPublishPipelineRunnerEnvironmentTests
 
             Assert.Contains("DETERMINISTIC_BUILD_VALUE", plan.ControlledBuildEnvironmentVariableNames);
             Assert.DoesNotContain("PRIVATE_BUILD_TOKEN", plan.ControlledBuildEnvironmentVariableNames);
+            Assert.True(plan.UseControlledSourceProvenance);
         }
         finally
         {

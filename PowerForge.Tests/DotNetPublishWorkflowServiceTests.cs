@@ -39,6 +39,7 @@ public sealed class DotNetPublishWorkflowServiceTests
         var logger = new CollectingLogger();
         var expectedPlan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Steps = new[] { new DotNetPublishStep() },
             Targets = new[] { new DotNetPublishTargetPlan { Name = "App" } }
         };
