@@ -137,6 +137,41 @@ function Assert-PinnedBackupDestination {
     }
 }
 
+function Assert-WorkRootLocation {
+    param(
+        [Parameter(Mandatory)][string] $Path,
+        [Parameter(Mandatory)][string] $ExpectedUser
+    )
+    if ($Path.EndsWith('/', [StringComparison]::Ordinal) -or
+        -not $Path.StartsWith("/var/lib/$ExpectedUser/", [StringComparison]::Ordinal)) {
+        throw 'Backup work directory must be beneath the writable publisher directory without a trailing separator.'
+    }
+}
+
+function Assert-PrivatePublisherDirectory {
+    param(
+        [Parameter(Mandatory)][string] $Path,
+        [Parameter(Mandatory)][string] $AccountUid
+    )
+    $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Publisher directory must be a real directory: $Path"
+    }
+    $ownerAndMode = @(& stat -c '%u %a' -- $Path)
+    Assert-ExitCode 'Inspecting publisher directory'
+    if ($ownerAndMode.Count -ne 1 -or $ownerAndMode[0] -ne "$AccountUid 700") {
+        throw "Publisher directory must be owned by the publisher and mode 0700: $Path"
+    }
+}
+
+function Assert-HostCaptureLockBudget {
+    param([Parameter(Mandatory)][object] $Manifest)
+    $count = if ($null -eq $Manifest.operationLocks) { 0 } else { @($Manifest.operationLocks).Count }
+    if ($count -gt 8) {
+        throw 'Host publisher supports at most eight operation locks within its six-hour service timeout.'
+    }
+}
+
 function Remove-AbandonedBackupStage {
     [CmdletBinding(SupportsShouldProcess)]
     param([Parameter(Mandatory)][string] $WorkRoot)
@@ -186,18 +221,25 @@ foreach ($path in @($manifestPath, $engineRoot, $workRoot, $identityFile, $known
 Assert-RootControlledFile $manifestPath 'Recovery manifest'
 Assert-RootControlledFile $knownHostsFile 'GitHub known-hosts file'
 Assert-ReadableKnownHostFile $knownHostsFile
-$expectedUser = "powerforge-$lane-backup"
+$expectedUser = "powerforge-$lane-publisher"
 if ((& id -un) -ne $expectedUser) { throw "Host backup must run as $expectedUser." }
-if (-not $workRoot.StartsWith("/var/lib/$expectedUser/", [StringComparison]::Ordinal)) {
-    throw 'Backup work directory must be beneath the writable service-account directory.'
+$account = @(& getent passwd $expectedUser)
+Assert-ExitCode 'Inspecting publisher account'
+$accountFields = $account[0].Split(':')
+if ($account.Count -ne 1 -or $accountFields.Count -ne 7 -or
+    $accountFields[5] -ne "/var/lib/$expectedUser" -or
+    $accountFields[6] -notin @('/usr/sbin/nologin', '/sbin/nologin')) {
+    throw 'Host publisher account must have a dedicated home and nologin shell.'
 }
+foreach ($path in @("$($accountFields[5])/.ssh/authorized_keys", "$($accountFields[5])/.ssh/authorized_keys2")) {
+    if ($null -ne (Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue)) {
+        throw 'Host publisher account must not accept SSH authorized keys.'
+    }
+}
+Assert-WorkRootLocation -Path $workRoot -ExpectedUser $expectedUser
 $accountUid = (& id -u).Trim()
-$workStat = @(& stat -c '%u %a' -- $workRoot)
-Assert-ExitCode 'Inspecting backup work directory'
-if (-not (Test-Path -LiteralPath $workRoot -PathType Container) -or
-    ((Get-Item -LiteralPath $workRoot -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) -or
-    $workStat[0] -ne "$accountUid 700") {
-    throw 'Backup work directory must be a real mode-0700 directory owned by the capture account.'
+foreach ($path in @($accountFields[5], "$($accountFields[5])/.ssh", $workRoot)) {
+    Assert-PrivatePublisherDirectory -Path $path -AccountUid $accountUid
 }
 $keyStat = @(& stat -c '%u %a' -- $identityFile)
 Assert-ExitCode 'Inspecting backup repository key'
@@ -236,8 +278,16 @@ $runtimeRoot = Join-Path $engineRoot 'PowerForge.Web.Cli/bin/Release/net10.0'
 $cli = Join-Path $runtimeRoot 'PowerForge.Web.Cli.dll'
 $support = Join-Path $engineRoot '.github/actions/powerforge-server-backup/PowerForgeBackupSupport.ps1'
 $catalog = Join-Path $engineRoot '.github/actions/powerforge-server-backup/PowerForgeBackupCatalog.ps1'
+$sourceEncryptionHelper = Join-Path $engineRoot 'Deployment/Linux/powerforge-server-encrypted-capture.sh'
+$installedEncryptionHelper = '/usr/local/sbin/powerforge-server-encrypted-capture'
 Assert-RootControlledPath $runtimeRoot 'PowerForge runtime directory'
-foreach ($path in @($cli, $support, $catalog)) { Assert-RootControlledFile $path 'PowerForge runtime file' }
+foreach ($path in @($cli, $support, $catalog, $sourceEncryptionHelper, $installedEncryptionHelper)) {
+    Assert-RootControlledFile $path 'PowerForge runtime file'
+}
+if ((Get-FileHash -LiteralPath $sourceEncryptionHelper -Algorithm SHA256).Hash -cne
+    (Get-FileHash -LiteralPath $installedEncryptionHelper -Algorithm SHA256).Hash) {
+    throw 'Installed encrypted capture helper does not match the pinned engine revision.'
+}
 $runtimeItems = @(Get-ChildItem -LiteralPath $runtimeRoot -Recurse -Force -ErrorAction Stop)
 if ($runtimeItems.Count -eq 0) { throw 'PowerForge runtime directory is empty.' }
 foreach ($item in $runtimeItems) {
@@ -266,6 +316,7 @@ if ($actualRuntimeSha256 -ne $runtimeSha256) {
 . $catalog
 
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+Assert-HostCaptureLockBudget $manifest
 $backupRepository = [string]$manifest.backupTarget.repository
 $backupBranch = [string]$manifest.backupTarget.branch
 $backupPath = ([string]$manifest.backupTarget.path).Replace('\', '/')
@@ -339,7 +390,7 @@ try {
     $hashLines | Set-Content -LiteralPath (Join-Path $captureRoot 'SHA256SUMS.txt') -Encoding utf8NoBOM
 
     $env:GIT_CONFIG_GLOBAL = '/dev/null'
-    $env:GIT_SSH_COMMAND = "/usr/bin/ssh -i $identityFile -o UserKnownHostsFile=$knownHostsFile -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes"
+    $env:GIT_SSH_COMMAND = "/usr/bin/ssh -F /dev/null -i $identityFile -o UserKnownHostsFile=$knownHostsFile -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o IdentityAgent=none -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=3"
     Invoke-GitWithRetry -Operation 'Cloning private backup repository' -ResetPath $checkout -Arguments @(
         'clone', '--depth', '1', '--no-tags', '--single-branch', '--branch', $backupBranch,
         "git@github.com:$backupRepository.git", $checkout)

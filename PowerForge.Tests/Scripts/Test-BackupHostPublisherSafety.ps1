@@ -10,6 +10,12 @@ $parseErrors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile(
     (Resolve-Path $scriptPath).Path, [ref]$tokens, [ref]$parseErrors)
 if ($parseErrors.Count -ne 0) { throw 'Host publisher did not parse.' }
+$exitCheck = $ast.Find({ param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Assert-ExitCode'
+}, $true)
+if ($null -eq $exitCheck) { throw 'Host publisher exit-code helper is missing.' }
+. ([scriptblock]::Create($exitCheck.Extent.Text))
 $safety = $ast.Find({ param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
     $node.Name -eq 'Assert-SafeBackupTarget'
@@ -46,6 +52,24 @@ $knownHostsSafety = $ast.Find({ param($node)
 }, $true)
 if ($null -eq $knownHostsSafety) { throw 'Host publisher known-hosts function is missing.' }
 . ([scriptblock]::Create($knownHostsSafety.Extent.Text))
+$workRootSafety = $ast.Find({ param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Assert-WorkRootLocation'
+}, $true)
+if ($null -eq $workRootSafety) { throw 'Host publisher work-root function is missing.' }
+. ([scriptblock]::Create($workRootSafety.Extent.Text))
+$privateDirectorySafety = $ast.Find({ param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Assert-PrivatePublisherDirectory'
+}, $true)
+if ($null -eq $privateDirectorySafety) { throw 'Host publisher private-directory function is missing.' }
+. ([scriptblock]::Create($privateDirectorySafety.Extent.Text))
+$lockBudgetSafety = $ast.Find({ param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Assert-HostCaptureLockBudget'
+}, $true)
+if ($null -eq $lockBudgetSafety) { throw 'Host publisher lock-budget function is missing.' }
+. ([scriptblock]::Create($lockBudgetSafety.Extent.Text))
 . (Join-Path $PSScriptRoot '../../.github/actions/powerforge-server-backup/PowerForgeBackupCatalog.ps1')
 
 $fixture = Join-Path ([IO.Path]::GetTempPath()) ('powerforge-backup-path-' + [Guid]::NewGuid().ToString('N'))
@@ -106,6 +130,35 @@ try {
     Assert-CaptureWithinRetention -Captures $captures -CaptureName $newer -KeepLatest 1
     Assert-PinnedBackupDestination -Repository 'Owner/Backups' -Branch 'main' `
         -ExpectedRepository 'Owner/Backups' -ExpectedBranch 'main'
+    Assert-WorkRootLocation -Path '/var/lib/powerforge-example-publisher/work' `
+        -ExpectedUser 'powerforge-example-publisher'
+    foreach ($invalid in @('/var/lib/powerforge-example-publisher/work/', '/tmp/powerforge-example-publisher/work')) {
+        try {
+            Assert-WorkRootLocation -Path $invalid -ExpectedUser 'powerforge-example-publisher'
+            throw 'Unsafe publisher work root passed preflight.'
+        } catch {
+            if ($_.Exception.Message -eq 'Unsafe publisher work root passed preflight.') { throw }
+        }
+    }
+    $privateDirectory = Join-Path $fixture 'private'
+    New-Item -ItemType Directory -Path $privateDirectory | Out-Null
+    & chmod 700 -- $privateDirectory
+    Assert-PrivatePublisherDirectory -Path $privateDirectory -AccountUid (& id -u).Trim()
+    & chmod 755 -- $privateDirectory
+    try {
+        Assert-PrivatePublisherDirectory -Path $privateDirectory -AccountUid (& id -u).Trim()
+        throw 'World-readable publisher directory passed preflight.'
+    } catch {
+        if ($_.Exception.Message -eq 'World-readable publisher directory passed preflight.') { throw }
+    }
+    & chmod 700 -- $privateDirectory
+    Assert-HostCaptureLockBudget ([pscustomobject]@{ operationLocks = 1..8 })
+    try {
+        Assert-HostCaptureLockBudget ([pscustomobject]@{ operationLocks = 1..9 })
+        throw 'Over-budget manifest locks passed preflight.'
+    } catch {
+        if ($_.Exception.Message -eq 'Over-budget manifest locks passed preflight.') { throw }
+    }
     try {
         Assert-PinnedBackupDestination -Repository 'Owner/Backups' -Branch 'Main' `
             -ExpectedRepository 'Owner/Backups' -ExpectedBranch 'main'
