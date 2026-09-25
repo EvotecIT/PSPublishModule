@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Management.Automation.Language;
 
 namespace PowerForge.Tests;
 
@@ -153,6 +154,84 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
             "[Console]::Write(\"$($command.OutputType[0].Name)|$($command.OutputType[0].Type.FullName)|$(Get-DeclaredValue)\")");
 
         Assert.Equal((0, $"{advisoryTypeName}|{advisoryTypeName}|Ada", string.Empty), Normalize(run));
+    }
+
+    [Theory]
+    [InlineData("net10.0", "pwsh")]
+    [InlineData("net472", "powershell")]
+    public void Build_BinaryModulePreservesUnresolvedStringOutputTypeAsAdvisoryMetadata(
+        string targetFramework,
+        string host)
+    {
+        using var fixture = Fixture.Create(
+            "function Get-DeclaredValue { [OutputType('PSScriptTools.Widget')] param() return 41 }; Export-ModuleMember -Function Get-DeclaredValue",
+            ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.StringOutput", "CompiledPowerShell", targetFramework);
+
+        var method = Assert.Single(typed.Methods);
+        Assert.Equal("PSScriptTools.Widget", method.DeclaredOutputType);
+        Assert.False(method.DeclaredOutputTypeIsSemanticContract);
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.StringOutput",
+            PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true)
+        {
+            TargetFramework = targetFramework
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        const string observation = "$command = Get-Command Get-DeclaredValue; " +
+                                   "[Console]::Write(\"$($command.OutputType[0].Name)|$($command.OutputType[0].Type.FullName)|$((Get-DeclaredValue).GetType().FullName)|$(Get-DeclaredValue)\")";
+        var originalPath = fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal);
+        var generatedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var original = Run(host, "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{originalPath}' -Force; " + observation);
+        var generated = Run(host, "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{generatedPath}' -Force; " + observation);
+        Assert.Equal((0, "PSScriptTools.Widget||System.Int32|41", string.Empty), Normalize(original));
+        Assert.Equal(Normalize(original), Normalize(generated));
+    }
+
+    [Theory]
+    [InlineData("[OutputType('First', 'Second')]")]
+    [InlineData("[OutputType('First', ParameterSetName = 'One')]")]
+    [InlineData("[OutputType(' ')]")]
+    public void Transpile_DoesNotAdmitOtherOutputTypeStringShapesWithoutTheirMetadataContract(
+        string attribute)
+    {
+        using var fixture = Fixture.Create(
+            $"function Get-DeclaredValue {{ {attribute} param() return 41 }}; Export-ModuleMember -Function Get-DeclaredValue",
+            ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.UnrepresentedOutput", "CompiledPowerShell", "net10.0");
+
+        Assert.DoesNotContain(typed.Methods, static method => method.SourceName == "Get-DeclaredValue");
+        Assert.Contains(typed.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.ParameterMetadata);
+    }
+
+    [Fact]
+    public void Resolve_StringOutputTypeRequiresAdvisoryMetadataCapability()
+    {
+        var ast = Parser.ParseInput("function Get-Value { [OutputType('Widget')] param() return 41 }", out _, out _);
+        var function = Assert.Single(ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+            .OfType<FunctionDefinitionAst>());
+
+        foreach (var capabilities in new[]
+                 {
+                     PowerShellCompilationCapabilities.TypedLibrary,
+                     PowerShellCompilationCapabilities.TypedExecutable
+                 })
+            Assert.False(PowerShellOutputTypeSemanticPolicy.TryResolve(
+                function.Body, "net10.0", capabilities, out _, out _, out _));
+        Assert.True(PowerShellOutputTypeSemanticPolicy.TryResolve(
+            function.Body, "net10.0", PowerShellCompilationCapabilities.BinaryModule,
+            out var contract, out _, out _));
+        Assert.Null(contract.SemanticType);
+        Assert.Equal("Widget", contract.MetadataTypeName);
     }
 
     [Fact]

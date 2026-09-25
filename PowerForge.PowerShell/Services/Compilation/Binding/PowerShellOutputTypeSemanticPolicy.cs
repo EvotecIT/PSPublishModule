@@ -49,6 +49,17 @@ internal static class PowerShellOutputTypeSemanticPolicy
         contract = Contract.None;
         errorNode = null;
         error = null;
+        if (attribute.NamedArguments.Count == 0 &&
+            attribute.PositionalArguments.Count == 1 &&
+            attribute.PositionalArguments[0] is StringConstantExpressionAst stringName &&
+            !string.IsNullOrWhiteSpace(stringName.Value) &&
+            capabilities.HasFlag(PowerShellCompilationCapability.AdvisoryOutputTypeMetadata))
+        {
+            // A string names advisory PowerShell output metadata. It is not a
+            // return-value contract, even when the name resolves to a CLR type.
+            contract = new Contract(null, stringName.Value);
+            return true;
+        }
         if (attribute.NamedArguments.Count != 0 ||
             attribute.PositionalArguments.Count != 1 ||
             attribute.PositionalArguments[0] is not TypeExpressionAst typeExpression ||
