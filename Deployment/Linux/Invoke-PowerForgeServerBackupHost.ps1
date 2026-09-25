@@ -89,6 +89,40 @@ function Assert-SafeBackupTarget {
     return $current
 }
 
+function Assert-PublishedBackupCatalog {
+    param(
+        [Parameter(Mandatory)][string] $TargetRoot,
+        [Parameter(Mandatory)][string] $CaptureName
+    )
+    $retained = @(Get-BackupCaptureDirectory -TargetRoot $TargetRoot)
+    if ($retained.Count -eq 0) { throw 'Published backup catalog has no retained captures.' }
+    $latest = (Get-Content -LiteralPath (Join-Path $TargetRoot 'LATEST.txt') -Raw).Trim()
+    $index = Get-Content -LiteralPath (Join-Path $TargetRoot 'index.json') -Raw | ConvertFrom-Json
+    if ($latest -ne $retained[0].Name -or $index.latest -ne $retained[0].Name -or
+        @($index.captures | Where-Object { $_.stamp -eq $CaptureName }).Count -ne 1) {
+        throw 'Published backup catalog does not match the retained captures.'
+    }
+}
+
+function Remove-AbandonedBackupStage {
+    [CmdletBinding(SupportsShouldProcess)]
+    param([Parameter(Mandatory)][string] $WorkRoot)
+    foreach ($stale in @(Get-ChildItem -LiteralPath $WorkRoot -Force -ErrorAction Stop |
+        Where-Object { $_.Name -match '^stage-\d{8}T\d{6}Z-\d+-1$' })) {
+        if (-not $stale.PSIsContainer -or
+            ($stale.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+            -not $stale.FullName.StartsWith($WorkRoot + '/', [StringComparison]::Ordinal)) {
+            throw "Abandoned backup stage is unsafe to remove: $($stale.FullName)"
+        }
+        $links = @(Get-ChildItem -LiteralPath $stale.FullName -Recurse -Force -ErrorAction Stop |
+            Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 })
+        if ($links.Count -ne 0) { throw "Abandoned backup stage contains a link: $($stale.FullName)" }
+        if ($PSCmdlet.ShouldProcess($stale.FullName, 'Remove abandoned backup stage')) {
+            Remove-Item -LiteralPath $stale.FullName -Recurse
+        }
+    }
+}
+
 if (-not $IsLinux) { throw 'Host-initiated server backup requires Linux.' }
 $lane = $env:POWERFORGE_BACKUP_LANE
 $manifestPath = $env:POWERFORGE_BACKUP_MANIFEST
@@ -120,6 +154,9 @@ Assert-RootControlledFile $manifestPath 'Recovery manifest'
 Assert-RootControlledFile $knownHostsFile 'GitHub known-hosts file'
 $expectedUser = "powerforge-$lane-backup"
 if ((& id -un) -ne $expectedUser) { throw "Host backup must run as $expectedUser." }
+if (-not $workRoot.StartsWith("/var/lib/$expectedUser/", [StringComparison]::Ordinal)) {
+    throw 'Backup work directory must be beneath the writable service-account directory.'
+}
 $accountUid = (& id -u).Trim()
 $workStat = @(& stat -c '%u %a' -- $workRoot)
 Assert-ExitCode 'Inspecting backup work directory'
@@ -145,15 +182,20 @@ if (-not (Test-Path -LiteralPath $engineRoot -PathType Container) -or
     throw 'PowerForge checkout must be root-controlled.'
 }
 Assert-RootControlledPath $engineRoot 'PowerForge checkout'
-$checkoutSha = @(& git -C $engineRoot rev-parse HEAD)
+$publisherPath = Join-Path $engineRoot 'Deployment/Linux/Invoke-PowerForgeServerBackupHost.ps1'
+if ([IO.Path]::GetFullPath($PSCommandPath) -ne $publisherPath) {
+    throw 'Host publisher must run from the pinned PowerForge checkout.'
+}
+Assert-RootControlledFile $publisherPath 'Host publisher script'
+$checkoutSha = @(& git -c "safe.directory=$engineRoot" -C $engineRoot rev-parse HEAD)
 Assert-ExitCode 'Resolving PowerForge checkout'
 if ($checkoutSha[0] -ne $engineSha) { throw 'PowerForge checkout does not match the reviewed engine revision.' }
-$engineOrigin = @(& git -C $engineRoot config --local --get remote.origin.url)
+$engineOrigin = @(& git -c "safe.directory=$engineRoot" -C $engineRoot config --local --get remote.origin.url)
 Assert-ExitCode 'Resolving PowerForge origin'
 if ($engineOrigin.Count -ne 1 -or $engineOrigin[0] -ne 'https://github.com/EvotecIT/PSPublishModule.git') {
     throw 'PowerForge checkout must use the canonical engine origin.'
 }
-$trackedChanges = @(& git -C $engineRoot status --porcelain --untracked-files=no)
+$trackedChanges = @(& git -c "safe.directory=$engineRoot" -C $engineRoot status --porcelain --untracked-files=no)
 Assert-ExitCode 'Inspecting PowerForge checkout changes'
 if ($trackedChanges.Count -ne 0) { throw 'PowerForge checkout contains tracked changes.' }
 $runtimeRoot = Join-Path $engineRoot 'PowerForge.Web.Cli/bin/Release/net10.0'
@@ -225,6 +267,7 @@ $captureName = '{0}-{1}-1' -f $stamp, [DateTimeOffset]::UtcNow.ToUnixTimeSeconds
 $stage = Join-Path $workRoot "stage-$captureName"
 $captureRoot = Join-Path $stage 'capture'
 $checkout = Join-Path $stage 'repository'
+Remove-AbandonedBackupStage -WorkRoot $workRoot
 if (Test-Path -LiteralPath $stage) { throw 'Backup stage already exists.' }
 New-Item -ItemType Directory -Path $stage | Out-Null
 & chmod 700 -- $stage
@@ -248,7 +291,7 @@ try {
         sourceRepository = $sourceRepository
         engineRepository = 'EvotecIT/PSPublishModule'
         engineSha = $engineSha
-        captureTrigger = 'ovh-systemd-timer'
+        captureTrigger = 'host-systemd-timer'
         capturedAtUtc = [DateTimeOffset]::UtcNow.ToString('O')
         retainedCapturesInTree = $keepLatest
         gitHistoryRetention = 'preserve'
@@ -282,7 +325,7 @@ try {
     Assert-ExitCode 'Configuring backup Git email'
     & git -C $checkout add -- $backupPath
     Assert-ExitCode 'Staging host recovery capture'
-    & git -C $checkout commit -m "Backup $sourceRepository from OVH at $stamp"
+    & git -C $checkout commit -m "Backup $sourceRepository from host at $stamp"
     Assert-ExitCode 'Committing host recovery capture'
 
     $published = $false
@@ -316,11 +359,7 @@ try {
     if ($entry.Count -ne 1 -or $entry[0] -ne "$backupPath/$captureName") {
         throw 'Published commit does not contain this recovery capture.'
     }
-    $latest = (Get-Content -LiteralPath (Join-Path $targetRoot 'LATEST.txt') -Raw).Trim()
-    $index = Get-Content -LiteralPath (Join-Path $targetRoot 'index.json') -Raw | ConvertFrom-Json
-    if ($latest -ne $captureName -or $index.latest -ne $captureName) {
-        throw 'Published backup catalog did not advance to this capture.'
-    }
+    Assert-PublishedBackupCatalog -TargetRoot $targetRoot -CaptureName $captureName
     Write-Output "Published encrypted recovery capture $captureName at $($publishedSha[0])."
 }
 finally {

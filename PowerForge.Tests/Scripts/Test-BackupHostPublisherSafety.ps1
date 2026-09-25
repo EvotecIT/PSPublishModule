@@ -16,6 +16,19 @@ $safety = $ast.Find({ param($node)
 }, $true)
 if ($null -eq $safety) { throw 'Host publisher path-safety function is missing.' }
 . ([scriptblock]::Create($safety.Extent.Text))
+$catalogSafety = $ast.Find({ param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Assert-PublishedBackupCatalog'
+}, $true)
+if ($null -eq $catalogSafety) { throw 'Host publisher catalog-safety function is missing.' }
+. ([scriptblock]::Create($catalogSafety.Extent.Text))
+$stageCleanup = $ast.Find({ param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Remove-AbandonedBackupStage'
+}, $true)
+if ($null -eq $stageCleanup) { throw 'Host publisher stage cleanup function is missing.' }
+. ([scriptblock]::Create($stageCleanup.Extent.Text))
+. (Join-Path $PSScriptRoot '../../.github/actions/powerforge-server-backup/PowerForgeBackupCatalog.ps1')
 
 $fixture = Join-Path ([IO.Path]::GetTempPath()) ('powerforge-backup-path-' + [Guid]::NewGuid().ToString('N'))
 $checkout = Join-Path $fixture 'checkout'
@@ -54,6 +67,47 @@ try {
     }
     Remove-Item -LiteralPath (Join-Path $target 'index.json')
     Assert-SafeBackupTarget -Checkout $checkout -RelativePath 'ovh/example' | Out-Null
+
+    $older = '20260925T020000Z-1-1'
+    $newer = '20260925T020001Z-2-1'
+    foreach ($name in @($older, $newer)) {
+        $capture = Join-Path $target $name
+        New-Item -ItemType Directory -Path $capture | Out-Null
+        Set-Content -LiteralPath (Join-Path $capture 'capture-summary.json') -Value '{"commandResults":[],"warnings":[]}'
+    }
+    Update-BackupCatalog -TargetRoot $target -TargetRelative 'ovh/example' -KeepLatestInTree 24
+    Assert-PublishedBackupCatalog -TargetRoot $target -CaptureName $older
+    try {
+        Assert-PublishedBackupCatalog -TargetRoot $target -CaptureName 'missing'
+        throw 'Unretained own capture was accepted.'
+    } catch {
+        if ($_.Exception.Message -eq 'Unretained own capture was accepted.') { throw }
+    }
+    Set-Content -LiteralPath (Join-Path $target 'LATEST.txt') -Value $older
+    try {
+        Assert-PublishedBackupCatalog -TargetRoot $target -CaptureName $older
+        throw 'Stale catalog head was accepted.'
+    } catch {
+        if ($_.Exception.Message -eq 'Stale catalog head was accepted.') { throw }
+    }
+    $work = Join-Path $fixture 'work'
+    $stale = Join-Path $work 'stage-20260925T020000Z-1-1'
+    New-Item -ItemType Directory -Path $stale -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $stale 'plain.txt') -Value 'stale'
+    Remove-AbandonedBackupStage -WorkRoot $work
+    if (Test-Path -LiteralPath $stale) { throw 'Abandoned stage was retained.' }
+    New-Item -ItemType Directory -Path $stale | Out-Null
+    New-Item -ItemType SymbolicLink -Path (Join-Path $stale 'outside') -Target $outside | Out-Null
+    try {
+        Remove-AbandonedBackupStage -WorkRoot $work
+        throw 'Stage containing a symlink was deleted.'
+    } catch {
+        if ($_.Exception.Message -eq 'Stage containing a symlink was deleted.') { throw }
+    }
+    if (-not (Test-Path -LiteralPath $stale) -or -not (Test-Path -LiteralPath $outside)) {
+        throw 'Unsafe stage check modified the stage or outside directory.'
+    }
+    Remove-Item -LiteralPath (Join-Path $stale 'outside')
     Write-Output 'Host publisher path-safety fixture passed.'
 }
 finally {
