@@ -495,10 +495,15 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var result = new PowerShellCompilationArtifactBuilder().Build(spec);
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(2, result.Manifest!.CompiledMethods);
+        Assert.Equal(3, result.Manifest!.CompiledMethods);
         Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        var formattedDate = Assert.Single(result.Manifest.UnitDispositionLedger!.Entries,
+            static unit => unit.Name == "Get-FallbackValue");
+        Assert.True(formattedDate.EmittedClrMethod);
+        Assert.False(formattedDate.RetainedHostedSource);
+        Assert.Equal(1, formattedDate.RuntimeCommandRegions);
         var escapedModulePath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
-        var command = $"Import-Module -Name '{escapedModulePath}' -Force; [bool](Get-Command Get-CompiledValue -ErrorAction SilentlyContinue); [bool](Get-Command Get-FallbackValue -ErrorAction SilentlyContinue); [bool](Get-Command Get-PrivateValue -ErrorAction SilentlyContinue); Get-CompiledValue; [int](Get-FallbackValue) -gt 2000";
+        var command = $"Import-Module -Name '{escapedModulePath}' -Force; [bool](Get-Command Get-CompiledValue -ErrorAction SilentlyContinue); [bool](Get-Command Get-FallbackValue -ErrorAction SilentlyContinue); [bool](Get-Command Get-PrivateValue -ErrorAction SilentlyContinue); Get-CompiledValue; [int](Get-FallbackValue) -gt 2000; function global:Get-Date {{ '2031' }}; Get-FallbackValue";
         var startInfo = new ProcessStartInfo
         {
             FileName = "pwsh",
@@ -516,7 +521,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var standardError = process.StandardError.ReadToEnd();
         Assert.True(process.WaitForExit(60_000), "Manifest-backed hybrid module proof did not exit within 60 seconds.");
         Assert.True(process.ExitCode == 0, $"Exit code: {process.ExitCode}{Environment.NewLine}{standardError}{Environment.NewLine}{standardOutput}");
-        Assert.Equal(new[] { "True", "True", "False", "1", "True" }, standardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.Equal(new[] { "True", "True", "False", "1", "True", "2031" }, standardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
         Assert.True(string.IsNullOrWhiteSpace(standardError), standardError);
     }
 

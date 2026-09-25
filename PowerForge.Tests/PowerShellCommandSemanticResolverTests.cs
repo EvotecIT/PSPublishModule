@@ -54,6 +54,7 @@ public sealed class PowerShellCommandSemanticResolverTests
     [InlineData("return Get-Date")]
     [InlineData("$value = Get-Date; return $value")]
     [InlineData("[datetime] $value = Get-Date; return $value")]
+    [InlineData("return [int](Get-Date -Format yyyy)")]
     public void BinaryModuleNeverLowersUnqualifiedGetDateAcrossExpressionShapes(string body)
     {
         var document = PowerShellSourceParser.Parse(
@@ -78,6 +79,7 @@ public sealed class PowerShellCommandSemanticResolverTests
     [InlineData("return Microsoft.PowerShell.Utility\\Get-Date")]
     [InlineData("$value = Microsoft.PowerShell.Utility\\Get-Date; return $value")]
     [InlineData("[datetime] $value = Microsoft.PowerShell.Utility\\Get-Date; return $value")]
+    [InlineData("[string] $value = Microsoft.PowerShell.Utility\\Get-Date -Format yyyy; return $value")]
     public void BinaryModuleLowersQualifiedGetDateAcrossExpressionShapes(string body)
     {
         var document = PowerShellSourceParser.Parse(

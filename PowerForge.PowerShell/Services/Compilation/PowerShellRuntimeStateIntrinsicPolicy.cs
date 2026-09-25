@@ -25,7 +25,8 @@ internal enum PowerShellRuntimeStateIntrinsicKind
     ModuleVariable,
     ShouldProcessTarget,
     ShouldProcessAction,
-    CurrentLocalDateTime
+    CurrentLocalDateTime,
+    FormattedCurrentLocalDateTime
 }
 
 internal static class PowerShellRuntimeStateIntrinsicPolicy
@@ -188,6 +189,7 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             PowerShellRuntimeStateIntrinsicKind.PSVersionMajor => typeof(int),
             PowerShellRuntimeStateIntrinsicKind.ProcessId => typeof(int),
             PowerShellRuntimeStateIntrinsicKind.CurrentLocalDateTime => typeof(DateTime),
+            PowerShellRuntimeStateIntrinsicKind.FormattedCurrentLocalDateTime => typeof(string),
             PowerShellRuntimeStateIntrinsicKind.HomeDirectory or
             PowerShellRuntimeStateIntrinsicKind.CurrentCulture or
             PowerShellRuntimeStateIntrinsicKind.CurrentUICulture => typeof(string),
