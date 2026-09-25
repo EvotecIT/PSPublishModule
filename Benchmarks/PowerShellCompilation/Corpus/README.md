@@ -62,9 +62,12 @@ powerforge powershell census ./Main.ps1 --kind exe --mode Strict `
     --framework net10.0 --semantic-profile PowerForge.Oracle.PowerShell/7.6 --output json
 
 ./Build/Invoke-PowerShellCompilerGate.ps1 `
-    -EvidencePath ./assessment/compiler-gate -RuntimeIdentifier win-x64
+    -EvidencePath ./assessment/compiler-gate-fast -RuntimeIdentifier win-x64 -Lane Fast
+
+./Build/Invoke-PowerShellCompilerGate.ps1 `
+    -EvidencePath ./assessment/compiler-gate-full -RuntimeIdentifier win-x64 -Lane Full
 ```
 
 Census accepts `--kind exe|dll|library`, `--mode Strict|Hybrid`, and `--semantic-profile`. Omitted kind is inferred per input. Incomplete input assessment retains successful products and `InputFailures` in JSON with a nonzero CLI exit code. Baselines require matching artifact, mode, profile, framework, and recursion contracts. The existing overload remains available to C# callers; use `RunWithOptions` for explicit contracts.
 
-The gate requires the repository .NET 10 SDK/runtime and the selected PowerShell host. It runs contract tests plus six Strict programs (24 authored units), including number-theory and calendar scenarios. Run `linux-x64` on Linux itself. Windows PowerShell 5.1/`net472` cases are selected only on Windows; host-capability JSON records their unavailability on Linux. The broader Hybrid module and NativeAOT lanes retain their own separately dated evidence.
+The gate requires the repository .NET 10 SDK/runtime and the selected PowerShell host. `Fast` is the default development and pull-request lane. It selects the semantic/census/fuzz tests, generated module workflows on the available hosts, and the ABI, package, provider, project run/watch, and CLI contract families. Both lanes then run the same six Strict programs (24 authored units), including number-theory and calendar scenarios. `Full` retains the broader artifact matrix for an explicit integration or release qualification; it is not a prerequisite for each edit. The workflow's `compilerFullGate` manual-dispatch input selects that lane on the CI runner. Run `linux-x64` on Linux itself. Windows PowerShell 5.1/`net472` cases are selected only on Windows; host-capability JSON records their unavailability on Linux. The broader Hybrid module and NativeAOT lanes retain their own separately dated evidence.

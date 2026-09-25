@@ -22,6 +22,11 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
     inputs:
+      compilerFullGate:
+        description: Run the complete compiler artifact matrix instead of the focused compiler gate.
+        required: true
+        default: false
+        type: boolean
       privateGalleryLiveValidation:
         description: Run the opt-in live Azure Artifacts private gallery validation job.
         required: true
@@ -305,7 +310,7 @@ jobs:
         run: .\PSPublishModule.Tests.ps1
   ProductBuildSmoke:
     runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","windows"]' || '["windows-latest"]') }}
-    timeout-minutes: 90
+    timeout-minutes: 130
     env:
       DbaClientXRoot: ${{ github.workspace }}\_dependencies\DbaClientX
 
@@ -355,9 +360,9 @@ jobs:
         timeout-minutes: 30
         run: .\Build\Test-ProductBuild.ps1 -Runtime win-x64
 
-      - name: Run bounded PowerShell compiler gate
+      - name: Prepare pinned PowerShell compiler host
         shell: pwsh
-        timeout-minutes: 40
+        timeout-minutes: 5
         run: |
           $ErrorActionPreference = 'Stop'
           . ./Benchmarks/PowerShellCompilation/Corpus/Corpus.Runner.Common.ps1
@@ -368,8 +373,27 @@ jobs:
           $payload = Get-VerifiedCorpusPayload -Uri $pin[0].releaseAssetUri -Sha256 $pin[0].releaseAssetSha256 -CacheRoot (Join-Path $gateRoot 'payloads') -CacheExtension '.zip' -Label 'compiler semantic host'
           $hostRoot = Join-Path $gateRoot 'host'
           Expand-VerifiedCorpusArchive -PayloadPath $payload -Target $hostRoot -ContainmentRoot $gateRoot -Label 'compiler semantic host'
+
+      - name: Run focused PowerShell compiler gate
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.compilerFullGate != true }}
+        shell: pwsh
+        timeout-minutes: 20
+        run: |
+          $gateRoot = Join-Path $env:RUNNER_TEMP 'powerforge-compiler-gate'
+          $hostRoot = Join-Path $gateRoot 'host'
           $env:PATH = $hostRoot + [IO.Path]::PathSeparator + $env:PATH
-          & (Join-Path $hostRoot 'pwsh.exe') -NoProfile -File ./Build/Invoke-PowerShellCompilerGate.ps1 -EvidencePath (Join-Path $gateRoot 'evidence') -NoBuild
+          & (Join-Path $hostRoot 'pwsh.exe') -NoProfile -File ./Build/Invoke-PowerShellCompilerGate.ps1 -EvidencePath (Join-Path $gateRoot 'evidence') -Lane Fast -NoBuild
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run complete PowerShell compiler gate
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.compilerFullGate == true }}
+        shell: pwsh
+        timeout-minutes: 70
+        run: |
+          $gateRoot = Join-Path $env:RUNNER_TEMP 'powerforge-compiler-gate'
+          $hostRoot = Join-Path $gateRoot 'host'
+          $env:PATH = $hostRoot + [IO.Path]::PathSeparator + $env:PATH
+          & (Join-Path $hostRoot 'pwsh.exe') -NoProfile -File ./Build/Invoke-PowerShellCompilerGate.ps1 -EvidencePath (Join-Path $gateRoot 'evidence') -Lane Full -NoBuild
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload compiler gate evidence
