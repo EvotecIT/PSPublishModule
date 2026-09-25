@@ -150,9 +150,13 @@ public sealed partial class DotNetPublishPipelineRunner
     private static string BuildControlledRestoreContextKey(ProjectEvaluationRequest request)
     {
         var key = new System.Text.StringBuilder();
+        // Concrete controlled builds retain only the selected RuntimeIdentifier.
+        // Different source RID lists that select that same runtime therefore share
+        // the same controlled restore context and matching condition.
         foreach (KeyValuePair<string, string> property in request.ReadEffectiveGlobalProperties()
                      .Where(property =>
-                         !property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase))
+                         !property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) &&
+                         !property.Key.Equals("RuntimeIdentifiers", StringComparison.OrdinalIgnoreCase))
                      .OrderBy(property => property.Key, StringComparer.OrdinalIgnoreCase))
         {
             AppendProjectReferenceKeySegment(key, property.Key.ToUpperInvariant());

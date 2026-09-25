@@ -9,6 +9,9 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryCreateControlledRestoreContextProps(
         ProjectEvaluationRequest rootRequest,
         IReadOnlyCollection<ControlledPublishGraphNode> graphNodes,
+        IReadOnlyCollection<EvaluatedProjectReference> rootProjectReferences,
+        IReadOnlyCollection<string> rootEvaluatedImports,
+        IReadOnlyDictionary<string, string> rootEvaluatedProperties,
         string originalGitRoot,
         string controlledSourceRoot,
         string controlledOutputRoot,
@@ -26,6 +29,11 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!contexts.Any(group => group.Select(BuildControlledRestoreContextKey)
                 .Distinct(StringComparer.Ordinal).Skip(1).Any()))
             return true;
+
+        if (!TryValidateControlledRestoreContextSources(graphNodes, rootRequest,
+                rootProjectReferences,
+                rootEvaluatedImports, rootEvaluatedProperties, out failureReason))
+            return false;
 
         var controlledPropertyNames = ReadControlledRestoreContextOverriddenPropertyNames();
         string nonce = Guid.NewGuid().ToString("N");
@@ -276,8 +284,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 new XAttribute("Text", "The project overrides the controlled context output path.")),
             new XElement("Error",
                 new XAttribute("Condition",
-                    "$(DefaultItemExcludes.Contains($(" + expectedObjExclusionProperty + "))) != 'True' or " +
-                    "$(DefaultItemExcludes.Contains($(" + expectedBinExclusionProperty + "))) != 'True'"),
+                    BuildControlledExactExclusionCondition(expectedObjExclusionProperty) + " or " +
+                    BuildControlledExactExclusionCondition(expectedBinExclusionProperty)),
                 new XAttribute("Text", "The project removes controlled output-tree exclusions.")),
             new XElement("PropertyGroup",
                 new XElement(actualIntermediateProperty,
@@ -327,6 +335,10 @@ public sealed partial class DotNetPublishPipelineRunner
     private static string BuildControlledProjectPathCondition(string path)
         => "$(MSBuildProjectFullPath.Equals('" + EscapeControlledMsBuildConditionLiteral(path) +
            "', System.StringComparison." + (IsWindows() ? "OrdinalIgnoreCase" : "Ordinal") + "))";
+
+    private static string BuildControlledExactExclusionCondition(string expectedProperty)
+        => "$([System.String]::Concat(';', $(DefaultItemExcludes), ';').Contains(" +
+           "$([System.String]::Concat(';', $(" + expectedProperty + "), ';')))) != 'True'";
 
     internal static string ComputeControlledRestoreContextDirectoryName(string controlledProjectPath, string contextKey)
         => ComputeSha256Hex(Encoding.UTF8.GetBytes(

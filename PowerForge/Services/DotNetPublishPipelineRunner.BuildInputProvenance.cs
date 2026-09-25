@@ -498,6 +498,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     pathMapsByEvaluation[evaluationKey],
                     buildPlan?.NoBuildInPublish == true,
                     graphNodes,
+                    evaluationsByEvaluation[evaluationKey].ProjectReferences,
                     evaluationsByEvaluation[evaluationKey].EvaluatedProperties,
                     out EvaluatedPublishInput[] publishInputs,
                     out string? publishInputFailureReason))

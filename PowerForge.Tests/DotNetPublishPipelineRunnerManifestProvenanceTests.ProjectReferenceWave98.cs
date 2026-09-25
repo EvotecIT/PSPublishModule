@@ -215,6 +215,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("disabled-props-project-reset")]
     [InlineData("single-context-empty-base")]
     [InlineData("removed-output-excludes")]
+    [InlineData("partial-output-excludes")]
+    [InlineData("late-path-mutation")]
+    [InlineData("reference-props-override")]
+    [InlineData("rid-list-context")]
     [Trait("Category", "DotNetPublishPrGate")]
     public void ReadSourceProvenance_RestoresEverySelectedFrameworkForSharedMultiTargetReference(string scenario)
     {
@@ -245,7 +249,11 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         bool resetDisabledPropsProject = scenario == "disabled-props-project-reset";
         bool emptySingleContextBase = scenario == "single-context-empty-base";
         bool removedOutputExcludes = scenario == "removed-output-excludes";
-        if (caseSensitiveContextValues || externalIntermediatePath)
+        bool partialOutputExcludes = scenario == "partial-output-excludes";
+        bool latePathMutation = scenario == "late-path-mutation";
+        bool referencePropsOverride = scenario == "reference-props-override";
+        bool ridListContext = scenario == "rid-list-context";
+        if (caseSensitiveContextValues || externalIntermediatePath || ridListContext)
             unselectedContextPackage = false;
         if (caseVariantSymbols && !OperatingSystem.IsWindows())
             return;
@@ -302,20 +310,28 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             if (defaultedProperty)
                 File.WriteAllText(Path.Combine(sharedDirectory, "Directory.Build.props"),
                     "<Project><PropertyGroup><Flavor Condition=\"'$(Flavor)' == ''\">Direct</Flavor></PropertyGroup></Project>");
-            string directContext = caseSensitiveContextValues
+            string directContext = ridListContext
+                ? " AdditionalProperties=\"RuntimeIdentifiers=linux-x64%3Bwin-x64\""
+                : caseSensitiveContextValues
                 ? " AdditionalProperties=\"DefineConstants=FOO\""
                 : targetFrameworksContext
                 ? " AdditionalProperties=\"TargetFrameworks=net10.0\""
                 : distinctRestoreContexts && !defaultedProperty
                 ? " AdditionalProperties=\"Flavor=Direct\""
                 : string.Empty;
-            string bridgeContext = caseSensitiveContextValues
+            string bridgeContext = referencePropsOverride
+                ? " AdditionalProperties=\"Flavor=Bridge;DirectoryBuildPropsPath=$(MSBuildProjectDirectory)/../Reference.Build.props\""
+                : ridListContext
+                ? " AdditionalProperties=\"RuntimeIdentifiers=linux-x64%3Bosx-x64\""
+                : caseSensitiveContextValues
                 ? " AdditionalProperties=\"DefineConstants=foo\""
                 : targetFrameworksContext
                 ? " AdditionalProperties=\"TargetFrameworks=net8.0\""
                 : distinctRestoreContexts
                 ? " AdditionalProperties=\"Flavor=Bridge\""
                 : string.Empty;
+            if (referencePropsOverride)
+                File.WriteAllText(Path.Combine(root, "Reference.Build.props"), "<Project />");
             string bridgeSharedReference = caseVariantSymbols
                 ? "../shared/Shared.csproj"
                 : $"../{sharedDirectoryName}/Shared.csproj";
@@ -364,6 +380,11 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string defaultItemExcludesOverride = removedOutputExcludes
                 ? "<DefaultItemExcludes Condition=\"$([System.String]::Copy('$(BaseOutputPath)').Contains('powerforge-context'))\">$(BaseIntermediateOutputPath)**</DefaultItemExcludes>"
                 : string.Empty;
+            if (partialOutputExcludes)
+                defaultItemExcludesOverride = "<DefaultItemExcludes Condition=\"$([System.String]::Copy('$(BaseOutputPath)').Contains('powerforge-context'))\">$(DefaultItemExcludes)bogus</DefaultItemExcludes>";
+            string latePathTarget = latePathMutation
+                ? "<Target Name=\"MutateContextIntermediate\" BeforeTargets=\"Build\" Condition=\"$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))\"><PropertyGroup><IntermediateOutputPath>$(MSBuildProjectDirectory)/../shared-obj/</IntermediateOutputPath></PropertyGroup></Target>"
+                : string.Empty;
             string isolationMarkerOverride = mutatedIsolationMarker
                 ? "<_PowerForgeRequiresContextIsolation>false</_PowerForgeRequiresContextIsolation><_PowerForgeRestoreContextMatched>false</_PowerForgeRestoreContextMatched>"
                 : string.Empty;
@@ -404,6 +425,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                   {(targetFrameworksContext || apostropheProjectPath ? string.Empty : "<ItemGroup><ProjectReference Include=\"../Leaf/Leaf.csproj\" /></ItemGroup>")}
                   {contextPackages}
                   {verifierCollision}
+                  {latePathTarget}
                 {sharedProjectEnd}
                 """);
             File.WriteAllText(leafProject, """
@@ -530,15 +552,20 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 DotNetPublishPipelineRunner.ReadSourceProvenance(root, buildPlan: plan);
 
             if (overrideSharedOutputPath || overrideSharedOutDir || overrideSharedAssets ||
-                disabledPropsEnvironment || disabledPropsProject || removedOutputExcludes)
+                disabledPropsEnvironment || disabledPropsProject || removedOutputExcludes ||
+                partialOutputExcludes || latePathMutation || referencePropsOverride)
             {
                 Assert.True(provenance.Dirty);
                 string expected = disabledPropsEnvironment || disabledPropsProject && !resetDisabledPropsProject
                     ? "disables Directory.Build.props imports"
                     : resetDisabledPropsProject
                         ? "PowerForgeVerifyRestoreContext_"
-                    : removedOutputExcludes
+                    : removedOutputExcludes || partialOutputExcludes
                         ? "removes controlled output-tree exclusions"
+                    : latePathMutation
+                        ? "target-time assignment to an isolation-sensitive property"
+                    : referencePropsOverride
+                        ? "project reference changes DirectoryBuildPropsPath"
                     : overrideSharedOutDir
                         ? "OutDir is outside its controlled context"
                         : overrideSharedAssets

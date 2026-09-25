@@ -19,6 +19,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string? evaluatedPathMap,
         bool proveControlledGeneratedInputs,
         IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes,
+        IReadOnlyCollection<EvaluatedProjectReference> rootProjectReferences,
         IReadOnlyDictionary<string, string> evaluatedProperties,
         out EvaluatedPublishInput[] publishInputs,
         out string? failureReason)
@@ -144,6 +145,9 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!TryCreateControlledRestoreContextProps(
                     request,
                     graphBuildNodes,
+                    rootProjectReferences,
+                    evaluatedImports,
+                    evaluatedProperties,
                     controlledGitRoot!,
                     controlledSourceRoot,
                     controlledOutputRoot,
