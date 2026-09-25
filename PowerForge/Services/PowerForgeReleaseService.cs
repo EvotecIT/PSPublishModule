@@ -6192,14 +6192,44 @@ internal sealed partial class PowerForgeReleaseService
         if (!request.SkipBuild || spec is null || !selectedOutputs.Contains(PowerForgeReleaseToolOutputKind.Installer))
             return;
 
-        var activeTargets = ResolveDotNetProfileTargetNames(spec);
-        foreach (var installer in spec.Installers ?? Array.Empty<DotNetPublishInstaller>())
+        var profiled = DotNetPublishPipelineRunner.ResolveProfile(spec);
+        var targets = DotNetPublishPipelineRunner.CloneTargets(profiled.Targets ?? Array.Empty<DotNetPublishTarget>());
+        var matrixSpec = new DotNetPublishSpec { DotNet = profiled.DotNet, Matrix = profiled.Matrix };
+        var activeProfile = (profiled.Profiles ?? Array.Empty<DotNetPublishProfile>())
+            .FirstOrDefault(profile => profile is not null &&
+                string.Equals(profile.Name, profiled.Profile, StringComparison.OrdinalIgnoreCase));
+        foreach (var installer in profiled.Installers ?? Array.Empty<DotNetPublishInstaller>())
         {
             if (installer.Versioning is not { Enabled: true, ApplyToPublish: true })
                 continue;
-            if (!activeTargets.Contains(installer.PrepareFromTarget) ||
-                selectedTargets.Length > 0 && !toolTargetMatches.Contains(installer.PrepareFromTarget, StringComparer.OrdinalIgnoreCase))
+            if (selectedTargets.Length > 0 &&
+                !toolTargetMatches.Contains(installer.PrepareFromTarget, StringComparer.OrdinalIgnoreCase))
                 continue;
+
+            var target = targets.FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, installer.PrepareFromTarget, StringComparison.OrdinalIgnoreCase));
+            if (target is null) continue;
+
+            // The real planner applies request overrides before ResolveProfile;
+            // profile dimensions therefore take precedence over request dimensions.
+            if (request.Runtimes is { Length: > 0 } && activeProfile?.Runtimes.Length is not > 0)
+                target.Publish.Runtimes = request.Runtimes;
+            if (request.Frameworks is { Length: > 0 } && selectedTargets.Length > 0 &&
+                activeProfile?.Frameworks.Length is not > 0)
+            {
+                target.Publish.Framework = request.Frameworks[0];
+                target.Publish.Frameworks = request.Frameworks;
+            }
+            if (request.Styles is { Length: > 0 } && activeProfile?.Style is null)
+            {
+                target.Publish.Style = request.Styles[0];
+                target.Publish.Styles = request.Styles;
+            }
+
+            var matchesSelectedCombination = DotNetPublishPipelineRunner.ResolveTargetCombinations(target, matrixSpec)
+                .Any(combo => DotNetPublishPipelineRunner.InstallerMatchesCombo(
+                    installer.Runtimes, installer.Frameworks, installer.Styles, combo));
+            if (!matchesSelectedCombination) continue;
 
             throw new InvalidOperationException(
                 $"SkipBuild cannot be combined with MSI versioning ApplyToPublish for target '{installer.PrepareFromTarget}': " +

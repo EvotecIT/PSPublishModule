@@ -4162,7 +4162,16 @@ public sealed partial class PowerForgeReleaseServiceTests
                     {
                         Targets =
                         [
-                            new DotNetPublishTarget { Name = "app", ProjectPath = "App.csproj" }
+                            new DotNetPublishTarget
+                            {
+                                Name = "app",
+                                ProjectPath = "App.csproj",
+                                Publish = new DotNetPublishPublishOptions
+                                {
+                                    Framework = "net10.0",
+                                    Runtimes = ["win-x64"]
+                                }
+                            }
                         ],
                         Installers =
                         [
@@ -4188,6 +4197,47 @@ public sealed partial class PowerForgeReleaseServiceTests
                     SkipBuild = true
                 }));
             Assert.Contains("SkipBuild cannot be combined with MSI versioning ApplyToPublish", error.Message);
+            Assert.False(packagesExecuted);
+
+            var installer = spec.Tools.DotNetPublish.Installers[0];
+            foreach (var excludedDimension in new[] { "runtime", "framework", "style" })
+            {
+                packagesExecuted = false;
+                installer.Runtimes = excludedDimension == "runtime" ? ["linux-x64"] : [];
+                installer.Frameworks = excludedDimension == "framework" ? ["net8.0"] : [];
+                installer.Styles = excludedDimension == "style" ? [DotNetPublishStyle.PortableCompat] : [];
+
+                var filtered = Assert.Throws<InvalidOperationException>(() => service.Execute(spec,
+                    new PowerForgeReleaseRequest
+                    {
+                        ConfigPath = Path.Combine(root, "release.json"),
+                        SkipBuild = true
+                    }));
+                Assert.Equal("Package lane must not run.", filtered.Message);
+                Assert.True(packagesExecuted);
+            }
+
+            installer.Runtimes = ["win-x64"];
+            installer.Frameworks = [];
+            installer.Styles = [];
+            spec.Tools.DotNetPublish.Profiles =
+            [
+                new DotNetPublishProfile
+                {
+                    Name = "windows",
+                    Default = true,
+                    Runtimes = ["win-x64"]
+                }
+            ];
+            packagesExecuted = false;
+            var profileConflict = Assert.Throws<InvalidOperationException>(() => service.Execute(spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    SkipBuild = true,
+                    Runtimes = ["linux-x64"]
+                }));
+            Assert.Contains("SkipBuild cannot be combined with MSI versioning ApplyToPublish", profileConflict.Message);
             Assert.False(packagesExecuted);
         }
         finally

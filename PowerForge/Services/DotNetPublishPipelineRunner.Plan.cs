@@ -3677,7 +3677,7 @@ public sealed partial class DotNetPublishPipelineRunner
             combo);
     }
 
-    private static bool InstallerMatchesCombo(
+    internal static bool InstallerMatchesCombo(
         string[] runtimes,
         string[] frameworks,
         DotNetPublishStyle[] styles,
