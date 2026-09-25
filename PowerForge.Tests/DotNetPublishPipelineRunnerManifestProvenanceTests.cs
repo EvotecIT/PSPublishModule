@@ -2451,7 +2451,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         throw new InvalidOperationException("Unable to locate repository global.json.");
     }
 
-    private static void RunDotNet(string root, string arguments)
+    private static void RunDotNet(string root, string arguments, IReadOnlyDictionary<string, string>? environment = null)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -2464,6 +2464,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             CreateNoWindow = true
         };
         DotNetTestProcessEnvironment.DisableBuildServers(startInfo);
+        if (environment is not null)
+            foreach (KeyValuePair<string, string> variable in environment)
+                startInfo.Environment[variable.Key] = variable.Value;
         using var process = new Process
         {
             StartInfo = startInfo

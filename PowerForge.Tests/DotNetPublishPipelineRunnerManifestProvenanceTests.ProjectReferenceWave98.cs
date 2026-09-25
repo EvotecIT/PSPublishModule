@@ -197,18 +197,28 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("shadowed-verifier")]
     [InlineData("controlled-properties")]
     [InlineData("disabled-props-environment")]
+    [InlineData("defaulted-property")]
+    [InlineData("environment-props")]
+    [InlineData("mutated-isolation-marker")]
+    [InlineData("spoofed-original-props")]
     [Trait("Category", "DotNetPublishPrGate")]
     public void ReadSourceProvenance_RestoresEverySelectedFrameworkForSharedMultiTargetReference(string scenario)
     {
         bool distinctRestoreContexts = scenario != "single-context";
-        bool unselectedContextPackage = scenario != "single-context" && scenario != "two-contexts";
+        bool unselectedContextPackage = scenario != "single-context" && scenario != "two-contexts" &&
+            scenario != "defaulted-property";
         bool customDirectoryBuildProps = scenario == "custom-props";
-        bool overrideSharedOutputPath = scenario == "escaped-output" || scenario == "shadowed-verifier";
+        bool overrideSharedOutputPath = scenario == "escaped-output" || scenario == "shadowed-verifier" ||
+            scenario == "mutated-isolation-marker";
         bool overrideSharedOutDir = scenario == "escaped-outdir";
         bool overrideSharedAssets = scenario == "escaped-assets";
         bool shadowVerifier = scenario == "shadowed-verifier";
         bool controlledProperties = scenario == "controlled-properties";
         bool disabledPropsEnvironment = scenario == "disabled-props-environment";
+        bool defaultedProperty = scenario == "defaulted-property";
+        bool environmentProps = scenario == "environment-props";
+        bool mutatedIsolationMarker = scenario == "mutated-isolation-marker";
+        bool spoofedOriginalProps = scenario == "spoofed-original-props";
         string root = Directory.CreateTempSubdirectory().FullName;
         try
         {
@@ -225,14 +235,20 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string leafProject = Path.Combine(leafDirectory, "Leaf.csproj");
             string? customPropsPath = null;
             string customPropsArgument = string.Empty;
-            if (customDirectoryBuildProps)
+            if (customDirectoryBuildProps || environmentProps || spoofedOriginalProps)
             {
                 customPropsPath = Path.Combine(root, "Custom.Build.props");
                 File.WriteAllText(customPropsPath,
                     "<Project><PropertyGroup><ContextPropsMarker>Loaded</ContextPropsMarker></PropertyGroup></Project>");
-                customPropsArgument = $" -p:DirectoryBuildPropsPath=\"{customPropsPath}\"";
+                if (customDirectoryBuildProps)
+                    customPropsArgument = $" -p:DirectoryBuildPropsPath=\"{customPropsPath}\"";
+                else if (spoofedOriginalProps)
+                    customPropsArgument = $" -p:_PowerForgeOriginalDirectoryBuildPropsPath=\"{customPropsPath}\"";
             }
-            string directContext = distinctRestoreContexts
+            if (defaultedProperty)
+                File.WriteAllText(Path.Combine(sharedDirectory, "Directory.Build.props"),
+                    "<Project><PropertyGroup><Flavor Condition=\"'$(Flavor)' == ''\">Direct</Flavor></PropertyGroup></Project>");
+            string directContext = distinctRestoreContexts && !defaultedProperty
                 ? " AdditionalProperties=\"Flavor=Direct\""
                 : string.Empty;
             string bridgeContext = distinctRestoreContexts
@@ -277,7 +293,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 ? "<OutDir>$(BaseOutputPath)../shared/</OutDir>"
                 : string.Empty;
             string assetsOverride = overrideSharedAssets
-                ? "<ProjectAssetsFile Condition=\"'$(_PowerForgeRequiresContextIsolation)' == 'true'\">$(MSBuildProjectDirectory)/../shared-assets/$(Flavor)/project.assets.json</ProjectAssetsFile>"
+                ? "<ProjectAssetsFile Condition=\"$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))\">$(MSBuildProjectDirectory)/../shared-assets/$(Flavor)/project.assets.json</ProjectAssetsFile>"
+                : string.Empty;
+            string isolationMarkerOverride = mutatedIsolationMarker
+                ? "<_PowerForgeRequiresContextIsolation>false</_PowerForgeRequiresContextIsolation><_PowerForgeRestoreContextMatched>false</_PowerForgeRestoreContextMatched>"
                 : string.Empty;
             string verifierCollision = shadowVerifier
                 ? "<Target Name=\"PowerForgeVerifyRestoreContext\" />"
@@ -290,9 +309,13 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     {outputOverride}
                     {outDirOverride}
                     {assetsOverride}
+                    {isolationMarkerOverride}
                   </PropertyGroup>
-                  <Target Name="RequireCustomProps" BeforeTargets="Restore;Build" Condition="'$(Flavor)' != '' and '{customDirectoryBuildProps.ToString().ToLowerInvariant()}' == 'true'">
+                  <Target Name="RequireCustomProps" BeforeTargets="Restore;Build" Condition="'$(Flavor)' != '' and '{(customDirectoryBuildProps || environmentProps).ToString().ToLowerInvariant()}' == 'true'">
                     <Error Condition="'$(ContextPropsMarker)' != 'Loaded'" Text="Custom DirectoryBuildPropsPath was not imported." />
+                  </Target>
+                  <Target Name="RejectSpoofedProps" BeforeTargets="Restore;Build" Condition="'{spoofedOriginalProps.ToString().ToLowerInvariant()}' == 'true'">
+                    <Error Condition="'$(ContextPropsMarker)' == 'Loaded'" Text="A caller property redirected the original props import." />
                   </Target>
                   <ItemGroup><ProjectReference Include="../Leaf/Leaf.csproj" /></ItemGroup>
                   {contextPackages}
@@ -313,15 +336,18 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(Path.Combine(leafDirectory, "Leaf.cs"),
                 "public static class Leaf { public const int Value = 1; }");
             File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\nshared-assets/\n");
+            var testEnvironment = environmentProps
+                ? new Dictionary<string, string> { ["DirectoryBuildPropsPath"] = customPropsPath! }
+                : null;
             if (unselectedContextPackage)
             {
                 RunDotNet(root,
-                    $"restore \"{sharedProject}\" --use-lock-file --nologo -p:Flavor=Direct -p:TargetFrameworks=net10.0{customPropsArgument}");
+                    $"restore \"{sharedProject}\" --use-lock-file --nologo -p:Flavor=Direct -p:TargetFrameworks=net10.0{customPropsArgument}", testEnvironment);
                 RunDotNet(root,
-                    $"restore \"{sharedProject}\" --use-lock-file --nologo -p:Flavor=Bridge -p:TargetFrameworks=net8.0{customPropsArgument}");
+                    $"restore \"{sharedProject}\" --use-lock-file --nologo -p:Flavor=Bridge -p:TargetFrameworks=net8.0{customPropsArgument}", testEnvironment);
             }
             RunDotNet(root,
-                $"restore \"{appProject}\" -r linux-x64 --use-lock-file --nologo -p:SelfContained=false{customPropsArgument}");
+                $"restore \"{appProject}\" -r linux-x64 --use-lock-file --nologo -p:SelfContained=false{customPropsArgument}", testEnvironment);
             if (unselectedContextPackage)
             {
                 Assert.Contains("Newtonsoft.Json", File.ReadAllText(Path.Combine(sharedDirectory, "packages.Direct.lock.json")));
@@ -336,7 +362,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 $"build \"{appProject}\" -c Release -f net10.0 -r linux-x64 --no-restore --nologo " +
                 "-m:1 -p:BuildInParallel=false " +
                 $"/p:SourceRevisionId={revision} /p:IncludeSourceRevisionInInformationalVersion=true " +
-                $"/p:ContinuousIntegrationBuild=true /p:DebugType=None /p:DebugSymbols=false{customPropsArgument}");
+                $"/p:ContinuousIntegrationBuild=true /p:DebugType=None /p:DebugSymbols=false{customPropsArgument}", testEnvironment);
             var plan = new DotNetPublishPlan
             {
                 ProjectRoot = root,
@@ -364,7 +390,17 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             };
 
             if (customPropsPath is not null)
-                plan.MsBuildProperties["DirectoryBuildPropsPath"] = customPropsPath;
+            {
+                if (customDirectoryBuildProps)
+                    plan.MsBuildProperties["DirectoryBuildPropsPath"] = customPropsPath;
+                else if (environmentProps)
+                {
+                    plan.EnvironmentVariables["DirectoryBuildPropsPath"] = customPropsPath;
+                    plan.ControlledBuildEnvironmentVariableNames = ["DirectoryBuildPropsPath"];
+                }
+                else
+                    plan.MsBuildProperties["_PowerForgeOriginalDirectoryBuildPropsPath"] = customPropsPath;
+            }
             if (controlledProperties)
             {
                 plan.MsBuildProperties["BuildProjectReferences"] = "true";
@@ -401,6 +437,22 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         {
             DeleteTestRepository(root);
         }
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void ControlledRestore_SeparatesProjectsSharingDirectoryAndContext()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "powerforge-context-identity");
+        string context = "Flavor=Direct";
+        string first = DotNetPublishPipelineRunner.ComputeControlledRestoreContextDirectoryName(
+            Path.Combine(directory, "First.csproj"), context);
+        string second = DotNetPublishPipelineRunner.ComputeControlledRestoreContextDirectoryName(
+            Path.Combine(directory, "Second.csproj"), context);
+
+        Assert.NotEqual(first, second);
+        Assert.Equal(first, DotNetPublishPipelineRunner.ComputeControlledRestoreContextDirectoryName(
+            Path.Combine(directory, "First.csproj"), context));
     }
 
     [Theory]
