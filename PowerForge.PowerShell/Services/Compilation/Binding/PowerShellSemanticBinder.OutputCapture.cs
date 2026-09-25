@@ -127,12 +127,15 @@ internal sealed partial class PowerShellSemanticBinder
         }
         var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, usesNativeInvocation);
         var operation = PowerShellMutationSemanticBinder.GetAssignmentOperator(assignment.Operator);
+        var nativeConditionalMember = usesNativeInvocation && assignment.Right is IfStatementAst &&
+                                      assignment.Operator == TokenKind.Equals &&
+                                      IsNativeConditionalMemberCaptureTarget(assignment.Left);
         PowerShellSemanticSymbolBinding? target = null;
         if (variable is not null) symbols.TryGetValue(variable.VariablePath.UserPath, out target);
         if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) ||
             !capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) ||
-            variable is null || operation is null ||
-            !usesNativeInvocation && (assignment.Operator != TokenKind.Equals || assignment.Left is not VariableExpressionAst ||
+            variable is null && !nativeConditionalMember || operation is null ||
+            !usesNativeInvocation && (variable is null || assignment.Operator != TokenKind.Equals || assignment.Left is not VariableExpressionAst ||
                 IsRuntimeOwnedScope(variable.VariablePath.UserPath) || target is null ||
                 target.Type.Provenance != PowerShellTypeFactProvenance.Unknown && target.Type.ClrType != typeof(object) ||
                 target.Type.Provenance is PowerShellTypeFactProvenance.Explicit or PowerShellTypeFactProvenance.Int32OrDouble))

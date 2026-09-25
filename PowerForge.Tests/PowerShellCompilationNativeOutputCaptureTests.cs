@@ -7,6 +7,55 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
+    public void NativeConditionalMemberCapture_PreservesRecordsAndFailureRollback(string framework, string host)
+    {
+        using var fixture = ArtifactFixture.Create(
+            """
+            function Get-ConditionalMember {
+                [CmdletBinding()]
+                param([string] $Mode)
+                $state = @{ Value = 'before' }
+                try {
+                    $state.Value = if ($Mode -eq 'none') { }
+                        elseif ($Mode -eq 'one') { 'one' }
+                        elseif ($Mode -eq 'many') { 'one'; $null; 'three' }
+                        elseif ($Mode -eq 'fail') { 'partial'; throw 'failed' }
+                        else { $null }
+                } catch { }
+                return ,$state.Value
+            }
+            """, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.ConditionalMemberCapture",
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+
+        const string probe = """
+            foreach ($mode in 'none','one','many','fail','null') {
+                $value = Get-ConditionalMember -Mode $mode
+                [pscustomobject]@{
+                    Mode = $mode
+                    Type = if ($null -eq $value) { '<null>' } else { $value.GetType().FullName }
+                    Values = if ($null -eq $value) { @() } else { @($value | ForEach-Object { if ($null -eq $_) { '<null>' } else { [string] $_ } }) }
+                } | ConvertTo-Json -Compress -Depth 5
+            }
+            """;
+        var original = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+            fixture.RootPath, "original-conditional-member-capture");
+        var compiled = RunStatementErrorProbe(host,
+            "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
+            fixture.RootPath, "compiled-conditional-member-capture");
+        Assert.True(original.ExitCode == 0 && compiled.ExitCode == 0,
+            original.StandardError + compiled.StandardError);
+        Assert.Equal(original.StandardOutput, compiled.StandardOutput);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
     public void NativeDirectForEachArrayCapture_PreservesZeroOneAndManyRecords(string framework, string host)
     {
         using var fixture = ArtifactFixture.Create(

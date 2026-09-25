@@ -90,6 +90,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
            RequiresNativeObjectParameterForEach(function) ||
            RequiresNativeDictionaryKeyForEach(function) ||
            RequiresNativeStatementValue(function) ||
+           RequiresNativeConditionalMemberCapture(function) ||
            function.Body.Find(static node => node is ArrayExpressionAst array &&
                array.SubExpression.Statements.Any(static statement => statement is AssignmentStatementAst),
                searchNestedScriptBlocks: false) is not null ||
@@ -119,6 +120,14 @@ internal static class PowerShellNativeFunctionBindingPolicy
         => function.Body.Find(static node => node is IfStatementAst conditional &&
             (conditional.Parent is HashtableAst ||
              conditional.Parent is StatementBlockAst { Parent: ArrayExpressionAst or SubExpressionAst }),
+            searchNestedScriptBlocks: false) is not null;
+
+    private static bool RequiresNativeConditionalMemberCapture(FunctionDefinitionAst function)
+        => function.Body.Find(static node => node is AssignmentStatementAst
+            {
+                Operator: TokenKind.Equals,
+                Right: IfStatementAst
+            } assignment && PowerShellSemanticBinder.IsNativeConditionalMemberCaptureTarget(assignment.Left),
             searchNestedScriptBlocks: false) is not null;
 
     private static bool RequiresNativeStatementArrayCapture(FunctionDefinitionAst function)
