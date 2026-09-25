@@ -217,6 +217,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("removed-output-excludes")]
     [InlineData("partial-output-excludes")]
     [InlineData("late-path-mutation")]
+    [InlineData("computed-late-path-mutation")]
     [InlineData("reference-props-override")]
     [InlineData("rid-list-context")]
     [Trait("Category", "DotNetPublishPrGate")]
@@ -251,6 +252,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         bool removedOutputExcludes = scenario == "removed-output-excludes";
         bool partialOutputExcludes = scenario == "partial-output-excludes";
         bool latePathMutation = scenario == "late-path-mutation";
+        bool computedLatePathMutation = scenario == "computed-late-path-mutation";
         bool referencePropsOverride = scenario == "reference-props-override";
         bool ridListContext = scenario == "rid-list-context";
         if (caseSensitiveContextValues || externalIntermediatePath || ridListContext)
@@ -384,6 +386,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 defaultItemExcludesOverride = "<DefaultItemExcludes Condition=\"$([System.String]::Copy('$(BaseOutputPath)').Contains('powerforge-context'))\">$(DefaultItemExcludes)bogus</DefaultItemExcludes>";
             string latePathTarget = latePathMutation
                 ? "<Target Name=\"MutateContextIntermediate\" BeforeTargets=\"Build\" Condition=\"$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))\"><PropertyGroup><IntermediateOutputPath>$(MSBuildProjectDirectory)/../shared-obj/</IntermediateOutputPath></PropertyGroup></Target>"
+                : computedLatePathMutation
+                    ? "<PropertyGroup><DestinationProperty>IntermediateOutputPath</DestinationProperty></PropertyGroup><Target Name=\"MutateContextIntermediate\" BeforeTargets=\"Build\"><CreateProperty Value=\"$(MSBuildProjectDirectory)/../shared-obj/\"><Output TaskParameter=\"Value\" PropertyName=\"$(DestinationProperty)\" /></CreateProperty></Target>"
                 : string.Empty;
             string isolationMarkerOverride = mutatedIsolationMarker
                 ? "<_PowerForgeRequiresContextIsolation>false</_PowerForgeRequiresContextIsolation><_PowerForgeRestoreContextMatched>false</_PowerForgeRestoreContextMatched>"
@@ -553,7 +557,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             if (overrideSharedOutputPath || overrideSharedOutDir || overrideSharedAssets ||
                 disabledPropsEnvironment || disabledPropsProject || removedOutputExcludes ||
-                partialOutputExcludes || latePathMutation || referencePropsOverride)
+                partialOutputExcludes || latePathMutation || computedLatePathMutation || referencePropsOverride ||
+                ridListContext)
             {
                 Assert.True(provenance.Dirty);
                 string expected = disabledPropsEnvironment || disabledPropsProject && !resetDisabledPropsProject
@@ -562,6 +567,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                         ? "PowerForgeVerifyRestoreContext_"
                     : removedOutputExcludes || partialOutputExcludes
                         ? "removes controlled output-tree exclusions"
+                    : computedLatePathMutation
+                        ? "MSBuild graph contains an uncontrolled build task"
+                    : ridListContext
+                        ? "different RuntimeIdentifiers lists"
                     : latePathMutation
                         ? "target-time assignment to an isolation-sensitive property"
                     : referencePropsOverride
@@ -571,8 +580,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                         : overrideSharedAssets
                             ? "assets path is outside its controlled context"
                         : "output path is outside its controlled context";
-                Assert.Contains(provenance.DirtyReasons,
-                    reason => reason.Contains(expected, StringComparison.Ordinal));
+                Assert.True(provenance.DirtyReasons.Any(
+                    reason => reason.Contains(expected, StringComparison.Ordinal)),
+                    string.Join(Environment.NewLine, provenance.DirtyReasons));
             }
             else
             {

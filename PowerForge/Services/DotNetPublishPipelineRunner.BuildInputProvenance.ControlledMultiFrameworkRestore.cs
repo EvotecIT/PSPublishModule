@@ -151,8 +151,8 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         var key = new System.Text.StringBuilder();
         // Concrete controlled builds retain only the selected RuntimeIdentifier.
-        // Different source RID lists that select that same runtime therefore share
-        // the same controlled restore context and matching condition.
+        // The context preflight rejects different source RID lists that would
+        // collapse to this key, since package conditions can inspect that list.
         foreach (KeyValuePair<string, string> property in request.ReadEffectiveGlobalProperties()
                      .Where(property =>
                          !property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) &&

@@ -26,6 +26,28 @@ public sealed partial class DotNetPublishPipelineRunner
             .GroupBy(request => Path.GetFullPath(request.ProjectPath),
                 FileSystemPathSafety.ExistingPathComparer)
             .ToArray();
+        foreach (IGrouping<string, ProjectEvaluationRequest> projectContexts in contexts)
+        {
+            foreach (IGrouping<string, ProjectEvaluationRequest> equivalentContext in
+                     projectContexts.GroupBy(BuildControlledRestoreContextKey, StringComparer.Ordinal))
+            {
+                bool differentRuntimeIdentifierLists = equivalentContext.Select(request =>
+                    {
+                        bool supplied = request.ReadEffectiveGlobalProperties().TryGetValue(
+                            "RuntimeIdentifiers", out string? value);
+                        return (supplied, value);
+                    })
+                    .Distinct().Skip(1).Any();
+                if (!differentRuntimeIdentifierLists)
+                    continue;
+
+                // Controlled builds reduce the RID list to the selected RuntimeIdentifier.
+                // That loses evaluation-time package conditions based on the original list.
+                failureReason = $"project '{projectContexts.Key}' selects different RuntimeIdentifiers lists " +
+                    "for one controlled runtime context; package inputs cannot be preserved safely.";
+                return false;
+            }
+        }
         if (!contexts.Any(group => group.Select(BuildControlledRestoreContextKey)
                 .Distinct(StringComparer.Ordinal).Skip(1).Any()))
             return true;
