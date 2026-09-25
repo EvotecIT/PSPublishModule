@@ -4828,10 +4828,13 @@ internal sealed partial class PowerForgeReleaseService
         DotNetPublishArtefactResult artifact,
         ISet<PowerForgeReleaseToolOutputKind> selectedOutputs)
     {
-        if (artifact.Category == DotNetPublishArtefactCategory.Bundle)
-            return selectedOutputs.Contains(PowerForgeReleaseToolOutputKind.Portable);
-
-        return selectedOutputs.Contains(PowerForgeReleaseToolOutputKind.Tool);
+        var outputKind = artifact.Category switch
+        {
+            DotNetPublishArtefactCategory.Bundle => PowerForgeReleaseToolOutputKind.Portable,
+            DotNetPublishArtefactCategory.Installer => PowerForgeReleaseToolOutputKind.Installer,
+            _ => PowerForgeReleaseToolOutputKind.Tool
+        };
+        return selectedOutputs.Contains(outputKind);
     }
 
     private static void ApplyDotNetOutputRootOverride(DotNetPublishSpec spec, string outputRoot)

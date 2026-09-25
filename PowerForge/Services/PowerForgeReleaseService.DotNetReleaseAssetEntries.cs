@@ -28,38 +28,51 @@ internal sealed partial class PowerForgeReleaseService
     }
 
     /// <summary>
-    /// Creates the final release entry for a .NET publish result, preferring its archive and otherwise retaining its executable.
+    /// Creates final release entries for a .NET publish result, including native installer outputs.
     /// </summary>
     internal static IEnumerable<PowerForgeReleaseAssetEntry> CreateDotNetArtefactEntries(
         DotNetPublishArtefactResult artifact,
         DotNetPublishPlan? dotNetPlan,
         string? sharedReleaseVersion)
     {
-        var artifactPath = !string.IsNullOrWhiteSpace(artifact.ZipPath) && File.Exists(artifact.ZipPath)
-            ? artifact.ZipPath
-            : !string.IsNullOrWhiteSpace(artifact.ExePath) && File.Exists(artifact.ExePath)
-                ? artifact.ExePath
-                : null;
-        if (string.IsNullOrWhiteSpace(artifactPath))
+        string?[] artifactPaths = artifact.Category == DotNetPublishArtefactCategory.Installer
+            ? (artifact.OutputFiles ?? Array.Empty<string>()).Cast<string?>().ToArray()
+            : new[]
+            {
+                !string.IsNullOrWhiteSpace(artifact.ZipPath) && File.Exists(artifact.ZipPath)
+                    ? artifact.ZipPath
+                    : artifact.ExePath
+            };
+        string[] existingPaths = artifactPaths
+            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            .Select(path => path!)
+            .ToArray();
+        if (existingPaths.Length == 0)
             yield break;
 
         var version = ResolveDotNetArtefactVersion(artifact, dotNetPlan, sharedReleaseVersion);
 
-        yield return new PowerForgeReleaseAssetEntry
+        foreach (string artifactPath in existingPaths)
         {
-            Path = artifactPath!,
-            Category = artifact.Category == DotNetPublishArtefactCategory.Bundle
-                ? PowerForgeReleaseAssetCategory.Portable
-                : PowerForgeReleaseAssetCategory.Tool,
-            Source = "DotNetPublish",
-            Target = artifact.Target,
-            Version = version,
-            Runtime = artifact.Runtime,
-            Framework = artifact.Framework,
-            Style = artifact.Style.ToString(),
-            BundleId = artifact.BundleId,
-            IsFinalPackageOutput = true
-        };
+            yield return new PowerForgeReleaseAssetEntry
+            {
+                Path = artifactPath,
+                Category = artifact.Category switch
+                {
+                    DotNetPublishArtefactCategory.Bundle => PowerForgeReleaseAssetCategory.Portable,
+                    DotNetPublishArtefactCategory.Installer => PowerForgeReleaseAssetCategory.Installer,
+                    _ => PowerForgeReleaseAssetCategory.Tool
+                },
+                Source = "DotNetPublish",
+                Target = artifact.Target,
+                Version = version,
+                Runtime = artifact.Runtime,
+                Framework = artifact.Framework,
+                Style = artifact.Style.ToString(),
+                BundleId = artifact.BundleId,
+                IsFinalPackageOutput = true
+            };
+        }
 
         foreach (string evidencePath in (artifact.EvidencePaths ?? Array.Empty<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)))
