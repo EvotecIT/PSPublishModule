@@ -80,7 +80,8 @@ if ($backupRepository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
 if ($backupBranch -notmatch '^[A-Za-z0-9._/-]+$' -or $backupBranch.Contains('..') -or $backupBranch.StartsWith('/')) {
     throw 'backupTarget.branch contains unsupported characters.'
 }
-if ($backupPath -notmatch '^[A-Za-z0-9._/-]+$' -or $backupPath.Contains('..') -or $backupPath.StartsWith('/')) {
+if ($backupPath -notmatch '^[A-Za-z0-9._/-]+$' -or $backupPath.Contains('..') -or $backupPath.StartsWith('/') -or
+    @($backupPath.Split('/') | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -in @('.', '..') -or $_ -ceq '.git' }).Count -ne 0) {
     throw 'backupTarget.path must be a safe repository-relative path.'
 }
 if ($null -ne $manifest.backupTarget.retention.keepDays) {
@@ -109,6 +110,10 @@ if ([string]::IsNullOrWhiteSpace($recipient)) {
         [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($recipientEnvName, 'Process'))) {
         throw 'Automated encrypted capture requires backupTarget.recipient or a populated recipientEnv variable.'
     }
+    $recipient = [Environment]::GetEnvironmentVariable($recipientEnvName, 'Process')
+}
+if ($recipient -cnotmatch '^age1[a-z0-9]+$') {
+    throw 'Automated encrypted capture requires a lowercase literal age public recipient.'
 }
 
 $runnerTemp = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd([IO.Path]::DirectorySeparatorChar)
@@ -275,6 +280,7 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
     Assert-LastExitCode 'Configuring the backup Git author'
     git -C $checkout config user.email 'powerforge-backup@users.noreply.github.com'
     Assert-LastExitCode 'Configuring the backup Git email'
+    Add-BackupCaptureToGit -Checkout $checkout -CaptureRelative "$backupPath/$captureName"
     git -C $checkout add -- $backupPath
     Assert-LastExitCode 'Staging the encrypted server backup'
     git -C $checkout commit -m "Backup $($env:GITHUB_REPOSITORY) at $($env:POWERFORGE_SOURCE_SHA)"

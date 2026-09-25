@@ -580,12 +580,18 @@ internal static partial class WebCliCommandHandlers
             errors.Add("backupTarget.repository must be an owner/repository name.");
         if (!IsSafeRepositoryRelativeValue(backupTarget.Branch, allowSlash: true))
             errors.Add("backupTarget.branch contains unsupported characters.");
-        if (!IsSafeRepositoryRelativeValue(backupTarget.Path, allowSlash: true))
+        if (!IsSafeRepositoryRelativeValue(backupTarget.Path, allowSlash: true) ||
+            backupTarget.Path!.Split('/').Any(static part => part.Length == 0 || part == "." || part == ".git"))
             errors.Add("backupTarget.path must be a safe repository-relative path.");
         if (!string.Equals(backupTarget.Encryption, "age", StringComparison.OrdinalIgnoreCase))
             errors.Add("backupTarget.encryption must be age.");
         if (string.IsNullOrWhiteSpace(backupTarget.Recipient) && string.IsNullOrWhiteSpace(backupTarget.RecipientEnv))
             errors.Add("backupTarget must declare recipient or recipientEnv.");
+        if (!string.IsNullOrWhiteSpace(backupTarget.Recipient) &&
+            (!backupTarget.Recipient.StartsWith("age1", StringComparison.Ordinal) ||
+             backupTarget.Recipient.Length <= 4 ||
+             backupTarget.Recipient.Any(static character => !(character is >= 'a' and <= 'z' or >= '0' and <= '9'))))
+            errors.Add("backupTarget.recipient must be a lowercase literal age public recipient.");
         if (!string.IsNullOrWhiteSpace(backupTarget.RecipientEnv) && !IsEnvironmentVariableName(backupTarget.RecipientEnv))
             errors.Add("backupTarget.recipientEnv must be an environment variable name.");
 

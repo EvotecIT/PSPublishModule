@@ -70,6 +70,12 @@ $helperModeSafety = $ast.Find({ param($node)
 }, $true)
 if ($null -eq $helperModeSafety) { throw 'Host publisher helper-mode function is missing.' }
 . ([scriptblock]::Create($helperModeSafety.Extent.Text))
+$recipientSafety = $ast.Find({ param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Assert-LiteralAgeRecipient'
+}, $true)
+if ($null -eq $recipientSafety) { throw 'Host publisher recipient function is missing.' }
+. ([scriptblock]::Create($recipientSafety.Extent.Text))
 $workRootSafety = $ast.Find({ param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
     $node.Name -eq 'Assert-WorkRootLocation'
@@ -97,12 +103,21 @@ try {
     New-Item -ItemType Directory -Path $checkout, $outside | Out-Null
     $safe = Assert-SafeBackupTarget -Checkout $checkout -RelativePath 'ovh/example'
     if ($safe -ne (Join-Path $checkout 'ovh/example')) { throw 'Missing safe path was rejected.' }
-    foreach ($invalid in @('backups/', 'backups//daily', '/backups', 'backups/../daily')) {
+    foreach ($invalid in @('backups/', 'backups//daily', '/backups', 'backups/../daily', '.git/backups', 'backups/.git/daily')) {
         try {
             Assert-BackupRelativePath $invalid
             throw 'Invalid backup path passed preflight.'
         } catch {
             if ($_.Exception.Message -eq 'Invalid backup path passed preflight.') { throw }
+        }
+    }
+    Assert-LiteralAgeRecipient 'age1abc123'
+    foreach ($invalid in @('AGE1abc123', 'age1ABC123')) {
+        try {
+            Assert-LiteralAgeRecipient $invalid
+            throw 'Uppercase age recipient passed preflight.'
+        } catch {
+            if ($_.Exception.Message -eq 'Uppercase age recipient passed preflight.') { throw }
         }
     }
 

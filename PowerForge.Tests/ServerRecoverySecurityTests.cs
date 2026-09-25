@@ -645,6 +645,52 @@ public sealed partial class ServerRecoverySecurityTests
         Assert.Contains(errors, error => error.Contains("from 1 through 365", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("backups/")]
+    [InlineData("backups//daily")]
+    [InlineData(".git/backups")]
+    [InlineData("backups/.git/daily")]
+    public void ManifestValidation_RejectsBackupPathsThatCannotBePublished(string path)
+    {
+        var manifest = CreateManifest();
+        manifest.BackupTarget = new PowerForgeServerBackupTarget
+        {
+            Type = "github",
+            Repository = "EvotecIT/Backups",
+            Branch = "main",
+            Path = path,
+            Encryption = "age",
+            Recipient = "age1example",
+            Retention = new PowerForgeServerBackupRetention { KeepLatestInTree = 24 }
+        };
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("backupTarget.path must be a safe repository-relative path", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("AGE1example")]
+    [InlineData("age1EXAMPLE")]
+    public void ManifestValidation_RejectsUppercaseAgeRecipients(string recipient)
+    {
+        var manifest = CreateManifest();
+        manifest.BackupTarget = new PowerForgeServerBackupTarget
+        {
+            Type = "github",
+            Repository = "EvotecIT/Backups",
+            Branch = "main",
+            Path = "ovh/example",
+            Encryption = "age",
+            Recipient = recipient,
+            Retention = new PowerForgeServerBackupRetention { KeepLatestInTree = 24 }
+        };
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("backupTarget.recipient must be a lowercase literal age public recipient", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void ManifestValidation_RequiresCompleteStrictSshRepositoryPrerequisites()
     {

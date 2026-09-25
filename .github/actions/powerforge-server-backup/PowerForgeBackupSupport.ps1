@@ -6,6 +6,28 @@ function Assert-LastExitCode {
     }
 }
 
+function Add-BackupCaptureToGit {
+    param(
+        [Parameter(Mandatory)][string] $Checkout,
+        [Parameter(Mandatory)][string] $CaptureRelative
+    )
+
+    $captureRoot = Join-Path $Checkout $CaptureRelative
+    if (-not (Test-Path -LiteralPath $captureRoot -PathType Container)) {
+        throw "Recovery capture directory is missing: $CaptureRelative"
+    }
+    $files = @(Get-ChildItem -LiteralPath $captureRoot -File -Recurse -Force -ErrorAction Stop)
+    if ($files.Count -eq 0) { throw 'Recovery capture has no files to stage.' }
+
+    & git -C $Checkout add --force -- $CaptureRelative
+    Assert-LastExitCode 'Staging complete recovery capture'
+    foreach ($file in $files) {
+        $relative = [IO.Path]::GetRelativePath($Checkout, $file.FullName).Replace('\', '/')
+        & git -C $Checkout ls-files --error-unmatch -- $relative > $null 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "Recovery capture artifact was not staged: $relative" }
+    }
+}
+
 function Invoke-GitWithRetry {
     param(
         [Parameter(Mandatory)][string] $Operation,

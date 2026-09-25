@@ -57,7 +57,7 @@ function Assert-BackupRelativePath {
     param([Parameter(Mandatory)][string] $RelativePath)
     if ($RelativePath -notmatch '^[A-Za-z0-9._/-]+$' -or $RelativePath.Contains('..') -or
         $RelativePath.StartsWith('/') -or
-        @($RelativePath.Split('/') | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -in @('.', '..') }).Count -ne 0) {
+        @($RelativePath.Split('/') | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -in @('.', '..') -or $_ -ceq '.git' }).Count -ne 0) {
         throw 'Backup target contains an invalid path component.'
     }
 }
@@ -154,6 +154,13 @@ function Assert-ExecutableRootHelper {
     if ($mode.Count -ne 1 -or
         (([Convert]::ToInt32($mode[0], 8) -band 0x40) -eq 0)) {
         throw 'Installed encrypted capture helper must be executable by root.'
+    }
+}
+
+function Assert-LiteralAgeRecipient {
+    param([Parameter(Mandatory)][string] $Recipient)
+    if ($Recipient -cnotmatch '^age1[a-z0-9]+$') {
+        throw 'Host backup requires a lowercase literal age public recipient.'
     }
 }
 
@@ -361,13 +368,13 @@ if ($backupRepository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' -or
     $backupBranch -notmatch '^[A-Za-z0-9._/-]+$' -or $backupBranch.Contains('..') -or $backupBranch.StartsWith('/') -or
     $backupPath -notmatch '^[A-Za-z0-9._/-]+$' -or $backupPath.Contains('..') -or $backupPath.StartsWith('/') -or
     -not [int]::TryParse([string]$keepValue, [ref]$keepLatest) -or $keepLatest -lt 1 -or $keepLatest -gt 365 -or
-    $manifest.backupTarget.encryption -ne 'age' -or
-    $manifest.backupTarget.recipient -notmatch '^age1[a-z0-9]+$') {
+    $manifest.backupTarget.encryption -ne 'age') {
     throw 'Recovery manifest does not declare a valid encrypted backup destination and retention.'
 }
 Assert-PinnedBackupDestination -Repository $backupRepository -Branch $backupBranch `
     -ExpectedRepository $expectedRepository -ExpectedBranch $expectedBranch
 Assert-BackupRelativePath $backupPath
+Assert-LiteralAgeRecipient ([string]$manifest.backupTarget.recipient)
 if ($null -ne $manifest.backupTarget.retention.keepDays -or
     ($null -ne $manifest.backupTarget.retention.keepLatestInTree -and
      $null -ne $manifest.backupTarget.retention.keepLatest)) {
@@ -441,8 +448,7 @@ try {
     Assert-ExitCode 'Configuring backup Git author'
     & git -C $checkout config user.email 'powerforge-backup@users.noreply.github.com'
     Assert-ExitCode 'Configuring backup Git email'
-    & git -C $checkout add -- $backupPath
-    Assert-ExitCode 'Staging host recovery capture'
+    Add-BackupCaptureToGit -Checkout $checkout -CaptureRelative "$backupPath/$captureName"
     & git -C $checkout commit -m "Backup $sourceRepository from host at $stamp"
     Assert-ExitCode 'Committing host recovery capture'
 
