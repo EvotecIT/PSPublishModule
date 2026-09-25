@@ -163,6 +163,9 @@ internal sealed class PowerForgeReleaseRequest
 
     public bool SkipBuild { get; set; }
 
+    /// <summary>Project DSL explicitly requested a separate build before no-build publish.</summary>
+    internal bool SeparateBuildRequested { get; set; }
+
     public bool SkipWorkspaceValidation { get; set; }
 
     public string? WorkspaceConfigPath { get; set; }

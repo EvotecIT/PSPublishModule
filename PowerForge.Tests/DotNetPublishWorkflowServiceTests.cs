@@ -101,13 +101,15 @@ public sealed class DotNetPublishWorkflowServiceTests
             runPublish: (plan, _) =>
             {
                 Assert.True(plan.SkipBuildRequested);
+                Assert.True(plan.SkipRestoreRequested);
                 return new DotNetPublishResult { Succeeded = true };
             });
 
         DotNetPublishWorkflowResult result = service.Execute(new DotNetPublishPreparedContext
         {
             Spec = new DotNetPublishSpec(),
-            SkipBuildRequested = true
+            SkipBuildRequested = true,
+            SkipRestoreRequested = true
         });
 
         Assert.True(result.Result?.Succeeded);

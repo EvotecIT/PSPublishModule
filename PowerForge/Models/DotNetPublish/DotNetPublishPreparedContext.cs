@@ -9,4 +9,5 @@ internal sealed class DotNetPublishPreparedContext
     public bool PlanOnly { get; set; }
     public bool ValidateOnly { get; set; }
     public bool SkipBuildRequested { get; set; }
+    public bool SkipRestoreRequested { get; set; }
 }

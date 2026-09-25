@@ -255,6 +255,7 @@ public sealed class DotNetPublishPreparationServiceTests
             Assert.True(context.Spec.DotNet.NoRestoreInPublish);
             Assert.True(context.Spec.DotNet.NoBuildInPublish);
             Assert.True(context.SkipBuildRequested);
+            Assert.True(context.SkipRestoreRequested);
         }
         finally
         {

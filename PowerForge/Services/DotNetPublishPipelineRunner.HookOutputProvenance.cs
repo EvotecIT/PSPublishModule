@@ -7,6 +7,8 @@ public sealed partial class DotNetPublishPipelineRunner
             ? "controlled-source"
             : plan.SkipBuildRequested && plan.NoBuildInPublish
                 ? "prebuilt-unverified"
+                : plan.SeparateBuildRequested && plan.NoBuildInPublish
+                    ? "separate-build-unverified"
                 : "working-tree";
 
     internal static SourceProvenance ReadPortableInventorySourceProvenance(

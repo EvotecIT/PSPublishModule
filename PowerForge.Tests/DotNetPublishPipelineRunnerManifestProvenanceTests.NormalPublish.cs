@@ -16,6 +16,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         plan.SkipBuildRequested = true;
         Assert.Equal("prebuilt-unverified", DotNetPublishPipelineRunner.DescribeBuildInputMode(plan));
 
+        plan.SkipBuildRequested = false;
+        plan.SeparateBuildRequested = true;
+        Assert.Equal("separate-build-unverified", DotNetPublishPipelineRunner.DescribeBuildInputMode(plan));
+
         plan.UseControlledSourceProvenance = true;
         Assert.Equal("controlled-source", DotNetPublishPipelineRunner.DescribeBuildInputMode(plan));
 
@@ -57,6 +61,29 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         var explicitSkipArgs = DotNetPublishPipelineRunner.BuildPublishArguments(
             plan, target, "net10.0", "win-x64", DotNetPublishStyle.PortableCompat, "out");
         Assert.Contains("--no-build", explicitSkipArgs);
+
+        plan.SkipBuildRequested = false;
+        plan.SeparateBuildRequested = true;
+        var separateBuildArgs = DotNetPublishPipelineRunner.BuildPublishArguments(
+            plan, target, "net10.0", "win-x64", DotNetPublishStyle.PortableCompat, "out");
+        Assert.Contains("--no-build", separateBuildArgs);
+    }
+
+    [Fact]
+    public void ExplicitSkipRestore_DisablesImplicitRestoreInBothBuildPaths()
+    {
+        var plan = new DotNetPublishPlan { SkipRestoreRequested = true, Restore = false };
+        var target = new DotNetPublishTargetPlan
+        {
+            Name = "app",
+            ProjectPath = "App.csproj",
+            Publish = new DotNetPublishPublishOptions()
+        };
+
+        Assert.Contains("--no-restore", DotNetPublishPipelineRunner.BuildGlobalBuildArguments(plan, "App.csproj", null));
+        Assert.Contains("--no-restore", DotNetPublishPipelineRunner.BuildGlobalBuildArguments(plan, "App.csproj", "win-x64"));
+        Assert.Contains("--no-restore", DotNetPublishPipelineRunner.BuildPreBuildArguments(
+            plan, target, "net10.0", "win-x64", DotNetPublishStyle.PortableCompat));
     }
 
     [Fact]

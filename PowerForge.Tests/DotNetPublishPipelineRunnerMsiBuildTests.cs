@@ -1763,6 +1763,14 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             Assert.Equal(expectedPatch, versions[0].Patch);
             Assert.Equal(expectedPatch + 1, versions[1].Patch);
             Assert.Equal(versions[0].StatePath, versions[1].StatePath);
+
+            plan.SkipBuildRequested = true;
+            var conflict = Assert.Throws<InvalidOperationException>(() =>
+                DotNetPublishPipelineRunner.ValidateRequestedBuildModes(plan));
+            Assert.Contains("SkipBuild cannot be combined with MSI versioning ApplyToPublish", conflict.Message);
+
+            plan.SkipBuildRequested = false;
+            DotNetPublishPipelineRunner.ValidateRequestedBuildModes(plan);
         }
         finally
         {

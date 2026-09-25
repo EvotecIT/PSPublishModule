@@ -1156,6 +1156,7 @@ internal static partial class Program
         if (skipRestore)
         {
             plan.NoRestoreInPublish = true;
+            plan.SkipRestoreRequested = true;
             steps = steps.Where(s => s.Kind != DotNetPublishStepKind.Restore).ToArray();
         }
 
@@ -1167,6 +1168,7 @@ internal static partial class Program
         }
 
         plan.Steps = steps;
+        DotNetPublishPipelineRunner.ValidateRequestedBuildModes(plan);
     }
 
     static string[] ValidateDotNetPublishPlan(DotNetPublishPlan plan)

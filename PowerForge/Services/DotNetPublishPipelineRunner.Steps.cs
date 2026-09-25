@@ -284,21 +284,24 @@ public sealed partial class DotNetPublishPipelineRunner
     private void BuildGlobal(DotNetPublishPlan plan, string? runtime)
     {
         var workDir = plan.ProjectRoot;
-        var props = BuildMsBuildPropertyArgs(plan.MsBuildProperties);
         foreach (var path in GetGlobalBuildPaths(plan, runtime))
         {
             var label = string.IsNullOrWhiteSpace(runtime) ? string.Empty : $" ({runtime})";
             _logger.Info($"Build{label} -> {path}");
 
-            var args = new List<string> { "build", path, "-c", plan.Configuration, "--nologo", "--disable-build-servers" };
-            if (!string.IsNullOrWhiteSpace(runtime))
-            {
-                args.AddRange(new[] { "-r", runtime! });
-                if (plan.Restore) args.Add("--no-restore");
-            }
-            args.AddRange(props);
+            var args = BuildGlobalBuildArguments(plan, path, runtime);
             RunDotnet(workDir, args, plan.EnvironmentVariables);
         }
+    }
+
+    internal static List<string> BuildGlobalBuildArguments(DotNetPublishPlan plan, string path, string? runtime)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+        var args = new List<string> { "build", path, "-c", plan.Configuration, "--nologo", "--disable-build-servers" };
+        if (!string.IsNullOrWhiteSpace(runtime)) args.AddRange(new[] { "-r", runtime! });
+        if (plan.Restore || plan.SkipRestoreRequested) args.Add("--no-restore");
+        args.AddRange(BuildMsBuildPropertyArgs(plan.MsBuildProperties));
+        return args;
     }
 
     internal static string[] GetGlobalBuildPaths(DotNetPublishPlan plan, string? runtime)
@@ -337,7 +340,7 @@ public sealed partial class DotNetPublishPipelineRunner
         };
         if (!string.IsNullOrWhiteSpace(framework)) args.AddRange(new[] { "-f", framework });
         if (!string.IsNullOrWhiteSpace(runtime)) args.AddRange(new[] { "-r", runtime });
-        if (plan.Restore) args.Add("--no-restore");
+        if (plan.Restore || plan.SkipRestoreRequested) args.Add("--no-restore");
         AppendPublishStyleArgs(args, target.Publish, style);
         args.AddRange(BuildMsBuildPropertyArgs(BuildPublishMsBuildProperties(plan, target, framework, runtime, style)));
         return args;
@@ -662,9 +665,9 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         if (plan.NoRestoreInPublish) publishArgs.Add("--no-restore");
-        // Normal publishing rebuilds by default; an explicit skip-build request
-        // retains the caller's choice to consume existing build output.
-        if ((plan.UseControlledSourceProvenance || plan.SkipBuildRequested) && plan.NoBuildInPublish &&
+        // Normal publishing rebuilds by default. Explicit skip-build and the
+        // project DSL's separate-build mode preserve their no-build contract.
+        if ((plan.UseControlledSourceProvenance || plan.SkipBuildRequested || plan.SeparateBuildRequested) && plan.NoBuildInPublish &&
             !TargetUsesPublishMsiVersionProperties(plan, target.Name, framework, runtime, style))
             publishArgs.Add("--no-build");
 
@@ -842,6 +845,34 @@ public sealed partial class DotNetPublishPipelineRunner
             framework,
             runtime,
             style);
+
+    internal static void ValidateRequestedBuildModes(DotNetPublishPlan plan)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+        if (!plan.SkipBuildRequested) return;
+
+        foreach (var step in plan.Steps ?? Array.Empty<DotNetPublishStep>())
+        {
+            if (step.Kind != DotNetPublishStepKind.Publish || string.IsNullOrWhiteSpace(step.TargetName))
+                continue;
+
+            var target = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+                .FirstOrDefault(candidate => string.Equals(candidate.Name, step.TargetName, StringComparison.OrdinalIgnoreCase));
+            if (target is null) continue;
+
+            if (TargetUsesPublishMsiVersionProperties(
+                    plan,
+                    target.Name,
+                    step.Framework ?? string.Empty,
+                    step.Runtime ?? string.Empty,
+                    step.Style ?? target.Publish.Style))
+            {
+                throw new InvalidOperationException(
+                    $"SkipBuild cannot be combined with MSI versioning ApplyToPublish for target '{target.Name}': " +
+                    "the versioned publish must compile the MSI payload.");
+            }
+        }
+    }
 
     private static bool TargetUsesPublishMsiVersionProperties(
         IEnumerable<DotNetPublishInstallerPlan> installers,

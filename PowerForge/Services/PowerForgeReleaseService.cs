@@ -414,6 +414,8 @@ internal sealed partial class PowerForgeReleaseService
 
         var willRunTools = runTools && ShouldRunSectionForTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches);
         var willRunAppleApps = runAppleApps && ShouldRunSectionForTargets(selectedTargets, appleTargetMatches, runTools, toolTargetMatches);
+        if (willRunTools)
+            PreflightSkipBuildMsiVersioning(dotNetSpecForTools, request, selectedTargets, toolTargetMatches, selectedToolOutputs);
         var hasNonAppleConfigurationConsumer = runWorkspaceValidation || runModule || runPackages || willRunTools;
         var configurationOverride = hasNonAppleConfigurationConsumer
             ? NormalizeConfiguration(request.Configuration)
@@ -760,6 +762,7 @@ internal sealed partial class PowerForgeReleaseService
                     if (spec.GitHub is { Commitish: "HEAD" } && verifiedSourceCommit is not null)
                         spec.GitHub.Commitish = verifiedSourceCommit;
                     ApplyDotNetPublishSkipFlags(dotNetPlan, request.SkipRestore, request.SkipBuild);
+                    dotNetPlan.SeparateBuildRequested = request.SeparateBuildRequested && !request.SkipBuild;
                     result.DotNetToolPlan = dotNetPlan;
 
                     if (!request.PlanOnly && !request.ValidateOnly)
@@ -6163,6 +6166,7 @@ internal sealed partial class PowerForgeReleaseService
         {
             plan.Restore = false;
             plan.NoRestoreInPublish = true;
+            plan.SkipRestoreRequested = true;
             steps = steps.Where(step => step.Kind != DotNetPublishStepKind.Restore).ToArray();
         }
 
@@ -6175,6 +6179,32 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         plan.Steps = steps;
+        DotNetPublishPipelineRunner.ValidateRequestedBuildModes(plan);
+    }
+
+    private static void PreflightSkipBuildMsiVersioning(
+        DotNetPublishSpec? spec,
+        PowerForgeReleaseRequest request,
+        string[] selectedTargets,
+        string[] toolTargetMatches,
+        ISet<PowerForgeReleaseToolOutputKind> selectedOutputs)
+    {
+        if (!request.SkipBuild || spec is null || !selectedOutputs.Contains(PowerForgeReleaseToolOutputKind.Installer))
+            return;
+
+        var activeTargets = ResolveDotNetProfileTargetNames(spec);
+        foreach (var installer in spec.Installers ?? Array.Empty<DotNetPublishInstaller>())
+        {
+            if (installer.Versioning is not { Enabled: true, ApplyToPublish: true })
+                continue;
+            if (!activeTargets.Contains(installer.PrepareFromTarget) ||
+                selectedTargets.Length > 0 && !toolTargetMatches.Contains(installer.PrepareFromTarget, StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            throw new InvalidOperationException(
+                $"SkipBuild cannot be combined with MSI versioning ApplyToPublish for target '{installer.PrepareFromTarget}': " +
+                "the versioned publish must compile the MSI payload.");
+        }
     }
 
     private static bool HasSigningOverrides(PowerForgeReleaseRequest request)

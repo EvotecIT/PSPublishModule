@@ -62,11 +62,17 @@ public sealed class DotNetPublishPlan
     /// <summary>When true, uses --no-restore during publish.</summary>
     public bool NoRestoreInPublish { get; set; }
 
+    /// <summary>Explicit front-end request to avoid restore during both build and publish.</summary>
+    internal bool SkipRestoreRequested { get; set; }
+
     /// <summary>Allows --no-build for controlled-source or explicit skip-build runs.</summary>
     public bool NoBuildInPublish { get; set; }
 
     /// <summary>Explicit front-end skip-build request, distinct from the default publish setting.</summary>
     internal bool SkipBuildRequested { get; set; }
+
+    /// <summary>Project release explicitly requested a separate build and no-build publish.</summary>
+    internal bool SeparateBuildRequested { get; set; }
 
     /// <summary>Opt-in controlled-checkout verification of evaluated build inputs.</summary>
     public bool UseControlledSourceProvenance { get; set; }

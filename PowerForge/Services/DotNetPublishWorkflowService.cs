@@ -51,6 +51,8 @@ internal sealed class DotNetPublishWorkflowService
         var enforceRequiredEnvironmentVariables = !context.PlanOnly && !context.ValidateOnly;
         var plan = _planPublish(context.Spec, context.SourceLabel, enforceRequiredEnvironmentVariables);
         plan.SkipBuildRequested = context.SkipBuildRequested;
+        plan.SkipRestoreRequested = context.SkipRestoreRequested;
+        DotNetPublishPipelineRunner.ValidateRequestedBuildModes(plan);
         if (context.PlanOnly || context.ValidateOnly)
         {
             if (context.ValidateOnly)

@@ -1192,7 +1192,8 @@ public sealed class DotNetPublishDotNetOptions
     public bool Clean { get; set; }
 
     /// <summary>
-    /// When true, runs <c>dotnet build</c> before publishing and uses <c>--no-build</c> in publish by default.
+    /// When true, runs <c>dotnet build</c> before publishing. A normal publish still
+    /// performs its own build unless an explicit no-build mode is selected.
     /// </summary>
     public bool Build { get; set; } = true;
 
@@ -1203,7 +1204,8 @@ public sealed class DotNetPublishDotNetOptions
 
     /// <summary>
     /// Allows <c>--no-build</c> for controlled-source or explicit skip-build runs.
-    /// Normal publishing rebuilds even when this setting is true.
+    /// Normal direct publishing rebuilds even when this setting is true. Project-release
+    /// configuration may explicitly choose a separate build followed by no-build publish.
     /// </summary>
     public bool NoBuildInPublish { get; set; } = true;
 

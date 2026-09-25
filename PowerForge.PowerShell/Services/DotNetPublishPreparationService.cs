@@ -40,7 +40,8 @@ internal sealed class DotNetPublishPreparationService
             JsonOnly = request.JsonOnly,
             PlanOnly = request.Plan,
             ValidateOnly = request.Validate,
-            SkipBuildRequested = request.SkipBuild
+            SkipBuildRequested = request.SkipBuild,
+            SkipRestoreRequested = request.SkipRestore
         };
     }
 

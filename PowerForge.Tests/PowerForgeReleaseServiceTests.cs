@@ -4125,8 +4125,125 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(result.DotNetToolPlan.NoRestoreInPublish);
             Assert.True(result.DotNetToolPlan.NoBuildInPublish);
             Assert.True(result.DotNetToolPlan.SkipBuildRequested);
+            Assert.True(result.DotNetToolPlan.SkipRestoreRequested);
             Assert.DoesNotContain(result.DotNetToolPlan.Steps, step => step.Kind == DotNetPublishStepKind.Restore);
             Assert.DoesNotContain(result.DotNetToolPlan.Steps, step => step.Kind == DotNetPublishStepKind.Build);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void Execute_SkipBuildVersionedMsi_RejectsBeforePackageLane()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            bool packagesExecuted = false;
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) =>
+                {
+                    packagesExecuted = true;
+                    throw new InvalidOperationException("Package lane must not run.");
+                },
+                planTools: (_, _, _) => throw new InvalidOperationException("Legacy tools should not run."),
+                runTools: _ => throw new InvalidOperationException("Legacy tools should not run."),
+                publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."));
+
+            var spec = new PowerForgeReleaseSpec
+            {
+                Packages = new ProjectBuildConfiguration(),
+                Tools = new PowerForgeToolReleaseSpec
+                {
+                    DotNetPublish = new DotNetPublishSpec
+                    {
+                        Targets =
+                        [
+                            new DotNetPublishTarget { Name = "app", ProjectPath = "App.csproj" }
+                        ],
+                        Installers =
+                        [
+                            new DotNetPublishInstaller
+                            {
+                                Id = "app.msi",
+                                PrepareFromTarget = "app",
+                                Versioning = new DotNetPublishMsiVersionOptions
+                                {
+                                    Enabled = true,
+                                    ApplyToPublish = true
+                                }
+                            }
+                        ]
+                    }
+                }
+            };
+
+            var error = Assert.Throws<InvalidOperationException>(() => service.Execute(spec,
+                new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "release.json"),
+                    SkipBuild = true
+                }));
+            Assert.Contains("SkipBuild cannot be combined with MSI versioning ApplyToPublish", error.Message);
+            Assert.False(packagesExecuted);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Execute_ProjectReleaseBuildMode_PreservesRequestedPublishBuild(bool buildDuringPublish)
+    {
+        string root = CreateSandbox();
+        try
+        {
+            string projectPath = Path.Combine(root, "App.csproj");
+            File.WriteAllText(projectPath, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><Version>1.2.3</Version></PropertyGroup></Project>");
+            var project = new ConfigurationProject
+            {
+                Name = "App",
+                ProjectRoot = root,
+                Release = new ConfigurationProjectRelease { BuildDuringPublish = buildDuringPublish },
+                Targets =
+                [
+                    new ConfigurationProjectTarget
+                    {
+                        Name = "App",
+                        ProjectPath = projectPath,
+                        Framework = "net10.0",
+                        Runtimes = ["win-x64"]
+                    }
+                ]
+            };
+            string configurationPath = Path.Combine(root, ".powerforge", "project.release.json");
+            var (spec, defaults) = PowerForgeProjectDslMapper.CreateRelease(project, configurationPath, root);
+            PowerForgeReleaseRequest request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(
+                configurationPath,
+                defaults,
+                new PSPublishModule.PowerForgeReleaseInvocationOptions { PlanOnly = true });
+            var service = new PowerForgeReleaseService(new NullLogger());
+
+            PowerForgeReleaseResult result = service.Execute(spec, request);
+
+            Assert.True(result.Success, result.ErrorMessage);
+            DotNetPublishPlan plan = Assert.IsType<DotNetPublishPlan>(result.DotNetToolPlan);
+            Assert.Equal(!buildDuringPublish, plan.SeparateBuildRequested);
+            Assert.False(plan.SkipBuildRequested);
+            Assert.Equal(!buildDuringPublish, plan.Steps.Any(step => step.Kind == DotNetPublishStepKind.Build));
+            DotNetPublishTargetPlan target = Assert.Single(plan.Targets);
+            List<string> publishArgs = DotNetPublishPipelineRunner.BuildPublishArguments(
+                plan, target, "net10.0", "win-x64", DotNetPublishStyle.PortableCompat, "out");
+            Assert.Equal(!buildDuringPublish, publishArgs.Contains("--no-build"));
+            Assert.Equal(
+                buildDuringPublish ? "working-tree" : "separate-build-unverified",
+                DotNetPublishPipelineRunner.DescribeBuildInputMode(plan));
         }
         finally
         {
