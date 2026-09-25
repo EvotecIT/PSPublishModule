@@ -34,7 +34,9 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
         string authorizedKeyMode = "644",
         string captureDirectoryOwner = "root",
         bool includeOptionalEncryptedCapture = false,
-        bool allEncryptedCaptureOptional = false)
+        bool allEncryptedCaptureOptional = false,
+        bool usePublisherEngine = false,
+        bool publisherAtDifferentRef = false)
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-recovery-source-security-" + Guid.NewGuid().ToString("N"));
         var workspace = Path.Combine(root, "caller");
@@ -65,7 +67,9 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
             if (alternateManagedSudoersTarget is not null)
                 File.WriteAllText(Path.Combine(workspace, "deploy", "linux", "alternate.sudoers"), "# managed source fixture\n");
 
-            var helperSource = "/srv/engine/Deployment/Linux/powerforge-server-encrypted-capture.sh";
+            var helperSource = usePublisherEngine
+                ? "/srv/publisher/Deployment/Linux/powerforge-server-encrypted-capture.sh"
+                : "/srv/engine/Deployment/Linux/powerforge-server-encrypted-capture.sh";
             if (helperFromCaller)
             {
                 File.WriteAllText(Path.Combine(workspace, "deploy", "linux", "fake-helper.sh"), "#!/usr/bin/env bash\nexit 0\n");
@@ -99,6 +103,14 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
                 new { url = repositoryUrl, path = "/srv/caller", @ref = callerRef },
                 new { url = "https://github.com/EvotecIT/PSPublishModule.git", path = "/srv/engine", @ref = EngineRef }
             };
+            if (usePublisherEngine)
+                repositories.Add(new
+                {
+                    role = "backup-publisher-engine",
+                    url = "https://github.com/EvotecIT/PSPublishModule.git",
+                    path = "/srv/publisher",
+                    @ref = publisherAtDifferentRef ? new string('b', 40) : EngineRef
+                });
             if (shadowEngineHelper)
                 repositories.Add(new { url = repositoryUrl, path = "/srv/engine/Deployment", @ref = callerRef });
             if (includeCloneOnlyRepository)
