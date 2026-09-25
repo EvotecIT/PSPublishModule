@@ -256,7 +256,8 @@ internal sealed class PowerShellLoweredFunction
         bool requiresPowerShellStatementErrors = false,
         bool requiresPowerShellStopping = false,
         PowerShellNativeFunctionBinding? nativeFunctionBinding = null,
-        string sourcePath = "", string sourceText = "", Type? successOutputType = null)
+        string sourcePath = "", string sourceText = "", Type? successOutputType = null,
+        PowerShellOutputTypeDeclaration[]? outputTypeDeclarations = null)
     {
         Symbol = symbol;
         GeneratedName = generatedName;
@@ -268,6 +269,7 @@ internal sealed class PowerShellLoweredFunction
         CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding();
         DeclaredOutputType = declaredOutputType;
         DeclaredOutputTypeName = declaredOutputTypeName ?? string.Empty;
+        OutputTypeDeclarations = outputTypeDeclarations ?? Array.Empty<PowerShellOutputTypeDeclaration>();
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         RequiresPowerShellStreams = requiresPowerShellStreams;
         RequiresRuntimeFreeProviderOperations = requiresRuntimeFreeProviderOperations;
@@ -300,6 +302,7 @@ internal sealed class PowerShellLoweredFunction
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
     internal Type? DeclaredOutputType { get; }
     internal string DeclaredOutputTypeName { get; }
+    internal PowerShellOutputTypeDeclaration[] OutputTypeDeclarations { get; }
     internal bool RequiresPowerShellBoundParameters { get; }
     internal bool RequiresPowerShellStreams { get; }
     internal bool RequiresRuntimeFreeProviderOperations { get; }

@@ -248,7 +248,8 @@ internal sealed partial class PowerShellTypedLowerer
                 functionDocument?.Path ?? string.Empty,
                 string.Join("\n", (functionDocument?.SourceText ?? string.Empty).Replace("\r\n", "\n").Split('\n')
                     .Skip(function.Body.Span.StartLine - 1).Take(function.Body.Span.EndLine - function.Body.Span.StartLine + 1)),
-                PowerShellSuccessOutputTypePolicy.Resolve(function, boundFunctions)));
+                PowerShellSuccessOutputTypePolicy.Resolve(function, boundFunctions),
+                function.OutputTypeDeclarations));
         }
 
         CloseLoweringDependencies(functions, program, diagnostics);

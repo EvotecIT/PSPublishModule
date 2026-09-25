@@ -204,6 +204,9 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Whether the authored output type is also a target-compatible CLR semantic contract.</summary>
     internal bool DeclaredOutputTypeIsSemanticContract { get; set; }
 
+    /// <summary>Authored output metadata attributes in source order.</summary>
+    internal PowerShellOutputTypeDeclaration[] OutputTypeDeclarations { get; set; } = Array.Empty<PowerShellOutputTypeDeclaration>();
+
     /// <summary>Typed method parameters.</summary>
     public PowerShellCompilationParameter[] Parameters { get; }
 

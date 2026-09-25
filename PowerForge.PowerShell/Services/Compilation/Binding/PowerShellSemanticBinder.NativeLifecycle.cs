@@ -10,7 +10,8 @@ internal sealed partial class PowerShellSemanticBinder
         ICollection<PowerShellSemanticDiagnostic> diagnostics, string? targetFramework,
         PowerShellCompilationCapability capabilities, Dictionary<string, PowerShellSemanticSymbolBinding> symbols,
         PowerShellBoundParameter[] parameters, PowerShellNativeFunctionBinding nativeBinding,
-        Type? outputType, string outputTypeName, int diagnosticStart)
+        Type? outputType, string outputTypeName, int diagnosticStart,
+        PowerShellOutputTypeDeclaration[] outputTypeDeclarations)
     {
         var locals = DeclareLocals(document, function, symbols, functions, capabilities, targetFramework, _commandResolver);
         var clauses = new List<PowerShellBoundConditionalClause>();
@@ -43,6 +44,6 @@ internal sealed partial class PowerShellSemanticBinder
             PowerShellCommentHelpBinder.Bind(function, functionSymbol), PowerShellAdvancedFunctionPolicy.GetAliases(function),
             PowerShellAdvancedFunctionPolicy.GetBodyBinding(function.Body), outputType, outputTypeName,
             body, PowerShellTypeFact.Unknown, PowerShellOutputCardinality.Unknown, body.Effects, body.Capabilities,
-            PowerShellExecutionDisposition.Typed, nativeBinding);
+            PowerShellExecutionDisposition.Typed, nativeBinding, outputTypeDeclarations);
     }
 }

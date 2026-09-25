@@ -121,7 +121,8 @@ internal sealed partial class PowerShellSemanticBinder
         if (nativeFunctionBinding is not null && PowerShellRuntimeFreePipelineLifecyclePolicy.HasNamedLifecycle(function.Body))
             return BindNativeLifecycleFunction(document, function, functionSymbol, functions, diagnostics, targetFramework,
                 capabilities, symbols, parameters, nativeFunctionBinding, outputTypeContract.SemanticType,
-                outputTypeContract.MetadataTypeName, functionDiagnosticStart);
+                outputTypeContract.MetadataTypeName, functionDiagnosticStart,
+                outputTypeContract.Declarations);
         if (hasRuntimeFreeLifecycle)
             return BindRuntimeFreePipelineLifecycleFunction(
                 document,
@@ -137,7 +138,8 @@ internal sealed partial class PowerShellSemanticBinder
                 parameters,
                 pipelineParameter,
                 functions[function.Name].PipelineLifecycleReturnsCollection,
-                functionDiagnosticStart);
+                functionDiagnosticStart,
+                outputTypeContract.Declarations);
         var authoredStatements = function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
         var localFunctionNames = functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var runtimeTailStart = nativeFunctionBinding is null && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams)
@@ -324,7 +326,8 @@ internal sealed partial class PowerShellSemanticBinder
             PowerShellSemanticEffect.None,
             PowerShellRequiredCapability.None,
             PowerShellExecutionDisposition.Typed,
-            nativeFunctionBinding);
+            nativeFunctionBinding,
+            outputTypeContract.Declarations);
     }
 
     private PowerShellBoundParameter[]? BindParameters(

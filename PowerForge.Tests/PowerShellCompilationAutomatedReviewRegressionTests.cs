@@ -197,8 +197,52 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
     }
 
     [Theory]
-    [InlineData("[OutputType('First', 'Second')]")]
-    [InlineData("[OutputType('First', ParameterSetName = 'One')]")]
+    [InlineData("net10.0", "pwsh")]
+    [InlineData("net472", "powershell")]
+    public void Build_BinaryModulePreservesOutputTypeListsAndParameterSets(string targetFramework, string host)
+    {
+        using var fixture = Fixture.Create("""
+            function Get-Multiple {
+                [OutputType('None', 'System.String')]
+                param()
+                'value'
+            }
+            function Get-BySet {
+                [CmdletBinding()]
+                [OutputType('First.Record', ParameterSetName='First')]
+                [OutputType('Second.Record', ParameterSetName='Second')]
+                param(
+                    [Parameter(ParameterSetName='First')][switch]$First,
+                    [Parameter(ParameterSetName='Second')][switch]$Second
+                )
+                'value'
+            }
+            Export-ModuleMember -Function Get-Multiple, Get-BySet
+            """, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "PowerForge.OutputTypeLists",
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true) { TargetFramework = targetFramework });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        const string observation = "$multiple=Get-Command Get-Multiple; $sets=Get-Command Get-BySet; " +
+                                   "[Console]::Write((@($multiple.OutputType.Name) -join ',') + '|' + " +
+                                   "(@($sets.OutputType.Name) -join ',') + '|' + (Get-Multiple) + '|' + (Get-BySet -First))";
+        var original = Run(host, "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal)}' -Force; " + observation);
+        var generated = Run(host, "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; " + observation);
+        Assert.Equal((0, "None,System.String|First.Record,Second.Record|value|value", string.Empty), Normalize(original));
+        Assert.Equal(Normalize(original), Normalize(generated));
+
+        var setMetadata = Run(host, "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; " +
+            "$attrs=(Get-Command Get-BySet).ImplementingType.GetCustomAttributes([System.Management.Automation.OutputTypeAttribute],$false); " +
+            "[Console]::Write((@($attrs | ForEach-Object { $_.ParameterSetName }) -join ','))");
+        Assert.Equal((0, "First,Second", string.Empty), Normalize(setMetadata));
+    }
+
+    [Theory]
     [InlineData("[OutputType(' ')]")]
     public void Transpile_DoesNotAdmitOtherOutputTypeStringShapesWithoutTheirMetadataContract(
         string attribute)
@@ -232,6 +276,36 @@ public sealed class PowerShellCompilationAutomatedReviewRegressionTests
             out var contract, out _, out _));
         Assert.Null(contract.SemanticType);
         Assert.Equal("Widget", contract.MetadataTypeName);
+    }
+
+    [Theory]
+    [InlineData("[OutputType('First', 'Second')]")]
+    [InlineData("[OutputType('First', ParameterSetName='One')] [OutputType('Second', ParameterSetName='Two')]")]
+    [InlineData("[OutputType([string], [datetime])]")]
+    public void Resolve_OutputTypeCollectionsRequireAdvisoryMetadataCapability(string attributes)
+    {
+        var source = $"function Get-Value {{ {attributes} param() return 41 }}";
+        var ast = Parser.ParseInput(source, out _, out _);
+        var function = Assert.Single(ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+            .OfType<FunctionDefinitionAst>());
+
+        foreach (var capabilities in new[]
+                 {
+                     PowerShellCompilationCapabilities.TypedLibrary,
+                     PowerShellCompilationCapabilities.TypedExecutable
+                 })
+            Assert.False(PowerShellOutputTypeSemanticPolicy.TryResolve(
+                function.Body, "net10.0", capabilities, out _, out _, out _));
+        Assert.True(PowerShellOutputTypeSemanticPolicy.TryResolve(
+            function.Body, "net10.0", PowerShellCompilationCapabilities.BinaryModule,
+            out var contract, out _, out _));
+        Assert.Null(contract.SemanticType);
+
+        using var fixture = Fixture.Create(source, ".psm1");
+        var strict = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath, PowerShellCompilationMode.Strict, targetFramework: "net10.0",
+            capabilities: PowerShellCompilationCapabilities.TypedLibrary));
+        Assert.False(Assert.Single(Assert.Single(strict.Files).Units).IsCompilable);
     }
 
     [Fact]

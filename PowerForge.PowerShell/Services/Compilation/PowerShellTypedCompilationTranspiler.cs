@@ -456,6 +456,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         }
         method.DocumentId = emitted.SourceSpan.DocumentId;
         method.DeclaredOutputTypeIsSemanticContract = emitted.DeclaredOutputType is not null;
+        method.OutputTypeDeclarations = emitted.OutputTypeDeclarations;
         method.SuccessOutputType = emitted.SuccessOutputType?.FullName ?? string.Empty;
         method.RequiresPowerShellModuleState = emitted.RequiresPowerShellModuleState;
         method.RequiresPowerShellModuleStateRead = emitted.RequiresPowerShellModuleStateRead;
@@ -714,7 +715,8 @@ internal sealed class PowerShellCSharpMethodEmission
         bool requiresPowerShellStatementErrors = false,
         bool requiresPowerShellStopping = false,
         PowerShellNativeFunctionBinding? nativeFunctionBinding = null,
-        Type? successOutputType = null)
+        Type? successOutputType = null,
+        PowerShellOutputTypeDeclaration[]? outputTypeDeclarations = null)
     {
         GeneratedName = generatedName;
         ReturnType = returnType;
@@ -732,6 +734,7 @@ internal sealed class PowerShellCSharpMethodEmission
         NativeFunctionBinding = nativeFunctionBinding;
         DeclaredOutputType = declaredOutputType;
         DeclaredOutputTypeName = declaredOutputTypeName ?? declaredOutputType?.FullName ?? string.Empty;
+        OutputTypeDeclarations = outputTypeDeclarations ?? Array.Empty<PowerShellOutputTypeDeclaration>();
         Help = help;
         Aliases = aliases ?? Array.Empty<string>();
         CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding();
@@ -768,6 +771,7 @@ internal sealed class PowerShellCSharpMethodEmission
     internal bool RequiresPowerShellModuleState => RequiresPowerShellModuleStateRead || RequiresPowerShellModuleStateWrite;
     internal Type? DeclaredOutputType { get; }
     internal string DeclaredOutputTypeName { get; }
+    internal PowerShellOutputTypeDeclaration[] OutputTypeDeclarations { get; }
     internal PowerShellCompilationHelp? Help { get; }
     internal string[] Aliases { get; }
     internal PowerShellCompilationCommandBinding CommandBinding { get; }

@@ -15,7 +15,20 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
         if (cmdlet.Method.Aliases.Length > 0)
             builder.AppendLine($"[Alias({string.Join(", ", cmdlet.Method.Aliases.Select(PowerShellCSharpLiteral.QuoteString))})]");
         builder.AppendLine(GenerateCmdletAttribute(cmdlet));
-        if (cmdlet.Method.DeclaredOutputTypeIsSemanticContract &&
+        if (cmdlet.Method.OutputTypeDeclarations.Length > 0)
+        {
+            foreach (var declaration in cmdlet.Method.OutputTypeDeclarations)
+            {
+                var types = declaration.UseClrTypes
+                    ? declaration.TypeNames.Select(name => $"typeof({GetGeneratedTypeName(name)})")
+                    : declaration.TypeNames.Select(PowerShellCSharpLiteral.QuoteString);
+                var parameterSet = string.IsNullOrEmpty(declaration.ParameterSetName)
+                    ? string.Empty
+                    : $", ParameterSetName = new string[] {{ {PowerShellCSharpLiteral.QuoteString(declaration.ParameterSetName)} }}";
+                builder.AppendLine($"[OutputType({string.Join(", ", types)}{parameterSet})]");
+            }
+        }
+        else if (cmdlet.Method.DeclaredOutputTypeIsSemanticContract &&
             !string.IsNullOrWhiteSpace(cmdlet.Method.DeclaredOutputType))
             builder.AppendLine($"[OutputType(typeof({GetGeneratedTypeName(cmdlet.Method.DeclaredOutputType)}))]");
         else if (!string.IsNullOrWhiteSpace(cmdlet.Method.DeclaredOutputType))

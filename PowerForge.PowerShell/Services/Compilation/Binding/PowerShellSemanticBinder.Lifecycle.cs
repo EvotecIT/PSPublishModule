@@ -29,7 +29,8 @@ internal sealed partial class PowerShellSemanticBinder
         PowerShellBoundParameter[] sourceParameters,
         ParameterAst pipelineParameter,
         bool signatureReturnsCollection,
-        int functionDiagnosticStart)
+        int functionDiagnosticStart,
+        PowerShellOutputTypeDeclaration[] outputTypeDeclarations)
     {
         var sourceParameter = sourceParameters.Single(parameter => parameter.Symbol.Name.Equals(
             pipelineParameter.Name.VariablePath.UserPath,
@@ -229,7 +230,8 @@ internal sealed partial class PowerShellSemanticBinder
             PowerShellOutputCardinality.Unknown,
             PowerShellSemanticEffect.None,
             PowerShellRequiredCapability.None,
-            PowerShellExecutionDisposition.Typed);
+            PowerShellExecutionDisposition.Typed,
+            outputTypeDeclarations: outputTypeDeclarations);
     }
 
     private PowerShellBoundBlock? BindLifecycleBlock(

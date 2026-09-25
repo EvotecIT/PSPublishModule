@@ -175,7 +175,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             moduleStateWriteSiteCount: moduleStateWriteSiteCount,
             regionGraph: regionGraph,
             nativeFunctionBinding: function.NativeFunctionBinding,
-            successOutputType: function.SuccessOutputType);
+            successOutputType: function.SuccessOutputType,
+            outputTypeDeclarations: function.OutputTypeDeclarations);
     }
 
     private void EmitStatement(

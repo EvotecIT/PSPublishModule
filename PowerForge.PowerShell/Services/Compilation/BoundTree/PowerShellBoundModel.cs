@@ -589,7 +589,8 @@ internal sealed class PowerShellBoundFunction
         PowerShellSemanticEffect effects,
         PowerShellRequiredCapability capabilities,
         PowerShellExecutionDisposition disposition,
-        PowerShellNativeFunctionBinding? nativeFunctionBinding = null)
+        PowerShellNativeFunctionBinding? nativeFunctionBinding = null,
+        PowerShellOutputTypeDeclaration[]? outputTypeDeclarations = null)
     {
         Symbol = symbol;
         Parameters = parameters ?? Array.Empty<PowerShellBoundParameter>();
@@ -600,6 +601,7 @@ internal sealed class PowerShellBoundFunction
         CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding();
         DeclaredOutputType = declaredOutputType;
         DeclaredOutputTypeName = declaredOutputTypeName ?? string.Empty;
+        OutputTypeDeclarations = outputTypeDeclarations ?? Array.Empty<PowerShellOutputTypeDeclaration>();
         Body = body;
         ReturnType = returnType;
         OutputCardinality = outputCardinality;
@@ -618,6 +620,7 @@ internal sealed class PowerShellBoundFunction
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
     internal Type? DeclaredOutputType { get; }
     internal string DeclaredOutputTypeName { get; }
+    internal PowerShellOutputTypeDeclaration[] OutputTypeDeclarations { get; }
     internal PowerShellBoundBlock Body { get; }
     internal PowerShellTypeFact ReturnType { get; }
     internal PowerShellOutputCardinality OutputCardinality { get; }
@@ -633,10 +636,10 @@ internal sealed class PowerShellBoundFunction
         PowerShellSemanticEffect? effects = null,
         PowerShellRequiredCapability? capabilities = null,
         PowerShellExecutionDisposition? disposition = null)
-        => new(Symbol, Parameters.ToArray(), Locals.ToArray(), Scope, Help, Aliases.ToArray(), CommandBinding, DeclaredOutputType, DeclaredOutputTypeName, Body, returnType ?? ReturnType, outputCardinality ?? OutputCardinality, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition, NativeFunctionBinding);
+        => new(Symbol, Parameters.ToArray(), Locals.ToArray(), Scope, Help, Aliases.ToArray(), CommandBinding, DeclaredOutputType, DeclaredOutputTypeName, Body, returnType ?? ReturnType, outputCardinality ?? OutputCardinality, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition, NativeFunctionBinding, OutputTypeDeclarations);
 
     internal PowerShellBoundFunction WithBody(PowerShellBoundBlock body)
-        => new(Symbol, Parameters.ToArray(), Locals.ToArray(), Scope, Help, Aliases.ToArray(), CommandBinding, DeclaredOutputType, DeclaredOutputTypeName, body, ReturnType, OutputCardinality, body.Effects, body.Capabilities, Disposition, NativeFunctionBinding);
+        => new(Symbol, Parameters.ToArray(), Locals.ToArray(), Scope, Help, Aliases.ToArray(), CommandBinding, DeclaredOutputType, DeclaredOutputTypeName, body, ReturnType, OutputCardinality, body.Effects, body.Capabilities, Disposition, NativeFunctionBinding, OutputTypeDeclarations);
 }
 
 internal sealed class PowerShellBoundSourceDocument
