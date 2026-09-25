@@ -34,6 +34,24 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
     }
 
     [Fact]
+    public void Validator_ShouldAcceptExplicitPublisherEngineHelper()
+    {
+        var result = RunValidator(usePublisherEngine: true);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("3", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldNeverSubstituteActionCheckoutForDifferentlyPinnedPublisher()
+    {
+        var result = RunValidator(usePublisherEngine: true, publisherAtDifferentRef: true);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("credential-free validation", result.AllOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Validator_ShouldRenderAllOptionalEncryptedCaptureCompatibilityFlag()
     {
         var result = RunValidator(allEncryptedCaptureOptional: true);
