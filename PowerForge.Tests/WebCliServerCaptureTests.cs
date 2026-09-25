@@ -6,6 +6,37 @@ namespace PowerForge.Tests;
 public sealed class WebCliServerCaptureTests
 {
     [Fact]
+    public void CaptureLocal_ExecutesManifestCommandsWithoutContactingTarget()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-local-capture-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var manifestPath = Path.Combine(root, "manifest.json");
+            var outputPath = Path.Combine(root, "capture");
+            File.WriteAllText(manifestPath, """
+                {"schemaVersion":2,"name":"local-capture-test","target":{"host":"no-such-host.invalid"},"capture":{"commands":[{"id":"marker","command":"printf local-capture-ok","required":true}]}}
+                """);
+
+            var exitCode = WebCliCommandHandlers.HandleServer(
+                ["capture", "--manifest", manifestPath, "--out", outputPath, "--local", "--fail-on-failure"],
+                outputJson: false,
+                logger: new WebConsoleLogger(),
+                outputSchemaVersion: 1);
+
+            Assert.Equal(0, exitCode);
+            Assert.Equal("local-capture-ok", File.ReadAllText(Path.Combine(outputPath, "commands", "0000-marker.out.txt")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void HydrateCapturedRepositoryRefs_UsesSuccessfulExactCommandOutput()
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-ref-capture-" + Guid.NewGuid().ToString("N"));

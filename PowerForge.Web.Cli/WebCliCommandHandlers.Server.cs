@@ -143,8 +143,11 @@ internal static partial class WebCliCommandHandlers
         var skipFiles = HasOption(subArgs, "--skip-files");
         var skipEncrypted = HasOption(subArgs, "--skip-encrypted");
         var failOnFailure = HasOption(subArgs, "--fail-on-failure");
+        var local = HasOption(subArgs, "--local");
+        if (local && HasOption(subArgs, "--ssh"))
+            throw new InvalidOperationException("Server capture cannot combine --local with --ssh.");
         var sshCommand = TryGetOptionValue(subArgs, "--ssh") ?? "ssh";
-        var target = BuildServerSshTarget(manifest.Target);
+        var target = local ? string.Empty : BuildServerSshTarget(manifest.Target);
 
         var outputRoot = ResolveCaptureOutputPath(outPathArg, manifest);
         Directory.CreateDirectory(outputRoot);
@@ -164,14 +167,15 @@ internal static partial class WebCliCommandHandlers
 
         if (dryRun)
         {
-            warnings.Add("Dry run requested; no SSH commands were executed.");
+            warnings.Add(local ? "Dry run requested; no local commands were executed." : "Dry run requested; no SSH commands were executed.");
         }
         else
         {
-            using var captureLock = AcquireRemoteOperationLocks(
+            using var captureLock = AcquireCaptureOperationLocks(
                 sshCommand,
                 target,
                 manifest.OperationLocks ?? Array.Empty<string>(),
+                local,
                 waitSecondsPerLock: 900);
             for (var commandIndex = 0; commandIndex < commandList.Length; commandIndex++)
             {
@@ -184,7 +188,8 @@ internal static partial class WebCliCommandHandlers
                     target,
                     command,
                     Path.Combine(outputRoot, "commands"),
-                    commandIndex);
+                    commandIndex,
+                    local);
                 captureLock?.EnsureHeld($"after capture command '{command.Id}'");
                 commandResults.Add(result);
                 if (!result.Success && command.Required)
@@ -194,7 +199,7 @@ internal static partial class WebCliCommandHandlers
             if (!skipFiles && plainFiles.Length > 0 && plainArchivePath is not null)
             {
                 captureLock?.EnsureHeld("before plain archive capture");
-                var archiveResult = CaptureRemoteTarArchive(sshCommand, target, plainFiles, plainArchivePath);
+                var archiveResult = CaptureRemoteTarArchive(sshCommand, target, plainFiles, plainArchivePath, local);
                 captureLock?.EnsureHeld("after plain archive capture");
                 if (!archiveResult.Success)
                 {
@@ -226,7 +231,8 @@ internal static partial class WebCliCommandHandlers
                         target,
                         encryptedFiles,
                         encryptedArchivePath,
-                        recipient);
+                        recipient,
+                        local);
                     captureLock?.EnsureHeld("after encrypted archive capture");
                     if (!encryptedResult.Success)
                     {
@@ -429,12 +435,15 @@ internal static partial class WebCliCommandHandlers
         string target,
         PowerForgeServerNamedCommand command,
         string commandOutputDirectory,
-        int commandIndex)
+        int commandIndex,
+        bool local)
     {
         var id = BuildCaptureCommandOutputStem(commandIndex, command.Id);
         var stdoutPath = Path.Combine(commandOutputDirectory, $"{id}.out.txt");
         var stderrPath = Path.Combine(commandOutputDirectory, $"{id}.err.txt");
-        var execution = RunProcessCaptureText(sshCommand, BuildSshArguments(target, command.Command ?? string.Empty));
+        var execution = RunProcessCaptureText(
+            local ? "sh" : sshCommand,
+            local ? ["-lc", command.Command ?? string.Empty] : BuildSshArguments(target, command.Command ?? string.Empty));
 
         File.WriteAllText(stdoutPath, execution.Stdout);
         File.WriteAllText(stderrPath, execution.Stderr);
@@ -464,10 +473,11 @@ internal static partial class WebCliCommandHandlers
         string sshCommand,
         string target,
         PowerForgeServerManagedFile[] files,
-        string outputPath)
+        string outputPath,
+        bool local)
     {
         var script = BuildRemoteTarScript(files);
-        return RunProcessCaptureBinary(sshCommand, BuildSshArguments(target, script), outputPath);
+        return RunProcessCaptureBinary(local ? "sh" : sshCommand, local ? ["-lc", script] : BuildSshArguments(target, script), outputPath);
     }
 
     private static ProcessResult CaptureRemoteEncryptedTarArchive(
@@ -475,10 +485,11 @@ internal static partial class WebCliCommandHandlers
         string target,
         PowerForgeServerManagedFile[] files,
         string outputPath,
-        string recipient)
+        string recipient,
+        bool local)
     {
         var script = BuildRemoteEncryptedTarScript(files, recipient);
-        return RunProcessCaptureBinary(sshCommand, BuildSshArguments(target, script), outputPath);
+        return RunProcessCaptureBinary(local ? "sh" : sshCommand, local ? ["-lc", script] : BuildSshArguments(target, script), outputPath);
     }
 
     internal static string BuildRemoteTarScript(PowerForgeServerManagedFile[] files)
