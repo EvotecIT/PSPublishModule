@@ -30,6 +30,8 @@ public sealed partial class DotNetPublishPipelineRunner
         var controlledPropertyNames = ReadControlledRestoreContextOverriddenPropertyNames();
         string nonce = Guid.NewGuid().ToString("N");
         string originalPropsProperty = BuildControlledOriginalPropsPropertyName(nonce);
+        string originalFrameworksProperty = BuildControlledOriginalFrameworksPropertyName(nonce);
+        string useOriginalFrameworksProperty = BuildControlledUseOriginalFrameworksPropertyName(nonce);
         string matchedProperty = "_PowerForgeMatched_" + nonce;
         string expectedIntermediateProperty = "_PowerForgeExpectedIntermediate_" + nonce;
         string expectedExtensionsProperty = "_PowerForgeExpectedExtensions_" + nonce;
@@ -41,7 +43,10 @@ public sealed partial class DotNetPublishPipelineRunner
         string actualTargetProperty = "_PowerForgeActualTarget_" + nonce;
         var isolatedProjectConditions = new List<string>();
 
-        var project = new XElement("Project");
+        // The wrapper is supplied as a global property. Restore the original observable
+        // value locally before importing it, including for code in the original props.
+        var project = new XElement("Project",
+            new XAttribute("TreatAsLocalProperty", "DirectoryBuildPropsPath"));
         foreach (IGrouping<string, ProjectEvaluationRequest> group in contexts)
         {
             string controlledProjectPath = Path.GetFullPath(Path.Combine(
@@ -89,7 +94,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 .ToArray();
             string[] propertyNames = representatives
                 .SelectMany(request => request.ReadEffectiveGlobalProperties().Keys)
-                .Where(name => !controlledPropertyNames.Contains(name))
+                .Where(name => !controlledPropertyNames.Contains(name) ||
+                    name.Equals("TargetFrameworks", StringComparison.OrdinalIgnoreCase))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
@@ -104,9 +110,30 @@ public sealed partial class DotNetPublishPipelineRunner
             // Capture the incoming values before the original props can supply defaults.
             project.Add(new XElement("PropertyGroup",
                 new XAttribute("Condition", projectCondition),
-                propertyNames.Select(name => new XElement(capturedProperties[name],
+                propertyNames.Where(name => !name.Equals("TargetFrameworks", StringComparison.OrdinalIgnoreCase))
+                    .Select(name => new XElement(capturedProperties[name],
                     "$(" + (name.Equals("DirectoryBuildPropsPath", StringComparison.OrdinalIgnoreCase)
-                        ? originalPropsProperty : name) + ")"))));
+                        ? originalPropsProperty : name) + ")")),
+                // Matrix restore supplies the declared framework list globally. Other builds,
+                // including nested references, must match their actual incoming value.
+                propertyNames.Where(name => name.Equals("TargetFrameworks", StringComparison.OrdinalIgnoreCase))
+                    .SelectMany(name => new[]
+                    {
+                        new XElement(capturedProperties[name],
+                            new XAttribute("Condition", "'$(" + useOriginalFrameworksProperty + ")' == 'true'"),
+                            "$(" + originalFrameworksProperty + ")"),
+                        new XElement(capturedProperties[name],
+                            new XAttribute("Condition", "'$(" + useOriginalFrameworksProperty + ")' != 'true'"),
+                            "$(TargetFrameworks)")
+                    })));
+            project.Add(new XElement("PropertyGroup",
+                new XAttribute("Condition", projectCondition),
+                new XElement("DirectoryBuildPropsPath",
+                    new XAttribute("Condition", "'$(" + originalPropsProperty + ")' != ''"),
+                    "$(" + originalPropsProperty + ")"),
+                new XElement("DirectoryBuildPropsPath",
+                    new XAttribute("Condition", "'$(" + originalPropsProperty + ")' == ''"),
+                    defaultProps ?? string.Empty)));
             // The controlled wrapper replaces the directory-props entry point. Import the
             // project's original props first so its build settings retain their normal order.
             project.Add(new XElement("Import",
@@ -264,6 +291,85 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static string BuildControlledOriginalPropsPropertyName(string nonce)
         => "_PowerForgeOriginalDirectoryBuildPropsPath_" + nonce;
+
+    private static string BuildControlledOriginalFrameworksPropertyName(string nonce)
+        => "_PowerForgeOriginalTargetFrameworks_" + nonce;
+
+    private static string BuildControlledUseOriginalFrameworksPropertyName(string nonce)
+        => "_PowerForgeUseOriginalTargetFrameworks_" + nonce;
+
+    private static bool TryAppendControlledOriginalFrameworksContext(
+        ICollection<string> arguments,
+        ProjectEvaluationRequest request,
+        string? propsPath,
+        string originalGitRoot,
+        string controlledSourceRoot,
+        IReadOnlyDictionary<string, string?> controlledEnvironment)
+    {
+        if (propsPath is null)
+            return true;
+        string fileName = Path.GetFileNameWithoutExtension(propsPath);
+        string nonce = fileName.Substring(fileName.LastIndexOf('.') + 1);
+        request.ReadEffectiveGlobalProperties().TryGetValue("TargetFrameworks", out string? original);
+        if (original is null)
+            controlledEnvironment.TryGetValue("TargetFrameworks", out original);
+        if (!TryRemapControlledBuildValue(original ?? string.Empty, originalGitRoot,
+                controlledSourceRoot, Path.GetDirectoryName(request.ProjectPath)!,
+                out string controlledOriginal))
+            return false;
+        arguments.Add("-p:" + BuildControlledOriginalFrameworksPropertyName(nonce) +
+            "=" + EscapeMsBuildPropertyValue(controlledOriginal));
+        arguments.Add("-p:" + BuildControlledUseOriginalFrameworksPropertyName(nonce) + "=true");
+        return true;
+    }
+
+    private static bool TryPrependControlledContextIntermediatePathMap(
+        ControlledPublishGraphNode node,
+        string originalGitRoot,
+        string controlledProjectPath,
+        ref string pathMap)
+    {
+        if (!node.EvaluatedProperties.TryGetValue("BaseIntermediateOutputPath", out string? basePath) ||
+            string.IsNullOrWhiteSpace(basePath))
+            return false;
+        string originalProjectDirectory = Path.GetDirectoryName(node.Request.ProjectPath)!;
+        string originalIntermediate = NormalizeBuildInputPathRoot(Path.IsPathRooted(basePath)
+            ? basePath
+            : Path.Combine(originalProjectDirectory, basePath));
+        if (!IsSameOrBelowBuildInputPath(originalIntermediate, originalGitRoot))
+            return false;
+        string originalMappedIntermediate = originalIntermediate;
+        string? bestSource = null;
+        if (!string.IsNullOrWhiteSpace(node.PathMap))
+        {
+            foreach (string entry in node.PathMap!.Split(','))
+            {
+                int separator = entry.IndexOf('=');
+                if (separator <= 0)
+                    return false;
+                string source = NormalizeBuildInputPathRoot(entry.Substring(0, separator).Trim());
+                string target = entry.Substring(separator + 1).Trim();
+                if (target.Length == 0 || !IsSameOrBelowBuildInputPath(originalIntermediate, source) ||
+                    (bestSource is not null && source.Length <= bestSource.Length))
+                    continue;
+                string relative = FrameworkCompatibility.GetRelativePath(source, originalIntermediate);
+                originalMappedIntermediate = relative == "."
+                    ? target
+                    : target.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
+                      Path.DirectorySeparatorChar + relative;
+                bestSource = source;
+            }
+        }
+        string controlledProjectDirectory = Path.GetDirectoryName(controlledProjectPath)!;
+        string suffix = ComputeControlledRestoreContextDirectoryName(controlledProjectPath,
+            BuildControlledRestoreContextKey(node));
+        string controlledIntermediate = NormalizeBuildInputPathRoot(Path.Combine(
+            controlledProjectDirectory, "obj", "powerforge-context", suffix));
+        // Roslyn embeds generated source paths in portable symbols. Hide only the
+        // context-specific segment, preserving any caller-supplied original PathMap.
+        pathMap = controlledIntermediate + "=" + originalMappedIntermediate + "," + pathMap;
+        return true;
+    }
 
     private static string EscapeControlledMsBuildConditionLiteral(string value)
         => EscapeMsBuildPropertyValue(value).Replace("'", "%27");

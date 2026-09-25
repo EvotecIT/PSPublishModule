@@ -102,6 +102,12 @@ public sealed partial class DotNetPublishPipelineRunner
         arguments.Add("-p:BuildProjectReferences=false");
         arguments.Add("-p:RestoreRecursive=false");
         AppendControlledRestoreContextProps(arguments, restoreContextProps);
+        if (!TryAppendControlledOriginalFrameworksContext(arguments, representative.Request,
+                restoreContextProps, originalGitRoot, controlledSourceRoot, controlledEnvironment))
+        {
+            failureReason = $"project '{originalProjectPath}' TargetFrameworks could not be remapped.";
+            return false;
+        }
         AppendControlledProofSafeguards(
             arguments,
             controlledNuGetConfig,
@@ -215,6 +221,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 out string controlledPathMap))
         {
             failureReason = $"PathMap for controlled project '{originalProjectPath}' could not be constructed.";
+            return false;
+        }
+        if (restoreContextProps is not null &&
+            !TryPrependControlledContextIntermediatePathMap(node, originalGitRoot,
+                controlledProjectPath, ref controlledPathMap))
+        {
+            failureReason = $"the original intermediate path for project '{originalProjectPath}' could not be mapped.";
             return false;
         }
         arguments.Add("-p:PathMap=" + EscapeMsBuildPropertyValue(controlledPathMap));

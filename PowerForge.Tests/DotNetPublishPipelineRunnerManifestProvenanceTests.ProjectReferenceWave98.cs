@@ -201,6 +201,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("environment-props")]
     [InlineData("mutated-isolation-marker")]
     [InlineData("spoofed-original-props")]
+    [InlineData("target-frameworks-context")]
+    [InlineData("keep-symbols")]
     [Trait("Category", "DotNetPublishPrGate")]
     public void ReadSourceProvenance_RestoresEverySelectedFrameworkForSharedMultiTargetReference(string scenario)
     {
@@ -219,6 +221,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         bool environmentProps = scenario == "environment-props";
         bool mutatedIsolationMarker = scenario == "mutated-isolation-marker";
         bool spoofedOriginalProps = scenario == "spoofed-original-props";
+        bool targetFrameworksContext = scenario == "target-frameworks-context";
+        bool keepSymbols = scenario == "keep-symbols";
         string root = Directory.CreateTempSubdirectory().FullName;
         try
         {
@@ -239,7 +243,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             {
                 customPropsPath = Path.Combine(root, "Custom.Build.props");
                 File.WriteAllText(customPropsPath,
-                    "<Project><PropertyGroup><ContextPropsMarker>Loaded</ContextPropsMarker></PropertyGroup></Project>");
+                    "<Project><PropertyGroup><ContextPropsMarker>Loaded</ContextPropsMarker>" +
+                    "<ContextPropsPathMarker Condition=\"'$(DirectoryBuildPropsPath)' == '$(MSBuildThisFileFullPath)'\">Loaded</ContextPropsPathMarker>" +
+                    "</PropertyGroup></Project>");
                 if (customDirectoryBuildProps)
                     customPropsArgument = $" -p:DirectoryBuildPropsPath=\"{customPropsPath}\"";
                 else if (spoofedOriginalProps)
@@ -248,10 +254,14 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             if (defaultedProperty)
                 File.WriteAllText(Path.Combine(sharedDirectory, "Directory.Build.props"),
                     "<Project><PropertyGroup><Flavor Condition=\"'$(Flavor)' == ''\">Direct</Flavor></PropertyGroup></Project>");
-            string directContext = distinctRestoreContexts && !defaultedProperty
+            string directContext = targetFrameworksContext
+                ? " AdditionalProperties=\"TargetFrameworks=net10.0\""
+                : distinctRestoreContexts && !defaultedProperty
                 ? " AdditionalProperties=\"Flavor=Direct\""
                 : string.Empty;
-            string bridgeContext = distinctRestoreContexts
+            string bridgeContext = targetFrameworksContext
+                ? " AdditionalProperties=\"TargetFrameworks=net8.0\""
+                : distinctRestoreContexts
                 ? " AdditionalProperties=\"Flavor=Bridge\""
                 : string.Empty;
             File.WriteAllText(appProject, $"""
@@ -313,11 +323,12 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                   </PropertyGroup>
                   <Target Name="RequireCustomProps" BeforeTargets="Restore;Build" Condition="'$(Flavor)' != '' and '{(customDirectoryBuildProps || environmentProps).ToString().ToLowerInvariant()}' == 'true'">
                     <Error Condition="'$(ContextPropsMarker)' != 'Loaded'" Text="Custom DirectoryBuildPropsPath was not imported." />
+                    <Error Condition="'$(ContextPropsPathMarker)' != 'Loaded'" Text="Original props observed a substituted DirectoryBuildPropsPath." />
                   </Target>
                   <Target Name="RejectSpoofedProps" BeforeTargets="Restore;Build" Condition="'{spoofedOriginalProps.ToString().ToLowerInvariant()}' == 'true'">
                     <Error Condition="'$(ContextPropsMarker)' == 'Loaded'" Text="A caller property redirected the original props import." />
                   </Target>
-                  <ItemGroup><ProjectReference Include="../Leaf/Leaf.csproj" /></ItemGroup>
+                  {(targetFrameworksContext ? string.Empty : "<ItemGroup><ProjectReference Include=\"../Leaf/Leaf.csproj\" /></ItemGroup>")}
                   {contextPackages}
                   {verifierCollision}
                 </Project>
@@ -331,8 +342,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 "internal static class Program { private static void Main() { _ = Bridge.Value + Shared.Value; } }");
             File.WriteAllText(Path.Combine(bridgeDirectory, "Bridge.cs"),
                 "public static class Bridge { public static int Value => Shared.Value; }");
-            File.WriteAllText(Path.Combine(sharedDirectory, "Shared.cs"),
-                "public static class Shared { public static int Value => Leaf.Value; }");
+            File.WriteAllText(Path.Combine(sharedDirectory, "Shared.cs"), targetFrameworksContext
+                ? "public static class Shared { public const int Value = 1; }"
+                : "public static class Shared { public static int Value => Leaf.Value; }");
             File.WriteAllText(Path.Combine(leafDirectory, "Leaf.cs"),
                 "public static class Leaf { public const int Value = 1; }");
             File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\nshared-assets/\n");
@@ -362,7 +374,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 $"build \"{appProject}\" -c Release -f net10.0 -r linux-x64 --no-restore --nologo " +
                 "-m:1 -p:BuildInParallel=false " +
                 $"/p:SourceRevisionId={revision} /p:IncludeSourceRevisionInInformationalVersion=true " +
-                $"/p:ContinuousIntegrationBuild=true /p:DebugType=None /p:DebugSymbols=false{customPropsArgument}", testEnvironment);
+                $"/p:ContinuousIntegrationBuild=true /p:DebugType={(keepSymbols ? "portable" : "None")} " +
+                $"/p:DebugSymbols={keepSymbols.ToString().ToLowerInvariant()}{customPropsArgument}", testEnvironment);
             var plan = new DotNetPublishPlan
             {
                 ProjectRoot = root,
@@ -376,6 +389,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     {
                         Name = "App",
                         ProjectPath = appProject,
+                        Publish = new DotNetPublishPublishOptions { KeepSymbols = keepSymbols },
                         Combinations =
                         [
                             new DotNetPublishTargetCombination
@@ -388,6 +402,14 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     }
                 ]
             };
+
+            if (keepSymbols)
+            {
+                plan.MsBuildProperties["DebugType"] = "portable";
+                plan.MsBuildProperties["DebugSymbols"] = "true";
+                plan.MsBuildProperties["ContinuousIntegrationBuild"] = "true";
+                plan.MsBuildProperties["IncludeSourceRevisionInInformationalVersion"] = "true";
+            }
 
             if (customPropsPath is not null)
             {
