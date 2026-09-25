@@ -645,6 +645,80 @@ public sealed partial class ServerRecoverySecurityTests
         Assert.Contains(errors, error => error.Contains("from 1 through 365", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("backups/")]
+    [InlineData("backups//daily")]
+    [InlineData(".git/backups")]
+    [InlineData("backups/.git/daily")]
+    public void ManifestValidation_RejectsBackupPathsThatCannotBePublished(string path)
+    {
+        var manifest = CreateManifest();
+        manifest.BackupTarget = new PowerForgeServerBackupTarget
+        {
+            Type = "github",
+            Repository = "EvotecIT/Backups",
+            Branch = "main",
+            Path = path,
+            Encryption = "age",
+            Recipient = "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd",
+            Retention = new PowerForgeServerBackupRetention { KeepLatestInTree = 24 }
+        };
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("backupTarget.path must be a safe repository-relative path", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("AGE1example")]
+    [InlineData("age1EXAMPLE")]
+    [InlineData("age1abc123")]
+    [InlineData("age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnq")]
+    public void ManifestValidation_RejectsInvalidAgeRecipients(string recipient)
+    {
+        var manifest = CreateManifest();
+        manifest.BackupTarget = new PowerForgeServerBackupTarget
+        {
+            Type = "github",
+            Repository = "EvotecIT/Backups",
+            Branch = "main",
+            Path = "ovh/example",
+            Encryption = "age",
+            Recipient = recipient,
+            Retention = new PowerForgeServerBackupRetention { KeepLatestInTree = 24 }
+        };
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("backupTarget.recipient must be a checksummed lowercase age X25519 public recipient", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("main/")]
+    [InlineData("main//daily")]
+    [InlineData("main.lock")]
+    [InlineData("main.")]
+    [InlineData("-main")]
+    [InlineData("HEAD")]
+    public void ManifestValidation_RejectsGitInvalidBackupBranches(string branch)
+    {
+        var manifest = CreateManifest();
+        manifest.BackupTarget = new PowerForgeServerBackupTarget
+        {
+            Type = "github",
+            Repository = "EvotecIT/Backups",
+            Branch = branch,
+            Path = "ovh/example",
+            Encryption = "age",
+            Recipient = "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd",
+            Retention = new PowerForgeServerBackupRetention { KeepLatestInTree = 24 }
+        };
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        Assert.Contains(errors, error => error.Contains("backupTarget.branch contains unsupported characters", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void ManifestValidation_RequiresCompleteStrictSshRepositoryPrerequisites()
     {

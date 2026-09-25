@@ -62,7 +62,7 @@ public sealed class ServerRecoveryDurableBackupTests
               "durableBackup": {
                 "exportRoot": "/var/lib/powerforge-backup-export",
                 "exportGroup": "powerforge-export",
-                "recipient": "age1example",
+                "recipient": "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd",
                 "stagingRetentionHours": 48,
                 "databases": [
                   { "id": "control", "provider": "postgresql", "database": "control", "required": true }
@@ -143,7 +143,7 @@ public sealed class ServerRecoveryDurableBackupTests
             {
                 ExportRoot = "/var/lib/powerforge-backup-export",
                 ExportGroup = "powerforge-export",
-                Recipient = "age1example",
+                Recipient = "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd",
                 StagingRetentionHours = 48,
                 Databases =
                 [
