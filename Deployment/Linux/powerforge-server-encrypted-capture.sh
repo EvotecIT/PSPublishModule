@@ -22,6 +22,7 @@ fi
 shift
 (( $# > 0 )) || die 'at least one capture path is required'
 [[ "$recipient" =~ ^age1[0-9a-z]+$ ]] || die 'recipient must be an age public recipient'
+printf '' | /usr/bin/age -r "$recipient" -o /dev/null 2>/dev/null || die 'recipient must be a valid checksummed age public recipient'
 
 required_paths=()
 optional_paths=()

@@ -159,8 +159,8 @@ function Assert-ExecutableRootHelper {
 
 function Assert-LiteralAgeRecipient {
     param([Parameter(Mandatory)][string] $Recipient)
-    if ($Recipient -cnotmatch '^age1[a-z0-9]+$') {
-        throw 'Host backup requires a lowercase literal age public recipient.'
+    if (-not (Test-AgeX25519Recipient $Recipient)) {
+        throw 'Host backup requires a checksummed lowercase age X25519 public recipient.'
     }
 }
 
@@ -413,6 +413,9 @@ if ($ValidateOnly) {
     return
 }
 
+& dotnet $cli server validate --manifest $manifestPath > $null
+Assert-ExitCode 'Validating host recovery manifest before capture'
+
 $captureName = Get-HostCaptureName
 $stamp = $captureName.Split('-')[0]
 $stage = Join-Path $workRoot "stage-$captureName"
@@ -493,13 +496,23 @@ try {
         Update-BackupCatalog -TargetRoot $targetRoot -TargetRelative $backupPath -KeepLatestInTree $keepLatest
         & git -C $checkout add -- $backupPath
         Assert-ExitCode 'Staging backup catalog'
+        Add-BackupCatalogToGit -Checkout $checkout -CatalogRelativePaths $catalogPaths
         & git -C $checkout diff --cached --quiet
         if ($LASTEXITCODE -eq 1) {
             & git -C $checkout commit --amend --no-edit
             Assert-ExitCode 'Committing backup catalog'
         } elseif ($LASTEXITCODE -ne 0) { throw 'Inspecting staged backup catalog failed.' }
         & git -C $checkout push origin "HEAD:$backupBranch"
-        if ($LASTEXITCODE -eq 0) { $published = $true; break }
+        $pushExitCode = $LASTEXITCODE
+        Invoke-GitWithRetry -Operation 'Confirming the private backup branch' -Arguments @(
+            '-C', $checkout, 'fetch', '--no-tags', 'origin', "+refs/heads/${backupBranch}:refs/remotes/origin/${backupBranch}")
+        if (Test-BackupPublicationAccepted -Checkout $checkout -Upstream "origin/$backupBranch") {
+            & git -C $checkout reset --hard "origin/$backupBranch" > $null
+            Assert-ExitCode 'Inspecting the accepted backup publication'
+            $published = $true
+            break
+        }
+        if ($pushExitCode -eq 0) { throw 'Backup push returned success but the remote branch does not contain its commit.' }
         Start-Sleep -Seconds ($attempt * 5)
     }
     if (-not $published) { throw 'Publishing host recovery capture failed after three attempts.' }
@@ -509,6 +522,10 @@ try {
     Assert-ExitCode 'Verifying published recovery capture'
     if ($entry.Count -ne 1 -or $entry[0] -ne "$backupPath/$captureName") {
         throw 'Published commit does not contain this recovery capture.'
+    }
+    foreach ($relative in @("$backupPath/LATEST.txt", "$backupPath/index.json")) {
+        & git -C $checkout cat-file -e "$($publishedSha[0]):$relative" 2>$null
+        if ($LASTEXITCODE -ne 0) { throw "Published commit does not contain backup catalog: $relative" }
     }
     Assert-PublishedBackupCatalog -TargetRoot $targetRoot -CaptureName $captureName
     Write-Output "Published encrypted recovery capture $captureName at $($publishedSha[0])."

@@ -48,7 +48,7 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
                 Path.Combine(engineRoot, "Deployment", "Linux", "powerforge-server-encrypted-capture.sh"),
                 "#!/usr/bin/env bash\nset -euo pipefail\n");
             var expectedEncryptedCommand = allEncryptedCaptureOptional
-                ? "/usr/local/sbin/powerforge-server-encrypted-capture --recipient age1example --ignore-failed-read -- /var/lib/example/optional"
+                ? "/usr/local/sbin/powerforge-server-encrypted-capture --recipient age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd --ignore-failed-read -- /var/lib/example/optional"
                 : includeOptionalEncryptedCapture
                     ? ExpectedCaptureCommand + " --optional /var/lib/example/optional"
                     : ExpectedCaptureCommand;

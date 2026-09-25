@@ -547,7 +547,7 @@
           ]
         },
         "exportGroup": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,31}$" },
-        "recipient": { "type": "string", "pattern": "^age1[a-z0-9]+$" },
+        "recipient": { "type": "string", "pattern": "^(?!.*[\\r\\n])age1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{58}$" },
         "stagingRetentionHours": { "type": "integer", "minimum": 24, "maximum": 720 },
         "databases": {
           "type": "array",
@@ -612,7 +612,7 @@
           "type": "string",
           "enum": ["age"]
         },
-        "recipient": { "type": "string", "pattern": "^(?!.*[\\r\\n])age1[a-z0-9]+$" },
+        "recipient": { "type": "string", "pattern": "^(?!.*[\\r\\n])age1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{58}$" },
         "recipientEnv": {
           "type": "string",
           "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"

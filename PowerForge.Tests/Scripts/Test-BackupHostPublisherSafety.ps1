@@ -113,6 +113,7 @@ $lockBudgetSafety = $ast.Find({ param($node)
 if ($null -eq $lockBudgetSafety) { throw 'Host publisher lock-budget function is missing.' }
 . ([scriptblock]::Create($lockBudgetSafety.Extent.Text))
 . (Join-Path $PSScriptRoot '../../.github/actions/powerforge-server-backup/PowerForgeBackupCatalog.ps1')
+. (Join-Path $PSScriptRoot '../../.github/actions/powerforge-server-backup/PowerForgeBackupSupport.ps1')
 
 $fixture = Join-Path ([IO.Path]::GetTempPath()) ('powerforge-backup-path-' + [Guid]::NewGuid().ToString('N'))
 $checkout = Join-Path $fixture 'checkout'
@@ -129,13 +130,14 @@ try {
             if ($_.Exception.Message -eq 'Invalid backup path passed preflight.') { throw }
         }
     }
-    Assert-LiteralAgeRecipient 'age1abc123'
-    foreach ($invalid in @('AGE1abc123', 'age1ABC123')) {
+    Assert-LiteralAgeRecipient 'age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd'
+    foreach ($invalid in @('age1abc123', 'age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnq',
+            'AGE18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd')) {
         try {
             Assert-LiteralAgeRecipient $invalid
-            throw 'Uppercase age recipient passed preflight.'
+            throw 'Invalid age recipient passed preflight.'
         } catch {
-            if ($_.Exception.Message -eq 'Uppercase age recipient passed preflight.') { throw }
+            if ($_.Exception.Message -eq 'Invalid age recipient passed preflight.') { throw }
         }
     }
     Assert-GitBackupBranch 'main'

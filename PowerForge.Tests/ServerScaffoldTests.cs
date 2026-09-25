@@ -187,7 +187,7 @@ public sealed class ServerScaffoldTests
         Assert.StartsWith("restrict ssh-ed25519", backupKey, StringComparison.Ordinal);
         Assert.Contains("/etc/powerforge/repository-ssh/example_ed25519", sudoers, StringComparison.Ordinal);
         Assert.Contains("Cmnd_Alias PF_EXAMPLE_BACKUP_ENCRYPTED = /usr/local/sbin/powerforge-server-encrypted-capture", sudoers, StringComparison.Ordinal);
-        Assert.Contains("--recipient age1examplepublicrecipient", sudoers, StringComparison.Ordinal);
+        Assert.Contains("--recipient age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd", sudoers, StringComparison.Ordinal);
         Assert.DoesNotContain("BACKUP_ENCRYPTED = /usr/bin/tar", sudoers, StringComparison.Ordinal);
         var manifest = files["deploy/linux/example.serverrecovery.json"];
         Assert.Contains("\"host\": \"192.0.2.10\"", manifest, StringComparison.Ordinal);
@@ -332,8 +332,12 @@ public sealed class ServerScaffoldTests
         invalidRecipient["backupTarget"]!["recipient"] = "age1UPPERCASE";
         Assert.False(EvaluateSchema(schema, invalidRecipient));
 
+        var shortRecipient = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
+        shortRecipient["backupTarget"]!["recipient"] = "age1abc123";
+        Assert.False(EvaluateSchema(schema, shortRecipient));
+
         var newlineRecipient = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
-        newlineRecipient["backupTarget"]!["recipient"] = "age1example\n";
+        newlineRecipient["backupTarget"]!["recipient"] = "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd\n";
         Assert.False(EvaluateSchema(schema, newlineRecipient));
 
         var newlineBackupLocation = JsonNode.Parse(files["deploy/linux/example.serverrecovery.json"])!.AsObject();
@@ -644,7 +648,7 @@ public sealed class ServerScaffoldTests
             Host = "192.0.2.10",
             SshPort = 22222,
             BackupRepository = "ExampleOrg/ServerBackups",
-            BackupRecipient = "age1examplepublicrecipient",
+            BackupRecipient = "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd",
             SmokePaths = "/ /sitemap.xml",
             OutputRoot = "."
         };
@@ -657,7 +661,7 @@ public sealed class ServerScaffoldTests
             "--engine-ref", EngineRef,
             "--host", "192.0.2.10",
             "--backup-repository", "ExampleOrg/ServerBackups",
-            "--backup-recipient", "age1examplepublicrecipient",
+            "--backup-recipient", "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd",
             "--repository-ref", EngineRef
         ];
 

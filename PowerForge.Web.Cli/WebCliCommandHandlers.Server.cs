@@ -519,9 +519,7 @@ internal static partial class WebCliCommandHandlers
         bool quoteArguments)
     {
         var captureFiles = GetRemoteCaptureFiles(files, allowWildcards: false);
-        if (string.IsNullOrWhiteSpace(recipient) ||
-            !recipient.StartsWith("age1", StringComparison.Ordinal) ||
-            recipient.Any(static character => !(character is >= 'a' and <= 'z' || character is >= '0' and <= '9')))
+        if (!IsValidAgeX25519Recipient(recipient))
             throw new InvalidOperationException("Remote encrypted capture requires an age public recipient beginning with age1.");
 
         static string Raw(string value) => value;

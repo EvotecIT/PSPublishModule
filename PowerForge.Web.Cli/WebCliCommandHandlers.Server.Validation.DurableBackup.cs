@@ -24,10 +24,7 @@ internal static partial class WebCliCommandHandlers
             errors.Add("durableBackup.stagingRetentionHours must be from 24 through 720.");
 
         var recipient = backup.Recipient;
-        if (string.IsNullOrWhiteSpace(recipient) ||
-            recipient.Length <= 4 ||
-            !recipient.StartsWith("age1", StringComparison.Ordinal) ||
-            recipient.Any(static character => !(character is >= 'a' and <= 'z' || character is >= '0' and <= '9')))
+        if (!IsValidAgeX25519Recipient(recipient))
             errors.Add("durableBackup requires a literal age public recipient in durableBackup.recipient.");
 
         var databaseIds = new HashSet<string>(StringComparer.Ordinal);

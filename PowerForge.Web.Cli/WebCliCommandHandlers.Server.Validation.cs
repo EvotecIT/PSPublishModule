@@ -587,11 +587,8 @@ internal static partial class WebCliCommandHandlers
             errors.Add("backupTarget.encryption must be age.");
         if (string.IsNullOrWhiteSpace(backupTarget.Recipient) && string.IsNullOrWhiteSpace(backupTarget.RecipientEnv))
             errors.Add("backupTarget must declare recipient or recipientEnv.");
-        if (!string.IsNullOrWhiteSpace(backupTarget.Recipient) &&
-            (!backupTarget.Recipient.StartsWith("age1", StringComparison.Ordinal) ||
-             backupTarget.Recipient.Length <= 4 ||
-             backupTarget.Recipient.Any(static character => !(character is >= 'a' and <= 'z' or >= '0' and <= '9'))))
-            errors.Add("backupTarget.recipient must be a lowercase literal age public recipient.");
+        if (!string.IsNullOrWhiteSpace(backupTarget.Recipient) && !IsValidAgeX25519Recipient(backupTarget.Recipient))
+            errors.Add("backupTarget.recipient must be a checksummed lowercase age X25519 public recipient.");
         if (!string.IsNullOrWhiteSpace(backupTarget.RecipientEnv) && !IsEnvironmentVariableName(backupTarget.RecipientEnv))
             errors.Add("backupTarget.recipientEnv must be an environment variable name.");
 

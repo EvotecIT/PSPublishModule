@@ -660,7 +660,7 @@ public sealed partial class ServerRecoverySecurityTests
             Branch = "main",
             Path = path,
             Encryption = "age",
-            Recipient = "age1example",
+            Recipient = "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd",
             Retention = new PowerForgeServerBackupRetention { KeepLatestInTree = 24 }
         };
 
@@ -672,7 +672,9 @@ public sealed partial class ServerRecoverySecurityTests
     [Theory]
     [InlineData("AGE1example")]
     [InlineData("age1EXAMPLE")]
-    public void ManifestValidation_RejectsUppercaseAgeRecipients(string recipient)
+    [InlineData("age1abc123")]
+    [InlineData("age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnq")]
+    public void ManifestValidation_RejectsInvalidAgeRecipients(string recipient)
     {
         var manifest = CreateManifest();
         manifest.BackupTarget = new PowerForgeServerBackupTarget
@@ -688,7 +690,7 @@ public sealed partial class ServerRecoverySecurityTests
 
         var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
 
-        Assert.Contains(errors, error => error.Contains("backupTarget.recipient must be a lowercase literal age public recipient", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("backupTarget.recipient must be a checksummed lowercase age X25519 public recipient", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -708,7 +710,7 @@ public sealed partial class ServerRecoverySecurityTests
             Branch = branch,
             Path = "ovh/example",
             Encryption = "age",
-            Recipient = "age1example",
+            Recipient = "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd",
             Retention = new PowerForgeServerBackupRetention { KeepLatestInTree = 24 }
         };
 

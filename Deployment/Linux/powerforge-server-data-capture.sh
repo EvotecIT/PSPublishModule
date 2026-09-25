@@ -92,6 +92,7 @@ assert_absolute_path "$export_root"
 assert_dedicated_export_root "$export_root"
 assert_unix_identity "$export_group"
 [[ "$recipient" =~ ^age1[a-z0-9]+$ ]] || die 'durable backup requires a literal age public recipient'
+printf '' | /usr/bin/age -r "$recipient" -o /dev/null 2>/dev/null || die 'durable backup requires a valid checksummed age public recipient'
 if [[ ! "$retention_hours" =~ ^[0-9]+$ ]] || ((retention_hours < 24 || retention_hours > 720)); then
   die 'staging retention must be from 24 through 720 hours'
 fi

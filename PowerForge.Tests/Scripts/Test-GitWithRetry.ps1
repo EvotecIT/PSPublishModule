@@ -73,19 +73,26 @@ try {
     Invoke-TestGit init $ignoredCheckout
     Invoke-TestGit -C $ignoredCheckout config user.name PowerForgeTest
     Invoke-TestGit -C $ignoredCheckout config user.email powerforge-test@example.invalid
-    Set-Content -LiteralPath (Join-Path $ignoredCheckout '.gitignore') -Value '*.gz' -Encoding utf8NoBOM
+    Set-Content -LiteralPath (Join-Path $ignoredCheckout '.gitignore') -Value @('*.gz', 'LATEST.txt', 'index.json') -Encoding utf8NoBOM
     $ignoredCapture = 'ovh/example/20260925T020000Z-1-1'
     $ignoredRoot = Join-Path $ignoredCheckout $ignoredCapture
     New-Item -ItemType Directory -Path $ignoredRoot -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $ignoredRoot 'plain-files.tar.gz') -Value archive -Encoding utf8NoBOM
     Set-Content -LiteralPath (Join-Path $ignoredRoot 'capture-summary.json') -Value '{}' -Encoding utf8NoBOM
+    Set-Content -LiteralPath (Join-Path $ignoredCheckout 'ovh/example/LATEST.txt') -Value '20260925T020000Z-1-1' -Encoding utf8NoBOM
+    Set-Content -LiteralPath (Join-Path $ignoredCheckout 'ovh/example/index.json') -Value '{"latest":"20260925T020000Z-1-1"}' -Encoding utf8NoBOM
     & git -C $ignoredCheckout check-ignore -q -- "$ignoredCapture/plain-files.tar.gz"
     if ($LASTEXITCODE -ne 0) { throw 'Ignored recovery archive fixture was not ignored by Git.' }
     Add-BackupCaptureToGit -Checkout $ignoredCheckout -CaptureRelative $ignoredCapture
+    Add-BackupCatalogToGit -Checkout $ignoredCheckout -CatalogRelativePaths @('ovh/example/LATEST.txt', 'ovh/example/index.json')
     Invoke-TestGit -C $ignoredCheckout add .gitignore
     Invoke-TestGit -C $ignoredCheckout commit -m ignored-capture
     & git -C $ignoredCheckout cat-file -e "HEAD:$ignoredCapture/plain-files.tar.gz"
     if ($LASTEXITCODE -ne 0) { throw 'Force-staged recovery archive was absent from the committed tree.' }
+    foreach ($relative in @('ovh/example/LATEST.txt', 'ovh/example/index.json')) {
+        & git -C $ignoredCheckout cat-file -e "HEAD:$relative"
+        if ($LASTEXITCODE -ne 0) { throw "Force-staged backup catalog was absent from the committed tree: $relative" }
+    }
 
     Invoke-TestGit init --bare $remote
     Invoke-TestGit init $seed
@@ -140,8 +147,15 @@ try {
     }
 
     Invoke-GitWithRetry -Operation 'Refresh after rejected push' -Arguments $fetchArguments -RetryDelaySeconds 0
+    if (Test-BackupPublicationAccepted -Checkout $workerA -Upstream 'origin/main') {
+        throw 'Rejected backup push was incorrectly accepted from the remote branch.'
+    }
     Invoke-TestGit -C $workerA rebase origin/main
     Invoke-TestGit -C $workerA push origin HEAD:main
+    Invoke-GitWithRetry -Operation 'Confirm ambiguous successful push' -Arguments $fetchArguments -RetryDelaySeconds 0
+    if (-not (Test-BackupPublicationAccepted -Checkout $workerA -Upstream 'origin/main')) {
+        throw 'Accepted backup commit was not recognized after a remote refresh.'
+    }
     $remoteHead = (& git --git-dir=$remote rev-parse main).Trim()
     $workerAHead = (& git -C $workerA rev-parse HEAD).Trim()
     if ($LASTEXITCODE -ne 0 -or $remoteHead -ne $workerAHead) {
