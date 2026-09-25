@@ -28,6 +28,24 @@ $stageCleanup = $ast.Find({ param($node)
 }, $true)
 if ($null -eq $stageCleanup) { throw 'Host publisher stage cleanup function is missing.' }
 . ([scriptblock]::Create($stageCleanup.Extent.Text))
+$retentionSafety = $ast.Find({ param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Assert-CaptureWithinRetention'
+}, $true)
+if ($null -eq $retentionSafety) { throw 'Host publisher retention function is missing.' }
+. ([scriptblock]::Create($retentionSafety.Extent.Text))
+$destinationPin = $ast.Find({ param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Assert-PinnedBackupDestination'
+}, $true)
+if ($null -eq $destinationPin) { throw 'Host publisher destination pin function is missing.' }
+. ([scriptblock]::Create($destinationPin.Extent.Text))
+$knownHostsSafety = $ast.Find({ param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Assert-ReadableKnownHostFile'
+}, $true)
+if ($null -eq $knownHostsSafety) { throw 'Host publisher known-hosts function is missing.' }
+. ([scriptblock]::Create($knownHostsSafety.Extent.Text))
 . (Join-Path $PSScriptRoot '../../.github/actions/powerforge-server-backup/PowerForgeBackupCatalog.ps1')
 
 $fixture = Join-Path ([IO.Path]::GetTempPath()) ('powerforge-backup-path-' + [Guid]::NewGuid().ToString('N'))
@@ -77,6 +95,42 @@ try {
     }
     Update-BackupCatalog -TargetRoot $target -TargetRelative 'ovh/example' -KeepLatestInTree 24
     Assert-PublishedBackupCatalog -TargetRoot $target -CaptureName $older
+    $captures = @(Get-BackupCaptureDirectory -TargetRoot $target)
+    Assert-CaptureWithinRetention -Captures $captures -CaptureName $older -KeepLatest 2
+    try {
+        Assert-CaptureWithinRetention -Captures $captures -CaptureName $older -KeepLatest 1
+        throw 'Superseded capture passed retention preflight.'
+    } catch {
+        if ($_.Exception.Message -eq 'Superseded capture passed retention preflight.') { throw }
+    }
+    Assert-CaptureWithinRetention -Captures $captures -CaptureName $newer -KeepLatest 1
+    Assert-PinnedBackupDestination -Repository 'Owner/Backups' -Branch 'main' `
+        -ExpectedRepository 'Owner/Backups' -ExpectedBranch 'main'
+    try {
+        Assert-PinnedBackupDestination -Repository 'Owner/Backups' -Branch 'Main' `
+            -ExpectedRepository 'Owner/Backups' -ExpectedBranch 'main'
+        throw 'Branch case mismatch passed destination pin.'
+    } catch {
+        if ($_.Exception.Message -eq 'Branch case mismatch passed destination pin.') { throw }
+    }
+    $knownHosts = Join-Path $fixture 'known_hosts'
+    Set-Content -LiteralPath $knownHosts -Value 'github.com example'
+    Assert-ReadableKnownHostFile $knownHosts
+    & chmod 000 -- $knownHosts
+    try {
+        Assert-ReadableKnownHostFile $knownHosts
+        throw 'Unreadable known-hosts file passed preflight.'
+    } catch {
+        if ($_.Exception.Message -eq 'Unreadable known-hosts file passed preflight.') { throw }
+    }
+    finally { & chmod 600 -- $knownHosts }
+    Set-Content -LiteralPath $knownHosts -Value '' -NoNewline
+    try {
+        Assert-ReadableKnownHostFile $knownHosts
+        throw 'Empty known-hosts file passed preflight.'
+    } catch {
+        if ($_.Exception.Message -eq 'Empty known-hosts file passed preflight.') { throw }
+    }
     try {
         Assert-PublishedBackupCatalog -TargetRoot $target -CaptureName 'missing'
         throw 'Unretained own capture was accepted.'

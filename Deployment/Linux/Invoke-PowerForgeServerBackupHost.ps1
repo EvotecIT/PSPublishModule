@@ -104,6 +104,39 @@ function Assert-PublishedBackupCatalog {
     }
 }
 
+function Assert-CaptureWithinRetention {
+    param(
+        [Parameter(Mandatory)][object[]] $Captures,
+        [Parameter(Mandatory)][string] $CaptureName,
+        [Parameter(Mandatory)][int] $KeepLatest
+    )
+    if (@($Captures | Select-Object -First $KeepLatest |
+        Where-Object { $_.Name -ceq $CaptureName }).Count -ne 1) {
+        throw 'This capture was superseded by newer captures before publication; no backup commit was pushed.'
+    }
+}
+
+function Assert-ReadableKnownHostFile {
+    param([Parameter(Mandatory)][string] $Path)
+    $stream = [IO.File]::OpenRead($Path)
+    try {
+        if ($stream.Length -eq 0) { throw 'GitHub known-hosts file is empty.' }
+    }
+    finally { $stream.Dispose() }
+}
+
+function Assert-PinnedBackupDestination {
+    param(
+        [Parameter(Mandatory)][string] $Repository,
+        [Parameter(Mandatory)][string] $Branch,
+        [Parameter(Mandatory)][string] $ExpectedRepository,
+        [Parameter(Mandatory)][string] $ExpectedBranch
+    )
+    if ($Repository -cne $ExpectedRepository -or $Branch -cne $ExpectedBranch) {
+        throw 'Host backup destination does not match the root-controlled repository and branch.'
+    }
+}
+
 function Remove-AbandonedBackupStage {
     [CmdletBinding(SupportsShouldProcess)]
     param([Parameter(Mandatory)][string] $WorkRoot)
@@ -152,6 +185,7 @@ foreach ($path in @($manifestPath, $engineRoot, $workRoot, $identityFile, $known
 }
 Assert-RootControlledFile $manifestPath 'Recovery manifest'
 Assert-RootControlledFile $knownHostsFile 'GitHub known-hosts file'
+Assert-ReadableKnownHostFile $knownHostsFile
 $expectedUser = "powerforge-$lane-backup"
 if ((& id -un) -ne $expectedUser) { throw "Host backup must run as $expectedUser." }
 if (-not $workRoot.StartsWith("/var/lib/$expectedUser/", [StringComparison]::Ordinal)) {
@@ -247,9 +281,8 @@ if ($backupRepository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' -or
     $manifest.backupTarget.recipient -notmatch '^age1[a-z0-9]+$') {
     throw 'Recovery manifest does not declare a valid encrypted backup destination and retention.'
 }
-if ($backupRepository -ne $expectedRepository -or $backupBranch -ne $expectedBranch) {
-    throw 'Host backup destination does not match the root-controlled repository and branch.'
-}
+Assert-PinnedBackupDestination -Repository $backupRepository -Branch $backupBranch `
+    -ExpectedRepository $expectedRepository -ExpectedBranch $expectedBranch
 if ($null -ne $manifest.backupTarget.retention.keepDays -or
     ($null -ne $manifest.backupTarget.retention.keepLatestInTree -and
      $null -ne $manifest.backupTarget.retention.keepLatest)) {
@@ -336,6 +369,7 @@ try {
         Invoke-BackupPublicationRebase -Checkout $checkout -Upstream "origin/$backupBranch" -GeneratedCatalogPaths $catalogPaths
         $targetRoot = Assert-SafeBackupTarget -Checkout $checkout -RelativePath $backupPath
         $captures = @(Get-BackupCaptureDirectory -TargetRoot $targetRoot)
+        Assert-CaptureWithinRetention -Captures $captures -CaptureName $captureName -KeepLatest $keepLatest
         foreach ($stale in @($captures | Select-Object -Skip $keepLatest)) {
             Remove-Item -LiteralPath $stale.FullName -Recurse
         }
