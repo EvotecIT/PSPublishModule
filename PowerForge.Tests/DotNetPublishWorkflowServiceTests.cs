@@ -92,6 +92,27 @@ public sealed class DotNetPublishWorkflowServiceTests
         Assert.Same(expectedResult, result.Result);
     }
 
+    [Fact]
+    public void Execute_preserves_explicit_skip_build_request_in_plan()
+    {
+        var service = new DotNetPublishWorkflowService(
+            new NullLogger(),
+            planPublish: (_, _, _) => new DotNetPublishPlan { NoBuildInPublish = true },
+            runPublish: (plan, _) =>
+            {
+                Assert.True(plan.SkipBuildRequested);
+                return new DotNetPublishResult { Succeeded = true };
+            });
+
+        DotNetPublishWorkflowResult result = service.Execute(new DotNetPublishPreparedContext
+        {
+            Spec = new DotNetPublishSpec(),
+            SkipBuildRequested = true
+        });
+
+        Assert.True(result.Result?.Succeeded);
+    }
+
     private sealed class TestProgressReporter : IDotNetPublishProgressReporter
     {
         public void StepStarting(DotNetPublishStep step) { }

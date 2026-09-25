@@ -125,6 +125,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     artefact.BundleId,
                     sourceDirty: provenance.Dirty is not false,
                     includeCompleteOutput: false);
+            inventory.BuildInputMode = DescribeBuildInputMode(plan);
 
             byte[] inventoryBytes = PowerForgePortablePayloadInventoryCms.Serialize(inventory);
             byte[] signatureBytes = _signPortableInventory(inventoryBytes, inventorySign);

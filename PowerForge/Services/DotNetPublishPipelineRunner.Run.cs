@@ -257,7 +257,9 @@ public sealed partial class DotNetPublishPipelineRunner
                             msiBuilds.Add(BuildMsiPackage(plan, msiPrepares, step, msiReservationOwner));
                             break;
                         case DotNetPublishStepKind.MsiSign:
-                            SignMsiPackage(plan, msiBuilds, step);
+                            SignMsiPackage(
+                                plan, msiBuilds, step,
+                                cleanTrackedGeneratedProvenanceState, msiReservationOwner);
                             break;
                         case DotNetPublishStepKind.DebianPackage:
                             artefacts.Add(BuildDebianPackage(plan, artefacts, step));

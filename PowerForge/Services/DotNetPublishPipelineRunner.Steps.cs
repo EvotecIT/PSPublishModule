@@ -460,6 +460,11 @@ public sealed partial class DotNetPublishPipelineRunner
         string[] signedFilePaths = Array.Empty<string>();
         if (target.Publish.Sign?.Enabled == true)
         {
+            // A normal publish may execute MSBuild targets. Recheck the Git source
+            // before invoking the signer, not only after signatures have been written.
+            if (!plan.UseControlledSourceProvenance)
+                signingProvenance = ReadPortableInventorySourceProvenance(
+                    plan, outputDir, plannedPublishGeneratedPaths, publishStep);
             signedFilePaths = TrySignOutput(outputDir, target.Publish.Sign);
             if (signedFilePaths.Length > 0)
             {
@@ -523,6 +528,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     signedFilePaths,
                     sourceDirty: provenance.Dirty is not false,
                     includeCompleteOutput: target.Publish.Zip);
+                inventory.BuildInputMode = DescribeBuildInputMode(plan);
                 byte[] inventoryBytes = PowerForgePortablePayloadInventoryCms.Serialize(inventory);
                 byte[] signatureBytes = _signPortableInventory(
                     inventoryBytes,
@@ -656,9 +662,9 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         if (plan.NoRestoreInPublish) publishArgs.Add("--no-restore");
-        // A no-build publish consumes ignored bin/obj bytes. Only the controlled mode
-        // snapshots and binds those inputs; normal publishing must run its build phase.
-        if (plan.UseControlledSourceProvenance && plan.NoBuildInPublish &&
+        // Normal publishing rebuilds by default; an explicit skip-build request
+        // retains the caller's choice to consume existing build output.
+        if ((plan.UseControlledSourceProvenance || plan.SkipBuildRequested) && plan.NoBuildInPublish &&
             !TargetUsesPublishMsiVersionProperties(plan, target.Name, framework, runtime, style))
             publishArgs.Add("--no-build");
 

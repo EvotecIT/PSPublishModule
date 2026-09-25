@@ -8,4 +8,5 @@ internal sealed class DotNetPublishPreparedContext
     public bool JsonOnly { get; set; }
     public bool PlanOnly { get; set; }
     public bool ValidateOnly { get; set; }
+    public bool SkipBuildRequested { get; set; }
 }

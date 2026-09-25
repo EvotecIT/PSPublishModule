@@ -165,7 +165,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         CopyBundleItems(plan, bundle, outputDir, tokens);
         CopyBundleModules(plan, bundle, outputDir, tokens);
-        GenerateBundleScripts(plan, bundle, outputDir, tokens);
+        GenerateBundleScripts(plan, bundle, outputDir, tokens, artefacts, bundleProvenanceSteps);
         RunBundleScripts(plan, bundle, tokens);
         if (bundle.PostProcess is not null)
         {
@@ -185,7 +185,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 PostProcess = bundle.PostProcess
             });
 
-            SignBundlePostProcessFiles(plan, bundle, outputDir);
+            SignBundlePostProcessFiles(plan, bundle, outputDir, artefacts, bundleProvenanceSteps);
         }
 
         string[] signedFilePaths = Array.Empty<string>();
@@ -193,6 +193,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string? primaryExecutable = null;
         if (sign?.Enabled == true)
         {
+            ValidateBundleSourceBeforeSigning(plan, outputDir, artefacts, bundleProvenanceSteps);
             signedFilePaths = TrySignOutput(outputDir, sign);
             primaryExecutable = ResolvePrimaryExecutable(outputDir, runtime, sourceTargetPlan!.ExecutableIdentities, recursive: true)
                 ?? throw new InvalidOperationException(
@@ -244,6 +245,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     bundleId,
                     sourceDirty: provenance.Dirty is not false,
                     includeCompleteOutput: bundle.Zip);
+            inventory.BuildInputMode = DescribeBuildInputMode(plan);
             byte[] inventoryBytes = PowerForgePortablePayloadInventoryCms.Serialize(inventory);
             byte[] signatureBytes = _signPortableInventory(
                 inventoryBytes,
@@ -364,6 +366,17 @@ public sealed partial class DotNetPublishPipelineRunner
             })
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(static path => path!);
+
+    internal static void ValidateBundleSourceBeforeSigning(
+        DotNetPublishPlan plan,
+        string outputDir,
+        IReadOnlyList<DotNetPublishArtefactResult> artefacts,
+        IReadOnlyList<DotNetPublishStep> provenanceSteps)
+    {
+        string[] generatedPaths = EnumerateBundleGeneratedArtefactPaths(artefacts).ToArray();
+        foreach (DotNetPublishStep provenanceStep in provenanceSteps)
+            _ = ReadPortableInventorySourceProvenance(plan, outputDir, generatedPaths, provenanceStep);
+    }
 
     internal static DotNetPublishStep[] ResolveBundleProvenanceSteps(
         DotNetPublishPlan plan,
@@ -557,7 +570,9 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishPlan plan,
         DotNetPublishBundlePlan bundle,
         string outputDir,
-        IReadOnlyDictionary<string, string> tokens)
+        IReadOnlyDictionary<string, string> tokens,
+        IReadOnlyList<DotNetPublishArtefactResult> artefacts,
+        IReadOnlyList<DotNetPublishStep> provenanceSteps)
     {
         foreach (var script in bundle.GeneratedScripts ?? Array.Empty<DotNetPublishBundleGeneratedScriptPlan>())
         {
@@ -599,7 +614,10 @@ public sealed partial class DotNetPublishPipelineRunner
 
             _logger.Info($"Generated bundle script -> {FrameworkCompatibility.GetRelativePath(outputDir, outputPath)} ({bundle.Id})");
             if (script.Sign is not null && script.Sign.Enabled)
+            {
+                ValidateBundleSourceBeforeSigning(plan, outputDir, artefacts, provenanceSteps);
                 _ = TrySignFiles(new[] { outputPath }, outputDir, script.Sign, scope: $"bundle '{bundle.Id}' generated scripts");
+            }
         }
     }
 
@@ -736,7 +754,9 @@ public sealed partial class DotNetPublishPipelineRunner
     private void SignBundlePostProcessFiles(
         DotNetPublishPlan plan,
         DotNetPublishBundlePlan bundle,
-        string outputDir)
+        string outputDir,
+        IReadOnlyList<DotNetPublishArtefactResult> artefacts,
+        IReadOnlyList<DotNetPublishStep> provenanceSteps)
     {
         var sign = bundle.PostProcess?.Sign;
         if (sign is null || !sign.Enabled)
@@ -744,6 +764,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var patterns = NormalizeBundleSignPatterns(bundle.PostProcess?.SignPatterns, sign);
         var targets = FindBundleSignTargets(outputDir, patterns);
+        ValidateBundleSourceBeforeSigning(plan, outputDir, artefacts, provenanceSteps);
         var signed = TrySignFiles(
             targets,
             outputDir,

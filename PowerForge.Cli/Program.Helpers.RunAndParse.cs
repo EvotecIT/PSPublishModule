@@ -1162,6 +1162,7 @@ internal static partial class Program
         if (skipBuild)
         {
             plan.NoBuildInPublish = true;
+            plan.SkipBuildRequested = true;
             steps = steps.Where(s => s.Kind != DotNetPublishStepKind.Build).ToArray();
         }
 

@@ -1202,7 +1202,8 @@ public sealed class DotNetPublishDotNetOptions
     public bool NoRestoreInPublish { get; set; } = true;
 
     /// <summary>
-    /// When true, publishes with <c>--no-build</c> (recommended when <see cref="Build"/> is true).
+    /// Allows <c>--no-build</c> for controlled-source or explicit skip-build runs.
+    /// Normal publishing rebuilds even when this setting is true.
     /// </summary>
     public bool NoBuildInPublish { get; set; } = true;
 

@@ -100,10 +100,17 @@ public sealed class NewConfigurationDotNetPublishCommand : PSCmdlet
     public bool NoRestoreInPublish { get; set; } = true;
 
     /// <summary>
-    /// Uses --no-build during publish.
+    /// Allows --no-build in controlled-source mode or when the invocation explicitly skips build.
+    /// Normal publishing rebuilds even when this setting is true.
     /// </summary>
     [Parameter]
     public bool NoBuildInPublish { get; set; } = true;
+
+    /// <summary>
+    /// Enables optional controlled-checkout verification of evaluated build inputs.
+    /// </summary>
+    [Parameter]
+    public bool UseControlledSourceProvenance { get; set; }
 
     /// <summary>
     /// Optional JSON manifest output path.
@@ -181,6 +188,8 @@ public sealed class NewConfigurationDotNetPublishCommand : PSCmdlet
             spec.DotNet.NoRestoreInPublish = NoRestoreInPublish;
         if (bound.ContainsKey(nameof(NoBuildInPublish)))
             spec.DotNet.NoBuildInPublish = NoBuildInPublish;
+        if (bound.ContainsKey(nameof(UseControlledSourceProvenance)))
+            spec.DotNet.UseControlledSourceProvenance = UseControlledSourceProvenance;
 
         spec.Outputs ??= new DotNetPublishOutputs();
         if (bound.ContainsKey(nameof(ManifestJsonPath)))

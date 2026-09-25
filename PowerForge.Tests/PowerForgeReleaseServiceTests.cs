@@ -4124,6 +4124,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.False(result.DotNetToolPlan.Build);
             Assert.True(result.DotNetToolPlan.NoRestoreInPublish);
             Assert.True(result.DotNetToolPlan.NoBuildInPublish);
+            Assert.True(result.DotNetToolPlan.SkipBuildRequested);
             Assert.DoesNotContain(result.DotNetToolPlan.Steps, step => step.Kind == DotNetPublishStepKind.Restore);
             Assert.DoesNotContain(result.DotNetToolPlan.Steps, step => step.Kind == DotNetPublishStepKind.Build);
         }

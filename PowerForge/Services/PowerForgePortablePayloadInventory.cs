@@ -5,6 +5,7 @@ using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace PowerForge;
 
@@ -24,6 +25,13 @@ internal sealed class PowerForgePortablePayloadInventory
     public string Style { get; set; } = string.Empty;
     public string SourceRevision { get; set; } = string.Empty;
     public bool SourceDirty { get; set; }
+    /// <summary>
+    /// Describes how publish bytes were obtained. SourceRevision identifies the checkout;
+    /// it does not by itself prove that prebuilt bytes came from that checkout.
+    /// Null is retained for inventories written before this optional field existed.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BuildInputMode { get; set; }
     public string ConfigurationPolicySha256 { get; set; } = string.Empty;
     public string Version { get; set; } = string.Empty;
     public string ExecutablePath { get; set; } = string.Empty;

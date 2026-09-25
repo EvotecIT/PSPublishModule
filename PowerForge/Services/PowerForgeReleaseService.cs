@@ -6170,6 +6170,7 @@ internal sealed partial class PowerForgeReleaseService
         {
             plan.Build = false;
             plan.NoBuildInPublish = true;
+            plan.SkipBuildRequested = true;
             steps = steps.Where(step => step.Kind != DotNetPublishStepKind.Build).ToArray();
         }
 
