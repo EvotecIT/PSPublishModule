@@ -6,6 +6,30 @@ namespace PowerForge.Tests;
 public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
     [Fact]
+    public void NormalPublish_RunsBuildPhaseInsteadOfForcingNoBuild()
+    {
+        var plan = new DotNetPublishPlan
+        {
+            NoBuildInPublish = true
+        };
+        var target = new DotNetPublishTargetPlan
+        {
+            Name = "app",
+            ProjectPath = "App.csproj",
+            Publish = new DotNetPublishPublishOptions()
+        };
+
+        var normalArgs = DotNetPublishPipelineRunner.BuildPublishArguments(
+            plan, target, "net10.0", "win-x64", DotNetPublishStyle.PortableCompat, "out");
+        Assert.DoesNotContain("--no-build", normalArgs);
+
+        plan.UseControlledSourceProvenance = true;
+        var controlledArgs = DotNetPublishPipelineRunner.BuildPublishArguments(
+            plan, target, "net10.0", "win-x64", DotNetPublishStyle.PortableCompat, "out");
+        Assert.Contains("--no-build", controlledArgs);
+    }
+
+    [Fact]
     public void NormalSignedPublish_UsesWorkingTreeWithoutControlledMsBuildReconstruction()
     {
         string root = Directory.CreateTempSubdirectory().FullName;

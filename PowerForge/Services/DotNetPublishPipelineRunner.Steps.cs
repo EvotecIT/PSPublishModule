@@ -656,7 +656,10 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         if (plan.NoRestoreInPublish) publishArgs.Add("--no-restore");
-        if (plan.NoBuildInPublish && !TargetUsesPublishMsiVersionProperties(plan, target.Name, framework, runtime, style))
+        // A no-build publish consumes ignored bin/obj bytes. Only the controlled mode
+        // snapshots and binds those inputs; normal publishing must run its build phase.
+        if (plan.UseControlledSourceProvenance && plan.NoBuildInPublish &&
+            !TargetUsesPublishMsiVersionProperties(plan, target.Name, framework, runtime, style))
             publishArgs.Add("--no-build");
 
         AppendPublishStyleArgs(publishArgs, target.Publish, style);

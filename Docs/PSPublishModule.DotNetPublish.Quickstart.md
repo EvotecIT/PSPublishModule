@@ -120,7 +120,7 @@ Depending on config, the run can emit:
 - Direct `Sign` still works and takes precedence when you want one target to fully define its own signing behavior.
 - Signing uses `TimeoutSeconds` per file, defaulting to 300 seconds, so a stuck `signtool.exe` follows `OnSignFailure` instead of hanging the publish run.
 
-Normal signed publishing uses the selected working tree. It checks the Git working tree for changes and verifies the produced files, signatures, and checksums; it does not attempt to reconstruct every MSBuild or NuGet input in a separate checkout. A clean Git status is not a claim that every compiler input was tracked. If a release specifically requires the stronger controlled-checkout input proof, set `DotNet.UseControlledSourceProvenance` to `true` in the JSON config. It is opt-in and can reject builds that normal signing accepts.
+Normal signed publishing uses the selected working tree. It checks the Git working tree for changes and verifies the produced files, signatures, and checksums; it does not attempt to reconstruct every MSBuild or NuGet input in a separate checkout. A clean Git status is not a claim that every compiler input was tracked. Normal mode runs the build phase of `dotnet publish` even when `DotNet.NoBuildInPublish` is `true`, rather than relying solely on prebuilt files from `bin` or `obj`. If a release specifically requires the stronger controlled-checkout input proof and no-build publishing, set `DotNet.UseControlledSourceProvenance` to `true` in the JSON config. It is opt-in and can reject builds that normal signing accepts.
 
 ## Installer Filters
 
