@@ -16,6 +16,12 @@ $exitCheck = $ast.Find({ param($node)
 }, $true)
 if ($null -eq $exitCheck) { throw 'Host publisher exit-code helper is missing.' }
 . ([scriptblock]::Create($exitCheck.Extent.Text))
+$relativePathSafety = $ast.Find({ param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Assert-BackupRelativePath'
+}, $true)
+if ($null -eq $relativePathSafety) { throw 'Host publisher relative-path function is missing.' }
+. ([scriptblock]::Create($relativePathSafety.Extent.Text))
 $safety = $ast.Find({ param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
     $node.Name -eq 'Assert-SafeBackupTarget'
@@ -52,6 +58,18 @@ $knownHostsSafety = $ast.Find({ param($node)
 }, $true)
 if ($null -eq $knownHostsSafety) { throw 'Host publisher known-hosts function is missing.' }
 . ([scriptblock]::Create($knownHostsSafety.Extent.Text))
+$passwordSafety = $ast.Find({ param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Assert-LockedPasswordStatus'
+}, $true)
+if ($null -eq $passwordSafety) { throw 'Host publisher password-status function is missing.' }
+. ([scriptblock]::Create($passwordSafety.Extent.Text))
+$helperModeSafety = $ast.Find({ param($node)
+    $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+    $node.Name -eq 'Assert-ExecutableRootHelper'
+}, $true)
+if ($null -eq $helperModeSafety) { throw 'Host publisher helper-mode function is missing.' }
+. ([scriptblock]::Create($helperModeSafety.Extent.Text))
 $workRootSafety = $ast.Find({ param($node)
     $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
     $node.Name -eq 'Assert-WorkRootLocation'
@@ -79,6 +97,14 @@ try {
     New-Item -ItemType Directory -Path $checkout, $outside | Out-Null
     $safe = Assert-SafeBackupTarget -Checkout $checkout -RelativePath 'ovh/example'
     if ($safe -ne (Join-Path $checkout 'ovh/example')) { throw 'Missing safe path was rejected.' }
+    foreach ($invalid in @('backups/', 'backups//daily', '/backups', 'backups/../daily')) {
+        try {
+            Assert-BackupRelativePath $invalid
+            throw 'Invalid backup path passed preflight.'
+        } catch {
+            if ($_.Exception.Message -eq 'Invalid backup path passed preflight.') { throw }
+        }
+    }
 
     New-Item -ItemType SymbolicLink -Path (Join-Path $checkout 'ovh') -Target $outside | Out-Null
     try {
@@ -143,6 +169,26 @@ try {
     $privateDirectory = Join-Path $fixture 'private'
     New-Item -ItemType Directory -Path $privateDirectory | Out-Null
     & chmod 700 -- $privateDirectory
+    Assert-LockedPasswordStatus -Account 'publisher' -Status @('publisher L 2026-09-25 -1 -1 -1 -1')
+    foreach ($status in @('publisher P 2026-09-25 0 99999 7 -1', 'publisher NP 2026-09-25 -1 -1 -1 -1')) {
+        try {
+            Assert-LockedPasswordStatus -Account 'publisher' -Status @($status)
+            throw 'Unlocked publisher password passed preflight.'
+        } catch {
+            if ($_.Exception.Message -eq 'Unlocked publisher password passed preflight.') { throw }
+        }
+    }
+    $helper = Join-Path $fixture 'encrypted-capture-helper'
+    Set-Content -LiteralPath $helper -Value '#!/bin/sh'
+    & chmod 755 -- $helper
+    Assert-ExecutableRootHelper $helper
+    & chmod 644 -- $helper
+    try {
+        Assert-ExecutableRootHelper $helper
+        throw 'Non-executable helper passed preflight.'
+    } catch {
+        if ($_.Exception.Message -eq 'Non-executable helper passed preflight.') { throw }
+    }
     Assert-PrivatePublisherDirectory -Path $privateDirectory -AccountUid (& id -u).Trim()
     & chmod 755 -- $privateDirectory
     try {
@@ -169,14 +215,16 @@ try {
     $knownHosts = Join-Path $fixture 'known_hosts'
     Set-Content -LiteralPath $knownHosts -Value 'github.com example'
     Assert-ReadableKnownHostFile $knownHosts
-    & chmod 000 -- $knownHosts
-    try {
-        Assert-ReadableKnownHostFile $knownHosts
-        throw 'Unreadable known-hosts file passed preflight.'
-    } catch {
-        if ($_.Exception.Message -eq 'Unreadable known-hosts file passed preflight.') { throw }
+    if ((& id -u).Trim() -ne '0') {
+        & chmod 000 -- $knownHosts
+        try {
+            Assert-ReadableKnownHostFile $knownHosts
+            throw 'Unreadable known-hosts file passed preflight.'
+        } catch {
+            if ($_.Exception.Message -eq 'Unreadable known-hosts file passed preflight.') { throw }
+        }
+        finally { & chmod 600 -- $knownHosts }
     }
-    finally { & chmod 600 -- $knownHosts }
     Set-Content -LiteralPath $knownHosts -Value '' -NoNewline
     try {
         Assert-ReadableKnownHostFile $knownHosts
@@ -205,16 +253,10 @@ try {
     if (Test-Path -LiteralPath $stale) { throw 'Abandoned stage was retained.' }
     New-Item -ItemType Directory -Path $stale | Out-Null
     New-Item -ItemType SymbolicLink -Path (Join-Path $stale 'outside') -Target $outside | Out-Null
-    try {
-        Remove-AbandonedBackupStage -WorkRoot $work
-        throw 'Stage containing a symlink was deleted.'
-    } catch {
-        if ($_.Exception.Message -eq 'Stage containing a symlink was deleted.') { throw }
+    Remove-AbandonedBackupStage -WorkRoot $work
+    if ((Test-Path -LiteralPath $stale) -or -not (Test-Path -LiteralPath $outside)) {
+        throw 'Abandoned stage cleanup followed a link or retained the stage.'
     }
-    if (-not (Test-Path -LiteralPath $stale) -or -not (Test-Path -LiteralPath $outside)) {
-        throw 'Unsafe stage check modified the stage or outside directory.'
-    }
-    Remove-Item -LiteralPath (Join-Path $stale 'outside')
     Write-Output 'Host publisher path-safety fixture passed.'
 }
 finally {

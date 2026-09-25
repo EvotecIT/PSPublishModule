@@ -53,17 +53,24 @@ function Assert-RootControlledPath {
     }
 }
 
+function Assert-BackupRelativePath {
+    param([Parameter(Mandatory)][string] $RelativePath)
+    if ($RelativePath -notmatch '^[A-Za-z0-9._/-]+$' -or $RelativePath.Contains('..') -or
+        $RelativePath.StartsWith('/') -or
+        @($RelativePath.Split('/') | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -in @('.', '..') }).Count -ne 0) {
+        throw 'Backup target contains an invalid path component.'
+    }
+}
+
 function Assert-SafeBackupTarget {
     param(
         [Parameter(Mandatory)][string] $Checkout,
         [Parameter(Mandatory)][string] $RelativePath
     )
+    Assert-BackupRelativePath $RelativePath
     $checkoutPath = [IO.Path]::GetFullPath($Checkout)
     $current = $checkoutPath
     foreach ($part in $RelativePath.Split('/')) {
-        if ([string]::IsNullOrWhiteSpace($part) -or $part -in @('.', '..')) {
-            throw 'Backup target contains an invalid path component.'
-        }
         $current = Join-Path $current $part
         $item = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
         if ($null -ne $item) {
@@ -125,6 +132,31 @@ function Assert-ReadableKnownHostFile {
     finally { $stream.Dispose() }
 }
 
+function Assert-LockedPasswordStatus {
+    param([Parameter(Mandatory)][string] $Account, [Parameter(Mandatory)][string[]] $Status)
+    $fields = if ($Status.Count -eq 1) { $Status[0] -split '\s+' } else { @() }
+    if ($fields.Count -lt 2 -or $fields[0] -cne $Account -or $fields[1] -cne 'L') {
+        throw 'Host publisher account must have a locked password.'
+    }
+}
+
+function Assert-LockedPublisherPassword {
+    param([Parameter(Mandatory)][string] $Account)
+    $status = @(& passwd -S $Account)
+    Assert-ExitCode 'Inspecting publisher password status'
+    Assert-LockedPasswordStatus -Account $Account -Status $status
+}
+
+function Assert-ExecutableRootHelper {
+    param([Parameter(Mandatory)][string] $Path)
+    $mode = @(& stat -c '%a' -- $Path)
+    Assert-ExitCode 'Inspecting installed encrypted capture helper mode'
+    if ($mode.Count -ne 1 -or
+        (([Convert]::ToInt32($mode[0], 8) -band 0x40) -eq 0)) {
+        throw 'Installed encrypted capture helper must be executable by root.'
+    }
+}
+
 function Assert-PinnedBackupDestination {
     param(
         [Parameter(Mandatory)][string] $Repository,
@@ -182,11 +214,10 @@ function Remove-AbandonedBackupStage {
             -not $stale.FullName.StartsWith($WorkRoot + '/', [StringComparison]::Ordinal)) {
             throw "Abandoned backup stage is unsafe to remove: $($stale.FullName)"
         }
-        $links = @(Get-ChildItem -LiteralPath $stale.FullName -Recurse -Force -ErrorAction Stop |
-            Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 })
-        if ($links.Count -ne 0) { throw "Abandoned backup stage contains a link: $($stale.FullName)" }
         if ($PSCmdlet.ShouldProcess($stale.FullName, 'Remove abandoned backup stage')) {
-            Remove-Item -LiteralPath $stale.FullName -Recurse
+            # GNU find's physical traversal removes links themselves without following targets.
+            & find -P $stale.FullName -depth -delete
+            Assert-ExitCode 'Removing abandoned backup stage'
         }
     }
 }
@@ -231,6 +262,7 @@ if ($account.Count -ne 1 -or $accountFields.Count -ne 7 -or
     $accountFields[6] -notin @('/usr/sbin/nologin', '/sbin/nologin')) {
     throw 'Host publisher account must have a dedicated home and nologin shell.'
 }
+Assert-LockedPublisherPassword $expectedUser
 foreach ($path in @("$($accountFields[5])/.ssh/authorized_keys", "$($accountFields[5])/.ssh/authorized_keys2")) {
     if ($null -ne (Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue)) {
         throw 'Host publisher account must not accept SSH authorized keys.'
@@ -288,6 +320,7 @@ if ((Get-FileHash -LiteralPath $sourceEncryptionHelper -Algorithm SHA256).Hash -
     (Get-FileHash -LiteralPath $installedEncryptionHelper -Algorithm SHA256).Hash) {
     throw 'Installed encrypted capture helper does not match the pinned engine revision.'
 }
+Assert-ExecutableRootHelper $installedEncryptionHelper
 $runtimeItems = @(Get-ChildItem -LiteralPath $runtimeRoot -Recurse -Force -ErrorAction Stop)
 if ($runtimeItems.Count -eq 0) { throw 'PowerForge runtime directory is empty.' }
 foreach ($item in $runtimeItems) {
@@ -334,6 +367,7 @@ if ($backupRepository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' -or
 }
 Assert-PinnedBackupDestination -Repository $backupRepository -Branch $backupBranch `
     -ExpectedRepository $expectedRepository -ExpectedBranch $expectedBranch
+Assert-BackupRelativePath $backupPath
 if ($null -ne $manifest.backupTarget.retention.keepDays -or
     ($null -ne $manifest.backupTarget.retention.keepLatestInTree -and
      $null -ne $manifest.backupTarget.retention.keepLatest)) {
