@@ -159,6 +159,29 @@ public sealed class PowerForgeReleaseModulePackageProvenanceTests
     }
 
     [Fact]
+    public void ResolveWingetInstallerAsset_RejectsAmbiguousNativeAndWindowsInstallers()
+    {
+        var package = new PowerForgeReleaseWingetPackage { PackageIdentifier = "EvotecIT.OfficeIMO.Studio" };
+        var installer = new PowerForgeReleaseWingetInstaller
+        {
+            Category = PowerForgeReleaseAssetCategory.Installer,
+            Target = "Studio"
+        };
+        PowerForgeReleaseAssetEntry[] assets =
+        [
+            new() { Category = PowerForgeReleaseAssetCategory.Installer, Target = "Studio", Runtime = "linux-x64", Path = "studio.deb" },
+            new() { Category = PowerForgeReleaseAssetCategory.Installer, Target = "Studio", Runtime = "win-x64", Path = "studio.msi" }
+        ];
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ResolveWingetInstallerAsset(installer, package, assets));
+        Assert.Contains("matched multiple assets", error.Message, StringComparison.Ordinal);
+
+        installer.Runtime = "win-x64";
+        Assert.Same(assets[1], PowerForgeReleaseService.ResolveWingetInstallerAsset(installer, package, assets));
+    }
+
+    [Fact]
     public void CreateDotNetStorePackageEntries_UsesMatchingTargetVersion()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
