@@ -4828,10 +4828,13 @@ internal sealed partial class PowerForgeReleaseService
         DotNetPublishArtefactResult artifact,
         ISet<PowerForgeReleaseToolOutputKind> selectedOutputs)
     {
-        if (artifact.Category == DotNetPublishArtefactCategory.Bundle)
-            return selectedOutputs.Contains(PowerForgeReleaseToolOutputKind.Portable);
-
-        return selectedOutputs.Contains(PowerForgeReleaseToolOutputKind.Tool);
+        var outputKind = artifact.Category switch
+        {
+            DotNetPublishArtefactCategory.Bundle => PowerForgeReleaseToolOutputKind.Portable,
+            DotNetPublishArtefactCategory.Installer => PowerForgeReleaseToolOutputKind.Installer,
+            _ => PowerForgeReleaseToolOutputKind.Tool
+        };
+        return selectedOutputs.Contains(outputKind);
     }
 
     private static void ApplyDotNetOutputRootOverride(DotNetPublishSpec spec, string outputRoot)
@@ -5467,17 +5470,7 @@ internal sealed partial class PowerForgeReleaseService
         IReadOnlyList<PowerForgeReleaseAssetEntry> assets,
         IReadOnlyList<PowerForgeToolGitHubReleaseResult> toolGitHubReleases)
     {
-        var asset = assets.FirstOrDefault(candidate =>
-            candidate.Category == installer.Category &&
-            (string.IsNullOrWhiteSpace(installer.Target) || string.Equals(candidate.Target, installer.Target, StringComparison.OrdinalIgnoreCase)) &&
-            (string.IsNullOrWhiteSpace(installer.Runtime) || string.Equals(candidate.Runtime, installer.Runtime, StringComparison.OrdinalIgnoreCase)) &&
-            (string.IsNullOrWhiteSpace(installer.Framework) || string.Equals(candidate.Framework, installer.Framework, StringComparison.OrdinalIgnoreCase)));
-
-        if (asset is null)
-        {
-            throw new InvalidOperationException(
-                $"Winget package '{package.PackageIdentifier}' could not match an asset for Category={installer.Category}, Target={installer.Target ?? "*"}, Runtime={installer.Runtime ?? "*"}, Framework={installer.Framework ?? "*"}.");
-        }
+        var asset = ResolveWingetInstallerAsset(installer, package, assets);
 
         var installerPath = asset.StagedPath ?? asset.Path;
         if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
@@ -5515,6 +5508,33 @@ internal sealed partial class PowerForgeReleaseService
             InstallerUrl = resolvedUrl,
             InstallerSha256 = ComputeSha256(installerPath)
         };
+    }
+
+    internal static PowerForgeReleaseAssetEntry ResolveWingetInstallerAsset(
+        PowerForgeReleaseWingetInstaller installer,
+        PowerForgeReleaseWingetPackage package,
+        IReadOnlyList<PowerForgeReleaseAssetEntry> assets)
+    {
+        var matches = assets.Where(candidate =>
+            candidate.Category == installer.Category &&
+            (string.IsNullOrWhiteSpace(installer.Target) || string.Equals(candidate.Target, installer.Target, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrWhiteSpace(installer.Runtime) || string.Equals(candidate.Runtime, installer.Runtime, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrWhiteSpace(installer.Framework) || string.Equals(candidate.Framework, installer.Framework, StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+
+        if (matches.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"Winget package '{package.PackageIdentifier}' could not match an asset for Category={installer.Category}, Target={installer.Target ?? "*"}, Runtime={installer.Runtime ?? "*"}, Framework={installer.Framework ?? "*"}.");
+        }
+
+        if (matches.Length > 1)
+        {
+            throw new InvalidOperationException(
+                $"Winget package '{package.PackageIdentifier}' matched multiple assets for Category={installer.Category}, Target={installer.Target ?? "*"}, Runtime={installer.Runtime ?? "*"}, Framework={installer.Framework ?? "*"}. Specify a unique installer asset selector.");
+        }
+
+        return matches[0];
     }
 
     private static string? ResolveGitHubReleaseDownloadUrl(

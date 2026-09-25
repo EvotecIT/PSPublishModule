@@ -77,6 +77,110 @@ public sealed class PowerForgeReleaseModulePackageProvenanceTests
         }
     }
 
+    [Theory]
+    [InlineData("linux-x64", "officeimo-studio_0.1.42_amd64.deb")]
+    [InlineData("osx-arm64", "OfficeIMO-Studio-0.1.42-osx-arm64.zip")]
+    public void CreateDotNetArtefactEntries_NativeInstallerIsFinalReleaseAsset(string runtime, string fileName)
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string installerPath = Path.Combine(root, fileName);
+            File.WriteAllText(installerPath, "native installer");
+
+            var entry = Assert.Single(PowerForgeReleaseService.CreateDotNetArtefactEntries(
+                new DotNetPublishArtefactResult
+                {
+                    Category = DotNetPublishArtefactCategory.Installer,
+                    Target = "Studio",
+                    Runtime = runtime,
+                    Framework = "net10.0",
+                    OutputFiles = [installerPath]
+                },
+                new DotNetPublishPlan
+                {
+                    Targets = [new DotNetPublishTargetPlan { Name = "Studio", Version = "0.1.42" }]
+                },
+                sharedReleaseVersion: null));
+
+            Assert.Equal(installerPath, entry.Path);
+            Assert.Equal(PowerForgeReleaseAssetCategory.Installer, entry.Category);
+            Assert.Equal("0.1.42", entry.Version);
+            Assert.Equal(runtime, entry.Runtime);
+            Assert.True(entry.IsFinalPackageOutput);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void FilterDotNetToolResult_InstallerOnlyRetainsNativePackageForRelease()
+    {
+        string root = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            string installerPath = Path.Combine(root, "officeimo-studio_0.1.42_amd64.deb");
+            File.WriteAllText(installerPath, "native installer");
+            var installer = new DotNetPublishArtefactResult
+            {
+                Category = DotNetPublishArtefactCategory.Installer,
+                Target = "Studio",
+                Runtime = "linux-x64",
+                Framework = "net10.0",
+                OutputFiles = [installerPath]
+            };
+            var result = new DotNetPublishResult
+            {
+                Artefacts =
+                [
+                    installer,
+                    new DotNetPublishArtefactResult { Category = DotNetPublishArtefactCategory.Publish }
+                ]
+            };
+
+            PowerForgeReleaseService.FilterDotNetToolResult(result,
+                new HashSet<PowerForgeReleaseToolOutputKind> { PowerForgeReleaseToolOutputKind.Installer });
+
+            Assert.Same(installer, Assert.Single(result.Artefacts));
+            Assert.Equal(installerPath, Assert.Single(PowerForgeReleaseService.CreateDotNetArtefactEntries(
+                installer,
+                new DotNetPublishPlan
+                {
+                    Targets = [new DotNetPublishTargetPlan { Name = "Studio", Version = "0.1.42" }]
+                },
+                sharedReleaseVersion: null)).Path);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ResolveWingetInstallerAsset_RejectsAmbiguousNativeAndWindowsInstallers()
+    {
+        var package = new PowerForgeReleaseWingetPackage { PackageIdentifier = "EvotecIT.OfficeIMO.Studio" };
+        var installer = new PowerForgeReleaseWingetInstaller
+        {
+            Category = PowerForgeReleaseAssetCategory.Installer,
+            Target = "Studio"
+        };
+        PowerForgeReleaseAssetEntry[] assets =
+        [
+            new() { Category = PowerForgeReleaseAssetCategory.Installer, Target = "Studio", Runtime = "linux-x64", Path = "studio.deb" },
+            new() { Category = PowerForgeReleaseAssetCategory.Installer, Target = "Studio", Runtime = "win-x64", Path = "studio.msi" }
+        ];
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            PowerForgeReleaseService.ResolveWingetInstallerAsset(installer, package, assets));
+        Assert.Contains("matched multiple assets", error.Message, StringComparison.Ordinal);
+
+        installer.Runtime = "win-x64";
+        Assert.Same(assets[1], PowerForgeReleaseService.ResolveWingetInstallerAsset(installer, package, assets));
+    }
+
     [Fact]
     public void CreateDotNetStorePackageEntries_UsesMatchingTargetVersion()
     {
