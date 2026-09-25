@@ -1,0 +1,11 @@
+[Unit]
+Description=Capture and publish encrypted %i recovery state daily
+
+[Timer]
+OnCalendar=*-*-* 02:20:00 UTC
+RandomizedDelaySec=35m
+Persistent=false
+Unit=powerforge-server-backup-host@%i.service
+
+[Install]
+WantedBy=timers.target

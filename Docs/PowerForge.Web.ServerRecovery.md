@@ -1,6 +1,6 @@
 # PowerForge.Web Server Recovery
 
-Last updated: 2026-09-05
+Last updated: 2026-09-25
 
 This document defines the reusable PowerForge pattern for rebuilding a Linux-hosted static website from source control, encrypted secrets, and a site-owned recovery manifest.
 
@@ -51,6 +51,7 @@ powerforge-web server inspect --manifest deploy/linux/example.serverrecovery.jso
 powerforge-web server plan --manifest deploy/linux/example.serverrecovery.json
 powerforge-web server capture --manifest deploy/linux/example.serverrecovery.json --out ./_server-state/example
 powerforge-web server capture --manifest deploy/linux/example.serverrecovery.json --out ./_server-state/example --fail-on-failure
+powerforge-web server capture --manifest deploy/linux/example.serverrecovery.json --out ./_server-state/example --local --fail-on-failure
 powerforge-web server capture --manifest deploy/linux/example.serverrecovery.json --out ./_server-state/example --encrypt-remote
 powerforge-web server deploy --manifest deploy/linux/example.serverrecovery.json --dry-run
 powerforge-web server verify --manifest deploy/linux/example.serverrecovery.json --fail-on-failure
@@ -63,7 +64,7 @@ powerforge-web server restore-secrets-plan --manifest deploy/linux/example.serve
 
 `server plan` loads the manifest, summarizes recovery coverage, emits the planned stages, and warns when encrypted capture is configured but no encryption recipient environment variable is available. `server validate` is currently an alias for `server plan`; it does not run a schema-only validation pass.
 
-`server capture` uses SSH to collect manifest-defined command outputs, streams the plain capture file set into `plain-files.tar.gz`, writes `capture-summary.json`, and creates a restore checklist. Repositories with `refCaptureCommandId` are pinned in the captured `manifest.json` from that required command's exact commit output. Multi-surface deployments can use `refCaptureCommandIds`; every listed required, non-sensitive command must return the same exact commit before the repository is pinned. Missing, malformed, or disagreeing output removes any stale source ref and raises a capture warning. Encrypted files are skipped unless `backupTarget.recipient` is set or the configured `backupTarget.recipientEnv` environment variable is present. Secret capture always delegates to the root-owned `powerforge-server-encrypted-capture` helper, whose exact sudoers command fixes the public recipient and required/optional paths so the restricted backup identity can receive only ciphertext. The older `--encrypt-remote` marker remains accepted for caller compatibility, but remote encryption is now the only secure execution mode. Capture warnings remain non-fatal for interactive use unless `--fail-on-failure` is passed, which exits non-zero when required command captures, revision hydration, archive capture, or encrypted capture reports warnings. The reusable backup action surfaces only bounded archive/encryption stderr on failure; it never prints command captures or archive contents into workflow logs.
+`server capture` uses SSH by default; `--local` runs the same manifest-defined commands, plain archive, encrypted archive, and operation locks on the current Linux host. The two transport options cannot be combined. It writes `capture-summary.json` and a restore checklist. Repositories with `refCaptureCommandId` are pinned in the captured `manifest.json` from that required command's exact commit output. Multi-surface deployments can use `refCaptureCommandIds`; every listed required, non-sensitive command must return the same exact commit before the repository is pinned. Missing, malformed, or disagreeing output removes any stale source ref and raises a capture warning. Encrypted files are skipped unless `backupTarget.recipient` is set or the configured `backupTarget.recipientEnv` environment variable is present. Secret capture always delegates to the root-owned `powerforge-server-encrypted-capture` helper, whose exact sudoers command fixes the public recipient and required/optional paths so the restricted backup identity can receive only ciphertext. The older `--encrypt-remote` marker remains accepted for caller compatibility; encryption still happens on the source host in both transport modes. Capture warnings remain non-fatal for interactive use unless `--fail-on-failure` is passed, which exits non-zero when required command captures, revision hydration, archive capture, or encrypted capture reports warnings. The reusable backup action surfaces only bounded archive/encryption stderr on failure; it never prints command captures or archive contents into workflow logs.
 
 `server deploy` runs the manifest's deploy commands over SSH. The default `deploy.operationLockOwner: engine` holds every declared operation lock for the complete command set and verifies that the lock session is still alive before and after each remote command. A command that owns the same lock, including `powerforge-site-deploy`, must instead use `deploy.operationLockOwner: command`; that mode requires exactly one non-sensitive deploy command, and that command must hold every declared operation lock for its complete lifetime. This explicit ownership boundary avoids nested self-deadlock without silently dropping coordination. Use `--dry-run` to print the resolved remote commands without executing them, and `--fail-on-failure` when automation should exit non-zero if a required deploy command fails.
 
@@ -273,6 +274,30 @@ concurrency:
 ```
 
 The action requires remote age encryption, a non-empty plain archive, a non-empty encrypted archive, a warning-free capture summary, exact source/engine/run provenance, and SHA-256 checksums before it clones the backup repository. It commits a timestamped directory under `backupTarget.path`, applies `backupTarget.retention.keepLatestInTree`, and retries fetch/rebase/push races without uploading recovery material as a GitHub Actions artifact. After retention, and again after any rebase, it regenerates `LATEST.txt` and `index.json` from the captures actually present in the checkout. The catalog hashes every nested artifact rather than assuming a fixed top-level file set, so consumers cannot silently keep selecting an old capture. The older `keepLatest` property remains a compatibility alias.
+
+### Capture and publish from the host
+
+`Deployment/Linux/Invoke-PowerForgeServerBackupHost.ps1` lets a dedicated, locked-password capture account initiate the same small recovery capture on its own host. The host keeps a repository-specific write deploy key, captures through `server capture --local`, checks the plain and age-encrypted archives and warning-free summary, then publishes the capture to the private backup repository. It reuses the backup action's catalog and Git conflict helpers, including `LATEST.txt`, `index.json`, checksum entries, and bounded retention in the current tree. Captured repository refs remain in the manifest, and the pinned PowerForge revision is recorded in metadata; there is no GitHub workflow run id for a host timer.
+
+Install the reviewed PowerForge CLI and script from the same pinned engine revision. Give each lane its own capture account, mode-0700 work directory, mode-0600 write deploy key scoped to the backup repository, and a root-owned known-hosts file that the account can read. The root-owned systemd environment file at `/etc/powerforge/server-backup/<lane>.env` supplies these paths and values:
+
+```ini
+POWERFORGE_BACKUP_LANE=example
+POWERFORGE_BACKUP_MANIFEST=/srv/example/deploy/linux/example.serverrecovery.json
+POWERFORGE_BACKUP_ENGINE_ROOT=/srv/powerforge/PSPublishModule
+POWERFORGE_BACKUP_ENGINE_SHA=<reviewed-40-character-commit>
+POWERFORGE_BACKUP_RUNTIME_SHA256=<installed-runtime-tree-sha256>
+POWERFORGE_BACKUP_WORK_ROOT=/var/lib/powerforge-example-backup/work
+POWERFORGE_BACKUP_IDENTITY_FILE=/var/lib/powerforge-example-backup/.ssh/backup_ed25519
+POWERFORGE_BACKUP_KNOWN_HOSTS_FILE=/etc/powerforge/server-backup/github_known_hosts
+POWERFORGE_BACKUP_SOURCE_REPOSITORY=Owner/Example
+POWERFORGE_BACKUP_REPOSITORY=Owner/PrivateBackups
+POWERFORGE_BACKUP_BRANCH=main
+```
+
+The shared `powerforge-server-backup-host@.service` and `.timer` templates run the lane under `powerforge-<lane>-backup` on a daily host schedule. The timer does not catch up a missed run when first enabled; monitor its next normal execution and alert if a scheduled day is missing. Use a dedicated, clean, root-owned checkout fixed at the reviewed engine commit. Build the CLI from that checkout and record a SHA-256 digest of every file in its `PowerForge.Web.Cli/bin/Release/net10.0` runtime tree: sort entries case-sensitively as `relative/path lowercase-file-sha256`, join them with LF including a final LF, then hash the UTF-8 bytes. The host checks the full tree, file ownership, and the committed engine revision before every capture. Run the script with `-ValidateOnly` under that account after installing the pinned runtime and credentials; this checks file ownership, paths, manifest, engine revision, and runtime digest without capturing or publishing. Enable the timer only after that preflight passes. Before retiring an inbound backup workflow, observe a normal timer execution and read the off-host encrypted artifact, its SHA-256 entries, warning count, `LATEST.txt`, and `index.json` at the published commit. Keep a separate restore drill; archive presence alone does not prove decryption and service recovery.
+
+The host's write deploy key can alter the backup repository if the host is compromised. Before enabling the host timer, protect the backup branch against force pushes and deletion, then verify a normal deploy-key push still works. Keep independent retained history or another failure domain, and do not treat this Git-backed lane as the durable-data backup for databases or large stores. A second machine may instead pull durable snapshots through a source key restricted to a fixed address and read-only command. That intentionally narrow inbound path has a different trust tradeoff from globally reachable runner-initiated SSH.
 
 This setting deliberately controls only the captures visible in the current Git tree. Git history is preserved, so it is not a data-destruction or repository-size retention policy. Use a separately reviewed history rewrite or a non-Git backup backend if historical deletion is required.
 

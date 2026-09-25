@@ -1,0 +1,20 @@
+[Unit]
+Description=Capture and publish encrypted %i recovery state from this host
+After=network-online.target
+Wants=network-online.target
+AssertPathExists=/etc/powerforge/server-backup/%i.env
+
+[Service]
+Type=oneshot
+User=powerforge-%i-backup
+Group=powerforge-%i-backup
+EnvironmentFile=/etc/powerforge/server-backup/%i.env
+UMask=0077
+ExecStart=/usr/bin/flock -n ${POWERFORGE_BACKUP_WORK_ROOT}/.capture-publish.lock /usr/bin/pwsh -NoProfile -NonInteractive -File /usr/local/lib/powerforge/Invoke-PowerForgeServerBackupHost.ps1
+TimeoutStartSec=45m
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/powerforge-%i-backup /var/lock
