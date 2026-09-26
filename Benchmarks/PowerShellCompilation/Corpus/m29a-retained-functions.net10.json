@@ -4,8 +4,8 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "emitted": 452,
-  "retained": 113,
+  "emitted": 453,
+  "retained": 112,
   "dispositionContract": "Every function identity matches the accepted constructor/object comparison and its full baseline; no previously emitted method or still-retained region is lost.",
   "packets": [
     {
@@ -856,9 +856,9 @@
       "packet": "cleanup",
       "stableUnits": 69,
       "functions": 68,
-      "emitted": 53,
-      "retained": 15,
-      "sourceExplanationSha256": "7c910f0a177a2916a264b9892f5d151cf9b361bb95dd29f81c28bb245c3acc38",
+      "emitted": 54,
+      "retained": 14,
+      "sourceExplanationSha256": "2c7f3b5552a75776c3f19ce63108618366e001d300574797c446281ed94a6f64",
       "functionsRetained": [
         {
           "unitId": "9620fa3e611793d93f7a99e7",
@@ -897,31 +897,6 @@
               "message": "A loop transfer leaving native captured output requires an explicit enclosing-control-flow transfer contract.",
               "line": 19,
               "column": 5
-            }
-          ]
-        },
-        {
-          "unitId": "b0d07944aec2f9420c410ff3",
-          "name": "Get-CloudDevicesToProcess",
-          "relativePath": "Private/Get-CloudDevicesToProcess.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; workflows and unsupported child bodies remain hosted.",
-              "line": 97,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Scalar switch whose $_, $PSItem, or $switch automatic-variable state is observed requires PowerShell runtime semantics.",
-              "line": 101,
-              "column": 13
             }
           ]
         },
@@ -3061,17 +3036,45 @@
       ]
     }
   ],
-  "compilerBaselineCommit": "a0188a0396e315c9886e9b635cf0008a810d05d0",
+  "compilerBaselineCommit": "1681702014081aac1016180ebc06b779bd9db365",
   "compilerSourceHashes": [
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.ScriptBlocks.cs",
-      "sha256": "7acb10003351cd42ca5c7611ec6fdaedded64a66e7ec82c42835cdf59ed21b23"
+      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.ControlFlow.cs",
+      "sha256": "c65abb3db72cb9703b7c2c8a5344c2e2d9424a28c026205ffb5802bafd7b01bd"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.NestedDeclarations.cs",
-      "sha256": "561c18cf2536d36946e46c5f941cbc4f82d2cf16b7399e78c1c979a71d49360e"
+      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.ScriptBlocks.cs",
+      "sha256": "3bdc0e7710fbcea9500fce16995c870e00a51946db9defd47859ca11c7079f6c"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.ScriptBlocks.cs",
+      "sha256": "2b2f55d87a5b092de7dadd25eb55d86cee00cefeddc6d39b0c7905c8edd73c48"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Switch.cs",
+      "sha256": "b124ffc3ad58916402f88ee62a390bf345d3b73810d0d679197e84078d817905"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeScriptBlock.cs",
+      "sha256": "95ea795de6a944de7635a86632c19769dd5fddcf21a1c1ced64b286e251f8cbb"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeScriptBlock.cs",
+      "sha256": "0c4d3e0d11f083185d38ceb602bcf2a5efc5fcbe555d9efc71d885736d67cfb2"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs",
+      "sha256": "7e9ba7278e5e78b1e43a9c304fa7022c22b1ef23b20393a1f894d7aaeee5cc20"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.ScriptBlocks.cs",
+      "sha256": "0bffb6f861543823c3fa0594a61d294289e8412fc604bb1aba8d66c56cec9c38"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Switch.cs",
+      "sha256": "887f9d3accbee63e966585e834b4ee4d04920366920073de133fb7eeb2357168"
     }
   ],
-  "dispositionComparison": "m29a-filter-header-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "a0188a0396e315c9886e9b635cf0008a810d05d0"
+  "dispositionComparison": "m29a-switch-predicate-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "1681702014081aac1016180ebc06b779bd9db365"
 }

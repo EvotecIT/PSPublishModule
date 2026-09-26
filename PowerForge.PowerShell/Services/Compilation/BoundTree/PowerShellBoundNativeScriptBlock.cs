@@ -4,7 +4,7 @@ namespace PowerForge;
 internal sealed class PowerShellBoundNativeScriptBlockExpression : PowerShellBoundExpression
 {
     internal PowerShellBoundNativeScriptBlockExpression(SourceSpan span, PowerShellSymbolId target, string sourceDocument,
-        string? declarationName = null)
+        string? declarationName = null, bool isSwitchPredicate = false)
         : base(span, new PowerShellTypeFact(typeof(System.Management.Automation.ScriptBlock), PowerShellTypeFactProvenance.Inferred,
                 "A compiled body retains native script-block invocation and source metadata."),
             PowerShellValueState.Known, PowerShellSemanticEffect.Host,
@@ -14,10 +14,13 @@ internal sealed class PowerShellBoundNativeScriptBlockExpression : PowerShellBou
         Target = target;
         SourceDocument = sourceDocument;
         DeclarationName = declarationName;
+        IsSwitchPredicate = isSwitchPredicate;
     }
 
     internal PowerShellSymbolId Target { get; }
     internal string SourceDocument { get; }
     /// <summary>Names a statement-time nested declaration; null denotes an ordinary literal value.</summary>
     internal string? DeclarationName { get; }
+    /// <summary>Retains the native constant-block identity for a switch predicate.</summary>
+    internal bool IsSwitchPredicate { get; }
 }

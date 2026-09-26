@@ -84,12 +84,13 @@ internal sealed partial class PowerShellSemanticBinder
         // Command conditions need success-record capture, not assignment-value
         // collapse: one array record must remain one switch item. Only the
         // separately qualified nativeCommandResults path owns that contract.
+        var hasPredicates = statement.Clauses.Any(clause => clause.Item1 is ScriptBlockExpressionAst);
         var nativeRuntimeValues = value is not PowerShellBoundNativeCommandExpression &&
-            value.Type.ClrType == typeof(object) &&
+            (value.Type.ClrType == typeof(object) || hasPredicates) &&
             matchMode == PowerShellBoundSwitchMatchMode.Exact && string.IsNullOrEmpty(statement.Label) &&
             capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
             PowerShellLoopInterruptContract.IsAvailable(capabilities) &&
-            statement.Clauses.All(clause => clause.Item1 is StringConstantExpressionAst);
+            statement.Clauses.All(clause => clause.Item1 is StringConstantExpressionAst or ScriptBlockExpressionAst);
         if (observesSwitch && !nativeRuntimeValues)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2304",
@@ -123,6 +124,7 @@ internal sealed partial class PowerShellSemanticBinder
         var clauses = new List<PowerShellBoundSwitchClause>();
         foreach (var clause in statement.Clauses)
         {
+            var nativePredicate = nativeRuntimeValues && clause.Item1 is ScriptBlockExpressionAst;
             var clauseSymbols = CloneSymbols(baselineSymbols);
             var clauseValue = BindExpression(
                 document,
@@ -130,11 +132,11 @@ internal sealed partial class PowerShellSemanticBinder
                 clauseSymbols,
                 functions,
                 diagnostics,
-                valueType,
+                nativePredicate ? typeof(System.Management.Automation.ScriptBlock) : valueType,
                 targetFramework,
                 capabilities);
             if (clauseValue is null) return null;
-            if (clauseValue.Type.ClrType != valueType)
+            if (clauseValue.Type.ClrType != (nativePredicate ? typeof(System.Management.Automation.ScriptBlock) : valueType))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     "PSB2306",

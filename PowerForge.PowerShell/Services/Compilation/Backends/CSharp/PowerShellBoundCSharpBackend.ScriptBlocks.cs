@@ -27,7 +27,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 .Append(NativeScriptBlockFactoryName(block.Target))
                 .AppendLine("(global::PowerForge.Generated.Runtime.PowerShellNativeFunctionContext creationContext)")
                 .AppendLine("    {")
-                .Append(block.DeclarationName is null ? "        return creationContext.CreateScriptBlock(" : "        return creationContext.CreateFunctionBody(")
+                .Append(block.DeclarationName is not null ? "        return creationContext.CreateFunctionBody(" :
+                    block.IsSwitchPredicate ? "        return creationContext.CreateSwitchPredicate(" : "        return creationContext.CreateScriptBlock(")
                 .Append(PowerShellCSharpLiteral.QuoteString(block.SourceDocument))
                 .Append(", ").Append(block.Span.StartOffset).Append(", ").Append(block.Span.EndOffset).AppendLine(",")
                 .Append("            ").Append(Callback(binding.HasBegin, 0)).AppendLine(",")

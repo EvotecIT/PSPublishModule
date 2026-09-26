@@ -12,6 +12,7 @@ namespace PowerForge.Generated.Runtime
         private NativeVariableStorage? _switchStorage;
         private NativeVariableStorage? _switchItemStorage;
         private static readonly Lazy<Func<object?, object, string>> SwitchString = new(CreateSwitchString);
+        private static readonly Lazy<Func<ScriptBlock, object?, object?>> SwitchPredicate = new(CreateSwitchPredicateInvocation);
 
         /// <summary>Saves switch automatic variables before evaluating its input in the current invocation.</summary>
         public NativeSwitchScope EnterSwitch()
@@ -67,6 +68,15 @@ namespace PowerForge.Generated.Runtime
                     caseSensitive ? StringComparison.InvariantCulture : StringComparison.InvariantCultureIgnoreCase);
             }
 
+            /// <summary>Invokes a compiled predicate in the engine's local scope and converts its captured records as Boolean.</summary>
+            public bool MatchesPredicate(ScriptBlock predicate)
+            {
+                CheckActive();
+                if (predicate is null) throw new ArgumentNullException(nameof(predicate));
+                var result = SwitchPredicate.Value(predicate, _item.Read.Invoke(_owner.FunctionContext));
+                return (bool)_owner.ConvertValue(typeof(bool), result)!;
+            }
+
             /// <summary>Restores iterator then item, including return, failure, and an empty input.</summary>
             public void Dispose()
             {
@@ -90,7 +100,23 @@ namespace PowerForge.Generated.Runtime
             var context = Expression.Parameter(typeof(object), "context");
             return Expression.Lambda<Func<object?, object, string>>(
                 Expression.Dynamic(PowerShellNativeLanguageOperations.GetSingletonBinder("PSToStringBinder"),
-                    typeof(string), value, Expression.Convert(context, contextType)), value, context).Compile();
+                typeof(string), value, Expression.Convert(context, contextType)), value, context).Compile();
+        }
+
+        private static Func<ScriptBlock, object?, object?> CreateSwitchPredicateInvocation()
+        {
+            var errorBehavior = typeof(ScriptBlock).GetNestedType("ErrorHandlingBehavior", BindingFlags.NonPublic)
+                ?? throw new NotSupportedException("PowerShell's switch predicate error contract is unavailable.");
+            var method = typeof(ScriptBlock).GetMethod("DoInvokeReturnAsIs", BindingFlags.Instance | BindingFlags.NonPublic,
+                null, new[] { typeof(bool), errorBehavior, typeof(object), typeof(object), typeof(object), typeof(object[]) }, null)
+                ?? throw new NotSupportedException("PowerShell's switch predicate invocation contract is unavailable.");
+            var predicate = Expression.Parameter(typeof(ScriptBlock), "predicate");
+            var item = Expression.Parameter(typeof(object), "item");
+            var noOutput = Expression.Constant(System.Management.Automation.Internal.AutomationNull.Value, typeof(object));
+            return Expression.Lambda<Func<ScriptBlock, object?, object?>>(
+                Expression.Call(predicate, method, Expression.Constant(true),
+                    Expression.Constant(Enum.Parse(errorBehavior, "WriteToExternalErrorPipe"), errorBehavior),
+                    item, noOutput, noOutput, Expression.Constant(null, typeof(object[]))), predicate, item).Compile();
         }
 
         /// <summary>Recognizes native unlabeled break/continue raised by an invoked command or conversion callback.</summary>

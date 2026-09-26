@@ -258,6 +258,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             var clauseSource = EmitExpression(clause.Value);
             var comparison = statement.MatchMode switch
             {
+                _ when nativeSwitchScope is not null && clause.Value is PowerShellLoweredNativeScriptBlockExpression { IsSwitchPredicate: true } =>
+                    $"{nativeSwitchScope}.MatchesPredicate({clauseSource})",
                 _ when nativeSwitchScope is not null => $"{nativeSwitchScope}.Matches({clauseSource}, {(statement.CaseSensitive ? "true" : "false")})",
                 PowerShellBoundSwitchMatchMode.Regex =>
                     $"global::System.Text.RegularExpressions.Regex.IsMatch(({valueIdentifier} ?? string.Empty), ({clauseSource} ?? string.Empty), global::System.Text.RegularExpressions.RegexOptions.{(statement.CaseSensitive ? "None" : "IgnoreCase")})",

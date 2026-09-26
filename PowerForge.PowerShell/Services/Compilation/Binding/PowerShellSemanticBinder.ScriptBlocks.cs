@@ -62,7 +62,11 @@ internal sealed partial class PowerShellSemanticBinder
     /// Parameter metadata and hosted command pipelines do not enter this value-binding route.</remarks>
     internal static bool IsCompiledValueScriptBlock(ScriptBlockExpressionAst expression)
         => IsAssignedScriptBlock(expression) || expression.Parent is InvokeMemberExpressionAst invocation &&
-           invocation.Arguments.Any(argument => ReferenceEquals(argument, expression));
+           invocation.Arguments.Any(argument => ReferenceEquals(argument, expression)) || IsSwitchPredicate(expression);
+
+    internal static bool IsSwitchPredicate(ScriptBlockExpressionAst expression)
+        => expression.Parent is SwitchStatementAst statement &&
+           statement.Clauses.Any(clause => ReferenceEquals(clause.Item1, expression));
 
     // Preserve filter process clauses and header parameters in the canonical child contract.
     // Workflow declarations require a different execution owner and remain hosted.
@@ -93,7 +97,8 @@ internal sealed partial class PowerShellSemanticBinder
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
         if (_nativeScriptBlocks.TryGetValue(ScriptBlockKey(document.DocumentId, syntax.Extent.StartOffset), out var target) &&
             functions.ContainsKey(target.Name))
-            return new PowerShellBoundNativeScriptBlockExpression(span, target, document.Text);
+            return new PowerShellBoundNativeScriptBlockExpression(span, target, document.Text,
+                isSwitchPredicate: IsSwitchPredicate(syntax));
         diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2960", "The script block requires a completely compiled native body and supported invocation metadata.", span));
         return null;
     }
