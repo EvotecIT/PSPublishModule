@@ -95,6 +95,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
            RequiresNativeConditionalMemberCapture(function) ||
            RequiresNativeVariableIndex(function) ||
            RequiresNativeModuleStateStringConversion(function) ||
+           RequiresNativeStaticNumericArgumentConversion(function) ||
            function.Body.Find(static node => node is ArrayExpressionAst array &&
                array.SubExpression.Statements.Any(static statement => statement is AssignmentStatementAst),
                searchNestedScriptBlocks: false) is not null ||
@@ -200,6 +201,46 @@ internal static class PowerShellNativeFunctionBindingPolicy
     private static bool IsSimpleIndex(Ast index)
         => index is VariableExpressionAst or ConstantExpressionAst or StringConstantExpressionAst ||
            index is UnaryExpressionAst { TokenKind: TokenKind.Plus or TokenKind.Minus, Child: ConstantExpressionAst };
+
+    // PowerShell converts a string parameter at the CLR call boundary. The
+    // typed overload binder cannot substitute a C# string-to-number cast.
+    // Select the invocation bridge only when the target and arity are closed;
+    // the native binder still validates target availability and call effects.
+    private static bool RequiresNativeStaticNumericArgumentConversion(FunctionDefinitionAst function)
+    {
+        var stringParameters = PowerShellParameterSyntax.GetParameters(function.Body)
+            .Where(static parameter => parameter.StaticType == typeof(string))
+            .Select(static parameter => parameter.Name.VariablePath.UserPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (stringParameters.Count == 0) return false;
+        return function.Body.Find(node => node is InvokeMemberExpressionAst
+            {
+                Static: true,
+                Expression: TypeExpressionAst target,
+                Member: StringConstantExpressionAst method,
+                Arguments: { Count: 1 } arguments
+            } &&
+            arguments[0] is VariableExpressionAst argument &&
+            stringParameters.Contains(argument.VariablePath.UserPath) &&
+            target.TypeName.GetReflectionType() is { } type &&
+            HasSingleNumericOverload(type, method.Value), searchNestedScriptBlocks: false) is not null;
+    }
+
+    private static bool HasSingleNumericOverload(Type type, string methodName)
+    {
+        var overloads = type.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static |
+                                        System.Reflection.BindingFlags.FlattenHierarchy)
+            .Where(candidate => candidate.Name.Equals(methodName, StringComparison.OrdinalIgnoreCase) &&
+                                !candidate.IsSpecialName && candidate.GetParameters().Length == 1)
+            .ToArray();
+        if (overloads.Length != 1 || overloads[0].ContainsGenericParameters) return false;
+        var parameter = overloads[0].GetParameters()[0];
+        var target = parameter.ParameterType;
+        return !parameter.IsOptional && !parameter.IsOut && !target.IsByRef &&
+               (target == typeof(byte) || target == typeof(short) || target == typeof(int) ||
+                target == typeof(long) || target == typeof(ushort) || target == typeof(uint) ||
+                target == typeof(ulong));
+    }
 
     // Preserve already-qualified typed direct returns, assignments, and
     // indexed mutation. A map read consumed by an if condition or emitted as
