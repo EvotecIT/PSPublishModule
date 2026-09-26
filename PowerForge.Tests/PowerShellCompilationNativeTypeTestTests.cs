@@ -41,15 +41,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "Generated.NativeRuntimeTypes", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(built.Succeeded, built.Error + Environment.NewLine + built.BuildOutput);
-        foreach (var name in new[] { "Get-FileEncoding", "Convert-Office365License", "Test-RuntimeType", "Test-DeferredType", "Test-DeferredArrayType", "Test-TypeOperandOrder" })
+        foreach (var name in new[] { "Get-FileEncoding", "Convert-FileEncodingSingle", "Convert-Office365License", "Test-RuntimeType", "Test-DeferredType", "Test-DeferredArrayType", "Test-TypeOperandOrder" })
         {
             var unit = Assert.Single(built.Manifest!.UnitDispositionLedger!.Entries, unit => unit.Name == name);
             Assert.True(unit.EmittedClrMethod, System.Text.Json.JsonSerializer.Serialize(unit));
             Assert.True(unit.UsesNativeFunctionBinding);
         }
-        var retainedConverter = Assert.Single(built.Manifest!.UnitDispositionLedger!.Entries, unit => unit.Name == "Convert-FileEncodingSingle");
-        Assert.True(retainedConverter.RetainedHostedSource);
-        Assert.Contains(retainedConverter.DiagnosticChain, cause => cause.FeatureId == "syntax.invokememberexpression");
         var data = Path.Combine(fixture.RootPath, "proof-data");
         Directory.CreateDirectory(data);
         var probe = """

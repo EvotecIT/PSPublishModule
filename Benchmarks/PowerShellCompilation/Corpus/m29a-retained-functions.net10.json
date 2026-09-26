@@ -4,36 +4,18 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "emitted": 465,
-  "retained": 100,
+  "emitted": 466,
+  "retained": 99,
   "dispositionContract": "Every function identity matches the accepted constructor/object comparison and its full baseline; no previously emitted method or still-retained region is lost.",
   "packets": [
     {
       "packet": "pssg",
       "stableUnits": 286,
       "functions": 282,
-      "emitted": 245,
-      "retained": 37,
-      "sourceExplanationSha256": "b7ed7fec28618cc1e9cd44b07c91e45d78aa9fe8d7c4e95cc0a7d998d76169b2",
+      "emitted": 246,
+      "retained": 36,
+      "sourceExplanationSha256": "c0ed988f77cb50c8d8a4f61919449c6795b066d94d53aacd4019e17f02e2f741",
       "functionsRetained": [
-        {
-          "unitId": "f05240d2c874ad6f03bce00b",
-          "name": "Convert-FileEncodingSingle",
-          "relativePath": "Private/Convert-FileEncodingSingle.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.invokememberexpression",
-              "message": "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
-              "line": 94,
-              "column": 13
-            }
-          ]
-        },
         {
           "unitId": "005401f052dbe8e7f319d556",
           "name": "Convert-GenericRightsToFileSystemRights",

@@ -9,6 +9,15 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("[guid]::NewGuid().ToString('N')", false)]
     [InlineData("[IO.Path]::GetRandomFileName()", false)]
     [InlineData("[System.Math]::Abs(-1)", false)]
+    [InlineData("[IO.File]::ReadAllBytes('input')", false)]
+    [InlineData("([IO.File]::ReadAllBytes('input'))", false)]
+    [InlineData("[IO.Directory]::GetFiles('input')", false)]
+    [InlineData("[Environment]::GetCommandLineArgs()", false)]
+    [InlineData("[Type]::GetTypeArray(@())", true)]
+    [InlineData("[Enum]::GetValues([IO.FileAccess])", true)]
+    [InlineData("[IO.File]::ReadAllBytes('input').GetType()", true)]
+    [InlineData("([IO.File]::ReadAllBytes('input'))[0]", true)]
+    [InlineData("[type]([IO.Directory]::GetFiles('input'))", true)]
     [InlineData("[object]::ReferenceEquals([int],[string])", true)]
     [InlineData("[Activator]::CreateInstance([Text.StringBuilder])", true)]
     [InlineData("[Type]::GetType('System.Int32')", true)]
@@ -25,6 +34,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("[IO.FileAccess]::Read", false)]
     [InlineData("[IO.FileAccess]::Read.GetType()", true)]
     [InlineData("[int]", true)]
+    [InlineData("$value -is [int]", false)]
+    [InlineData("($value -is [int]) -and ($value -isnot [string])", false)]
+    [InlineData("if($value -is [int]) {'yes'}else{'no'}", false)]
+    [InlineData("if($value -is [int]) {[int]}else{'no'}", true)]
+    [InlineData("($value -is [int]).GetType()", true)]
+    [InlineData("[type]($value -is [int])", true)]
     public void NativeScalarReceiver_SeparatesReceiverSyntaxFromAuthoredTypeValues(string source, bool expected)
     {
         var ast = Parser.ParseInput(source, out _, out var errors);

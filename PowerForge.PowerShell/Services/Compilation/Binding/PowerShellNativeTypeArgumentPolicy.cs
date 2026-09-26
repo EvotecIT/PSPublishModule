@@ -28,8 +28,34 @@ internal static class PowerShellNativeTypeArgumentPolicy
             MemberExpressionAst { Expression: TypeExpressionAst receiver } access &&
             access is not InvokeMemberExpressionAst && IsLiteralEnumReceiver(receiver))
             return false;
-        return syntax.Find(node => node is TypeExpressionAst type && !IsClosedValueReceiver(type, syntax),
+        return syntax.Find(node => node is TypeExpressionAst type &&
+            !IsClosedTypeTestOperand(type, syntax) && !IsClosedValueReceiver(type, syntax),
             searchNestedScriptBlocks: false) is not null;
+    }
+
+    // A type-test predicate yields Boolean, not its authored Type operand. Prove
+    // that result up to the analyzed value or an if condition; transformations
+    // such as GetType(), casts and collection access retain their own guards.
+    private static bool IsClosedTypeTestOperand(TypeExpressionAst syntax, Ast valueBoundary)
+    {
+        if (syntax.Parent is not BinaryExpressionAst { Operator: TokenKind.Is or TokenKind.IsNot } test)
+            return false;
+        for (Ast value = test; ;)
+        {
+            if (ReferenceEquals(value, valueBoundary)) return true;
+            if (value.Parent is not { } parent) return false;
+            if (parent is CommandExpressionAst { Redirections.Count: 0 } command && ReferenceEquals(command.Expression, value) ||
+                parent is PipelineAst { PipelineElements.Count: 1 } pipeline && ReferenceEquals(pipeline.PipelineElements[0], value) ||
+                parent is ParenExpressionAst paren && ReferenceEquals(paren.Pipeline, value) ||
+                parent is BinaryExpressionAst { Operator: TokenKind.And or TokenKind.Or or TokenKind.Xor } ||
+                parent is UnaryExpressionAst { TokenKind: TokenKind.Not or TokenKind.Exclaim })
+            {
+                value = parent;
+                continue;
+            }
+            return parent is IfStatementAst conditional &&
+                conditional.Clauses.Any(clause => ReferenceEquals(clause.Item1, value));
+        }
     }
 
     private static bool IsClosedValueReceiver(TypeExpressionAst syntax, Ast valueBoundary)
@@ -40,7 +66,7 @@ internal static class PowerShellNativeTypeArgumentPolicy
             return false;
         var type = syntax.TypeName.GetReflectionType();
         if (type is null) return false;
-        // A resolved static scalar-returning call cannot pass its receiver Type
+        // A resolved static closed-value call cannot pass its receiver Type
         // as its result. Keep object/Type/generic returns and unresolved members
         // conservative; this is not general return-value or alias analysis.
         var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)
@@ -96,7 +122,8 @@ internal static class PowerShellNativeTypeArgumentPolicy
 
     private static bool IsClosedNonTypeResult(Type type)
         => PowerShellStableScalarTypePolicy.IsSupported(type) ||
-           type.IsValueType && !type.ContainsGenericParameters;
+           type.IsValueType && !type.ContainsGenericParameters ||
+           type.IsArray && type.GetElementType() is { } elementType && IsClosedNonTypeResult(elementType);
 
     private static bool IsLiteralEnumReceiver(TypeExpressionAst syntax)
     {
