@@ -15,7 +15,7 @@ internal sealed partial class PowerShellSemanticBinder
         foreach (var declaration in declarations)
         {
             foreach (var expression in declaration.Syntax.Body.FindAll(static node => node is ScriptBlockExpressionAst,
-                         searchNestedScriptBlocks: true).OfType<ScriptBlockExpressionAst>().Where(IsAssignedScriptBlock))
+                         searchNestedScriptBlocks: true).OfType<ScriptBlockExpressionAst>().Where(IsCompiledValueScriptBlock))
             {
                 var document = declaration.Document;
                 var key = ScriptBlockKey(document.DocumentId, expression.Extent.StartOffset);
@@ -40,6 +40,13 @@ internal sealed partial class PowerShellSemanticBinder
         return owner is AssignmentStatementAst { Operator: TokenKind.Equals, Left: VariableExpressionAst variable } &&
                (variable.VariablePath.IsUnqualified || variable.VariablePath.IsLocal);
     }
+
+    /// <summary>Identifies literal block values whose creation can use the native compiled callback owner.</summary>
+    /// <remarks>Direct method arguments preserve the native method binder and dynamic invocation scope.
+    /// Parameter metadata and hosted command pipelines do not enter this value-binding route.</remarks>
+    internal static bool IsCompiledValueScriptBlock(ScriptBlockExpressionAst expression)
+        => IsAssignedScriptBlock(expression) || expression.Parent is InvokeMemberExpressionAst invocation &&
+           invocation.Arguments.Any(argument => ReferenceEquals(argument, expression));
 
     private static string ScriptBlockKey(string documentId, int offset)
         => documentId + ":" + offset.ToString(System.Globalization.CultureInfo.InvariantCulture);

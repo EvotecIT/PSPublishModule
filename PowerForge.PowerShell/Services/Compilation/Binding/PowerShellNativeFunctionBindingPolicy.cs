@@ -81,7 +81,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
                node is TypeConstraintAst constraint && constraint.TypeName.GetReflectionType() is { } constraintType &&
                PowerShellCompilationParameterTypePolicy.IsQualifiedHostDataType(constraintType),
                searchNestedScriptBlocks: false) is not null ||
-           function.Body.Find(static node => node is ScriptBlockExpressionAst block && PowerShellSemanticBinder.IsAssignedScriptBlock(block), searchNestedScriptBlocks: true) is not null ||
+           function.Body.Find(static node => node is ScriptBlockExpressionAst block && PowerShellSemanticBinder.IsCompiledValueScriptBlock(block), searchNestedScriptBlocks: true) is not null ||
            function.Body.GetType().GetProperty("CleanBlock")?.GetValue(function.Body) is not null ||
            FindNativePipelineOperator(function) is not null ||
            function.Body.Find(static node => node is BinaryExpressionAst { Operator: TokenKind.Format } format &&

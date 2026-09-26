@@ -3,6 +3,35 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationBoundPipelineTests
 {
     [Theory]
+    [InlineData("dynamicparam { } end { 'value' }")]
+    [InlineData("trap { continue }; 'value'")]
+    [InlineData("param($__writeOutput) $__writeOutput")]
+    public void MethodScriptBlocks_RetainOwnerWhenChildCannotCompile(string body)
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Read-Filtered { param([object[]]$Values) $Values.Where({ " + body + " }) }",
+            TestPath("method-scriptblock-fallback.psm1"));
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document }, "net10.0", PowerShellCompilationCapabilities.HybridModule);
+        Assert.Empty(result.Emitted.Methods);
+        Assert.NotEmpty(result.Emitted.Diagnostics);
+    }
+
+    [Theory]
+    [InlineData("net10.0")]
+    [InlineData("net472")]
+    public void MethodScriptBlocks_RejectRuntimeFreeDynamicScope(string framework)
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Read-Filtered { param([object[]]$Values,[int]$Minimum) $Values.Where({ $_ -gt $Minimum }) }",
+            TestPath("method-scriptblock-strict.psm1"));
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document }, framework, PowerShellCompilationCapabilities.TypedExecutable);
+        Assert.Empty(result.Emitted.Methods);
+        Assert.NotEmpty(result.Emitted.Diagnostics);
+    }
+
+    [Theory]
     [InlineData("param($__writeOutput) $__writeOutput")]
     [InlineData("$nested={ param($__writeOutput) $__writeOutput }; $nested")]
     public void NativeScriptBlocks_RetainOwnersAfterChildLoweringFailure(string body)

@@ -4,17 +4,17 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "emitted": 429.0,
-  "retained": 136.0,
+  "emitted": 440,
+  "retained": 125,
   "dispositionContract": "Every function identity matches the accepted constructor/object comparison and its full baseline; no previously emitted method or still-retained region is lost.",
   "packets": [
     {
       "packet": "pssg",
       "stableUnits": 286,
       "functions": 282,
-      "emitted": 236,
-      "retained": 46,
-      "sourceExplanationSha256": "20ebdf2ca5dcc1147f95888ac5358ca59f7f224b9622f28aa06357764a7579c8",
+      "emitted": 237,
+      "retained": 45,
+      "sourceExplanationSha256": "9960df1795af959796d01312eb99a0672a170c94ffab54834dbe3e88ee44b970",
       "functionsRetained": [
         {
           "unitId": "f05240d2c874ad6f03bce00b",
@@ -351,13 +351,6 @@
           ],
           "causes": [
             {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 56,
-              "column": 57
-            },
-            {
               "code": "UnsupportedSyntax",
               "featureId": "syntax.unsupported",
               "message": "Typed indexed mutation requires simple '=' assignment to a local or parameter target.",
@@ -383,24 +376,6 @@
               "message": "Conversion target 'Microsoft.PowerShell.Commands.OSProductSuite' requires runtime type resolution.",
               "line": 57,
               "column": 42
-            }
-          ]
-        },
-        {
-          "unitId": "c34a025adf5d80af10ea49b4",
-          "name": "Get-ComputerSMB",
-          "relativePath": "Public/Computers/Get-ComputerSMB.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 24,
-              "column": 57
             }
           ]
         },
@@ -863,13 +838,6 @@
               "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
               "line": 99,
               "column": 5
-            },
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 253,
-              "column": 71
             }
           ]
         },
@@ -1974,46 +1942,10 @@
       "packet": "pst",
       "stableUnits": 121,
       "functions": 109,
-      "emitted": 64,
-      "retained": 45,
-      "sourceExplanationSha256": "dd8342d69360f050141ae93b1bc6f1060ffb428d425d52ac89777e5bce5588a5",
+      "emitted": 74,
+      "retained": 35,
+      "sourceExplanationSha256": "040bb7fa6b86009b6e042c49708e3aa48b98435f1fe094ddc7289bd4d3a5374c",
       "functionsRetained": [
-        {
-          "unitId": "802592d61be943a32f34f4a9",
-          "name": "Set-PSAnsiFileMap",
-          "relativePath": "functions/ANSIFileMap.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 81,
-              "column": 52
-            }
-          ]
-        },
-        {
-          "unitId": "c75273c1a15e96b97ab5645b",
-          "name": "Remove-PSAnsiFileEntry",
-          "relativePath": "functions/ANSIFileMap.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 176,
-              "column": 52
-            }
-          ]
-        },
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
           "name": "Convert-EventLogRecord",
@@ -2029,24 +1961,6 @@
               "message": "Parameter '$LogRecord' has CLR type 'System.Diagnostics.Eventing.Reader.EventLogRecord[]' that requires a target capability unavailable to this compilation.",
               "line": 6,
               "column": 9
-            }
-          ]
-        },
-        {
-          "unitId": "4361af2379ba5bb91fb16d80",
-          "name": "ConvertTo-Markdown",
-          "relativePath": "functions/ConvertTo-Markdown.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 116,
-              "column": 97
             }
           ]
         },
@@ -2088,39 +2002,25 @@
               "column": 39
             },
             {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 138,
-              "column": 35
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.SystemParameters' is not available in the generated project reference set for the requested target.",
+              "line": 154,
+              "column": 30
             },
             {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 161,
-              "column": 36
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.Input.Mouse' is not available in the generated project reference set for the requested target.",
+              "line": 184,
+              "column": 25
             },
             {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 164,
-              "column": 35
-            },
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 183,
-              "column": 40
-            },
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 230,
-              "column": 38
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.Input.Mouse' is not available in the generated project reference set for the requested target.",
+              "line": 216,
+              "column": 25
             },
             {
               "code": "UnsupportedSyntax",
@@ -2137,29 +2037,11 @@
               "column": 59
             },
             {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 310,
-              "column": 38
-            }
-          ]
-        },
-        {
-          "unitId": "e9d3ba4bffe92d67b728a6f3",
-          "name": "Get-CommandParameter",
-          "relativePath": "functions/Copy-Command.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 48,
-              "column": 34
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.Input.Mouse' is not available in the generated project reference set for the requested target.",
+              "line": 324,
+              "column": 37
             }
           ]
         },
@@ -2502,13 +2384,6 @@
               "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
               "line": 30,
               "column": 5
-            },
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 105,
-              "column": 67
             }
           ]
         },
@@ -2917,49 +2792,6 @@
               "message": "CLR type 'powershell' is not available in the generated project reference set for the requested target.",
               "line": 19,
               "column": 11
-            },
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 45,
-              "column": 29
-            }
-          ]
-        },
-        {
-          "unitId": "f5733666b102fc3aaab50348",
-          "name": "Get-PSScriptTools",
-          "relativePath": "functions/Get-PSScriptTools.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 49,
-              "column": 54
-            }
-          ]
-        },
-        {
-          "unitId": "8dff2bf0ab81a2c8a2cef38c",
-          "name": "Get-PSUnique",
-          "relativePath": "functions/Get-PSUnique.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 26,
-              "column": 57
             }
           ]
         },
@@ -2978,13 +2810,6 @@
               "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
               "line": 5,
               "column": 1
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 57,
-              "column": 59
             }
           ]
         },
@@ -3043,24 +2868,6 @@
           ]
         },
         {
-          "unitId": "503f22139fdbd3130f8b8b24",
-          "name": "New-PSDynamicParameter",
-          "relativePath": "functions/New-DynamicParamCode.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 81,
-              "column": 65
-            }
-          ]
-        },
-        {
           "unitId": "b669a68616829b343dc91676",
           "name": "New-PSDynamicParameterForm",
           "relativePath": "functions/New-DynamicParamCode.ps1",
@@ -3082,34 +2889,6 @@
               "message": "CLR type 'System.Management.Automation.Cmdlet' is not available in the generated project reference set for the requested target.",
               "line": 277,
               "column": 15
-            },
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 278,
-              "column": 45
-            },
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 286,
-              "column": 49
-            },
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 300,
-              "column": 19
-            },
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 328,
-              "column": 21
             }
           ]
         },
@@ -3128,24 +2907,6 @@
               "message": "break must be inside a supported loop or scalar switch.",
               "line": 55,
               "column": 13
-            }
-          ]
-        },
-        {
-          "unitId": "7af2e236927fd158d4a26ae1",
-          "name": "New-PSFormatXML",
-          "relativePath": "functions/New-PSFormatXML.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 198,
-              "column": 57
             }
           ]
         },
@@ -3200,13 +2961,6 @@
               "message": "Parameter '$MemberType' has CLR type 'System.Management.Automation.PSMemberTypes' that requires a target capability unavailable to this compilation.",
               "line": 14,
               "column": 9
-            },
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 57,
-              "column": 33
             }
           ]
         },
@@ -3530,6 +3284,13 @@
               "message": "CLR type 'Windows.Markup.XamlReader' is not available in the generated project reference set for the requested target.",
               "line": 209,
               "column": 17
+            },
+            {
+              "code": "ScriptBlock",
+              "featureId": "scriptblock.typed",
+              "message": "Typed script-block conversion currently requires a Boolean-returning delegate; 'System.Action' returns 'System.Void'.",
+              "line": 261,
+              "column": 50
             }
           ]
         },
@@ -3542,13 +3303,6 @@
           "usesNativeFunctionBinding": false,
           "generatedRegionMemberNames": [],
           "causes": [
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.register-argumentcompleter",
-              "message": "Command invocation 'Register-ArgumentCompleter' requires a registered semantic provider or a hosted PowerShell command region.",
-              "line": 1,
-              "column": 1
-            },
             {
               "code": "UnsupportedSyntax",
               "featureId": "assignment.target",
@@ -3583,318 +3337,17 @@
           "causes": [
             {
               "code": "UnsupportedSyntax",
-              "featureId": "semantic.lowering.missing",
-              "message": "The semantic pipeline did not produce a lowered compilation contract.",
-              "line": 1,
-              "column": 1
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.TextWrapping' is not available in the generated project reference set for the requested target.",
+              "line": 104,
+              "column": 46
             },
             {
               "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'begin' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 23,
-              "column": 5
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 26,
-              "column": 9
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 27,
-              "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Syntax node 'FunctionDefinitionAst' is not supported by the typed compiler.",
-              "line": 28,
-              "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'process' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 46,
-              "column": 5
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-warning",
-              "message": "Command invocation 'Write-Warning' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 49,
-              "column": 13
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 53,
-              "column": 9
-            },
-            {
-              "code": "RuntimeScope",
-              "featureId": "runtime.scope",
-              "message": "Variable '$global:TraceEnabled' depends on PowerShell runtime scope.",
-              "line": 54,
-              "column": 13
-            },
-            {
-              "code": "RuntimeScope",
-              "featureId": "runtime.scope",
-              "message": "Variable '$PSCmdlet' depends on PowerShell runtime scope.",
-              "line": 55,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 57,
-              "column": 17
-            },
-            {
-              "code": "RuntimeScope",
-              "featureId": "runtime.scope",
-              "message": "Variable '$global:traceSynchHash' depends on PowerShell runtime scope.",
-              "line": 58,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.get-date",
-              "message": "Command invocation 'Get-Date' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 58,
-              "column": 78
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 60,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 64,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 66,
-              "column": 17
-            },
-            {
-              "code": "RuntimeScope",
-              "featureId": "runtime.scope",
-              "message": "Variable '$global:traceSynchHash' depends on PowerShell runtime scope.",
-              "line": 67,
-              "column": 78
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.out-string",
-              "message": "Command invocation 'Out-String' requires the PowerShell runtime.",
-              "line": 68,
-              "column": 80
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 68,
-              "column": 93
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 76,
-              "column": 17
-            },
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks and script-block literals require PowerShell runtime semantics.",
-              "line": 77,
-              "column": 60
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 161,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 164,
-              "column": 17
-            },
-            {
-              "code": "RuntimeScope",
-              "featureId": "runtime.scope",
-              "message": "Variable '$global:traceSynchHash' depends on PowerShell runtime scope.",
-              "line": 165,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.out-string",
-              "message": "Command invocation 'Out-String' requires the PowerShell runtime.",
-              "line": 165,
-              "column": 42
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 165,
-              "column": 55
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.start-sleep",
-              "message": "Command invocation 'Start-Sleep' requires the PowerShell runtime.",
-              "line": 171,
-              "column": 21
-            },
-            {
-              "code": "RuntimeScope",
-              "featureId": "runtime.scope",
-              "message": "Variable '$global:traceSynchHash' depends on PowerShell runtime scope.",
-              "line": 174,
-              "column": 26
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 176,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 179,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.get-ciminstance",
-              "message": "Command invocation 'Get-CimInstance' requires the PowerShell runtime.",
-              "line": 181,
-              "column": 23
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.subexpression",
-              "message": "Syntax node 'SubExpressionAst' is not supported by the typed compiler.",
-              "line": 185,
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.Forms.MessageBox' is not available in the generated project reference set for the requested target.",
+              "line": 143,
               "column": 37
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.subexpression",
-              "message": "Syntax node 'SubExpressionAst' is not supported by the typed compiler.",
-              "line": 185,
-              "column": 56
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.subexpression",
-              "message": "Syntax node 'SubExpressionAst' is not supported by the typed compiler.",
-              "line": 188,
-              "column": 37
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.subexpression",
-              "message": "Syntax node 'SubExpressionAst' is not supported by the typed compiler.",
-              "line": 189,
-              "column": 37
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.subexpression",
-              "message": "Syntax node 'SubExpressionAst' is not supported by the typed compiler.",
-              "line": 190,
-              "column": 37
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.subexpression",
-              "message": "Syntax node 'SubExpressionAst' is not supported by the typed compiler.",
-              "line": 191,
-              "column": 37
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 194,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 195,
-              "column": 25
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 196,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.settracemessage",
-              "message": "Command invocation '_SetTraceMessage' requires the PowerShell runtime.",
-              "line": 197,
-              "column": 25
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 201,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.settracemessage",
-              "message": "Command invocation '_SetTraceMessage' requires the PowerShell runtime.",
-              "line": 202,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 206,
-              "column": 13
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 211,
-              "column": 9
             }
           ]
         },
@@ -4080,11 +3533,11 @@
           "generatedRegionMemberNames": [],
           "causes": [
             {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 246,
-              "column": 25
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.WindowStartupLocation' is not available in the generated project reference set for the requested target.",
+              "line": 280,
+              "column": 39
             }
           ]
         },
@@ -4175,24 +3628,6 @@
           ]
         },
         {
-          "unitId": "d8007e2f7aacb76b8aa1ce02",
-          "name": "Get-LastModifiedFile",
-          "relativePath": "functions/get-lastModified.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 69,
-              "column": 46
-            }
-          ]
-        },
-        {
           "unitId": "7a39c35c2e90fa2a99971977",
           "name": "Convert-HashtableString",
           "relativePath": "functions/hashtableTools.ps1",
@@ -4207,6 +3642,13 @@
               "message": "CLR type 'System.Management.Automation.Language.Parser' is not available in the generated project reference set for the requested target.",
               "line": 26,
               "column": 16
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "The right operand of '-is' or '-isnot' must be one statically resolvable CLR type on the target surface.",
+              "line": 27,
+              "column": 30
             }
           ]
         },
@@ -4255,13 +3697,6 @@
           "usesNativeFunctionBinding": false,
           "generatedRegionMemberNames": [],
           "causes": [
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.register-argumentcompleter",
-              "message": "Command invocation 'Register-ArgumentCompleter' requires a registered semantic provider or a hosted PowerShell command region.",
-              "line": 1,
-              "column": 1
-            },
             {
               "code": "UnsupportedParameterType",
               "featureId": "parameter.type",
@@ -4685,24 +4120,6 @@
               "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
               "line": 276,
               "column": 9
-            }
-          ]
-        },
-        {
-          "unitId": "7151e897e2f3e4ae77846e47",
-          "name": "Get-MyTimeInfo",
-          "relativePath": "functions/timehelpers.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks require a typed delegate or explicit hosted PowerShell boundary.",
-              "line": 184,
-              "column": 48
             }
           ]
         }
@@ -5155,16 +4572,17 @@
       ]
     }
   ],
-  "compilerBaselineCommit": "4684b2833318393a15f86dcaf98bc3ed4bcf8897",
+  "compilerBaselineCommit": "e6d209809f049b71a31d881d8e713190b4cce0e4",
   "compilerSourceHashes": [
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
-      "sha256": "71f259c8d4ba64d1145fd3e29af34258ba615ffc9e5c98fb077e3177efa17726"
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.ScriptBlocks.cs",
+      "sha256": "15354386f96cfb53b71719d2ba196ff1cd4b9223b9770901a2b3a19390b49b10"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs",
-      "sha256": "351519e19fbaf3c51529b2a44a2d2350faf16e3690abb3aa37f144373dcb6c6b"
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
+      "sha256": "eac98e80f0374bea28b9dace1a727e332e8857006566a4f76e09b68014972f86"
     }
   ],
-  "dispositionComparison": "m29a-try-array-comparison.net10.json"
+  "dispositionComparison": "m29a-method-block-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "e6d209809f049b71a31d881d8e713190b4cce0e4"
 }
