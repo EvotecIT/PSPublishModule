@@ -25,7 +25,7 @@ internal sealed partial class PowerShellSemanticBinder
         var matchMode = (statement.Flags & SwitchFlags.Regex) != 0
             ? PowerShellBoundSwitchMatchMode.Regex
             : PowerShellBoundSwitchMatchMode.Exact;
-        if (PowerShellAutomaticVariableObservationPolicy.ObservesWithin(statement, "_", "PSItem", "switch"))
+        if (PowerShellAutomaticVariableObservationPolicy.ObservesSwitchState(statement))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2304",
