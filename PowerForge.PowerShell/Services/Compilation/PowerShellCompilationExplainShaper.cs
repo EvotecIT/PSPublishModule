@@ -22,12 +22,34 @@ public static class PowerShellCompilationExplainShaper
         if (string.IsNullOrWhiteSpace(targetFramework)) throw new ArgumentException("A target framework is required.", nameof(targetFramework));
         if (commandProviders is null) throw new ArgumentNullException(nameof(commandProviders));
         var shaped = Shape(input, plan, targetFramework, commandProviders: commandProviders);
+        var profile = plan.TargetContract?.SemanticProfileId ??
+                      PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework);
+        var emittedMethods = GetEmittedMethods(input, plan, shaped, targetFramework, profile, commandProviders);
         var ledger = PowerShellCompilationUnitDispositionLedgerBuilder.Create(
             plan,
             input.Kind,
             shaped,
-            input.SourcePath);
+            input.SourcePath,
+            emittedMethods: emittedMethods);
         return PowerShellCompilationExplanationService.CreateFinal(plan, ledger);
+    }
+
+    internal static PowerShellCompiledMethod[] GetEmittedMethods(
+        PowerShellCompilationResolvedInput input,
+        PowerShellCompilationPlan plan,
+        PowerShellTypedCompilationResult? shaped,
+        string targetFramework,
+        string semanticProfileId,
+        IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders)
+    {
+        var methods = shaped?.Methods.AsEnumerable() ?? Enumerable.Empty<PowerShellCompiledMethod>();
+        if (input.Kind == PowerShellCompilationArtifactKind.Executable && plan.Mode == PowerShellCompilationMode.Hybrid)
+        {
+            var entry = PowerShellHybridExecutableEntryPlanner.TryPlan(
+                input.SourcePath, input.CompilationSourceFiles, plan, targetFramework, semanticProfileId, commandProviders);
+            if (entry is not null) methods = methods.Append(entry.EntryPoint.Method);
+        }
+        return methods.ToArray();
     }
 
     internal static PowerShellTypedCompilationResult? Shape(

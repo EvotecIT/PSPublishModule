@@ -130,8 +130,7 @@ internal static class PowerShellCommandRegionSemanticBinder
             source,
             arguments,
             BindStages(document, statements, commandResolver, localFunctionNames, capabilities),
-            statements.Count, sourceSelection: new PowerShellCommandRegionSourceSelection(document.Path, document.Text,
-                statements.Select(statement => PowerShellSourceParser.GetSpan(document, statement.Extent))));
+            statements.Count, sourceSelection: GetSourceSelection(document, statements.Select(static statement => statement.Extent)));
     }
 
     internal static PowerShellBoundCommandCaptureStatement BindCapture(
@@ -155,9 +154,15 @@ internal static class PowerShellCommandRegionSemanticBinder
             source,
             arguments,
             BindStages(document, referenced, commandResolver, localFunctionNames, capabilities),
-            new PowerShellCommandRegionSourceSelection(document.Path, document.Text,
-                new[] { PowerShellSourceParser.GetSpan(document, assignment.Right.Extent) }));
+            GetSourceSelection(document, new[] { assignment.Right.Extent }));
     }
+
+    private static PowerShellCommandRegionSourceSelection GetSourceSelection(
+        ParsedSourceDocument document,
+        IEnumerable<IScriptExtent> extents)
+        => document.AuthoredProjection?.Select(document, extents) ??
+           new PowerShellCommandRegionSourceSelection(document.Path, document.Text,
+               extents.Select(extent => PowerShellSourceParser.GetSpan(document, extent)));
 
     private static PowerShellBoundCommandRegionArgument[] BindArguments<TAst>(
         IEnumerable<TAst> syntax,

@@ -15,7 +15,7 @@ public sealed class PowerShellCompilationExplanationTests
         try
         {
             var source = Path.Combine(root, "Date.ps1");
-            File.WriteAllText(source, "param([string] $Pattern)\nGet-Date -Format $Pattern\n");
+            File.WriteAllText(source, "param([string] $Pattern)\nGet-Date -Format $Pattern\nGet-Date -Format $Pattern\n");
             var input = new PowerShellCompilationInputResolver().Resolve(source,
                 PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
             var plan = new PowerShellCompilationAnalyzer().Analyze(input, PowerShellCompilationMode.Hybrid, "net10.0");

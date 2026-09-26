@@ -1,8 +1,10 @@
 # Hybrid executable entry contract
 
-Status: design target. No Hybrid script-root statement is claimed as compiled by this document.
+Status: first bounded implementation on the feature branch. The full entry contract below remains open.
 
-Hybrid executables already emit eligible named functions as CLR methods. The packaged program still calls `PowerShell.AddScript` for the authored entry script, so its top-level statements run in PowerShell. The final explanation marks an otherwise eligible retained script root with `artifact.executable-script-root`. A compiled named function called from that root is useful coverage, but it is not compiled root execution.
+Hybrid executables already emit eligible named functions as CLR methods. The packaged program still calls `PowerShell.AddScript` for the authored entry script. A narrowly admitted single direct command can now use a private compiled root method after the script's parameter block binds once; its command itself remains a hosted PowerShell region. Other top-level statements remain in PowerShell and an eligible retained root reports `artifact.executable-script-root`. A compiled named function called from a hosted root is useful coverage, but it is not compiled root execution.
+
+The first admitted body has exactly one direct `Get-Date` or `ConvertTo-Json` command, no functions, includes, redirections, dynamic invocation, or script-block argument, and only simple string parameters. Its arguments are literals or references to those bound parameters. This small command set keeps script-state inspection such as `Get-Variable MyInvocation` on the hosted root until an invocation-context contract exists. The same selection runs in explain and build; the packaged statement must still match the authored statement exactly. The bridge receives already-bound string values through an internal command in the original runspace. The generated root method is private and its hosted region carries the authored document and offsets. This does not make either command runtime-free or qualify the wider forms listed below.
 
 ## Ownership and invocation
 

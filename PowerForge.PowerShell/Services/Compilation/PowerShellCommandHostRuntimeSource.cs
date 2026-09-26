@@ -3,7 +3,9 @@ namespace PowerForge;
 /// <summary>Defines the complete compiler-owned runtime sources required by generated command methods.</summary>
 internal static class PowerShellCommandHostRuntimeSource
 {
-    internal static IReadOnlyDictionary<string, string> Render(PowerShellTypedCompilationResult typed)
+    internal static IReadOnlyDictionary<string, string> Render(
+        PowerShellTypedCompilationResult typed,
+        bool requiresExecutableEntryHost = false)
     {
         var sources = new Dictionary<string, string>(StringComparer.Ordinal);
         var requiresRegionHost = typed.PromotedRegions.Any(static region => region.RequiresLocalOwnershipGuard);
@@ -55,7 +57,7 @@ internal static class PowerShellCommandHostRuntimeSource
                 sources.Add(name + ".g.cs", "#nullable enable\n" + reader.ReadToEnd());
             }
         }
-        var requiresModuleState = requiresRegionHost || typed.Methods.Any(PowerShellModuleSessionStatePolicy.RequiresState) ||
+        var requiresModuleState = requiresExecutableEntryHost || requiresRegionHost || typed.Methods.Any(PowerShellModuleSessionStatePolicy.RequiresState) ||
             typed.PromotedRegions.Any(static region => region.RequiresPowerShellStopping) ||
             typed.Methods.Any(static method => method.NativeFunctionBinding is not null && method.RequiresPowerShellStatementErrors);
         if (requiresModuleState)

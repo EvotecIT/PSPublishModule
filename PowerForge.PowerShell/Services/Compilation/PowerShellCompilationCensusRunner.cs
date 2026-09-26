@@ -170,7 +170,10 @@ public sealed partial class PowerShellCompilationCensusRunner
                 plan,
                 resolved.Kind,
                 emitted,
-                resolved.SourcePath);
+                resolved.SourcePath,
+                emittedMethods: PowerShellCompilationExplainShaper.GetEmittedMethods(
+                    resolved, plan, emitted, targetFramework!, profile,
+                    Array.Empty<PowerShellCompilationCommandProviderContract>()));
             sourceFiles = resolved.SourceFiles.Length;
             sourceFingerprint = ComputeSourceFingerprint(resolved.SourceFiles, path);
             coverage = BuildCoverageBreakdown(dispositionLedger);

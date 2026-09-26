@@ -6,8 +6,6 @@ namespace PowerForge;
 /// <summary>Compiles one entry script and its contained dot-source closure through the shared semantic pipeline.</summary>
 internal static class PowerShellTypedExecutableCompiler
 {
-    private const PowerShellCompilationCapability Capabilities = PowerShellCompilationCapabilities.TypedExecutable;
-
     internal static PowerShellTypedExecutableCompilation Compile(
         string entryPointPath,
         IEnumerable<string> sourcePaths,
@@ -15,6 +13,38 @@ internal static class PowerShellTypedExecutableCompiler
         string targetFramework,
         string semanticProfileId,
         IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders = null)
+        => CompileCore(entryPointPath, sourcePaths, plan, targetFramework, semanticProfileId,
+            commandProviders, PowerShellCompilationCapabilities.TypedExecutable, parametersAlreadyBound: false);
+
+    internal static PowerShellTypedExecutableCompilation CompileHybridPreboundEntry(
+        string entryPointPath,
+        IEnumerable<string> sourcePaths,
+        PowerShellCompilationPlan plan,
+        string targetFramework,
+        string semanticProfileId,
+        IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders = null)
+    {
+        if (plan.Mode != PowerShellCompilationMode.Hybrid)
+            throw new InvalidOperationException("A prebound executable entry requires a Hybrid compilation plan.");
+        var entryPoint = Path.GetFullPath(entryPointPath);
+        var rootUnit = plan.Files.FirstOrDefault(file =>
+                PowerShellCompilationPathSafety.PathEquals(file.FullPath, entryPoint))?
+            .Units.SingleOrDefault(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
+        if (rootUnit?.IsCompilable != true)
+            throw new InvalidOperationException("A prebound executable entry requires an eligible authored script root.");
+        return CompileCore(entryPointPath, sourcePaths, plan, targetFramework, semanticProfileId,
+            commandProviders, PowerShellCompilationCapabilities.HybridExecutable, parametersAlreadyBound: true);
+    }
+
+    private static PowerShellTypedExecutableCompilation CompileCore(
+        string entryPointPath,
+        IEnumerable<string> sourcePaths,
+        PowerShellCompilationPlan plan,
+        string targetFramework,
+        string semanticProfileId,
+        IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders,
+        PowerShellCompilationCapability capabilities,
+        bool parametersAlreadyBound)
     {
         if (!plan.CanProceed) throw CreatePlanFailure(plan);
 
@@ -41,12 +71,12 @@ internal static class PowerShellTypedExecutableCompiler
             .Where(static statement => statement is not FunctionDefinitionAst && !IsTopLevelDotSource(statement))
             .ToArray() ?? Array.Empty<StatementAst>();
 
-        var entryDocument = CreateEntryDocument(entrySource, statements, identityRoot);
+        var entryDocument = CreateEntryDocument(entrySource, statements, identityRoot, parametersAlreadyBound);
         var registry = PowerShellCommandSemanticRegistry.Create(commandProviders);
         var semantic = new PowerShellSemanticCompilationPipeline(registry, semanticProfileId).Compile(
             parsed.Values.Select(static source => source.Document).Append(entryDocument.Document),
             targetFramework,
-            Capabilities);
+            capabilities);
         var emissions = semantic.Lowered.Functions
             .Zip(semantic.Emitted.Methods, static (function, emission) => new SemanticEmission(function, emission))
             .ToArray();
@@ -170,9 +200,15 @@ internal static class PowerShellTypedExecutableCompiler
         }
     }
 
-    private static ExecutableEntryDocument CreateEntryDocument(ParsedSource entrySource, IEnumerable<StatementAst> statements, string identityRoot)
+    private static ExecutableEntryDocument CreateEntryDocument(
+        ParsedSource entrySource,
+        IEnumerable<StatementAst> statements,
+        string identityRoot,
+        bool parametersAlreadyBound)
     {
-        var parameterBlock = PowerShellSourceParser.GetParameterBlockSource(entrySource.Ast.ParamBlock);
+        var parameterBlock = parametersAlreadyBound
+            ? GetAlreadyBoundParameterBlock(entrySource.Ast.ParamBlock)
+            : PowerShellSourceParser.GetParameterBlockSource(entrySource.Ast.ParamBlock);
         var builder = new StringBuilder().AppendLine("function Invoke {").AppendLine(parameterBlock);
         var mappings = new List<PowerShellRegionSourceRemap>();
         foreach (var statement in statements)
@@ -187,9 +223,25 @@ internal static class PowerShellTypedExecutableCompiler
             builder.AppendLine();
         }
         builder.Append('}');
+        var parsed = PowerShellSourceParser.Parse(builder.ToString(), entrySource.Path + ".powerforge-entry.ps1", identityRoot);
+        var remaps = mappings.ToArray();
         return new ExecutableEntryDocument(
-            PowerShellSourceParser.Parse(builder.ToString(), entrySource.Path + ".powerforge-entry.ps1", identityRoot),
-            mappings.ToArray());
+            new ParsedSourceDocument(parsed.DocumentId, parsed.Path, parsed.Text, parsed.SyntaxRoot,
+                parsed.Tokens, parsed.Errors, new PowerShellAuthoredSourceProjection(entrySource.Document, remaps)),
+            remaps);
+    }
+
+    private static string GetAlreadyBoundParameterBlock(ParamBlockAst? parameterBlock)
+    {
+        if (parameterBlock is null) return string.Empty;
+        var parameters = parameterBlock.Parameters.Select(parameter =>
+        {
+            var typeConstraints = parameter.Attributes.OfType<TypeConstraintAst>()
+                .Select(static constraint => constraint.Extent.Text);
+            return string.Join(" ", typeConstraints.Append(parameter.Name.Extent.Text));
+        });
+        return string.Join(Environment.NewLine, parameterBlock.Attributes.Select(static attribute => attribute.Extent.Text)
+            .Append("param(" + string.Join(", ", parameters) + ")"));
     }
 
     private static InvalidOperationException CreateSemanticFailure(PowerShellSemanticCompilationResult result, string owner)
@@ -217,7 +269,7 @@ internal static class PowerShellTypedExecutableCompiler
             method.SourceSpan.StartLine,
             sourcePath,
             requiresPowerShellStreams: method.RequiresPowerShellStreams,
-            requiresPowerShellCommandRegions: false,
+            requiresPowerShellCommandRegions: method.RequiresPowerShellCommandRegions,
             aliases: function.Aliases.ToArray(),
             requiresPowerShellBoundParameters: method.RequiresPowerShellBoundParameters,
             isAdvancedFunction: function.CommandBinding.IsAdvancedFunction,

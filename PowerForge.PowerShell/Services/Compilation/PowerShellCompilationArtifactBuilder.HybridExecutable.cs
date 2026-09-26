@@ -15,6 +15,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string providerProjectReferences)
     {
         var capabilities = PowerShellCompilationBuildSpec.GetCapabilities(spec.Kind, spec.Mode);
+        var entry = PowerShellHybridExecutableEntryPlanner.TryPlan(
+            spec.SourcePath, compilationSourcePaths, plan, spec.TargetFramework,
+            spec.SemanticProfileId, commandProviders);
         var typed = new PowerShellTypedCompilationTranspiler(commandProviders, spec.SemanticProfileId).TranspileForBinaryModule(
             compilationSourcePaths,
             "PowerForge.Compiled",
@@ -25,7 +28,12 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions: null, targetFramework: spec.TargetFramework, semanticProfileId: spec.SemanticProfileId, capabilities: capabilities);
         WriteCompiledPowerShellSource(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode,
             spec.SourcePath, compilationSourcePaths);
-        WriteBinaryHostRuntime(workspace, typed);
+        WriteBinaryHostRuntime(workspace, typed, requiresExecutableEntryHost: entry is not null);
+        if (entry is not null)
+            WriteCompiledPowerShellSource(
+                Path.Combine(workspace, "CompiledPowerShellEntry.cs"),
+                PowerShellHybridExecutableEntryEmitter.GenerateSource(entry),
+                spec.SourcePath, compilationSourcePaths, includeSyntheticEntry: true);
         File.WriteAllText(
             Path.Combine(workspace, "CompiledCmdlets.cs"),
             PowerShellBinaryCmdletSourceGenerator.Generate(typed, exportedFunctions: null, targetFramework: spec.TargetFramework),
@@ -34,6 +42,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         var packagedSources = PreparePackagedSources(workspace, spec.SourcePath, compilationSourcePaths, dependencyPlan, typed);
         var parameterInitializers = PowerShellPackagedParameterBindingPolicy.Generate(spec.SourcePath, spec.TargetFramework);
         var packagedScript = GeneratePackagedScript(spec.SourcePath, packagedSources, typed);
+        if (entry is not null)
+            packagedScript = PowerShellHybridExecutableEntryEmitter.ComposeScript(packagedScript, spec.SourcePath, entry);
         var packagedScriptPath = Path.Combine(workspace, "Source.ps1");
         File.WriteAllText(packagedScriptPath, packagedScript, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         File.WriteAllText(
@@ -61,7 +71,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 .Replace("{{PROVIDER_REFERENCES}}", providerProjectReferences)
                 .Replace("{{DEPENDENCY_RESOURCES}}", packagedSources.ProjectResources),
             new UTF8Encoding(false));
-        var compiledMethods = typed.Methods.Where(static method => method.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline).ToArray();
+        var compiledMethods = typed.Methods.Where(static method => method.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline)
+            .Concat(entry is null ? Array.Empty<PowerShellCompiledMethod>() : new[] { entry.EntryPoint.Method })
+            .ToArray();
         PowerShellCommandMetadataBuildSupport.Write(workspace, projectPath, typed, exportedFunctions: null);
         return new HybridExecutableBuildPlan(projectPath, typed, compiledMethods, plan.TotalUnits);
     }

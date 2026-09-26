@@ -13,7 +13,8 @@ internal sealed class ParsedSourceDocument
         string text,
         ScriptBlockAst syntaxRoot,
         Token[] tokens,
-        ParseError[] errors)
+        ParseError[] errors,
+        PowerShellAuthoredSourceProjection? authoredProjection = null)
     {
         DocumentId = documentId;
         Path = path;
@@ -21,6 +22,7 @@ internal sealed class ParsedSourceDocument
         SyntaxRoot = syntaxRoot;
         Tokens = tokens;
         Errors = errors;
+        AuthoredProjection = authoredProjection;
     }
 
     internal string DocumentId { get; }
@@ -29,4 +31,5 @@ internal sealed class ParsedSourceDocument
     internal ScriptBlockAst SyntaxRoot { get; }
     internal Token[] Tokens { get; }
     internal ParseError[] Errors { get; }
+    internal PowerShellAuthoredSourceProjection? AuthoredProjection { get; }
 }

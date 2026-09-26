@@ -224,7 +224,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
         if (mode == PowerShellCompilationMode.Package) return true;
         if (mode != PowerShellCompilationMode.Hybrid || artifactKind == PowerShellCompilationArtifactKind.Library) return false;
         if (hostedLifecycle) return true;
-        if (unit.Kind == PowerShellCompilationUnitKind.Script) return true;
+        if (unit.Kind == PowerShellCompilationUnitKind.Script) return !emitted;
         if (artifactKind == PowerShellCompilationArtifactKind.BinaryModule) return !wrapped;
         return !emitted;
     }
@@ -268,7 +268,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
             : method.SourcePath;
         return PowerShellCompilationPathSafety.PathEquals(methodPath, fullPath) &&
                method.SourceName.Equals(unit.Name, StringComparison.OrdinalIgnoreCase) &&
-               method.SourceLine == unit.StartLine;
+               (unit.Kind == PowerShellCompilationUnitKind.Script || method.SourceLine == unit.StartLine);
     }
 
     private static bool RegionMatches(
