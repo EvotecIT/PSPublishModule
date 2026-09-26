@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Closed scalar/value receiver classification with exact value-boundary proof; same-input no-loss comparison. Execution credit is restricted to the named unchanged offline workflow.",
+  "baselineCompilerCommit": "ffd255a049f89ace7bc63097bbb6839d2da60086",
+  "baselineComparison": "m29a-delegate-cast-comparison.net10.json",
+  "baselineComparisonSha256": "89aa4c545ef1ac04d24f1a32dee5e3ac9d0dfe562dfd169d1e823417c70f3242",
+  "baselineRetainedInventory": "m29a-retained-functions.net10.json at baselineCompilerCommit",
+  "baselineRetainedInventorySha256": "96dd457eda85070dbf4bf0d283be367fb009e3cc0f2fe6afec33b891dda714aa",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 453,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "baselineEmitted": 242,
+      "candidateEmitted": 242,
+      "candidateExplanationSha256": "2657e1acde0a75449fecacc1ec2a25a193ad83c9803ae674b6f2a3d847a143c0",
+      "changes": []
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "baselineEmitted": 54,
+      "candidateEmitted": 55,
+      "candidateExplanationSha256": "659b8a7836f00f362051ca4983221e38e2b903ef9829259bd6b3eed058e1b22e",
+      "changes": [
+        {
+          "unitId": "7996fe9e2f4a5b6aca354ec8",
+          "name": "Merge-ADComputerHTMLReportData",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "baselineCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.invokememberexpression",
+              "message": "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
+              "line": 41,
+              "column": 19
+            }
+          ],
+          "candidateCauses": [],
+          "newExecutionQualification": true
+        }
+      ]
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "baselineEmitted": 55,
+      "candidateEmitted": 55,
+      "candidateExplanationSha256": "eeda66ded0b2a18edcb08eba5f3191ea968f7f67b3069f21ce083286aa4523ce",
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "baselineEmitted": 78,
+      "candidateEmitted": 79,
+      "candidateExplanationSha256": "3f7a8255b426900d892072939533e56ff4fbfd82ac1c341ebc6f4d411f579f66",
+      "changes": [
+        {
+          "unitId": "28ce9bc64f86aa3f6ea34024",
+          "name": "Rename-Hashtable",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "baselineCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.invokememberexpression",
+              "message": "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
+              "line": 486,
+              "column": 21
+            }
+          ],
+          "candidateCauses": [],
+          "newExecutionQualification": false
+        }
+      ]
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "baselineEmitted": 24,
+      "candidateEmitted": 24,
+      "candidateExplanationSha256": "33db727b972d0164311bb9bea1aa885067c91999c419f1f0775022b285fbe25e",
+      "changes": []
+    }
+  ],
+  "lostEmittedMethods": 0,
+  "lostRetainedRegions": 0,
+  "compilerSourceHashes": [
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeTypeArgumentPolicy.cs",
+      "sha256": "0d94a2b1e6b86de3c0403c23db8a0e23ee35d2414dcadf0213966128324e8743"
+    }
+  ],
+  "newlyExecutedFunctions": [
+    "Merge-ADComputerHTMLReportData"
+  ],
+  "otherNewMethodsAreEmissionOnly": true,
+  "candidateEmitted": 455
+}

@@ -4,8 +4,8 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "emitted": 453,
-  "retained": 112,
+  "emitted": 455,
+  "retained": 110,
   "dispositionContract": "Every function identity matches the accepted constructor/object comparison and its full baseline; no previously emitted method or still-retained region is lost.",
   "packets": [
     {
@@ -856,9 +856,9 @@
       "packet": "cleanup",
       "stableUnits": 69,
       "functions": 68,
-      "emitted": 54,
-      "retained": 14,
-      "sourceExplanationSha256": "2c7f3b5552a75776c3f19ce63108618366e001d300574797c446281ed94a6f64",
+      "emitted": 55,
+      "retained": 13,
+      "sourceExplanationSha256": "659b8a7836f00f362051ca4983221e38e2b903ef9829259bd6b3eed058e1b22e",
       "functionsRetained": [
         {
           "unitId": "9620fa3e611793d93f7a99e7",
@@ -951,24 +951,6 @@
               "message": "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
               "line": 15,
               "column": 9
-            }
-          ]
-        },
-        {
-          "unitId": "7996fe9e2f4a5b6aca354ec8",
-          "name": "Merge-ADComputerHTMLReportData",
-          "relativePath": "Private/Merge-ADComputerHTMLReportData.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.invokememberexpression",
-              "message": "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
-              "line": 41,
-              "column": 19
             }
           ]
         },
@@ -1459,9 +1441,9 @@
       "packet": "pst",
       "stableUnits": 121,
       "functions": 109,
-      "emitted": 78,
-      "retained": 31,
-      "sourceExplanationSha256": "ae2d532b2f2621a4d2991b71519ede26aa8f93b0bba19ea9b65e617c635791c1",
+      "emitted": 79,
+      "retained": 30,
+      "sourceExplanationSha256": "3f7a8255b426900d892072939533e56ff4fbfd82ac1c341ebc6f4d411f579f66",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -2654,24 +2636,6 @@
           ]
         },
         {
-          "unitId": "28ce9bc64f86aa3f6ea34024",
-          "name": "Rename-Hashtable",
-          "relativePath": "functions/hashtableTools.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.invokememberexpression",
-              "message": "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
-              "line": 486,
-              "column": 21
-            }
-          ]
-        },
-        {
           "unitId": "09a30ea6dc3cca424ff570fc",
           "name": "Remove-Runspace",
           "relativePath": "functions/remove-runspace.ps1",
@@ -3029,25 +2993,13 @@
       ]
     }
   ],
-  "compilerBaselineCommit": "6ff3a706d1508d60a0d6f8d080ab838aed2d7611",
+  "compilerBaselineCommit": "ffd255a049f89ace7bc63097bbb6839d2da60086",
   "compilerSourceHashes": [
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
-      "sha256": "23dd8c177cf037dcb3ce2ba1de7212496adf84245eb47155de855687f1c7013a"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Program.cs",
-      "sha256": "218516dde346381eb08da3ea583a212c9d3b254bf915f58219094fbd0041b714"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.ScriptBlocks.cs",
-      "sha256": "69c67f539ef3f7bee38c1cc1019acf4eec74156b736baf19272aea9f9381201a"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Conversions.cs",
-      "sha256": "bb872452182ce2228cbb001038ccbe4faea1dc5627622a83253e071b9584ee78"
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeTypeArgumentPolicy.cs",
+      "sha256": "0d94a2b1e6b86de3c0403c23db8a0e23ee35d2414dcadf0213966128324e8743"
     }
   ],
-  "dispositionComparison": "m29a-delegate-cast-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "6ff3a706d1508d60a0d6f8d080ab838aed2d7611"
+  "dispositionComparison": "m29a-scalar-receiver-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "ffd255a049f89ace7bc63097bbb6839d2da60086"
 }
