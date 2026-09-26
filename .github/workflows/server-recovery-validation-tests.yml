@@ -7,12 +7,15 @@ on:
       - ".github/actions/powerforge-server-recovery-validate/**"
       - ".github/workflows/server-recovery-validation-tests.yml"
       - "Deployment/Linux/powerforge-server-encrypted-capture.sh"
+      - "Deployment/Linux/powerforge-server-data-capture.sh"
+      - "Deployment/Linux/tests/powerforge-server-data-capture-sqlite-fixture.sh"
       - "PowerForge.Tests/GitHubServerRecoveryValidation*.cs"
       - "PowerForge.Tests/ServerRecovery*.cs"
       - "PowerForge.Tests/ServerScaffoldTests.cs"
       - "PowerForge.Tests/WebCliServerCaptureTests.cs"
       - "PowerForge.Web.Cli/ServerScaffoldTemplateStore.cs"
       - "PowerForge.Web.Cli/ServerRecoveryModels.cs"
+      - "PowerForge.Web.Cli/ServerRecoveryDurableBackupModels.cs"
       - "PowerForge.Web.Cli/Templates/ServerScaffold/**"
       - "PowerForge.Web.Cli/WebCliCommandHandlers.Server*.cs"
       - "Schemas/powerforge.web.serverrecovery.schema.json"
@@ -21,12 +24,15 @@ on:
       - ".github/actions/powerforge-server-recovery-validate/**"
       - ".github/workflows/server-recovery-validation-tests.yml"
       - "Deployment/Linux/powerforge-server-encrypted-capture.sh"
+      - "Deployment/Linux/powerforge-server-data-capture.sh"
+      - "Deployment/Linux/tests/powerforge-server-data-capture-sqlite-fixture.sh"
       - "PowerForge.Tests/GitHubServerRecoveryValidation*.cs"
       - "PowerForge.Tests/ServerRecovery*.cs"
       - "PowerForge.Tests/ServerScaffoldTests.cs"
       - "PowerForge.Tests/WebCliServerCaptureTests.cs"
       - "PowerForge.Web.Cli/ServerScaffoldTemplateStore.cs"
       - "PowerForge.Web.Cli/ServerRecoveryModels.cs"
+      - "PowerForge.Web.Cli/ServerRecoveryDurableBackupModels.cs"
       - "PowerForge.Web.Cli/Templates/ServerScaffold/**"
       - "PowerForge.Web.Cli/WebCliCommandHandlers.Server*.cs"
       - "Schemas/powerforge.web.serverrecovery.schema.json"
@@ -59,3 +65,13 @@ jobs:
           -c Release
           --no-restore
           --filter 'FullyQualifiedName~GitHubServerRecoveryValidation|FullyQualifiedName~ServerRecovery|FullyQualifiedName~ServerScaffoldTests|FullyQualifiedName~WebCliServerCaptureTests'
+
+      - name: Prove encrypted SQLite capture and restore
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq age jq postgresql rsync sqlite3 shellcheck
+          sudo service postgresql start
+          pg_isready -q
+          bash -n Deployment/Linux/powerforge-server-data-capture.sh Deployment/Linux/tests/powerforge-server-data-capture-sqlite-fixture.sh
+          shellcheck Deployment/Linux/powerforge-server-data-capture.sh Deployment/Linux/tests/powerforge-server-data-capture-sqlite-fixture.sh
+          sudo bash Deployment/Linux/tests/powerforge-server-data-capture-sqlite-fixture.sh

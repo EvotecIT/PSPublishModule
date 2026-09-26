@@ -1,6 +1,6 @@
 # PowerForge.Web Server Recovery
 
-Last updated: 2026-09-25
+Last updated: 2026-09-26
 
 This document defines the reusable PowerForge pattern for rebuilding a Linux-hosted static website from source control, encrypted secrets, and a site-owned recovery manifest.
 
@@ -172,17 +172,24 @@ Git-backed recovery captures are appropriate for configuration and small encrypt
 
 - one dedicated root-owned export directory and a read-only export group
 - PostgreSQL databases written as custom-format dumps and checked with `pg_restore --list`
+- SQLite databases copied through SQLite's online backup command and checked with `PRAGMA integrity_check`
 - exact files that must be included only inside an age-encrypted recovery bundle
 - immutable artifact stores copied into timestamped snapshots with hard-link reuse
 - the short staging retention period on the source server
 
-`Deployment/Linux/powerforge-server-data-capture.sh` executes that contract as root. It accepts only a root-owned manifest that is not group- or world-writable, validates identifiers and exact paths without evaluating manifest text, creates its database work area outside the export tree, and publishes a snapshot only after encryption, metadata generation, SHA-256 calculation, and an immediate checksum verification succeed. A final atomic rename and `READY` marker distinguish complete snapshots from interrupted work. The source server retains at least two complete snapshots even when the configured staging window has expired.
+`Deployment/Linux/powerforge-server-data-capture.sh` executes that contract as root. For SQLite, set `provider: "sqlite"`, put the exact absolute source file in `database`, and set `runAs` to a service account whose numeric UID is not zero and that can read the file. Install the `sqlite3` CLI on the host. The capture runs SQLite's online backup as that account, then copies the completed output into a new root-owned inode before checking its integrity and including it in the age-encrypted bundle. PostgreSQL dumps receive the same root-owned copy before validation and encryption. A SQLite source cannot overlap a plaintext artifact store, the export root, or a directly captured file; hard links to live SQLite data or directly encrypted files are also rejected in artifact stores. The capture never copies a live database file or WAL sidecar directly. PostgreSQL entries continue to use their existing database name and do not set `runAs`.
+
+Keep plaintext artifact stores separate from the database writer: a configured SQLite account must not own or have write access to the artifact directories or their ancestry. This prevents that account from inserting sensitive hard links while capture runs. A sticky shared ancestor such as `/var/tmp` is allowed when its child is independently owned; the artifact store itself must still be non-writable by the SQLite account.
+
+The same isolation applies to artifact payload files, not just directories. Capture remembers existing sensitive file and SQLite sidecar identities before reading them, so rotation or sidecar deletion cannot hide an existing plaintext hard link. The export directory and its ancestry must be root-owned and protected from non-root writes; creating a new export directory requires a protected parent. Nested artifact files named `READY`, `SHA256SUMS`, or `VERIFIED` are ordinary payloads and remain covered by integrity verification.
+
+The capture accepts only a root-owned manifest that is not group- or world-writable, validates identifiers and exact paths without evaluating manifest text, creates its database work area outside the export tree, and publishes a snapshot only after encryption, metadata generation, SHA-256 calculation, and an immediate checksum verification succeed. A final atomic rename and `READY` marker distinguish complete snapshots from interrupted work. The source server retains at least two complete snapshots even when the configured staging window has expired.
 
 The export directory is staging, not disaster recovery. Put the matching pull job on a second failure domain. `Deployment/Linux/powerforge-server-backup-pull.sh` uses a fixed SSH identity, a pinned known-hosts file, and batch-only strict host-key checking. Pair it with a forced read-only `rrsync` key rooted at the export directory; the source server then holds no credential that can write to or delete the destination. The pull verifies every declared hash and the age header before adding `VERIFIED`, never deletes remote data, and prunes only locally verified timestamped snapshots. Its default policy keeps 56 recent snapshots, eight additional weekly restore points, and twelve additional monthly restore points.
 
 The destination must be prepared deliberately with a mode-600 marker containing `powerforge-server-backup-v1` at `.powerforge-server-backup-root`. This marker prevents a missing mount or mistyped destination from turning retention into a broad filesystem cleanup. The runtime also requires Bash, rsync, SSH, SHA-256 tools, and a `date` implementation that can calculate ISO weeks with `date -u -d <date> +%G-%V`.
 
-Checksum and age-header validation proves that the transported ciphertext matches the source snapshot; it does not prove that the decryption identity is available or that application restore steps still work. Keep the age private identity outside the source server and run a periodic isolated restore drill: decrypt `recovery.tar.gz.age`, re-run `pg_restore --list` for each dump, restore into disposable database names, compare expected schema/data checks, and validate representative artifact hashes before deleting the drill environment.
+Checksum and age-header validation proves that the transported ciphertext matches the source snapshot; it does not prove that the decryption identity is available or that application restore steps still work. Keep the age private identity outside the source server and run a periodic isolated restore drill: decrypt `recovery.tar.gz.age`, re-run `pg_restore --list` for PostgreSQL dumps and `PRAGMA integrity_check` for SQLite copies, restore into disposable locations, compare expected schema/data checks, and validate representative artifact hashes before deleting the drill environment.
 
 ## Bootstrap Stages
 
