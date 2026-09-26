@@ -4,8 +4,8 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "emitted": 471,
-  "retained": 94,
+  "emitted": 474,
+  "retained": 91,
   "dispositionContract": "Every function identity matches the accepted constructor/object comparison and its full baseline; no previously emitted method or still-retained region is lost.",
   "packets": [
     {
@@ -14,7 +14,7 @@
       "functions": 282,
       "emitted": 251,
       "retained": 31,
-      "sourceExplanationSha256": "75dc64b4baed8822fd10e0db765fcf4345f5bce661ddcc7435586e26c893f993",
+      "sourceExplanationSha256": "194254d952ebefca8df2e4e89cfe0d058aecde8b053584e4979fd43021fa186c",
       "functionsRetained": [
         {
           "unitId": "005401f052dbe8e7f319d556",
@@ -191,13 +191,6 @@
           "usesNativeFunctionBinding": false,
           "generatedRegionMemberNames": [],
           "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$Results' has CLR type 'System.Collections.Generic.List`1[[System.Management.Automation.PSObject, System.Management.Automation, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35]]' that requires a target capability unavailable to this compilation.",
-              "line": 66,
-              "column": 9
-            },
             {
               "code": "UnsupportedParameterType",
               "featureId": "parameter.type",
@@ -460,10 +453,10 @@
           "causes": [
             {
               "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "CLR type 'System.Collections.Generic.List[PSObject]' is not available in the generated project reference set for the requested target.",
-              "line": 92,
-              "column": 20
+              "featureId": "syntax.invokememberexpression",
+              "message": "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
+              "line": 210,
+              "column": 46
             }
           ]
         },
@@ -692,9 +685,9 @@
       "packet": "cleanup",
       "stableUnits": 69,
       "functions": 68,
-      "emitted": 59,
-      "retained": 9,
-      "sourceExplanationSha256": "92a40a4958d900fb27b09057ce13c568be73b30382040bb54d829a9d7095f17e",
+      "emitted": 62,
+      "retained": 6,
+      "sourceExplanationSha256": "00475543df05c1a36eafe23ca8bdeecaecbb33fbbfebe54a8cb282fa886c2d77",
       "functionsRetained": [
         {
           "unitId": "2be0f84457750dd64ee0c5d1",
@@ -789,42 +782,6 @@
           ]
         },
         {
-          "unitId": "75d131a2200973600d3077af",
-          "name": "Remove-ADSIDHistory",
-          "relativePath": "Private/Remove-ADSIDHistory.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "CLR type 'System.Collections.Generic.List[PSCustomObject]' is not available in the generated project reference set for the requested target.",
-              "line": 14,
-              "column": 29
-            }
-          ]
-        },
-        {
-          "unitId": "bcf3a0b2c8f38b4967d30b13",
-          "name": "Request-ADSIDHistory",
-          "relativePath": "Private/Request-ADSIDHistory.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$ObjectsToProcess' has CLR type 'System.Collections.Generic.List`1[[System.Management.Automation.PSObject, System.Management.Automation, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35]]' that requires a target capability unavailable to this compilation.",
-              "line": 21,
-              "column": 9
-            }
-          ]
-        },
-        {
           "unitId": "0cd5b407109c831e17445271",
           "name": "Invoke-ADComputersCleanup",
           "relativePath": "Public/Invoke-ADComputersCleanup.ps1",
@@ -841,31 +798,6 @@
               "message": "Captured statement output requires a qualified command success-stream host and either a native variable target or an unconstrained local.",
               "line": 856,
               "column": 5
-            }
-          ]
-        },
-        {
-          "unitId": "80b99474fc5f60c7fb47f569",
-          "name": "Invoke-ADSIDHistoryCleanup",
-          "relativePath": "Public/Invoke-ADSIDHistoryCleanup.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "CLR type 'System.Collections.Generic.List[PSCustomObject]' is not available in the generated project reference set for the requested target.",
-              "line": 185,
-              "column": 28
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "CLR type 'System.Collections.Generic.List[PSCustomObject]' is not available in the generated project reference set for the requested target.",
-              "line": 239,
-              "column": 25
             }
           ]
         }
@@ -2669,26 +2601,26 @@
   "compilerBaselineCommit": "e239ce8b9e17554a92f2189d2df277fb61034d6b",
   "compilerSourceHashes": [
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.AccessMutations.cs",
-      "sha256": "ee194eea80fd6f2cdddabced622d3be8bccb0b72cdac1510adfbd51f2ad763f2"
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
+      "sha256": "30e1e3db559ae41e659b52a3749fba0755c8cfe68e0a81e2ff16d7ab801ac781"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Compilation.cs",
-      "sha256": "d9284ffd675cf659901fe06ac5ea9de72a806c69cbaa02f4f097545704521121"
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs",
+      "sha256": "8df1965fb2fec0e4adc36001056fed366f6b44ace0fabc3e7c72fd2ece10aaee"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Declarations.cs",
-      "sha256": "eb65fdf2781d886fd4be62453f47eb72460e7fd03414a4ef52f631ecf82ad344"
+      "path": "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs",
+      "sha256": "c7b0502a84aea9817f40e1c31dcd4174e6d754439afdaeb92251c9bf37f5e445"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.NativeFunction.cs",
-      "sha256": "d7febe5f81efac492e467541f5c52a5351777f3f898932ab7a338d99d37b4e84"
+      "path": "PowerForge.PowerShell/Services/Compilation/PowerShellGeneratedTypePolicy.cs",
+      "sha256": "719cad63093abceca9eed145e965b8d8d9cd6f20d08e5c60af0f58a73e863f4f"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.cs",
-      "sha256": "10cfde8f87916ea1f5dd00b12e124eb14fcf9692bbac53fa6c6a2c4da6dc3452"
+      "path": "PowerForge.PowerShell/Services/Compilation/PowerShellGeneratedElementTypePolicy.cs",
+      "sha256": "a8207a8447778d404abfcf57108e6ce9201db7e28e0e895dbd69f7fe594613fc"
     }
   ],
-  "dispositionComparison": "m29a-expression-index-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "5feae23f61b598294e098280a6f423dbed06c36d"
+  "dispositionComparison": "m29a-host-containers-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "ba835b763b6aab026db17740874b77816c87976c"
 }

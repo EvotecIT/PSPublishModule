@@ -29,22 +29,26 @@ internal static class PowerShellGeneratedTypePolicy
     internal static bool IsSupported(Type type, string? targetFramework = null)
     {
         if (type.IsArray)
-            return type.GetArrayRank() == 1 && IsSupported(type.GetElementType()!, targetFramework);
+            return type.GetArrayRank() == 1 && PowerShellGeneratedElementTypePolicy.IsRepresentable(type.GetElementType()!, targetFramework) &&
+                   IsSupported(type.GetElementType()!, targetFramework);
         if (type.IsGenericType)
         {
             var definition = type.GetGenericTypeDefinition();
-            if (definition != typeof(Dictionary<,>) &&
-                definition != typeof(List<>) &&
-                definition != typeof(HashSet<>) &&
-                definition != typeof(Nullable<>))
-                return false;
-            return type.GetGenericArguments().All(argument => IsSupported(argument, targetFramework)) &&
-                   IsSupportedNonGeneric(definition, targetFramework);
+            if (!IsSupportedContainerDefinition(definition, targetFramework)) return false;
+            return type.GetGenericArguments().All(argument => PowerShellGeneratedElementTypePolicy.IsRepresentable(argument, targetFramework) &&
+                   IsSupported(argument, targetFramework)) &&
+                   !type.ContainsGenericParameters;
         }
         if (type.IsByRef || type.IsPointer)
             return false;
         return IsSupportedNonGeneric(type, targetFramework);
     }
+
+    /// <summary>Shares the target-qualified container boundary without admitting its element types.</summary>
+    internal static bool IsSupportedContainerDefinition(Type definition, string? targetFramework)
+        => (definition == typeof(Dictionary<,>) || definition == typeof(List<>) ||
+            definition == typeof(HashSet<>) || definition == typeof(Nullable<>)) &&
+           IsSupportedNonGeneric(definition, targetFramework);
 
     internal static bool IsSupportedDelegateSignature(Type type, string? targetFramework = null)
     {

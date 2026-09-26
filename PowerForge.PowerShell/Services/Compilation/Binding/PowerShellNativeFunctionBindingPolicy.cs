@@ -77,11 +77,11 @@ internal static class PowerShellNativeFunctionBindingPolicy
            function.Body.Find(static node => node is ThrowStatementAst { Pipeline: null } thrown &&
                !PowerShellControlFlowBindingPolicy.HasAncestor<CatchClauseAst>(thrown), searchNestedScriptBlocks: false) is not null ||
            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&
-           function.Body.Find(static node => node is TypeExpressionAst expression &&
+           function.Body.Find(node => node is TypeExpressionAst expression &&
                expression.TypeName.GetReflectionType() is { } expressionType &&
-               PowerShellCompilationParameterTypePolicy.IsQualifiedHostDataType(expressionType) ||
+               PowerShellCompilationParameterTypePolicy.IsQualifiedHostDataType(expressionType, targetFramework) ||
                node is TypeConstraintAst constraint && constraint.TypeName.GetReflectionType() is { } constraintType &&
-               PowerShellCompilationParameterTypePolicy.IsQualifiedHostDataType(constraintType),
+               PowerShellCompilationParameterTypePolicy.IsQualifiedHostDataType(constraintType, targetFramework),
                searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(node => node is ScriptBlockExpressionAst block && PowerShellSemanticBinder.IsCompiledValueScriptBlock(block, targetFramework) ||
                node is FunctionDefinitionAst nested && PowerShellSemanticBinder.IsCompiledNestedFunction(nested), searchNestedScriptBlocks: true) is not null ||
