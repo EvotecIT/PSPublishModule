@@ -16,6 +16,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string controlledSourceRoot,
         string controlledOutputRoot,
         IReadOnlyDictionary<string, string?> controlledEnvironment,
+        IReadOnlyCollection<VerifiedPackageInputCatalog> verifiedPackageCatalogs,
         out string? propsPath,
         out string? failureReason)
     {
@@ -54,7 +55,8 @@ public sealed partial class DotNetPublishPipelineRunner
 
         if (!TryValidateControlledRestoreContextSources(graphNodes, rootRequest, originalGitRoot,
                 rootProjectReferences,
-                rootEvaluatedImports, rootEvaluatedProperties, out failureReason))
+                rootEvaluatedImports, rootEvaluatedProperties, verifiedPackageCatalogs,
+                out failureReason))
             return false;
 
         var controlledPropertyNames = ReadControlledRestoreContextOverriddenPropertyNames();

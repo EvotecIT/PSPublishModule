@@ -152,6 +152,9 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledSourceRoot,
                     controlledOutputRoot,
                     controlledEnvironment,
+                    graphVerifiedPackages.Concat(verifiedPackages is null
+                        ? Array.Empty<VerifiedPackageInputCatalog>()
+                        : new[] { verifiedPackages }).Distinct().ToArray(),
                     out string? restoreContextProps,
                     out string? restoreContextFailureReason))
             {

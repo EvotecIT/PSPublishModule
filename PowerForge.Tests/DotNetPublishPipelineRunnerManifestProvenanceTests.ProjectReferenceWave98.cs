@@ -734,23 +734,6 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         }
     }
 
-    // The full matrix above is available in DotNetPublishDeepTests. Keep the PR gate
-    // representative so its hosted runner finishes within the job timeout.
-    [Theory]
-    [InlineData("single-context")]
-    [InlineData("two-contexts")]
-    [InlineData("custom-props")]
-    [InlineData("target-frameworks-context")]
-    [InlineData("removed-output-excludes")]
-    [InlineData("late-path-mutation")]
-    [InlineData("apostrophe-project-path")]
-    [InlineData("inactive-pack-path-target")]
-    [InlineData("second-context-activated-import")]
-    [InlineData("context-activated-indirect-import")]
-    [Trait("Category", "DotNetPublishPrGate")]
-    public void ReadSourceProvenance_PrGateSharedMultiTargetReference(string scenario)
-        => ReadSourceProvenance_RestoresEverySelectedFrameworkForSharedMultiTargetReference(scenario);
-
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
     public void ControlledRestore_SeparatesProjectsSharingDirectoryAndContext()
