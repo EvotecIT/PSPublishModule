@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 2,
+  "purpose": "Same-input M29a native catch-state selection, Hybrid net10.0; execution proof is separate from emission.",
+  "baselineCommit": "e28161c9a1c6c6cc70b71453c9ed45e91fa40c3e",
+  "baselineLedger": "m29a-typed-array-comparison.net10.json",
+  "baselineLedgerSha256": "496c02a4c531e771de1e0343b3edfd4a7591ab8213768932a3f202cdaf6093ae",
+  "comparisonContract": "Every baseline function ID matched exactly once; all 584 total units and 565 functions remain, with no lost complete method or compiled region of a retained function. Dispositions and region-member lists are unchanged. This comparison does not claim byte-identical explanations or unchanged cause metadata.",
+  "newlyEmittedFunctions": [],
+  "qualifiedAlreadyEmittedFunctions": [
+    "Convert-IPToBinary"
+  ],
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "baselineEmitted": 234,
+      "candidateEmitted": 234,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateSha256": "e8ab18fbb7e3033c614629987d81aee5c518d9bc82477899b07b50edffb4cace",
+      "changes": []
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "baselineEmitted": 51,
+      "candidateEmitted": 51,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateSha256": "0657fb62f5946ce6a6e9501b5013afc92b9cbb591b76e92a1fdf473ddf0a164c",
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "baselineEmitted": 55,
+      "candidateEmitted": 55,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateSha256": "e637f8c6bb2b52aaebab9f6cf4be7cac71c4bc71c92ac07b5c7725fdad87fe0d",
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "baselineEmitted": 63,
+      "candidateEmitted": 63,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateSha256": "c75bb8e4a6ef5dd43924c9af0c6b615cb511786210fbca22a1efaa3a5d4172ea",
+      "changes": []
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "baselineEmitted": 22,
+      "candidateEmitted": 22,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateSha256": "1f9db57e7ca2680c99fb3c944c4a13bb3ad826381169da53f7c7f279e84df078",
+      "changes": []
+    }
+  ]
+}

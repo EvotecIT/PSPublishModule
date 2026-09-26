@@ -94,7 +94,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 $Target
             }
             function Read-MethodCatch {
-                [CmdletBinding()] param([Parameter(ValueFromPipeline=$true)][string]$Text)
+                [CmdletBinding()] param([string]$Text)
                 try { [int]::Parse($Text) }
                 catch [InvalidOperationException] { 'invalid' }
                 catch { 'all'; $_.Exception.GetType().FullName; $_.FullyQualifiedErrorId }

@@ -17,7 +17,16 @@ internal static class PowerShellAutomaticVariableObservationPolicy
                  !HasImmediateCatchOwner(variable, statement)),
             searchNestedScriptBlocks: true).Any();
 
-    private static bool HasImmediateCatchOwner(VariableExpressionAst variable, SwitchStatementAst statement)
+    /// <summary>Finds direct reads whose current error item belongs to an authored catch.</summary>
+    internal static bool ObservesCatchState(FunctionDefinitionAst function)
+        => function.Body.Find(node => node is VariableExpressionAst variable &&
+                variable.VariablePath.IsUnqualified &&
+                (variable.VariablePath.UserPath.Equals("_", StringComparison.OrdinalIgnoreCase) ||
+                 variable.VariablePath.UserPath.Equals("PSItem", StringComparison.OrdinalIgnoreCase)) &&
+                !PowerShellAssignmentTargetPolicy.IsDirectAssignmentTarget(variable) &&
+                HasImmediateCatchOwner(variable, function.Body), searchNestedScriptBlocks: false) is not null;
+
+    private static bool HasImmediateCatchOwner(VariableExpressionAst variable, Ast statement)
     {
         for (Ast? ancestor = variable.Parent; ancestor is not null && !ReferenceEquals(ancestor, statement);
              ancestor = ancestor.Parent)
