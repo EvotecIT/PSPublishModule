@@ -8,7 +8,15 @@ task_root=$(mktemp -d /var/lib/powerforge-service-artifact-test.XXXXXXXX)
 service="fixture${task_root##*.}"
 service=${service,,}
 [[ $task_root == /var/lib/powerforge-service-artifact-test.* && $service =~ ^fixture[a-z0-9]+$ ]] || exit 1
-trap 'rm -rf -- "$task_root" "/tmp/powerforge-service-${service}"' EXIT
+deploy_user="pfs${task_root##*.}"
+deploy_user=${deploy_user,,}
+[[ $deploy_user =~ ^pfs[a-z0-9]{8}$ ]] || exit 1
+if getent passwd "$deploy_user" >/dev/null || getent group "$deploy_user" >/dev/null; then
+  echo 'Temporary fixture account already exists.' >&2; exit 1
+fi
+trap 'userdel "$deploy_user" >/dev/null 2>&1 || true; groupdel "$deploy_user" >/dev/null 2>&1 || true; rm -rf -- "$task_root" "/tmp/powerforge-service-${service}"' EXIT
+groupadd "$deploy_user"
+useradd -M -N -g "$deploy_user" -s /usr/sbin/nologin "$deploy_user"
 repo='ExampleOrg/Service'
 sha='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 mkdir -p "$task_root/bin" "$task_root/etc/powerforge/service-pull" "$task_root/etc/powerforge/services" \
@@ -17,8 +25,8 @@ chmod 0755 "$task_root" "$task_root/etc" "$task_root/etc/powerforge" \
   "$task_root/service" "$task_root/service/releases" \
   "$task_root/bin" "$task_root/package"
 chmod 0750 "$task_root/etc/powerforge/service-pull" "$task_root/etc/powerforge/services"
-setfacl -m u:nobody:--x "$task_root/etc/powerforge/service-pull" "$task_root/etc/powerforge/services"
-chown nobody:nogroup "$task_root/work"
+setfacl -m "u:${deploy_user}:--x" "$task_root/etc/powerforge/service-pull" "$task_root/etc/powerforge/services"
+chown "$deploy_user:$deploy_user" "$task_root/work"
 chmod 0700 "$task_root/work"
 printf 'published service\n' >"$task_root/package/artifact.tar"
 digest=$(sha256sum "$task_root/package/artifact.tar")
@@ -26,11 +34,28 @@ digest=${digest%% *}
 jq -n --arg repo "$repo" --arg sha "$sha" --arg digest "$digest" \
   '{schemaVersion:1,sourceRepository:$repo,sourceSha:$sha,workflowRunId:"12345",workflowRunAttempt:"2",artifactSha256:$digest}' \
   >"$task_root/package/package.json"
+jq '.workflowRunAttempt="1"' "$task_root/package/package.json" >"$task_root/package/package-partial.json"
+jq '.artifactSha256="ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"' \
+  "$task_root/package/package.json" >"$task_root/package/package-tamper.json"
+python3 - "$task_root/package" <<'PY'
+import pathlib
+import sys
+import zipfile
+
+root = pathlib.Path(sys.argv[1])
+for suffix, metadata in (("", "package.json"), ("-partial", "package-partial.json"),
+                         ("-tamper", "package-tamper.json"), ("-extra", "package.json")):
+    with zipfile.ZipFile(root / f"bundle{suffix}.zip", "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.write(root / "artifact.tar", "artifact.tar")
+        archive.write(root / metadata, "package.json")
+        if suffix == "-extra":
+            archive.writestr("unexpected.txt", "not a service artifact")
+PY
 printf 'fixture-token\n' >"$task_root/etc/powerforge/service-pull/${service}.token"
 printf 'SOURCE_REPOSITORY=%s\nSOURCE_BRANCH=main\nSOURCE_WORKFLOW=package-service.yml\nARTIFACT_NAME=powerforge-service-example\nWORK_ROOT=%s/work\n' \
   "$repo" "$task_root" >"$task_root/etc/powerforge/service-pull/${service}.env"
 printf 'SERVICE_ROOT=%s/service\n' "$task_root" >"$task_root/etc/powerforge/services/${service}.env"
-chown root:nogroup "$task_root/etc/powerforge/service-pull/${service}.token" \
+chown "root:$deploy_user" "$task_root/etc/powerforge/service-pull/${service}.token" \
   "$task_root/etc/powerforge/service-pull/${service}.env" "$task_root/etc/powerforge/services/${service}.env"
 chmod 0640 "$task_root/etc/powerforge/service-pull/${service}.token" \
   "$task_root/etc/powerforge/service-pull/${service}.env" "$task_root/etc/powerforge/services/${service}.env"
@@ -58,34 +83,69 @@ if [[ $1 == api ]]; then
         printf '{"commit":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}\n'
       fi
       ;;
+    repos/ExampleOrg/Service/branches/release%2F1.x)
+      printf '{"commit":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}\n'
+      ;;
     repos/ExampleOrg/Service/actions/workflows/package-service.yml/runs*)
       if [[ ${POWERFORGE_FIXTURE_MODE:-} == missing ]]; then
         printf '{"workflow_runs":[]}\n'
       else
-        printf '{"workflow_runs":[{"id":12345,"head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","head_branch":"main","status":"completed","conclusion":"success","event":"push","run_number":8,"run_attempt":2}]}\n'
+        branch=main
+        [[ ${POWERFORGE_FIXTURE_MODE:-} != slash ]] || branch=release/1.x
+        printf '{"workflow_runs":[{"id":12345,"head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","head_branch":"%s","status":"completed","conclusion":"success","event":"push","run_number":8,"run_attempt":2}]}\n' "$branch"
       fi
       ;;
     repos/ExampleOrg/Service/actions/runs/12345)
-      printf '{"id":12345,"head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","head_branch":"main","status":"completed","conclusion":"success","event":"push","run_attempt":2}\n'
+      branch=main
+      [[ ${POWERFORGE_FIXTURE_MODE:-} != slash ]] || branch=release/1.x
+      printf '{"id":12345,"head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","head_branch":"%s","status":"completed","conclusion":"success","event":"push","run_attempt":2}\n' "$branch"
+      ;;
+    repos/ExampleOrg/Service/actions/runs/12345/artifacts*)
+      if [[ ${POWERFORGE_FIXTURE_MODE:-} == oversize ]]; then
+        printf '{"artifacts":[{"id":54321,"name":"powerforge-service-example","expired":false,"size_in_bytes":2147483648}]}\n'
+      else
+        printf '{"artifacts":[{"id":54321,"name":"powerforge-service-example","expired":false,"size_in_bytes":1024}]}\n'
+      fi
       ;;
     *) exit 1 ;;
   esac
-elif [[ $1 == run && $2 == download ]]; then
-  while (($#)); do
-    if [[ $1 == --dir ]]; then destination=$2; break; fi
-    shift
-  done
-  [[ -n ${destination:-} ]] || exit 1
-  cp "$POWERFORGE_FIXTURE_ROOT/package/artifact.tar" "$destination/artifact.tar"
-  if [[ ${POWERFORGE_FIXTURE_MODE:-} == tamper ]]; then
-    jq '.artifactSha256="ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"' \
-      "$POWERFORGE_FIXTURE_ROOT/package/package.json" >"$destination/package.json"
-  else
-    cp "$POWERFORGE_FIXTURE_ROOT/package/package.json" "$destination/package.json"
-  fi
 else
   exit 1
 fi
+SH
+cat >"$task_root/bin/getent" <<'SH'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+if [[ ${POWERFORGE_FIXTURE_MODE:-} == shared-group && $1 == group ]]; then
+  /usr/bin/getent "$@" | awk -F: 'BEGIN {OFS=":"} {$4="other-user"; print}'
+else
+  exec /usr/bin/getent "$@"
+fi
+SH
+cat >"$task_root/bin/curl" <<'SH'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+[[ ${GH_TOKEN:-} == fixture-token ]]
+[[ $* != *fixture-token* ]]
+if [[ $* == *'--config -'* ]]; then
+  config=$(cat)
+  [[ $config == 'header = "Authorization: Bearer fixture-token"' ]]
+  [[ $* == *'api.github.com/repos/ExampleOrg/Service/actions/artifacts/54321/zip'* ]]
+  printf 'https://artifact-storage.example.test/bundle.zip'
+  exit 0
+fi
+[[ $* == *'https://artifact-storage.example.test/bundle.zip'* ]]
+while (($#)); do
+  if [[ $1 == --output ]]; then destination=$2; shift 2; else shift; fi
+done
+[[ -n ${destination:-} ]]
+case ${POWERFORGE_FIXTURE_MODE:-} in
+  tamper) suffix=-tamper ;;
+  partial) suffix=-partial ;;
+  extra) suffix=-extra ;;
+  *) suffix= ;;
+esac
+cp "$POWERFORGE_FIXTURE_ROOT/package/bundle${suffix}.zip" "$destination"
 SH
 cat >"$task_root/bin/sudo" <<'SH'
 #!/usr/bin/env bash
@@ -93,27 +153,39 @@ set -Eeuo pipefail
 [[ "$*" == "-- /usr/local/sbin/powerforge-service-deploy --service $POWERFORGE_FIXTURE_SERVICE" ]]
 stage="/tmp/powerforge-service-${POWERFORGE_FIXTURE_SERVICE}"
 [[ -s $stage/artifact.tar && -s $stage/deployment.json ]]
-jq -e '.sourceSha == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" and .workflowRunId == "12345" and .workflowRunAttempt == "2"' \
+jq -e '.sourceSha == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" and .workflowRunId == "12345" and .workflowRunAttempt == "2" and (.packageRunAttempt == "1" or .packageRunAttempt == "2") and (.pullConfigurationSha256 | test("^[0-9a-f]{64}$"))' \
   "$stage/deployment.json" >/dev/null
 cp "$stage/deployment.json" "$POWERFORGE_FIXTURE_ROOT/work/deployed.json"
 printf 'promoted\n' >>"$POWERFORGE_FIXTURE_ROOT/work/sudo.log"
 SH
-chmod 0755 "$task_root/bin/gh" "$task_root/bin/sudo"
+chmod 0755 "$task_root/bin/gh" "$task_root/bin/getent" "$task_root/bin/curl" "$task_root/bin/sudo"
 
 run_fixture() {
   local mode=$1
   rm -f -- "$task_root/work/branch-reads"
-  runuser -u nobody -- env POWERFORGE_FIXTURE_ROOT="$task_root" POWERFORGE_FIXTURE_SERVICE="$service" \
+  runuser -u "$deploy_user" -- env POWERFORGE_FIXTURE_ROOT="$task_root" POWERFORGE_FIXTURE_SERVICE="$service" \
     POWERFORGE_FIXTURE_MODE="$mode" bash "$task_root/runner.sh" "$service"
 }
 if run_fixture missing >"$task_root/missing.log" 2>&1; then
   echo 'Accepted a missing successful run.' >&2; exit 1
 fi
-grep -Fq 'no successful service package run' "$task_root/missing.log"
+grep -Fq 'no successful service package run' "$task_root/missing.log" || { cat "$task_root/missing.log" >&2; exit 1; }
+if run_fixture shared-group >"$task_root/shared-group.log" 2>&1; then
+  echo 'Accepted a deployment group with another member.' >&2; exit 1
+fi
+grep -Fq 'deployment group has other explicit members' "$task_root/shared-group.log"
 if run_fixture tamper >"$task_root/tamper.log" 2>&1; then
   echo 'Accepted a package with the wrong SHA-256.' >&2; exit 1
 fi
 grep -Fq 'service package does not match' "$task_root/tamper.log"
+if run_fixture extra >"$task_root/extra.log" 2>&1; then
+  echo 'Accepted unexpected workflow artifact members.' >&2; exit 1
+fi
+grep -Fq 'workflow artifact contains invalid or oversized members' "$task_root/extra.log"
+if run_fixture oversize >"$task_root/oversize.log" 2>&1; then
+  echo 'Accepted an oversized workflow artifact.' >&2; exit 1
+fi
+grep -Fq 'no unique bounded service artifact' "$task_root/oversize.log"
 if run_fixture advance >"$task_root/advance.log" 2>&1; then
   echo 'Promoted after the source branch advanced.' >&2; exit 1
 fi
@@ -133,7 +205,8 @@ grep -Fq 'fixed service staging path already exists' "$task_root/stale-stage.log
 rmdir "/tmp/powerforge-service-${service}"
 [[ ! -e $task_root/work/sudo.log ]]
 [[ ! -e /tmp/powerforge-service-${service} ]]
-run_fixture success
+run_fixture partial
+[[ $(jq -r '.packageRunAttempt' "$task_root/work/deployed.json") == 1 ]]
 [[ $(wc -l <"$task_root/work/sudo.log") -eq 1 ]]
 mkdir -p "$task_root/service/releases/verified/_powerforge"
 cp "$task_root/work/deployed.json" "$task_root/service/releases/verified/_powerforge/deployment.json"
@@ -145,4 +218,11 @@ jq -e --arg sha "$sha" '.sourceSha == $sha and .workflowRunId == "12345" and .wo
   "$task_root/service/current/_powerforge/deployment.json" >/dev/null
 run_fixture success
 [[ $(wc -l <"$task_root/work/sudo.log") -eq 1 ]]
+printf '# change in root-owned promoter configuration\n' >>"$task_root/etc/powerforge/services/${service}.env"
+run_fixture success
+[[ $(wc -l <"$task_root/work/sudo.log") -eq 2 ]]
+printf 'SOURCE_REPOSITORY=%s\nSOURCE_BRANCH=release/1.x\nSOURCE_WORKFLOW=package-service.yml\nARTIFACT_NAME=powerforge-service-example\nWORK_ROOT=%s/work\n' \
+  "$repo" "$task_root" >"$task_root/etc/powerforge/service-pull/${service}.env"
+run_fixture slash
+[[ $(wc -l <"$task_root/work/sudo.log") -eq 3 ]]
 echo 'Host-initiated Linux service artifact pull fixture passed.'
