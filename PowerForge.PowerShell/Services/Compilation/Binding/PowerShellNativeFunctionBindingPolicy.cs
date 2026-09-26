@@ -94,6 +94,10 @@ internal static class PowerShellNativeFunctionBindingPolicy
            RequiresNativeCommandSwitch(function, capabilities) ||
            RequiresNativeObjectParameterSwitch(function, capabilities) ||
            RequiresNativeConditionalAccessCapture(function) ||
+           function.Body.Find(static node => node is UnaryExpressionAst
+               { TokenKind: TokenKind.PlusPlus or TokenKind.MinusMinus or TokenKind.PostfixPlusPlus or TokenKind.PostfixMinusMinus } increment &&
+               PowerShellSemanticBinder.NativeAccessMutationReceiver(increment.Child) is not null,
+               searchNestedScriptBlocks: false) is not null ||
            RequiresNativeVariableIndex(function) ||
            RequiresNativeModuleStateStringConversion(function) ||
            RequiresNativeStaticNumericArgumentConversion(function) ||

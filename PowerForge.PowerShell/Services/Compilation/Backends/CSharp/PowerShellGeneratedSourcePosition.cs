@@ -9,14 +9,17 @@ internal static class PowerShellGeneratedSourcePosition
     {
         var line = 1;
         var column = 1;
-        for (var index = 0; index < builder.Length; index++)
+        // StringBuilder's indexer walks its linked chunks. Scan a contiguous
+        // snapshot so large generated methods do not multiply chunk traversal.
+        var source = builder.ToString();
+        for (var index = 0; index < source.Length; index++)
         {
-            if (builder[index] == '\n')
+            if (source[index] == '\n')
             {
                 line++;
                 column = 1;
             }
-            else if (builder[index] != '\r')
+            else if (source[index] != '\r')
             {
                 column++;
             }

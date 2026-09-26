@@ -23,6 +23,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         if (assignmentTarget is not null)
         {
+            if (value is null && operation is PowerShellBoundMutationOperator.Increment or PowerShellBoundMutationOperator.Decrement or
+                PowerShellBoundMutationOperator.PostIncrement or PowerShellBoundMutationOperator.PostDecrement)
+                return "__nativeFunction.MutateAccess(" + PowerShellCSharpLiteral.QuoteString(assignmentTarget.Text) + ", " +
+                    PowerShellCSharpLiteral.QuoteString(operation.ToString()) + EmitNativeAssignmentLocation(assignmentTarget);
             if (value is null) throw new InvalidOperationException("A native assignment requires its compiled value expression.");
             return EmitNativeAssignmentTarget(assignmentTarget, operation, value);
         }

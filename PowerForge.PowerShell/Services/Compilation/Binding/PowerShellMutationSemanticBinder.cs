@@ -280,6 +280,26 @@ internal static partial class PowerShellMutationSemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2407", "Value-producing increment and decrement contexts require PowerShell expression-result semantics.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
             return true;
         }
+        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+            PowerShellSemanticBinder.NativeAccessMutationReceiver(syntax.Child) is { } receiver)
+        {
+            if (!symbols.TryGetValue(receiver.VariablePath.UserPath, out var root)) return false;
+            mutation = new PowerShellBoundMutationExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent),
+                root.Symbol, typeof(object), operation.Value, null,
+                standalone ? new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.Inferred,
+                    "Standalone native access mutation does not emit a success record.") : PowerShellTypeFact.Unknown,
+                false, PowerShellIntegralMutationSemantics.None,
+                nativeTargetRead: PowerShellNativeFunctionBindingPolicy.BindVariable(document, receiver),
+                nativeSourceText: PowerShellNativeFunctionBindingPolicy.SourceLines(document, PowerShellSourceParser.GetSpan(document, syntax.Extent)),
+                nativeSetSequencePoint: standalone,
+                nativeAssignmentTarget: new PowerShellNativeAssignmentTarget(syntax.Child.Extent.Text,
+                    document.Path, document.Text, PowerShellSourceParser.GetSpan(document, syntax.Child.Extent),
+                    syntax.Child.Extent.StartOffset, syntax.Child.Extent.EndOffset,
+                    MutatesReceiver: true, ReadVariables: syntax.Child.FindAll(static node => node is VariableExpressionAst, false)
+                        .Cast<VariableExpressionAst>().Select(static variable => variable.VariablePath.UserPath)
+                        .Distinct(StringComparer.OrdinalIgnoreCase).ToArray()));
+            return true;
+        }
         var operand = UnwrapExpression(syntax.Child) as VariableExpressionAst;
         if (operand is null || !symbols.TryGetValue(operand.VariablePath.UserPath, out var target)) return false;
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))

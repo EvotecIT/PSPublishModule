@@ -162,6 +162,7 @@ internal static class PowerShellLoweredRegionGraphBuilder
             {
                 var target = mutation.NativeTargetRead is { } nativeTarget
                     ? "PowerShellSessionVariable:" + nativeTarget.Name.ToUpperInvariant() : Symbol(mutation.Target);
+                if (mutation.NativeAssignmentTarget?.MutatesReceiver is true) target += ".*";
                 RecordFirst(writeOffsets, target, expression.Span.EndOffset);
                 if (mutation.Operation != PowerShellBoundMutationOperator.Assign)
                     RecordFirst(readOffsets, target, expression.Span.StartOffset);
@@ -169,6 +170,8 @@ internal static class PowerShellLoweredRegionGraphBuilder
                 {
                     RecordFirst(readOffsets, "PowerShellSessionState:*", expression.Span.StartOffset);
                     RecordFirst(writeOffsets, "PowerShellSessionState:*", expression.Span.EndOffset);
+                    foreach (var name in mutation.NativeAssignmentTarget?.ReadVariables ?? Array.Empty<string>())
+                        RecordFirst(readOffsets, "PowerShellSessionVariable:" + name.ToUpperInvariant(), expression.Span.StartOffset);
                 }
             }
             if (expression is PowerShellLoweredInvocationExpression invocation)
