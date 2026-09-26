@@ -16,6 +16,7 @@ internal sealed class PowerForgeServerDurableBackupDatabase
     public string? Id { get; set; }
     public string? Provider { get; set; }
     public string? Database { get; set; }
+    public string? RunAs { get; set; }
     public bool Required { get; set; }
 }
 

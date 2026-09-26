@@ -153,7 +153,7 @@ internal static partial class WebCliCommandHandlers
             throw new InvalidOperationException("--site-id must be 1-14 lowercase letters, digits, or hyphens and start with a letter.");
         if (!int.TryParse(portText, out var port) || port is < 1 or > 65535)
             throw new InvalidOperationException("--ssh-port must be from 1 through 65535.");
-        if (!backupRecipient.StartsWith("age1", StringComparison.Ordinal) || backupRecipient.Any(char.IsWhiteSpace))
+        if (!IsValidAgeX25519Recipient(backupRecipient))
             throw new InvalidOperationException("--backup-recipient must be an age public recipient beginning with age1.");
         if (!string.IsNullOrWhiteSpace(acmeAccountId) &&
             !Regex.IsMatch(acmeAccountId, "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$", RegexOptions.CultureInvariant))

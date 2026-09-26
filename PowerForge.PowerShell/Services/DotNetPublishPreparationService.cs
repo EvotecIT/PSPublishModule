@@ -39,7 +39,9 @@ internal sealed class DotNetPublishPreparationService
             JsonOutputPath = request.JsonOnly ? ResolveJsonOutputPath(spec, sourceLabel, request) : null,
             JsonOnly = request.JsonOnly,
             PlanOnly = request.Plan,
-            ValidateOnly = request.Validate
+            ValidateOnly = request.Validate,
+            SkipBuildRequested = request.SkipBuild,
+            SkipRestoreRequested = request.SkipRestore
         };
     }
 

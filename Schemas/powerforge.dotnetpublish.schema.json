@@ -1260,6 +1260,7 @@
         "Build": { "type": "boolean" },
         "NoRestoreInPublish": { "type": "boolean" },
         "NoBuildInPublish": { "type": "boolean" },
+        "UseControlledSourceProvenance": { "type": "boolean" },
         "Runtimes": { "type": ["array", "null"], "items": { "type": "string" } },
         "MsBuildProperties": {
           "type": ["object", "null"],

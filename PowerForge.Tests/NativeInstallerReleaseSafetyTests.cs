@@ -34,6 +34,7 @@ public sealed class NativeInstallerReleaseSafetyTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Targets = new[] { new DotNetPublishTargetPlan { Name = "sample", Version = "1.2.3" } },
             Installers = new[] { CreateInstaller(kind, "1.2.4") }
         };
@@ -52,6 +53,7 @@ public sealed class NativeInstallerReleaseSafetyTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Targets = new[] { new DotNetPublishTargetPlan { Name = "sample", Version = "1.2.3" } },
             Installers = new[] { CreateInstaller(kind, "1.2.3") }
         };
@@ -64,6 +66,7 @@ public sealed class NativeInstallerReleaseSafetyTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Installers = new[] { new DotNetPublishInstallerPlan
             {
                 Id = "studio.msi", Versioning = new DotNetPublishMsiVersionOptions { Enabled = true, ApplyToPublish = true }
@@ -86,6 +89,7 @@ public sealed class NativeInstallerReleaseSafetyTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Installers = new[] { new DotNetPublishInstallerPlan
             {
                 Id = "studio.msi", Versioning = new DotNetPublishMsiVersionOptions { Enabled = true, ApplyToPublish = false }
@@ -115,6 +119,7 @@ public sealed class NativeInstallerReleaseSafetyTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Installers = [new DotNetPublishInstallerPlan { Id = "studio|msi" }],
             MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>
             {
@@ -131,6 +136,7 @@ public sealed class NativeInstallerReleaseSafetyTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Installers = [new DotNetPublishInstallerPlan
             {
                 Id = "studio.msi",

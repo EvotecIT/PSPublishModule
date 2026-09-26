@@ -48,6 +48,22 @@ paths_overlap() {
   [[ "$1" == "$2" || "$1" == "$2/"* || "$2" == "$1/"* ]]
 }
 
+assert_root_controlled_ancestry() {
+  local current="$1" leaf="$1" mode
+  while :; do
+    [[ "$($stat_bin -c '%u' -- "$current")" == '0' ]] || die "export ancestry must be owned by root: $current"
+    mode="$($stat_bin -c '%a' -- "$current")"
+    if (( (8#$mode & 0022) != 0 )); then
+      if [[ "$current" == "$leaf" ]] || (( (8#$mode & 01000) == 0 )); then
+        die "export ancestry must not be writable by non-root accounts: $current"
+      fi
+    fi
+    [[ "$current" != '/' ]] || break
+    current="${current%/*}"
+    [[ -n "$current" ]] || current='/'
+  done
+}
+
 [[ "${EUID}" -eq 0 ]] || die 'capture must run as root'
 [[ "$#" -eq 1 ]] || die 'usage: powerforge-server-data-capture <server-recovery-manifest.json>'
 umask 0027
@@ -60,16 +76,12 @@ age_bin="$(require_command age)"
 tar_bin="$(require_command tar)"
 rsync_bin="$(require_command rsync)"
 sha256_bin="$(require_command sha256sum)"
-pg_dump_bin="$(require_command pg_dump)"
-pg_dumpall_bin="$(require_command pg_dumpall)"
-pg_restore_bin="$(require_command pg_restore)"
-psql_bin="$(require_command psql)"
 runuser_bin="$(require_command runuser)"
 flock_bin="$(require_command flock)"
 mktemp_bin="$(require_command mktemp)"
 stat_bin="$(require_command stat)"
 readlink_bin="$(require_command readlink)"
-readonly jq_bin age_bin tar_bin rsync_bin sha256_bin pg_dump_bin pg_dumpall_bin pg_restore_bin psql_bin runuser_bin flock_bin mktemp_bin stat_bin readlink_bin
+readonly jq_bin age_bin tar_bin rsync_bin sha256_bin runuser_bin flock_bin mktemp_bin stat_bin readlink_bin
 
 manifest_uid="$($stat_bin -c '%u' "$manifest")"
 manifest_mode="$($stat_bin -c '%a' "$manifest")"
@@ -84,6 +96,22 @@ manifest_mode="$($stat_bin -c '%a' "$manifest")"
   (.durableBackup.artifactStores | type == "array" and length > 0)
 ' "$manifest" >/dev/null || die 'manifest does not contain a complete schema-v2 durableBackup contract'
 
+pg_dump_bin=''
+pg_dumpall_bin=''
+pg_restore_bin=''
+psql_bin=''
+sqlite3_bin=''
+if "$jq_bin" -e 'any(.durableBackup.databases[]; .provider == "postgresql")' "$manifest" >/dev/null; then
+  pg_dump_bin="$(require_command pg_dump)"
+  pg_dumpall_bin="$(require_command pg_dumpall)"
+  pg_restore_bin="$(require_command pg_restore)"
+  psql_bin="$(require_command psql)"
+fi
+if "$jq_bin" -e 'any(.durableBackup.databases[]; .provider == "sqlite")' "$manifest" >/dev/null; then
+  sqlite3_bin="$(require_command sqlite3)"
+fi
+readonly pg_dump_bin pg_dumpall_bin pg_restore_bin psql_bin sqlite3_bin
+
 export_root="$($jq_bin -er '.durableBackup.exportRoot' "$manifest")"
 export_group="$($jq_bin -er '.durableBackup.exportGroup' "$manifest")"
 recipient="$($jq_bin -er '.durableBackup.recipient' "$manifest")"
@@ -92,6 +120,7 @@ assert_absolute_path "$export_root"
 assert_dedicated_export_root "$export_root"
 assert_unix_identity "$export_group"
 [[ "$recipient" =~ ^age1[a-z0-9]+$ ]] || die 'durable backup requires a literal age public recipient'
+printf '' | /usr/bin/age -r "$recipient" -o /dev/null 2>/dev/null || die 'durable backup requires a valid checksummed age public recipient'
 if [[ ! "$retention_hours" =~ ^[0-9]+$ ]] || ((retention_hours < 24 || retention_hours > 720)); then
   die 'staging retention must be from 24 through 720 hours'
 fi
@@ -101,6 +130,13 @@ export_parent="${export_root%/*}"
 [[ -n "$export_parent" ]] || export_parent='/'
 [[ -d "$export_parent" && ! -L "$export_parent" && "$($readlink_bin -f -- "$export_parent")" == "$export_parent" ]] ||
   die 'export root parent must be a canonical non-link directory'
+# An existing root-owned leaf can safely have a sticky shared ancestor. A new
+# leaf requires a protected parent so another account cannot precreate it.
+if [[ -e "$export_root" || -L "$export_root" ]]; then
+  assert_root_controlled_ancestry "$export_root"
+else
+  assert_root_controlled_ancestry "$export_parent"
+fi
 if [[ -e "$export_root" || -L "$export_root" ]]; then
   [[ -d "$export_root" && ! -L "$export_root" && "$($readlink_bin -f -- "$export_root")" == "$export_root" ]] ||
     die 'existing export root must be a canonical non-link directory'
@@ -108,6 +144,7 @@ fi
 if [[ -e "$export_root/snapshots" || -L "$export_root/snapshots" ]]; then
   [[ -d "$export_root/snapshots" && ! -L "$export_root/snapshots" && "$($readlink_bin -f -- "$export_root/snapshots")" == "$export_root/snapshots" ]] ||
     die 'existing export snapshot root must be a canonical non-link directory'
+  assert_root_controlled_ancestry "$export_root/snapshots"
 fi
 install -d -m 0750 -o root -g "$export_group" "$export_root" "$export_root/snapshots"
 [[ -d "$export_root" && ! -L "$export_root" && "$($readlink_bin -f -- "$export_root")" == "$export_root" ]] ||
@@ -148,35 +185,102 @@ install -d -m 0750 -o root -g "$export_group" "$partial/artifacts"
 work="$($mktemp_bin -d /var/tmp/powerforge-server-data-capture.XXXXXXXX)"
 [[ "$work" == /var/tmp/powerforge-server-data-capture.* && -d "$work" && ! -L "$work" ]] ||
   die 'unable to create a safe database staging directory'
-chown postgres:postgres "$work"
-chmod 0700 "$work"
-install -d -m 0700 -o postgres -g postgres "$work/databases"
+chmod 0711 "$work"
+install -d -m 0700 -o root -g root "$work/databases"
 
 database_ids=()
-while IFS=$'\t' read -r id provider database required; do
+sqlite_paths=()
+sqlite_accounts=()
+sqlite_identities=()
+declare -A seen_database_ids=()
+# Decode every collection completely before capture. Process substitution would hide
+# jq failure after an earlier valid row and could publish an incomplete READY snapshot.
+database_rows="$($jq_bin -r '.durableBackup.databases[] | [.id, .provider, .database, (.runAs // "-"), (.required // false)] | @tsv' "$manifest")" ||
+  die 'database manifest decoding failed'
+encrypted_rows="$($jq_bin -r '.durableBackup.encryptedFiles[] | [.target, (.required // false)] | @tsv' "$manifest")" ||
+  die 'encrypted-file manifest decoding failed'
+artifact_rows="$($jq_bin -r '.durableBackup.artifactStores[] | [.id, .path, (.required // false)] | @tsv' "$manifest")" ||
+  die 'artifact-store manifest decoding failed'
+while IFS=$'\t' read -r id provider database run_as required; do
   assert_identifier "$id"
-  [[ "$provider" == 'postgresql' ]] || die "unsupported database provider for $id: $provider"
-  assert_database_name "$database"
+  [[ ! -v seen_database_ids["$id"] ]] || die "duplicate database id: $id"
+  seen_database_ids["$id"]=1
   [[ "$required" == 'true' || "$required" == 'false' ]] || die "invalid required flag for database: $id"
-
-  if ! "$runuser_bin" -u postgres -- "$psql_bin" -Atqc "select 1 from pg_database where datname = '$database'" | grep -qx '1'; then
-    [[ "$required" == 'false' ]] && { log "optional database is absent: $database"; continue; }
-    die "required PostgreSQL database is absent: $database"
-  fi
-
-  dump_path="$work/databases/$id.dump"
-  "$runuser_bin" -u postgres -- "$pg_dump_bin" --format=custom --no-owner --no-privileges --file="$dump_path" --dbname="$database"
-  [[ -s "$dump_path" ]] || die "PostgreSQL dump is empty: $database"
-  "$pg_restore_bin" --list "$dump_path" >/dev/null || die "PostgreSQL dump cannot be listed: $database"
+  case "$provider" in
+    postgresql)
+      [[ "$run_as" == '-' ]] || die "PostgreSQL database must not set runAs: $id"
+      assert_database_name "$database"
+      if ! "$runuser_bin" -u postgres -- "$psql_bin" -Atqc "select 1 from pg_database where datname = '$database'" | grep -qx '1'; then
+        [[ "$required" == 'false' ]] && { log "optional database is absent: $database"; continue; }
+        die "required PostgreSQL database is absent: $database"
+      fi
+      install -d -m 0711 -o root -g root "$work/postgresql"
+      install -d -m 0700 -o postgres -g postgres "$work/postgresql/$id"
+      staging_path="$work/postgresql/$id/backup.dump"
+      "$runuser_bin" -u postgres -- "$pg_dump_bin" --format=custom --no-owner --no-privileges --file="$staging_path" --dbname="$database"
+      install -d -m 0700 -o root -g root "$work/postgresql/$id"
+      [[ -s "$staging_path" && -f "$staging_path" && ! -L "$staging_path" ]] || die "PostgreSQL dump is missing or unsafe: $database"
+      dump_path="$work/databases/$id.dump"
+      # A retained service-account descriptor still reaches the staged inode after chown/move.
+      # Copy into a new inode under the root-only directory before validating or packaging it.
+      install -m 0600 -o root -g root -- "$staging_path" "$dump_path"
+      "$pg_restore_bin" --list "$dump_path" >/dev/null || die "PostgreSQL dump cannot be listed: $database"
+      ;;
+    sqlite)
+      assert_absolute_path "$database"
+      paths_overlap "$database" "$export_root" && die "SQLite database overlaps durable export root: $database"
+      sqlite_paths+=("$database")
+      [[ "$run_as" != '-' && "$run_as" != 'root' ]] || die "SQLite database requires a non-root runAs account: $id"
+      assert_unix_identity "$run_as"
+      getent passwd "$run_as" >/dev/null || die "SQLite backup account does not exist: $run_as"
+      [[ "$(id -u "$run_as")" != '0' ]] || die "SQLite backup account must not have UID 0: $run_as"
+      sqlite_accounts+=("$run_as")
+      if [[ ! -e "$database" && ! -L "$database" ]]; then
+        [[ "$required" == 'false' ]] && { log "optional SQLite database is absent: $database"; continue; }
+        die "required SQLite database is absent: $database"
+      fi
+      [[ -f "$database" && ! -L "$database" && "$($readlink_bin -f -- "$database")" == "$database" ]] ||
+        die "SQLite source must be a canonical non-link file: $database"
+      # WAL/journal paths may disappear when the online backup closes its connection.
+      # Retain their identities so an artifact hard link remains detectable afterward.
+      for sqlite_file in "$database" "$database"-wal "$database"-shm "$database"-journal; do
+        if [[ -f "$sqlite_file" && ! -L "$sqlite_file" ]]; then
+          sqlite_identities+=("$($stat_bin -c '%d:%i' -- "$sqlite_file")")
+        fi
+      done
+      install -d -m 0711 -o root -g root "$work/sqlite"
+      install -d -m 0700 -o "$run_as" "$work/sqlite/$id"
+      staging_path="$work/sqlite/$id/backup.sqlite"
+      "$runuser_bin" -u "$run_as" -- "$sqlite3_bin" -readonly "$database" ".backup '$staging_path'"
+      # Revoke the service account's directory access before root inspects its output.
+      install -d -m 0700 -o root -g root "$work/sqlite/$id"
+      [[ -s "$staging_path" && -f "$staging_path" && ! -L "$staging_path" ]] || die "SQLite backup is missing or unsafe: $id"
+      dump_path="$work/databases/$id.sqlite"
+      install -m 0600 -o root -g root -- "$staging_path" "$dump_path"
+      [[ "$("$sqlite3_bin" -readonly "$dump_path" 'PRAGMA integrity_check;')" == 'ok' ]] ||
+        die "SQLite backup integrity check failed: $id"
+      ;;
+    *) die "unsupported database provider for $id: $provider" ;;
+  esac
   database_ids+=("$id")
-done < <("$jq_bin" -r '.durableBackup.databases[] | [.id, .provider, .database, (.required // false)] | @tsv' "$manifest")
+done <<<"$database_rows"
 (( ${#database_ids[@]} > 0 )) || die 'durable capture did not produce any database dump'
 
-"$runuser_bin" -u postgres -- "$pg_dumpall_bin" --globals-only >"$work/databases/postgresql-globals.sql"
-[[ -s "$work/databases/postgresql-globals.sql" ]] || die 'PostgreSQL globals dump is empty'
+if [[ -n "$pg_dump_bin" ]]; then
+  install -d -m 0711 -o root -g root "$work/postgresql"
+  install -d -m 0700 -o postgres -g postgres "$work/postgresql/globals"
+  # Open the output as postgres too: root redirection inside its writable
+  # staging directory would follow a link planted by a concurrent postgres process.
+  "$runuser_bin" -u postgres -- "$pg_dumpall_bin" --globals-only --file="$work/postgresql/globals/globals.sql"
+  install -d -m 0700 -o root -g root "$work/postgresql/globals"
+  [[ -s "$work/postgresql/globals/globals.sql" && -f "$work/postgresql/globals/globals.sql" && ! -L "$work/postgresql/globals/globals.sql" ]] || die 'PostgreSQL globals dump is missing or unsafe'
+  install -m 0600 -o root -g root -- "$work/postgresql/globals/globals.sql" "$work/databases/postgresql-globals.sql"
+  [[ -s "$work/databases/postgresql-globals.sql" ]] || die 'PostgreSQL globals dump is empty'
+fi
 
 tar_args=(-C "$work" databases)
 encrypted_paths=()
+encrypted_identities=()
 while IFS=$'\t' read -r path required; do
   assert_absolute_path "$path"
   [[ "$required" == 'true' || "$required" == 'false' ]] || die "invalid required flag for encrypted file: $path"
@@ -187,8 +291,18 @@ while IFS=$'\t' read -r path required; do
   fi
   [[ -f "$path" && ! -L "$path" ]] || die "encrypted path must be a regular non-link file: $path"
   [[ "$($readlink_bin -f -- "$path")" == "$path" ]] || die "encrypted path must be canonical: $path"
+  encrypted_identities+=("$($stat_bin -c '%d:%i' -- "$path")")
   tar_args+=(-C / "${path#/}")
-done < <("$jq_bin" -r '.durableBackup.encryptedFiles[] | [.target, (.required // false)] | @tsv' "$manifest")
+done <<<"$encrypted_rows"
+
+for sqlite_path in "${sqlite_paths[@]}"; do
+  for encrypted_path in "${encrypted_paths[@]}"; do
+    if paths_overlap "$sqlite_path" "$encrypted_path" ||
+      [[ "$encrypted_path" == "$sqlite_path"-wal || "$encrypted_path" == "$sqlite_path"-shm || "$encrypted_path" == "$sqlite_path"-journal ]]; then
+      die "SQLite database overlaps directly captured encrypted file: $sqlite_path and $encrypted_path"
+    fi
+  done
+done
 
 "$tar_bin" -czf - "${tar_args[@]}" | "$age_bin" -r "$recipient" -o "$partial/recovery.tar.gz.age"
 [[ -s "$partial/recovery.tar.gz.age" ]] || die 'encrypted recovery bundle is empty'
@@ -205,6 +319,10 @@ while IFS=$'\t' read -r id source required; do
     paths_overlap "$encrypted_path" "$source" &&
       die "encrypted path overlaps plaintext artifact store: $encrypted_path and $source"
   done
+  for sqlite_path in "${sqlite_paths[@]}"; do
+    paths_overlap "$sqlite_path" "$source" &&
+      die "SQLite database overlaps plaintext artifact store: $sqlite_path and $source"
+  done
   if [[ ! -d "$source" || -L "$source" ]]; then
     [[ "$required" == 'false' ]] && { log "optional artifact store is absent: $source"; continue; }
     die "required artifact store is absent or unsafe: $source"
@@ -212,6 +330,62 @@ while IFS=$'\t' read -r id source required; do
   [[ "$($readlink_bin -f -- "$source")" == "$source" ]] || die "artifact store must be canonical: $source"
   unsafe_source_entry="$(find "$source" -mindepth 1 ! -type f ! -type d -print -quit)"
   [[ -z "$unsafe_source_entry" ]] || die "artifact store contains a link or special entry: $unsafe_source_entry"
+  find "$source" -type f -printf '%D:%i\n' >"$work/artifact-inodes" || die "artifact identity scan failed: $source"
+  for sqlite_identity in "${sqlite_identities[@]}"; do
+    if grep -Fx "$sqlite_identity" "$work/artifact-inodes" >/dev/null; then
+      die "artifact store contains a hard link to live SQLite data: $source"
+    fi
+  done
+  for encrypted_identity in "${encrypted_identities[@]}"; do
+    if grep -Fx "$encrypted_identity" "$work/artifact-inodes" >/dev/null; then
+      die "artifact store contains a hard link to directly encrypted data: $source"
+    fi
+  done
+  # A database writer must not be able to add a sensitive hard link after the scan.
+  for sqlite_account in "${sqlite_accounts[@]}"; do
+    sqlite_uid="$(id -u "$sqlite_account")"
+    artifact_parent="$source"
+    while [[ "$artifact_parent" != '/' ]]; do
+      [[ "$($stat_bin -c '%u' "$artifact_parent")" != "$sqlite_uid" ]] ||
+        die "SQLite account owns artifact-store ancestry: $sqlite_account and $artifact_parent"
+      if "$runuser_bin" -u "$sqlite_account" -- test -w "$artifact_parent"; then
+        artifact_parent_mode="$($stat_bin -c '%a' "$artifact_parent")"
+        # Sticky ancestors cannot rename an independently owned child; the store itself
+        # must still be non-writable, because it could receive new entries.
+        if [[ "$artifact_parent" == "$source" ]] || (( (8#$artifact_parent_mode & 01000) == 0 )); then
+          die "SQLite account can modify artifact-store ancestry: $sqlite_account and $artifact_parent"
+        fi
+      fi
+      artifact_parent="${artifact_parent%/*}"
+      [[ -n "$artifact_parent" ]] || artifact_parent='/'
+    done
+    owned_entry="$(find "$source" -mindepth 1 -uid "$sqlite_uid" -print -quit)" || die "artifact ownership scan failed: $source"
+    [[ -z "$owned_entry" ]] || die "SQLite account owns artifact-store entry: $sqlite_account and $owned_entry"
+    find "$source" -mindepth 1 -print0 >"$work/artifact-entries" || die "artifact entry scan failed: $source"
+    # One unprivileged process tests effective access (including ACLs), rather
+    # than starting a process for every payload file in a large release store.
+    # shellcheck disable=SC2016 # Variables belong to the unprivileged Bash process.
+    if ! "$runuser_bin" -u "$sqlite_account" -- /bin/bash --noprofile --norc -c '
+      while IFS= read -r -d "" entry; do
+        if [[ -w "$entry" ]]; then printf "%s\n" "$entry" >&2; exit 1; fi
+      done
+      exit 0
+    ' <"$work/artifact-entries"; then
+      die "SQLite account can modify artifact-store entry: $sqlite_account"
+    fi
+  done
+  for encrypted_path in "${encrypted_paths[@]}"; do
+    [[ -f "$encrypted_path" && ! -L "$encrypted_path" ]] || continue
+    hardlink_entry="$(find "$source" -type f -samefile "$encrypted_path" -print -quit)"
+    [[ -z "$hardlink_entry" ]] || die "artifact store contains a hard link to directly encrypted data: $hardlink_entry"
+  done
+  for sqlite_path in "${sqlite_paths[@]}"; do
+    for sqlite_file in "$sqlite_path" "$sqlite_path"-wal "$sqlite_path"-shm "$sqlite_path"-journal; do
+      [[ -f "$sqlite_file" && ! -L "$sqlite_file" ]] || continue
+      hardlink_entry="$(find "$source" -type f -samefile "$sqlite_file" -print -quit)"
+      [[ -z "$hardlink_entry" ]] || die "artifact store contains a hard link to live SQLite data: $hardlink_entry"
+    done
+  done
 
   destination="$partial/artifacts/$id"
   install -d -m 0750 -o root -g "$export_group" "$destination"
@@ -223,7 +397,7 @@ while IFS=$'\t' read -r id source required; do
   fi
   "$rsync_bin" "${rsync_args[@]}" "$source/" "$destination/"
   artifact_ids+=("$id")
-done < <("$jq_bin" -r '.durableBackup.artifactStores[] | [.id, .path, (.required // false)] | @tsv' "$manifest")
+done <<<"$artifact_rows"
 (( ${#artifact_ids[@]} > 0 )) || die 'durable capture did not export any artifact store'
 
 unsafe_snapshot_entry="$(find "$partial" -mindepth 1 ! -type f ! -type d -print -quit)"
@@ -234,7 +408,7 @@ while IFS= read -r -d '' snapshot_entry; do
     die "snapshot path cannot be represented safely in SHA256SUMS: $relative_entry"
 done < <(find "$partial" -mindepth 1 -print0)
 
-database_json="$($jq_bin -c '[.durableBackup.databases[] | {id, provider, database, required: (.required // false)}]' "$manifest")"
+database_json="$($jq_bin -c '[.durableBackup.databases[] | {id, provider, database, runAs, required: (.required // false)}]' "$manifest")"
 artifact_json="$($jq_bin -c '[.durableBackup.artifactStores[] | {id, path, required: (.required // false)}]' "$manifest")"
 manifest_sha="$($sha256_bin "$manifest" | awk '{print $1}')"
 # shellcheck disable=SC2016 # jq variables are intentionally evaluated by jq, not Bash.
@@ -253,7 +427,7 @@ find "$partial" -type d -exec chmod 0750 {} +
 find "$partial" -type f -exec chmod 0640 {} +
 (
   cd "$partial"
-  find . -type f ! -name SHA256SUMS ! -name READY -print0 |
+  find . -type f ! -path ./SHA256SUMS ! -path ./READY -print0 |
     sort -z |
     xargs -0 "$sha256_bin" >"$checksum_temp"
   mv -- "$checksum_temp" SHA256SUMS

@@ -83,6 +83,7 @@ public sealed class DotNetPublishPipelineRunnerStatePreserveTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 AllowOutputOutsideProjectRoot = false
             };
@@ -146,6 +147,7 @@ public sealed class DotNetPublishPipelineRunnerStatePreserveTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 AllowOutputOutsideProjectRoot = false
             };

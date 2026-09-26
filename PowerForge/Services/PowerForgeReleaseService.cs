@@ -414,6 +414,8 @@ internal sealed partial class PowerForgeReleaseService
 
         var willRunTools = runTools && ShouldRunSectionForTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches);
         var willRunAppleApps = runAppleApps && ShouldRunSectionForTargets(selectedTargets, appleTargetMatches, runTools, toolTargetMatches);
+        if (willRunTools)
+            PreflightSkipBuildMsiVersioning(dotNetSpecForTools, request, selectedTargets, toolTargetMatches, selectedToolOutputs);
         var hasNonAppleConfigurationConsumer = runWorkspaceValidation || runModule || runPackages || willRunTools;
         var configurationOverride = hasNonAppleConfigurationConsumer
             ? NormalizeConfiguration(request.Configuration)
@@ -760,6 +762,7 @@ internal sealed partial class PowerForgeReleaseService
                     if (spec.GitHub is { Commitish: "HEAD" } && verifiedSourceCommit is not null)
                         spec.GitHub.Commitish = verifiedSourceCommit;
                     ApplyDotNetPublishSkipFlags(dotNetPlan, request.SkipRestore, request.SkipBuild);
+                    dotNetPlan.SeparateBuildRequested = request.SeparateBuildRequested && !request.SkipBuild;
                     result.DotNetToolPlan = dotNetPlan;
 
                     if (!request.PlanOnly && !request.ValidateOnly)
@@ -4828,10 +4831,13 @@ internal sealed partial class PowerForgeReleaseService
         DotNetPublishArtefactResult artifact,
         ISet<PowerForgeReleaseToolOutputKind> selectedOutputs)
     {
-        if (artifact.Category == DotNetPublishArtefactCategory.Bundle)
-            return selectedOutputs.Contains(PowerForgeReleaseToolOutputKind.Portable);
-
-        return selectedOutputs.Contains(PowerForgeReleaseToolOutputKind.Tool);
+        var outputKind = artifact.Category switch
+        {
+            DotNetPublishArtefactCategory.Bundle => PowerForgeReleaseToolOutputKind.Portable,
+            DotNetPublishArtefactCategory.Installer => PowerForgeReleaseToolOutputKind.Installer,
+            _ => PowerForgeReleaseToolOutputKind.Tool
+        };
+        return selectedOutputs.Contains(outputKind);
     }
 
     private static void ApplyDotNetOutputRootOverride(DotNetPublishSpec spec, string outputRoot)
@@ -5467,17 +5473,7 @@ internal sealed partial class PowerForgeReleaseService
         IReadOnlyList<PowerForgeReleaseAssetEntry> assets,
         IReadOnlyList<PowerForgeToolGitHubReleaseResult> toolGitHubReleases)
     {
-        var asset = assets.FirstOrDefault(candidate =>
-            candidate.Category == installer.Category &&
-            (string.IsNullOrWhiteSpace(installer.Target) || string.Equals(candidate.Target, installer.Target, StringComparison.OrdinalIgnoreCase)) &&
-            (string.IsNullOrWhiteSpace(installer.Runtime) || string.Equals(candidate.Runtime, installer.Runtime, StringComparison.OrdinalIgnoreCase)) &&
-            (string.IsNullOrWhiteSpace(installer.Framework) || string.Equals(candidate.Framework, installer.Framework, StringComparison.OrdinalIgnoreCase)));
-
-        if (asset is null)
-        {
-            throw new InvalidOperationException(
-                $"Winget package '{package.PackageIdentifier}' could not match an asset for Category={installer.Category}, Target={installer.Target ?? "*"}, Runtime={installer.Runtime ?? "*"}, Framework={installer.Framework ?? "*"}.");
-        }
+        var asset = ResolveWingetInstallerAsset(installer, package, assets);
 
         var installerPath = asset.StagedPath ?? asset.Path;
         if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
@@ -5515,6 +5511,33 @@ internal sealed partial class PowerForgeReleaseService
             InstallerUrl = resolvedUrl,
             InstallerSha256 = ComputeSha256(installerPath)
         };
+    }
+
+    internal static PowerForgeReleaseAssetEntry ResolveWingetInstallerAsset(
+        PowerForgeReleaseWingetInstaller installer,
+        PowerForgeReleaseWingetPackage package,
+        IReadOnlyList<PowerForgeReleaseAssetEntry> assets)
+    {
+        var matches = assets.Where(candidate =>
+            candidate.Category == installer.Category &&
+            (string.IsNullOrWhiteSpace(installer.Target) || string.Equals(candidate.Target, installer.Target, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrWhiteSpace(installer.Runtime) || string.Equals(candidate.Runtime, installer.Runtime, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrWhiteSpace(installer.Framework) || string.Equals(candidate.Framework, installer.Framework, StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+
+        if (matches.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"Winget package '{package.PackageIdentifier}' could not match an asset for Category={installer.Category}, Target={installer.Target ?? "*"}, Runtime={installer.Runtime ?? "*"}, Framework={installer.Framework ?? "*"}.");
+        }
+
+        if (matches.Length > 1)
+        {
+            throw new InvalidOperationException(
+                $"Winget package '{package.PackageIdentifier}' matched multiple assets for Category={installer.Category}, Target={installer.Target ?? "*"}, Runtime={installer.Runtime ?? "*"}, Framework={installer.Framework ?? "*"}. Specify a unique installer asset selector.");
+        }
+
+        return matches[0];
     }
 
     private static string? ResolveGitHubReleaseDownloadUrl(
@@ -6143,6 +6166,7 @@ internal sealed partial class PowerForgeReleaseService
         {
             plan.Restore = false;
             plan.NoRestoreInPublish = true;
+            plan.SkipRestoreRequested = true;
             steps = steps.Where(step => step.Kind != DotNetPublishStepKind.Restore).ToArray();
         }
 
@@ -6150,10 +6174,67 @@ internal sealed partial class PowerForgeReleaseService
         {
             plan.Build = false;
             plan.NoBuildInPublish = true;
+            plan.SkipBuildRequested = true;
             steps = steps.Where(step => step.Kind != DotNetPublishStepKind.Build).ToArray();
         }
 
         plan.Steps = steps;
+        DotNetPublishPipelineRunner.ValidateRequestedBuildModes(plan);
+    }
+
+    private static void PreflightSkipBuildMsiVersioning(
+        DotNetPublishSpec? spec,
+        PowerForgeReleaseRequest request,
+        string[] selectedTargets,
+        string[] toolTargetMatches,
+        ISet<PowerForgeReleaseToolOutputKind> selectedOutputs)
+    {
+        if (!request.SkipBuild || spec is null || !selectedOutputs.Contains(PowerForgeReleaseToolOutputKind.Installer))
+            return;
+
+        var profiled = DotNetPublishPipelineRunner.ResolveProfile(spec);
+        var targets = DotNetPublishPipelineRunner.CloneTargets(profiled.Targets ?? Array.Empty<DotNetPublishTarget>());
+        var matrixSpec = new DotNetPublishSpec { DotNet = profiled.DotNet, Matrix = profiled.Matrix };
+        var activeProfile = (profiled.Profiles ?? Array.Empty<DotNetPublishProfile>())
+            .FirstOrDefault(profile => profile is not null &&
+                string.Equals(profile.Name, profiled.Profile, StringComparison.OrdinalIgnoreCase));
+        foreach (var installer in profiled.Installers ?? Array.Empty<DotNetPublishInstaller>())
+        {
+            if (installer.Versioning is not { Enabled: true, ApplyToPublish: true })
+                continue;
+            if (selectedTargets.Length > 0 &&
+                !toolTargetMatches.Contains(installer.PrepareFromTarget, StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            var target = targets.FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, installer.PrepareFromTarget, StringComparison.OrdinalIgnoreCase));
+            if (target is null) continue;
+
+            // The real planner applies request overrides before ResolveProfile;
+            // profile dimensions therefore take precedence over request dimensions.
+            if (request.Runtimes is { Length: > 0 } && activeProfile?.Runtimes.Length is not > 0)
+                target.Publish.Runtimes = request.Runtimes;
+            if (request.Frameworks is { Length: > 0 } && selectedTargets.Length > 0 &&
+                activeProfile?.Frameworks.Length is not > 0)
+            {
+                target.Publish.Framework = request.Frameworks[0];
+                target.Publish.Frameworks = request.Frameworks;
+            }
+            if (request.Styles is { Length: > 0 } && activeProfile?.Style is null)
+            {
+                target.Publish.Style = request.Styles[0];
+                target.Publish.Styles = request.Styles;
+            }
+
+            var matchesSelectedCombination = DotNetPublishPipelineRunner.ResolveTargetCombinations(target, matrixSpec)
+                .Any(combo => DotNetPublishPipelineRunner.InstallerMatchesCombo(
+                    installer.Runtimes, installer.Frameworks, installer.Styles, combo));
+            if (!matchesSelectedCombination) continue;
+
+            throw new InvalidOperationException(
+                $"SkipBuild cannot be combined with MSI versioning ApplyToPublish for target '{installer.PrepareFromTarget}': " +
+                "the versioned publish must compile the MSI payload.");
+        }
     }
 
     private static bool HasSigningOverrides(PowerForgeReleaseRequest request)

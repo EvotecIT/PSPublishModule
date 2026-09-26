@@ -267,6 +267,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Bundles = new[]
                 {
@@ -379,6 +380,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Bundles = new[]
                 {
@@ -496,6 +498,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
             };
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 SourceRevision = sourceRevision,
                 Targets =
@@ -660,6 +663,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
             };
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 SourceRevision = sourceRevision,
                 Targets =
@@ -757,6 +761,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
             string outputDir = Path.Combine(root, "Artifacts", "Bundles", "package");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 SourceRevision = sourceRevision,
                 Targets =
@@ -894,6 +899,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
             var outputDir = Path.Combine(root, "Artifacts", "Bundles", "portable");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Bundles = new[]
                 {
@@ -977,6 +983,7 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 AllowOutputOutsideProjectRoot = false,
                 Installers = new[]

@@ -100,6 +100,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(forcedNetNineInput, "public static class ForcedNetNineOnly { public const int Changed = 1; }");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 Targets =

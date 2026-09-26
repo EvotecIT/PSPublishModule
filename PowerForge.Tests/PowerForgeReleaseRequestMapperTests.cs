@@ -36,7 +36,8 @@ public sealed class PowerForgeReleaseRequestMapperTests
     {
         var defaults = new PowerForgeReleaseRequest
         {
-            ToolsOnly = true
+            ToolsOnly = true,
+            SeparateBuildRequested = true
         };
 
         var request = PSPublishModule.PowerForgeReleaseRequestMapper.Build(
@@ -45,6 +46,7 @@ public sealed class PowerForgeReleaseRequestMapperTests
             new PSPublishModule.PowerForgeReleaseInvocationOptions());
 
         Assert.True(request.ToolsOnly);
+        Assert.True(request.SeparateBuildRequested);
     }
 
     [Fact]

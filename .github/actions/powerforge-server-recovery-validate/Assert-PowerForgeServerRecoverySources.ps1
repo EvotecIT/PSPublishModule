@@ -172,10 +172,8 @@ function Resolve-ManagedSourcePath {
         $LocalEngineRepository,
         [StringComparison]::OrdinalIgnoreCase
     )
-    $usesEngineCheckout = $matchesEngineRepository -and (
-        -not $matchesCallerRepository -or
+    $usesEngineCheckout = $matchesEngineRepository -and
         [string]::Equals($repositoryRef, $env:POWERFORGE_ENGINE_REF, [StringComparison]::OrdinalIgnoreCase)
-    )
     $localRoot = if ($usesEngineCheckout) {
         $LocalEngineRoot
     } elseif ($matchesCallerRepository) {
@@ -681,7 +679,13 @@ foreach ($sudoersDocument in $sudoersDocuments) {
 }
 
 if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
-    $engineRepositories = @(
+    $publisherRepositories = @($Manifest.repositories | Where-Object {
+        [string]::Equals([string]$_.role, 'backup-publisher-engine', [StringComparison]::Ordinal)
+    })
+    if ($publisherRepositories.Count -gt 1) {
+        throw 'Encrypted recovery capture allows only one backup-publisher-engine repository.'
+    }
+    $actionEngineRepositories = @(
         foreach ($repository in @($Manifest.repositories)) {
             $repositoryUrl = [string]$repository.url
             if ([string]::IsNullOrWhiteSpace($repositoryUrl)) {
@@ -695,13 +699,36 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
             }
         }
     )
-    if ($engineRepositories.Count -ne 1) {
-        throw 'Encrypted recovery capture requires one repository pinned to the validation action engine.'
+    if ($publisherRepositories.Count -eq 1) {
+        $helperRepository = $publisherRepositories[0]
+        $helperRepositorySlug = Get-GitHubRepositorySlug -Url ([string]$helperRepository.url)
+        if (-not [string]::Equals($helperRepositorySlug, $EngineRepository, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'The backup-publisher-engine must use the PowerForge action repository.'
+        }
+    } else {
+        if ($actionEngineRepositories.Count -ne 1) {
+            throw 'Encrypted recovery capture requires one repository pinned to the validation action engine.'
+        }
+        $helperRepository = $actionEngineRepositories[0]
     }
-    $expectedHelperSource = ([string]$engineRepositories[0].path).TrimEnd('/') +
+    $expectedHelperSource = ([string]$helperRepository.path).TrimEnd('/') +
         '/Deployment/Linux/powerforge-server-encrypted-capture.sh'
+    $helperRepositoryRef = [string]$helperRepository.ref
+    $helperRoot = if ([string]::Equals($helperRepositoryRef, $env:POWERFORGE_ENGINE_REF, [StringComparison]::OrdinalIgnoreCase)) {
+        $EngineRoot
+    } else {
+        if ([string]::IsNullOrWhiteSpace($ExternalRepositoryRoot)) {
+            throw 'The pinned backup publisher engine is unavailable for credential-free validation.'
+        }
+        $helperRepositorySlug = Get-GitHubRepositorySlug -Url ([string]$helperRepository.url)
+        Resolve-ExternalRepositoryRoot `
+            -Repository $helperRepository `
+            -RepositorySlug $helperRepositorySlug `
+            -RepositoryRef $helperRepositoryRef `
+            -ValidationRoot $ExternalRepositoryRoot
+    }
     $expectedHelperPath = [IO.Path]::GetFullPath(
-        (Join-Path $EngineRoot 'Deployment/Linux/powerforge-server-encrypted-capture.sh')
+        (Join-Path $helperRoot 'Deployment/Linux/powerforge-server-encrypted-capture.sh')
     )
     $helper = @($resolvedEntries).Where({
         [string]::Equals(

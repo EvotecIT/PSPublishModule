@@ -443,6 +443,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 $"/p:DebugSymbols={keepSymbols.ToString().ToLowerInvariant()}{customPropsArgument}{globalOutputArguments}", testEnvironment);
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 SourceRevision = revision,

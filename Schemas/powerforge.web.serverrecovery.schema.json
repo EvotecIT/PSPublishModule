@@ -547,7 +547,7 @@
           ]
         },
         "exportGroup": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_-]{0,31}$" },
-        "recipient": { "type": "string", "pattern": "^age1[a-z0-9]+$" },
+        "recipient": { "type": "string", "pattern": "^(?!.*[\\r\\n])age1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{58}$" },
         "stagingRetentionHours": { "type": "integer", "minimum": 24, "maximum": 720 },
         "databases": {
           "type": "array",
@@ -572,11 +572,28 @@
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$" },
-        "provider": { "type": "string", "enum": ["postgresql"] },
-        "database": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$" },
+        "provider": { "type": "string", "enum": ["postgresql", "sqlite"] },
+        "database": { "type": "string" },
+        "runAs": { "type": "string", "pattern": "^(?!root$)[A-Za-z_][A-Za-z0-9_-]{0,31}$" },
         "required": { "type": "boolean" }
       },
-      "required": ["id", "provider", "database"]
+      "required": ["id", "provider", "database"],
+      "allOf": [
+        {
+          "if": { "properties": { "provider": { "const": "postgresql" } }, "required": ["provider"] },
+          "then": {
+            "properties": { "database": { "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$" } },
+            "not": { "required": ["runAs"] }
+          }
+        },
+        {
+          "if": { "properties": { "provider": { "const": "sqlite" } }, "required": ["provider"] },
+          "then": {
+            "required": ["runAs"],
+            "properties": { "database": { "$ref": "#/$defs/AbsoluteUnixExactPath" } }
+          }
+        }
+      ]
     },
     "DurableBackupArtifactStore": {
       "type": "object",
@@ -602,17 +619,17 @@
         },
         "branch": {
           "type": "string",
-          "pattern": "^(?!.*[\\r\\n])(?!/)(?!.*\\.\\.)[A-Za-z0-9_./-]+$"
+          "pattern": "^(?!HEAD$)(?!.*[\\r\\n])(?!-)(?!.*\\.\\.)(?!.*(?:^|/)\\.)(?!.*\\.lock(?:/|$))(?!.*\\.$)[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$"
         },
         "path": {
           "type": "string",
-          "pattern": "^(?!.*[\\r\\n])(?!/)(?!.*\\.\\.)[A-Za-z0-9_./-]+$"
+          "pattern": "^(?!.*[\\r\\n])(?!.*\\.\\.)(?!.*(?:^|/)\\.(?:/|$))(?!.*(?:^|/)\\.git(?:/|$))[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$"
         },
         "encryption": {
           "type": "string",
           "enum": ["age"]
         },
-        "recipient": { "type": "string", "minLength": 1 },
+        "recipient": { "type": "string", "pattern": "^(?!.*[\\r\\n])age1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{58}$" },
         "recipientEnv": {
           "type": "string",
           "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"

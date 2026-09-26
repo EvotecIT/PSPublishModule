@@ -93,6 +93,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(defaultSource, "public static class DefaultInput { public const int Value = 2; }");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Targets =
                 [

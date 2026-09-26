@@ -80,7 +80,10 @@ if ($backupRepository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
 if ($backupBranch -notmatch '^[A-Za-z0-9._/-]+$' -or $backupBranch.Contains('..') -or $backupBranch.StartsWith('/')) {
     throw 'backupTarget.branch contains unsupported characters.'
 }
-if ($backupPath -notmatch '^[A-Za-z0-9._/-]+$' -or $backupPath.Contains('..') -or $backupPath.StartsWith('/')) {
+& git -C / check-ref-format --branch $backupBranch > $null 2> $null
+Assert-LastExitCode 'Validating the backup Git branch'
+if ($backupPath -notmatch '^[A-Za-z0-9._/-]+$' -or $backupPath.Contains('..') -or $backupPath.StartsWith('/') -or
+    @($backupPath.Split('/') | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -in @('.', '..') -or $_ -ceq '.git' }).Count -ne 0) {
     throw 'backupTarget.path must be a safe repository-relative path.'
 }
 if ($null -ne $manifest.backupTarget.retention.keepDays) {
@@ -109,6 +112,10 @@ if ([string]::IsNullOrWhiteSpace($recipient)) {
         [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($recipientEnvName, 'Process'))) {
         throw 'Automated encrypted capture requires backupTarget.recipient or a populated recipientEnv variable.'
     }
+    $recipient = [Environment]::GetEnvironmentVariable($recipientEnvName, 'Process')
+}
+if (-not (Test-AgeX25519Recipient $recipient)) {
+    throw 'Automated encrypted capture requires a checksummed lowercase age X25519 public recipient.'
 }
 
 $runnerTemp = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd([IO.Path]::DirectorySeparatorChar)
@@ -193,6 +200,8 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
             throw "PowerForge capture CLI was not produced: $cli"
         }
 
+        dotnet $cli server validate --manifest $captureManifestPath
+        Assert-LastExitCode 'Validating the recovery manifest before capture'
         dotnet $cli server capture --manifest $captureManifestPath --out $captureRoot --ssh $serverSshCommand --encrypt-remote --fail-on-failure
         $captureExitCode = $LASTEXITCODE
     } finally {
@@ -275,8 +284,10 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
     Assert-LastExitCode 'Configuring the backup Git author'
     git -C $checkout config user.email 'powerforge-backup@users.noreply.github.com'
     Assert-LastExitCode 'Configuring the backup Git email'
+    Add-BackupCaptureToGit -Checkout $checkout -CaptureRelative "$backupPath/$captureName"
     git -C $checkout add -- $backupPath
     Assert-LastExitCode 'Staging the encrypted server backup'
+    Add-BackupCatalogToGit -Checkout $checkout -CatalogRelativePaths @("$backupPath/LATEST.txt", "$backupPath/index.json")
     git -C $checkout commit -m "Backup $($env:GITHUB_REPOSITORY) at $($env:POWERFORGE_SOURCE_SHA)"
     Assert-LastExitCode 'Committing the encrypted server backup'
 
@@ -305,6 +316,7 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
         Update-BackupCatalog -TargetRoot $targetRoot -TargetRelative $backupPath -KeepLatestInTree $keepLatestInTree
         git -C $checkout add -- $backupPath
         Assert-LastExitCode 'Restaging retained backup captures'
+        Add-BackupCatalogToGit -Checkout $checkout -CatalogRelativePaths $generatedCatalogPaths
 
         git -C $checkout diff --cached --quiet "origin/$backupBranch"
         $diffFromOrigin = $LASTEXITCODE
@@ -328,12 +340,19 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
         }
 
         git -C $checkout push origin "HEAD:$backupBranch"
-        if ($LASTEXITCODE -eq 0) {
+        $pushExitCode = $LASTEXITCODE
+        Invoke-GitWithRetry -Operation 'Confirming the backup branch' -Arguments @(
+            '-C', $checkout, 'fetch', '--no-tags', 'origin',
+            "+refs/heads/${backupBranch}:refs/remotes/origin/${backupBranch}")
+        if (Test-BackupPublicationAccepted -Checkout $checkout -Upstream "origin/$backupBranch") {
+            git -C $checkout reset --hard "origin/$backupBranch" > $null
+            Assert-LastExitCode 'Inspecting the accepted backup publication'
             $publishedCommit = (git -C $checkout rev-parse HEAD).Trim()
-            Assert-LastExitCode 'Resolving the published backup commit'
+            Assert-LastExitCode 'Resolving the accepted backup commit'
             $published = $true
             break
         }
+        if ($pushExitCode -eq 0) { throw 'Backup push returned success but the remote branch does not contain its commit.' }
         Start-Sleep -Seconds ($attempt * 5)
     }
     if (-not $published) {
@@ -344,6 +363,10 @@ exec /usr/bin/ssh -F "${POWERFORGE_SERVER_SSH_CONFIG:?}" "$@"
         throw 'Unable to resolve the published backup commit.'
     }
     $publishedCapturePath = "$backupPath/$captureName"
+    foreach ($relative in @("$backupPath/LATEST.txt", "$backupPath/index.json")) {
+        git -C $checkout cat-file -e "${publishedCommit}:$relative" 2>$null
+        Assert-LastExitCode "Checking published backup catalog $relative"
+    }
     $publishedCaptureEntry = [string](git -C $checkout ls-tree --name-only $publishedCommit -- $publishedCapturePath)
     Assert-LastExitCode 'Checking whether the published commit retained this capture'
     $publishedCaptureName = if ([string]::Equals($publishedCaptureEntry.Trim(), $publishedCapturePath, [StringComparison]::Ordinal)) {

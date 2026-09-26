@@ -54,6 +54,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(netTenInput, "public static class NetTenOnly { public const int Changed = 1; }");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 Targets =
@@ -130,6 +131,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(selectedPlatformInput, "public static class Windows19041Only { public const int Changed = 1; }");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 Targets = [CreateContextTarget("App", appProject, sign: true, framework: "net10.0-windows")]
@@ -210,6 +212,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(netNineInput, "public static class NetNineOnly { public const int Changed = 1; }");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 Targets = [CreateContextTarget("App", appProject, sign: true)]

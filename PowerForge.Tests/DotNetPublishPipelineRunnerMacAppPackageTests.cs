@@ -178,6 +178,7 @@ public sealed class DotNetPublishPipelineRunnerMacAppPackageTests
             string package = Path.Combine(root, "artifacts", "OfficeIMO-Studio.zip");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Installers = new[]
                 {

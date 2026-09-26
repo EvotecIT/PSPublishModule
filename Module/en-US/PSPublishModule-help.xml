@@ -41467,7 +41467,8 @@ New-ConfigurationDotNetTarget, New-ConfigurationDotNetInstaller, and New-Configu
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>NoBuildInPublish</maml:name>
           <maml:description>
-            <maml:para>Uses --no-build during publish.</maml:para>
+            <maml:para>Allows --no-build in controlled-source mode or when the invocation explicitly skips build.&#xD;
+Normal publishing rebuilds even when this setting is true.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
           <dev:type>
@@ -41608,6 +41609,18 @@ New-ConfigurationDotNetTarget, New-ConfigurationDotNetInstaller, and New-Configu
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>UseControlledSourceProvenance</maml:name>
+          <maml:description>
+            <maml:para>Enables optional controlled-checkout verification of evaluated build inputs.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
@@ -41710,7 +41723,8 @@ New-ConfigurationDotNetTarget, New-ConfigurationDotNetInstaller, and New-Configu
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>NoBuildInPublish</maml:name>
         <maml:description>
-          <maml:para>Uses --no-build during publish.</maml:para>
+          <maml:para>Allows --no-build in controlled-source mode or when the invocation explicitly skips build.&#xD;
+Normal publishing rebuilds even when this setting is true.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
         <dev:type>
@@ -41847,6 +41861,18 @@ New-ConfigurationDotNetTarget, New-ConfigurationDotNetInstaller, and New-Configu
         <command:parameterValue required="false" variableLength="false">DotNetPublishTarget[]</command:parameterValue>
         <dev:type>
           <maml:name>DotNetPublishTarget[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>UseControlledSourceProvenance</maml:name>
+        <maml:description>
+          <maml:para>Enables optional controlled-checkout verification of evaluated build inputs.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+        <dev:type>
+          <maml:name>Boolean</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

@@ -443,6 +443,10 @@ jobs:
         shell: bash
         run: bash Deployment/Linux/tests/powerforge-service-deploy-ssh-fixture.sh
 
+      - name: Test host-initiated Linux service artifact pull
+        shell: bash
+        run: sudo bash Deployment/Linux/tests/powerforge-service-artifact-pull-fixture.sh
+
       - name: Test bounded Linux service deployment diagnostics
         shell: pwsh
         run: pwsh -NoLogo -NoProfile -File Deployment/Linux/tests/powerforge-ssh-diagnostic-fixture.ps1
