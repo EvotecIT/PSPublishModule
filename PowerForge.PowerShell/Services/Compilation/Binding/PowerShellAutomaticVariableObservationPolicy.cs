@@ -7,16 +7,21 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellAutomaticVariableObservationPolicy
 {
-    internal static bool Observes(Ast syntax, params string[] names)
+    internal static bool ObservesWithin(Ast syntax, params string[] names)
     {
         var observedNames = names.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        Ast root = syntax;
-        while (root.Parent is not null && root is not FunctionDefinitionAst) root = root.Parent;
-        if (root is FunctionDefinitionAst function) root = function.Body;
-        return root.FindAll(
+        return syntax.FindAll(
             node => node is VariableExpressionAst variable &&
                     observedNames.Contains(variable.VariablePath.UserPath) &&
                     !PowerShellAssignmentTargetPolicy.IsDirectAssignmentTarget(variable),
             searchNestedScriptBlocks: true).Any();
+    }
+
+    internal static bool Observes(Ast syntax, params string[] names)
+    {
+        Ast root = syntax;
+        while (root.Parent is not null && root is not FunctionDefinitionAst) root = root.Parent;
+        if (root is FunctionDefinitionAst function) root = function.Body;
+        return ObservesWithin(root, names);
     }
 }

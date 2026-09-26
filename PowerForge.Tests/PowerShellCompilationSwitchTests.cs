@@ -220,6 +220,22 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Analyze_DoesNotAttributeLaterCatchItemToScalarSwitch()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-SwitchThenCatch { param([string] $Value) switch ($Value) { 'a' { 'yes' } default { 'no' } }; try { throw [System.Exception]::new('boom') } catch { $caught = [string] $_ } }");
+
+        var unit = Assert.Single(Assert.Single(
+            new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath)).Files).Units);
+
+        Assert.False(unit.IsCompilable);
+        Assert.DoesNotContain(unit.Diagnostics, diagnostic =>
+            diagnostic.Message.Contains("Scalar switch whose", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(unit.Diagnostics, diagnostic =>
+            diagnostic.Message.Contains("Variable '$_' requires dynamic PowerShell scope", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Build_TypedLibraryUsesPowerShellCultureSemanticsForUnicodeSwitch()
     {
         using var fixture = ArtifactFixture.Create(
