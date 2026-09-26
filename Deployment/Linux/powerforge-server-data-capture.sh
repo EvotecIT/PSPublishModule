@@ -48,6 +48,22 @@ paths_overlap() {
   [[ "$1" == "$2" || "$1" == "$2/"* || "$2" == "$1/"* ]]
 }
 
+assert_root_controlled_ancestry() {
+  local current="$1" leaf="$1" mode
+  while :; do
+    [[ "$($stat_bin -c '%u' -- "$current")" == '0' ]] || die "export ancestry must be owned by root: $current"
+    mode="$($stat_bin -c '%a' -- "$current")"
+    if (( (8#$mode & 0022) != 0 )); then
+      if [[ "$current" == "$leaf" ]] || (( (8#$mode & 01000) == 0 )); then
+        die "export ancestry must not be writable by non-root accounts: $current"
+      fi
+    fi
+    [[ "$current" != '/' ]] || break
+    current="${current%/*}"
+    [[ -n "$current" ]] || current='/'
+  done
+}
+
 [[ "${EUID}" -eq 0 ]] || die 'capture must run as root'
 [[ "$#" -eq 1 ]] || die 'usage: powerforge-server-data-capture <server-recovery-manifest.json>'
 umask 0027
@@ -114,6 +130,13 @@ export_parent="${export_root%/*}"
 [[ -n "$export_parent" ]] || export_parent='/'
 [[ -d "$export_parent" && ! -L "$export_parent" && "$($readlink_bin -f -- "$export_parent")" == "$export_parent" ]] ||
   die 'export root parent must be a canonical non-link directory'
+# An existing root-owned leaf can safely have a sticky shared ancestor. A new
+# leaf requires a protected parent so another account cannot precreate it.
+if [[ -e "$export_root" || -L "$export_root" ]]; then
+  assert_root_controlled_ancestry "$export_root"
+else
+  assert_root_controlled_ancestry "$export_parent"
+fi
 if [[ -e "$export_root" || -L "$export_root" ]]; then
   [[ -d "$export_root" && ! -L "$export_root" && "$($readlink_bin -f -- "$export_root")" == "$export_root" ]] ||
     die 'existing export root must be a canonical non-link directory'
@@ -121,6 +144,7 @@ fi
 if [[ -e "$export_root/snapshots" || -L "$export_root/snapshots" ]]; then
   [[ -d "$export_root/snapshots" && ! -L "$export_root/snapshots" && "$($readlink_bin -f -- "$export_root/snapshots")" == "$export_root/snapshots" ]] ||
     die 'existing export snapshot root must be a canonical non-link directory'
+  assert_root_controlled_ancestry "$export_root/snapshots"
 fi
 install -d -m 0750 -o root -g "$export_group" "$export_root" "$export_root/snapshots"
 [[ -d "$export_root" && ! -L "$export_root" && "$($readlink_bin -f -- "$export_root")" == "$export_root" ]] ||
@@ -167,7 +191,16 @@ install -d -m 0700 -o root -g root "$work/databases"
 database_ids=()
 sqlite_paths=()
 sqlite_accounts=()
+sqlite_identities=()
 declare -A seen_database_ids=()
+# Decode every collection completely before capture. Process substitution would hide
+# jq failure after an earlier valid row and could publish an incomplete READY snapshot.
+database_rows="$($jq_bin -r '.durableBackup.databases[] | [.id, .provider, .database, (.runAs // "-"), (.required // false)] | @tsv' "$manifest")" ||
+  die 'database manifest decoding failed'
+encrypted_rows="$($jq_bin -r '.durableBackup.encryptedFiles[] | [.target, (.required // false)] | @tsv' "$manifest")" ||
+  die 'encrypted-file manifest decoding failed'
+artifact_rows="$($jq_bin -r '.durableBackup.artifactStores[] | [.id, .path, (.required // false)] | @tsv' "$manifest")" ||
+  die 'artifact-store manifest decoding failed'
 while IFS=$'\t' read -r id provider database run_as required; do
   assert_identifier "$id"
   [[ ! -v seen_database_ids["$id"] ]] || die "duplicate database id: $id"
@@ -208,6 +241,13 @@ while IFS=$'\t' read -r id provider database run_as required; do
       fi
       [[ -f "$database" && ! -L "$database" && "$($readlink_bin -f -- "$database")" == "$database" ]] ||
         die "SQLite source must be a canonical non-link file: $database"
+      # WAL/journal paths may disappear when the online backup closes its connection.
+      # Retain their identities so an artifact hard link remains detectable afterward.
+      for sqlite_file in "$database" "$database"-wal "$database"-shm "$database"-journal; do
+        if [[ -f "$sqlite_file" && ! -L "$sqlite_file" ]]; then
+          sqlite_identities+=("$($stat_bin -c '%d:%i' -- "$sqlite_file")")
+        fi
+      done
       install -d -m 0711 -o root -g root "$work/sqlite"
       install -d -m 0700 -o "$run_as" "$work/sqlite/$id"
       staging_path="$work/sqlite/$id/backup.sqlite"
@@ -223,13 +263,15 @@ while IFS=$'\t' read -r id provider database run_as required; do
     *) die "unsupported database provider for $id: $provider" ;;
   esac
   database_ids+=("$id")
-done < <("$jq_bin" -r '.durableBackup.databases[] | [.id, .provider, .database, (.runAs // "-"), (.required // false)] | @tsv' "$manifest")
+done <<<"$database_rows"
 (( ${#database_ids[@]} > 0 )) || die 'durable capture did not produce any database dump'
 
 if [[ -n "$pg_dump_bin" ]]; then
   install -d -m 0711 -o root -g root "$work/postgresql"
   install -d -m 0700 -o postgres -g postgres "$work/postgresql/globals"
-  "$runuser_bin" -u postgres -- "$pg_dumpall_bin" --globals-only >"$work/postgresql/globals/globals.sql"
+  # Open the output as postgres too: root redirection inside its writable
+  # staging directory would follow a link planted by a concurrent postgres process.
+  "$runuser_bin" -u postgres -- "$pg_dumpall_bin" --globals-only --file="$work/postgresql/globals/globals.sql"
   install -d -m 0700 -o root -g root "$work/postgresql/globals"
   [[ -s "$work/postgresql/globals/globals.sql" && -f "$work/postgresql/globals/globals.sql" && ! -L "$work/postgresql/globals/globals.sql" ]] || die 'PostgreSQL globals dump is missing or unsafe'
   install -m 0600 -o root -g root -- "$work/postgresql/globals/globals.sql" "$work/databases/postgresql-globals.sql"
@@ -238,6 +280,7 @@ fi
 
 tar_args=(-C "$work" databases)
 encrypted_paths=()
+encrypted_identities=()
 while IFS=$'\t' read -r path required; do
   assert_absolute_path "$path"
   [[ "$required" == 'true' || "$required" == 'false' ]] || die "invalid required flag for encrypted file: $path"
@@ -248,8 +291,9 @@ while IFS=$'\t' read -r path required; do
   fi
   [[ -f "$path" && ! -L "$path" ]] || die "encrypted path must be a regular non-link file: $path"
   [[ "$($readlink_bin -f -- "$path")" == "$path" ]] || die "encrypted path must be canonical: $path"
+  encrypted_identities+=("$($stat_bin -c '%d:%i' -- "$path")")
   tar_args+=(-C / "${path#/}")
-done < <("$jq_bin" -r '.durableBackup.encryptedFiles[] | [.target, (.required // false)] | @tsv' "$manifest")
+done <<<"$encrypted_rows"
 
 for sqlite_path in "${sqlite_paths[@]}"; do
   for encrypted_path in "${encrypted_paths[@]}"; do
@@ -286,6 +330,17 @@ while IFS=$'\t' read -r id source required; do
   [[ "$($readlink_bin -f -- "$source")" == "$source" ]] || die "artifact store must be canonical: $source"
   unsafe_source_entry="$(find "$source" -mindepth 1 ! -type f ! -type d -print -quit)"
   [[ -z "$unsafe_source_entry" ]] || die "artifact store contains a link or special entry: $unsafe_source_entry"
+  find "$source" -type f -printf '%D:%i\n' >"$work/artifact-inodes" || die "artifact identity scan failed: $source"
+  for sqlite_identity in "${sqlite_identities[@]}"; do
+    if grep -Fx "$sqlite_identity" "$work/artifact-inodes" >/dev/null; then
+      die "artifact store contains a hard link to live SQLite data: $source"
+    fi
+  done
+  for encrypted_identity in "${encrypted_identities[@]}"; do
+    if grep -Fx "$encrypted_identity" "$work/artifact-inodes" >/dev/null; then
+      die "artifact store contains a hard link to directly encrypted data: $source"
+    fi
+  done
   # A database writer must not be able to add a sensitive hard link after the scan.
   for sqlite_account in "${sqlite_accounts[@]}"; do
     sqlite_uid="$(id -u "$sqlite_account")"
@@ -304,13 +359,20 @@ while IFS=$'\t' read -r id source required; do
       artifact_parent="${artifact_parent%/*}"
       [[ -n "$artifact_parent" ]] || artifact_parent='/'
     done
-    while IFS= read -r -d '' artifact_directory; do
-      [[ "$($stat_bin -c '%u' "$artifact_directory")" != "$sqlite_uid" ]] ||
-        die "SQLite account owns artifact-store directory: $sqlite_account and $artifact_directory"
-      if "$runuser_bin" -u "$sqlite_account" -- test -w "$artifact_directory"; then
-        die "SQLite account can modify artifact-store directory: $sqlite_account and $artifact_directory"
-      fi
-    done < <(find "$source" -mindepth 1 -type d -print0)
+    owned_entry="$(find "$source" -mindepth 1 -uid "$sqlite_uid" -print -quit)" || die "artifact ownership scan failed: $source"
+    [[ -z "$owned_entry" ]] || die "SQLite account owns artifact-store entry: $sqlite_account and $owned_entry"
+    find "$source" -mindepth 1 -print0 >"$work/artifact-entries" || die "artifact entry scan failed: $source"
+    # One unprivileged process tests effective access (including ACLs), rather
+    # than starting a process for every payload file in a large release store.
+    # shellcheck disable=SC2016 # Variables belong to the unprivileged Bash process.
+    if ! "$runuser_bin" -u "$sqlite_account" -- /bin/bash --noprofile --norc -c '
+      while IFS= read -r -d "" entry; do
+        if [[ -w "$entry" ]]; then printf "%s\n" "$entry" >&2; exit 1; fi
+      done
+      exit 0
+    ' <"$work/artifact-entries"; then
+      die "SQLite account can modify artifact-store entry: $sqlite_account"
+    fi
   done
   for encrypted_path in "${encrypted_paths[@]}"; do
     [[ -f "$encrypted_path" && ! -L "$encrypted_path" ]] || continue
@@ -335,7 +397,7 @@ while IFS=$'\t' read -r id source required; do
   fi
   "$rsync_bin" "${rsync_args[@]}" "$source/" "$destination/"
   artifact_ids+=("$id")
-done < <("$jq_bin" -r '.durableBackup.artifactStores[] | [.id, .path, (.required // false)] | @tsv' "$manifest")
+done <<<"$artifact_rows"
 (( ${#artifact_ids[@]} > 0 )) || die 'durable capture did not export any artifact store'
 
 unsafe_snapshot_entry="$(find "$partial" -mindepth 1 ! -type f ! -type d -print -quit)"
@@ -365,7 +427,7 @@ find "$partial" -type d -exec chmod 0750 {} +
 find "$partial" -type f -exec chmod 0640 {} +
 (
   cd "$partial"
-  find . -type f ! -name SHA256SUMS ! -name READY -print0 |
+  find . -type f ! -path ./SHA256SUMS ! -path ./READY -print0 |
     sort -z |
     xargs -0 "$sha256_bin" >"$checksum_temp"
   mv -- "$checksum_temp" SHA256SUMS
