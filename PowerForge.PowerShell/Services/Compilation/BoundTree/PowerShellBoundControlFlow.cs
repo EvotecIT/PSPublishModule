@@ -156,6 +156,12 @@ internal enum PowerShellBoundSwitchMatchMode
     Regex
 }
 
+internal enum PowerShellBoundSwitchInputKind
+{
+    Scalar,
+    NativeCommandResults
+}
+
 internal sealed class PowerShellBoundSwitchStatement : PowerShellBoundStatement
 {
     internal PowerShellBoundSwitchStatement(
@@ -164,17 +170,23 @@ internal sealed class PowerShellBoundSwitchStatement : PowerShellBoundStatement
         PowerShellBoundSwitchClause[] clauses,
         PowerShellBoundBlock? defaultBlock,
         PowerShellBoundSwitchMatchMode matchMode,
-        bool caseSensitive)
+        bool caseSensitive,
+        PowerShellBoundSwitchInputKind inputKind = PowerShellBoundSwitchInputKind.Scalar)
         : base(
             span,
-            clauses.Aggregate(value.Effects | (defaultBlock?.Effects ?? PowerShellSemanticEffect.None), static (effects, clause) => effects | clause.Value.Effects | clause.Body.Effects),
-            clauses.Aggregate(value.Capabilities | (defaultBlock?.Capabilities ?? PowerShellRequiredCapability.None), static (capabilities, clause) => capabilities | clause.Value.Capabilities | clause.Body.Capabilities))
+            clauses.Aggregate(value.Effects | (defaultBlock?.Effects ?? PowerShellSemanticEffect.None) |
+                PowerShellLoopInterruptContract.Effects(inputKind == PowerShellBoundSwitchInputKind.NativeCommandResults),
+                static (effects, clause) => effects | clause.Value.Effects | clause.Body.Effects),
+            clauses.Aggregate(value.Capabilities | (defaultBlock?.Capabilities ?? PowerShellRequiredCapability.None) |
+                PowerShellLoopInterruptContract.Capabilities(inputKind == PowerShellBoundSwitchInputKind.NativeCommandResults),
+                static (capabilities, clause) => capabilities | clause.Value.Capabilities | clause.Body.Capabilities))
     {
         Value = value;
         Clauses = clauses;
         DefaultBlock = defaultBlock;
         MatchMode = matchMode;
         CaseSensitive = caseSensitive;
+        InputKind = inputKind;
     }
 
     internal PowerShellBoundExpression Value { get; }
@@ -182,6 +194,7 @@ internal sealed class PowerShellBoundSwitchStatement : PowerShellBoundStatement
     internal PowerShellBoundBlock? DefaultBlock { get; }
     internal PowerShellBoundSwitchMatchMode MatchMode { get; }
     internal bool CaseSensitive { get; }
+    internal PowerShellBoundSwitchInputKind InputKind { get; }
 }
 
 internal sealed class PowerShellBoundThrowStatement : PowerShellBoundStatement

@@ -135,7 +135,8 @@ internal sealed class PowerShellLoweredSwitchStatement : PowerShellLoweredStatem
         PowerShellLoweredSwitchClause[] clauses,
         PowerShellLoweredStatement[]? defaultStatements,
         PowerShellBoundSwitchMatchMode matchMode,
-        bool caseSensitive)
+        bool caseSensitive,
+        PowerShellBoundSwitchInputKind inputKind = PowerShellBoundSwitchInputKind.Scalar)
         : base(span)
     {
         Value = value;
@@ -143,6 +144,7 @@ internal sealed class PowerShellLoweredSwitchStatement : PowerShellLoweredStatem
         DefaultStatements = defaultStatements is null ? null : new PowerShellImmutableArray<PowerShellLoweredStatement>(defaultStatements);
         MatchMode = matchMode;
         CaseSensitive = caseSensitive;
+        InputKind = inputKind;
     }
 
     internal PowerShellLoweredExpression Value { get; }
@@ -150,6 +152,7 @@ internal sealed class PowerShellLoweredSwitchStatement : PowerShellLoweredStatem
     internal PowerShellImmutableArray<PowerShellLoweredStatement>? DefaultStatements { get; }
     internal PowerShellBoundSwitchMatchMode MatchMode { get; }
     internal bool CaseSensitive { get; }
+    internal PowerShellBoundSwitchInputKind InputKind { get; }
 }
 
 internal sealed class PowerShellLoweredThrowStatement : PowerShellLoweredStatement

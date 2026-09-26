@@ -4,6 +4,61 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void NativeCommandResultSwitchPreservesIterationAndFailure(string framework, string host)
+    {
+        const string source = """
+            function Get-SwitchInput {
+                [CmdletBinding()] param([string]$Mode)
+                if ($Mode -eq 'Zero') { return }
+                if ($Mode -eq 'Null') { $null; return }
+                if ($Mode -eq 'Many') { 'a'; 'b'; 'a'; return }
+                if ($Mode -eq 'Array') { ,@('a','b'); return }
+                if ($Mode -eq 'Numeric') { 1; return }
+                if ($Mode -eq 'Upper') { 'A'; return }
+                if ($Mode -eq 'PartialFail') { 'a'; throw 'stopped' }
+                'a'
+            }
+            function Get-SwitchResult {
+                [CmdletBinding()] param([string]$Mode)
+                switch (Get-SwitchInput -Mode $Mode) {
+                    'a' { 'first' }
+                    'a' { 'second' }
+                    'b' { 'bee'; break }
+                    '1' { 'number' }
+                    '' { 'null-match' }
+                    default { 'other' }
+                }
+            }
+            Export-ModuleMember -Function Get-SwitchResult
+            """;
+        using var fixture = ArtifactFixture.Create(source, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.NativeStreamSwitch", PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries, entry => entry.Name == "Get-SwitchResult");
+        Assert.True(unit.EmittedClrMethod, string.Join(" | ", unit.DiagnosticChain.Select(cause => cause.Message)));
+        Assert.Equal(1, unit.RuntimeCommandRegions);
+        const string probe = """
+            foreach($mode in 'Zero','Null','One','Many','Array','Numeric','Upper','PartialFail') {
+                $values=@(); $caught=$null
+                try { $values=@(Get-SwitchResult -Mode $mode) } catch { $caught=$_.FullyQualifiedErrorId }
+                [pscustomobject]@{mode=$mode;values=@($values);caught=$caught} | ConvertTo-Json -Compress -Depth 5
+            }
+            """;
+        var original = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+            fixture.RootPath, "stream-switch-original");
+        var compiled = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
+            fixture.RootPath, "stream-switch-compiled");
+        Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
+        Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
+        Assert.Equal(original.StandardOutput, compiled.StandardOutput);
+        Assert.Equal(original.StandardError, compiled.StandardError);
+    }
+
     [Fact]
     public void NativeLiteralCommandValuesDoNotWidenStrictAdmission()
     {

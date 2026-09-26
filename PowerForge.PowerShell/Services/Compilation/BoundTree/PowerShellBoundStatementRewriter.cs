@@ -26,7 +26,7 @@ internal static class PowerShellBoundStatementRewriter
                 selection.Span, selection.Value,
                 selection.Clauses.Select(clause => new PowerShellBoundSwitchClause(clause.Value, rewriteBlock(clause.Body))).ToArray(),
                 selection.DefaultBlock is null ? null : rewriteBlock(selection.DefaultBlock),
-                selection.MatchMode, selection.CaseSensitive),
+                selection.MatchMode, selection.CaseSensitive, selection.InputKind),
             PowerShellBoundTryStatement attempted => new PowerShellBoundTryStatement(
                 attempted.Span, rewriteBlock(attempted.Body),
                 attempted.Catches.Select(clause => new PowerShellBoundCatchClause(clause.ExceptionTypes.ToArray(), rewriteBlock(clause.Body))).ToArray(),

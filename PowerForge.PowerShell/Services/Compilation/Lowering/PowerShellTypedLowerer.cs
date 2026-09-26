@@ -531,7 +531,8 @@ internal sealed partial class PowerShellTypedLowerer
                     LowerStatements(clause.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities))).ToArray(),
                 switchStatement.DefaultBlock is null ? null : LowerStatements(switchStatement.DefaultBlock, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
                 switchStatement.MatchMode,
-                switchStatement.CaseSensitive),
+                switchStatement.CaseSensitive,
+                switchStatement.InputKind),
             PowerShellBoundThrowStatement thrown => new PowerShellLoweredThrowStatement(
                 thrown.Span,
                 thrown.Expression is null ? null : LowerExpression(thrown.Expression, functions, names, targetCapabilities),

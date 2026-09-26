@@ -196,11 +196,48 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var prefix = new string(' ', indent * 4);
         var valueIdentifier = getTemporaryIdentifier("switch_value");
         var matchedIdentifier = getTemporaryIdentifier("switch_matched");
+        if (statement.InputKind == PowerShellBoundSwitchInputKind.NativeCommandResults)
+        {
+            if (statement.Value is not PowerShellLoweredNativeCommandExpression command)
+                throw new InvalidOperationException("Native command-result switch requires its authored command capture.");
+            var recordsIdentifier = getTemporaryIdentifier("switch_records");
+            var recordIdentifier = getTemporaryIdentifier("switch_record");
+            builder.Append(prefix).Append("var ").Append(recordsIdentifier)
+                .AppendLine(" = new global::System.Collections.Generic.List<object?>();");
+            builder.Append(prefix).Append(EmitNativeCommandRecords(command, recordsIdentifier + ".Add")).AppendLine(";");
+            builder.Append(prefix).Append("foreach (object? ").Append(recordIdentifier)
+                .Append(" in ").Append(recordsIdentifier).AppendLine(")");
+            builder.Append(prefix).AppendLine("{");
+            builder.Append(prefix).AppendLine("    __checkLoopInterrupts();");
+            builder.Append(prefix).Append("    string ").Append(valueIdentifier)
+                .Append(" = __nativeFunction.StringifySwitchValue(").Append(recordIdentifier).AppendLine(");");
+            builder.Append(prefix).Append("    bool ").Append(matchedIdentifier).AppendLine(" = false;");
+            EmitSwitchClauses(builder, statement, indent + 1, valueIdentifier, matchedIdentifier,
+                getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+            builder.Append(prefix).AppendLine("}");
+            return;
+        }
         builder.Append(prefix).Append(PowerShellCSharpSymbolRenderer.TypeName(statement.Value.ClrType)).Append(' ')
             .Append(valueIdentifier).Append(" = ").Append(EmitExpression(statement.Value)).AppendLine(";");
         builder.Append(prefix).Append("bool ").Append(matchedIdentifier).AppendLine(" = false;");
         builder.Append(prefix).AppendLine("do");
         builder.Append(prefix).AppendLine("{");
+        EmitSwitchClauses(builder, statement, indent, valueIdentifier, matchedIdentifier,
+            getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+        builder.Append(prefix).AppendLine("}");
+        builder.Append(prefix).AppendLine("while (false);");
+        if (SwitchAlwaysReturns(statement))
+        {
+            builder.Append(prefix).AppendLine(
+                "throw new global::System.InvalidOperationException(\"An exhaustive PowerShell switch completed without returning.\");");
+        }
+    }
+
+    private void EmitSwitchClauses(StringBuilder builder, PowerShellLoweredSwitchStatement statement, int indent,
+        string valueIdentifier, string matchedIdentifier, Func<string, string> getTemporaryIdentifier,
+        string? discardHelper, ICollection<PowerShellCompilationSourceMapEntry> sourceMap, string? successOutputSink)
+    {
+        var prefix = new string(' ', indent * 4);
         foreach (var clause in statement.Clauses)
         {
             var clauseSource = EmitExpression(clause.Value);
@@ -208,7 +245,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             {
                 PowerShellBoundSwitchMatchMode.Regex =>
                     $"global::System.Text.RegularExpressions.Regex.IsMatch(({valueIdentifier} ?? string.Empty), ({clauseSource} ?? string.Empty), global::System.Text.RegularExpressions.RegexOptions.{(statement.CaseSensitive ? "None" : "IgnoreCase")})",
-                _ when statement.Value.ClrType == typeof(string) =>
+                _ when statement.InputKind == PowerShellBoundSwitchInputKind.NativeCommandResults ||
+                       statement.Value.ClrType == typeof(string) =>
                     $"global::System.String.Equals({valueIdentifier}, {clauseSource}, global::System.StringComparison.{(statement.CaseSensitive ? "InvariantCulture" : "InvariantCultureIgnoreCase")})",
                 _ => $"{valueIdentifier} == {clauseSource}"
             };
@@ -224,13 +262,6 @@ internal sealed partial class PowerShellBoundCSharpBackend
             builder.Append(prefix).Append("    if (!").Append(matchedIdentifier).AppendLine(")");
             EmitBlock(builder, statement.DefaultStatements, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap,
                 successOutputSink: successOutputSink);
-        }
-        builder.Append(prefix).AppendLine("}");
-        builder.Append(prefix).AppendLine("while (false);");
-        if (SwitchAlwaysReturns(statement))
-        {
-            builder.Append(prefix).AppendLine(
-                "throw new global::System.InvalidOperationException(\"An exhaustive PowerShell switch completed without returning.\");");
         }
     }
 

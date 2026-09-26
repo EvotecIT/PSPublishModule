@@ -52,6 +52,21 @@ internal sealed partial class PowerShellSemanticBinder
             targetFramework: targetFramework,
             capabilities: capabilities);
         if (value is null) return null;
+        var nativeCommandResults = value is PowerShellBoundNativeCommandExpression &&
+            matchMode == PowerShellBoundSwitchMatchMode.Exact &&
+            statement.Condition is PipelineAst commandPipeline &&
+            PowerShellCommandRegionSemanticBinder.IsNativeLiteralCommandValue(commandPipeline, capabilities);
+        if (nativeCommandResults &&
+            (!PowerShellLoopInterruptContract.IsAvailable(capabilities) ||
+             statement.Clauses.Any(clause => clause.Item1 is not StringConstantExpressionAst ||
+                 !IsClosedNativeCommandSwitchClause(clause.Item2)) ||
+             statement.Default is not null && !IsClosedNativeCommandSwitchClause(statement.Default)))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2305",
+                "Native command-result switch requires exact literal-string clauses with closed output bodies and a cooperative host iterator.",
+                PowerShellSourceParser.GetSpan(document, statement.Extent)));
+            return null;
+        }
         // Native invocation storage is intentionally object-valued. An authored
         // [string] parameter still has a PowerShell-owned conversion constraint,
         // so a read of that exact parameter can be used as a scalar string here.
@@ -72,7 +87,7 @@ internal sealed partial class PowerShellSemanticBinder
                 new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Explicit,
                     "The invocation-owned parameter retains its authored String constraint."), value);
 
-        var valueType = value.Type.ClrType;
+        var valueType = nativeCommandResults ? typeof(string) : value.Type.ClrType;
         if (matchMode == PowerShellBoundSwitchMatchMode.Regex && valueType != typeof(string))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
@@ -149,8 +164,15 @@ internal sealed partial class PowerShellSemanticBinder
             clauses.ToArray(),
             defaultBlock,
             matchMode,
-            (statement.Flags & SwitchFlags.CaseSensitive) != 0);
+            (statement.Flags & SwitchFlags.CaseSensitive) != 0,
+            nativeCommandResults ? PowerShellBoundSwitchInputKind.NativeCommandResults : PowerShellBoundSwitchInputKind.Scalar);
     }
+
+    private static bool IsClosedNativeCommandSwitchClause(StatementBlockAst body)
+        => body.Traps is null or { Count: 0 } && body.Statements.All(statement =>
+            statement is BreakStatementAst { Label: null } ||
+            statement is PipelineAst { PipelineElements.Count: 1 } pipeline &&
+            pipeline.PipelineElements[0] is CommandExpressionAst { Expression: StringConstantExpressionAst });
 
     private static bool CanRecoverNativeStringParameter(SwitchStatementAst statement, string name,
         out ScriptBlockAst functionBody)

@@ -91,6 +91,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
            RequiresNativeDictionaryKeyForEach(function) ||
            RequiresNativeStatementValue(function) ||
            RequiresNativeLiteralCommandValue(function, capabilities) ||
+           RequiresNativeCommandSwitch(function, capabilities) ||
            RequiresNativeConditionalMemberCapture(function) ||
            function.Body.Find(static node => node is ArrayExpressionAst array &&
                array.SubExpression.Statements.Any(static statement => statement is AssignmentStatementAst),
@@ -129,6 +130,13 @@ internal static class PowerShellNativeFunctionBindingPolicy
             literal.KeyValuePairs.Any(pair =>
                 PowerShellCommandRegionSemanticBinder.IsNativeLiteralCommandValue(pair.Item2, capabilities)),
             searchNestedScriptBlocks: false) is not null;
+
+    private static bool RequiresNativeCommandSwitch(FunctionDefinitionAst function,
+        PowerShellCompilationCapability capabilities)
+        => PowerShellLoopInterruptContract.IsAvailable(capabilities) &&
+           function.Body.Find(node => node is SwitchStatementAst { Condition: PipelineAst pipeline } &&
+               PowerShellCommandRegionSemanticBinder.IsNativeLiteralCommandValue(pipeline, capabilities),
+               searchNestedScriptBlocks: false) is not null;
 
     private static bool RequiresNativeConditionalMemberCapture(FunctionDefinitionAst function)
         => function.Body.Find(static node => node is AssignmentStatementAst
