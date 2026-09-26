@@ -293,7 +293,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
     private static bool RequiresNativeStatementArrayCapture(FunctionDefinitionAst function)
         => function.Body.Find(static node => node is AssignmentStatementAst { Operator: TokenKind.Equals } assignment &&
             PowerShellSemanticBinder.UnwrapExpression(assignment.Right) is ArrayExpressionAst collection &&
-            collection.SubExpression.FindAll(static nested => nested is ForEachStatementAst,
+            collection.SubExpression.FindAll(static nested => nested is ForEachStatementAst or TryStatementAst,
                 searchNestedScriptBlocks: false).Any(),
             searchNestedScriptBlocks: false) is not null;
 
