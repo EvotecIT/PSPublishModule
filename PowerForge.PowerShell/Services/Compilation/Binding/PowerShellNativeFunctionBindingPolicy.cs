@@ -93,6 +93,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
            RequiresNativeLiteralCommandValue(function, capabilities) ||
            RequiresNativeCommandSwitch(function, capabilities) ||
            RequiresNativeConditionalMemberCapture(function) ||
+           RequiresNativeVariableIndex(function) ||
            function.Body.Find(static node => node is ArrayExpressionAst array &&
                array.SubExpression.Statements.Any(static statement => statement is AssignmentStatementAst),
                searchNestedScriptBlocks: false) is not null ||
@@ -145,6 +146,46 @@ internal static class PowerShellNativeFunctionBindingPolicy
                 Right: IfStatementAst
             } assignment && PowerShellSemanticBinder.IsNativeConditionalMemberCaptureTarget(assignment.Left),
             searchNestedScriptBlocks: false) is not null;
+
+    /// <summary>Selects invocation-owned lookup for a locally constructed map used outside the typed index contract.</summary>
+    private static bool RequiresNativeVariableIndex(FunctionDefinitionAst function)
+    {
+        var maps = function.Body.FindAll(static node => node is AssignmentStatementAst
+            {
+                Left: VariableExpressionAst
+            } assignment && IsDictionaryLiteral(assignment.Right), searchNestedScriptBlocks: false)
+            .OfType<AssignmentStatementAst>()
+            .Select(static assignment => ((VariableExpressionAst)assignment.Left).VariablePath.ToString())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return maps.Count > 0 && function.Body.Find(node => node is IndexExpressionAst
+            {
+                Target: VariableExpressionAst target
+            } index && maps.Contains(target.VariablePath.ToString()) && RequiresInvocationOwnedMapRead(index),
+            searchNestedScriptBlocks: false) is not null;
+    }
+
+    private static bool IsDictionaryLiteral(Ast syntax)
+    {
+        var value = PowerShellSemanticBinder.UnwrapExpression(syntax);
+        return value is HashtableAst || value is ConvertExpressionAst conversion &&
+            PowerShellDictionarySemanticBinder.IsOrderedHashtableConversion(conversion);
+    }
+
+    // Preserve already-qualified typed direct returns, assignments, and
+    // indexed mutation. A map read consumed by an if condition or emitted as
+    // an ordinary statement instead needs the active PowerShell invocation.
+    private static bool RequiresInvocationOwnedMapRead(IndexExpressionAst index)
+    {
+        for (Ast current = index; current.Parent is { } parent; current = parent)
+        {
+            if (parent is ReturnStatementAst) return false;
+            if (parent is AssignmentStatementAst assignment)
+                return assignment.Parent is IfStatementAst &&
+                       assignment.Left.Find(node => ReferenceEquals(node, index), searchNestedScriptBlocks: false) is null;
+            if (parent is FunctionDefinitionAst) break;
+        }
+        return true;
+    }
 
     private static bool RequiresNativeStatementArrayCapture(FunctionDefinitionAst function)
         => function.Body.Find(static node => node is AssignmentStatementAst { Operator: TokenKind.Equals } assignment &&
