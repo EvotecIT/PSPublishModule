@@ -8,6 +8,37 @@ namespace PowerForge.Tests;
 public sealed class PowerShellCompilationExplanationTests
 {
     [Fact]
+    public void HybridExecutableExplainAttributesHostedScriptRootToArtifactShaping()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Explain", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var source = Path.Combine(root, "Date.ps1");
+            File.WriteAllText(source, "param([string] $Pattern)\nGet-Date -Format $Pattern\n");
+            var input = new PowerShellCompilationInputResolver().Resolve(source,
+                PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
+            var plan = new PowerShellCompilationAnalyzer().Analyze(input, PowerShellCompilationMode.Hybrid, "net10.0");
+            var explanation = PowerShellCompilationExplainShaper.CreateFinalExplanation(input, plan, "net10.0");
+
+            var script = Assert.Single(Assert.Single(explanation.Files).Units);
+            Assert.True(script.SemanticEligible);
+            Assert.False(script.Emitted);
+            Assert.True(script.RetainedHostedSource);
+            Assert.True(script.ShapingFallback);
+            Assert.Equal("PowerShellRuntime", script.LoweringRoute);
+            var cause = Assert.Single(script.Causes, static item =>
+                item.FeatureId == PowerShellCompilationFeatureIds.ExecutableScriptRoot);
+            Assert.Equal(PowerShellCompilationDiagnosticCode.ArtifactShaping, cause.Code);
+            Assert.Contains("hosted entry point", cause.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ExplanationIncludesFileAndDependencyCausesAndRedactsAuthoredAbsolutePaths()
     {
         const string privatePath = @"C:\Users\Alice\Private\Module.psd1";

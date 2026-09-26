@@ -106,7 +106,19 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                         diagnostic.Message,
                         diagnostic.Line,
                         diagnostic.Column))
-                    .ToArray();
+                    .ToList();
+                if (plan.Mode == PowerShellCompilationMode.Hybrid &&
+                    artifactKind == PowerShellCompilationArtifactKind.Executable &&
+                    unit.Kind == PowerShellCompilationUnitKind.Script &&
+                    unit.IsCompilable && retainedHostedSource && !emitted)
+                {
+                    diagnosticChain.Add(new PowerShellCompilationDispositionCause(
+                        PowerShellCompilationDiagnosticCode.ArtifactShaping,
+                        PowerShellCompilationFeatureIds.ExecutableScriptRoot,
+                        "Hybrid executable script statements remain in the hosted entry point; only eligible named functions are emitted as CLR methods.",
+                        unit.StartLine,
+                        1));
+                }
 
                 entries.Add(new PowerShellCompilationUnitDisposition(
                     PowerShellCompilationExplanationService.ComputeUnitId(relativePath, unit),

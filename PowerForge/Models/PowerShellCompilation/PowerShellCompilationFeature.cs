@@ -62,6 +62,8 @@ public static class PowerShellCompilationFeatureIds
     public const string BinaryCmdletShape = "binary-module.cmdlet-shape";
     /// <summary>Typed dictionary values flowing beyond supported lookup and mutation contexts.</summary>
     public const string DictionaryFlow = "collection.dictionary-flow";
+    /// <summary>Hybrid executable script entry points retained for PowerShell-owned invocation semantics.</summary>
+    public const string ExecutableScriptRoot = "artifact.executable-script-root";
 
     /// <summary>Returns a stable feature id for one statically named PowerShell command.</summary>
     public static string ForCommand(string commandName) => "command." + NormalizeSegment(commandName);
@@ -85,6 +87,8 @@ public static class PowerShellCompilationFeatureIds
                 return Parser;
             case PowerShellCompilationDiagnosticCode.UnsupportedParameterType:
                 return ParameterType;
+            case PowerShellCompilationDiagnosticCode.ArtifactShaping:
+                return "artifact.shaping";
             case PowerShellCompilationDiagnosticCode.DynamicCommandInvocation:
                 return DynamicCommand;
             case PowerShellCompilationDiagnosticCode.CommandInvocation:
