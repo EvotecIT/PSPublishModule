@@ -11,7 +11,7 @@ namespace PowerForge.Generated.Runtime
 
     public sealed partial class PowerShellNativeFunctionContext
     {
-        private NativeIteratorStorage? _foreachStorage;
+        private NativeVariableStorage? _foreachStorage;
 
         /// <summary>Saves the invocation's foreach variable before the compiled collection expression runs.</summary>
         public NativeForEachScope EnterForEach()
@@ -24,14 +24,14 @@ namespace PowerForge.Generated.Runtime
         public sealed class NativeForEachScope : IDisposable
         {
             private readonly PowerShellNativeFunctionContext _owner;
-            private readonly NativeIteratorStorage _storage;
+            private readonly NativeVariableStorage _storage;
             private readonly object? _previous;
             private bool _disposed;
 
             internal NativeForEachScope(PowerShellNativeFunctionContext owner)
             {
                 _owner = owner;
-                _storage = owner._foreachStorage ??= new NativeIteratorStorage(owner);
+                _storage = owner._foreachStorage ??= new NativeVariableStorage(owner);
                 _previous = _storage.Read.Invoke(owner.FunctionContext);
             }
 
@@ -72,18 +72,18 @@ namespace PowerForge.Generated.Runtime
         }
 
         /// <summary>Uses the invocation's tuple or dynamic storage exactly as native iterator statements do.</summary>
-        private sealed class NativeIteratorStorage
+        private sealed class NativeVariableStorage
         {
             internal readonly NativeAstOperation Read;
             internal readonly NativeAstOperation Write;
 
-            internal NativeIteratorStorage(PowerShellNativeFunctionContext owner)
+            internal NativeVariableStorage(PowerShellNativeFunctionContext owner, string name = "foreach", int? automaticIndex = null)
             {
-                Read = Compile(owner, false);
-                Write = Compile(owner, true);
+                Read = Compile(owner, name, automaticIndex, false);
+                Write = Compile(owner, name, automaticIndex, true);
             }
 
-            private static NativeAstOperation Compile(PowerShellNativeFunctionContext owner, bool write)
+            private static NativeAstOperation Compile(PowerShellNativeFunctionContext owner, string name, int? automaticIndex, bool write)
             {
                 const BindingFlags instance = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
                 const BindingFlags statics = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
@@ -95,14 +95,15 @@ namespace PowerForge.Generated.Runtime
                 var tupleBase = typeof(PSObject).Assembly.GetType("System.Management.Automation.MutableTuple", true)!;
                 var names = (Dictionary<string, int>)tupleBase.GetField("_nameToIndexMap", instance)!.GetValue(tuple)!;
                 Expression operation;
-                if (owner._optimized && names.TryGetValue("foreach", out var index))
+                if (automaticIndex.HasValue || owner._optimized && names.ContainsKey(name))
                 {
+                    var index = automaticIndex ?? names[name];
                     var slot = (Expression)native.Invoke("GetLocal", index)!;
                     operation = write ? Expression.Assign(slot, Expression.Convert(Expression.Invoke(native.RightHandSide), slot.Type)) : slot;
                 }
                 else
                 {
-                    var path = Expression.Constant(new VariablePath("foreach"));
+                    var path = Expression.Constant(new VariablePath(name));
                     var method = native.CompilerType.GetMethod(write ? "CallSetVariable" : "CallGetVariable", statics)!;
                     operation = (Expression)PowerShellNativeFunctionHost.Invoke(method, null,
                         write ? new object[] { path, Expression.Invoke(native.RightHandSide), null! } : new object[] { path, null! })!;

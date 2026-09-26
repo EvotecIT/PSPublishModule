@@ -159,7 +159,8 @@ internal enum PowerShellBoundSwitchMatchMode
 internal enum PowerShellBoundSwitchInputKind
 {
     Scalar,
-    NativeCommandResults
+    NativeCommandResults,
+    NativeRuntimeValues
 }
 
 internal sealed class PowerShellBoundSwitchStatement : PowerShellBoundStatement
@@ -175,10 +176,12 @@ internal sealed class PowerShellBoundSwitchStatement : PowerShellBoundStatement
         : base(
             span,
             clauses.Aggregate(value.Effects | (defaultBlock?.Effects ?? PowerShellSemanticEffect.None) |
-                PowerShellLoopInterruptContract.Effects(inputKind == PowerShellBoundSwitchInputKind.NativeCommandResults),
+                PowerShellLoopInterruptContract.Effects(inputKind != PowerShellBoundSwitchInputKind.Scalar) |
+                (inputKind != PowerShellBoundSwitchInputKind.Scalar ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError : PowerShellSemanticEffect.None),
                 static (effects, clause) => effects | clause.Value.Effects | clause.Body.Effects),
             clauses.Aggregate(value.Capabilities | (defaultBlock?.Capabilities ?? PowerShellRequiredCapability.None) |
-                PowerShellLoopInterruptContract.Capabilities(inputKind == PowerShellBoundSwitchInputKind.NativeCommandResults),
+                PowerShellLoopInterruptContract.Capabilities(inputKind != PowerShellBoundSwitchInputKind.Scalar) |
+                (inputKind != PowerShellBoundSwitchInputKind.Scalar ? PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost | PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None),
                 static (capabilities, clause) => capabilities | clause.Value.Capabilities | clause.Body.Capabilities))
     {
         Value = value;

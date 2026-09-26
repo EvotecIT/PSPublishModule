@@ -92,6 +92,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
            RequiresNativeStatementValue(function) ||
            RequiresNativeLiteralCommandValue(function, capabilities) ||
            RequiresNativeCommandSwitch(function, capabilities) ||
+           RequiresNativeObjectParameterSwitch(function, capabilities) ||
            RequiresNativeConditionalMemberCapture(function) ||
            RequiresNativeVariableIndex(function) ||
            RequiresNativeModuleStateStringConversion(function) ||
@@ -140,6 +141,22 @@ internal static class PowerShellNativeFunctionBindingPolicy
            function.Body.Find(node => node is SwitchStatementAst { Condition: PipelineAst pipeline } &&
                PowerShellCommandRegionSemanticBinder.IsNativeLiteralCommandValue(pipeline, capabilities),
                searchNestedScriptBlocks: false) is not null;
+
+    private static bool RequiresNativeObjectParameterSwitch(FunctionDefinitionAst function,
+        PowerShellCompilationCapability capabilities)
+    {
+        if (!PowerShellLoopInterruptContract.IsAvailable(capabilities)) return false;
+        var parameters = PowerShellParameterSyntax.GetParameters(function.Body)
+            .Where(parameter => parameter.StaticType == typeof(object))
+            .Select(parameter => parameter.Name.VariablePath.UserPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return function.Body.Find(node => node is SwitchStatementAst selection &&
+            string.IsNullOrEmpty(selection.Label) &&
+            (selection.Flags & (SwitchFlags.Regex | SwitchFlags.Wildcard | SwitchFlags.File | SwitchFlags.Parallel)) == 0 &&
+            selection.Clauses.All(clause => clause.Item1 is StringConstantExpressionAst) &&
+            selection.Condition is PipelineAst pipeline && pipeline.GetPureExpression() is VariableExpressionAst variable &&
+            variable.VariablePath.IsUnqualified && parameters.Contains(variable.VariablePath.UserPath),
+            searchNestedScriptBlocks: false) is not null;
+    }
 
     private static bool RequiresNativeConditionalMemberCapture(FunctionDefinitionAst function)
         => function.Body.Find(static node => node is AssignmentStatementAst

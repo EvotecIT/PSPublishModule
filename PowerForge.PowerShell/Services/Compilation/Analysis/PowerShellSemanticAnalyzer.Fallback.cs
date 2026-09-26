@@ -197,7 +197,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 PowerShellBoundIfStatement conditional => conditional.ElseBlock is not null &&
                     conditional.Clauses.All(static clause => BlockReturnsValue(clause.Body)) &&
                     BlockReturnsValue(conditional.ElseBlock),
-                PowerShellBoundSwitchStatement switchStatement => switchStatement.DefaultBlock is not null &&
+                PowerShellBoundSwitchStatement switchStatement => switchStatement.InputKind == PowerShellBoundSwitchInputKind.Scalar && switchStatement.DefaultBlock is not null &&
                     switchStatement.Clauses.All(static clause => BlockReturnsValue(clause.Body)) &&
                     BlockReturnsValue(switchStatement.DefaultBlock),
                 PowerShellBoundTryStatement tryStatement =>

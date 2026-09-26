@@ -25,14 +25,7 @@ internal sealed partial class PowerShellSemanticBinder
         var matchMode = (statement.Flags & SwitchFlags.Regex) != 0
             ? PowerShellBoundSwitchMatchMode.Regex
             : PowerShellBoundSwitchMatchMode.Exact;
-        if (PowerShellAutomaticVariableObservationPolicy.ObservesSwitchState(statement))
-        {
-            diagnostics.Add(new PowerShellSemanticDiagnostic(
-                "PSB2304",
-                "Scalar switch whose $_, $PSItem, or $switch automatic-variable state is observed requires PowerShell runtime semantics.",
-                PowerShellSourceParser.GetSpan(document, statement.Extent)));
-            return null;
-        }
+        var observesSwitch = PowerShellAutomaticVariableObservationPolicy.ObservesSwitchState(statement);
         if (matchMode == PowerShellBoundSwitchMatchMode.Regex &&
             PowerShellAutomaticVariableObservationPolicy.Observes(statement, "Matches"))
         {
@@ -54,6 +47,7 @@ internal sealed partial class PowerShellSemanticBinder
         if (value is null) return null;
         var nativeCommandResults = value is PowerShellBoundNativeCommandExpression &&
             matchMode == PowerShellBoundSwitchMatchMode.Exact &&
+            string.IsNullOrEmpty(statement.Label) &&
             statement.Condition is PipelineAst commandPipeline &&
             PowerShellCommandRegionSemanticBinder.IsNativeLiteralCommandValue(commandPipeline, capabilities);
         if (nativeCommandResults &&
@@ -71,7 +65,7 @@ internal sealed partial class PowerShellSemanticBinder
         // [string] parameter still has a PowerShell-owned conversion constraint,
         // so a read of that exact parameter can be used as a scalar string here.
         // Do not infer a CLR type for untyped or merely inferred native locals.
-        if (matchMode == PowerShellBoundSwitchMatchMode.Exact &&
+        if (!observesSwitch && matchMode == PowerShellBoundSwitchMatchMode.Exact &&
             value is PowerShellBoundNativeVariableExpression nativeValue &&
             UnwrapExpression(statement.Condition, preservePipeline: true) is VariableExpressionAst variable &&
             variable.VariablePath.IsUnqualified &&
@@ -87,7 +81,23 @@ internal sealed partial class PowerShellSemanticBinder
                 new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Explicit,
                     "The invocation-owned parameter retains its authored String constraint."), value);
 
-        var valueType = nativeCommandResults ? typeof(string) : value.Type.ClrType;
+        // Command conditions need success-record capture, not assignment-value
+        // collapse: one array record must remain one switch item. Only the
+        // separately qualified nativeCommandResults path owns that contract.
+        var nativeRuntimeValues = value is not PowerShellBoundNativeCommandExpression &&
+            value.Type.ClrType == typeof(object) &&
+            matchMode == PowerShellBoundSwitchMatchMode.Exact && string.IsNullOrEmpty(statement.Label) &&
+            capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+            PowerShellLoopInterruptContract.IsAvailable(capabilities) &&
+            statement.Clauses.All(clause => clause.Item1 is StringConstantExpressionAst);
+        if (observesSwitch && !nativeRuntimeValues)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2304",
+                "Scalar switch whose $_, $PSItem, or $switch automatic-variable state is observed requires PowerShell runtime semantics.",
+                PowerShellSourceParser.GetSpan(document, statement.Extent)));
+            return null;
+        }
+        var valueType = nativeCommandResults || nativeRuntimeValues ? typeof(string) : value.Type.ClrType;
         if (matchMode == PowerShellBoundSwitchMatchMode.Regex && valueType != typeof(string))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
@@ -146,11 +156,11 @@ internal sealed partial class PowerShellSemanticBinder
         }
 
         PowerShellBoundBlock? defaultBlock = null;
-        if (statement.Default is null)
+        if (statement.Default is null || nativeRuntimeValues || nativeCommandResults)
         {
             pathSymbols.Add(baselineSymbols);
         }
-        else
+        if (statement.Default is not null)
         {
             var defaultSymbols = CloneSymbols(baselineSymbols);
             defaultBlock = BindBlock(document, statement.Default, defaultSymbols, functions, diagnostics, targetFramework, capabilities);
@@ -165,6 +175,7 @@ internal sealed partial class PowerShellSemanticBinder
             defaultBlock,
             matchMode,
             (statement.Flags & SwitchFlags.CaseSensitive) != 0,
+            nativeRuntimeValues ? PowerShellBoundSwitchInputKind.NativeRuntimeValues :
             nativeCommandResults ? PowerShellBoundSwitchInputKind.NativeCommandResults : PowerShellBoundSwitchInputKind.Scalar);
     }
 

@@ -199,7 +199,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
             PowerShellBoundIfStatement conditional => conditional.ElseBlock is not null &&
                 conditional.Clauses.All(static clause => clause.Body.Statements.LastOrDefault() is { } last && AlwaysReturns(last)) &&
                 conditional.ElseBlock.Statements.LastOrDefault() is { } otherwise && AlwaysReturns(otherwise),
-            PowerShellBoundSwitchStatement switchStatement => switchStatement.DefaultBlock is not null &&
+            PowerShellBoundSwitchStatement switchStatement => switchStatement.InputKind == PowerShellBoundSwitchInputKind.Scalar && switchStatement.DefaultBlock is not null &&
                 switchStatement.Clauses.All(static clause => clause.Body.Statements.LastOrDefault() is { } last && AlwaysReturns(last)) &&
                 switchStatement.DefaultBlock.Statements.LastOrDefault() is { } otherwise && AlwaysReturns(otherwise),
             PowerShellBoundTryStatement tryStatement =>

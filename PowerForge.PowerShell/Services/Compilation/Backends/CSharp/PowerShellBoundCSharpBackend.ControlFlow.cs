@@ -196,24 +196,38 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var prefix = new string(' ', indent * 4);
         var valueIdentifier = getTemporaryIdentifier("switch_value");
         var matchedIdentifier = getTemporaryIdentifier("switch_matched");
-        if (statement.InputKind == PowerShellBoundSwitchInputKind.NativeCommandResults)
+        if (statement.InputKind != PowerShellBoundSwitchInputKind.Scalar)
         {
-            if (statement.Value is not PowerShellLoweredNativeCommandExpression command)
-                throw new InvalidOperationException("Native command-result switch requires its authored command capture.");
-            var recordsIdentifier = getTemporaryIdentifier("switch_records");
-            var recordIdentifier = getTemporaryIdentifier("switch_record");
-            builder.Append(prefix).Append("var ").Append(recordsIdentifier)
-                .AppendLine(" = new global::System.Collections.Generic.List<object?>();");
-            builder.Append(prefix).Append(EmitNativeCommandRecords(command, recordsIdentifier + ".Add")).AppendLine(";");
-            builder.Append(prefix).Append("foreach (object? ").Append(recordIdentifier)
-                .Append(" in ").Append(recordsIdentifier).AppendLine(")");
+            var scope = getTemporaryIdentifier("nativeSwitch");
+            var flow = getTemporaryIdentifier("switchTransfer");
+            builder.Append(prefix).Append("using (var ").Append(scope).AppendLine(" = __nativeFunction.EnterSwitch())");
             builder.Append(prefix).AppendLine("{");
-            builder.Append(prefix).AppendLine("    __checkLoopInterrupts();");
-            builder.Append(prefix).Append("    string ").Append(valueIdentifier)
-                .Append(" = __nativeFunction.StringifySwitchValue(").Append(recordIdentifier).AppendLine(");");
-            builder.Append(prefix).Append("    bool ").Append(matchedIdentifier).AppendLine(" = false;");
-            EmitSwitchClauses(builder, statement, indent + 1, valueIdentifier, matchedIdentifier,
-                getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+            if (statement.InputKind == PowerShellBoundSwitchInputKind.NativeCommandResults)
+            {
+                if (statement.Value is not PowerShellLoweredNativeCommandExpression command)
+                    throw new InvalidOperationException("Native command-result switch requires its authored command capture.");
+                var records = getTemporaryIdentifier("switch_records");
+                builder.Append(prefix).Append("    var ").Append(records).AppendLine(" = new global::System.Collections.Generic.List<object?>();");
+                builder.Append(prefix).Append("    ").Append(EmitNativeCommandRecords(command, records + ".Add")).AppendLine(";");
+                builder.Append(prefix).Append("    ").Append(scope).Append(".Initialize(").Append(records).AppendLine(");");
+            }
+            else
+                builder.Append(prefix).Append("    ").Append(scope).Append(".Initialize(").Append(EmitExpression(statement.Value)).AppendLine(");");
+            builder.Append(prefix).Append("    while (").Append(scope).AppendLine(".Cursor.MoveNext())");
+            builder.Append(prefix).AppendLine("    {");
+            builder.Append(prefix).AppendLine("        try");
+            builder.Append(prefix).AppendLine("        {");
+            builder.Append(prefix).AppendLine("            __checkLoopInterrupts();");
+            builder.Append(prefix).Append("            ").Append(scope).AppendLine(".SetCurrent();");
+            builder.Append(prefix).Append("            bool ").Append(matchedIdentifier).AppendLine(" = false;");
+            EmitSwitchClauses(builder, statement, indent + 2, valueIdentifier, matchedIdentifier,
+                getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink, scope);
+            builder.Append(prefix).AppendLine("        }");
+            builder.Append(prefix).Append("        catch (global::System.Management.Automation.FlowControlException ").Append(flow)
+                .Append(") when (__nativeFunction.IsSwitchTransfer(").Append(flow).AppendLine(", false)) { continue; }");
+            builder.Append(prefix).Append("        catch (global::System.Management.Automation.FlowControlException ").Append(flow)
+                .Append(") when (__nativeFunction.IsSwitchTransfer(").Append(flow).AppendLine(", true)) { break; }");
+            builder.Append(prefix).AppendLine("    }");
             builder.Append(prefix).AppendLine("}");
             return;
         }
@@ -235,7 +249,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
     private void EmitSwitchClauses(StringBuilder builder, PowerShellLoweredSwitchStatement statement, int indent,
         string valueIdentifier, string matchedIdentifier, Func<string, string> getTemporaryIdentifier,
-        string? discardHelper, ICollection<PowerShellCompilationSourceMapEntry> sourceMap, string? successOutputSink)
+        string? discardHelper, ICollection<PowerShellCompilationSourceMapEntry> sourceMap, string? successOutputSink,
+        string? nativeSwitchScope = null)
     {
         var prefix = new string(' ', indent * 4);
         foreach (var clause in statement.Clauses)
@@ -243,6 +258,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             var clauseSource = EmitExpression(clause.Value);
             var comparison = statement.MatchMode switch
             {
+                _ when nativeSwitchScope is not null => $"{nativeSwitchScope}.Matches({clauseSource}, {(statement.CaseSensitive ? "true" : "false")})",
                 PowerShellBoundSwitchMatchMode.Regex =>
                     $"global::System.Text.RegularExpressions.Regex.IsMatch(({valueIdentifier} ?? string.Empty), ({clauseSource} ?? string.Empty), global::System.Text.RegularExpressions.RegexOptions.{(statement.CaseSensitive ? "None" : "IgnoreCase")})",
                 _ when statement.InputKind == PowerShellBoundSwitchInputKind.NativeCommandResults ||
@@ -266,7 +282,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
     }
 
     private static bool SwitchAlwaysReturns(PowerShellLoweredSwitchStatement statement)
-        => statement.DefaultStatements is not null &&
+        => statement.InputKind == PowerShellBoundSwitchInputKind.Scalar && statement.DefaultStatements is not null &&
            statement.Clauses.All(static clause => StatementsAlwaysReturn(clause.Statements)) &&
            StatementsAlwaysReturn(statement.DefaultStatements);
 

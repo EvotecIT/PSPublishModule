@@ -152,9 +152,9 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
                     Analyze(clause.Body, state, locals, diagnostics);
                     return state;
                 }).ToList();
-                if (switchStatement.DefaultBlock is null)
+                if (switchStatement.DefaultBlock is null || switchStatement.InputKind != PowerShellBoundSwitchInputKind.Scalar)
                     branchStates.Add(assigned.ToHashSet(StringComparer.Ordinal));
-                else
+                if (switchStatement.DefaultBlock is not null)
                 {
                     var defaultState = assigned.ToHashSet(StringComparer.Ordinal);
                     Analyze(switchStatement.DefaultBlock, defaultState, locals, diagnostics);
