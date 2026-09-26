@@ -6,6 +6,9 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
 
 fail() { printf 'powerforge-service-artifact-pull: %s\n' "$*" >&2; exit 1; }
+max_package_bytes=1073741824
+max_metadata_bytes=1048576
+max_archive_bytes=$((max_package_bytes - max_metadata_bytes))
 [[ $# -eq 1 && $1 =~ ^[a-z0-9][a-z0-9.-]{0,62}$ ]] || fail 'usage: powerforge-service-artifact-pull <service>'
 [[ $(id -u) -ne 0 ]] || fail 'run as the dedicated deployment account, not root'
 service=$1
@@ -31,16 +34,30 @@ IFS=: read -r _ _ group_gid group_members <<<"$group_entry"
 primary_group_peer=$(getent passwd | awk -F: -v gid="$(id -g)" -v self="$(id -un)" '$4 == gid && $1 != self { print $1; exit }') || fail 'unable to inspect primary group users'
 [[ -z $primary_group_peer ]] || fail 'deployment group is another account primary group'
 
-# Both files are root-owned. The service root comes from the promoter's own configuration,
-# so an up-to-date decision cannot be made against a different release directory.
+# Snapshot both root-owned files before reading any values. The digest must describe
+# exactly the bytes that were sourced, even if an operator replaces a file mid-pull.
+command -v git >/dev/null || fail 'missing command: git'
+config_snapshot_root=$(mktemp -d /tmp/powerforge-service-config.XXXXXXXX) || fail 'unable to snapshot service configuration'
+trap 'rm -rf -- "$config_snapshot_root"' EXIT
+snapshot_pull="$config_snapshot_root/pull.env"
+snapshot_service="$config_snapshot_root/service.env"
+install -m 0600 -- "$pull_config" "$snapshot_pull" || fail 'unable to snapshot pull configuration'
+install -m 0600 -- "$service_config" "$snapshot_service" || fail 'unable to snapshot service configuration'
+configuration_sha=$(sha256sum -- "$snapshot_pull" "$snapshot_service" | awk '{print $1}' | sha256sum)
+configuration_sha=${configuration_sha%% *}
+initial_configuration_sha=$(sha256sum -- "$pull_config" "$service_config" | awk '{print $1}' | sha256sum)
+[[ ${initial_configuration_sha%% *} == "$configuration_sha" ]] || fail 'service pull configuration changed while being snapshotted'
+
+# The service root comes from the promoter's own configuration, so an up-to-date
+# decision cannot be made against a different release directory.
 # shellcheck disable=SC1090
-source "$pull_config"
+source "$snapshot_pull"
 unset ARTIFACT_PULL_STAGE_ROOT
 # shellcheck disable=SC1090
-source "$service_config"
+source "$snapshot_service"
 : "${SOURCE_REPOSITORY:?}" "${SOURCE_BRANCH:?}" "${SOURCE_WORKFLOW:?}" "${ARTIFACT_NAME:?}" "${WORK_ROOT:?}" "${SERVICE_ROOT:?}" "${ARTIFACT_PULL_STAGE_ROOT:?}"
 [[ $SOURCE_REPOSITORY =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail 'invalid GitHub repository'
-[[ $SOURCE_BRANCH =~ ^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$ ]] || fail 'invalid source branch'
+git -C / check-ref-format --branch "$SOURCE_BRANCH" >/dev/null 2>&1 || fail 'invalid source branch'
 [[ $SOURCE_WORKFLOW =~ ^[A-Za-z0-9._-]+\.ya?ml$ ]] || fail 'invalid workflow filename'
 [[ $ARTIFACT_NAME =~ ^[A-Za-z0-9._-]+$ ]] || fail 'invalid artifact name'
 [[ $WORK_ROOT == /* && $WORK_ROOT != / && -d $WORK_ROOT && ! -L $WORK_ROOT ]] || fail 'invalid deployment work root'
@@ -66,7 +83,7 @@ assert_trusted_chain() {
 }
 assert_trusted_chain "$WORK_ROOT" "$(id -u)" 1
 assert_trusted_chain "$SERVICE_ROOT" 0 0
-for command_name in gh jq sha256sum flock mktemp find stat realpath sudo date getent awk curl python3; do
+for command_name in gh jq sha256sum flock mktemp find stat realpath sudo date getent awk curl python3 git; do
   command -v "$command_name" >/dev/null || fail "missing command: $command_name"
 done
 
@@ -105,8 +122,6 @@ run_json=$(gh api -H 'Accept: application/vnd.github+json' "repos/${SOURCE_REPOS
 run_attempt=$(jq -er --arg sha "$source_sha" --arg branch "$SOURCE_BRANCH" --argjson id "$run_id" \
   'if .id == $id and .head_sha == $sha and .head_branch == $branch and .status == "completed" and .conclusion == "success" and (.event == "push" or .event == "workflow_dispatch") then .run_attempt else error("selected run changed") end' <<<"$run_json") || fail 'selected workflow run no longer matches the source branch'
 [[ $run_attempt =~ ^[1-9][0-9]*$ ]] || fail 'workflow attempt is invalid'
-configuration_sha=$(sha256sum -- "$pull_config" "$service_config" | sha256sum)
-configuration_sha=${configuration_sha%% *}
 
 current_metadata="$SERVICE_ROOT/current/_powerforge/deployment.json"
 if [[ -L $SERVICE_ROOT/current && -f $current_metadata && ! -L $current_metadata ]]; then
@@ -123,6 +138,7 @@ download_root=$(mktemp -d "$WORK_ROOT/.download.XXXXXXXX")
 cleanup() {
   [[ ! -d $download_root ]] || rm -rf -- "$download_root"
   [[ ! -d $workflow_stage ]] || rm -rf -- "$workflow_stage"
+  [[ ! -d $config_snapshot_root ]] || rm -rf -- "$config_snapshot_root"
 }
 trap cleanup EXIT
 artifacts_json=$(gh api -H 'Accept: application/vnd.github+json' "repos/${SOURCE_REPOSITORY}/actions/runs/${run_id}/artifacts?name=${ARTIFACT_NAME}&per_page=100") || fail 'unable to inspect workflow artifacts'
@@ -140,13 +156,13 @@ artifact_url=$(printf 'header = "Authorization: Bearer %s"\n' "$GH_TOKEN" | curl
 printf 'url = "%s"\n' "$artifact_url" | curl --config - \
   --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
   --max-filesize 1074790400 --max-time 600 --output "$bundle" || fail 'unable to download the bounded workflow artifact'
-python3 - "$bundle" "$download_root" <<'PY' || fail 'workflow artifact contains invalid or oversized members'
+python3 - "$bundle" "$download_root" "$max_archive_bytes" <<'PY' || fail 'workflow artifact contains invalid or oversized members'
 import os
 import stat
 import sys
 import zipfile
 
-limits = {"artifact.tar": 1073741824, "package.json": 1048576}
+limits = {"artifact.tar": int(sys.argv[3]), "package.json": 1048576}
 with zipfile.ZipFile(sys.argv[1]) as archive:
     members = archive.infolist()
     if len(members) != 2 or {member.filename for member in members} != set(limits):
@@ -172,7 +188,7 @@ mapfile -t entries < <(find "$download_root" -mindepth 1 -maxdepth 1 -printf '%f
 archive="$download_root/artifact.tar"
 package_metadata="$download_root/package.json"
 [[ -f $archive && ! -L $archive && -s $archive && -f $package_metadata && ! -L $package_metadata && -s $package_metadata ]] || fail 'service artifact members must be non-empty regular files'
-(( $(stat -c %s -- "$archive") <= 1073741824 && $(stat -c %s -- "$package_metadata") <= 1048576 )) || fail 'service artifact exceeds the promoter size limit'
+(( $(stat -c %s -- "$archive") <= max_archive_bytes && $(stat -c %s -- "$package_metadata") <= max_metadata_bytes )) || fail 'service artifact exceeds the promoter size limit'
 artifact_sha=$(sha256sum -- "$archive")
 artifact_sha=${artifact_sha%% *}
 package_attempt=$(jq -er '.workflowRunAttempt' "$package_metadata") || fail 'service package has no workflow attempt'
@@ -188,9 +204,12 @@ jq -n --arg repo "$SOURCE_REPOSITORY" --arg sha "$source_sha" --arg run "$run_id
   '{schemaVersion:1,sourceRepository:$repo,sourceSha:$sha,workflowRunId:$run,workflowRunAttempt:$attempt,packageRunAttempt:$package_attempt,artifactSha256:$digest,pullConfigurationSha256:$configuration,deployedAtUtc:$time}' \
   >"$workflow_stage/deployment.json"
 chmod 0600 -- "$workflow_stage/deployment.json"
+archive_bytes=$(stat -c %s -- "$workflow_stage/artifact.tar")
+metadata_bytes=$(stat -c %s -- "$workflow_stage/deployment.json")
+(( metadata_bytes > 0 && metadata_bytes <= max_metadata_bytes && archive_bytes + metadata_bytes <= max_package_bytes )) || fail 'service artifact and deployment metadata exceed the promoter size limit'
 latest_branch_json=$(gh api -H 'Accept: application/vnd.github+json' "repos/${SOURCE_REPOSITORY}/branches/${encoded_branch}") || fail 'unable to recheck the source branch before promotion'
 [[ $(jq -er '.commit.sha' <<<"$latest_branch_json") == "$source_sha" ]] || fail 'source branch advanced before promotion; a later pull will use the new commit'
-latest_configuration_sha=$(sha256sum -- "$pull_config" "$service_config" | sha256sum)
+latest_configuration_sha=$(sha256sum -- "$pull_config" "$service_config" | awk '{print $1}' | sha256sum)
 [[ ${latest_configuration_sha%% *} == "$configuration_sha" ]] || fail 'service pull configuration changed before promotion'
 unset GH_TOKEN
 sudo -- /usr/local/sbin/powerforge-service-deploy --service "$service"

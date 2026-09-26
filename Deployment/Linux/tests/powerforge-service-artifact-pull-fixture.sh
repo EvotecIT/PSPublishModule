@@ -88,6 +88,14 @@ if [[ $1 == api ]]; then
       [[ ! -f $counter_file ]] || counter=$(<"$counter_file")
       counter=$((counter + 1))
       printf '%s\n' "$counter" >"$counter_file"
+      if [[ ${POWERFORGE_FIXTURE_MODE:-} == config-race && $counter -eq 1 ]]; then
+        touch "$POWERFORGE_FIXTURE_ROOT/work/config-read"
+        for ((attempt=0; attempt<100; attempt++)); do
+          [[ ! -e $POWERFORGE_FIXTURE_ROOT/work/config-updated ]] || break
+          sleep 0.05
+        done
+        [[ -e $POWERFORGE_FIXTURE_ROOT/work/config-updated ]] || exit 1
+      fi
       if [[ ${POWERFORGE_FIXTURE_MODE:-} == advance && $counter -gt 1 ]]; then
         printf '{"commit":{"sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}\n'
       else
@@ -97,18 +105,32 @@ if [[ $1 == api ]]; then
     repos/ExampleOrg/Service/branches/release%2F1.x)
       printf '{"commit":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}\n'
       ;;
+    repos/ExampleOrg/Service/branches/feature%2Ffoo%2Bbar)
+      printf '{"commit":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}\n'
+      ;;
+    repos/ExampleOrg/Service/branches/release%2Fv1%40beta)
+      printf '{"commit":{"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}\n'
+      ;;
     repos/ExampleOrg/Service/actions/workflows/package-service.yml/runs*)
       if [[ ${POWERFORGE_FIXTURE_MODE:-} == missing ]]; then
         printf '{"workflow_runs":[]}\n'
       else
         branch=main
-        [[ ${POWERFORGE_FIXTURE_MODE:-} != slash ]] || branch=release/1.x
+        case ${POWERFORGE_FIXTURE_MODE:-} in
+          slash) branch=release/1.x ;;
+          plus) branch=feature/foo+bar ;;
+          at) branch=release/v1@beta ;;
+        esac
         printf '{"workflow_runs":[{"id":12345,"head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","head_branch":"%s","status":"completed","conclusion":"success","event":"push","run_number":8,"run_attempt":2}]}\n' "$branch"
       fi
       ;;
     repos/ExampleOrg/Service/actions/runs/12345)
       branch=main
-      [[ ${POWERFORGE_FIXTURE_MODE:-} != slash ]] || branch=release/1.x
+      case ${POWERFORGE_FIXTURE_MODE:-} in
+        slash) branch=release/1.x ;;
+        plus) branch=feature/foo+bar ;;
+        at) branch=release/v1@beta ;;
+      esac
       printf '{"id":12345,"head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","head_branch":"%s","status":"completed","conclusion":"success","event":"push","run_attempt":2}\n' "$branch"
       ;;
     repos/ExampleOrg/Service/actions/runs/12345/artifacts*)
@@ -206,6 +228,28 @@ if run_fixture advance >"$task_root/advance.log" 2>&1; then
   echo 'Promoted after the source branch advanced.' >&2; exit 1
 fi
 grep -Fq 'source branch advanced before promotion' "$task_root/advance.log"
+run_fixture config-race >"$task_root/config-race.log" 2>&1 &
+race_pid=$!
+for ((attempt=0; attempt<100; attempt++)); do
+  [[ ! -e $task_root/work/config-read ]] || break
+  sleep 0.05
+done
+if [[ ! -e $task_root/work/config-read ]]; then
+  wait "$race_pid" || true
+  echo 'The puller did not reach the configuration race checkpoint.' >&2; exit 1
+fi
+cp "$task_root/etc/powerforge/service-pull/${service}.env" "$task_root/etc/powerforge/service-pull/${service}.next"
+printf 'ARTIFACT_NAME=changed-artifact\n' >>"$task_root/etc/powerforge/service-pull/${service}.next"
+chown "root:$deploy_user" "$task_root/etc/powerforge/service-pull/${service}.next"
+chmod 0640 "$task_root/etc/powerforge/service-pull/${service}.next"
+mv "$task_root/etc/powerforge/service-pull/${service}.next" "$task_root/etc/powerforge/service-pull/${service}.env"
+touch "$task_root/work/config-updated"
+if wait "$race_pid"; then
+  echo 'Promoted after root replaced the pull configuration.' >&2; exit 1
+fi
+grep -Fq 'service pull configuration changed before promotion' "$task_root/config-race.log"
+printf 'SOURCE_REPOSITORY=%s\nSOURCE_BRANCH=main\nSOURCE_WORKFLOW=package-service.yml\nARTIFACT_NAME=powerforge-service-example\nWORK_ROOT=%s/work\n' \
+  "$repo" "$task_root" >"$task_root/etc/powerforge/service-pull/${service}.env"
 chmod 0660 "$task_root/etc/powerforge/service-pull/${service}.token"
 if run_fixture success >"$task_root/token-mode.log" 2>&1; then
   echo 'Accepted a group-writable GitHub token file.' >&2; exit 1
@@ -258,8 +302,16 @@ printf 'SOURCE_REPOSITORY=%s\nSOURCE_BRANCH=release/1.x\nSOURCE_WORKFLOW=package
   "$repo" "$task_root" >"$task_root/etc/powerforge/service-pull/${service}.env"
 run_fixture slash
 [[ $(wc -l <"$task_root/work/sudo.log") -eq 3 ]]
+printf 'SOURCE_REPOSITORY=%s\nSOURCE_BRANCH=feature/foo+bar\nSOURCE_WORKFLOW=package-service.yml\nARTIFACT_NAME=powerforge-service-example\nWORK_ROOT=%s/work\n' \
+  "$repo" "$task_root" >"$task_root/etc/powerforge/service-pull/${service}.env"
+run_fixture plus
+[[ $(wc -l <"$task_root/work/sudo.log") -eq 4 ]]
+printf 'SOURCE_REPOSITORY=%s\nSOURCE_BRANCH=release/v1@beta\nSOURCE_WORKFLOW=package-service.yml\nARTIFACT_NAME=powerforge-service-example\nWORK_ROOT=%s/work\n' \
+  "$repo" "$task_root" >"$task_root/etc/powerforge/service-pull/${service}.env"
+run_fixture at
+[[ $(wc -l <"$task_root/work/sudo.log") -eq 5 ]]
 printf 'SOURCE_REPOSITORY=exampleorg/service\nSOURCE_BRANCH=main\nSOURCE_WORKFLOW=package-service.yml\nARTIFACT_NAME=powerforge-service-example\nWORK_ROOT=%s/work\n' \
   "$task_root" >"$task_root/etc/powerforge/service-pull/${service}.env"
 run_fixture success
-[[ $(wc -l <"$task_root/work/sudo.log") -eq 4 ]]
+[[ $(wc -l <"$task_root/work/sudo.log") -eq 6 ]]
 echo 'Host-initiated Linux service artifact pull fixture passed.'
