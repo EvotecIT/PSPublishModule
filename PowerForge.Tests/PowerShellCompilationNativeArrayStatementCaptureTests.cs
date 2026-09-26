@@ -60,12 +60,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "Generated.ArrayStatementCapture", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.True(result.Manifest!.CompiledMethods == 4, string.Join(Environment.NewLine,
+        Assert.True(result.Manifest!.CompiledMethods == 5, string.Join(Environment.NewLine,
             result.Manifest.UnitDispositionLedger!.Entries.SelectMany(unit =>
                 unit.DiagnosticChain.Select(cause => unit.Name + ": " + cause.Message))));
-        Assert.Contains(result.Manifest.UnitDispositionLedger.Entries, unit =>
-            unit.Name == "Get-EscapingReturn" && !unit.Emitted);
         const string probe = """
+            foreach ($case in @(@(), @(1), @(1,2,3))) {
+                [pscustomobject]@{returnRecords=@(Get-EscapingReturn -Items $case)}|ConvertTo-Json -Compress -Depth 5
+            }
             foreach ($case in @(@(), @('a'), @('a',$null,'b'))) {
                 foreach ($header in $false,$true) {
                     $values=Get-FilteredRecords -Items $case -IncludeHeader $header

@@ -290,8 +290,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
         => function.Body.Find(static node => node is AssignmentStatementAst { Operator: TokenKind.Equals } assignment &&
             PowerShellSemanticBinder.UnwrapExpression(assignment.Right) is ArrayExpressionAst collection &&
             collection.SubExpression.FindAll(static nested => nested is ForEachStatementAst,
-                searchNestedScriptBlocks: false).Any() &&
-            !IsPotentialStableScalarVectorCapture(assignment, collection),
+                searchNestedScriptBlocks: false).Any(),
             searchNestedScriptBlocks: false) is not null;
 
     // A direct foreach assigned to [Array] is statement-output capture, not
@@ -309,26 +308,6 @@ internal static class PowerShellNativeFunctionBindingPolicy
                 }
             } && constraint.TypeName.GetReflectionType() == typeof(Array),
             searchNestedScriptBlocks: false) is not null;
-
-    // The existing guarded stable-vector region owns this narrower shape. Merely
-    // selecting native function binding would remove its safe region promotion.
-    private static bool IsPotentialStableScalarVectorCapture(AssignmentStatementAst assignment, ArrayExpressionAst collection)
-    {
-        if (collection.SubExpression.Traps is { Count: > 0 } ||
-            collection.SubExpression.Statements.Count != 1 ||
-            collection.SubExpression.Statements[0] is not ForEachStatementAst ||
-            assignment.Left is not AttributedExpressionAst
-            {
-                Attribute: TypeConstraintAst constraint,
-                Child: VariableExpressionAst variable
-            } || !variable.VariablePath.IsUnqualified)
-            return false;
-        var type = constraint.TypeName.GetReflectionType();
-        return type is { IsArray: true } && type.GetArrayRank() == 1 &&
-               type.GetElementType() is { } elementType &&
-               PowerShellRegionTransferTypePolicy.IsSupported(type) &&
-               PowerShellStableScalarTypePolicy.IsSupported(elementType);
-    }
 
     private static bool RequiresNativeObjectParameterForEach(FunctionDefinitionAst function)
     {

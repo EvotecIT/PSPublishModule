@@ -25,7 +25,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(4, result.Manifest!.PromotedTypedRegions);
+        foreach (var name in new[] { "Get-ADEncryptionTypes", "Get-ADTrustAttributes" })
+            Assert.True(Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries, unit => unit.Name == name).EmittedClrMethod);
 
         const string probe = """
             function Describe-Vector($command, $case, $arguments) {
@@ -88,7 +89,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(source))).ToLowerInvariant());
             var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
                 new[] { source }, "PowerForge.Compiled", Path.GetFileNameWithoutExtension(item.File) + "Methods", "net10.0",
-                PowerShellCompilationCapabilities.HybridModule);
+                PowerShellCompilationCapabilities.HybridModule & ~PowerShellCompilationCapability.NativeFunctionBinding);
             var regions = typed.PromotedRegions.Where(candidate =>
                     candidate.SourceName.Equals(Path.GetFileNameWithoutExtension(item.File), StringComparison.OrdinalIgnoreCase))
                 .OrderBy(static candidate => candidate.StartOffset).ToArray();
