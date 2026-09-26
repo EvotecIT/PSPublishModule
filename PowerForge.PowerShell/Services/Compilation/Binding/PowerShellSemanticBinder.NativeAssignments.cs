@@ -4,10 +4,10 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellSemanticBinder
 {
-    // Keep conditional output capture on a direct, stable receiver. The native
-    // assignment owner evaluates the authored member target before its RHS.
-    internal static bool IsNativeConditionalMemberCaptureTarget(ExpressionAst target)
-        => target is MemberExpressionAst
+    // Keep conditional output capture on a direct receiver. The existing native
+    // assignment owner retains authored target evaluation and storage semantics.
+    internal static bool IsNativeConditionalAccessCaptureTarget(ExpressionAst target)
+        => IsNativeConditionalIndexCaptureTarget(target) || target is MemberExpressionAst
         {
             Static: false,
             Expression: VariableExpressionAst { VariablePath.IsUnqualified: true } receiver,
@@ -15,6 +15,14 @@ internal sealed partial class PowerShellSemanticBinder
         } member && member is not InvokeMemberExpressionAst &&
            member.GetType().GetProperty("NullConditional")?.GetValue(member) is not true &&
            !PowerShellAssignmentTargetPolicy.IsAutomaticVariable(receiver.VariablePath.UserPath);
+
+    private static bool IsNativeConditionalIndexCaptureTarget(ExpressionAst target)
+        => target is IndexExpressionAst
+        {
+            Target: VariableExpressionAst { VariablePath.IsUnqualified: true } receiver
+        } index && index.GetType().GetProperty("NullConditional")?.GetValue(index) is not true &&
+            !PowerShellAssignmentTargetPolicy.IsAutomaticVariable(receiver.VariablePath.UserPath) &&
+            IsNativeAssignmentIndex(index.Index);
 
     // These targets use native storage semantics without introducing another command or body.
     // More complex receiver/index expressions require a separately bound evaluation contract.

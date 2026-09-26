@@ -219,6 +219,9 @@ The compiler emits stable PowerShell source paths and checksums in portable PDBs
 
 ## How to choose and close the next implementation slice
 
+- [x] Qualify literal enum arguments and simple native indexed `if` capture through existing owners. Two unchanged PSSharedGoods registry readers match original/generated values and caught errors on disposable HKCU keys on PowerShell 7 and 5.1. Preserve transformed Type-value guards, capture rollback/transfers, and Strict rejection. Same-input `net10.0` coverage is 228/282 with no losses; the third gained function, `Set-LoggingCapabilities`, remains emission-only.
+- [ ] Qualify the gained logging-default workflow before claiming its execution, and select the next complete retained workflow by its current pipeline/command or lifecycle co-blockers. Do not treat the older `Get-FolderEncoding` conditional-value diagnosis as its current sole blocker.
+
 1. Fix accepted-code defects first; reproduce the original/generated failure and inspect sibling paths.
 2. Choose a complete blocked workflow from immutable source with every co-blocker visible. Do not import or execute external administration code merely to analyze it.
 3. Implement the smallest contract in the existing owner. Group by semantic shape, ownership, effects, and lifetime rather than function name or one CLR type at a time.

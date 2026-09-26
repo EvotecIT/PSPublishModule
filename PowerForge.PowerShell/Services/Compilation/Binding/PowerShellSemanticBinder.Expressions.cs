@@ -429,8 +429,7 @@ internal sealed partial class PowerShellSemanticBinder
     private static bool InvocationConsumesAuthoredTypeLiteral(InvokeMemberExpressionAst invocation)
     {
         if (invocation.Arguments is not { } arguments) return false;
-        if (arguments.Any(static argument =>
-                argument.Find(static node => node is TypeExpressionAst, searchNestedScriptBlocks: false) is not null))
+        if (arguments.Any(PowerShellNativeTypeArgumentPolicy.ContainsTypeValue))
             return true;
 
         // A Type literal can flow through aliases even when a later assignment
@@ -458,8 +457,7 @@ internal sealed partial class PowerShellSemanticBinder
             if (target is null || !referencedVariables.Contains(target.VariablePath.UserPath) ||
                 !resolvedVariables.Add(target.VariablePath.UserPath))
                 continue;
-            if (assignment.Right.Find(static child => child is TypeExpressionAst,
-                    searchNestedScriptBlocks: false) is not null)
+            if (PowerShellNativeTypeArgumentPolicy.ContainsTypeValue(assignment.Right))
                 return true;
             foreach (var source in assignment.Right.FindAll(static child => child is VariableExpressionAst,
                          searchNestedScriptBlocks: false).OfType<VariableExpressionAst>())

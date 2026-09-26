@@ -94,7 +94,7 @@ namespace PowerForge.Generated.Runtime
             // actual invocation wrapper, but other records (including remoting
             // records with origin metadata) retain the native matcher's identity.
             caughtRecord = handler >= 0 && exceptionTypes[handler] is null &&
-                runtimeError is MethodInvocationException &&
+                runtimeError is MethodException &&
                 runtimeError.ErrorRecord.GetType() == typeof(ErrorRecord) &&
                 runtimeError.ErrorRecord.Exception is ParentContainsErrorRecordException
                 ? new ErrorRecord(runtimeError.ErrorRecord, runtimeError)

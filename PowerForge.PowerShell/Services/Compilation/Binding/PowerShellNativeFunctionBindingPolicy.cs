@@ -93,7 +93,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
            RequiresNativeLiteralCommandValue(function, capabilities) ||
            RequiresNativeCommandSwitch(function, capabilities) ||
            RequiresNativeObjectParameterSwitch(function, capabilities) ||
-           RequiresNativeConditionalMemberCapture(function) ||
+           RequiresNativeConditionalAccessCapture(function) ||
            RequiresNativeVariableIndex(function) ||
            RequiresNativeModuleStateStringConversion(function) ||
            RequiresNativeStaticNumericArgumentConversion(function) ||
@@ -158,12 +158,12 @@ internal static class PowerShellNativeFunctionBindingPolicy
             searchNestedScriptBlocks: false) is not null;
     }
 
-    private static bool RequiresNativeConditionalMemberCapture(FunctionDefinitionAst function)
+    private static bool RequiresNativeConditionalAccessCapture(FunctionDefinitionAst function)
         => function.Body.Find(static node => node is AssignmentStatementAst
             {
                 Operator: TokenKind.Equals,
                 Right: IfStatementAst
-            } assignment && PowerShellSemanticBinder.IsNativeConditionalMemberCaptureTarget(assignment.Left),
+            } assignment && PowerShellSemanticBinder.IsNativeConditionalAccessCaptureTarget(assignment.Left),
             searchNestedScriptBlocks: false) is not null;
 
     /// <summary>Selects invocation-owned lookup for a locally constructed map used outside the typed index contract.</summary>
