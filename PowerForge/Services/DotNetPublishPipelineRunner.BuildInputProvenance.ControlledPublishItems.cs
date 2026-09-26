@@ -19,6 +19,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string? evaluatedPathMap,
         bool proveControlledGeneratedInputs,
         IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes,
+        IReadOnlyCollection<EvaluatedProjectReference> rootProjectReferences,
         IReadOnlyDictionary<string, string> evaluatedProperties,
         out EvaluatedPublishInput[] publishInputs,
         out string? failureReason)
@@ -141,6 +142,26 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Save(controlledNuGetConfig);
             string offlinePackageSourceList = string.Join(";", distinctOfflinePackageSources);
 
+            if (!TryCreateControlledRestoreContextProps(
+                    request,
+                    graphBuildNodes,
+                    rootProjectReferences,
+                    evaluatedProperties,
+                    controlledGitRoot!,
+                    controlledSourceRoot,
+                    controlledOutputRoot,
+                    controlledEnvironment,
+                    graphVerifiedPackages.Concat(verifiedPackages is null
+                        ? Array.Empty<VerifiedPackageInputCatalog>()
+                        : new[] { verifiedPackages }).Distinct().ToArray(),
+                    out string? restoreContextProps,
+                    out string? restoreContextFailureReason))
+            {
+                failureReason = "the controlled restore contexts could not be mapped: " +
+                    restoreContextFailureReason;
+                return false;
+            }
+
             if (!TryBuildControlledPublishProjectGraph(
                     graphBuildNodes,
                     controlledGitRoot!,
@@ -149,6 +170,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledNuGetConfig,
                     offlinePackageSourceList,
                     controlledOutputRoot,
+                    restoreContextProps,
                     out string? controlledGraphFailureReason))
             {
                 failureReason = "the controlled project-reference graph could not be built" +
@@ -165,7 +187,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledEnvironment,
                     controlledNuGetConfig,
                     offlinePackageSourceList,
-                    controlledOutputRoot))
+                    controlledOutputRoot,
+                    restoreContextProps))
             {
                 failureReason = "the controlled root project could not be restored.";
                 return false;
@@ -199,6 +222,7 @@ public sealed partial class DotNetPublishPipelineRunner
             arguments.Add("-p:BuildProjectReferences=" +
                 rebuildProjectReferences.ToString().ToLowerInvariant());
             arguments.Add("-p:RestoreRecursive=false");
+            AppendControlledRestoreContextProps(arguments, restoreContextProps);
             if (!TryBuildControlledPathMap(
                     controlledSourceRoot,
                     controlledGitRoot!,
@@ -471,16 +495,18 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string?> controlledEnvironment,
         string controlledNuGetConfig,
         string offlinePackageSourceList,
-        string controlledOutputRoot)
+        string controlledOutputRoot,
+        string? restoreContextProps)
     {
         try
         {
             var arguments = new List<string>
             {
-                "restore",
+                "msbuild",
                 controlledProjectPath,
                 "-nologo",
                 "-verbosity:quiet",
+                "-target:Restore",
                 "-p:RestoreRecursive=false"
             };
             if (!TryAppendControlledProjectEvaluationProperties(
@@ -496,13 +522,14 @@ public sealed partial class DotNetPublishPipelineRunner
                 controlledNuGetConfig,
                 offlinePackageSourceList,
                 Path.Combine(controlledOutputRoot, "root-packages.lock.json"));
+            AppendControlledRestoreContextProps(arguments, restoreContextProps);
 
-            var process = RunBuildInputEvaluationProcess(
-                "dotnet",
+            var process = RunControlledMsBuildEvaluationProcess(
                 Path.GetDirectoryName(controlledProjectPath)!,
                 arguments,
                 controlledEnvironment,
-                TimeSpan.FromMinutes(5));
+                TimeSpan.FromMinutes(5),
+                controlledOutputRoot);
             return process.ExitCode == 0 && !process.TimedOut;
         }
         catch
@@ -581,10 +608,15 @@ public sealed partial class DotNetPublishPipelineRunner
                      node => Path.GetFullPath(node.Request.ProjectPath),
                      FileSystemPathSafety.ExistingPathComparer))
         {
-            string?[] selectedFrameworks = project.Select(node => node.Request.TargetFramework).ToArray();
-            if (project.Any(node => SelectControlledMultiFrameworkRestoreFrameworks(
-                    node.EvaluatedProperties,
-                    selectedFrameworks).Length > 1))
+            if (project.GroupBy(BuildControlledRestoreContextKey, StringComparer.Ordinal)
+                .Any(context =>
+                {
+                    string?[] selectedFrameworks = context
+                        .Select(node => node.Request.TargetFramework).ToArray();
+                    return context.Any(node => SelectControlledMultiFrameworkRestoreFrameworks(
+                        node.EvaluatedProperties,
+                        selectedFrameworks).Length > 1);
+                }))
                 matrixProjects.Add(project.Key);
         }
         return matrixProjects;
@@ -598,17 +630,31 @@ public sealed partial class DotNetPublishPipelineRunner
         string controlledNuGetConfig,
         string offlinePackageSourceList,
         string controlledOutputRoot,
+        string? restoreContextProps,
         out string? failureReason)
     {
         failureReason = null;
+        var projectContexts = graphBuildNodes
+            .GroupBy(node => Path.GetFullPath(node.Request.ProjectPath),
+                FileSystemPathSafety.ExistingPathComparer)
+            .ToDictionary(group => group.Key, group => (
+                Isolated: group.Select(BuildControlledRestoreContextKey)
+                    .Distinct(StringComparer.Ordinal).Skip(1).Any(),
+                CanonicalControlledProjectPath: Path.GetFullPath(Path.Combine(
+                    controlledSourceRoot,
+                    FrameworkCompatibility.GetRelativePath(originalGitRoot, group.Key)))),
+                FileSystemPathSafety.ExistingPathComparer);
         foreach (ControlledPublishGraphNode node in graphBuildNodes)
         {
             string projectPath = Path.GetFullPath(node.Request.ProjectPath);
+            var projectContext = projectContexts[projectPath];
+            string contextKey = BuildControlledRestoreContextKey(node);
             string?[] selectedFrameworks = graphBuildNodes
                 .Where(candidate =>
                     FileSystemPathSafety.ExistingPathComparer.Equals(
                         Path.GetFullPath(candidate.Request.ProjectPath),
-                        projectPath))
+                        projectPath) &&
+                    BuildControlledRestoreContextKey(candidate).Equals(contextKey, StringComparison.Ordinal))
                 .Select(candidate => candidate.Request.TargetFramework)
                 .ToArray();
             string[] frameworks = SelectControlledMultiFrameworkRestoreFrameworks(
@@ -626,6 +672,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 return false;
             }
             bool restoreWithFrameworkMatrix = frameworks.Length > 1;
+            bool frameworkSpecificOutput = projectContext.Isolated &&
+                node.EvaluatedProperties.TryGetValue("AppendTargetFrameworkToOutputPath", out string? appendFramework) &&
+                !string.Equals(appendFramework?.Trim(), "true", StringComparison.OrdinalIgnoreCase);
             if (restoreWithFrameworkMatrix)
             {
                 // Restore immediately before this node so each effective property context owns the
@@ -644,6 +693,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         controlledNuGetConfig,
                         offlinePackageSourceList,
                         controlledOutputRoot,
+                        restoreContextProps,
                         out failureReason))
                 {
                     return false;
@@ -652,12 +702,16 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!TryBuildControlledPublishGraphNode(
                     node,
                     restore: !restoreWithFrameworkMatrix,
+                    projectContext.Isolated,
+                    frameworkSpecificOutput,
+                    projectContext.CanonicalControlledProjectPath,
                     originalGitRoot,
                     controlledSourceRoot,
                     controlledEnvironment,
                     controlledNuGetConfig,
                     offlinePackageSourceList,
                     controlledOutputRoot,
+                    restoreContextProps,
                     out failureReason))
                 return false;
         }

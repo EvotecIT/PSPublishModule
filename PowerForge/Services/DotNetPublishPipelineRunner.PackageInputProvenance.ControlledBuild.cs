@@ -7,6 +7,13 @@ public sealed partial class DotNetPublishPipelineRunner
 {
     private sealed partial class VerifiedPackageInputCatalog
     {
+        /// <summary>Returns locked identities and hashes admitted through explicit package trust or SDK evidence.</summary>
+        internal IEnumerable<KeyValuePair<string, string>> ReadControlledTrustedPackageIdentities(IReadOnlyCollection<string> trustedBuildPackages)
+            => _archivePathsByPackageKey.Where(package =>
+                    trustedBuildPackages.Contains(package.Key.Split('|')[0], StringComparer.OrdinalIgnoreCase) ||
+                    _sdkManagedArchivePaths.Contains(Path.GetFullPath(package.Value)))
+                .Select(package => new KeyValuePair<string, string>(package.Key, _lockedPackageHashes[package.Key]));
+
         private static bool TryPrimeLockedPackageArchives(
             IEnumerable<string> packageRoots,
             IReadOnlyDictionary<string, string> lockedPackageHashes,

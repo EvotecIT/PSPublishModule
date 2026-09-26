@@ -605,7 +605,8 @@ public sealed partial class DotNetPublishPipelineRunner
             return true;
         }
 
-        bool importActivation = ContainsUncontrolledImportActivation(reachableDocument);
+        bool importActivation = ContainsUncontrolledImportActivation(reachableDocument,
+            reachableDocuments, evaluatedProperties, immutableGlobalProperties);
         bool taskPropertyFunction = ContainsUncontrolledTaskInputPropertyFunction(
             reachableDocument,
             reachableDocuments,
@@ -770,8 +771,15 @@ public sealed partial class DotNetPublishPipelineRunner
            taskName.Equals("CallTarget", StringComparison.OrdinalIgnoreCase) ||
            taskName.Equals("ReadLinesFromFile", StringComparison.OrdinalIgnoreCase);
 
-    private static bool ContainsUncontrolledImportActivation(XDocument document)
+    private static bool ContainsUncontrolledImportActivation(
+        XDocument document,
+        IReadOnlyCollection<XDocument> relatedDocuments,
+        IReadOnlyDictionary<string, string> evaluatedProperties,
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties)
     {
+        var unstableProperties = ReadControlledRestoreContextOverriddenPropertyNames();
+        unstableProperties.UnionWith(ControlledInvocationGuardProperties);
+        unstableProperties.UnionWith(ControlledContextPathProperties);
         foreach (XElement import in document.Descendants().Where(element =>
                      element.Name.LocalName.Equals("Import", StringComparison.OrdinalIgnoreCase)))
         {
@@ -793,7 +801,10 @@ public sealed partial class DotNetPublishPipelineRunner
                 "$(MSBuildProjectDirectory)",
                 string.Empty);
             if (ContainsUnresolvedBuildExpression(unresolved) &&
-                !IsTrustedLegacyMsBuildToolsImport(project))
+                !IsTrustedLegacyMsBuildToolsImport(project) &&
+                !TryExpandStableControlledImportAliases(unresolved, relatedDocuments,
+                    evaluatedProperties, immutableGlobalProperties,
+                    unstableProperties, out _))
                 return true;
 
             string[] conditions = import.AncestorsAndSelf()
