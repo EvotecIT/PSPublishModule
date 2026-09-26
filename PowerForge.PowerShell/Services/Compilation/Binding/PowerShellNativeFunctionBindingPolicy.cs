@@ -165,7 +165,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
         PowerShellCompilationCapability capabilities)
         => function.Body.Find(node => node is HashtableAst literal &&
             literal.KeyValuePairs.Any(pair =>
-                PowerShellCommandRegionSemanticBinder.IsNativeLiteralCommandValue(pair.Item2, capabilities)),
+                PowerShellCommandRegionSemanticBinder.IsNativeLiteralInvocationValue(pair.Item2, capabilities)),
             searchNestedScriptBlocks: false) is not null;
 
     private static bool RequiresNativeCommandSwitch(FunctionDefinitionAst function,

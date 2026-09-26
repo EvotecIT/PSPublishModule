@@ -4,8 +4,8 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "emitted": 474,
-  "retained": 91,
+  "emitted": 475,
+  "retained": 90,
   "dispositionContract": "Every function identity matches the accepted constructor/object comparison and its full baseline; no previously emitted method or still-retained region is lost.",
   "packets": [
     {
@@ -685,9 +685,9 @@
       "packet": "cleanup",
       "stableUnits": 69,
       "functions": 68,
-      "emitted": 62,
-      "retained": 6,
-      "sourceExplanationSha256": "00475543df05c1a36eafe23ca8bdeecaecbb33fbbfebe54a8cb282fa886c2d77",
+      "emitted": 63,
+      "retained": 5,
+      "sourceExplanationSha256": "b496f148d7918837e5d8d8e2b89efe6599e12967516c99646d94ae57041a4990",
       "functionsRetained": [
         {
           "unitId": "2be0f84457750dd64ee0c5d1",
@@ -706,24 +706,6 @@
               "message": "A loop transfer leaving native captured output requires an explicit enclosing-control-flow transfer contract.",
               "line": 19,
               "column": 5
-            }
-          ]
-        },
-        {
-          "unitId": "71c49bb9421d8e2482eeb4c6",
-          "name": "Get-InitialCloudDevices",
-          "relativePath": "Private/Get-InitialCloudDevices.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "[pscustomobject] note-property values require one expression, a native-hosted conditional, or one qualified hosted command value.",
-              "line": 269,
-              "column": 46
             }
           ]
         },
@@ -1073,7 +1055,7 @@
       "functions": 109,
       "emitted": 80,
       "retained": 29,
-      "sourceExplanationSha256": "d1b9bce9d03bcf1f2683664817564d0f9932a89295091206b10b7d75b06e2294",
+      "sourceExplanationSha256": "06f67d7f1f79f5d650e7d677108514cd31537e970e3fd72e818f0a3715216d6e",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -1607,7 +1589,7 @@
             {
               "code": "UnsupportedSyntax",
               "featureId": "syntax.unsupported",
-              "message": "[pscustomobject] note-property values require one expression, a native-hosted conditional, or one qualified hosted command value.",
+              "message": "[pscustomobject] note-property values require one expression, a native-hosted conditional, or one qualified hosted command or local invocation value.",
               "line": 66,
               "column": 42
             }
@@ -2601,26 +2583,22 @@
   "compilerBaselineCommit": "e239ce8b9e17554a92f2189d2df277fb61034d6b",
   "compilerSourceHashes": [
     {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellCommandRegionSemanticBinder.cs",
+      "sha256": "f0c351be3ba62d191ca11f84ee9d878f513a79a88299fbec6113ae194ffea20d"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellDictionarySemanticBinder.cs",
+      "sha256": "c806ce0eaf773c35e96cef8c8cf0583da1769b53aed1f32c1afca8c2c93fff48"
+    },
+    {
       "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
-      "sha256": "30e1e3db559ae41e659b52a3749fba0755c8cfe68e0a81e2ff16d7ab801ac781"
+      "sha256": "a65dd2ca526bd871bfe98bcec970de96c1fd7fa9e5bd103ed9fe2de80cfed6e4"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs",
-      "sha256": "8df1965fb2fec0e4adc36001056fed366f6b44ace0fabc3e7c72fd2ece10aaee"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs",
-      "sha256": "c7b0502a84aea9817f40e1c31dcd4174e6d754439afdaeb92251c9bf37f5e445"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/PowerShellGeneratedTypePolicy.cs",
-      "sha256": "719cad63093abceca9eed145e965b8d8d9cd6f20d08e5c60af0f58a73e863f4f"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/PowerShellGeneratedElementTypePolicy.cs",
-      "sha256": "a8207a8447778d404abfcf57108e6ce9201db7e28e0e895dbd69f7fe594613fc"
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellObjectSemanticBinder.cs",
+      "sha256": "6881e0b15c3dcb2148780a438a022322ffa40d883bf2e4dae220c72cbe1b8096"
     }
   ],
-  "dispositionComparison": "m29a-host-containers-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "ba835b763b6aab026db17740874b77816c87976c"
+  "dispositionComparison": "m29a-literal-invocation-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "2de1faa77f415ba7f5dc27af3d8ef03963db42e1"
 }

@@ -57,11 +57,11 @@ internal static class PowerShellObjectSemanticBinder
                 : capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && pair.Item2 is IfStatementAst
                     ? pair.Item2
                     : null;
-            if (valueSyntax is null && PowerShellCommandRegionSemanticBinder.IsNativeLiteralCommandValue(pair.Item2, capabilities))
+            if (valueSyntax is null && PowerShellCommandRegionSemanticBinder.IsNativeLiteralInvocationValue(pair.Item2, capabilities))
                 valueSyntax = pair.Item2;
             if (valueSyntax is null)
             {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2903", "[pscustomobject] note-property values require one expression, a native-hosted conditional, or one qualified hosted command value.", PowerShellSourceParser.GetSpan(document, pair.Item2.Extent)));
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2903", "[pscustomobject] note-property values require one expression, a native-hosted conditional, or one qualified hosted command or local invocation value.", PowerShellSourceParser.GetSpan(document, pair.Item2.Extent)));
                 return null;
             }
             var value = bindExpression(valueSyntax, null);

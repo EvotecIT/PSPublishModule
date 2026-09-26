@@ -23,6 +23,17 @@ internal static class PowerShellCommandRegionSemanticBinder
            pipeline.PipelineElements[0] is CommandAst { InvocationOperator: TokenKind.Unknown } command &&
            command.GetCommandName() is not null;
 
+    /// <summary>Routes a literal value's direct local call-operator invocation through native success capture.</summary>
+    internal static bool IsNativeLiteralInvocationValue(StatementAst statement, PowerShellCompilationCapability capabilities)
+        => IsNativeLiteralCommandValue(statement, capabilities) ||
+           capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+           capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&
+           statement is PipelineAst { PipelineElements.Count: 1 } pipeline && !HasPipelineOperators(pipeline) &&
+           pipeline.PipelineElements[0] is CommandAst { InvocationOperator: TokenKind.Ampersand } command &&
+           command.CommandElements.FirstOrDefault() is VariableExpressionAst variable &&
+           (variable.VariablePath.IsUnqualified || variable.VariablePath.IsLocal) &&
+           !PowerShellAssignmentTargetPolicy.IsAutomaticVariable(variable.VariablePath.UserPath);
+
     /// <summary>
     /// Identifies a complete authored pipeline whose command binding, stream routing, script-block state,
     /// and retained mutations must remain owned by the active PowerShell invocation.
