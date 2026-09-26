@@ -101,6 +101,48 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
+    public void Build_ExistingNativeModuleStateCasesMatchOriginalExecution(string targetFramework, string host)
+    {
+        if (targetFramework == "net472" && !OperatingSystem.IsWindows()) return;
+        const string source = """
+            $script:State = [string[]]@('one', 'two')
+            $script:Items = [string[]]@('one', 'two')
+            function Read-State { return $script:State }
+            function Get-Items { return $script:Items }
+            function Get-Random { return 1 }
+            function Get-StateCount { [CmdletBinding()] param() return (Read-State).Count }
+            function Get-StatePipeline { [CmdletBinding()] param() ([string[]]$script:State) | ForEach-Object { $copy = $_ }; return $copy }
+            function Get-StateCommandIndex { [CmdletBinding()] param() return ([string[]](Get-Items))[0] }
+            function Get-StateCallerIndex { [CmdletBinding()] param() return ([string[]](Get-ExternalItems))[0] }
+            function Get-StateDynamicIndex { [CmdletBinding()] param() return ([string[]]$script:Items)[(Get-Random)] }
+            Export-ModuleMember -Function Get-StateCount, Get-StatePipeline, Get-StateCommandIndex, Get-StateCallerIndex, Get-StateDynamicIndex
+            """;
+        using var fixture = ArtifactFixture.Create(source, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "PowerForge.HybridModuleStateBoundaryCases",
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true) { TargetFramework = targetFramework });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        foreach (var name in new[] { "Get-StateCount", "Get-StatePipeline", "Get-StateCommandIndex", "Get-StateCallerIndex", "Get-StateDynamicIndex" })
+        {
+            var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries, entry => entry.Name == name);
+            Assert.True(unit.EmittedClrMethod, name + ": " + string.Join("; ", unit.DiagnosticChain.Select(static cause => cause.Message)));
+            Assert.True(unit.UsesNativeFunctionBinding, name);
+        }
+        const string proof = "function global:Get-ExternalItems { 'caller' }; " +
+            "[string]::Join('|', @(Get-StateCount)); [string]::Join('|', @(Get-StatePipeline)); " +
+            "[string]::Join('|', @(Get-StateCommandIndex)); [string]::Join('|', @(Get-StateCallerIndex)); " +
+            "[string]::Join('|', @(Get-StateDynamicIndex))";
+        var original = RunModuleProof(fixture.ScriptPath, proof, host);
+        var generated = RunModuleProof(result.ArtifactPath!, proof, host);
+        Assert.Equal(original, generated);
+        Assert.Equal(new[] { "2", "two", "one", "caller", "two" }, generated.Split(Environment.NewLine));
+    }
+
+    [Theory]
+    [InlineData("net10.0", "pwsh")]
+    [InlineData("net472", "powershell.exe")]
     public void Build_AuthoredModuleStateConversionsPreserveLiveMemberAndIndexSemantics(string targetFramework, string host)
     {
         if (targetFramework == "net472" && !OperatingSystem.IsWindows()) return;
@@ -160,14 +202,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     }
 
-    [Theory]
-    [InlineData("([string[]]($script:Items))[0]")]
-    [InlineData("([string[]](Get-Items))[0]")]
-    [InlineData("([string[]]$script:Items)[(Get-Random)]")]
-    public void Analyze_CompoundOrEffectfulTypedModuleStateIndexingRemainsFallback(string expression)
+    [Fact]
+    public void Analyze_NestedModuleStateCastIndexRemainsFallback()
     {
         using var fixture = ArtifactFixture.Create(
-            $"function Get-StateItem {{ [CmdletBinding()] param() return {expression} }}",
+            "function Get-StateItem { [CmdletBinding()] param() return ([string[]]($script:Items))[0] }",
             ".psm1");
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath,
@@ -185,10 +224,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("return ([string]$script:State).Substring(1)")]
     [InlineData("[string[]] $copy = [string[]]$script:State; return $copy[0]")]
     [InlineData("return Use-State -Value $script:State")]
-    [InlineData("return (Read-State).Count")]
     [InlineData("return [string]::Concat($script:State)")]
     [InlineData("foreach ($item in ([string[]]$script:State)) { $null = $item }; return 1")]
-    [InlineData("([string[]]$script:State) | ForEach-Object { $copy = $_ }; return $copy")]
     public void Analyze_DerivedModuleStateCannotEscapeTheDirectTypedReadBoundary(string body)
     {
         using var fixture = ArtifactFixture.Create(
