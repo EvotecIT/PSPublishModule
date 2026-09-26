@@ -165,16 +165,6 @@ internal sealed partial class PowerShellSemanticBinder
     {
         var variableSpan = PowerShellSourceParser.GetSpan(document, statement.Variable.Extent);
         var nativeInvocation = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding);
-        if (nativeInvocation && statement.Condition.FindAll(
-                static node => node is BinaryExpressionAst { Operator: TokenKind.DotDot },
-                searchNestedScriptBlocks: false).Any())
-        {
-            diagnostics.Add(new PowerShellSemanticDiagnostic(
-                PowerShellCompilationFeatureIds.ForOperator("dotdot"),
-                "A direct native foreach range requires PowerShell's lazy range-enumerator contract and remains hosted.",
-                PowerShellSourceParser.GetSpan(document, statement.Condition.Extent)));
-            return null;
-        }
         if (!symbols.TryGetValue(statement.Variable.VariablePath.UserPath, out var target))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2302", $"foreach variable '${statement.Variable.VariablePath.UserPath}' has no function-scope semantic symbol.", variableSpan));

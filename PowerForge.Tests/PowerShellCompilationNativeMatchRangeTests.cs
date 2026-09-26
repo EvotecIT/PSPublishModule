@@ -60,20 +60,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "Generated.NativeMatchRange", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        foreach (var name in new[] { "Invoke-MatchFlow", "Invoke-RangeFlow", "Invoke-RangeOnce", "Invoke-RangeFailureOrder", "Invoke-RangeSlice" })
+        foreach (var name in new[] { "Invoke-MatchFlow", "Invoke-RangeFlow", "Invoke-RangeOnce", "Invoke-RangeFailureOrder", "Invoke-RangeSlice", "Invoke-RangeIterator" })
         {
             var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries, unit => unit.Name == name);
             Assert.True(unit.EmittedClrMethod, System.Text.Json.JsonSerializer.Serialize(unit));
             Assert.True(unit.UsesNativeFunctionBinding);
             Assert.False(unit.RetainedHostedSource);
         }
-        var iterator = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries,
-            unit => unit.Name == "Invoke-RangeIterator");
-        Assert.False(iterator.EmittedClrMethod);
-        Assert.True(iterator.RetainedHostedSource);
-        Assert.Contains(iterator.DiagnosticChain,
-            diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.ForOperator("dotdot") &&
-                          diagnostic.Message.Contains("lazy range-enumerator", StringComparison.Ordinal));
 
         const string probe = """
             function Describe-Record($item) {
@@ -142,8 +135,19 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                     faults=@($faults | ForEach-Object { Describe-Record $_ });errors=@($Error | ForEach-Object { Describe-Record $_ })} |
                     ConvertTo-Json -Depth 9 -Compress
             }
-            [pscustomobject]@{kind='iterator-retained';records=@(Invoke-RangeIterator -Left 1 -Right 3)} |
-                ConvertTo-Json -Depth 5 -Compress
+            $iteratorCases=@(
+                @{name='ascending';left=1;right=3}, @{name='descending';left=3;right=1},
+                @{name='single';left=1;right=1}, @{name='strings';left='1';right='3'},
+                @{name='invalid-left';left='bad';right=2}, @{name='invalid-right';left=1;right='bad'})
+            foreach ($case in $iteratorCases) {
+                $Error.Clear(); $faults=@(); $records=[Collections.Generic.List[object]]::new()
+                try { Invoke-RangeIterator -Left $case.left -Right $case.right -ErrorAction Continue -ErrorVariable faults 2>&1 |
+                    ForEach-Object { $records.Add((Describe-Record $_)) } }
+                catch { $records.Add((Describe-Record $_)) }
+                [pscustomobject]@{kind='iterator';case=$case.name;records=$records.ToArray();
+                    faults=@($faults | ForEach-Object { Describe-Record $_ });errors=@($Error | ForEach-Object { Describe-Record $_ })} |
+                    ConvertTo-Json -Depth 9 -Compress
+            }
             """;
         var original = RunStatementErrorProbe(host,
             "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
