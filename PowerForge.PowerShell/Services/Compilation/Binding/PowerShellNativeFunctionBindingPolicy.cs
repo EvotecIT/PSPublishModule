@@ -103,6 +103,8 @@ internal static class PowerShellNativeFunctionBindingPolicy
                _ => false
            }, searchNestedScriptBlocks: false) is not null ||
            RequiresNativeDictionaryKeyForEach(function) ||
+           function.Body.Find(static node => node is HashtableAst literal && PowerShellDictionarySemanticBinder.HasComputedKeys(literal),
+               searchNestedScriptBlocks: false) is not null ||
            RequiresNativeStatementValue(function) ||
            RequiresNativeLiteralCommandValue(function, capabilities) ||
            RequiresNativeCommandSwitch(function, capabilities) ||

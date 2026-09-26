@@ -62,7 +62,9 @@ internal enum PowerShellBoundDictionaryKind
     StringHashtable,
     OrderedStringDictionary,
     ObjectDictionary,
-    OrderedObjectDictionary
+    OrderedObjectDictionary,
+    NativeHashtable,
+    NativeOrderedDictionary
 }
 
 internal sealed class PowerShellBoundDictionaryEntry

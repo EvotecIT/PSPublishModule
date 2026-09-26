@@ -135,7 +135,8 @@ internal sealed partial class PowerShellSemanticBinder
                 typedHashtable,
                 ordered: false,
                 typedDictionary.StaticType,
-                PowerShellTypeFactProvenance.Explicit);
+                PowerShellTypeFactProvenance.Explicit,
+                nativeKeys: capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding));
         if (assignment.Left is ConvertExpressionAst typedLeft)
             return new PowerShellTypeFact(typedLeft.StaticType, PowerShellTypeFactProvenance.Explicit, "The assignment target has an authored type constraint.");
         if (expression is HashtableAst hashtable)
@@ -143,13 +144,15 @@ internal sealed partial class PowerShellSemanticBinder
                 hashtable,
                 ordered: false,
                 contextualType: null,
-                PowerShellTypeFactProvenance.Inferred);
+                PowerShellTypeFactProvenance.Inferred,
+                nativeKeys: capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding));
         if (expression is ConvertExpressionAst ordered && PowerShellDictionarySemanticBinder.IsOrderedHashtableConversion(ordered))
             return PowerShellDictionarySemanticBinder.InferLiteralType(
                 (HashtableAst)ordered.Child,
                 ordered: true,
                 typeof(System.Collections.Specialized.OrderedDictionary),
-                PowerShellTypeFactProvenance.Inferred);
+                PowerShellTypeFactProvenance.Inferred,
+                nativeKeys: capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding));
         if (expression is ConvertExpressionAst powerShellObject && PowerShellObjectConstructionPolicy.IsLiteral(powerShellObject))
             return PowerShellObjectSemanticBinder.InferLiteralType(powerShellObject);
         if (expression is ConvertExpressionAst conversion && conversion.StaticType != typeof(object))

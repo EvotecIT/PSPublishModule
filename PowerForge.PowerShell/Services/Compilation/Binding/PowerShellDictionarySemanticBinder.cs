@@ -16,7 +16,8 @@ internal static class PowerShellDictionarySemanticBinder
         PowerShellCompilationCapability capabilities,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
-        var objectValues = UsesObjectRepresentation(syntax, contextualType);
+        var nativeKeys = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && HasComputedKeys(syntax);
+        var objectValues = nativeKeys || UsesObjectRepresentation(syntax, contextualType);
         var entries = new List<PowerShellBoundDictionaryEntry>();
         foreach (var pair in syntax.KeyValuePairs)
         {
@@ -31,10 +32,10 @@ internal static class PowerShellDictionarySemanticBinder
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2701", "Dictionary values require one expression, a native-hosted conditional, or one qualified hosted command value.", PowerShellSourceParser.GetSpan(document, pair.Item2.Extent)));
                 return null;
             }
-            var key = bindExpression(pair.Item1, typeof(string));
+            var key = bindExpression(pair.Item1, nativeKeys ? null : typeof(string));
             var value = bindExpression(valueSyntax, objectValues ? null : typeof(string));
             if (key is null || value is null) return null;
-            if (key.Type.ClrType != typeof(string) || !objectValues && value.Type.ClrType != typeof(string))
+            if (!nativeKeys && key.Type.ClrType != typeof(string) || !objectValues && value.Type.ClrType != typeof(string))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2702", "Typed dictionary literals require String keys; the homogeneous String representation also requires String values.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
                 return null;
@@ -45,7 +46,7 @@ internal static class PowerShellDictionarySemanticBinder
         var type = ordered
             ? typeof(OrderedDictionary)
             : typeof(Hashtable);
-        var kind = (ordered, objectValues) switch
+        var kind = nativeKeys ? (ordered ? PowerShellBoundDictionaryKind.NativeOrderedDictionary : PowerShellBoundDictionaryKind.NativeHashtable) : (ordered, objectValues) switch
         {
             (true, true) => PowerShellBoundDictionaryKind.OrderedObjectDictionary,
             (true, false) => PowerShellBoundDictionaryKind.OrderedStringDictionary,
@@ -216,13 +217,18 @@ internal static class PowerShellDictionarySemanticBinder
             !PowerShellDictionaryShapePolicy.HasClosedStringValues(syntax);
     }
 
+    /// <summary>Identifies literal maps whose key values require invocation-owned binding rather than String coercion.</summary>
+    internal static bool HasComputedKeys(HashtableAst syntax)
+        => syntax.KeyValuePairs.Any(static pair => pair.Item1 is not StringConstantExpressionAst);
+
     internal static PowerShellTypeFact InferLiteralType(
         HashtableAst syntax,
         bool ordered,
         Type? contextualType,
-        PowerShellTypeFactProvenance provenance)
+        PowerShellTypeFactProvenance provenance,
+        bool nativeKeys = false)
     {
-        var objectValues = UsesObjectRepresentation(syntax, contextualType);
+        var objectValues = nativeKeys && HasComputedKeys(syntax) || UsesObjectRepresentation(syntax, contextualType);
         var dictionaryType = ordered
             ? typeof(OrderedDictionary)
             : typeof(Hashtable);

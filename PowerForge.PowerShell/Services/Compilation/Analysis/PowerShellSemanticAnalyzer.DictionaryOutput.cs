@@ -77,7 +77,8 @@ internal sealed partial class PowerShellSemanticAnalyzer
 
     private static bool IsHostLiteralMapTree(PowerShellBoundDictionaryExpression dictionary)
         => (dictionary.Kind is PowerShellBoundDictionaryKind.StringHashtable or PowerShellBoundDictionaryKind.ObjectDictionary or
-            PowerShellBoundDictionaryKind.OrderedStringDictionary or PowerShellBoundDictionaryKind.OrderedObjectDictionary) &&
+            PowerShellBoundDictionaryKind.OrderedStringDictionary or PowerShellBoundDictionaryKind.OrderedObjectDictionary or
+            PowerShellBoundDictionaryKind.NativeHashtable or PowerShellBoundDictionaryKind.NativeOrderedDictionary) &&
            dictionary.Entries.All(static entry =>
                entry.Value is not PowerShellBoundDictionaryExpression nested || IsHostLiteralMapTree(nested));
 

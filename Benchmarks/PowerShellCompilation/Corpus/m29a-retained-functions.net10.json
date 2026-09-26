@@ -4,17 +4,17 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "emitted": 457,
-  "retained": 108,
+  "emitted": 463,
+  "retained": 102,
   "dispositionContract": "Every function identity matches the accepted constructor/object comparison and its full baseline; no previously emitted method or still-retained region is lost.",
   "packets": [
     {
       "packet": "pssg",
       "stableUnits": 286,
       "functions": 282,
-      "emitted": 242,
-      "retained": 40,
-      "sourceExplanationSha256": "2657e1acde0a75449fecacc1ec2a25a193ad83c9803ae674b6f2a3d847a143c0",
+      "emitted": 243,
+      "retained": 39,
+      "sourceExplanationSha256": "f22d9fe956daae365da07b28dcd9f8738e994fd8cfeeb27d2db194e55d4ccbf5",
       "functionsRetained": [
         {
           "unitId": "f05240d2c874ad6f03bce00b",
@@ -470,24 +470,6 @@
           ]
         },
         {
-          "unitId": "d6e6d019c46177363a58eefd",
-          "name": "ConvertTo-NormalizedString",
-          "relativePath": "Public/Converts/ConvertTo-NormalizedString.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Typed dictionary literals require String keys; the homogeneous String representation also requires String values.",
-              "line": 50,
-              "column": 31
-            }
-          ]
-        },
-        {
           "unitId": "5afce79b3913c8184f5e3fa2",
           "name": "Set-DnsServerIpAddress",
           "relativePath": "Public/DNS/Set-DNSServerIPAddress.ps1",
@@ -856,9 +838,9 @@
       "packet": "cleanup",
       "stableUnits": 69,
       "functions": 68,
-      "emitted": 57,
-      "retained": 11,
-      "sourceExplanationSha256": "94577f0aa3ef83bc6b73bb0e78ed688c386fc30ed51c6b123c09477acbe991f6",
+      "emitted": 59,
+      "retained": 9,
+      "sourceExplanationSha256": "92a40a4958d900fb27b09057ce13c568be73b30382040bb54d829a9d7095f17e",
       "functionsRetained": [
         {
           "unitId": "2be0f84457750dd64ee0c5d1",
@@ -971,42 +953,6 @@
           ]
         },
         {
-          "unitId": "1adb09886fb8845998a6307f",
-          "name": "Request-ADComputersDisable",
-          "relativePath": "Private/Request-ADComputersDisable.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Typed dictionary literals require String keys; the homogeneous String representation also requires String values.",
-              "line": 31,
-              "column": 45
-            }
-          ]
-        },
-        {
-          "unitId": "369474758b8a6088af8f3bcc",
-          "name": "Request-ADComputersMove",
-          "relativePath": "Private/Request-ADComputersMove.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Typed dictionary literals require String keys; the homogeneous String representation also requires String values.",
-              "line": 21,
-              "column": 41
-            }
-          ]
-        },
-        {
           "unitId": "bcf3a0b2c8f38b4967d30b13",
           "name": "Request-ADSIDHistory",
           "relativePath": "Private/Request-ADSIDHistory.ps1",
@@ -1075,9 +1021,9 @@
       "packet": "pinf",
       "stableUnits": 67,
       "functions": 66,
-      "emitted": 55,
-      "retained": 11,
-      "sourceExplanationSha256": "eeda66ded0b2a18edcb08eba5f3191ea968f7f67b3069f21ce083286aa4523ce",
+      "emitted": 57,
+      "retained": 9,
+      "sourceExplanationSha256": "bf72f44dfd97021241aae4a9c408360dd6bd22f8c702c18da95ace1633fd917b",
       "functionsRetained": [
         {
           "unitId": "fc33881d5a7752031137ea07",
@@ -1300,24 +1246,6 @@
           ]
         },
         {
-          "unitId": "b1840fc55c97935caccbab6e",
-          "name": "Remove-InfobloxNetworkExtensibleAttribute",
-          "relativePath": "Public/Remove-InfobloxNetworkExtensibleAttribute.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Typed dictionary literals require String keys; the homogeneous String representation also requires String values.",
-              "line": 43,
-              "column": 23
-            }
-          ]
-        },
-        {
           "unitId": "f1b9f57cab21ceef2174e21a",
           "name": "Set-InfobloxDHCPRange",
           "relativePath": "Public/Set-InfobloxDHCPRange.ps1",
@@ -1350,24 +1278,6 @@
               "column": 9
             }
           ]
-        },
-        {
-          "unitId": "d88982c6e4f2263fb598fbd6",
-          "name": "Set-InfobloxNetworkMembers",
-          "relativePath": "Public/Set-InfobloxNetworkMembers.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Typed dictionary literals require String keys; the homogeneous String representation also requires String values.",
-              "line": 134,
-              "column": 27
-            }
-          ]
         }
       ]
     },
@@ -1375,9 +1285,9 @@
       "packet": "pst",
       "stableUnits": 121,
       "functions": 109,
-      "emitted": 79,
-      "retained": 30,
-      "sourceExplanationSha256": "3f7a8255b426900d892072939533e56ff4fbfd82ac1c341ebc6f4d411f579f66",
+      "emitted": 80,
+      "retained": 29,
+      "sourceExplanationSha256": "3beab13841806b14b4a45aa21d3642788ff584ea5dd6c19100ca107a1bc4d72f",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -2586,24 +2496,6 @@
               "column": 9
             }
           ]
-        },
-        {
-          "unitId": "ce7ca97ed7966d76f0813a6d",
-          "name": "Show-ANSISequence",
-          "relativePath": "functions/show-ansi.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Typed dictionary literals require String keys; the homogeneous String representation also requires String values.",
-              "line": 119,
-              "column": 26
-            }
-          ]
         }
       ]
     },
@@ -2927,49 +2819,45 @@
       ]
     }
   ],
-  "compilerBaselineCommit": "93ede3e4b18fd50f80e3625b0ea92110b71b29ab",
+  "compilerBaselineCommit": "e239ce8b9e17554a92f2189d2df277fb61034d6b",
   "compilerSourceHashes": [
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.ControlFlow.cs",
-      "sha256": "f758e75e654bdd79e82f554415e1342188bb2b12dd79b832d3f136bae4c981f4"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.NativeEnumeration.cs",
-      "sha256": "dfb79f9d4704806f356864829952017938ff11fadf4c8c36276dab78f6ff7f59"
+      "path": "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellSemanticAnalyzer.DictionaryOutput.cs",
+      "sha256": "401f398e4cb5d00b11d3991bc2cf378488c87c5417b70076150a92a906ebde6a"
     },
     {
       "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.cs",
-      "sha256": "7f42e16ea1d4bfdecb780ebd297b65ef9cf491c62b43bab5a1d08764025d9c6f"
+      "sha256": "ebd73b0b377d1a5da145e8c558198fd2d36f72a4ade3e6ddc93c954a81172e3b"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellControlFlowBindingPolicy.cs",
-      "sha256": "b80eca72da6488ec431bfdfbaaeca7ef489dc4488ca43aac5433ceeb174644c1"
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellDictionarySemanticBinder.cs",
+      "sha256": "9f8e5da882c374ad28306a9c1a1ee023799c495d54bf7d11e0db9c5d40c0abd1"
     },
     {
       "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
-      "sha256": "3f38d64a1987f3dc2a9a49ee840a47496ba0529264a24edebc6828dabdadf177"
+      "sha256": "4c32c99123fa58a94c8140d9a1726c378a55482b4b8c54b4518cf1acb9278365"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs",
-      "sha256": "c4719903ed4a7255bc4ca12acfd245ee344e482336dc9e770f9d370dfc748349"
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Locals.cs",
+      "sha256": "ee1a0728839efa627379745a28c5e18598c623aa8a35bba23f1f6635708dc6b2"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundControlFlow.cs",
-      "sha256": "9bb416d7e9bdb5dd7cfe51a9a6c35ab682d736e69b4fa0841c9fed35dbda584e"
+      "path": "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundCollections.cs",
+      "sha256": "5cd7e445d069247e14ee614fc04af3c0f1dcbef5d085d9fa29bdffefab52d8d9"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredControlFlow.cs",
-      "sha256": "3007d2eed139b70ff1de79e16b61603b88bbcb49c3b4bc6c0e7bee26f122048c"
+      "path": "PowerForge.PowerShell/Services/Compilation/PowerShellCommandHostRuntimeSource.cs",
+      "sha256": "71ce3fe77565756e956bdd5cde1ef61c605cac9d19d7a24de4dc013029b6dfd6"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.cs",
-      "sha256": "18997bf07150297fa6bab3da12fb8eb82a62203efc4472efc3079219061f148c"
+      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.NativeDictionaries.cs",
+      "sha256": "635fe5a5a8055bb728d32a3bea22ce7f91066048d77d219f4cac7af4a7a33511"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.LoopTransfers.cs",
-      "sha256": "f5e5cfa30acaaece82496bff9cbf61f0f371eb7a4ddfef01d83d1ab7e9de5908"
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Dictionaries.cs",
+      "sha256": "5f5fb030df93211cc04f7eee0d141638bb7acbf66bfd94c73d27f33a4c5bc14c"
     }
   ],
-  "dispositionComparison": "m29a-labeled-loop-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "93ede3e4b18fd50f80e3625b0ea92110b71b29ab"
+  "dispositionComparison": "m29a-dictionary-key-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "e239ce8b9e17554a92f2189d2df277fb61034d6b"
 }

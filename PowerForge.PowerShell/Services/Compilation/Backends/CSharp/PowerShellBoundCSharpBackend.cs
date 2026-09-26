@@ -558,6 +558,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
     private string EmitDictionary(PowerShellLoweredDictionaryExpression dictionary)
     {
+        if (dictionary.Kind is PowerShellBoundDictionaryKind.NativeHashtable or PowerShellBoundDictionaryKind.NativeOrderedDictionary)
+            return EmitNativeDictionary(dictionary);
         var entries = string.Join(", ", dictionary.Entries.Select(entry => $"{{ {EmitExpression(entry.Key)}, {EmitExpression(entry.Value)} }}"));
         var comparer = _semanticHostFamily == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51
             ? "global::System.StringComparer.InvariantCultureIgnoreCase"
