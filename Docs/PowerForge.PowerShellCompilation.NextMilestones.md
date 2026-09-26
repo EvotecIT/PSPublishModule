@@ -220,7 +220,8 @@ The compiler emits stable PowerShell source paths and checksums in portable PDBs
 ## How to choose and close the next implementation slice
 
 - [x] Qualify literal enum arguments and simple native indexed `if` capture through existing owners. Two unchanged PSSharedGoods registry readers match original/generated values and caught errors on disposable HKCU keys on PowerShell 7 and 5.1. Preserve transformed Type-value guards, capture rollback/transfers, and Strict rejection. Same-input `net10.0` coverage is 228/282 with no losses; the third gained function, `Set-LoggingCapabilities`, remains emission-only.
-- [ ] Qualify the gained logging-default workflow before claiming its execution, and select the next complete retained workflow by its current pipeline/command or lifecycle co-blockers. Do not treat the older `Get-FolderEncoding` conditional-value diagnosis as its current sole blocker.
+- [x] Qualify the gained `Set-LoggingCapabilities` defaults-only workflow with the unchanged `Remove-EmptyValue` dependency: 24 original/generated cases per host, each called twice, preserve caller-map identity, module replacement/mutation, false/zero values, timestamp switch presence, and empty-value removal. No log path is supplied; file creation and rotation remain unqualified.
+- [ ] Select the next complete retained workflow by its current pipeline/command or lifecycle co-blockers. A fresh one-file Hybrid explanation confirms two unsupported pipeline-statement diagnoses in `Get-FolderEncoding`; its older conditional-value diagnosis is not the current sole blocker. Account for nested script-method bodies, invocation-led pipelines, and state/stream semantics before widening admission.
 
 1. Fix accepted-code defects first; reproduce the original/generated failure and inspect sibling paths.
 2. Choose a complete blocked workflow from immutable source with every co-blocker visible. Do not import or execute external administration code merely to analyze it.
