@@ -268,6 +268,7 @@ public sealed partial class DotNetPublishPipelineRunnerStorePackageTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 Restore = true,
@@ -349,6 +350,7 @@ public sealed partial class DotNetPublishPipelineRunnerStorePackageTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 Restore = true,
@@ -409,6 +411,7 @@ public sealed partial class DotNetPublishPipelineRunnerStorePackageTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 Restore = true,
@@ -473,6 +476,7 @@ public sealed partial class DotNetPublishPipelineRunnerStorePackageTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 Restore = true,
@@ -535,6 +539,7 @@ public sealed partial class DotNetPublishPipelineRunnerStorePackageTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 Restore = true,
@@ -687,6 +692,7 @@ public sealed partial class DotNetPublishPipelineRunnerStorePackageTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 Restore = true,

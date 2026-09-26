@@ -90,7 +90,7 @@ public sealed class ReleaseValidationCompositionTests : IDisposable
         runspace.Open();
         runspace.SessionStateProxy.SetVariable("ImportedSpec", imported);
         using var shell = PowerShell.Create(runspace);
-        shell.AddScript("New-ConfigurationDotNetPublish -Settings { $ImportedSpec }");
+        shell.AddScript("New-ConfigurationDotNetPublish -Settings { $ImportedSpec } -UseControlledSourceProvenance $true");
 
         var output = shell.Invoke();
 
@@ -98,6 +98,7 @@ public sealed class ReleaseValidationCompositionTests : IDisposable
         Assert.Empty(shell.Streams.Warning);
         var composed = Assert.IsType<DotNetPublishSpec>(Assert.Single(output).BaseObject);
         Assert.Equal(_root, composed.DotNet.ProjectRoot);
+        Assert.True(composed.DotNet.UseControlledSourceProvenance);
         Assert.Equal(new[] { "win-x64" }, Assert.Single(composed.Targets).SupportedRuntimes);
         var bundle = Assert.Single(composed.Bundles);
         Assert.Equal("portable", bundle.Id);

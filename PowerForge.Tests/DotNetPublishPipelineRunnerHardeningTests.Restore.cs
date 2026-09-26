@@ -35,6 +35,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["RestoreLockedMode"] = "true",

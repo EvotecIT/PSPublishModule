@@ -62,6 +62,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string outputSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(generatorOutput)));
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 Targets =
@@ -147,6 +148,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string outputSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(libraryOutput)));
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 Targets =

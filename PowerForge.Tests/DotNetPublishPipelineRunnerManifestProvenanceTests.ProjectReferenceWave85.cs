@@ -251,6 +251,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         provenLibraryBytes = File.ReadAllBytes(libraryOutput);
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             ProjectRoot = root,
             Configuration = "Release",
             SourceRevision = revision,

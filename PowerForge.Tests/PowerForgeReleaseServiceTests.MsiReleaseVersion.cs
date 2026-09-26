@@ -12,6 +12,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             File.WriteAllText(archive, "archive");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 Targets = [new DotNetPublishTargetPlan
                 {
                     Name = "App", Version = "0.1.0",
@@ -70,6 +71,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Targets = [new DotNetPublishTargetPlan
                 {
@@ -126,6 +128,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             File.WriteAllText(archive, "archive");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 Targets = [new DotNetPublishTargetPlan
                 {
                     Name = "Studio.Windows", Version = "0.1.0",

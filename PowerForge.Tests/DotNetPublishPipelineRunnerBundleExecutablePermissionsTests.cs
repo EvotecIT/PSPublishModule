@@ -21,6 +21,7 @@ public sealed class DotNetPublishPipelineRunnerBundleExecutablePermissionsTests
             string bundleZip = Path.Combine(root, "bundle.zip");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Targets =
                 [

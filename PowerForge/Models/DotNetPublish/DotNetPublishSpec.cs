@@ -1192,7 +1192,8 @@ public sealed class DotNetPublishDotNetOptions
     public bool Clean { get; set; }
 
     /// <summary>
-    /// When true, runs <c>dotnet build</c> before publishing and uses <c>--no-build</c> in publish by default.
+    /// When true, runs <c>dotnet build</c> before publishing. A normal publish still
+    /// performs its own build unless an explicit no-build mode is selected.
     /// </summary>
     public bool Build { get; set; } = true;
 
@@ -1202,9 +1203,17 @@ public sealed class DotNetPublishDotNetOptions
     public bool NoRestoreInPublish { get; set; } = true;
 
     /// <summary>
-    /// When true, publishes with <c>--no-build</c> (recommended when <see cref="Build"/> is true).
+    /// Allows <c>--no-build</c> for controlled-source or explicit skip-build runs.
+    /// Normal direct publishing rebuilds even when this setting is true. Project-release
+    /// configuration may explicitly choose a separate build followed by no-build publish.
     /// </summary>
     public bool NoBuildInPublish { get; set; } = true;
+
+    /// <summary>
+    /// Opts into the controlled-checkout build-input proof. Normal publishing uses the selected
+    /// working tree and still verifies the resulting signed artifacts and source state.
+    /// </summary>
+    public bool UseControlledSourceProvenance { get; set; }
 
     /// <summary>
     /// Default runtime identifiers to publish for (when a target does not specify its own runtimes).

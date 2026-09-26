@@ -1156,16 +1156,19 @@ internal static partial class Program
         if (skipRestore)
         {
             plan.NoRestoreInPublish = true;
+            plan.SkipRestoreRequested = true;
             steps = steps.Where(s => s.Kind != DotNetPublishStepKind.Restore).ToArray();
         }
 
         if (skipBuild)
         {
             plan.NoBuildInPublish = true;
+            plan.SkipBuildRequested = true;
             steps = steps.Where(s => s.Kind != DotNetPublishStepKind.Build).ToArray();
         }
 
         plan.Steps = steps;
+        DotNetPublishPipelineRunner.ValidateRequestedBuildModes(plan);
     }
 
     static string[] ValidateDotNetPublishPlan(DotNetPublishPlan plan)

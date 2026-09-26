@@ -171,6 +171,7 @@ public sealed class DotNetPublishPipelineRunnerMsiPrepareTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 AllowOutputOutsideProjectRoot = false
             };
@@ -243,6 +244,7 @@ public sealed class DotNetPublishPipelineRunnerMsiPrepareTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 AllowOutputOutsideProjectRoot = false
             };
@@ -321,6 +323,7 @@ public sealed class DotNetPublishPipelineRunnerMsiPrepareTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 AllowOutputOutsideProjectRoot = false,
                 Installers = new[]

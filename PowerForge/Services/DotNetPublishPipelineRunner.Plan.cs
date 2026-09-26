@@ -592,6 +592,7 @@ public sealed partial class DotNetPublishPipelineRunner
             Build = spec.DotNet.Build,
             NoRestoreInPublish = spec.DotNet.NoRestoreInPublish,
             NoBuildInPublish = spec.DotNet.NoBuildInPublish,
+            UseControlledSourceProvenance = spec.DotNet.UseControlledSourceProvenance,
             MsBuildProperties = msbuildProps,
             TrustedBuildPackages = NormalizeStrings(spec.DotNet.TrustedBuildPackages),
             EnvironmentVariables = resolvedEnvironmentVariables,
@@ -868,6 +869,7 @@ public sealed partial class DotNetPublishPipelineRunner
             Build = dotNet.Build,
             NoRestoreInPublish = dotNet.NoRestoreInPublish,
             NoBuildInPublish = dotNet.NoBuildInPublish,
+            UseControlledSourceProvenance = dotNet.UseControlledSourceProvenance,
             Runtimes = (dotNet.Runtimes ?? Array.Empty<string>()).ToArray(),
             TrustedBuildPackages = (dotNet.TrustedBuildPackages ?? Array.Empty<string>()).ToArray(),
             MsBuildProperties = dotNet.MsBuildProperties is null
@@ -3675,7 +3677,7 @@ public sealed partial class DotNetPublishPipelineRunner
             combo);
     }
 
-    private static bool InstallerMatchesCombo(
+    internal static bool InstallerMatchesCombo(
         string[] runtimes,
         string[] frameworks,
         DotNetPublishStyle[] styles,

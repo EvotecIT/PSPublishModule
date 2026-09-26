@@ -23,6 +23,7 @@ public sealed class PowerForgeReleaseModulePackageProvenanceTests
                 },
                 new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     Targets = [new DotNetPublishTargetPlan { Name = "Example", Version = "2.3.4" }]
                 },
                 sharedReleaseVersion: null));
@@ -62,6 +63,7 @@ public sealed class PowerForgeReleaseModulePackageProvenanceTests
                 },
                 new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     Targets = [new DotNetPublishTargetPlan { Name = "Example", Version = "2.3.4" }]
                 },
                 sharedReleaseVersion: null).ToArray();
@@ -99,6 +101,7 @@ public sealed class PowerForgeReleaseModulePackageProvenanceTests
                 },
                 new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     Targets = [new DotNetPublishTargetPlan { Name = "Studio", Version = "0.1.42" }]
                 },
                 sharedReleaseVersion: null));
@@ -148,6 +151,7 @@ public sealed class PowerForgeReleaseModulePackageProvenanceTests
                 installer,
                 new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     Targets = [new DotNetPublishTargetPlan { Name = "Studio", Version = "0.1.42" }]
                 },
                 sharedReleaseVersion: null)).Path);
@@ -198,6 +202,7 @@ public sealed class PowerForgeReleaseModulePackageProvenanceTests
                 },
                 new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     Targets = [new DotNetPublishTargetPlan { Name = "Example", Version = "2.3.4" }]
                 },
                 sharedReleaseVersion: null));

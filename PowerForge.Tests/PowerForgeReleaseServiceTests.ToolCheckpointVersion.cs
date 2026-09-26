@@ -46,6 +46,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 Success = true,
                 DotNetToolPlan = new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     Targets =
                     [
                         new DotNetPublishTargetPlan

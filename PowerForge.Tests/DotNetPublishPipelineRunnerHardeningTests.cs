@@ -188,6 +188,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Outputs = new DotNetPublishOutputs
                 {
@@ -249,6 +250,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Outputs = new DotNetPublishOutputs
                 {
@@ -386,6 +388,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Outputs = new DotNetPublishOutputs
                 {
@@ -749,6 +752,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["PublishSingleFile"] = "true",
@@ -798,6 +802,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
         const string sourceRevision = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             SourceRevision = sourceRevision,
             MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -829,6 +834,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Configuration = "Release",
             MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -863,6 +869,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Configuration = "Release"
         };
         var target = new DotNetPublishTargetPlan
@@ -892,6 +899,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Targets = new[]
             {
                 new DotNetPublishTargetPlan
@@ -928,6 +936,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["SyncSELocalHtmlForgeXProject"] = string.Empty
@@ -970,6 +979,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Targets = new[]
             {
                 new DotNetPublishTargetPlan
@@ -1008,6 +1018,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Targets = new[]
             {
                 new DotNetPublishTargetPlan
@@ -1043,6 +1054,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Targets = new[]
             {
                 new DotNetPublishTargetPlan
@@ -1139,6 +1151,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Targets = new[]
             {
                 new DotNetPublishTargetPlan
@@ -1184,6 +1197,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Targets = new[]
             {
                 new DotNetPublishTargetPlan
@@ -1222,6 +1236,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Targets = new[]
             {
                 new DotNetPublishTargetPlan
@@ -1276,6 +1291,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     {
         var selectedPlan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Targets = new[]
             {
                 new DotNetPublishTargetPlan
@@ -1296,6 +1312,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
         };
         var configuredPlan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Targets = new[]
             {
                 new DotNetPublishTargetPlan
@@ -1362,6 +1379,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
         };
         var selectedPlan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Targets =
             [
                 new DotNetPublishTargetPlan
@@ -1374,6 +1392,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
         };
         var configuredPlan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Targets =
             [
                 new DotNetPublishTargetPlan
@@ -1412,6 +1431,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["UseLocalHtmlForgeX"] = "false"
@@ -1466,6 +1486,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Steps = new[]
                 {
@@ -1507,6 +1528,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Configuration = "Release",
             NoRestoreInPublish = true,
             Targets = Array.Empty<DotNetPublishTargetPlan>()
@@ -1579,6 +1601,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 LockedOutputGuard = true,
                 OnLockedOutput = DotNetPublishPolicyMode.Fail,
@@ -1614,6 +1637,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 LockedOutputGuard = true,
                 OnLockedOutput = DotNetPublishPolicyMode.Warn,

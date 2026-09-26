@@ -16,6 +16,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Configuration = "Release",
             Targets =
             [
@@ -74,6 +75,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         };
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["RuntimeIdentifiers"] = "linux-x64;win-x64;win-arm64"
@@ -541,6 +543,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string manifestPath = Path.Combine(root, "manifest.json");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Outputs = new DotNetPublishOutputs { ManifestJsonPath = manifestPath }
             };

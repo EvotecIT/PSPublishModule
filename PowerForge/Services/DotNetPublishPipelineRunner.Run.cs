@@ -31,6 +31,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (string.IsNullOrWhiteSpace(msiReservationOwner))
             throw new ArgumentException("MSI reservation owner cannot be empty.", nameof(msiReservationOwner));
+        ValidateRequestedBuildModes(plan);
         cancellationToken.ThrowIfCancellationRequested();
         var previousCancellationToken = _cancellationToken.Value;
         string? previousDotNetExecutablePath = ActiveDotNetExecutablePath.Value;
@@ -257,7 +258,9 @@ public sealed partial class DotNetPublishPipelineRunner
                             msiBuilds.Add(BuildMsiPackage(plan, msiPrepares, step, msiReservationOwner));
                             break;
                         case DotNetPublishStepKind.MsiSign:
-                            SignMsiPackage(plan, msiBuilds, step);
+                            SignMsiPackage(
+                                plan, msiBuilds, step,
+                                cleanTrackedGeneratedProvenanceState, msiReservationOwner);
                             break;
                         case DotNetPublishStepKind.DebianPackage:
                             artefacts.Add(BuildDebianPackage(plan, artefacts, step));

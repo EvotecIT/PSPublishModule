@@ -19,6 +19,7 @@ public sealed class DotNetPublishPipelineRunnerProvenanceEdgeCaseTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Steps = null!
             };

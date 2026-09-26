@@ -54,6 +54,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 "/p:ContinuousIntegrationBuild=true /p:DebugType=None /p:DebugSymbols=false");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 SourceRevision = revision,
@@ -151,6 +152,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 "/p:ContinuousIntegrationBuild=true /p:DebugType=None /p:DebugSymbols=false");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 SourceRevision = revision,
@@ -264,6 +266,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 "/p:ContinuousIntegrationBuild=true /p:DebugType=None /p:DebugSymbols=false");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 SourceRevision = revision,

@@ -49,6 +49,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 NoBuildInPublish = false,
@@ -126,6 +127,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         };
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             NoBuildInPublish = false
         };
 
@@ -239,6 +241,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 NoBuildInPublish = false,
@@ -340,6 +343,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             byte[] provenBytes = File.ReadAllBytes(libraryOutput);
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 SourceRevision = revision,
