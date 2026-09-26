@@ -5,6 +5,9 @@ namespace PowerForge;
 /// <summary>Admits a small, source-checked script-root body to the private Hybrid entry ABI.</summary>
 internal static class PowerShellHybridExecutableEntryPlanner
 {
+    private static readonly ISet<string> NoParameterReferences =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
     private static readonly HashSet<string> QualifiedCommands = new(StringComparer.OrdinalIgnoreCase)
     {
         "Get-Date",
@@ -31,14 +34,18 @@ internal static class PowerShellHybridExecutableEntryPlanner
 
         var ast = Parser.ParseFile(fullPath, out _, out var errors);
         if (errors.Length != 0 || ast.UsingStatements.Count != 0 ||
-            ast.EndBlock?.Statements.Count != 1 ||
-            ast.EndBlock.Statements[0] is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
-            pipeline.PipelineElements[0] is not CommandAst command ||
+            ast.EndBlock?.Statements is not { Count: > 0 } statements ||
             ast.ParamBlock?.Attributes.Count > 0)
             return null;
         var parameterNames = ast.ParamBlock?.Parameters.Select(static parameter => parameter.Name.VariablePath.UserPath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (!HasPreboundCommandShape(command, parameterNames)) return null;
+        if (statements.Select((statement, index) => (statement, index)).Any(item =>
+                item.statement is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
+                pipeline.PipelineElements[0] is not CommandAst command ||
+                !HasPreboundCommandShape(command, item.index == 0
+                    ? parameterNames
+                    : NoParameterReferences)))
+            return null;
         if (ast.ParamBlock is not null && ast.ParamBlock.Parameters.Any(parameter =>
                 parameter.Attributes.Count != 1 ||
                 parameter.Attributes[0] is not TypeConstraintAst constraint ||

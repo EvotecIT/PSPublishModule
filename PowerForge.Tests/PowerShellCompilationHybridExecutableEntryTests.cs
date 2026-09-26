@@ -7,6 +7,68 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Fact]
+    public void Build_HybridSequentialEntryRetainsLaterParameterRead()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "param([string] $Pattern = 'MM')\nGet-Date -Date '2025-11-30' -Format yyyy -OutVariable Pattern\nGet-Date -Date '2025-11-30' -Format $Pattern");
+        var input = new PowerShellCompilationInputResolver().Resolve(fixture.ScriptPath,
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
+        var plan = new PowerShellCompilationAnalyzer().Analyze(input, PowerShellCompilationMode.Hybrid, "net10.0");
+
+        var root = Assert.Single(Assert.Single(PowerShellCompilationExplainShaper
+            .CreateFinalExplanation(input, plan, "net10.0").Files).Units);
+
+        Assert.True(root.SemanticEligible);
+        Assert.False(root.Emitted);
+        Assert.True(root.RetainedHostedSource);
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "PowerForge.HybridRetainedSequentialEntry",
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true));
+        Assert.True(result.Succeeded, result.Error + System.Environment.NewLine + result.BuildOutput);
+        Assert.False(Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries).Emitted);
+        var original = RunProcess("pwsh", "-NoProfile", "-File", fixture.ScriptPath);
+        var generated = RunProcess(result.ArtifactPath!);
+        Assert.Equal((original.ExitCode, original.StandardOutput, original.StandardError),
+            (generated.ExitCode, generated.StandardOutput, generated.StandardError));
+    }
+
+    [Fact]
+    public void Build_HybridExecutablePreservesSequentialCommandOutput()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "param([string] $When = '2024-04-05')\nGet-Date -Date $When -Format yyyy\n# Keep the authored order.\nConvertTo-Json -InputObject 'tag'\nGet-Date -Date '2025-11-30' -Format MM");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "PowerForge.HybridSequentialEntry",
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true);
+        var input = new PowerShellCompilationInputResolver().Resolve(fixture.ScriptPath,
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
+        var plan = new PowerShellCompilationAnalyzer().Analyze(input, PowerShellCompilationMode.Hybrid, "net10.0");
+        var explainedRoot = Assert.Single(Assert.Single(PowerShellCompilationExplainShaper
+            .CreateFinalExplanation(input, plan, "net10.0").Files).Units);
+        Assert.True(explainedRoot.Emitted);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.True(result.Succeeded, result.Error + System.Environment.NewLine + result.BuildOutput);
+        Assert.True(Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries).Emitted);
+        foreach (var arguments in new[] { System.Array.Empty<string>(), new[] { "-When", "2025-11-30" } })
+        {
+            var original = RunProcess("pwsh", new[] { "-NoProfile", "-File", fixture.ScriptPath }.Concat(arguments).ToArray());
+            var generated = RunProcess(result.ArtifactPath!, arguments);
+            Assert.Equal((original.ExitCode, original.StandardOutput, original.StandardError),
+                (generated.ExitCode, generated.StandardOutput, generated.StandardError));
+        }
+        var originalFailure = RunProcess("pwsh", "-NoProfile", "-File", fixture.ScriptPath, "-When", "not-a-date");
+        var generatedFailure = RunProcess(result.ArtifactPath!, "-When", "not-a-date");
+        Assert.Equal(originalFailure.ExitCode, generatedFailure.ExitCode);
+        Assert.Equal(originalFailure.StandardOutput, generatedFailure.StandardOutput);
+        Assert.Contains("not-a-date", originalFailure.StandardError, System.StringComparison.Ordinal);
+        Assert.Contains("not-a-date", generatedFailure.StandardError, System.StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Build_HybridExecutablePreservesOmittedStringParameter()
     {
         using var fixture = ArtifactFixture.Create("param([string] $Value)\nConvertTo-Json -InputObject $Value");

@@ -68,17 +68,26 @@ internal static class PowerShellHybridExecutableEntryEmitter
         var authored = Parser.ParseFile(authoredSourcePath, out _, out var authoredErrors);
         var packaged = Parser.ParseInput(packagedSource, out _, out var packagedErrors);
         if (authoredErrors.Length != 0 || packagedErrors.Length != 0 ||
-            authored.EndBlock?.Statements.Count != 1 || packaged.EndBlock is null)
-            throw new InvalidOperationException("The compiled Hybrid entry no longer has one valid authored statement.");
-        var original = authored.EndBlock.Statements[0].Extent.Text;
-        var matches = packaged.EndBlock.Statements.Where(statement =>
-            statement.GetType() == authored.EndBlock.Statements[0].GetType() &&
-            statement.Extent.Text.Equals(original, StringComparison.Ordinal)).ToArray();
+            authored.EndBlock?.Statements is not { Count: > 0 } authoredStatements ||
+            packaged.EndBlock is null || packaged.EndBlock.Statements.Count < authoredStatements.Count)
+            throw new InvalidOperationException("The compiled Hybrid entry no longer has a valid authored statement sequence.");
+        var packagedStatements = packaged.EndBlock.Statements;
+        var matches = Enumerable.Range(0, packagedStatements.Count - authoredStatements.Count + 1)
+            .Where(start => authoredStatements.Select((statement, offset) =>
+                packagedStatements[start + offset].GetType() == statement.GetType() &&
+                packagedStatements[start + offset].Extent.Text.Equals(statement.Extent.Text, StringComparison.Ordinal))
+                .All(static matched => matched)).ToArray();
         if (matches.Length != 1)
-            throw new InvalidOperationException("The packaged Hybrid entry no longer has one exact authored statement.");
-        var selected = matches[0].Extent;
+            throw new InvalidOperationException("The packaged Hybrid entry no longer has one exact authored statement sequence.");
+        var selected = packagedStatements.Skip(matches[0]).Take(authoredStatements.Count)
+            .Select(static statement => statement.Extent).ToArray();
         var values = compiled.EntryPoint.Parameters.Select(parameter => "$" + parameter.Contract.Name);
         var invocation = "Invoke-PowerForgeCompiledEntry -Values ([object[]] @(" + string.Join(", ", values) + "))";
-        return packagedSource.Substring(0, selected.StartOffset) + invocation + packagedSource.Substring(selected.EndOffset);
+        var source = new StringBuilder(packagedSource);
+        for (var index = selected.Length - 1; index > 0; index--)
+            source.Remove(selected[index].StartOffset, selected[index].EndOffset - selected[index].StartOffset);
+        source.Remove(selected[0].StartOffset, selected[0].EndOffset - selected[0].StartOffset);
+        source.Insert(selected[0].StartOffset, invocation);
+        return source.ToString();
     }
 }
