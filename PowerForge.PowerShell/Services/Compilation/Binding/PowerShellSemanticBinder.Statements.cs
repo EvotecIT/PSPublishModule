@@ -299,7 +299,13 @@ internal sealed partial class PowerShellSemanticBinder
                 }
                 return new PowerShellBoundThrowStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), null);
             }
-            if (throwStatement.Pipeline is null) return null;
+            if (throwStatement.Pipeline is null)
+            {
+                if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) return null;
+                var throwSpan = PowerShellSourceParser.GetSpan(document, statement.Extent);
+                return new PowerShellBoundThrowStatement(throwSpan, new PowerShellBoundLiteralExpression(throwSpan, null,
+                    LiteralType(typeof(object), "A bare non-rethrow passes null to native exception conversion."), PowerShellValueState.Null));
+            }
             var expression = BindExpression(document, throwStatement.Pipeline, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
             if (expression is null) return null;
             if (!typeof(Exception).IsAssignableFrom(expression.Type.ClrType) &&

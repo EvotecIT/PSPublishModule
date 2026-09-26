@@ -4,17 +4,17 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "emitted": 466,
-  "retained": 99,
+  "emitted": 469,
+  "retained": 96,
   "dispositionContract": "Every function identity matches the accepted constructor/object comparison and its full baseline; no previously emitted method or still-retained region is lost.",
   "packets": [
     {
       "packet": "pssg",
       "stableUnits": 286,
       "functions": 282,
-      "emitted": 246,
-      "retained": 36,
-      "sourceExplanationSha256": "c0ed988f77cb50c8d8a4f61919449c6795b066d94d53aacd4019e17f02e2f741",
+      "emitted": 249,
+      "retained": 33,
+      "sourceExplanationSha256": "38ebc9592b5b9f9b20b9930dbdba3a6330edbd565f28e92d229a0c4bfc7ff1c1",
       "functionsRetained": [
         {
           "unitId": "005401f052dbe8e7f319d556",
@@ -579,60 +579,6 @@
               "message": "CLR type 'PowerShell' is not available in the generated project reference set for the requested target.",
               "line": 54,
               "column": 11
-            }
-          ]
-        },
-        {
-          "unitId": "eae0fabd2a6ff707f25100bb",
-          "name": "New-PSRegistry",
-          "relativePath": "Public/Registry/New-PSRegistry.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.throwstatement",
-              "message": "Statement 'ThrowStatementAst' is not yet represented by the bound pipeline.",
-              "line": 57,
-              "column": 17
-            }
-          ]
-        },
-        {
-          "unitId": "67ea8a335a26934ffb7b1351",
-          "name": "Remove-PSRegistry",
-          "relativePath": "Public/Registry/Remove-PSRegistry.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.throwstatement",
-              "message": "Statement 'ThrowStatementAst' is not yet represented by the bound pipeline.",
-              "line": 68,
-              "column": 17
-            }
-          ]
-        },
-        {
-          "unitId": "c5a04a295594097dd19d2958",
-          "name": "Set-PSRegistry",
-          "relativePath": "Public/Registry/Set-PSRegistry.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.throwstatement",
-              "message": "Statement 'ThrowStatementAst' is not yet represented by the bound pipeline.",
-              "line": 88,
-              "column": 17
             }
           ]
         },

@@ -74,6 +74,8 @@ internal static class PowerShellNativeFunctionBindingPolicy
     private static bool RequiresNativeBinding(FunctionDefinitionAst function, string? targetFramework,
         PowerShellCompilationCapability capabilities)
         => function.Body.BeginBlock is not null || function.Body.ProcessBlock is not null ||
+           function.Body.Find(static node => node is ThrowStatementAst { Pipeline: null } thrown &&
+               !PowerShellControlFlowBindingPolicy.HasAncestor<CatchClauseAst>(thrown), searchNestedScriptBlocks: false) is not null ||
            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&
            function.Body.Find(static node => node is TypeExpressionAst expression &&
                expression.TypeName.GetReflectionType() is { } expressionType &&
