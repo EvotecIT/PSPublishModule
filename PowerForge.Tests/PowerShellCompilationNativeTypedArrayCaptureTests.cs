@@ -44,7 +44,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 try {
                     [int[]]$Target=@(foreach($item in $Values){$item;if($ThrowAfterOutput){throw 'capture failed'}})
                 } catch {
-                    [pscustomobject]@{error=$_.FullyQualifiedErrorId;message=$_.Exception.Message;exception=$_.Exception.GetType().FullName}
+                    [pscustomobject]@{error=$_.FullyQualifiedErrorId;message=$_.Exception.Message;exception=$_.Exception.GetType().FullName;
+                        line=$_.InvocationInfo.ScriptLineNumber;column=$_.InvocationInfo.OffsetInLine;source=$_.InvocationInfo.Line}
                 } finally { 'finally' }
                 [pscustomobject]@{type=$Target.GetType().FullName;count=$Target.Count;values=@($Target)}
             }
@@ -75,6 +76,29 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 catch { $_.FullyQualifiedErrorId; $_.Exception.GetType().FullName }
                 $Target
             }
+            function Read-TypedCatch {
+                [CmdletBinding()] param([object[]]$Values)
+                [int[]]$Target=7
+                try { $Target=@(foreach($item in $Values){$item}) }
+                catch [System.Management.Automation.PSInvalidCastException] { 'cast'; $_.Exception.GetType().FullName }
+                catch { 'all'; $_.Exception.GetType().FullName }
+                finally { 'finally' }
+                $Target
+            }
+            function Read-MixedCatch {
+                [CmdletBinding()] param([object[]]$Values)
+                [int[]]$Target=7
+                try { $Target=@(foreach($item in $Values){$item}) }
+                catch [InvalidOperationException] { 'invalid' }
+                catch { 'all'; $_.Exception.GetType().FullName }
+                $Target
+            }
+            function Read-MethodCatch {
+                [CmdletBinding()] param([Parameter(ValueFromPipeline=$true)][string]$Text)
+                try { [int]::Parse($Text) }
+                catch [InvalidOperationException] { 'invalid' }
+                catch { 'all'; $_.Exception.GetType().FullName; $_.FullyQualifiedErrorId }
+            }
             function Read-BlockedCapture {
                 [CmdletBinding()] param([int]$Value)
                 [string[]]$Items=@(foreach($item in $Value){[string]$item})
@@ -92,12 +116,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             var unit = Assert.Single(built.Manifest!.UnitDispositionLedger!.Entries, unit => unit.Name == name);
             Assert.True(unit.EmittedClrMethod, System.Text.Json.JsonSerializer.Serialize(unit));
         }
-        foreach (var name in new[] { "Read-StringCapture", "Read-IntegerCapture", "Read-ExistingConstraint", "Read-ParameterConstraint", "Read-LocalConstraint", "Read-LocalDeclaration" })
+        foreach (var name in new[] { "Read-StringCapture", "Read-IntegerCapture", "Read-ExistingConstraint", "Read-ParameterConstraint", "Read-LocalConstraint", "Read-LocalDeclaration", "Read-TypedCatch", "Read-MixedCatch", "Read-MethodCatch" })
         {
             var unit = Assert.Single(built.Manifest!.UnitDispositionLedger!.Entries, unit => unit.Name == name);
-            Assert.False(unit.EmittedClrMethod, System.Text.Json.JsonSerializer.Serialize(unit));
-            Assert.True(unit.RetainedHostedSource);
-            Assert.Contains(unit.DiagnosticChain, cause => cause.Message.Contains("element-conversion error semantics remain hosted"));
+            Assert.True(unit.EmittedClrMethod, System.Text.Json.JsonSerializer.Serialize(unit));
         }
         var blocked = Assert.Single(built.Manifest!.UnitDispositionLedger!.Entries, unit => unit.Name == "Read-BlockedCapture");
         Assert.True(blocked.RetainedHostedSource);
@@ -109,9 +131,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                     [pscustomobject]@{name=$name;values=$values;records=@(& $name -Values $values)}|ConvertTo-Json -Depth 6 -Compress
                 }
             }
-            foreach($name in 'Read-ExistingConstraint','Read-ParameterConstraint','Read-LocalConstraint','Read-LocalDeclaration') {
+            foreach($name in 'Read-ExistingConstraint','Read-ParameterConstraint','Read-LocalConstraint','Read-LocalDeclaration','Read-TypedCatch','Read-MixedCatch') {
                 [pscustomobject]@{name=$name;records=@(& $name -Values @(1,'bad',3))}|ConvertTo-Json -Depth 6 -Compress
             }
+            [pscustomobject]@{methodRecords=@(Read-MethodCatch -Text 'bad')}|ConvertTo-Json -Depth 6 -Compress
             & (Get-Command Read-StringCapture).Module {
                 $script:trace=[System.Collections.Generic.List[string]]::new()
                 $callback=[pscustomobject]@{Value='callback'}

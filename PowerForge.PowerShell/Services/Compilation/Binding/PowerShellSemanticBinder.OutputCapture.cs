@@ -114,50 +114,6 @@ internal sealed partial class PowerShellSemanticBinder
                 !statement.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStreams));
     }
 
-    // Native pipeline capture deliberately erases expression types. Inspect only
-    // authored output positions; conditions and iterators remain bound by their
-    // existing native owners. No command, cast, callback or extra body can supply records.
-    private static bool HasClosedNativeTypedRecords(StatementBlockAst block, Type elementType)
-        => block.Traps is null or { Count: 0 } && block.Statements.Count > 0 &&
-           block.Statements.All(statement => statement switch
-           {
-               PipelineAst { PipelineElements.Count: 1 } pipeline when
-                   pipeline.PipelineElements[0] is CommandExpressionAst { Redirections.Count: 0 } command
-                   => command.Expression is ConstantExpressionAst constant &&
-                      constant.Value is not null && constant.Value.GetType() == elementType,
-               IfStatementAst conditional => conditional.Clauses.All(clause =>
-                   HasClosedNativeTypedRecords(clause.Item2, elementType)) &&
-                   (conditional.ElseClause is null || HasClosedNativeTypedRecords(conditional.ElseClause, elementType)),
-               ForEachStatementAst loop => HasClosedNativeTypedRecords(loop.Body, elementType),
-               _ => false
-           });
-
-    private static IEnumerable<Type> NativeCaptureConstraintTypes(AssignmentStatementAst assignment,
-        VariableExpressionAst? destination, PowerShellSemanticSymbolBinding? target)
-    {
-        if (target?.Type.Provenance == PowerShellTypeFactProvenance.Explicit) yield return target.Type.ClrType;
-        if (destination is null) yield break;
-        static string Identity(VariableExpressionAst variable)
-            => variable.VariablePath.IsLocal ? variable.VariablePath.UserPath.Substring(6) : variable.VariablePath.UserPath;
-        var name = Identity(destination);
-        var body = FindOwningFunctionBody(assignment);
-        var targets = body is null ? new[] { assignment.Left } : body.FindAll(node =>
-                node is AssignmentStatementAst prior &&
-                PowerShellAssignmentTargetPolicy.FindDirectVariable(prior.Left, true) is { } variable &&
-                Identity(variable).Equals(name, StringComparison.OrdinalIgnoreCase), false)
-            .Cast<AssignmentStatementAst>().Select(prior => prior.Left);
-        foreach (var left in targets)
-            for (var attributed = left as AttributedExpressionAst; attributed is not null;
-                 attributed = attributed.Child as AttributedExpressionAst)
-                if (attributed.Attribute is TypeConstraintAst constraint && constraint.TypeName.GetReflectionType() is { } type)
-                    yield return type;
-        if (body is null) yield break;
-        foreach (var parameter in PowerShellParameterSyntax.GetParameters(body))
-            if (parameter.Name.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase))
-                foreach (var constraint in parameter.Attributes.OfType<TypeConstraintAst>())
-                    if (constraint.TypeName.GetReflectionType() is { } type) yield return type;
-    }
-
     private PowerShellBoundStatement? BindOutputCapture(ParsedSourceDocument document, AssignmentStatementAst assignment,
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
@@ -234,15 +190,6 @@ internal sealed partial class PowerShellSemanticBinder
         }
         if (usesNativeInvocation)
         {
-            if (collectedArray is not null && NativeCaptureConstraintTypes(assignment, variable, target)
-                .Any(vector => vector.IsArray && vector.GetElementType() is { } element &&
-                    PowerShellStableScalarTypePolicy.IsSupported(element) &&
-                    !HasClosedNativeTypedRecords(collectedArray.SubExpression, element)))
-            {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2940",
-                    "Typed native statement-array capture requires records already matching the declared stable-scalar element type; element-conversion error semantics remain hosted.", span));
-                return null;
-            }
             return new PowerShellBoundOutputCaptureStatement(span, target?.Symbol,
                 body,
                 new PowerShellNativeAssignmentTarget(assignment.Left.Extent.Text, document.Path, document.Text,
