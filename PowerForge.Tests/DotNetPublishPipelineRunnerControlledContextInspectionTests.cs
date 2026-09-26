@@ -8,6 +8,44 @@ namespace PowerForge.Tests;
 public sealed class DotNetPublishPipelineRunnerControlledContextInspectionTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void ControlledRootRestore_InspectsWrapperActivatedImports(bool unsafeImport)
+    {
+        string root = Directory.CreateTempSubdirectory("pf-root-restore-inspection-").FullName;
+        try
+        {
+            string wrapper = Path.Combine(root, "PowerForge.ControlledRestoreContexts.probe.props");
+            File.WriteAllText(wrapper, "<Project><PropertyGroup><_PowerForgeMatched_probe>true</_PowerForgeMatched_probe></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(root, "Context.targets"), unsafeImport
+                ? "<Project><Target Name=\"Unsafe\" BeforeTargets=\"Restore\"><Exec Command=\"echo unsafe\" /><WriteLinesToFile File=\"unsafe.txt\" Lines=\"executed\" /></Target></Project>"
+                : "<Project><PropertyGroup><HarmlessMarker>loaded</HarmlessMarker></PropertyGroup></Project>");
+            string project = Path.Combine(root, "Probe.proj");
+            File.WriteAllText(project, """
+                <Project>
+                  <Import Project="$(DirectoryBuildPropsPath)" />
+                  <Import Project="Context.targets" Condition="$(DirectoryBuildPropsPath.Contains('PowerForge.ControlledRestoreContexts'))" />
+                  <Target Name="Restore"><WriteLinesToFile File="restored.txt" Lines="completed" /></Target>
+                </Project>
+                """);
+            // Exercise the production root-restore entry point, including its argument construction.
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+            Type requestType = typeof(DotNetPublishPipelineRunner).GetNestedType("ProjectEvaluationRequest", System.Reflection.BindingFlags.NonPublic)!;
+            object request = requestType.GetConstructors(flags).Single().Invoke(
+                [project, null, "Release", null, null, null, null, true, null, true, null]);
+            var method = typeof(DotNetPublishPipelineRunner).GetMethod("TryRestoreControlledPublishRoot",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+            bool accepted = (bool)method.Invoke(null,
+                [request, root, root, project, new Dictionary<string, string?>(), "", "", root, wrapper])!;
+            Assert.Equal(!unsafeImport, accepted);
+            Assert.Equal(!unsafeImport, File.Exists(Path.Combine(root, "restored.txt")));
+            Assert.False(File.Exists(Path.Combine(root, "unsafe.txt")));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Theory]
     [InlineData("BuildDependsOn")]
     [InlineData("%42uildDependsOn")]
     [InlineData("$(DependencyProperty)")]

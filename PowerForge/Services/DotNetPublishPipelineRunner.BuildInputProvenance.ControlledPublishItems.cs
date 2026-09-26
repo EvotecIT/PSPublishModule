@@ -502,10 +502,11 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             var arguments = new List<string>
             {
-                "restore",
+                "msbuild",
                 controlledProjectPath,
                 "-nologo",
                 "-verbosity:quiet",
+                "-target:Restore",
                 "-p:RestoreRecursive=false"
             };
             if (!TryAppendControlledProjectEvaluationProperties(
@@ -523,12 +524,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 Path.Combine(controlledOutputRoot, "root-packages.lock.json"));
             AppendControlledRestoreContextProps(arguments, restoreContextProps);
 
-            var process = RunBuildInputEvaluationProcess(
-                "dotnet",
+            var process = RunControlledMsBuildEvaluationProcess(
                 Path.GetDirectoryName(controlledProjectPath)!,
                 arguments,
                 controlledEnvironment,
-                TimeSpan.FromMinutes(5));
+                TimeSpan.FromMinutes(5),
+                controlledOutputRoot);
             return process.ExitCode == 0 && !process.TimedOut;
         }
         catch
