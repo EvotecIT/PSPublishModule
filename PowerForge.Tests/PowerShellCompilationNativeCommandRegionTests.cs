@@ -24,8 +24,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             function Get-SwitchResult {
                 [CmdletBinding()] param([string]$Mode)
                 switch (Get-SwitchInput -Mode $Mode) {
-                    'a' { 'first' }
-                    'a' { 'second' }
+                    'a' { 'first,second' -split ',' }
+                    'a' { 'third' }
                     'b' { 'bee'; break }
                     '1' { 'number' }
                     '' { 'null-match' }

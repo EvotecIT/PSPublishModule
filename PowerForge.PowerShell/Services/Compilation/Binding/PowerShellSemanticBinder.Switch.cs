@@ -172,7 +172,14 @@ internal sealed partial class PowerShellSemanticBinder
         => body.Traps is null or { Count: 0 } && body.Statements.All(statement =>
             statement is BreakStatementAst { Label: null } ||
             statement is PipelineAst { PipelineElements.Count: 1 } pipeline &&
-            pipeline.PipelineElements[0] is CommandExpressionAst { Expression: StringConstantExpressionAst });
+            pipeline.PipelineElements[0] is CommandExpressionAst command &&
+            (command.Expression is StringConstantExpressionAst ||
+             command.Expression is BinaryExpressionAst
+             {
+                 Operator: TokenKind.Isplit or TokenKind.Csplit,
+                 Left: StringConstantExpressionAst,
+                 Right: StringConstantExpressionAst { Value: "," }
+             }));
 
     private static bool CanRecoverNativeStringParameter(SwitchStatementAst statement, string name,
         out ScriptBlockAst functionBody)
