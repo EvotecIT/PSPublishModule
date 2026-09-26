@@ -65,10 +65,13 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var isolatedPaths = new HashSet<string>(FileSystemPathSafety.ExistingPathComparer);
         var pendingImports = new Queue<(string Path, string ProjectDirectory,
-            IReadOnlyDictionary<string, string> Properties, string? PackageRoot)>();
+            IReadOnlyDictionary<string, string> Properties,
+            IReadOnlyDictionary<string, string> EvaluatedProperties, string? PackageRoot)>();
         var sourceContextsByImport = new Dictionary<string,
             (string Path, string ProjectDirectory,
-                List<(IReadOnlyDictionary<string, string> Properties, string? PackageRoot)> Contexts)>(
+                List<(IReadOnlyDictionary<string, string> Properties,
+                    IReadOnlyDictionary<string, string> EvaluatedProperties,
+                    string? PackageRoot)> Contexts)>(
                 StringComparer.Ordinal);
         var sourceProperties = new Dictionary<string, List<IReadOnlyDictionary<string, string>>>(
             FileSystemPathSafety.ExistingPathComparer);
@@ -79,10 +82,16 @@ public sealed partial class DotNetPublishPipelineRunner
             => first.Count == second.Count && first.All(property => second.Any(candidate =>
                 StringComparer.OrdinalIgnoreCase.Equals(property.Key, candidate.Key) &&
                 StringComparer.Ordinal.Equals(property.Value, candidate.Value)));
+        static bool SameEvaluatedProperties(IReadOnlyDictionary<string, string> first,
+            IReadOnlyDictionary<string, string> second)
+            => first.Count == second.Count && first.All(property =>
+                second.TryGetValue(property.Key, out string? value) &&
+                StringComparer.Ordinal.Equals(property.Value, value));
         static string? ReadPackageRoot(IReadOnlyDictionary<string, string> properties)
             => properties.TryGetValue("NuGetPackageRoot", out string? root) ? root : null;
         void AddSource(string path, string projectDirectory,
-            IReadOnlyDictionary<string, string> properties, string? packageRoot)
+            IReadOnlyDictionary<string, string> properties,
+            IReadOnlyDictionary<string, string> evaluatedProperties, string? packageRoot)
         {
             isolatedPaths.Add(path);
             if (!projectSources.TryGetValue(projectDirectory, out HashSet<string>? paths))
@@ -107,33 +116,41 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!sourceContextsByImport.TryGetValue(key, out var source))
             {
                 source = (path, projectDirectory,
-                    new List<(IReadOnlyDictionary<string, string> Properties, string? PackageRoot)>());
+                    new List<(IReadOnlyDictionary<string, string> Properties,
+                        IReadOnlyDictionary<string, string> EvaluatedProperties,
+                        string? PackageRoot)>());
                 sourceContextsByImport[key] = source;
             }
             if (!source.Contexts.Any(context => SameProperties(context.Properties, properties) &&
+                    (ReferenceEquals(context.EvaluatedProperties, evaluatedProperties) ||
+                     SameEvaluatedProperties(context.EvaluatedProperties, evaluatedProperties)) &&
                     string.Equals(context.PackageRoot, packageRoot,
                         IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)))
             {
-                source.Contexts.Add((properties, packageRoot));
-                pendingImports.Enqueue((path, projectDirectory, properties, packageRoot));
+                source.Contexts.Add((properties, evaluatedProperties, packageRoot));
+                pendingImports.Enqueue((path, projectDirectory, properties,
+                    evaluatedProperties, packageRoot));
             }
         }
         if (isolatedProjects.Contains(Path.GetFullPath(rootRequest.ProjectPath)))
             AddSource(rootRequest.ProjectPath, Path.GetDirectoryName(rootRequest.ProjectPath)!,
-                rootRequest.ReadEffectiveGlobalProperties(), ReadPackageRoot(rootEvaluatedProperties));
+                rootRequest.ReadEffectiveGlobalProperties(), rootEvaluatedProperties,
+                ReadPackageRoot(rootEvaluatedProperties));
         foreach (string import in rootEvaluatedImports)
         {
             if (isolatedProjects.Contains(Path.GetFullPath(rootRequest.ProjectPath)) &&
                 !IsControlledToolchainImport(import, rootEvaluatedProperties))
                 AddSource(import, Path.GetDirectoryName(rootRequest.ProjectPath)!,
-                    rootRequest.ReadEffectiveGlobalProperties(), ReadPackageRoot(rootEvaluatedProperties));
+                    rootRequest.ReadEffectiveGlobalProperties(), rootEvaluatedProperties,
+                    ReadPackageRoot(rootEvaluatedProperties));
         }
         foreach (ControlledPublishGraphNode node in graphNodes)
         {
             bool isolated = isolatedProjects.Contains(Path.GetFullPath(node.Request.ProjectPath));
             if (isolated)
                 AddSource(node.Request.ProjectPath, Path.GetDirectoryName(node.Request.ProjectPath)!,
-                    node.Request.ReadEffectiveGlobalProperties(), ReadPackageRoot(node.EvaluatedProperties));
+                    node.Request.ReadEffectiveGlobalProperties(), node.EvaluatedProperties,
+                    ReadPackageRoot(node.EvaluatedProperties));
             foreach (string import in node.EvaluatedImports)
             {
                 // The installed SDK supplies its own target-time output defaults. Custom
@@ -142,7 +159,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     continue;
                 if (isolated)
                     AddSource(import, Path.GetDirectoryName(node.Request.ProjectPath)!,
-                        node.Request.ReadEffectiveGlobalProperties(), ReadPackageRoot(node.EvaluatedProperties));
+                        node.Request.ReadEffectiveGlobalProperties(), node.EvaluatedProperties,
+                        ReadPackageRoot(node.EvaluatedProperties));
             }
         }
 
@@ -170,10 +188,11 @@ public sealed partial class DotNetPublishPipelineRunner
         do
         {
             discoveredContextImport = false;
+            string? unresolvedContextImport = null;
             while (pendingImports.Count > 0)
             {
                 (string path, string projectDirectory, IReadOnlyDictionary<string, string> properties,
-                    string? packageRoot) =
+                    IReadOnlyDictionary<string, string> evaluatedProperties, string? packageRoot) =
                     pendingImports.Dequeue();
                 if (!File.Exists(path))
                     continue;
@@ -206,11 +225,14 @@ public sealed partial class DotNetPublishPipelineRunner
                         continue;
                     if (!TryResolveControlledContextImport(path, projectDirectory,
                             import.Attribute("Project")?.Value, originalGitRoot,
-                            verifiedPackageCatalogs, packageRoot,
+                            verifiedPackageCatalogs, packageRoot, properties,
+                            evaluatedProperties,
+                            projectSources[projectDirectory].Where(documents.ContainsKey)
+                                .Select(source => documents[source]), unstableProperties,
                             out string? importedPath))
                     {
-                        failureReason = $"context-dependent import '{import.Attribute("Project")?.Value}' in '{path}' cannot be inspected safely.";
-                        return false;
+                        unresolvedContextImport = $"context-dependent import '{import.Attribute("Project")?.Value}' in '{path}' cannot be inspected safely.";
+                        continue;
                     }
                     if (File.Exists(importedPath))
                     {
@@ -221,9 +243,15 @@ public sealed partial class DotNetPublishPipelineRunner
                             return false;
                         }
                         discoveredContextImport |= !projectSources[projectDirectory].Contains(importedPath!);
-                        AddSource(importedPath!, projectDirectory, properties, packageRoot);
+                        AddSource(importedPath!, projectDirectory, properties,
+                            evaluatedProperties, packageRoot);
                     }
                 }
+            }
+            if (!discoveredContextImport && unresolvedContextImport is not null)
+            {
+                failureReason = unresolvedContextImport;
+                return false;
             }
             // A newly discovered props file may define an alias used by a later import
             // condition in a source document already scanned above.
@@ -232,7 +260,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 foreach (var source in sourceContextsByImport.Values)
                     foreach (var context in source.Contexts)
                         pendingImports.Enqueue((source.Path, source.ProjectDirectory,
-                            context.Properties, context.PackageRoot));
+                            context.Properties, context.EvaluatedProperties,
+                            context.PackageRoot));
             }
         }
         while (discoveredContextImport);
@@ -362,6 +391,10 @@ public sealed partial class DotNetPublishPipelineRunner
         string originalGitRoot,
         IReadOnlyCollection<VerifiedPackageInputCatalog> verifiedPackageCatalogs,
         string? packageRoot,
+        IReadOnlyDictionary<string, string> globalProperties,
+        IReadOnlyDictionary<string, string> evaluatedProperties,
+        IEnumerable<XDocument> sourceDocuments,
+        ISet<string> unstableProperties,
         out string? path)
     {
         path = null;
@@ -384,6 +417,10 @@ public sealed partial class DotNetPublishPipelineRunner
                         Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
                         Path.DirectorySeparatorChar);
             }
+            if (ContainsUnresolvedBuildExpression(expression) &&
+                !TryExpandStableControlledImportAliases(expression, sourceDocuments,
+                    evaluatedProperties, globalProperties, unstableProperties, out expression))
+                return false;
             if (ContainsUnresolvedBuildExpression(expression) ||
                 expression.IndexOfAny(new[] { '*', '?' }) >= 0)
                 return false;

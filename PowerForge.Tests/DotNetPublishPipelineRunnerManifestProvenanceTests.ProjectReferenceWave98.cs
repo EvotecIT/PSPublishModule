@@ -240,6 +240,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("override-activated-import")]
     [InlineData("second-context-activated-import")]
     [InlineData("inactive-override-import")]
+    [InlineData("stable-context-import-alias")]
+    [InlineData("malicious-context-import-alias")]
+    [InlineData("wildcard-context-import-alias")]
     public void ReadSourceProvenance_RestoresEverySelectedFrameworkForSharedMultiTargetReference(string scenario)
     {
         bool distinctRestoreContexts = scenario != "single-context";
@@ -282,7 +285,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         bool globalOutputRoots = scenario == "global-output-roots";
         bool referenceGlobalIntermediateRoots = scenario == "reference-global-intermediate-roots";
         bool overrideActivatedImport = scenario is "override-activated-import" or "second-context-activated-import";
-        bool inactiveOverrideImport = scenario == "inactive-override-import";
+        bool benignContextAlias = scenario == "stable-context-import-alias";
+        bool wildcardContextAlias = scenario == "wildcard-context-import-alias";
         bool computedLatePathMutation = scenario == "computed-late-path-mutation";
         bool referencePropsOverride = scenario == "reference-props-override";
         bool ridListContext = scenario == "rid-list-context";
@@ -299,14 +303,12 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             scenario == "context-activated-indirect-import" ||
             scenario == "context-activated-external-alias-import" ||
             scenario == "context-activated-property-method-import" ||
-            scenario == "context-activated-chained-import";
-        bool indirectContextActivatedImport = scenario == "context-activated-indirect-import";
-        bool externalAliasContextImport = scenario == "context-activated-external-alias-import";
-        bool propertyMethodContextImport = scenario == "context-activated-property-method-import";
-        bool chainedContextImport = scenario == "context-activated-chained-import";
+            scenario == "context-activated-chained-import" ||
+            scenario == "malicious-context-import-alias";
         if (caseSensitiveContextValues || externalIntermediatePath || ridListContext ||
             inactivePackPathTarget || standalonePathTarget || inactiveContextTarget ||
-            packHookCalledByBuild || uppercaseContextPaths ||
+            packHookCalledByBuild || uppercaseContextPaths || benignContextAlias ||
+            wildcardContextAlias ||
             contextActivatedImport)
             unselectedContextPackage = false;
         if ((caseVariantSymbols || uppercaseContextPaths) && !OperatingSystem.IsWindows())
@@ -478,32 +480,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string requireFrameworkSplit = sameContextMultiFrameworkOutput
                 ? "<Target Name=\"RequireFrameworkSplit\" BeforeTargets=\"CoreCompile\" Condition=\"$(BaseOutputPath.Contains('powerforge-context')) and '$(AppendTargetFrameworkToOutputPath)' != 'true'\"><Error Condition=\"$(OutputPath.Contains('framework-')) != 'True' or $(IntermediateOutputPath.Contains('framework-')) != 'True'\" Text=\"Framework outputs were not isolated: OutputPath=$(OutputPath), IntermediateOutputPath=$(IntermediateOutputPath), BaseOutputPath=$(BaseOutputPath), Append=$(AppendTargetFrameworkToOutputPath).\" /></Target>"
                 : string.Empty;
-            string contextualImport = externalAliasContextImport
-                ? "<Import Project=\"Context.aliases.props\" /><Import Project=\"Context.targets\" Condition=\"'$(ContextImportEnabled)' == 'true'\" />"
-                : chainedContextImport
-                    ? "<Import Project=\"Context.aliases.props\" Condition=\"$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))\" /><Import Project=\"Context.targets\" Condition=\"'$(ContextImportEnabled)' == 'true'\" />"
-                : overrideActivatedImport
-                    ? "<Import Project=\"Context.targets\" Condition=\"'$(BuildProjectReferences)' == 'false'" +
-                      (scenario == "second-context-activated-import" ? " and '$(Flavor)' == 'Direct'" : "") + "\" />"
-                : inactiveOverrideImport
-                    ? "<Import Project=\"Missing.targets\" Condition=\"'false' == 'true' and '$(BuildProjectReferences)' == 'false'\" />"
-                : indirectContextActivatedImport
-                ? "<PropertyGroup><ContextImportEnabled>$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))</ContextImportEnabled></PropertyGroup><Import Project=\"Context.targets\" Condition=\"'$(ContextImportEnabled)' == 'true'\" />"
-                : propertyMethodContextImport
-                    ? "<Import Project=\"Context.targets\" Condition=\"$(BaseIntermediateOutputPath.Contains('powerforge-context'))\" />"
-                : contextActivatedImport
-                    ? "<Import Project=\"Context.targets\" Condition=\"$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))\" />"
-                    : string.Empty;
-            if (contextActivatedImport)
-            {
-                if (externalAliasContextImport || chainedContextImport)
-                    File.WriteAllText(Path.Combine(sharedDirectory, "Context.aliases.props"),
-                        "<Project><PropertyGroup><ContextImportEnabled>$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))</ContextImportEnabled></PropertyGroup></Project>");
-                File.WriteAllText(Path.Combine(sharedDirectory, "Context.targets"),
-                    "<Project><Target Name=\"MutateImportedContext\" BeforeTargets=\"CoreCompile\"><PropertyGroup><IntermediateOutputPath>$(MSBuildProjectDirectory)/../shared-obj/</IntermediateOutputPath></PropertyGroup></Target></Project>");
-                File.WriteAllText(Path.Combine(Directory.CreateDirectory(
-                    Path.Combine(root, "shared-obj")).FullName, ".keep"), string.Empty);
-            }
+            string contextualImport = WriteContextualImportFixture(
+                scenario, root, sharedDirectory);
             string isolationMarkerOverride = mutatedIsolationMarker
                 ? "<_PowerForgeRequiresContextIsolation>false</_PowerForgeRequiresContextIsolation><_PowerForgeRestoreContextMatched>false</_PowerForgeRestoreContextMatched>"
                 : string.Empty;
@@ -698,7 +676,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 disabledPropsEnvironment || disabledPropsProject || removedOutputExcludes ||
                 partialOutputExcludes || latePathMutation || computedLatePathMutation || referencePropsOverride ||
                 ridListContext || contextActivatedImport || packHookCalledByBuild ||
-                invokedStandalonePathTarget || sdkTargetNameCollision || controlledOverridePathTarget)
+                invokedStandalonePathTarget || sdkTargetNameCollision || controlledOverridePathTarget ||
+                wildcardContextAlias)
             {
                 Assert.True(provenance.Dirty);
                 string expected = disabledPropsEnvironment || disabledPropsProject && !resetDisabledPropsProject
@@ -713,6 +692,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                         ? "different RuntimeIdentifiers lists"
                     : contextActivatedImport
                         ? "isolation-sensitive property"
+                    : wildcardContextAlias
+                        ? "uncontrolled build task"
                     : packHookCalledByBuild || invokedStandalonePathTarget || sdkTargetNameCollision
                         ? "target-time assignment to an isolation-sensitive property"
                     : latePathMutation || controlledOverridePathTarget

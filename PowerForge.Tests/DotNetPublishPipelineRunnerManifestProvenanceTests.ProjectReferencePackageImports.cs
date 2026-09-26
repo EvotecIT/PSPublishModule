@@ -9,14 +9,15 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
     public void ReadSourceProvenance_PrGateVerifiedConditionalPackageImport()
-        => ReadSourceProvenance_InspectsVerifiedConditionalPackageImports(false, false);
+        => ReadSourceProvenance_InspectsVerifiedConditionalPackageImports(false, false, false);
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
     public void ReadSourceProvenance_InspectsVerifiedConditionalPackageImports(
-        bool distinctPackageRoots, bool mutatesIntermediatePath)
+        bool distinctPackageRoots, bool mutatesIntermediatePath, bool useStableAlias)
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
@@ -41,9 +42,15 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                   </metadata>
                 </package>
                 """);
-            File.WriteAllText(Path.Combine(packageBuild, "Context.Package.props"), """
+            string nestedImportPath = useStableAlias
+                ? "$(ContextNestedPath)" : "Context.Nested.targets";
+            string aliasProperty = useStableAlias
+                ? "<PropertyGroup><ContextNestedPath>Context.Nested.targets</ContextNestedPath></PropertyGroup>"
+                : string.Empty;
+            File.WriteAllText(Path.Combine(packageBuild, "Context.Package.props"), $"""
                 <Project>
-                  <Import Project="Context.Nested.targets"
+                  {aliasProperty}
+                  <Import Project="{nestedImportPath}"
                           Condition="'$(BuildProjectReferences)' == 'false' and '$(Flavor)' == 'Bridge'" />
                 </Project>
                 """);
