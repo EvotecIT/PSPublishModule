@@ -76,12 +76,26 @@ namespace PowerForge.Generated.Runtime
         }
 
         private static bool IsNativeAssignmentAccess(ExpressionAst expression)
-            => expression switch
+            => FindNativeStaticAccessReceiver(expression) is not null || expression switch
             {
                 VariableExpressionAst => true,
                 MemberExpressionAst { Static: false } member => IsNativeAssignmentAccess(member.Expression),
                 IndexExpressionAst index when IsNativeAssignmentIndex(index.Index) => IsNativeAssignmentAccess(index.Target),
                 _ => false
+            };
+
+        /// <summary>Finds a literal static CLR root below a bounded member/index assignment target.</summary>
+        internal static TypeExpressionAst? FindNativeStaticAccessReceiver(ExpressionAst target)
+            => target switch
+            {
+                MemberExpressionAst { Member: StringConstantExpressionAst } member
+                    when member is not InvokeMemberExpressionAst &&
+                         member.GetType().GetProperty("NullConditional")?.GetValue(member) is not true
+                    => member.Static ? member.Expression as TypeExpressionAst : FindNativeStaticAccessReceiver(member.Expression),
+                IndexExpressionAst index when IsNativeAssignmentIndex(index.Index) &&
+                    index.GetType().GetProperty("NullConditional")?.GetValue(index) is not true
+                    => FindNativeStaticAccessReceiver(index.Target),
+                _ => null
             };
 
         /// <summary>Shares bounded target admission with the semantic binder; interpolation cannot introduce another body.</summary>

@@ -4,9 +4,8 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "emitted": 475,
-  "retained": 90,
   "dispositionContract": "Every function identity matches the accepted constructor/object comparison and its full baseline; no previously emitted method or still-retained region is lost.",
+  "compilerBaselineCommit": "1d7e78c0e898a376f53e918fe9c6db2e0ac9b95a",
   "packets": [
     {
       "packet": "pssg",
@@ -1053,9 +1052,9 @@
       "packet": "pst",
       "stableUnits": 121,
       "functions": 109,
-      "emitted": 80,
-      "retained": 29,
-      "sourceExplanationSha256": "06f67d7f1f79f5d650e7d677108514cd31537e970e3fd72e818f0a3715216d6e",
+      "emitted": 81,
+      "retained": 28,
+      "sourceExplanationSha256": "3648dc3d644a36cd99de5a844cd5883463a7991b1faf3aa9b3be61360a472380",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -2019,38 +2018,6 @@
           ]
         },
         {
-          "unitId": "5d89979192eaf089b12ce819",
-          "name": "Test-WithCulture",
-          "relativePath": "functions/Test-WithCulture.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "assignment.target",
-              "message": "Typed CLR member mutation requires a direct local-variable or static CLR member assignment with simple '='; other receivers remain on the PowerShell runtime path.",
-              "line": 52,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "assignment.target",
-              "message": "Typed CLR member mutation requires a direct local-variable or static CLR member assignment with simple '='; other receivers remain on the PowerShell runtime path.",
-              "line": 53,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "assignment.target",
-              "message": "Typed CLR member mutation requires a direct local-variable or static CLR member assignment with simple '='; other receivers remain on the PowerShell runtime path.",
-              "line": 79,
-              "column": 9
-            }
-          ]
-        },
-        {
           "unitId": "6bf3b6db5fadf06390328270",
           "name": "Trace-Message",
           "relativePath": "functions/Trace.ps1",
@@ -2264,9 +2231,9 @@
       "packet": "platyps",
       "stableUnits": 41,
       "functions": 40,
-      "emitted": 24,
-      "retained": 16,
-      "sourceExplanationSha256": "33db727b972d0164311bb9bea1aa885067c91999c419f1f0775022b285fbe25e",
+      "emitted": 26,
+      "retained": 14,
+      "sourceExplanationSha256": "d5c2988c739a56a9159b7b165dc814e07f8e198e592b75f8015ed688e720415c",
       "functionsRetained": [
         {
           "unitId": "62d3e169b4f7eb162da5636b",
@@ -2369,42 +2336,6 @@
               "message": "CLR type 'Markdown.MAML.Renderer.YamlRenderer' is not available in the generated project reference set for the requested target.",
               "line": 773,
               "column": 25
-            }
-          ]
-        },
-        {
-          "unitId": "e77644b15c8c40e0b01b1a2c",
-          "name": "New-ExternalHelp",
-          "relativePath": "platyPS.psm1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "control.finally.stream-stop",
-              "message": "Non-success streams from finally during downstream stop require PowerShell preference and variable-capture handling that the generated command host cannot yet preserve.",
-              "line": 782,
-              "column": 1
-            }
-          ]
-        },
-        {
-          "unitId": "8aa8e61d19809e6d3ae37ecc",
-          "name": "Get-HelpPreview",
-          "relativePath": "platyPS.psm1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "control.finally.stream-stop",
-              "message": "Non-success streams from finally during downstream stop require PowerShell preference and variable-capture handling that the generated command host cannot yet preserve.",
-              "line": 954,
-              "column": 1
             }
           ]
         },
@@ -2580,25 +2511,42 @@
       ]
     }
   ],
-  "compilerBaselineCommit": "e239ce8b9e17554a92f2189d2df277fb61034d6b",
   "compilerSourceHashes": [
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellCommandRegionSemanticBinder.cs",
-      "sha256": "f0c351be3ba62d191ca11f84ee9d878f513a79a88299fbec6113ae194ffea20d"
+      "path": "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellSemanticAnalyzer.DictionaryOutput.cs",
+      "sha256": "5101e8192eee5b8d80a6c00efa75ec6e25975790ae4f499df9ee048d402da90c"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellDictionarySemanticBinder.cs",
-      "sha256": "c806ce0eaf773c35e96cef8c8cf0583da1769b53aed1f32c1afca8c2c93fff48"
+      "path": "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellSemanticAnalyzer.Fallback.cs",
+      "sha256": "0a490c6d5963ad75ae3b535d34027ff726439bb07919458ca02a30214b300ecd"
     },
     {
       "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
-      "sha256": "a65dd2ca526bd871bfe98bcec970de96c1fd7fa9e5bd103ed9fe2de80cfed6e4"
+      "sha256": "eb8aece2352d7e62c244a11ee601e9ffeaa21dec720c83dcd7d7e17395fd956c"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellObjectSemanticBinder.cs",
-      "sha256": "6881e0b15c3dcb2148780a438a022322ffa40d883bf2e4dae220c72cbe1b8096"
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs",
+      "sha256": "0ce123ef05d77c98b814512b15ac05017600ee365009455c8d6d84f76615ad4b"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.StaticAssignments.cs",
+      "sha256": "fc9c8a13771c1fff54d5db1bc212e2adae3957627a17aff0ec70b3cd0049f4b4"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellNativeAssignmentTarget.cs",
+      "sha256": "09ecb40f5e793e1eb1a50e5bb99c12cadee7925430dbbf16abb47666b8139e8c"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredRegionGraphBuilder.cs",
+      "sha256": "6d8efe794f4d16cf6cf7e7af7c74fdd28413e0727f686fd91c1c140a20de2c74"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Declarations.cs",
+      "sha256": "22220445ab7ff6e5f3daf5e5c8a3d7719292ce244c58f53fc4fd121bff525581"
     }
   ],
-  "dispositionComparison": "m29a-literal-invocation-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "2de1faa77f415ba7f5dc27af3d8ef03963db42e1"
+  "dispositionComparison": "m29a-static-receiver-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "1d7e78c0e898a376f53e918fe9c6db2e0ac9b95a",
+  "emitted": 478,
+  "retained": 87
 }

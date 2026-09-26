@@ -173,6 +173,10 @@ internal sealed partial class PowerShellSemanticAnalyzer
             {
                 foreach (var statement in EnumerateStatements(pending.Pop()))
                 {
+                    // An authored native pipeline retains the invocation's preference, capture,
+                    // and downstream-stop owner. Direct generated sinks remain unqualified.
+                    if (statement is PowerShellBoundCommandRegionStatement { NativeSourcePath: not null })
+                        continue;
                     if (statement is PowerShellBoundStreamWriteStatement { Kind: not PowerShellStreamCommandKind.Success } or
                         PowerShellBoundCommandRegionStatement or PowerShellBoundCommandCaptureStatement)
                         return true;

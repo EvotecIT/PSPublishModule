@@ -203,10 +203,12 @@ internal static class PowerShellLoweredRegionGraphBuilder
                     // Native assignment observes invocation-owned constraints and can invoke transformations.
                     RecordFirst(readOffsets, "PowerShellSessionState:*", statement.Span.StartOffset);
                     RecordFirst(writeOffsets, "PowerShellSessionState:*", statement.Span.EndOffset);
-                    RecordFirst(writeOffsets, "PowerShellSessionVariable:" + assignment.Name.ToUpperInvariant() +
+                    var assignmentRoot = assignment.Target.StaticReceiverTypeName is { } staticType
+                        ? "ClrStaticReceiver:" + staticType : "PowerShellSessionVariable:" + assignment.Name.ToUpperInvariant();
+                    RecordFirst(writeOffsets, assignmentRoot +
                         (assignment.Target.MutatesReceiver ? ".*" : ""), statement.Span.EndOffset);
                     if (assignment.Target.MutatesReceiver || assignment.Operation != PowerShellBoundMutationOperator.Assign)
-                        RecordFirst(readOffsets, "PowerShellSessionVariable:" + assignment.Name.ToUpperInvariant(), statement.Span.StartOffset);
+                        RecordFirst(readOffsets, assignmentRoot, statement.Span.StartOffset);
                     foreach (var name in assignment.Target.ReadVariables ?? Array.Empty<string>())
                         RecordFirst(readOffsets, "PowerShellSessionVariable:" + name.ToUpperInvariant(), statement.Span.StartOffset);
                     break;

@@ -87,6 +87,10 @@ internal sealed partial class PowerShellSemanticBinder
             if (assignment.Right is IfStatementAst or ForStatementAst or ForEachStatementAst or WhileStatementAst or DoWhileStatementAst or DoUntilStatementAst)
                 return BindOutputCapture(document, assignment, symbols, functions, diagnostics, targetFramework, capabilities);
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                NativeStaticAssignmentReceiver(assignment.Left) is { } staticReceiver)
+                return BindNativeStaticAssignment(document, assignment, staticReceiver, symbols, functions,
+                    diagnostics, targetFramework, capabilities);
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
                 NativeAssignmentReceiver(assignment.Left) is { } receiver &&
                 PowerShellMutationSemanticBinder.GetAssignmentOperator(assignment.Operator) is { } memberOperation)
             {

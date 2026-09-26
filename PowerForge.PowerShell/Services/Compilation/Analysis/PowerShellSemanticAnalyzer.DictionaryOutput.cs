@@ -12,6 +12,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
             .ToHashSet(StringComparer.Ordinal);
         var nativeDictionaryLocals = statements
             .OfType<PowerShellBoundNativeAssignmentStatement>()
+            .Where(static assignment => assignment.Target.StaticReceiverTypeName is null)
             .Where(static assignment => assignment.Value is PowerShellBoundDictionaryExpression)
             .Select(static assignment => assignment.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -31,7 +32,8 @@ internal sealed partial class PowerShellSemanticAnalyzer
         if (function.NativeFunctionBinding is null) return false;
         var statements = EnumerateStatements(function.Body).ToArray();
         var assignments = statements.OfType<PowerShellBoundAssignmentStatement>().ToArray();
-        var nativeAssignments = statements.OfType<PowerShellBoundNativeAssignmentStatement>().ToArray();
+        var nativeAssignments = statements.OfType<PowerShellBoundNativeAssignmentStatement>()
+            .Where(static assignment => assignment.Target.StaticReceiverTypeName is null).ToArray();
         var dictionaryLocals = assignments
             .Where(static assignment => assignment.Value is PowerShellBoundDictionaryExpression)
             .Select(static assignment => assignment.Target.StableKey)
