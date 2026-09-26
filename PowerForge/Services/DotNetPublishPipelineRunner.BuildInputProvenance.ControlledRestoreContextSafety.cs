@@ -65,13 +65,18 @@ public sealed partial class DotNetPublishPipelineRunner
         var isolatedPaths = new HashSet<string>(FileSystemPathSafety.ExistingPathComparer);
         var pendingImports = new Queue<(string Path, string ProjectDirectory,
             IReadOnlyDictionary<string, string> Properties)>();
-        var queuedImports = new HashSet<string>(StringComparer.Ordinal);
-        var sourceContextByImport = new Dictionary<string, IReadOnlyDictionary<string, string>>(
-            StringComparer.Ordinal);
+        var sourceContextsByImport = new Dictionary<string,
+            (string Path, string ProjectDirectory, List<IReadOnlyDictionary<string, string>> Properties)>(
+                StringComparer.Ordinal);
         var sourceProperties = new Dictionary<string, List<IReadOnlyDictionary<string, string>>>(
             FileSystemPathSafety.ExistingPathComparer);
         var projectSources = new Dictionary<string, HashSet<string>>(
             FileSystemPathSafety.ExistingPathComparer);
+        static bool SameProperties(IReadOnlyDictionary<string, string> first,
+            IReadOnlyDictionary<string, string> second)
+            => first.Count == second.Count && first.All(property => second.Any(candidate =>
+                StringComparer.OrdinalIgnoreCase.Equals(property.Key, candidate.Key) &&
+                StringComparer.Ordinal.Equals(property.Value, candidate.Value)));
         void AddSource(string path, string projectDirectory,
             IReadOnlyDictionary<string, string> properties)
         {
@@ -92,13 +97,19 @@ public sealed partial class DotNetPublishPipelineRunner
                 contexts = new List<IReadOnlyDictionary<string, string>>();
                 sourceProperties[path] = contexts;
             }
-            if (!contexts.Contains(properties))
+            if (!contexts.Any(context => SameProperties(context, properties)))
                 contexts.Add(properties);
             string key = Path.GetFullPath(path) + "\0" + projectDirectory;
-            if (!sourceContextByImport.ContainsKey(key))
-                sourceContextByImport[key] = properties;
-            if (queuedImports.Add(key))
+            if (!sourceContextsByImport.TryGetValue(key, out var source))
+            {
+                source = (path, projectDirectory, new List<IReadOnlyDictionary<string, string>>());
+                sourceContextsByImport[key] = source;
+            }
+            if (!source.Properties.Any(context => SameProperties(context, properties)))
+            {
+                source.Properties.Add(properties);
                 pendingImports.Enqueue((path, projectDirectory, properties));
+            }
         }
         if (isolatedProjects.Contains(Path.GetFullPath(rootRequest.ProjectPath)))
             AddSource(rootRequest.ProjectPath, Path.GetDirectoryName(rootRequest.ProjectPath)!,
@@ -207,14 +218,9 @@ public sealed partial class DotNetPublishPipelineRunner
             // condition in a source document already scanned above.
             if (discoveredContextImport)
             {
-                queuedImports.Clear();
-                foreach (KeyValuePair<string, HashSet<string>> project in projectSources)
-                    foreach (string path in project.Value)
-                    {
-                        string key = Path.GetFullPath(path) + "\0" + project.Key;
-                        if (queuedImports.Add(key))
-                            pendingImports.Enqueue((path, project.Key, sourceContextByImport[key]));
-                    }
+                foreach (var source in sourceContextsByImport.Values)
+                    foreach (IReadOnlyDictionary<string, string> properties in source.Properties)
+                        pendingImports.Enqueue((source.Path, source.ProjectDirectory, properties));
             }
         }
         while (discoveredContextImport);

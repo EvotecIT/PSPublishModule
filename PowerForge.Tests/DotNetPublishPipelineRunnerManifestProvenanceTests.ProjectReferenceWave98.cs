@@ -235,6 +235,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("global-output-roots")]
     [InlineData("reference-global-intermediate-roots")]
     [InlineData("override-activated-import")]
+    [InlineData("second-context-activated-import")]
     [InlineData("inactive-override-import")]
     public void ReadSourceProvenance_RestoresEverySelectedFrameworkForSharedMultiTargetReference(string scenario)
     {
@@ -277,7 +278,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         bool controlledOverridePathTarget = scenario == "controlled-override-path-target";
         bool globalOutputRoots = scenario == "global-output-roots";
         bool referenceGlobalIntermediateRoots = scenario == "reference-global-intermediate-roots";
-        bool overrideActivatedImport = scenario == "override-activated-import";
+        bool overrideActivatedImport = scenario is "override-activated-import" or "second-context-activated-import";
         bool inactiveOverrideImport = scenario == "inactive-override-import";
         bool computedLatePathMutation = scenario == "computed-late-path-mutation";
         bool referencePropsOverride = scenario == "reference-props-override";
@@ -470,7 +471,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 : chainedContextImport
                     ? "<Import Project=\"Context.aliases.props\" Condition=\"$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))\" /><Import Project=\"Context.targets\" Condition=\"'$(ContextImportEnabled)' == 'true'\" />"
                 : overrideActivatedImport
-                    ? "<Import Project=\"Context.targets\" Condition=\"'$(BuildProjectReferences)' == 'false'\" />"
+                    ? "<Import Project=\"Context.targets\" Condition=\"'$(BuildProjectReferences)' == 'false'" +
+                      (scenario == "second-context-activated-import" ? " and '$(Flavor)' == 'Direct'" : "") + "\" />"
                 : inactiveOverrideImport
                     ? "<Import Project=\"Missing.targets\" Condition=\"'false' == 'true' and '$(BuildProjectReferences)' == 'false'\" />"
                 : indirectContextActivatedImport
@@ -743,7 +745,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("late-path-mutation")]
     [InlineData("apostrophe-project-path")]
     [InlineData("inactive-pack-path-target")]
-    [InlineData("context-activated-import")]
+    [InlineData("second-context-activated-import")]
     [InlineData("context-activated-indirect-import")]
     [Trait("Category", "DotNetPublishPrGate")]
     public void ReadSourceProvenance_PrGateSharedMultiTargetReference(string scenario)
