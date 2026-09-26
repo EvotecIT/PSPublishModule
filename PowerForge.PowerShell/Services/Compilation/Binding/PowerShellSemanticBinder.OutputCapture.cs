@@ -144,7 +144,7 @@ internal sealed partial class PowerShellSemanticBinder
                 "Captured statement output requires a qualified command success-stream host and either a native variable target or an unconstrained local.", span));
             return null;
         }
-        if (assignment.Right.FindAll(static node => node is ReturnStatementAst, false).Any())
+        if (!usesNativeInvocation && assignment.Right.FindAll(static node => node is ReturnStatementAst, false).Any())
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2931",
                 "A return inside captured statement output requires an explicit enclosing-function transfer contract.", span));

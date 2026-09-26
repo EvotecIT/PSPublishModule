@@ -39,8 +39,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
             builder.Append(prefix).AppendLine("    using (__nativeFunction.RedirectOutput(__writeOutput))");
             builder.Append(prefix).AppendLine("    {");
         }
-        foreach (var statement in capture.Statements)
-            EmitStatement(builder, statement, indent + (capture.UsesNativeInvocation ? 2 : 1), getTemporaryIdentifier, discardHelper, sourceMap);
+        _outputCaptureDepth++;
+        try
+        {
+            foreach (var statement in capture.Statements)
+                EmitStatement(builder, statement, indent + (capture.UsesNativeInvocation ? 2 : 1), getTemporaryIdentifier, discardHelper, sourceMap);
+        }
+        finally { _outputCaptureDepth--; }
         if (capture.UsesNativeInvocation)
             builder.Append(prefix).AppendLine("    }");
         builder.Append(prefix).Append("    ");
@@ -65,6 +70,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
         // pending records when a raw CLR exception escapes (for example MoveNext).
         builder.Append(prefix).Append("catch (global::System.Management.Automation.RuntimeException) { ")
             .Append(records).AppendLine(".Clear(); throw; }");
+        if (capture.Kind == PowerShellOutputCaptureKind.NativeObjectArray)
+            builder.Append(prefix).Append("catch (global::PowerForge.Generated.Runtime.PowerShellCapturedReturnSignal) { ")
+                .Append(records).AppendLine(".Clear(); throw; }");
         var flushedRecord = getTemporaryIdentifier("flushedCaptureRecord");
         builder.Append(prefix).AppendLine("finally");
         builder.Append(prefix).AppendLine("{");

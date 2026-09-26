@@ -112,6 +112,7 @@ namespace PowerForge.Generated.Runtime
 
         internal static bool IsOperationFailure(Exception error)
             => error is not PipelineStoppedException && error is not FlowControlException &&
+               error is not PowerShellCapturedReturnSignal &&
                error is not StackOverflowException && error is not AccessViolationException;
 
         private sealed class CatchScope : IDisposable
@@ -140,5 +141,10 @@ namespace PowerForge.Generated.Runtime
                 _nativeSession?.PSVariable.Set("_", _previousUnder);
             }
         }
+    }
+
+    /// <summary>Transfers an authored return through a generated capture callback to its enclosing function.</summary>
+    internal sealed class PowerShellCapturedReturnSignal : Exception
+    {
     }
 }

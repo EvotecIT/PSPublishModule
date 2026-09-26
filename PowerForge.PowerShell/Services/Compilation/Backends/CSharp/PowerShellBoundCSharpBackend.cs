@@ -31,6 +31,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
         PowerShellCompilationCapability targetCapabilities)
     {
         _sourceFunction = function;
+        var transfersCapturedReturn = TransfersCapturedReturn(function);
+        if (transfersCapturedReturn && function.ReturnType != typeof(void))
+            throw new InvalidOperationException("A native captured return requires a void success-stream method.");
         var managedInstance = targetCapabilities.HasFlag(PowerShellCompilationCapability.RuntimeFreeModuleState);
         var initializer = function.Symbol.Kind == PowerShellSymbolKind.ModuleInitializer;
         var bodyIndent = managedInstance ? 5 : 3;
@@ -106,8 +109,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
         if (function.NativeFunctionBinding is not null && function.RequiresPowerShellStatementErrors)
             EmitNativeEntrySequencePoint(builder, function);
+        if (transfersCapturedReturn)
+            builder.Append(new string(' ', bodyIndent * 4)).AppendLine("try")
+                .Append(new string(' ', bodyIndent * 4)).AppendLine("{");
         foreach (var statement in function.Statements)
-            EmitStatement(builder, statement, bodyIndent, GetTemporaryIdentifier, discardHelper, sourceMap);
+            EmitStatement(builder, statement, bodyIndent + (transfersCapturedReturn ? 1 : 0), GetTemporaryIdentifier, discardHelper, sourceMap);
+        if (transfersCapturedReturn)
+            builder.Append(new string(' ', bodyIndent * 4)).AppendLine("}")
+                .Append(new string(' ', bodyIndent * 4)).AppendLine("catch (global::PowerForge.Generated.Runtime.PowerShellCapturedReturnSignal) { return; }");
 
         foreach (var helper in _numericHelpers.Values)
             builder.AppendLine(helper.Source);
@@ -251,6 +260,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 return;
             case PowerShellLoweredClrMemberAssignmentStatement assignment:
                 builder.Append(prefix).Append(EmitClrMemberAssignment(assignment)).AppendLine(";");
+                return;
+            case PowerShellLoweredReturnStatement returned when _outputCaptureDepth > 0:
+                EmitCapturedReturn(builder, returned, prefix);
                 return;
             case PowerShellLoweredReturnStatement { Expression: null }:
                 builder.Append(prefix).AppendLine("return;");
