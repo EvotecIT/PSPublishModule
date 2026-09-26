@@ -25,7 +25,7 @@ internal sealed partial class PowerShellSemanticBinder
         var regionCandidates = new Dictionary<string, PowerShellBoundRegionCandidate>(StringComparer.Ordinal);
         var regionOpportunities = new Dictionary<string, PowerShellBoundRegionOpportunity>(StringComparer.Ordinal);
         var declarations = DeclareFunctions(orderedDocuments, diagnostics);
-        declarations = DeclareNativeScriptBlocks(declarations, capabilities);
+        declarations = DeclareNativeScriptBlocks(declarations, capabilities, targetFramework);
         if (_runtimeFreeModule is not null)
             declarations = declarations.Append(new FunctionDeclaration(_runtimeFreeModule.Document, _runtimeFreeModule.Initializer,
                 new PowerShellSymbolId(PowerShellSymbolKind.ModuleInitializer, _runtimeFreeModule.Document.DocumentId,

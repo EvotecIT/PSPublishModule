@@ -1461,7 +1461,7 @@
       "functions": 109,
       "emitted": 78,
       "retained": 31,
-      "sourceExplanationSha256": "e7bf6803d2f8210e6c7d2f638b227527cefc572a3df115236d3485d42de326b6",
+      "sourceExplanationSha256": "ae2d532b2f2621a4d2991b71519ede26aa8f93b0bba19ea9b65e617c635791c1",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -1496,13 +1496,6 @@
               "message": "break must be inside a supported loop or scalar switch.",
               "line": 70,
               "column": 17
-            },
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Typed script-block conversion currently requires a Boolean-returning delegate; 'System.Action' returns 'System.Void'.",
-              "line": 122,
-              "column": 67
             },
             {
               "code": "UnsupportedSyntax",
@@ -2409,18 +2402,25 @@
               "column": 17
             },
             {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Typed script-block conversion currently requires a Boolean-returning delegate; 'System.Action' returns 'System.Void'.",
-              "line": 248,
-              "column": 59
-            },
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Typed script-block conversion currently requires a Boolean-returning delegate; 'System.Action' returns 'System.Void'.",
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "The script block requires a completely compiled native body and supported invocation metadata.",
               "line": 261,
               "column": 50
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.Input.Cursors' is not available in the generated project reference set for the requested target.",
+              "line": 288,
+              "column": 40
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.Input.Cursors' is not available in the generated project reference set for the requested target.",
+              "line": 300,
+              "column": 40
             }
           ]
         },
@@ -2465,13 +2465,6 @@
           "usesNativeFunctionBinding": false,
           "generatedRegionMemberNames": [],
           "causes": [
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Typed script-block conversion currently requires a Boolean-returning delegate; 'System.Action' returns 'System.Void'.",
-              "line": 40,
-              "column": 58
-            },
             {
               "code": "UnsupportedSyntax",
               "featureId": "syntax.unsupported",
@@ -3036,45 +3029,25 @@
       ]
     }
   ],
-  "compilerBaselineCommit": "1681702014081aac1016180ebc06b779bd9db365",
+  "compilerBaselineCommit": "6ff3a706d1508d60a0d6f8d080ab838aed2d7611",
   "compilerSourceHashes": [
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.ControlFlow.cs",
-      "sha256": "c65abb3db72cb9703b7c2c8a5344c2e2d9424a28c026205ffb5802bafd7b01bd"
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
+      "sha256": "23dd8c177cf037dcb3ce2ba1de7212496adf84245eb47155de855687f1c7013a"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.ScriptBlocks.cs",
-      "sha256": "3bdc0e7710fbcea9500fce16995c870e00a51946db9defd47859ca11c7079f6c"
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Program.cs",
+      "sha256": "218516dde346381eb08da3ea583a212c9d3b254bf915f58219094fbd0041b714"
     },
     {
       "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.ScriptBlocks.cs",
-      "sha256": "2b2f55d87a5b092de7dadd25eb55d86cee00cefeddc6d39b0c7905c8edd73c48"
+      "sha256": "69c67f539ef3f7bee38c1cc1019acf4eec74156b736baf19272aea9f9381201a"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Switch.cs",
-      "sha256": "b124ffc3ad58916402f88ee62a390bf345d3b73810d0d679197e84078d817905"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeScriptBlock.cs",
-      "sha256": "95ea795de6a944de7635a86632c19769dd5fddcf21a1c1ced64b286e251f8cbb"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeScriptBlock.cs",
-      "sha256": "0c4d3e0d11f083185d38ceb602bcf2a5efc5fcbe555d9efc71d885736d67cfb2"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs",
-      "sha256": "7e9ba7278e5e78b1e43a9c304fa7022c22b1ef23b20393a1f894d7aaeee5cc20"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.ScriptBlocks.cs",
-      "sha256": "0bffb6f861543823c3fa0594a61d294289e8412fc604bb1aba8d66c56cec9c38"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Switch.cs",
-      "sha256": "887f9d3accbee63e966585e834b4ee4d04920366920073de133fb7eeb2357168"
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Conversions.cs",
+      "sha256": "bb872452182ce2228cbb001038ccbe4faea1dc5627622a83253e071b9584ee78"
     }
   ],
-  "dispositionComparison": "m29a-switch-predicate-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "1681702014081aac1016180ebc06b779bd9db365"
+  "dispositionComparison": "m29a-delegate-cast-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "6ff3a706d1508d60a0d6f8d080ab838aed2d7611"
 }

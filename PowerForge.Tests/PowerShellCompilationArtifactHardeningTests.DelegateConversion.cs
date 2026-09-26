@@ -165,7 +165,6 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         });
 
         Assert.False(result.Succeeded);
-        Assert.Contains("delegate", result.Error, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 

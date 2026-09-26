@@ -32,3 +32,5 @@ Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/FolderIn
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/FolderInspection/license.txt -text -eol -whitespace
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/FileSelection/*.ps1 -text -eol -whitespace
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/FileSelection/license.txt -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/TraceMessage/*.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/TraceMessage/license.txt -text -eol -whitespace

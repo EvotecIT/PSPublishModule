@@ -4,6 +4,7 @@ namespace PowerForge.Generated.Runtime
     using System.Collections.Concurrent;
     using System.Linq.Expressions;
     using System.Management.Automation;
+    using System.Management.Automation.Language;
     using System.Reflection;
     using System.Runtime.CompilerServices;
 
@@ -78,9 +79,24 @@ namespace PowerForge.Generated.Runtime
         {
             EnsureActive();
             var extent = PowerShellSourceExtent.Create(file, line, column, endLine, endColumn, sourceText);
-            var authored = RuntimeTypeNameConstructor.Value.Invoke(new object[] { extent, typeName });
+            var authored = CreateRuntimeTypeName(typeName, extent);
             return (Type)PowerShellNativeFunctionHost.Invoke(ResolveRuntimeTypeName.Value, null,
                 new[] { authored, extent })!;
+        }
+
+        // Generic and array names need their parser-owned ITypeName shape.
+        // Resolve each fresh name in the active host; a cached resolved Type
+        // would bypass later session type resolution. Parsing never executes source.
+        private static object CreateRuntimeTypeName(string typeName, IScriptExtent extent)
+        {
+            if (typeName.IndexOf('[') < 0)
+                return RuntimeTypeNameConstructor.Value.Invoke(new object[] { extent, typeName });
+            var syntax = Parser.ParseInput("[" + typeName + "]", out _, out var errors);
+            if (errors.Length != 0 || syntax.EndBlock?.Statements.Count != 1 ||
+                syntax.EndBlock.Statements[0] is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
+                pipeline.PipelineElements[0] is not CommandExpressionAst { Expression: TypeExpressionAst expression })
+                throw new NotSupportedException("The authored runtime type name has no supported PowerShell type-expression shape.");
+            return expression.TypeName;
         }
 
         private static Func<object?, object?> CreateConversionSite(Type destination)
