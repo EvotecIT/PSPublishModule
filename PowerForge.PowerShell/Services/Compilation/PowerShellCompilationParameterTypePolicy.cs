@@ -24,6 +24,22 @@ internal static class PowerShellCompilationParameterTypePolicy
         typeof(SwitchParameter).FullName!
     };
 
+    // These SDK data contracts exist on both supported hosts. They require the
+    // artifact's PowerShell reference, not a runtime-free CLR target. Match the
+    // actual SDK Type identities rather than admitting arbitrary same-name types.
+    private static readonly HashSet<Type> PowerShellHostDataTypes = new()
+    {
+        typeof(PSSerializer),
+        typeof(ErrorRecord),
+        typeof(ActionPreferenceStopException),
+        typeof(ErrorCategory)
+    };
+
+    internal static bool IsQualifiedHostDataType(Type type)
+        => type.IsArray && type.GetArrayRank() == 1
+            ? IsQualifiedHostDataType(type.GetElementType()!)
+            : PowerShellHostDataTypes.Contains(type);
+
     internal static PowerShellCompilationParameterTypeCapability Classify(Type type, string? targetFramework)
     {
         if (type.IsArray)
@@ -41,7 +57,8 @@ internal static class PowerShellCompilationParameterTypePolicy
         var result = PowerShellCompilationParameterTypeCapability.None;
         if (PowerShellGeneratedTypePolicy.IsSupported(type, targetFramework))
             result |= PowerShellCompilationParameterTypeCapability.ClrMethod;
-        else if (type.FullName is { } fullName && PowerShellHostTypeNames.Contains(fullName))
+        else if (PowerShellHostDataTypes.Contains(type) ||
+                 type.FullName is { } fullName && PowerShellHostTypeNames.Contains(fullName))
             result |= PowerShellCompilationParameterTypeCapability.ClrMethod |
                       PowerShellCompilationParameterTypeCapability.PowerShellHost;
 

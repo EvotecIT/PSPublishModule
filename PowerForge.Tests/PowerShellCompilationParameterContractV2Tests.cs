@@ -223,7 +223,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath,
             targetFramework: "net10.0",
-            capabilities: PowerShellCompilationCapabilities.BinaryModule));
+            capabilities: PowerShellCompilationCapabilities.HybridModule));
 
         var unit = Assert.Single(Assert.Single(plan.Files).Units);
         Assert.True(unit.IsCompilable, string.Join(Environment.NewLine, unit.Diagnostics.Select(static diagnostic => diagnostic.Message)));

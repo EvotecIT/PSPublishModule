@@ -74,6 +74,13 @@ internal static class PowerShellNativeFunctionBindingPolicy
     private static bool RequiresNativeBinding(FunctionDefinitionAst function, string? targetFramework,
         PowerShellCompilationCapability capabilities)
         => function.Body.BeginBlock is not null || function.Body.ProcessBlock is not null ||
+           capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&
+           function.Body.Find(static node => node is TypeExpressionAst expression &&
+               expression.TypeName.GetReflectionType() is { } expressionType &&
+               PowerShellCompilationParameterTypePolicy.IsQualifiedHostDataType(expressionType) ||
+               node is TypeConstraintAst constraint && constraint.TypeName.GetReflectionType() is { } constraintType &&
+               PowerShellCompilationParameterTypePolicy.IsQualifiedHostDataType(constraintType),
+               searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(static node => node is ScriptBlockExpressionAst block && PowerShellSemanticBinder.IsAssignedScriptBlock(block), searchNestedScriptBlocks: true) is not null ||
            function.Body.GetType().GetProperty("CleanBlock")?.GetValue(function.Body) is not null ||
            FindNativePipelineOperator(function) is not null ||

@@ -51,7 +51,10 @@ internal sealed partial class PowerShellSemanticBinder
                 targetFramework, capabilities, diagnostics);
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
             syntax is MemberExpressionAst nativeMember && syntax is not InvokeMemberExpressionAst &&
-            (!nativeMember.Static || nativeMember.Member is not StringConstantExpressionAst))
+            (!nativeMember.Static || nativeMember.Member is not StringConstantExpressionAst ||
+             nativeMember.Expression is TypeExpressionAst hostDataType &&
+             hostDataType.TypeName.GetReflectionType() is { } hostDataClrType &&
+             PowerShellCompilationParameterTypePolicy.IsQualifiedHostDataType(hostDataClrType)))
             return PowerShellNativeAccessSemanticBinder.BindMember(document, nativeMember,
                 (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
                 targetFramework, capabilities, diagnostics);
