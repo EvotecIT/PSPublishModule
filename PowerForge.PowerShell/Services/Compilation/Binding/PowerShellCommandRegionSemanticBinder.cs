@@ -14,6 +14,15 @@ internal static class PowerShellCommandRegionSemanticBinder
     internal static bool RequiresPipelineSyntax(PipelineAst pipeline)
         => pipeline.PipelineElements.Count != 1 || pipeline.PipelineElements[0] is CommandAst || HasPipelineOperators(pipeline);
 
+    /// <summary>One ordinary hosted command can supply an authored literal value through the existing capture boundary.</summary>
+    internal static bool IsNativeLiteralCommandValue(StatementAst statement, PowerShellCompilationCapability capabilities)
+        => capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+           capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&
+           statement is PipelineAst { PipelineElements.Count: 1 } pipeline &&
+           !HasPipelineOperators(pipeline) &&
+           pipeline.PipelineElements[0] is CommandAst { InvocationOperator: TokenKind.Unknown } command &&
+           command.GetCommandName() is not null;
+
     /// <summary>
     /// Identifies a complete authored pipeline whose command binding, stream routing, script-block state,
     /// and retained mutations must remain owned by the active PowerShell invocation.

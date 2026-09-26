@@ -4,6 +4,79 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
+    [Fact]
+    public void NativeLiteralCommandValuesDoNotWidenStrictAdmission()
+    {
+        const string direct = "function Get-Literal { [pscustomobject]@{ Result = Get-Date } }";
+        var document = PowerShellSourceParser.Parse(direct, Path.Combine(Path.GetTempPath(), "literal-command-strict.ps1"));
+        var strict = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0",
+            PowerShellCompilationCapabilities.TypedExecutable);
+        Assert.Empty(strict.Emitted.Methods);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void NativeLiteralCommandValuesPreserveCaptureAndObjectIdentity(string framework, string host)
+    {
+        const string source = """
+            function Get-LiteralRecords {
+                [CmdletBinding()] param([string]$Mode)
+                if ($Mode -eq 'Zero') { return }
+                if ($Mode -eq 'One') { 17; return }
+                if ($Mode -eq 'Many') { 17; 23; return }
+                if ($Mode -eq 'PartialFail') { 17; throw 'stopped after output' }
+                throw 'stopped'
+            }
+            function Get-LiteralMap {
+                [CmdletBinding()] param([string]$Mode)
+                $value = @{ Before = 'ready'; Result = Get-LiteralRecords -Mode $Mode; After = 'done' }
+                return $value['Result']
+            }
+            function Get-LiteralObject {
+                [CmdletBinding()] param([string]$Mode)
+                [pscustomobject]@{ Before = 'ready'; Result = Get-LiteralRecords -Mode $Mode; After = 'done' }
+            }
+            Export-ModuleMember -Function Get-LiteralMap, Get-LiteralObject
+            """;
+        using var fixture = ArtifactFixture.Create(source, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.NativeLiteralValues", PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        foreach (var name in new[] { "Get-LiteralMap", "Get-LiteralObject" })
+        {
+            var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries, item => item.Name == name);
+            Assert.True(unit.EmittedClrMethod, name + ": " + string.Join(" | ", unit.DiagnosticChain.Select(cause => cause.Message)));
+            Assert.False(unit.RetainedHostedSource);
+            Assert.Equal(1, unit.RuntimeCommandRegions);
+        }
+        const string probe = """
+            foreach($name in 'Get-LiteralMap','Get-LiteralObject') {
+                foreach($mode in 'Zero','One','Many','Fail','PartialFail') {
+                    $caught=$null; $records=@()
+                    try { $records=@(& $name -Mode $mode) } catch { $caught=$_.FullyQualifiedErrorId }
+                    $described=@(foreach($record in $records) {
+                        if($record -is [pscustomobject]) {
+                            [pscustomobject]@{kind='object';type=$record.GetType().FullName;before=$record.Before;after=$record.After;resultType=if($null -ne $record.Result){$record.Result.GetType().FullName}else{$null};result=@($record.Result)}
+                        } else {
+                            [pscustomobject]@{kind='value';type=if($null -ne $record){$record.GetType().FullName}else{$null};value=$record}
+                        }
+                    })
+                    [pscustomobject]@{name=$name;mode=$mode;records=$described;caught=$caught} | ConvertTo-Json -Compress -Depth 8
+                }
+            }
+            """;
+        var original = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+            fixture.RootPath, "literal-command-original");
+        var compiled = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
+            fixture.RootPath, "literal-command-compiled");
+        Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
+        Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
+        Assert.Equal(original.StandardOutput, compiled.StandardOutput);
+        Assert.Equal(original.StandardError, compiled.StandardError);
+    }
+
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
