@@ -152,11 +152,12 @@ internal static partial class PowerShellOperatorSemanticBinder
 
         if (operation is "Ieq" or "Ceq" or "Ine" or "Cne" or "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge")
         {
-            if ((left.ValueState == PowerShellValueState.Null && Nullable.GetUnderlyingType(leftType) is null && PowerShellClrTypeSemantics.IsNonNullableValueType(rightType)) ||
-                (right.ValueState == PowerShellValueState.Null && Nullable.GetUnderlyingType(rightType) is null && PowerShellClrTypeSemantics.IsNonNullableValueType(leftType)))
-                return Reject(diagnostics, span, "PSB2209", "Comparing a non-nullable CLR value to $null requires PowerShell runtime semantics.");
             var equality = operation is "Ieq" or "Ceq" or "Ine" or "Cne";
             var relational = operation is "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge";
+            if (!equality &&
+                ((left.ValueState == PowerShellValueState.Null && Nullable.GetUnderlyingType(leftType) is null && PowerShellClrTypeSemantics.IsNonNullableValueType(rightType)) ||
+                 (right.ValueState == PowerShellValueState.Null && Nullable.GetUnderlyingType(rightType) is null && PowerShellClrTypeSemantics.IsNonNullableValueType(leftType))))
+                return Reject(diagnostics, span, "PSB2209", "Relational comparison of a non-nullable CLR value with $null requires PowerShell runtime semantics.");
             if (equality && (left.ValueState == PowerShellValueState.Null || right.ValueState == PowerShellValueState.Null))
             {
                 var comparedValue = left.ValueState == PowerShellValueState.Null ? right : left;
