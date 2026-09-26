@@ -50,12 +50,16 @@ initial_configuration_sha=$(sha256sum -- "$pull_config" "$service_config" | awk 
 
 # The service root comes from the promoter's own configuration, so an up-to-date
 # decision cannot be made against a different release directory.
+unset SOURCE_REPOSITORY SOURCE_BRANCH SOURCE_WORKFLOW ARTIFACT_NAME WORK_ROOT
+unset SERVICE_ROOT ARTIFACT_PULL_STAGE_ROOT
 # shellcheck disable=SC1090
 source "$snapshot_pull"
-unset ARTIFACT_PULL_STAGE_ROOT
+: "${SOURCE_REPOSITORY:?}" "${SOURCE_BRANCH:?}" "${SOURCE_WORKFLOW:?}" "${ARTIFACT_NAME:?}" "${WORK_ROOT:?}"
+readonly SOURCE_REPOSITORY SOURCE_BRANCH SOURCE_WORKFLOW ARTIFACT_NAME WORK_ROOT
+unset SERVICE_ROOT ARTIFACT_PULL_STAGE_ROOT
 # shellcheck disable=SC1090
 source "$snapshot_service"
-: "${SOURCE_REPOSITORY:?}" "${SOURCE_BRANCH:?}" "${SOURCE_WORKFLOW:?}" "${ARTIFACT_NAME:?}" "${WORK_ROOT:?}" "${SERVICE_ROOT:?}" "${ARTIFACT_PULL_STAGE_ROOT:?}"
+: "${SERVICE_ROOT:?}" "${ARTIFACT_PULL_STAGE_ROOT:?}"
 [[ $SOURCE_REPOSITORY =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail 'invalid GitHub repository'
 git -C / check-ref-format --branch "$SOURCE_BRANCH" >/dev/null 2>&1 || fail 'invalid source branch'
 [[ $SOURCE_WORKFLOW =~ ^[A-Za-z0-9._-]+\.ya?ml$ ]] || fail 'invalid workflow filename'
@@ -102,6 +106,7 @@ for orphan in "$WORK_ROOT"/.download.*; do
   [[ $(realpath -e -- "$orphan") == "$orphan" ]] || fail "non-canonical abandoned download directory: $orphan"
   rm -rf -- "$orphan"
 done
+unset GH_TOKEN
 IFS= read -r GH_TOKEN <"$token_file" || [[ -n ${GH_TOKEN:-} ]]
 [[ ${GH_TOKEN:-} =~ ^[A-Za-z0-9_-]+$ ]] || fail 'GitHub read-only token file is empty or malformed'
 GH_HOST=github.com

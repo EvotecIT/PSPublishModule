@@ -200,14 +200,29 @@ chmod 0755 "$task_root/bin/gh" "$task_root/bin/getent" "$task_root/bin/curl" "$t
 
 run_fixture() {
   local mode=$1
+  shift
   rm -f -- "$task_root/work/branch-reads"
   runuser -u "$deploy_user" -- env POWERFORGE_FIXTURE_ROOT="$task_root" POWERFORGE_FIXTURE_SERVICE="$service" \
-    POWERFORGE_FIXTURE_MODE="$mode" bash "$task_root/runner.sh" "$service"
+    POWERFORGE_FIXTURE_MODE="$mode" "$@" bash "$task_root/runner.sh" "$service"
 }
 if run_fixture missing >"$task_root/missing.log" 2>&1; then
   echo 'Accepted a missing successful run.' >&2; exit 1
 fi
 grep -Fq 'no successful service package run' "$task_root/missing.log" || { cat "$task_root/missing.log" >&2; exit 1; }
+cp -p "$task_root/etc/powerforge/service-pull/${service}.env" "$task_root/pull.env.saved"
+sed -i '/^SOURCE_REPOSITORY=/d' "$task_root/etc/powerforge/service-pull/${service}.env"
+if run_fixture inherited-pull SOURCE_REPOSITORY="$repo" >"$task_root/inherited-pull.log" 2>&1; then
+  echo 'Accepted a missing pull setting from the caller environment.' >&2; exit 1
+fi
+grep -Fq 'SOURCE_REPOSITORY: parameter null or not set' "$task_root/inherited-pull.log"
+cp -p "$task_root/pull.env.saved" "$task_root/etc/powerforge/service-pull/${service}.env"
+cp -p "$task_root/etc/powerforge/services/${service}.env" "$task_root/service.env.saved"
+sed -i '/^SERVICE_ROOT=/d' "$task_root/etc/powerforge/services/${service}.env"
+if run_fixture inherited-service SERVICE_ROOT="$task_root/service" >"$task_root/inherited-service.log" 2>&1; then
+  echo 'Accepted a missing service setting from the caller environment.' >&2; exit 1
+fi
+grep -Fq 'SERVICE_ROOT: parameter null or not set' "$task_root/inherited-service.log"
+cp -p "$task_root/service.env.saved" "$task_root/etc/powerforge/services/${service}.env"
 if run_fixture shared-group >"$task_root/shared-group.log" 2>&1; then
   echo 'Accepted a deployment group with another member.' >&2; exit 1
 fi
