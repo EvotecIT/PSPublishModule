@@ -572,11 +572,28 @@
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$" },
-        "provider": { "type": "string", "enum": ["postgresql"] },
-        "database": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$" },
+        "provider": { "type": "string", "enum": ["postgresql", "sqlite"] },
+        "database": { "type": "string" },
+        "runAs": { "type": "string", "pattern": "^(?!root$)[A-Za-z_][A-Za-z0-9_-]{0,31}$" },
         "required": { "type": "boolean" }
       },
-      "required": ["id", "provider", "database"]
+      "required": ["id", "provider", "database"],
+      "allOf": [
+        {
+          "if": { "properties": { "provider": { "const": "postgresql" } }, "required": ["provider"] },
+          "then": {
+            "properties": { "database": { "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$" } },
+            "not": { "required": ["runAs"] }
+          }
+        },
+        {
+          "if": { "properties": { "provider": { "const": "sqlite" } }, "required": ["provider"] },
+          "then": {
+            "required": ["runAs"],
+            "properties": { "database": { "$ref": "#/$defs/AbsoluteUnixExactPath" } }
+          }
+        }
+      ]
     },
     "DurableBackupArtifactStore": {
       "type": "object",

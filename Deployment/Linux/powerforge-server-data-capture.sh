@@ -60,16 +60,12 @@ age_bin="$(require_command age)"
 tar_bin="$(require_command tar)"
 rsync_bin="$(require_command rsync)"
 sha256_bin="$(require_command sha256sum)"
-pg_dump_bin="$(require_command pg_dump)"
-pg_dumpall_bin="$(require_command pg_dumpall)"
-pg_restore_bin="$(require_command pg_restore)"
-psql_bin="$(require_command psql)"
 runuser_bin="$(require_command runuser)"
 flock_bin="$(require_command flock)"
 mktemp_bin="$(require_command mktemp)"
 stat_bin="$(require_command stat)"
 readlink_bin="$(require_command readlink)"
-readonly jq_bin age_bin tar_bin rsync_bin sha256_bin pg_dump_bin pg_dumpall_bin pg_restore_bin psql_bin runuser_bin flock_bin mktemp_bin stat_bin readlink_bin
+readonly jq_bin age_bin tar_bin rsync_bin sha256_bin runuser_bin flock_bin mktemp_bin stat_bin readlink_bin
 
 manifest_uid="$($stat_bin -c '%u' "$manifest")"
 manifest_mode="$($stat_bin -c '%a' "$manifest")"
@@ -83,6 +79,22 @@ manifest_mode="$($stat_bin -c '%a' "$manifest")"
   (.durableBackup.encryptedFiles | type == "array" and length > 0) and
   (.durableBackup.artifactStores | type == "array" and length > 0)
 ' "$manifest" >/dev/null || die 'manifest does not contain a complete schema-v2 durableBackup contract'
+
+pg_dump_bin=''
+pg_dumpall_bin=''
+pg_restore_bin=''
+psql_bin=''
+sqlite3_bin=''
+if "$jq_bin" -e 'any(.durableBackup.databases[]; .provider == "postgresql")' "$manifest" >/dev/null; then
+  pg_dump_bin="$(require_command pg_dump)"
+  pg_dumpall_bin="$(require_command pg_dumpall)"
+  pg_restore_bin="$(require_command pg_restore)"
+  psql_bin="$(require_command psql)"
+fi
+if "$jq_bin" -e 'any(.durableBackup.databases[]; .provider == "sqlite")' "$manifest" >/dev/null; then
+  sqlite3_bin="$(require_command sqlite3)"
+fi
+readonly pg_dump_bin pg_dumpall_bin pg_restore_bin psql_bin sqlite3_bin
 
 export_root="$($jq_bin -er '.durableBackup.exportRoot' "$manifest")"
 export_group="$($jq_bin -er '.durableBackup.exportGroup' "$manifest")"
@@ -149,32 +161,81 @@ install -d -m 0750 -o root -g "$export_group" "$partial/artifacts"
 work="$($mktemp_bin -d /var/tmp/powerforge-server-data-capture.XXXXXXXX)"
 [[ "$work" == /var/tmp/powerforge-server-data-capture.* && -d "$work" && ! -L "$work" ]] ||
   die 'unable to create a safe database staging directory'
-chown postgres:postgres "$work"
-chmod 0700 "$work"
-install -d -m 0700 -o postgres -g postgres "$work/databases"
+chmod 0711 "$work"
+install -d -m 0700 -o root -g root "$work/databases"
 
 database_ids=()
-while IFS=$'\t' read -r id provider database required; do
+sqlite_paths=()
+declare -A seen_database_ids=()
+while IFS=$'\t' read -r id provider database run_as required; do
   assert_identifier "$id"
-  [[ "$provider" == 'postgresql' ]] || die "unsupported database provider for $id: $provider"
-  assert_database_name "$database"
+  [[ ! -v seen_database_ids["$id"] ]] || die "duplicate database id: $id"
+  seen_database_ids["$id"]=1
   [[ "$required" == 'true' || "$required" == 'false' ]] || die "invalid required flag for database: $id"
-
-  if ! "$runuser_bin" -u postgres -- "$psql_bin" -Atqc "select 1 from pg_database where datname = '$database'" | grep -qx '1'; then
-    [[ "$required" == 'false' ]] && { log "optional database is absent: $database"; continue; }
-    die "required PostgreSQL database is absent: $database"
-  fi
-
-  dump_path="$work/databases/$id.dump"
-  "$runuser_bin" -u postgres -- "$pg_dump_bin" --format=custom --no-owner --no-privileges --file="$dump_path" --dbname="$database"
-  [[ -s "$dump_path" ]] || die "PostgreSQL dump is empty: $database"
-  "$pg_restore_bin" --list "$dump_path" >/dev/null || die "PostgreSQL dump cannot be listed: $database"
+  case "$provider" in
+    postgresql)
+      [[ "$run_as" == '-' ]] || die "PostgreSQL database must not set runAs: $id"
+      assert_database_name "$database"
+      if ! "$runuser_bin" -u postgres -- "$psql_bin" -Atqc "select 1 from pg_database where datname = '$database'" | grep -qx '1'; then
+        [[ "$required" == 'false' ]] && { log "optional database is absent: $database"; continue; }
+        die "required PostgreSQL database is absent: $database"
+      fi
+      install -d -m 0711 -o root -g root "$work/postgresql"
+      install -d -m 0700 -o postgres -g postgres "$work/postgresql/$id"
+      staging_path="$work/postgresql/$id/backup.dump"
+      "$runuser_bin" -u postgres -- "$pg_dump_bin" --format=custom --no-owner --no-privileges --file="$staging_path" --dbname="$database"
+      install -d -m 0700 -o root -g root "$work/postgresql/$id"
+      [[ -s "$staging_path" && -f "$staging_path" && ! -L "$staging_path" ]] || die "PostgreSQL dump is missing or unsafe: $database"
+      chown -h root:root "$staging_path"
+      chmod 0600 "$staging_path"
+      dump_path="$work/databases/$id.dump"
+      mv -- "$staging_path" "$dump_path"
+      "$pg_restore_bin" --list "$dump_path" >/dev/null || die "PostgreSQL dump cannot be listed: $database"
+      ;;
+    sqlite)
+      assert_absolute_path "$database"
+      paths_overlap "$database" "$export_root" && die "SQLite database overlaps durable export root: $database"
+      sqlite_paths+=("$database")
+      [[ "$run_as" != '-' && "$run_as" != 'root' ]] || die "SQLite database requires a non-root runAs account: $id"
+      assert_unix_identity "$run_as"
+      getent passwd "$run_as" >/dev/null || die "SQLite backup account does not exist: $run_as"
+      if [[ ! -e "$database" && ! -L "$database" ]]; then
+        [[ "$required" == 'false' ]] && { log "optional SQLite database is absent: $database"; continue; }
+        die "required SQLite database is absent: $database"
+      fi
+      [[ -f "$database" && ! -L "$database" && "$($readlink_bin -f -- "$database")" == "$database" ]] ||
+        die "SQLite source must be a canonical non-link file: $database"
+      install -d -m 0711 -o root -g root "$work/sqlite"
+      install -d -m 0700 -o "$run_as" "$work/sqlite/$id"
+      staging_path="$work/sqlite/$id/backup.sqlite"
+      "$runuser_bin" -u "$run_as" -- "$sqlite3_bin" -readonly "$database" ".backup '$staging_path'"
+      # Revoke the service account's directory access before root inspects or moves its output.
+      install -d -m 0700 -o root -g root "$work/sqlite/$id"
+      [[ -s "$staging_path" && -f "$staging_path" && ! -L "$staging_path" ]] || die "SQLite backup is missing or unsafe: $id"
+      chown -h root:root "$staging_path"
+      chmod 0600 "$staging_path"
+      dump_path="$work/databases/$id.sqlite"
+      mv -- "$staging_path" "$dump_path"
+      [[ "$("$sqlite3_bin" -readonly "$dump_path" 'PRAGMA integrity_check;')" == 'ok' ]] ||
+        die "SQLite backup integrity check failed: $id"
+      ;;
+    *) die "unsupported database provider for $id: $provider" ;;
+  esac
   database_ids+=("$id")
-done < <("$jq_bin" -r '.durableBackup.databases[] | [.id, .provider, .database, (.required // false)] | @tsv' "$manifest")
+done < <("$jq_bin" -r '.durableBackup.databases[] | [.id, .provider, .database, (.runAs // "-"), (.required // false)] | @tsv' "$manifest")
 (( ${#database_ids[@]} > 0 )) || die 'durable capture did not produce any database dump'
 
-"$runuser_bin" -u postgres -- "$pg_dumpall_bin" --globals-only >"$work/databases/postgresql-globals.sql"
-[[ -s "$work/databases/postgresql-globals.sql" ]] || die 'PostgreSQL globals dump is empty'
+if [[ -n "$pg_dump_bin" ]]; then
+  install -d -m 0711 -o root -g root "$work/postgresql"
+  install -d -m 0700 -o postgres -g postgres "$work/postgresql/globals"
+  "$runuser_bin" -u postgres -- "$pg_dumpall_bin" --globals-only >"$work/postgresql/globals/globals.sql"
+  install -d -m 0700 -o root -g root "$work/postgresql/globals"
+  [[ -s "$work/postgresql/globals/globals.sql" && -f "$work/postgresql/globals/globals.sql" && ! -L "$work/postgresql/globals/globals.sql" ]] || die 'PostgreSQL globals dump is missing or unsafe'
+  chown -h root:root "$work/postgresql/globals/globals.sql"
+  chmod 0600 "$work/postgresql/globals/globals.sql"
+  mv -- "$work/postgresql/globals/globals.sql" "$work/databases/postgresql-globals.sql"
+  [[ -s "$work/databases/postgresql-globals.sql" ]] || die 'PostgreSQL globals dump is empty'
+fi
 
 tar_args=(-C "$work" databases)
 encrypted_paths=()
@@ -191,6 +252,15 @@ while IFS=$'\t' read -r path required; do
   tar_args+=(-C / "${path#/}")
 done < <("$jq_bin" -r '.durableBackup.encryptedFiles[] | [.target, (.required // false)] | @tsv' "$manifest")
 
+for sqlite_path in "${sqlite_paths[@]}"; do
+  for encrypted_path in "${encrypted_paths[@]}"; do
+    if paths_overlap "$sqlite_path" "$encrypted_path" ||
+      [[ "$encrypted_path" == "$sqlite_path"-wal || "$encrypted_path" == "$sqlite_path"-shm || "$encrypted_path" == "$sqlite_path"-journal ]]; then
+      die "SQLite database overlaps directly captured encrypted file: $sqlite_path and $encrypted_path"
+    fi
+  done
+done
+
 "$tar_bin" -czf - "${tar_args[@]}" | "$age_bin" -r "$recipient" -o "$partial/recovery.tar.gz.age"
 [[ -s "$partial/recovery.tar.gz.age" ]] || die 'encrypted recovery bundle is empty'
 
@@ -205,6 +275,10 @@ while IFS=$'\t' read -r id source required; do
   for encrypted_path in "${encrypted_paths[@]}"; do
     paths_overlap "$encrypted_path" "$source" &&
       die "encrypted path overlaps plaintext artifact store: $encrypted_path and $source"
+  done
+  for sqlite_path in "${sqlite_paths[@]}"; do
+    paths_overlap "$sqlite_path" "$source" &&
+      die "SQLite database overlaps plaintext artifact store: $sqlite_path and $source"
   done
   if [[ ! -d "$source" || -L "$source" ]]; then
     [[ "$required" == 'false' ]] && { log "optional artifact store is absent: $source"; continue; }
@@ -235,7 +309,7 @@ while IFS= read -r -d '' snapshot_entry; do
     die "snapshot path cannot be represented safely in SHA256SUMS: $relative_entry"
 done < <(find "$partial" -mindepth 1 -print0)
 
-database_json="$($jq_bin -c '[.durableBackup.databases[] | {id, provider, database, required: (.required // false)}]' "$manifest")"
+database_json="$($jq_bin -c '[.durableBackup.databases[] | {id, provider, database, runAs, required: (.required // false)}]' "$manifest")"
 artifact_json="$($jq_bin -c '[.durableBackup.artifactStores[] | {id, path, required: (.required // false)}]' "$manifest")"
 manifest_sha="$($sha256_bin "$manifest" | awk '{print $1}')"
 # shellcheck disable=SC2016 # jq variables are intentionally evaluated by jq, not Bash.
