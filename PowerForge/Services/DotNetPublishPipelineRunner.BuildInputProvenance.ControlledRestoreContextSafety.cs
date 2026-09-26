@@ -141,6 +141,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 return false;
             }
         }
+        var unstableProperties = ReadControlledRestoreContextOverriddenPropertyNames();
+        unstableProperties.UnionWith(ControlledInvocationGuardProperties);
+        unstableProperties.UnionWith(ControlledContextPathProperties);
+        Dictionary<string, string> ReadImmutableProperties(IReadOnlyDictionary<string, string> properties)
+            => properties.Where(property => !unstableProperties.Contains(property.Key))
+                .ToDictionary(property => property.Key, property => property.Value,
+                    StringComparer.OrdinalIgnoreCase);
         bool discoveredContextImport;
         do
         {
@@ -171,10 +178,12 @@ public sealed partial class DotNetPublishPipelineRunner
                     bool contextDependent = import.AncestorsAndSelf()
                         .SelectMany(element => element.Attributes())
                         .Where(attribute => attribute.Name.LocalName.Equals("Condition", StringComparison.OrdinalIgnoreCase))
-                        .Any(attribute => ConditionDependsOnControlledContextPath(attribute.Value,
+                        .Any(attribute => ConditionDependsOnControlledContextValue(attribute.Value,
                             projectSources[projectDirectory].Where(documents.ContainsKey)
-                                .Select(source => documents[source])));
-                    if (!contextDependent)
+                                .Select(source => documents[source]), unstableProperties));
+                    if (!contextDependent || IsDefinitelyInactiveControlledBuildOperation(
+                            import, properties, definingProjectPath: null,
+                            immutableGlobalProperties: ReadImmutableProperties(properties)))
                         continue;
                     if (!TryResolveControlledContextImport(path, projectDirectory,
                             import.Attribute("Project")?.Value, originalGitRoot, out string? importedPath))
@@ -212,6 +221,20 @@ public sealed partial class DotNetPublishPipelineRunner
 
         // A later imported target can mutate an output path after the verifier has
         // already run. Fail before controlled execution for custom target writes.
+        bool unknownLocalProperties = false;
+        foreach (XDocument source in documents.Values)
+        {
+            string? localProperties = source.Root?.Attribute("TreatAsLocalProperty")?.Value;
+            if (string.IsNullOrWhiteSpace(localProperties))
+                continue;
+            if (ContainsUnresolvedBuildExpression(localProperties!))
+            {
+                unknownLocalProperties = true;
+                break;
+            }
+            unstableProperties.UnionWith(DecodeMsBuildEscapes(localProperties!).Split(';')
+                .Select(name => name.Trim()).Where(name => name.Length > 0));
+        }
         foreach (string path in isolatedPaths)
         {
             if (!documents.TryGetValue(path, out XDocument? document))
@@ -220,11 +243,14 @@ public sealed partial class DotNetPublishPipelineRunner
             foreach (XElement target in document.Descendants().Where(element =>
                          element.Name.LocalName.Equals("Target", StringComparison.OrdinalIgnoreCase)))
             {
-                if (!ConditionDependsOnControlledContextPath(
-                        target.Attribute("Condition")?.Value, new[] { document }) &&
-                    sourceProperties[path].All(properties =>
-                        IsDefinitelyInactiveControlledBuildOperation(target, properties,
-                            definingProjectPath: null, immutableGlobalProperties: properties)))
+                if (sourceProperties[path].All(properties =>
+                    {
+                        var immutable = unknownLocalProperties
+                            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                            : ReadImmutableProperties(properties);
+                        return IsDefinitelyInactiveControlledBuildOperation(target, properties,
+                            definingProjectPath: null, immutableGlobalProperties: immutable);
+                    }))
                     continue;
                 if (IsDefinitelyUninvokedControlledContextTarget(target, documents,
                         sourceProperties[path]))
@@ -239,6 +265,15 @@ public sealed partial class DotNetPublishPipelineRunner
                                 attribute.Name.LocalName.Equals("PropertyName", StringComparison.OrdinalIgnoreCase))?.Value
                             : null;
                     if (propertyName is null || !ControlledContextPathProperties.Contains(propertyName))
+                        continue;
+                    if (sourceProperties[path].All(properties =>
+                    {
+                        var immutable = unknownLocalProperties
+                            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                            : ReadImmutableProperties(properties);
+                        return IsDefinitelyInactiveControlledBuildOperation(assignment, properties,
+                            definingProjectPath: null, immutableGlobalProperties: immutable);
+                    }))
                         continue;
                     failureReason = $"target-time assignment to an isolation-sensitive property '{propertyName}' in '{path}' cannot be proven safe for controlled restore contexts.";
                     return false;
@@ -262,8 +297,9 @@ public sealed partial class DotNetPublishPipelineRunner
         return false;
     }
 
-    private static bool ConditionDependsOnControlledContextPath(
-        string? condition, IEnumerable<XDocument> documents)
+    private static bool ConditionDependsOnControlledContextValue(
+        string? condition, IEnumerable<XDocument> documents,
+        ISet<string> unstableProperties)
     {
         if (string.IsNullOrWhiteSpace(condition))
             return false;
@@ -281,7 +317,7 @@ public sealed partial class DotNetPublishPipelineRunner
                          @"\$\(([A-Za-z_][A-Za-z0-9_.-]*)", RegexOptions.CultureInvariant))
             {
                 string name = match.Groups[1].Value.Split('.')[0];
-                if (ControlledContextPathProperties.Contains(name))
+                if (unstableProperties.Contains(name))
                     return true;
                 foreach (XElement property in documents.SelectMany(document => document.Descendants())
                              .Where(element => element.Parent?.Name.LocalName.Equals(

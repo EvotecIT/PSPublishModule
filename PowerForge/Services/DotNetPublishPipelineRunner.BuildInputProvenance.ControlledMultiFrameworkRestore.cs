@@ -169,6 +169,7 @@ public sealed partial class DotNetPublishPipelineRunner
         ControlledPublishGraphNode node,
         bool restore,
         bool isolatedRestoreContext,
+        bool frameworkSpecificOutput,
         string canonicalControlledProjectPath,
         string originalGitRoot,
         string controlledSourceRoot,
@@ -233,7 +234,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
         if (restoreContextProps is not null && isolatedRestoreContext &&
             !TryPrependControlledContextIntermediatePathMap(node,
-                canonicalControlledProjectPath, ref controlledPathMap))
+                canonicalControlledProjectPath, frameworkSpecificOutput, ref controlledPathMap))
         {
             failureReason = $"the original intermediate path for project '{originalProjectPath}' could not be mapped.";
             return false;

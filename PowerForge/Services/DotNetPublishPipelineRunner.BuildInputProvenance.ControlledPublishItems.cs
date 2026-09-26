@@ -669,6 +669,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 return false;
             }
             bool restoreWithFrameworkMatrix = frameworks.Length > 1;
+            bool frameworkSpecificOutput = projectContext.Isolated &&
+                node.EvaluatedProperties.TryGetValue("AppendTargetFrameworkToOutputPath", out string? appendFramework) &&
+                !string.Equals(appendFramework?.Trim(), "true", StringComparison.OrdinalIgnoreCase);
             if (restoreWithFrameworkMatrix)
             {
                 // Restore immediately before this node so each effective property context owns the
@@ -697,6 +700,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     node,
                     restore: !restoreWithFrameworkMatrix,
                     projectContext.Isolated,
+                    frameworkSpecificOutput,
                     projectContext.CanonicalControlledProjectPath,
                     originalGitRoot,
                     controlledSourceRoot,

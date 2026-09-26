@@ -65,6 +65,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string useOriginalFrameworksProperty = BuildControlledUseOriginalFrameworksPropertyName(nonce);
         string matchedProperty = "_PowerForgeMatched_" + nonce;
         string expectedIntermediateProperty = "_PowerForgeExpectedIntermediate_" + nonce;
+        string expectedBuildIntermediateProperty = "_PowerForgeExpectedBuildIntermediate_" + nonce;
         string expectedExtensionsProperty = "_PowerForgeExpectedExtensions_" + nonce;
         string expectedOutputProperty = "_PowerForgeExpectedOutput_" + nonce;
         string expectedObjExclusionProperty = "_PowerForgeExpectedObjExclusion_" + nonce;
@@ -80,7 +81,9 @@ public sealed partial class DotNetPublishPipelineRunner
         // The wrapper is supplied as a global property. Restore the original observable
         // value locally before importing it, including for code in the original props.
         var project = new XElement("Project",
-            new XAttribute("TreatAsLocalProperty", "DirectoryBuildPropsPath"));
+            new XAttribute("TreatAsLocalProperty",
+                "DirectoryBuildPropsPath;BaseIntermediateOutputPath;IntermediateOutputPath;" +
+                "MSBuildProjectExtensionsPath;BaseOutputPath;OutputPath"));
         foreach (IGrouping<string, ProjectEvaluationRequest> group in contexts)
         {
             string controlledProjectPath = Path.GetFullPath(Path.Combine(
@@ -274,7 +277,11 @@ public sealed partial class DotNetPublishPipelineRunner
                     new XElement("BaseIntermediateOutputPath", escapedIntermediate),
                     new XElement("MSBuildProjectExtensionsPath", escapedIntermediate),
                     new XElement("BaseOutputPath", escapedOutput),
+                    properties.ContainsKey("OutputPath") || controlledEnvironment.ContainsKey("OutputPath")
+                        ? new XElement("OutputPath", escapedOutput)
+                        : null,
                     new XElement(expectedIntermediateProperty, escapedIntermediate),
+                    new XElement(expectedBuildIntermediateProperty, escapedIntermediate),
                     new XElement(expectedExtensionsProperty, escapedIntermediate),
                     new XElement(expectedOutputProperty, escapedOutput),
                     new XElement(expectedObjExclusionProperty, escapedObjExclusion),
@@ -286,6 +293,42 @@ public sealed partial class DotNetPublishPipelineRunner
                         "$(DefaultItemExcludes);" + escapedObjExclusion +
                         ";" + escapedBinExclusion),
                     new XElement(matchedProperty, "true")));
+                ControlledPublishGraphNode[] frameworkNodes = graphNodes
+                    .Where(node => FileSystemPathSafety.ExistingPathComparer.Equals(
+                        Path.GetFullPath(node.Request.ProjectPath), group.Key) &&
+                        BuildControlledRestoreContextKey(node).Equals(contextKey, StringComparison.Ordinal) &&
+                        node.EvaluatedProperties.TryGetValue(
+                            "AppendTargetFrameworkToOutputPath", out string? append) &&
+                        !string.Equals(append?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                if (frameworkNodes.Any(node => string.IsNullOrWhiteSpace(
+                        ReadControlledNodeTargetFramework(node))))
+                {
+                    failureReason = $"project '{group.Key}' disables framework output suffixes " +
+                        "without a selected target framework.";
+                    return false;
+                }
+                // The SDK normally adds the TFM to both paths. When the project disables
+                // that behavior, retain shared restore assets but split compiled outputs.
+                foreach (string framework in frameworkNodes
+                             .Select(node => ReadControlledNodeTargetFramework(node)!)
+                             .Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    string frameworkSuffix = BuildControlledFrameworkOutputDirectoryName(framework);
+                    string frameworkIntermediate = EscapeMsBuildPropertyValue(
+                        Path.Combine(intermediate, frameworkSuffix) + Path.DirectorySeparatorChar);
+                    string frameworkOutput = EscapeMsBuildPropertyValue(
+                        Path.Combine(output, frameworkSuffix) + Path.DirectorySeparatorChar);
+                    project.Add(new XElement("PropertyGroup",
+                        new XAttribute("Condition", condition + " and $(TargetFramework.Equals('" +
+                            EscapeControlledMsBuildConditionLiteral(framework) +
+                            "', System.StringComparison.OrdinalIgnoreCase))"),
+                        new XElement("IntermediateOutputPath", frameworkIntermediate),
+                        new XElement("BaseOutputPath", frameworkOutput),
+                        new XElement("OutputPath", frameworkOutput),
+                        new XElement(expectedBuildIntermediateProperty, frameworkIntermediate),
+                        new XElement(expectedOutputProperty, frameworkOutput)));
+                }
             }
         }
         // Property instance methods keep apostrophes in paths out of MSBuild's quoted
@@ -335,7 +378,7 @@ public sealed partial class DotNetPublishPipelineRunner
             new XElement("Error",
                 new XAttribute("Condition",
                     "$(IntermediateOutputPath.Length) != 0 and $(" + actualIntermediateProperty +
-                    ".StartsWith($(" + expectedIntermediateProperty + "), System.StringComparison." +
+                    ".StartsWith($(" + expectedBuildIntermediateProperty + "), System.StringComparison." +
                     pathComparison + ")) != 'True'"),
                 new XAttribute("Text", "The project intermediate output path is outside its controlled context.")),
             new XElement("Error",
@@ -378,6 +421,17 @@ public sealed partial class DotNetPublishPipelineRunner
     internal static string ComputeControlledRestoreContextDirectoryName(string controlledProjectPath, string contextKey)
         => ComputeSha256Hex(Encoding.UTF8.GetBytes(
             Path.GetFullPath(controlledProjectPath) + "\0" + contextKey)).Substring(0, 24);
+
+    private static string BuildControlledFrameworkOutputDirectoryName(string framework)
+        => "framework-" + ComputeSha256Hex(Encoding.UTF8.GetBytes(
+            framework.ToLowerInvariant())).Substring(0, 16);
+
+    private static string? ReadControlledNodeTargetFramework(ControlledPublishGraphNode node)
+        => !string.IsNullOrWhiteSpace(node.Request.TargetFramework)
+            ? node.Request.TargetFramework
+            : node.EvaluatedProperties.TryGetValue("TargetFramework", out string? framework)
+                ? framework
+                : null;
 
     private static string BuildControlledOriginalPropsPropertyName(string nonce)
         => "_PowerForgeOriginalDirectoryBuildPropsPath_" + nonce;
@@ -429,6 +483,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool TryPrependControlledContextIntermediatePathMap(
         ControlledPublishGraphNode node,
         string controlledProjectPath,
+        bool frameworkSpecificOutput,
         ref string pathMap)
     {
         if (!node.EvaluatedProperties.TryGetValue("BaseIntermediateOutputPath", out string? basePath) ||
@@ -441,28 +496,9 @@ public sealed partial class DotNetPublishPipelineRunner
         // The original intermediate directory is a PathMap destination only. The
         // controlled build writes to its isolated checkout directory, even when the
         // approved build used a centralized intermediate directory outside Git.
-        string originalMappedIntermediate = originalIntermediate;
-        string? bestSource = null;
-        if (!string.IsNullOrWhiteSpace(node.PathMap))
-        {
-            foreach (string entry in node.PathMap!.Split(','))
-            {
-                int separator = entry.IndexOf('=');
-                if (separator <= 0)
-                    return false;
-                string source = NormalizeBuildInputPathRoot(entry.Substring(0, separator).Trim());
-                string target = entry.Substring(separator + 1).Trim();
-                if (target.Length == 0 || !IsSameOrBelowBuildInputPath(originalIntermediate, source) ||
-                    (bestSource is not null && source.Length <= bestSource.Length))
-                    continue;
-                string relative = FrameworkCompatibility.GetRelativePath(source, originalIntermediate);
-                originalMappedIntermediate = relative == "."
-                    ? target
-                    : target.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
-                      Path.DirectorySeparatorChar + relative;
-                bestSource = source;
-            }
-        }
+        if (!TryApplyOriginalIntermediatePathMap(originalIntermediate, node.PathMap,
+                out string originalMappedIntermediate))
+            return false;
         string controlledProjectDirectory = Path.GetDirectoryName(controlledProjectPath)!;
         string suffix = ComputeControlledRestoreContextDirectoryName(controlledProjectPath,
             BuildControlledRestoreContextKey(node));
@@ -471,6 +507,53 @@ public sealed partial class DotNetPublishPipelineRunner
         // Roslyn embeds generated source paths in portable symbols. Hide only the
         // context-specific segment, preserving any caller-supplied original PathMap.
         pathMap = controlledIntermediate + "=" + originalMappedIntermediate + "," + pathMap;
+        if (frameworkSpecificOutput)
+        {
+            string? framework = ReadControlledNodeTargetFramework(node);
+            if (string.IsNullOrWhiteSpace(framework) ||
+                !node.EvaluatedProperties.TryGetValue("IntermediateOutputPath", out string? intermediatePath) ||
+                string.IsNullOrWhiteSpace(intermediatePath))
+                return false;
+            string originalBuildIntermediate = NormalizeBuildInputPathRoot(
+                Path.IsPathRooted(intermediatePath) ? intermediatePath :
+                    Path.Combine(originalProjectDirectory, intermediatePath));
+            if (!TryApplyOriginalIntermediatePathMap(originalBuildIntermediate, node.PathMap,
+                    out string mappedBuildIntermediate))
+                return false;
+            string controlledBuildIntermediate = NormalizeBuildInputPathRoot(Path.Combine(
+                controlledIntermediate,
+                BuildControlledFrameworkOutputDirectoryName(framework!)));
+            pathMap = controlledBuildIntermediate + "=" + mappedBuildIntermediate + "," + pathMap;
+        }
+        return true;
+    }
+
+    private static bool TryApplyOriginalIntermediatePathMap(
+        string originalPath,
+        string? originalPathMap,
+        out string mappedPath)
+    {
+        mappedPath = originalPath;
+        string? bestSource = null;
+        if (string.IsNullOrWhiteSpace(originalPathMap))
+            return true;
+        foreach (string entry in originalPathMap!.Split(','))
+        {
+            int separator = entry.IndexOf('=');
+            if (separator <= 0)
+                return false;
+            string source = NormalizeBuildInputPathRoot(entry.Substring(0, separator).Trim());
+            string target = entry.Substring(separator + 1).Trim();
+            if (target.Length == 0 || !IsSameOrBelowBuildInputPath(originalPath, source) ||
+                (bestSource is not null && source.Length <= bestSource.Length))
+                continue;
+            string relative = FrameworkCompatibility.GetRelativePath(source, originalPath);
+            mappedPath = relative == "."
+                ? target
+                : target.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
+                  Path.DirectorySeparatorChar + relative;
+            bestSource = source;
+        }
         return true;
     }
 
@@ -501,6 +584,11 @@ public sealed partial class DotNetPublishPipelineRunner
             "TargetFrameworks",
             "RuntimeIdentifiers",
             "PathMap",
+            "BaseIntermediateOutputPath",
+            "IntermediateOutputPath",
+            "MSBuildProjectExtensionsPath",
+            "BaseOutputPath",
+            "OutputPath",
             "_TargetFrameworkOverride",
             "_DisableNuGetRestoreTargetFrameworksOverride"
         };

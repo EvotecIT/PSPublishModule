@@ -229,11 +229,21 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("context-activated-external-alias-import")]
     [InlineData("context-activated-property-method-import")]
     [InlineData("context-activated-chained-import")]
+    [InlineData("controlled-override-path-target")]
+    [InlineData("same-context-multi-framework-output")]
+    [InlineData("mixed-framework-append")]
+    [InlineData("global-output-roots")]
+    [InlineData("reference-global-intermediate-roots")]
+    [InlineData("override-activated-import")]
+    [InlineData("inactive-override-import")]
     public void ReadSourceProvenance_RestoresEverySelectedFrameworkForSharedMultiTargetReference(string scenario)
     {
         bool distinctRestoreContexts = scenario != "single-context";
         bool unselectedContextPackage = scenario != "single-context" && scenario != "two-contexts" &&
-            scenario != "defaulted-property";
+            scenario != "defaulted-property" && scenario != "same-context-multi-framework-output" &&
+            scenario != "mixed-framework-append" &&
+            scenario != "reference-global-intermediate-roots" &&
+            scenario != "inactive-override-import";
         bool customDirectoryBuildProps = scenario == "custom-props";
         bool emptyDirectoryBuildPropsPath = scenario == "empty-props-path";
         bool caseSensitiveContextValues = scenario == "case-sensitive-context-values";
@@ -251,8 +261,12 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         bool mutatedIsolationMarker = scenario == "mutated-isolation-marker";
         bool spoofedOriginalProps = scenario == "spoofed-original-props";
         bool targetFrameworksContext = scenario == "target-frameworks-context";
+        bool sameContextMultiFrameworkOutput = scenario == "same-context-multi-framework-output" ||
+            scenario == "mixed-framework-append";
+        bool mixedFrameworkAppend = scenario == "mixed-framework-append";
         bool caseVariantSymbols = scenario == "case-variant-symbols";
-        bool keepSymbols = scenario == "keep-symbols" || caseVariantSymbols || externalIntermediatePath;
+        bool keepSymbols = scenario == "keep-symbols" || caseVariantSymbols || externalIntermediatePath ||
+            sameContextMultiFrameworkOutput;
         bool disabledPropsProject = scenario == "disabled-props-project" ||
             scenario == "disabled-props-project-reset";
         bool resetDisabledPropsProject = scenario == "disabled-props-project-reset";
@@ -260,6 +274,11 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         bool removedOutputExcludes = scenario == "removed-output-excludes";
         bool partialOutputExcludes = scenario == "partial-output-excludes";
         bool latePathMutation = scenario == "late-path-mutation";
+        bool controlledOverridePathTarget = scenario == "controlled-override-path-target";
+        bool globalOutputRoots = scenario == "global-output-roots";
+        bool referenceGlobalIntermediateRoots = scenario == "reference-global-intermediate-roots";
+        bool overrideActivatedImport = scenario == "override-activated-import";
+        bool inactiveOverrideImport = scenario == "inactive-override-import";
         bool computedLatePathMutation = scenario == "computed-late-path-mutation";
         bool referencePropsOverride = scenario == "reference-props-override";
         bool ridListContext = scenario == "rid-list-context";
@@ -268,6 +287,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         bool packHookCalledByBuild = scenario == "pack-hook-called-by-build";
         bool uppercaseContextPaths = scenario == "uppercase-context-paths";
         bool contextActivatedImport = scenario == "context-activated-import" ||
+            overrideActivatedImport ||
             scenario == "context-activated-indirect-import" ||
             scenario == "context-activated-external-alias-import" ||
             scenario == "context-activated-property-method-import" ||
@@ -304,6 +324,12 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string utilityProject = Path.Combine(utilityDirectory, "Utility.csproj");
             string? customPropsPath = null;
             string customPropsArgument = string.Empty;
+            string globalOutputRoot = Path.Combine(root, "global-bin") + Path.DirectorySeparatorChar;
+            string referenceGlobalIntermediateRoot =
+                (Path.Combine(root, "global-obj") + Path.DirectorySeparatorChar).Replace('\\', '/');
+            string globalOutputArguments = globalOutputRoots
+                ? $" -p:BaseOutputPath={globalOutputRoot} -p:OutputPath={globalOutputRoot}"
+                : string.Empty;
             if (customDirectoryBuildProps || environmentProps || spoofedOriginalProps ||
                 scenario == "missing-props-path")
             {
@@ -335,12 +361,21 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             if (defaultedProperty)
                 File.WriteAllText(Path.Combine(sharedDirectory, "Directory.Build.props"),
                     "<Project><PropertyGroup><Flavor Condition=\"'$(Flavor)' == ''\">Direct</Flavor></PropertyGroup></Project>");
+            if (sameContextMultiFrameworkOutput)
+                File.WriteAllText(Path.Combine(sharedDirectory, "Directory.Build.props"),
+                    "<Project><PropertyGroup><BaseOutputPath>bin/$(TargetFramework)/</BaseOutputPath>" +
+                    (mixedFrameworkAppend
+                        ? "<AppendTargetFrameworkToOutputPath Condition=\"'$(TargetFramework)' == 'net8.0'\">false</AppendTargetFrameworkToOutputPath>"
+                        : "<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>") +
+                    "</PropertyGroup></Project>");
             string directContext = ridListContext
                 ? " AdditionalProperties=\"RuntimeIdentifiers=linux-x64%3Bwin-x64\""
                 : caseSensitiveContextValues
                 ? " AdditionalProperties=\"DefineConstants=FOO\""
                 : targetFrameworksContext
                 ? " AdditionalProperties=\"TargetFrameworks=net10.0\""
+                : referenceGlobalIntermediateRoots
+                ? " AdditionalProperties=\"Flavor=Direct;BaseIntermediateOutputPath=../global-obj/;MSBuildProjectExtensionsPath=../global-obj/\""
                 : distinctRestoreContexts && !defaultedProperty
                 ? " AdditionalProperties=\"Flavor=Direct\""
                 : string.Empty;
@@ -352,6 +387,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 ? " AdditionalProperties=\"DefineConstants=foo\""
                 : targetFrameworksContext
                 ? " AdditionalProperties=\"TargetFrameworks=net8.0\""
+                : referenceGlobalIntermediateRoots
+                ? " AdditionalProperties=\"Flavor=Bridge;BaseIntermediateOutputPath=../global-obj/;MSBuildProjectExtensionsPath=../global-obj/\""
+                : sameContextMultiFrameworkOutput
+                ? " AdditionalProperties=\"Flavor=Direct\""
                 : distinctRestoreContexts
                 ? " AdditionalProperties=\"Flavor=Bridge\""
                 : string.Empty;
@@ -370,7 +409,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                   <ItemGroup>
                     <ProjectReference Include="../Bridge/Bridge.csproj" />
                     <ProjectReference Include="../{sharedDirectoryName}/Shared.csproj"{directContext} />
-                    {(emptySingleContextBase ? "<ProjectReference Include=\"../Utility/Utility.csproj\" />" : string.Empty)}
+                    {(emptySingleContextBase || sameContextMultiFrameworkOutput ? "<ProjectReference Include=\"../Utility/Utility.csproj\" />" : string.Empty)}
                   </ItemGroup>
                 </Project>
                 """);
@@ -411,6 +450,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 defaultItemExcludesOverride = "<DefaultItemExcludes Condition=\"$([System.String]::Copy('$(BaseOutputPath)').Contains('powerforge-context'))\">$(DefaultItemExcludes)bogus</DefaultItemExcludes>";
             string latePathTarget = latePathMutation
                 ? "<Target Name=\"MutateContextIntermediate\" BeforeTargets=\"Build\" Condition=\"$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))\"><PropertyGroup><IntermediateOutputPath>$(MSBuildProjectDirectory)/../shared-obj/</IntermediateOutputPath></PropertyGroup></Target>"
+                : controlledOverridePathTarget
+                    ? "<Target Name=\"ControlledOverrideMutation\" BeforeTargets=\"CoreCompile\" Condition=\"'$(BuildProjectReferences)' == 'false'\"><PropertyGroup><IntermediateOutputPath>$(MSBuildProjectDirectory)/../shared-obj/</IntermediateOutputPath></PropertyGroup></Target>"
                 : computedLatePathMutation
                     ? "<PropertyGroup><DestinationProperty>IntermediateOutputPath</DestinationProperty></PropertyGroup><Target Name=\"MutateContextIntermediate\" BeforeTargets=\"Build\"><CreateProperty Value=\"$(MSBuildProjectDirectory)/../shared-obj/\"><Output TaskParameter=\"Value\" PropertyName=\"$(DestinationProperty)\" /></CreateProperty></Target>"
                 : inactivePackPathTarget || packHookCalledByBuild
@@ -421,10 +462,17 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string callPackHookDuringBuild = packHookCalledByBuild
                 ? "<BuildDependsOn>$(BuildDependsOn);PrepareUnusedPackPath</BuildDependsOn>"
                 : string.Empty;
+            string requireFrameworkSplit = sameContextMultiFrameworkOutput
+                ? "<Target Name=\"RequireFrameworkSplit\" BeforeTargets=\"CoreCompile\" Condition=\"$(BaseOutputPath.Contains('powerforge-context')) and '$(AppendTargetFrameworkToOutputPath)' != 'true'\"><Error Condition=\"$(OutputPath.Contains('framework-')) != 'True' or $(IntermediateOutputPath.Contains('framework-')) != 'True'\" Text=\"Framework outputs were not isolated: OutputPath=$(OutputPath), IntermediateOutputPath=$(IntermediateOutputPath), BaseOutputPath=$(BaseOutputPath), Append=$(AppendTargetFrameworkToOutputPath).\" /></Target>"
+                : string.Empty;
             string contextualImport = externalAliasContextImport
                 ? "<Import Project=\"Context.aliases.props\" /><Import Project=\"Context.targets\" Condition=\"'$(ContextImportEnabled)' == 'true'\" />"
                 : chainedContextImport
                     ? "<Import Project=\"Context.aliases.props\" Condition=\"$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))\" /><Import Project=\"Context.targets\" Condition=\"'$(ContextImportEnabled)' == 'true'\" />"
+                : overrideActivatedImport
+                    ? "<Import Project=\"Context.targets\" Condition=\"'$(BuildProjectReferences)' == 'false'\" />"
+                : inactiveOverrideImport
+                    ? "<Import Project=\"Missing.targets\" Condition=\"'false' == 'true' and '$(BuildProjectReferences)' == 'false'\" />"
                 : indirectContextActivatedImport
                 ? "<PropertyGroup><ContextImportEnabled>$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))</ContextImportEnabled></PropertyGroup><Import Project=\"Context.targets\" Condition=\"'$(ContextImportEnabled)' == 'true'\" />"
                 : propertyMethodContextImport
@@ -480,11 +528,12 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                   <Target Name="RejectUnexpectedProps" BeforeTargets="Restore;Build" Condition="'{emptyDirectoryBuildPropsPath.ToString().ToLowerInvariant()}' == 'true'">
                     <Error Condition="'$(UnexpectedPropsMarker)' == 'Loaded'" Text="An explicitly empty DirectoryBuildPropsPath imported discovered props." />
                   </Target>
-                  {(targetFrameworksContext || apostropheProjectPath ? string.Empty : "<ItemGroup><ProjectReference Include=\"../Leaf/Leaf.csproj\" /></ItemGroup>")}
+                  {(targetFrameworksContext || apostropheProjectPath || referenceGlobalIntermediateRoots ? string.Empty : "<ItemGroup><ProjectReference Include=\"../Leaf/Leaf.csproj\" /></ItemGroup>")}
                   {contextPackages}
                   {verifierCollision}
-                  {latePathTarget}
-                  {contextualImport}
+                    {latePathTarget}
+                    {requireFrameworkSplit}
+                    {contextualImport}
                 {sharedProjectEnd}
                 """);
             File.WriteAllText(leafProject, """
@@ -492,6 +541,17 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
                 </Project>
                 """);
+            if (sameContextMultiFrameworkOutput)
+            {
+                File.WriteAllText(utilityProject, """
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+                      <ItemGroup><ProjectReference Include="../Shared/Shared.csproj" AdditionalProperties="Flavor=Bridge" /></ItemGroup>
+                    </Project>
+                    """);
+                File.WriteAllText(Path.Combine(utilityDirectory, "Utility.cs"),
+                    "public static class Utility { public const int Value = 1; }");
+            }
             if (emptySingleContextBase)
             {
                 File.WriteAllText(utilityProject, """
@@ -513,24 +573,29 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(Path.Combine(bridgeDirectory, "Bridge.cs"),
                 "public static class Bridge { public static int Value => Shared.Value; }");
             File.WriteAllText(Path.Combine(sharedDirectory, "Shared.cs"), targetFrameworksContext ||
-                apostropheProjectPath
+                apostropheProjectPath || referenceGlobalIntermediateRoots
                 ? "public static class Shared { public const int Value = 1; }"
                 : "public static class Shared { public static int Value => Leaf.Value; }");
             File.WriteAllText(Path.Combine(leafDirectory, "Leaf.cs"),
                 "public static class Leaf { public const int Value = 1; }");
-            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\nshared-assets/\n");
+            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\nshared-assets/\nglobal-bin/\nglobal-obj/\n");
             var testEnvironment = environmentProps
                 ? new Dictionary<string, string> { ["DirectoryBuildPropsPath"] = customPropsPath! }
                 : null;
+            if (referenceGlobalIntermediateRoots)
+                RunDotNet(root,
+                    $"restore \"{sharedProject}\" --use-lock-file --nologo " +
+                    $"-p:BaseIntermediateOutputPath={referenceGlobalIntermediateRoot} " +
+                    $"-p:MSBuildProjectExtensionsPath={referenceGlobalIntermediateRoot}", testEnvironment);
             if (unselectedContextPackage)
             {
                 RunDotNet(root,
-                    $"restore \"{sharedProject}\" --use-lock-file --nologo -p:Flavor=Direct -p:TargetFrameworks=net10.0{customPropsArgument}", testEnvironment);
+                    $"restore \"{sharedProject}\" --use-lock-file --nologo -p:Flavor=Direct -p:TargetFrameworks=net10.0{customPropsArgument}{globalOutputArguments}", testEnvironment);
                 RunDotNet(root,
-                    $"restore \"{sharedProject}\" --use-lock-file --nologo -p:Flavor=Bridge -p:TargetFrameworks=net8.0{customPropsArgument}", testEnvironment);
+                    $"restore \"{sharedProject}\" --use-lock-file --nologo -p:Flavor=Bridge -p:TargetFrameworks=net8.0{customPropsArgument}{globalOutputArguments}", testEnvironment);
             }
             RunDotNet(root,
-                $"restore \"{appProject}\" -r linux-x64 --use-lock-file --nologo -p:SelfContained=false{customPropsArgument}", testEnvironment);
+                $"restore \"{appProject}\" -r linux-x64 --use-lock-file --nologo -p:SelfContained=false{customPropsArgument}{globalOutputArguments}", testEnvironment);
             if (unselectedContextPackage)
             {
                 Assert.Contains("Newtonsoft.Json", File.ReadAllText(Path.Combine(sharedDirectory, "packages.Direct.lock.json")));
@@ -546,7 +611,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 "-m:1 -p:BuildInParallel=false " +
                 $"/p:SourceRevisionId={revision} /p:IncludeSourceRevisionInInformationalVersion=true " +
                 $"/p:ContinuousIntegrationBuild=true /p:DebugType={(keepSymbols ? "portable" : "None")} " +
-                $"/p:DebugSymbols={keepSymbols.ToString().ToLowerInvariant()}{customPropsArgument}", testEnvironment);
+                $"/p:DebugSymbols={keepSymbols.ToString().ToLowerInvariant()}{customPropsArgument}{globalOutputArguments}", testEnvironment);
             var plan = new DotNetPublishPlan
             {
                 ProjectRoot = root,
@@ -596,10 +661,15 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             }
             if (emptyDirectoryBuildPropsPath)
                 plan.MsBuildProperties["DirectoryBuildPropsPath"] = string.Empty;
-            if (controlledProperties)
+            if (controlledProperties || controlledOverridePathTarget || overrideActivatedImport)
             {
                 plan.MsBuildProperties["BuildProjectReferences"] = "true";
                 plan.MsBuildProperties["RestoreRecursive"] = "true";
+            }
+            if (globalOutputRoots)
+            {
+                plan.MsBuildProperties["BaseOutputPath"] = globalOutputRoot;
+                plan.MsBuildProperties["OutputPath"] = globalOutputRoot;
             }
             if (disabledPropsEnvironment)
             {
@@ -613,7 +683,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             if (overrideSharedOutputPath || overrideSharedOutDir || overrideSharedAssets ||
                 disabledPropsEnvironment || disabledPropsProject || removedOutputExcludes ||
                 partialOutputExcludes || latePathMutation || computedLatePathMutation || referencePropsOverride ||
-                ridListContext || contextActivatedImport || packHookCalledByBuild)
+                ridListContext || contextActivatedImport || packHookCalledByBuild || controlledOverridePathTarget)
             {
                 Assert.True(provenance.Dirty);
                 string expected = disabledPropsEnvironment || disabledPropsProject && !resetDisabledPropsProject
@@ -630,7 +700,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                         ? "isolation-sensitive property"
                     : packHookCalledByBuild
                         ? "target-time assignment to an isolation-sensitive property"
-                    : latePathMutation
+                    : latePathMutation || controlledOverridePathTarget
                         ? "target-time assignment to an isolation-sensitive property"
                     : referencePropsOverride
                         ? "project reference changes DirectoryBuildPropsPath"
