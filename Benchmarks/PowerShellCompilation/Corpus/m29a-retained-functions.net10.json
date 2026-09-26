@@ -4,17 +4,17 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "emitted": 463,
-  "retained": 102,
+  "emitted": 465,
+  "retained": 100,
   "dispositionContract": "Every function identity matches the accepted constructor/object comparison and its full baseline; no previously emitted method or still-retained region is lost.",
   "packets": [
     {
       "packet": "pssg",
       "stableUnits": 286,
       "functions": 282,
-      "emitted": 243,
-      "retained": 39,
-      "sourceExplanationSha256": "f22d9fe956daae365da07b28dcd9f8738e994fd8cfeeb27d2db194e55d4ccbf5",
+      "emitted": 245,
+      "retained": 37,
+      "sourceExplanationSha256": "b7ed7fec28618cc1e9cd44b07c91e45d78aa9fe8d7c4e95cc0a7d998d76169b2",
       "functionsRetained": [
         {
           "unitId": "f05240d2c874ad6f03bce00b",
@@ -27,10 +27,10 @@
           "causes": [
             {
               "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "The right operand of '-is' or '-isnot' must be one statically resolvable CLR type on the target surface.",
-              "line": 60,
-              "column": 34
+              "featureId": "syntax.invokememberexpression",
+              "message": "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
+              "line": 94,
+              "column": 13
             }
           ]
         },
@@ -418,24 +418,6 @@
           ]
         },
         {
-          "unitId": "372d1f53a285ae3cac690845",
-          "name": "Convert-Office365License",
-          "relativePath": "Public/Converts/Convert-Office365License.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "The right operand of '-is' or '-isnot' must be one statically resolvable CLR type on the target surface.",
-              "line": 1887,
-              "column": 27
-            }
-          ]
-        },
-        {
           "unitId": "975739889f75e147e751ffd4",
           "name": "ConvertTo-ImmutableID",
           "relativePath": "Public/Converts/ConvertTo-ImmutableID.ps1",
@@ -484,24 +466,6 @@
               "message": "Command invocation 'Test-Connection' requires a registered semantic provider or a hosted PowerShell command region.",
               "line": 31,
               "column": 9
-            }
-          ]
-        },
-        {
-          "unitId": "ec8b7af98d83afe0c6efcc3d",
-          "name": "Get-FileEncoding",
-          "relativePath": "Public/FilesFolders/Get-FileEncoding.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "The right operand of '-is' or '-isnot' must be one statically resolvable CLR type on the target surface.",
-              "line": 94,
-              "column": 19
             }
           ]
         },
@@ -1287,7 +1251,7 @@
       "functions": 109,
       "emitted": 80,
       "retained": 29,
-      "sourceExplanationSha256": "3beab13841806b14b4a45aa21d3642788ff584ea5dd6c19100ca107a1bc4d72f",
+      "sourceExplanationSha256": "d1b9bce9d03bcf1f2683664817564d0f9932a89295091206b10b7d75b06e2294",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -2451,13 +2415,6 @@
               "message": "CLR type 'System.Management.Automation.Language.Parser' is not available in the generated project reference set for the requested target.",
               "line": 26,
               "column": 16
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "The right operand of '-is' or '-isnot' must be one statically resolvable CLR type on the target surface.",
-              "line": 27,
-              "column": 30
             }
           ]
         },

@@ -287,6 +287,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
             PowerShellBoundClosedCollectionFactoryResultExpression factoryResult => new[] { factoryResult.Value },
             PowerShellBoundBinaryExpression binary => new[] { binary.Left, binary.Right },
             PowerShellBoundUnaryExpression unary => new[] { unary.Operand },
+            PowerShellBoundNativeTypeTestExpression nativeTest => nativeTest.Target is null ? new[] { nativeTest.Operand } : new[] { nativeTest.Operand, nativeTest.Target },
             PowerShellBoundTypeTestExpression typeTest => new[] { typeTest.Operand },
             PowerShellBoundRegexExpression regex => new[] { regex.Input, regex.Pattern }.Concat(regex.Replacement is null ? Array.Empty<PowerShellBoundExpression>() : new[] { regex.Replacement }),
             PowerShellBoundWildcardExpression wildcard => new[] { wildcard.Input, wildcard.Pattern },
@@ -503,6 +504,12 @@ internal sealed partial class PowerShellSemanticAnalyzer
         {
             foreach (var read in EnumerateVariableReads(unary.Operand)) yield return read;
         }
+        if (expression is PowerShellBoundNativeTypeTestExpression nativeTest)
+        {
+            foreach (var read in EnumerateVariableReads(nativeTest.Operand)) yield return read;
+            if (nativeTest.Target is not null)
+                foreach (var read in EnumerateVariableReads(nativeTest.Target)) yield return read;
+        }
         if (expression is PowerShellBoundTypeTestExpression typeTest)
         {
             foreach (var read in EnumerateVariableReads(typeTest.Operand)) yield return read;
@@ -655,6 +662,12 @@ internal sealed partial class PowerShellSemanticAnalyzer
         if (expression is PowerShellBoundUnaryExpression unary)
         {
             foreach (var nested in EnumerateInvocations(unary.Operand)) yield return nested;
+        }
+        if (expression is PowerShellBoundNativeTypeTestExpression nativeTest)
+        {
+            foreach (var nested in EnumerateInvocations(nativeTest.Operand)) yield return nested;
+            if (nativeTest.Target is not null)
+                foreach (var nested in EnumerateInvocations(nativeTest.Target)) yield return nested;
         }
         if (expression is PowerShellBoundTypeTestExpression typeTest)
         {

@@ -103,6 +103,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
                _ => false
            }, searchNestedScriptBlocks: false) is not null ||
            RequiresNativeDictionaryKeyForEach(function) ||
+           RequiresNativeTypeTest(function, targetFramework, capabilities) ||
            function.Body.Find(static node => node is HashtableAst literal && PowerShellDictionarySemanticBinder.HasComputedKeys(literal),
                searchNestedScriptBlocks: false) is not null ||
            RequiresNativeStatementValue(function) ||
@@ -146,6 +147,12 @@ internal static class PowerShellNativeFunctionBindingPolicy
                     argument.ArgumentName.Equals("ValueFromPipelineByPropertyName", StringComparison.OrdinalIgnoreCase))));
 
     /// <summary>Selects invocation-owned cardinality only when an if is itself consumed as a literal or collection value.</summary>
+    private static bool RequiresNativeTypeTest(FunctionDefinitionAst function, string? targetFramework, PowerShellCompilationCapability capabilities)
+        => function.Body.Find(node => node is BinaryExpressionAst test && test.Operator is TokenKind.Is or TokenKind.IsNot &&
+            (test.Right is not TypeExpressionAst literal || literal.TypeName.GetReflectionType() is not { } type ||
+             !PowerShellCompilationParameterTypePolicy.CanUseInMethod(type, targetFramework, capabilities)),
+            searchNestedScriptBlocks: false) is not null;
+
     private static bool RequiresNativeStatementValue(FunctionDefinitionAst function)
         => function.Body.Find(static node => node is IfStatementAst conditional &&
             (conditional.Parent is HashtableAst ||

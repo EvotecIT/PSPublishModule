@@ -1,0 +1,211 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Invocation-owned runtime type tests preserve operand evaluation, lazy type-name resolution and PowerShell type-test semantics; execution qualification is distinct from emission.",
+  "baselineCompilerCommit": "eb88a81a48bab630012a6e4fcdf07bd244bf30c7",
+  "baselineComparison": "m29a-dictionary-key-comparison.net10.json",
+  "baselineComparisonSha256": "03c1fac09636fdfdea2dec8137f027b21a902ec8a16c513f9d2f85e6145d0f36",
+  "baselineRetainedInventory": "m29a-retained-functions.net10.json at baselineCompilerCommit",
+  "baselineRetainedInventorySha256": "720e54607afcf3855b6e1aa9ac8e254ec6263cfd7be483b7e8446a9d9992657b",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 463,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "baselineEmitted": 243,
+      "candidateEmitted": 245,
+      "candidateExplanationSha256": "b7ed7fec28618cc1e9cd44b07c91e45d78aa9fe8d7c4e95cc0a7d998d76169b2",
+      "changes": [
+        {
+          "unitId": "372d1f53a285ae3cac690845",
+          "name": "Convert-Office365License",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "baselineCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "The right operand of '-is' or '-isnot' must be one statically resolvable CLR type on the target surface.",
+              "line": 1887,
+              "column": 27
+            }
+          ],
+          "candidateCauses": [],
+          "newExecutionQualification": true
+        },
+        {
+          "unitId": "ec8b7af98d83afe0c6efcc3d",
+          "name": "Get-FileEncoding",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "baselineCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "The right operand of '-is' or '-isnot' must be one statically resolvable CLR type on the target surface.",
+              "line": 94,
+              "column": 19
+            }
+          ],
+          "candidateCauses": [],
+          "newExecutionQualification": true
+        }
+      ],
+      "retainedCauseChanges": [
+        {
+          "unitId": "f05240d2c874ad6f03bce00b",
+          "name": "Convert-FileEncodingSingle",
+          "baselineCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "The right operand of '-is' or '-isnot' must be one statically resolvable CLR type on the target surface.",
+              "line": 60,
+              "column": 34
+            }
+          ],
+          "candidateCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.invokememberexpression",
+              "message": "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
+              "line": 94,
+              "column": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "baselineEmitted": 59,
+      "candidateEmitted": 59,
+      "candidateExplanationSha256": "92a40a4958d900fb27b09057ce13c568be73b30382040bb54d829a9d7095f17e",
+      "changes": [],
+      "retainedCauseChanges": []
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "baselineEmitted": 57,
+      "candidateEmitted": 57,
+      "candidateExplanationSha256": "bf72f44dfd97021241aae4a9c408360dd6bd22f8c702c18da95ace1633fd917b",
+      "changes": [],
+      "retainedCauseChanges": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "baselineEmitted": 80,
+      "candidateEmitted": 80,
+      "candidateExplanationSha256": "d1b9bce9d03bcf1f2683664817564d0f9932a89295091206b10b7d75b06e2294",
+      "changes": [],
+      "retainedCauseChanges": [
+        {
+          "unitId": "7a39c35c2e90fa2a99971977",
+          "name": "Convert-HashtableString",
+          "baselineCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Management.Automation.Language.Parser' is not available in the generated project reference set for the requested target.",
+              "line": 26,
+              "column": 16
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "The right operand of '-is' or '-isnot' must be one statically resolvable CLR type on the target surface.",
+              "line": 27,
+              "column": 30
+            }
+          ],
+          "candidateCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Management.Automation.Language.Parser' is not available in the generated project reference set for the requested target.",
+              "line": 26,
+              "column": 16
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "baselineEmitted": 24,
+      "candidateEmitted": 24,
+      "candidateExplanationSha256": "33db727b972d0164311bb9bea1aa885067c91999c419f1f0775022b285fbe25e",
+      "changes": [],
+      "retainedCauseChanges": []
+    }
+  ],
+  "lostEmittedMethods": 0,
+  "lostRetainedRegions": 0,
+  "candidateEmitted": 465,
+  "newlyExecutedFunctions": [
+    "Get-FileEncoding",
+    "Convert-Office365License"
+  ],
+  "executionLimits": {
+    "Get-FileEncoding": "Both Windows hosts, six owned encoding files, plain and detailed output, exclusive reopen proving disposal. Authored BOM-classification quirks preserved.",
+    "Convert-Office365License": "Both Windows hosts, offline string/pipeline/reverse lookup only; no tenant or SDK license operations.",
+    "Convert-FileEncodingSingle": "Retained hosted helper executes conversion/backup with compiled reader; no complete compiled-converter claim."
+  },
+  "compilerSourceHashes": [
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellSemanticAnalyzer.cs",
+      "sha256": "4f9dd7873a5c48a1e0c0fcf0606a12d430417fc4c14e45c40882d02f78454e8e"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.cs",
+      "sha256": "a4761201fb18d800636a2d56fb0ec2f15ab66f742ab8d07b0c1412e5faed2ed4"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
+      "sha256": "8afba54b2b01df9c8f70228d85863ba527d9325788f3e77ba64a9bab36ec909a"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellOperatorSemanticBinder.cs",
+      "sha256": "f44fba3921da259eeb6b7c67ff0681596d2c4fabd506abe8848c26294ec7b25f"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredTreeEnumerator.cs",
+      "sha256": "b11d3e946fd5c1b79ec09adbe9edea867f8ddbc5932ad185c451abcf2a4372e5"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs",
+      "sha256": "06a6c21db08fd4bc007e899945b4a670da35bb5eccedb3bb5a836d95bacc85aa"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Conversions.cs",
+      "sha256": "d9e039d847b6ea4bfddc006db7d8a0567f5743a791bd40ea7e4a6d03962f39c0"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeLanguageOperations.cs",
+      "sha256": "e1765c2a64aad21eaed096dc01b6f52a2cb960d4019201ff09db3a179c797612"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeTypeTestExpression.cs",
+      "sha256": "0d5bc2c3fecd471bd210b4a12e3e018c06c07d0c940e72278e0c1a1ce1e0ff78"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeTypeTestExpression.cs",
+      "sha256": "69fe1966818b7b475752c82ddecfd186134281ac366b906c2406f112cb90ebcf"
+    }
+  ]
+}

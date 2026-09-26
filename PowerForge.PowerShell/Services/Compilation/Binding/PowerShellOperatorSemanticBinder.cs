@@ -29,7 +29,7 @@ internal static partial class PowerShellOperatorSemanticBinder
                 operatorSpan, PowerShellSourceParser.GetSourceLines(document, operatorSpan));
         }
         if (operation is "Is" or "IsNot")
-            return BindTypeTest(syntax, span, operation == "IsNot", bindOperand, diagnostics, targetFramework, capabilities);
+            return BindTypeTest(document, syntax, span, operation == "IsNot", bindOperand, diagnostics, targetFramework, capabilities);
         if (operation is "Match" or "Imatch" or "Cmatch" or "Notmatch" or "Inotmatch" or "Cnotmatch")
             return BindRegexMatch(syntax, span, operation, bindOperand, diagnostics);
         if (operation is "Replace" or "Ireplace" or "Creplace")
@@ -308,6 +308,7 @@ internal static partial class PowerShellOperatorSemanticBinder
             operand);
 
     private static PowerShellBoundExpression? BindTypeTest(
+        ParsedSourceDocument document,
         BinaryExpressionAst syntax,
         SourceSpan span,
         bool negate,
@@ -319,7 +320,17 @@ internal static partial class PowerShellOperatorSemanticBinder
         if (syntax.Right is not TypeExpressionAst typeExpression ||
             typeExpression.TypeName.GetReflectionType() is not { } targetType ||
             !PowerShellCompilationParameterTypePolicy.CanUseInMethod(targetType, targetFramework, capabilities))
-            return Reject(diagnostics, span, "PSB2220", "The right operand of '-is' or '-isnot' must be one statically resolvable CLR type on the target surface.");
+        {
+            if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+                return Reject(diagnostics, span, "PSB2220", "The right operand of '-is' or '-isnot' must be one statically resolvable CLR type on the target surface.");
+            var value = bindOperand(syntax.Left);
+            if (value is null) return null;
+            var target = syntax.Right is TypeExpressionAst ? null : bindOperand(syntax.Right);
+            if (syntax.Right is not TypeExpressionAst && target is null) return null;
+            return new PowerShellBoundNativeTypeTestExpression(span, value, target,
+                (syntax.Right as TypeExpressionAst)?.TypeName.FullName,
+                PowerShellSourceParser.GetSpan(document, syntax.Right.Extent), negate);
+        }
         var operand = bindOperand(syntax.Left);
         return operand is null ? null : new PowerShellBoundTypeTestExpression(span, operand, targetType, negate, capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors));
     }

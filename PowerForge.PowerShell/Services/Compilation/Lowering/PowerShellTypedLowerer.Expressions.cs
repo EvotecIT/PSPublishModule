@@ -76,6 +76,10 @@ internal sealed partial class PowerShellTypedLowerer
                 unary.Type.ClrType,
                 unary.Operation,
                 LowerExpression(unary.Operand, functions, names, targetCapabilities)),
+            PowerShellBoundNativeTypeTestExpression nativeTest => new PowerShellLoweredNativeTypeTestExpression(nativeTest.Span,
+                LowerExpression(nativeTest.Operand, functions, names, targetCapabilities),
+                nativeTest.Target is null ? null : LowerExpression(nativeTest.Target, functions, names, targetCapabilities),
+                nativeTest.AuthoredTypeName, nativeTest.TargetSpan, nativeTest.Negate),
             PowerShellBoundTypeTestExpression typeTest => new PowerShellLoweredTypeTestExpression(
                 typeTest.Span,
                 LowerExpression(typeTest.Operand, functions, names, targetCapabilities),

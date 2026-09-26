@@ -153,6 +153,10 @@ internal static class PowerShellLoweredTreeEnumerator
             case PowerShellLoweredUnaryExpression unary:
                 yield return unary.Operand;
                 break;
+            case PowerShellLoweredNativeTypeTestExpression nativeTest:
+                yield return nativeTest.Operand;
+                if (nativeTest.Target is not null) yield return nativeTest.Target;
+                break;
             case PowerShellLoweredTypeTestExpression typeTest:
                 yield return typeTest.Operand;
                 break;

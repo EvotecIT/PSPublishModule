@@ -12,11 +12,11 @@ namespace PowerForge.Generated.Runtime
     internal static class PowerShellNativeLanguageOperations
     {
         private static readonly ConcurrentDictionary<bool, Func<object, object?, object?, bool>> MembershipOperations = new();
-        private static readonly Lazy<Func<object?, object, bool>> TypeTest = new(() => CreateTypeTest());
+        private static readonly Lazy<Func<object?, object?, bool>> TypeTest = new(() => CreateTypeTest());
 
-        internal static bool IsInstance(object? value, Type type) => TypeTest.Value(value, type);
+        internal static bool IsInstance(object? value, object? type) => TypeTest.Value(value, type);
 
-        private static Func<object?, object, bool> CreateTypeTest()
+        private static Func<object?, object?, bool> CreateTypeTest()
         {
             var type = typeof(PSObject).Assembly.GetType("System.Management.Automation.TypeOps", true)!;
             var method = type.GetMethod("IsInstance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
@@ -24,7 +24,7 @@ namespace PowerForge.Generated.Runtime
                 ?? throw new NotSupportedException("PowerShell's type-test operation is unavailable.");
             var value = Expression.Parameter(typeof(object), "value");
             var target = Expression.Parameter(typeof(object), "target");
-            return Expression.Lambda<Func<object?, object, bool>>(Expression.Call(method, value, target), value, target).Compile();
+            return Expression.Lambda<Func<object?, object?, bool>>(Expression.Call(method, value, target), value, target).Compile();
         }
 
         internal static object? NormalizeCommandArgument(object? value)

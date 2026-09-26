@@ -30,6 +30,14 @@ namespace PowerForge.Generated.Runtime
             return CustomObjectConversionSite.Value(value);
         }
 
+        /// <summary>Tests evaluated operands through PowerShell's type-test owner, including runtime Type conversion and failures.</summary>
+        public bool EvaluateTypeTest(object? value, object? target, bool negate)
+        {
+            EnsureActive();
+            var matches = PowerShellNativeLanguageOperations.IsInstance(value, target);
+            return negate ? !matches : matches;
+        }
+
         /// <summary>Applies PowerShell's nonthrowing value conversion after evaluating both operands.</summary>
         /// <remarks>Invalid destination types still fail through the host's type conversion, as with authored -as.</remarks>
         public object? EvaluateAs(object? value, object? destination)
