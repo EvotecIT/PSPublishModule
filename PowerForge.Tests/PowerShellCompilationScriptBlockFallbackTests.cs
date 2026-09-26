@@ -3,8 +3,8 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationBoundPipelineTests
 {
     [Theory]
-    [InlineData("function Read-Child($Value) { $Value }")]
-    [InlineData("filter Read-Child { $_ }")]
+    [InlineData("function Read-Child([Missing.Authored.Type]$Value) { $Value }")]
+    [InlineData("filter Read-Child { trap { continue }; $_ }")]
     [InlineData("function Read-Child { dynamicparam { } end { 'value' } }")]
     [InlineData("function Read-Child { trap { continue }; 'value' }")]
     [InlineData("function Read-Child { param($__writeOutput) $__writeOutput }")]
@@ -30,6 +30,24 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             new[] { document }, framework, PowerShellCompilationCapabilities.TypedExecutable);
         Assert.Empty(result.Emitted.Methods);
         Assert.NotEmpty(result.Emitted.Diagnostics);
+    }
+
+    [Theory]
+    [InlineData("net10.0")]
+    [InlineData("net472")]
+    public void NestedFunctions_RejectRuntimeFreeLoweringOfFilterAndHeaderDeclarations(string framework)
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Read-Owner { param([object[]]$Values) filter Read-Child([int]$Min=1) { $_ -gt $Min }; " +
+            "function Read-Header([int]$Value=3) { $Value }; $Values | Read-Child; Read-Header }",
+            TestPath("nested-filter-header-capabilities.psm1"));
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document }, framework, PowerShellCompilationCapabilities.HybridModule);
+        Assert.Empty(result.Emitted.Diagnostics);
+        Assert.Equal(3, result.Emitted.Methods.Length);
+        var strict = new PowerShellTypedLowerer().Lower(result.Analyzed, PowerShellCompilationCapability.None);
+        Assert.Empty(strict.Functions);
+        Assert.Contains(strict.Diagnostics, diagnostic => diagnostic.Code == "PSL1013");
     }
 
     [Theory]

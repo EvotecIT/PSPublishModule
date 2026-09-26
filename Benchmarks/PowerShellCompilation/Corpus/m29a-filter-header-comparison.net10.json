@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Nested native filters and header parameters; same-input per-function no-loss comparison.",
+  "baselineCompilerCommit": "a0188a0396e315c9886e9b635cf0008a810d05d0",
+  "baselineComparison": "m29a-nested-function-comparison.net10.json",
+  "baselineComparisonSha256": "90553be776dd2cee0c9062b8db9e8b389a740f9632c02c846c77d98c2fd399d7",
+  "baselineRetainedInventory": "m29a-retained-functions.net10.json at baselineCompilerCommit",
+  "baselineRetainedInventorySha256": "5eb769b457d3f6da997ba16423c961572793d3000f3aeac7f490a3e81d56e61c",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 449,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "candidateEmitted": 242,
+      "candidateExplanationSha256": "2657e1acde0a75449fecacc1ec2a25a193ad83c9803ae674b6f2a3d847a143c0",
+      "changes": [
+        {
+          "unitId": "bce9a825e76bfb46f9edba91",
+          "name": "ConvertFrom-ObjectToString",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "82df6b2b3e82e119c76391ac",
+          "name": "ConvertTo-JsonLiteral",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "e83fa1894fda2fc22e7a0653",
+          "name": "ConvertTo-PrettyObject",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "candidateEmitted": 53,
+      "candidateExplanationSha256": "7c910f0a177a2916a264b9892f5d151cf9b361bb95dd29f81c28bb245c3acc38",
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "candidateEmitted": 55,
+      "candidateExplanationSha256": "eeda66ded0b2a18edcb08eba5f3191ea968f7f67b3069f21ce083286aa4523ce",
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "candidateEmitted": 78,
+      "candidateExplanationSha256": "e7bf6803d2f8210e6c7d2f638b227527cefc572a3df115236d3485d42de326b6",
+      "changes": []
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "candidateEmitted": 24,
+      "candidateExplanationSha256": "33db727b972d0164311bb9bea1aa885067c91999c419f1f0775022b285fbe25e",
+      "changes": []
+    }
+  ],
+  "lostEmittedMethods": 0,
+  "lostRetainedRegions": 0,
+  "compilerSourceHashes": [
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.ScriptBlocks.cs",
+      "sha256": "7acb10003351cd42ca5c7611ec6fdaedded64a66e7ec82c42835cdf59ed21b23"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.NestedDeclarations.cs",
+      "sha256": "561c18cf2536d36946e46c5f941cbc4f82d2cf16b7399e78c1c979a71d49360e"
+    }
+  ],
+  "candidateEmitted": 452
+}

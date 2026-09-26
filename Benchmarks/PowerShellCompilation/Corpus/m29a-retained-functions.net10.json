@@ -4,17 +4,17 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "emitted": 449,
-  "retained": 116,
+  "emitted": 452,
+  "retained": 113,
   "dispositionContract": "Every function identity matches the accepted constructor/object comparison and its full baseline; no previously emitted method or still-retained region is lost.",
   "packets": [
     {
       "packet": "pssg",
       "stableUnits": 286,
       "functions": 282,
-      "emitted": 239,
-      "retained": 43,
-      "sourceExplanationSha256": "b91bac1fb3b763294581b1e0f721b555faff196929160c496bd3e7ab3a79a1ac",
+      "emitted": 242,
+      "retained": 40,
+      "sourceExplanationSha256": "2657e1acde0a75449fecacc1ec2a25a193ad83c9803ae674b6f2a3d847a143c0",
       "functionsRetained": [
         {
           "unitId": "f05240d2c874ad6f03bce00b",
@@ -436,24 +436,6 @@
           ]
         },
         {
-          "unitId": "bce9a825e76bfb46f9edba91",
-          "name": "ConvertFrom-ObjectToString",
-          "relativePath": "Public/Converts/ConvertFrom-ObjectToString.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
-              "line": 69,
-              "column": 9
-            }
-          ]
-        },
-        {
           "unitId": "975739889f75e147e751ffd4",
           "name": "ConvertTo-ImmutableID",
           "relativePath": "Public/Converts/ConvertTo-ImmutableID.ps1",
@@ -488,24 +470,6 @@
           ]
         },
         {
-          "unitId": "82df6b2b3e82e119c76391ac",
-          "name": "ConvertTo-JsonLiteral",
-          "relativePath": "Public/Converts/ConvertTo-JsonLiteral.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
-              "line": 102,
-              "column": 9
-            }
-          ]
-        },
-        {
           "unitId": "d6e6d019c46177363a58eefd",
           "name": "ConvertTo-NormalizedString",
           "relativePath": "Public/Converts/ConvertTo-NormalizedString.ps1",
@@ -520,24 +484,6 @@
               "message": "Typed dictionary literals require String keys; the homogeneous String representation also requires String values.",
               "line": 50,
               "column": 31
-            }
-          ]
-        },
-        {
-          "unitId": "e83fa1894fda2fc22e7a0653",
-          "name": "ConvertTo-PrettyObject",
-          "relativePath": "Public/Converts/ConvertTo-PrettyObject.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
-              "line": 108,
-              "column": 9
             }
           ]
         },
@@ -912,7 +858,7 @@
       "functions": 68,
       "emitted": 53,
       "retained": 15,
-      "sourceExplanationSha256": "5cc5a1851e4b51a2bb6b1e623a6e0f0a368ee89901fd0df393147cb10b528a58",
+      "sourceExplanationSha256": "7c910f0a177a2916a264b9892f5d151cf9b361bb95dd29f81c28bb245c3acc38",
       "functionsRetained": [
         {
           "unitId": "9620fa3e611793d93f7a99e7",
@@ -966,7 +912,7 @@
             {
               "code": "UnsupportedSyntax",
               "featureId": "syntax.unsupported",
-              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
+              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; workflows and unsupported child bodies remain hosted.",
               "line": 97,
               "column": 5
             },
@@ -1540,7 +1486,7 @@
       "functions": 109,
       "emitted": 78,
       "retained": 31,
-      "sourceExplanationSha256": "77d154c2fad0c5e061efadfdea33190805c6008f99b16235234f405b370b9e8b",
+      "sourceExplanationSha256": "e7bf6803d2f8210e6c7d2f638b227527cefc572a3df115236d3485d42de326b6",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -1966,7 +1912,7 @@
             {
               "code": "UnsupportedSyntax",
               "featureId": "psb2961",
-              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
+              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; workflows and unsupported child bodies remain hosted.",
               "line": 33,
               "column": 9
             },
@@ -2801,7 +2747,7 @@
       "functions": 40,
       "emitted": 24,
       "retained": 16,
-      "sourceExplanationSha256": "30d691e44d386e72929b0f5640b6978883a1e261da70e1d266e323156f18f5d5",
+      "sourceExplanationSha256": "33db727b972d0164311bb9bea1aa885067c91999c419f1f0775022b285fbe25e",
       "functionsRetained": [
         {
           "unitId": "62d3e169b4f7eb162da5636b",
@@ -3066,41 +3012,6 @@
               "message": "Parameter '$Session' has CLR type 'System.Management.Automation.Runspaces.PSSession' that requires a target capability unavailable to this compilation.",
               "line": 2256,
               "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
-              "line": 2287,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
-              "line": 2295,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
-              "line": 2305,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
-              "line": 2320,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
-              "line": 2325,
-              "column": 5
             }
           ]
         },
@@ -3150,53 +3061,17 @@
       ]
     }
   ],
-  "compilerBaselineCommit": "870988559cf6151591818d4a6db7ec641816b5d4",
+  "compilerBaselineCommit": "a0188a0396e315c9886e9b635cf0008a810d05d0",
   "compilerSourceHashes": [
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.ScriptBlocks.cs",
-      "sha256": "2258b4ef9a40fd3185789f4742414f36fcf4275476fb92de8b5b3e45c68b1c8b"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.cs",
-      "sha256": "9efd3933df669ace2893273c5cbdfa248525ba9018e2f40c77f3cf65401a6458"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
-      "sha256": "8f837f90dd95e756225c0eaa6fa476dd33647f6a93fcb742fe6bb0de1d35bcc1"
-    },
-    {
       "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.ScriptBlocks.cs",
-      "sha256": "3b188a3264ab2db74c8e800ad812d323ac1074155d9a0f0c1fba6339c436251f"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs",
-      "sha256": "d9adbe7a37da32c9611cc98002e65407803f425ed11a5130b9d5620b39458f39"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeScriptBlock.cs",
-      "sha256": "c8464c8767f6536a1e45e84249be3647eb9aafe43aade2c296f2c91d91aaf00c"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeScriptBlock.cs",
-      "sha256": "e08abe3a1200789b4e41431b2e116030d1b0d479785b8c4b1d0d9844f8211c92"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs",
-      "sha256": "3f9928b1811c8a36537af15ba590ef6a22fc79da7d396950d128bc7cf96c3e40"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/PowerShellCommandHostRuntimeSource.cs",
-      "sha256": "d114f59358d4bbb0e19d36956d6ae7e00904d0cc5bc0d3dd34049805caff9fd3"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.cs",
-      "sha256": "af39a7d7a51e2f866e842b5c9820607f4287438228a26507903c58d94ad42770"
+      "sha256": "7acb10003351cd42ca5c7611ec6fdaedded64a66e7ec82c42835cdf59ed21b23"
     },
     {
       "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.NestedDeclarations.cs",
-      "sha256": "c6fb82da0ac365afb2c6e4e98a4b0a36d7df0f80febb7c35bdf725b5dbf61095"
+      "sha256": "561c18cf2536d36946e46c5f941cbc4f82d2cf16b7399e78c1c979a71d49360e"
     }
   ],
-  "dispositionComparison": "m29a-nested-function-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "870988559cf6151591818d4a6db7ec641816b5d4"
+  "dispositionComparison": "m29a-filter-header-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "a0188a0396e315c9886e9b635cf0008a810d05d0"
 }

@@ -35,7 +35,7 @@ namespace PowerForge.Generated.Runtime
                 ?? throw new NotSupportedException("PowerShell's native declaration body factory is unavailable.");
             // The engine retains an unbound cached block and returns a fresh session-bound clone.
             // Install on that unbound block so the declaration still owns cloning and session binding.
-            PowerShellNativeFunctionHost.Invoke(method, wrapper, new object[] { _executionContext, false });
+            PowerShellNativeFunctionHost.Invoke(method, wrapper, new object[] { _executionContext, definition.IsFilter });
             var body = field.GetValue(wrapper) as ScriptBlock
                 ?? throw new NotSupportedException("PowerShell's native declaration body is unavailable.");
             ValidateUnboundBody(body);
@@ -71,7 +71,7 @@ namespace PowerForge.Generated.Runtime
             var document = PowerShellNativeFunctionHost.ParseSelectedDocument(source, file, startOffset, endOffset);
             var definition = document.Find(node => node is FunctionDefinitionAst && node.Extent.StartOffset == startOffset &&
                 node.Extent.EndOffset == endOffset, searchNestedScriptBlocks: true) as FunctionDefinitionAst;
-            if (definition is null || definition.IsFilter || definition.Parameters?.Count > 0 ||
+            if (definition is null || definition.IsWorkflow ||
                 definition.Body.DynamicParamBlock is not null)
                 throw new ArgumentException("A nested compiled declaration requires one qualified function span and body metadata.", nameof(source));
             return definition;

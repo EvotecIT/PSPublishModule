@@ -39,7 +39,8 @@ internal sealed partial class PowerShellSemanticBinder
                 while (!names.Add(name)) name += "_";
                 var span = PowerShellSourceParser.GetSpan(document, nested.Extent);
                 var symbol = new PowerShellSymbolId(PowerShellSymbolKind.NativeScriptBlock, document.DocumentId, name, span);
-                var function = new FunctionDefinitionAst(nested.Extent, false, false, name, null,
+                var function = new FunctionDefinitionAst(nested.Extent, false, nested.IsFilter, name,
+                    nested.Parameters?.Select(static parameter => (ParameterAst)parameter.Copy()),
                     (ScriptBlockAst)nested.Body.Copy());
                 _nativeScriptBlocks.Add(key, symbol);
                 all.Add(new FunctionDeclaration(document, function, symbol));
@@ -63,10 +64,10 @@ internal sealed partial class PowerShellSemanticBinder
         => IsAssignedScriptBlock(expression) || expression.Parent is InvokeMemberExpressionAst invocation &&
            invocation.Arguments.Any(argument => ReferenceEquals(argument, expression));
 
-    // Header parameters and implicit filter lifecycle need separate metadata/lifecycle binding.
-    // Ordinary declarations keep every existing child body and parameter eligibility check.
+    // Preserve filter process clauses and header parameters in the canonical child contract.
+    // Workflow declarations require a different execution owner and remain hosted.
     internal static bool IsCompiledNestedFunction(FunctionDefinitionAst function)
-        => !function.IsFilter && (function.Parameters is null || function.Parameters.Count == 0);
+        => !function.IsWorkflow;
 
     private PowerShellBoundStatement? BindNativeFunctionDeclaration(ParsedSourceDocument document,
         FunctionDefinitionAst syntax, IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
@@ -79,7 +80,7 @@ internal sealed partial class PowerShellSemanticBinder
             return new PowerShellBoundExpressionStatement(span,
                 new PowerShellBoundNativeScriptBlockExpression(span, target, document.Text, syntax.Name), emitsOutput: false);
         diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2961",
-            "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.", span));
+            "The nested declaration requires a completely compiled native body and qualified declaration metadata; workflows and unsupported child bodies remain hosted.", span));
         return null;
     }
 
