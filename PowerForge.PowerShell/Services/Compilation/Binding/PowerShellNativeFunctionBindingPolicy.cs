@@ -109,6 +109,9 @@ internal static class PowerShellNativeFunctionBindingPolicy
            RequiresNativeModuleStateStringConversion(function) ||
            RequiresNativeStaticNumericArgumentConversion(function) ||
            PowerShellAutomaticVariableObservationPolicy.ObservesCatchState(function) ||
+           function.Body.Find(static node => node is ConvertExpressionAst conversion &&
+               PowerShellObjectConstructionPolicy.HasTypeNameMetadata(conversion),
+               searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(static node => node is ArrayExpressionAst array &&
                array.SubExpression.Statements.Any(static statement => statement is AssignmentStatementAst),
                searchNestedScriptBlocks: false) is not null ||

@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 2,
+  "purpose": "Same-input M29a constructor receiver and custom-object metadata comparison, Hybrid net10.0; execution is separate from emission.",
+  "baselineCommit": "66f4d515627a9e84f6f584c7a3fee9c3fec51fb2",
+  "baselineLedger": "m29a-typed-array-comparison.net10.json",
+  "baselineLedgerSha256": "496c02a4c531e771de1e0343b3edfd4a7591ab8213768932a3f202cdaf6093ae",
+  "comparisonContract": "Every baseline function ID matched exactly once; all 584 units and 565 functions remain, with no lost complete method or compiled region of a retained function. The full baseline ledger plus these changes defines current dispositions and region-member lists; byte-identical explanations and unchanged cause metadata are not claimed.",
+  "newlyExecutedFunctions": [
+    "Export-ADComputerReportData",
+    "Test-EmptyFolder"
+  ],
+  "executedTargets": {
+    "Export-ADComputerReportData": [
+      "net10.0/PowerShell7/Windows",
+      "net472/PowerShell5.1/Windows"
+    ],
+    "Test-EmptyFolder": [
+      "net10.0/PowerShell7/Windows"
+    ]
+  },
+  "otherNewMethodsAreEmissionOnly": true,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "baselineEmitted": 234,
+      "candidateEmitted": 235,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateSha256": "d323207344dbecfa17b5eccb0025b38d85c342d85784f350f9d28abe1c2b8953",
+      "changes": [
+        {
+          "unitId": "39ac1e86821c0d45b991f372",
+          "name": "Send-Email",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "causes": []
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "baselineEmitted": 51,
+      "candidateEmitted": 52,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateSha256": "bc725ceeb886d787c8c6d1f5a136c17e32c75b001665e233538f28ebf9da5e07",
+      "changes": [
+        {
+          "unitId": "85ea3f17d8a23facb1217f2d",
+          "name": "Export-ADComputerReportData",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "causes": []
+        }
+      ]
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "baselineEmitted": 55,
+      "candidateEmitted": 55,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateSha256": "e637f8c6bb2b52aaebab9f6cf4be7cac71c4bc71c92ac07b5c7725fdad87fe0d",
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "baselineEmitted": 63,
+      "candidateEmitted": 64,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateSha256": "dd8342d69360f050141ae93b1bc6f1060ffb428d425d52ac89777e5bce5588a5",
+      "changes": [
+        {
+          "unitId": "ca7d04ee730f992a81b444cd",
+          "name": "Test-EmptyFolder",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "causes": []
+        }
+      ]
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "baselineEmitted": 22,
+      "candidateEmitted": 22,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateSha256": "1f9db57e7ca2680c99fb3c944c4a13bb3ad826381169da53f7c7f279e84df078",
+      "changes": []
+    }
+  ]
+}
