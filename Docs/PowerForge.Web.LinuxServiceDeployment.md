@@ -2,7 +2,7 @@
 
 PowerForge provides generic package and deployment actions plus a root-owned promoter for small Linux systemd services. It complements server recovery: the actions deploy reproducible application code, while the recovery manifest captures host configuration, service units, certificates, encrypted secrets, and mutable state.
 
-The service repository stays thin. It owns the service code, a validation script, a secret-free package job, and a protected-environment deployment job. PowerForge owns checkout, packaging, artifact publication, provenance, SSH hygiene, archive validation, atomic promotion, health checks, retention, and rollback.
+The service repository stays thin. It owns the service code, a validation script, and a secret-free package job. Choose either the protected-environment push deployment below or the host-initiated artifact pull. PowerForge owns packaging, artifact provenance, archive validation, atomic promotion, health checks, retention, and rollback.
 
 ## Runtime Contract
 
@@ -192,6 +192,43 @@ point at either committed source or a generated release directory without escapi
 the caller repository. Service artifacts are retained for seven days by default so
 manual protected-environment approval can outlive a short queue or weekend; override
 `artifact-retention-days` only when the repository has a different approval policy.
+
+## Host-Initiated Artifact Pull
+
+Use `Deployment/Linux/powerforge-service-artifact-pull.sh` when the host must initiate routine deployment and no GitHub runner should SSH into it. Keep the secret-free package job above, but omit its `deploy` job; use only one routine deployment lane per service. The host polls the configured workflow for a successful `push` or `workflow_dispatch` run at the current branch-tip commit, downloads its named artifact, checks the package's source repository, commit, run identity, and SHA-256, and hands the verified files to the same root-owned service promoter. It rechecks the branch immediately before promotion and stops on a detected change. A repeated run already recorded in the current release is skipped.
+
+Install `gh`, `jq`, and the promoter on the host. Run the pull script as a dedicated unprivileged deployment account, never as root. The matching promoter configuration under `/etc/powerforge/services/<service>.env` and the pull configuration under `/etc/powerforge/service-pull/<service>.env` must be root-owned, mode `0640`, and readable by only that account's dedicated primary group. The root-owned token file `/etc/powerforge/service-pull/<service>.token` has the same mode; give it a repository-scoped, read-only GitHub credential with Contents and Actions read access. Keep the token out of the repository and systemd command line. The pull work directory must belong to the deployment account and have mode `0700`. The service release root and its parent chain remain root-controlled. The two example configuration files in `Deployment/Linux` show the separate pull and promotion settings.
+
+For a service named `example`, provision a separate `example-deploy` account and primary group, then extend the host setup above:
+
+```bash
+install -o root -g root -m 0755 \
+  Deployment/Linux/powerforge-service-artifact-pull.sh \
+  /usr/local/sbin/powerforge-service-artifact-pull
+install -d -o root -g root -m 0750 /etc/powerforge/service-pull
+install -d -o root -g root -m 0755 /var/lib/powerforge/service-pull
+install -d -o example-deploy -g example-deploy -m 0700 /var/lib/powerforge/service-pull/example
+setfacl -m u:example-deploy:--x /etc/powerforge/services
+setfacl -m u:example-deploy:--x /etc/powerforge/service-pull
+chgrp example-deploy /etc/powerforge/services/example.env
+install -o root -g example-deploy -m 0640 \
+  Deployment/Linux/powerforge-service-artifact-pull.env.example \
+  /etc/powerforge/service-pull/example.env
+```
+
+Set the example pull configuration to the actual repository, branch, workflow, artifact, and work root. Provision `/etc/powerforge/service-pull/example.token` separately as root:`example-deploy` mode `0640`, without passing the token on a command line. The named ACL grants traversal of the shared promoter-config directory without exposing other services' configuration files; `setfacl` is required on the host. Keep the promoter's example config at root:`example-deploy` mode `0640` after subsequent updates.
+
+For the pull lane, grant the fixed promoter command to `example-deploy` instead of the `powerforge-example` SSH account used by the push lane. Validate it with `visudo -cf` and `sudo -l -U example-deploy`:
+
+```sudoers
+example-deploy ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-service-deploy --service example
+```
+
+```bash
+/usr/local/sbin/powerforge-service-artifact-pull example
+```
+
+A host timer can run that command after the account, token, GitHub CLI, package job, service unit, promoter, sudoers rule, and health provenance endpoint have been staged and checked. Package runs for an older commit, a failed workflow, a detected changed branch, mismatched artifact metadata, or an unavailable artifact are not promoted. Artifacts expire according to the package job's retention setting; after expiry, rerun the package workflow on the reviewed branch tip or publish a durable release artifact before attempting recovery. Until the public hostname is active, configure the promoter's local health URL and leave public health URLs empty; add public verification only after the route is live. This route does not configure Apache, certificates, backup, DNS, or the application health response for you. Cover those in the server-recovery manifest and test rollback before enabling unattended pulls.
 
 ## Promotion And Rollback
 
