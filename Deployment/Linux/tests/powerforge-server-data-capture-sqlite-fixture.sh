@@ -35,7 +35,7 @@ jq -n \
   '{schemaVersion:2,name:"sqlite-fixture",target:{host:"localhost"},durableBackup:{exportRoot:$exportRoot,exportGroup:"root",recipient:$recipient,stagingRetentionHours:48,databases:[{id:"public",provider:"sqlite",database:$database,runAs:"nobody",required:true}],encryptedFiles:[{target:$encryptedFile,required:true,sensitive:true}],artifactStores:[{id:"release",path:$artifacts,required:true}]}}' \
   >"$fixture_root/manifest.json"
 
-"$capture_script" "$fixture_root/manifest.json"
+bash "$capture_script" "$fixture_root/manifest.json"
 snapshot="$(find "$fixture_root/export/snapshots" -mindepth 1 -maxdepth 1 -type d -name '????????T??????Z' -print -quit)"
 [[ -n "$snapshot" && -f "$snapshot/READY" ]] || { echo 'No ready snapshot was produced.' >&2; exit 1; }
 age -d -i "$fixture_root/identity" -o "$fixture_root/recovery.tar.gz" "$snapshot/recovery.tar.gz.age"
@@ -48,7 +48,7 @@ tar -xzf "$fixture_root/recovery.tar.gz" -C "$fixture_root/restore" databases/pu
 jq --arg root "$fixture_root/export-overlap" --arg path "$fixture_root/data" \
   '.durableBackup.exportRoot = $root | .durableBackup.artifactStores[0].path = $path' \
   "$fixture_root/manifest.json" >"$fixture_root/overlap.json"
-if "$capture_script" "$fixture_root/overlap.json" >"$fixture_root/overlap.log" 2>&1; then
+if bash "$capture_script" "$fixture_root/overlap.json" >"$fixture_root/overlap.log" 2>&1; then
   echo 'A plaintext artifact store accepted a live SQLite database.' >&2
   exit 1
 fi
@@ -58,11 +58,43 @@ grep -q 'SQLite database overlaps plaintext artifact store' "$fixture_root/overl
 jq --arg root "$fixture_root/export-sidecar" --arg path "$database-wal" \
   '.durableBackup.exportRoot = $root | .durableBackup.encryptedFiles[0].target = $path | .durableBackup.encryptedFiles[0].required = false' \
   "$fixture_root/manifest.json" >"$fixture_root/sidecar.json"
-if "$capture_script" "$fixture_root/sidecar.json" >"$fixture_root/sidecar.log" 2>&1; then
+if bash "$capture_script" "$fixture_root/sidecar.json" >"$fixture_root/sidecar.log" 2>&1; then
   echo 'A directly captured SQLite WAL sidecar was accepted.' >&2
   exit 1
 fi
 grep -q 'SQLite database overlaps directly captured encrypted file' "$fixture_root/sidecar.log"
+
+# A separate artifact-store path can still name the live database inode.
+ln -- "$database" "$fixture_root/artifacts/public-hardlink.db"
+jq --arg root "$fixture_root/export-hardlink" '.durableBackup.exportRoot = $root' \
+  "$fixture_root/manifest.json" >"$fixture_root/hardlink.json"
+if bash "$capture_script" "$fixture_root/hardlink.json" >"$fixture_root/hardlink.log" 2>&1; then
+  echo 'A plaintext artifact store accepted a hard link to live SQLite data.' >&2
+  exit 1
+fi
+grep -q 'artifact store contains a hard link to live SQLite data' "$fixture_root/hardlink.log"
+[[ -z "$(find "$fixture_root/export-hardlink/snapshots" -mindepth 1 -maxdepth 1 -type d -name '????????T??????Z' -print -quit)" ]]
+rm -- "$fixture_root/artifacts/public-hardlink.db"
+
+ln -- "$fixture_root/config.env" "$fixture_root/artifacts/config-hardlink.env"
+jq --arg root "$fixture_root/export-secret-hardlink" '.durableBackup.exportRoot = $root' \
+  "$fixture_root/manifest.json" >"$fixture_root/secret-hardlink.json"
+if bash "$capture_script" "$fixture_root/secret-hardlink.json" >"$fixture_root/secret-hardlink.log" 2>&1; then
+  echo 'A plaintext artifact store accepted a hard link to directly encrypted data.' >&2
+  exit 1
+fi
+grep -q 'artifact store contains a hard link to directly encrypted data' "$fixture_root/secret-hardlink.log"
+rm -- "$fixture_root/artifacts/config-hardlink.env"
+
+install -d -m 0700 -o nobody "$fixture_root/artifacts/writable"
+jq --arg root "$fixture_root/export-writable" '.durableBackup.exportRoot = $root' \
+  "$fixture_root/manifest.json" >"$fixture_root/writable.json"
+if bash "$capture_script" "$fixture_root/writable.json" >"$fixture_root/writable.log" 2>&1; then
+  echo 'A SQLite-writer-owned artifact directory was accepted.' >&2
+  exit 1
+fi
+grep -q 'SQLite account owns artifact-store directory' "$fixture_root/writable.log"
+rmdir -- "$fixture_root/artifacts/writable"
 
 # When PostgreSQL is present, both provider staging paths must produce one
 # encrypted bundle without giving either service account write access to it.
@@ -73,7 +105,7 @@ if command -v pg_isready >/dev/null && pg_isready -q; then
   jq --arg root "$fixture_root/export-mixed" --arg database "$pg_database" \
     '.durableBackup.exportRoot = $root | .durableBackup.databases += [{id:"postgres",provider:"postgresql",database:$database,required:true}]' \
     "$fixture_root/manifest.json" >"$fixture_root/mixed.json"
-  "$capture_script" "$fixture_root/mixed.json"
+  bash "$capture_script" "$fixture_root/mixed.json"
   mixed_snapshot="$(find "$fixture_root/export-mixed/snapshots" -mindepth 1 -maxdepth 1 -type d -name '????????T??????Z' -print -quit)"
   [[ -n "$mixed_snapshot" && -f "$mixed_snapshot/READY" ]]
   age -d -i "$fixture_root/identity" -o "$fixture_root/mixed-recovery.tar.gz" "$mixed_snapshot/recovery.tar.gz.age"

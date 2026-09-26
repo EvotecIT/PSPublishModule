@@ -166,6 +166,7 @@ install -d -m 0700 -o root -g root "$work/databases"
 
 database_ids=()
 sqlite_paths=()
+sqlite_accounts=()
 declare -A seen_database_ids=()
 while IFS=$'\t' read -r id provider database run_as required; do
   assert_identifier "$id"
@@ -186,10 +187,10 @@ while IFS=$'\t' read -r id provider database run_as required; do
       "$runuser_bin" -u postgres -- "$pg_dump_bin" --format=custom --no-owner --no-privileges --file="$staging_path" --dbname="$database"
       install -d -m 0700 -o root -g root "$work/postgresql/$id"
       [[ -s "$staging_path" && -f "$staging_path" && ! -L "$staging_path" ]] || die "PostgreSQL dump is missing or unsafe: $database"
-      chown -h root:root "$staging_path"
-      chmod 0600 "$staging_path"
       dump_path="$work/databases/$id.dump"
-      mv -- "$staging_path" "$dump_path"
+      # A retained service-account descriptor still reaches the staged inode after chown/move.
+      # Copy into a new inode under the root-only directory before validating or packaging it.
+      install -m 0600 -o root -g root -- "$staging_path" "$dump_path"
       "$pg_restore_bin" --list "$dump_path" >/dev/null || die "PostgreSQL dump cannot be listed: $database"
       ;;
     sqlite)
@@ -199,6 +200,8 @@ while IFS=$'\t' read -r id provider database run_as required; do
       [[ "$run_as" != '-' && "$run_as" != 'root' ]] || die "SQLite database requires a non-root runAs account: $id"
       assert_unix_identity "$run_as"
       getent passwd "$run_as" >/dev/null || die "SQLite backup account does not exist: $run_as"
+      [[ "$(id -u "$run_as")" != '0' ]] || die "SQLite backup account must not have UID 0: $run_as"
+      sqlite_accounts+=("$run_as")
       if [[ ! -e "$database" && ! -L "$database" ]]; then
         [[ "$required" == 'false' ]] && { log "optional SQLite database is absent: $database"; continue; }
         die "required SQLite database is absent: $database"
@@ -209,13 +212,11 @@ while IFS=$'\t' read -r id provider database run_as required; do
       install -d -m 0700 -o "$run_as" "$work/sqlite/$id"
       staging_path="$work/sqlite/$id/backup.sqlite"
       "$runuser_bin" -u "$run_as" -- "$sqlite3_bin" -readonly "$database" ".backup '$staging_path'"
-      # Revoke the service account's directory access before root inspects or moves its output.
+      # Revoke the service account's directory access before root inspects its output.
       install -d -m 0700 -o root -g root "$work/sqlite/$id"
       [[ -s "$staging_path" && -f "$staging_path" && ! -L "$staging_path" ]] || die "SQLite backup is missing or unsafe: $id"
-      chown -h root:root "$staging_path"
-      chmod 0600 "$staging_path"
       dump_path="$work/databases/$id.sqlite"
-      mv -- "$staging_path" "$dump_path"
+      install -m 0600 -o root -g root -- "$staging_path" "$dump_path"
       [[ "$("$sqlite3_bin" -readonly "$dump_path" 'PRAGMA integrity_check;')" == 'ok' ]] ||
         die "SQLite backup integrity check failed: $id"
       ;;
@@ -231,9 +232,7 @@ if [[ -n "$pg_dump_bin" ]]; then
   "$runuser_bin" -u postgres -- "$pg_dumpall_bin" --globals-only >"$work/postgresql/globals/globals.sql"
   install -d -m 0700 -o root -g root "$work/postgresql/globals"
   [[ -s "$work/postgresql/globals/globals.sql" && -f "$work/postgresql/globals/globals.sql" && ! -L "$work/postgresql/globals/globals.sql" ]] || die 'PostgreSQL globals dump is missing or unsafe'
-  chown -h root:root "$work/postgresql/globals/globals.sql"
-  chmod 0600 "$work/postgresql/globals/globals.sql"
-  mv -- "$work/postgresql/globals/globals.sql" "$work/databases/postgresql-globals.sql"
+  install -m 0600 -o root -g root -- "$work/postgresql/globals/globals.sql" "$work/databases/postgresql-globals.sql"
   [[ -s "$work/databases/postgresql-globals.sql" ]] || die 'PostgreSQL globals dump is empty'
 fi
 
@@ -287,6 +286,44 @@ while IFS=$'\t' read -r id source required; do
   [[ "$($readlink_bin -f -- "$source")" == "$source" ]] || die "artifact store must be canonical: $source"
   unsafe_source_entry="$(find "$source" -mindepth 1 ! -type f ! -type d -print -quit)"
   [[ -z "$unsafe_source_entry" ]] || die "artifact store contains a link or special entry: $unsafe_source_entry"
+  # A database writer must not be able to add a sensitive hard link after the scan.
+  for sqlite_account in "${sqlite_accounts[@]}"; do
+    sqlite_uid="$(id -u "$sqlite_account")"
+    artifact_parent="$source"
+    while [[ "$artifact_parent" != '/' ]]; do
+      [[ "$($stat_bin -c '%u' "$artifact_parent")" != "$sqlite_uid" ]] ||
+        die "SQLite account owns artifact-store ancestry: $sqlite_account and $artifact_parent"
+      if "$runuser_bin" -u "$sqlite_account" -- test -w "$artifact_parent"; then
+        artifact_parent_mode="$($stat_bin -c '%a' "$artifact_parent")"
+        # Sticky ancestors cannot rename an independently owned child; the store itself
+        # must still be non-writable, because it could receive new entries.
+        if [[ "$artifact_parent" == "$source" ]] || (( (8#$artifact_parent_mode & 01000) == 0 )); then
+          die "SQLite account can modify artifact-store ancestry: $sqlite_account and $artifact_parent"
+        fi
+      fi
+      artifact_parent="${artifact_parent%/*}"
+      [[ -n "$artifact_parent" ]] || artifact_parent='/'
+    done
+    while IFS= read -r -d '' artifact_directory; do
+      [[ "$($stat_bin -c '%u' "$artifact_directory")" != "$sqlite_uid" ]] ||
+        die "SQLite account owns artifact-store directory: $sqlite_account and $artifact_directory"
+      if "$runuser_bin" -u "$sqlite_account" -- test -w "$artifact_directory"; then
+        die "SQLite account can modify artifact-store directory: $sqlite_account and $artifact_directory"
+      fi
+    done < <(find "$source" -mindepth 1 -type d -print0)
+  done
+  for encrypted_path in "${encrypted_paths[@]}"; do
+    [[ -f "$encrypted_path" && ! -L "$encrypted_path" ]] || continue
+    hardlink_entry="$(find "$source" -type f -samefile "$encrypted_path" -print -quit)"
+    [[ -z "$hardlink_entry" ]] || die "artifact store contains a hard link to directly encrypted data: $hardlink_entry"
+  done
+  for sqlite_path in "${sqlite_paths[@]}"; do
+    for sqlite_file in "$sqlite_path" "$sqlite_path"-wal "$sqlite_path"-shm "$sqlite_path"-journal; do
+      [[ -f "$sqlite_file" && ! -L "$sqlite_file" ]] || continue
+      hardlink_entry="$(find "$source" -type f -samefile "$sqlite_file" -print -quit)"
+      [[ -z "$hardlink_entry" ]] || die "artifact store contains a hard link to live SQLite data: $hardlink_entry"
+    done
+  done
 
   destination="$partial/artifacts/$id"
   install -d -m 0750 -o root -g "$export_group" "$destination"
