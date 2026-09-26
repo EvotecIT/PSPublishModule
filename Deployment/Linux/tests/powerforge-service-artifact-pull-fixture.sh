@@ -64,6 +64,7 @@ mkdir -m 0700 "$task_root/work/.stage"
 chown "$deploy_user:$deploy_user" "$task_root/work/.stage"
 env SUDO_UID="$(id -u "$deploy_user")" \
   POWERFORGE_SERVICE_CONFIG_ROOT="$task_root/etc/powerforge/services" \
+  POWERFORGE_SERVICE_PULL_CONFIG_ROOT="$task_root/etc/powerforge/service-pull" \
   POWERFORGE_SERVICE_LOCK_ROOT="$task_root/locks" \
   POWERFORGE_SERVICE_TRUSTED_STAGE_ROOT="$task_root/trusted" \
   POWERFORGE_SERVICE_TRANSACTION_ROOT="$task_root/transactions" \
@@ -158,6 +159,10 @@ SH
 cat >"$task_root/bin/curl" <<'SH'
 #!/usr/bin/env bash
 set -Eeuo pipefail
+if [[ $* == *'powerforge-deploy='* ]]; then
+  cat "$POWERFORGE_FIXTURE_ROOT/service/current/_powerforge/deployment.json"
+  exit 0
+fi
 [[ ${GH_TOKEN:-} == fixture-token ]]
 [[ $* != *fixture-token* && $* != *fixture-signed-url* ]]
 [[ $* == *'--config -'* ]]
@@ -193,10 +198,18 @@ fi
 [[ -s $stage/artifact.tar && -s $stage/deployment.json ]]
 jq -e '.sourceSha == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" and .workflowRunId == "12345" and .workflowRunAttempt == "2" and (.packageRunAttempt == "1" or .packageRunAttempt == "2") and (.pullConfigurationSha256 | test("^[0-9a-f]{64}$"))' \
   "$stage/deployment.json" >/dev/null
+expected_service_configuration_sha=$(sha256sum "$POWERFORGE_FIXTURE_ROOT/etc/powerforge/services/${POWERFORGE_FIXTURE_SERVICE}.env")
+expected_service_configuration_sha=${expected_service_configuration_sha%% *}
+jq -e --arg sha "$expected_service_configuration_sha" '.serviceConfigurationSha256 == $sha' "$stage/deployment.json" >/dev/null
 cp "$stage/deployment.json" "$POWERFORGE_FIXTURE_ROOT/work/deployed.json"
 printf 'promoted\n' >>"$POWERFORGE_FIXTURE_ROOT/work/sudo.log"
 SH
-chmod 0755 "$task_root/bin/gh" "$task_root/bin/getent" "$task_root/bin/curl" "$task_root/bin/sudo"
+cat >"$task_root/bin/systemctl" <<'SH'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+printf '%s\n' "$*" >>"$POWERFORGE_FIXTURE_ROOT/work/systemctl.log"
+SH
+chmod 0755 "$task_root/bin/gh" "$task_root/bin/getent" "$task_root/bin/curl" "$task_root/bin/sudo" "$task_root/bin/systemctl"
 
 run_fixture() {
   local mode=$1
@@ -308,6 +321,18 @@ ln -s releases/verified "$task_root/service/current"
 [[ $(realpath -e "$task_root/service/current") == "$task_root/service/releases/"* ]]
 jq -e --arg sha "$sha" '.sourceSha == $sha and .workflowRunId == "12345" and .workflowRunAttempt == "2"' \
   "$task_root/service/current/_powerforge/deployment.json" >/dev/null
+chmod 0700 "$task_root/service"
+if run_fixture success >"$task_root/inaccessible-root.log" 2>&1; then
+  echo 'Accepted an inaccessible current service root.' >&2; exit 1
+fi
+grep -Fq 'service release root is not traversable' "$task_root/inaccessible-root.log"
+chmod 0755 "$task_root/service"
+chmod 0600 "$task_root/service/current/_powerforge/deployment.json"
+if run_fixture success >"$task_root/inaccessible-metadata.log" 2>&1; then
+  echo 'Accepted inaccessible current deployment metadata.' >&2; exit 1
+fi
+grep -Fq 'current deployment metadata is missing or inaccessible' "$task_root/inaccessible-metadata.log"
+chmod 0644 "$task_root/service/current/_powerforge/deployment.json"
 run_fixture success
 [[ $(wc -l <"$task_root/work/sudo.log") -eq 1 ]]
 printf '# change in root-owned promoter configuration\n' >>"$task_root/etc/powerforge/services/${service}.env"
@@ -327,6 +352,56 @@ run_fixture at
 [[ $(wc -l <"$task_root/work/sudo.log") -eq 5 ]]
 printf 'SOURCE_REPOSITORY=exampleorg/service\nSOURCE_BRANCH=main\nSOURCE_WORKFLOW=package-service.yml\nARTIFACT_NAME=powerforge-service-example\nWORK_ROOT=%s/work\n' \
   "$task_root" >"$task_root/etc/powerforge/service-pull/${service}.env"
+run_fixture success
+[[ $(wc -l <"$task_root/work/sudo.log") -eq 6 ]]
+run_real_promoter() {
+  env PATH="$task_root/bin:$PATH" POWERFORGE_FIXTURE_ROOT="$task_root" SUDO_UID="$(id -u "$deploy_user")" \
+    POWERFORGE_SERVICE_CONFIG_ROOT="$task_root/etc/powerforge/services" \
+    POWERFORGE_SERVICE_PULL_CONFIG_ROOT="$task_root/etc/powerforge/service-pull" \
+    POWERFORGE_SERVICE_LOCK_ROOT="$task_root/locks" \
+    POWERFORGE_SERVICE_TRUSTED_STAGE_ROOT="$task_root/trusted" \
+    POWERFORGE_SERVICE_TRANSACTION_ROOT="$task_root/transactions" \
+    POWERFORGE_SYSTEMD_CONFIG_ROOT="$task_root/systemd" \
+    bash "$script_dir/../powerforge-service-deploy.sh" --service "$service"
+}
+mkdir -m 0700 "$task_root/generated-root"
+printf 'real promoter boundary\n' >"$task_root/generated-root/promotion.txt"
+mkdir -m 0700 "$task_root/work/.stage"
+tar -C "$task_root/generated-root" -cf "$task_root/work/.stage/artifact.tar" .
+cp "$task_root/work/deployed.json" "$task_root/work/.stage/deployment.json"
+chown -R "$deploy_user:$deploy_user" "$task_root/work/.stage"
+printf '# root rotated the service configuration after pull verification\n' >>"$task_root/etc/powerforge/services/${service}.env"
+if run_real_promoter >"$task_root/promoter-config-race.log" 2>&1; then
+  echo 'Real promoter accepted a service configuration changed after pull verification.' >&2; exit 1
+fi
+grep -Fq 'Service configuration changed between artifact verification and promotion' "$task_root/promoter-config-race.log" || { cat "$task_root/promoter-config-race.log" >&2; exit 1; }
+prepare_real_stage() {
+  mkdir -m 0700 "$task_root/work/.stage"
+  tar -C "$task_root/generated-root" -cf "$task_root/work/.stage/artifact.tar" .
+  local artifact_sha service_sha combined_sha
+  artifact_sha=$(sha256sum "$task_root/work/.stage/artifact.tar")
+  artifact_sha=${artifact_sha%% *}
+  service_sha=$(sha256sum "$task_root/etc/powerforge/services/${service}.env")
+  service_sha=${service_sha%% *}
+  combined_sha=$(sha256sum "$task_root/etc/powerforge/service-pull/${service}.env" "$task_root/etc/powerforge/services/${service}.env" | awk '{print $1}' | sha256sum)
+  combined_sha=${combined_sha%% *}
+  jq --arg artifact "$artifact_sha" --arg service_configuration "$service_sha" --arg configuration "$combined_sha" \
+    '.artifactSha256=$artifact | .serviceConfigurationSha256=$service_configuration | .pullConfigurationSha256=$configuration' \
+    "$task_root/work/deployed.json" >"$task_root/work/.stage/deployment.json"
+  chown -R "$deploy_user:$deploy_user" "$task_root/work/.stage"
+}
+prepare_real_stage
+cp -p "$task_root/etc/powerforge/service-pull/${service}.env" "$task_root/pull-before-rotation.env"
+printf '# root rotated pull policy after verification\n' >>"$task_root/etc/powerforge/service-pull/${service}.env"
+if run_real_promoter >"$task_root/promoter-pull-config-race.log" 2>&1; then
+  echo 'Real promoter accepted a pull configuration changed after verification.' >&2; exit 1
+fi
+grep -Fq 'Pull configuration changed between artifact verification and promotion' "$task_root/promoter-pull-config-race.log" || { cat "$task_root/promoter-pull-config-race.log" >&2; exit 1; }
+cp -p "$task_root/pull-before-rotation.env" "$task_root/etc/powerforge/service-pull/${service}.env"
+prepare_real_stage
+run_real_promoter >"$task_root/promoter-bound-success.log" 2>&1 || { cat "$task_root/promoter-bound-success.log" >&2; exit 1; }
+[[ -f $task_root/service/current/promotion.txt ]]
+grep -Fq "restart ${service}.service" "$task_root/work/systemctl.log"
 run_fixture success
 [[ $(wc -l <"$task_root/work/sudo.log") -eq 6 ]]
 echo 'Host-initiated Linux service artifact pull fixture passed.'

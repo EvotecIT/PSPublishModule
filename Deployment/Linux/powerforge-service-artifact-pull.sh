@@ -70,6 +70,10 @@ git -C / check-ref-format --branch "$SOURCE_BRANCH" >/dev/null 2>&1 || fail 'inv
 [[ $ARTIFACT_PULL_STAGE_ROOT == "$WORK_ROOT/.stage" ]] || fail 'artifact pull staging path must be inside the private work root'
 [[ $SERVICE_ROOT == /* && $SERVICE_ROOT != / && -d $SERVICE_ROOT && ! -L $SERVICE_ROOT ]] || fail 'invalid service release root'
 [[ $(realpath -e -- "$SERVICE_ROOT") == "$SERVICE_ROOT" ]] || fail 'service release root must be canonical'
+[[ -x $SERVICE_ROOT ]] || fail 'service release root is not traversable by the deployment account'
+if [[ -d $SERVICE_ROOT/releases ]]; then
+  [[ -x $SERVICE_ROOT/releases ]] || fail 'release directory is not traversable by the deployment account'
+fi
 assert_trusted_chain() {
   local path=$1 expected_leaf_owner=$2 allow_own_parent=$3 part=/ component owner mode
   local -a components
@@ -129,7 +133,9 @@ run_attempt=$(jq -er --arg sha "$source_sha" --arg branch "$SOURCE_BRANCH" --arg
 [[ $run_attempt =~ ^[1-9][0-9]*$ ]] || fail 'workflow attempt is invalid'
 
 current_metadata="$SERVICE_ROOT/current/_powerforge/deployment.json"
-if [[ -L $SERVICE_ROOT/current && -f $current_metadata && ! -L $current_metadata ]]; then
+if [[ -e $SERVICE_ROOT/current || -L $SERVICE_ROOT/current ]]; then
+  [[ -L $SERVICE_ROOT/current ]] || fail 'current release pointer is not a symlink'
+  [[ -f $current_metadata && ! -L $current_metadata && -r $current_metadata ]] || fail 'current deployment metadata is missing or inaccessible'
   current_target=$(realpath -e -- "$SERVICE_ROOT/current") || fail 'unable to resolve the current release'
   if [[ $current_target == "$SERVICE_ROOT/releases/"* ]] && jq -e --arg sha "$source_sha" --arg run "$run_id" --arg attempt "$run_attempt" --arg configuration "$configuration_sha" \
       '.sourceSha == $sha and .workflowRunId == $run and .workflowRunAttempt == $attempt and .pullConfigurationSha256 == $configuration' "$current_metadata" >/dev/null 2>&1; then
@@ -206,7 +212,8 @@ jq -e --arg repo "$SOURCE_REPOSITORY" --arg sha "$source_sha" --arg run "$run_id
 install -d -m 0700 -- "$workflow_stage"
 install -m 0600 -- "$archive" "$workflow_stage/artifact.tar"
 jq -n --arg repo "$SOURCE_REPOSITORY" --arg sha "$source_sha" --arg run "$run_id" --arg attempt "$run_attempt" --arg package_attempt "$package_attempt" --arg digest "$artifact_sha" --arg configuration "$configuration_sha" --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  '{schemaVersion:1,sourceRepository:$repo,sourceSha:$sha,workflowRunId:$run,workflowRunAttempt:$attempt,packageRunAttempt:$package_attempt,artifactSha256:$digest,pullConfigurationSha256:$configuration,deployedAtUtc:$time}' \
+  --arg service_configuration "$(sha256sum -- "$snapshot_service" | awk '{print $1}')" \
+  '{schemaVersion:1,sourceRepository:$repo,sourceSha:$sha,workflowRunId:$run,workflowRunAttempt:$attempt,packageRunAttempt:$package_attempt,artifactSha256:$digest,pullConfigurationSha256:$configuration,serviceConfigurationSha256:$service_configuration,deployedAtUtc:$time}' \
   >"$workflow_stage/deployment.json"
 chmod 0600 -- "$workflow_stage/deployment.json"
 archive_bytes=$(stat -c %s -- "$workflow_stage/artifact.tar")
