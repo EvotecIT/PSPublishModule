@@ -10,7 +10,6 @@ public sealed partial class DotNetPublishPipelineRunner
         ProjectEvaluationRequest rootRequest,
         IReadOnlyCollection<ControlledPublishGraphNode> graphNodes,
         IReadOnlyCollection<EvaluatedProjectReference> rootProjectReferences,
-        IReadOnlyCollection<string> rootEvaluatedImports,
         IReadOnlyDictionary<string, string> rootEvaluatedProperties,
         string originalGitRoot,
         string controlledSourceRoot,
@@ -53,9 +52,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Distinct(StringComparer.Ordinal).Skip(1).Any()))
             return true;
 
-        if (!TryValidateControlledRestoreContextSources(graphNodes, rootRequest, originalGitRoot,
-                rootProjectReferences,
-                rootEvaluatedImports, rootEvaluatedProperties, verifiedPackageCatalogs,
+        if (!TryValidateControlledRestoreContextReferences(graphNodes, rootRequest,
+                rootProjectReferences, rootEvaluatedProperties,
                 out failureReason))
             return false;
 
@@ -86,6 +84,12 @@ public sealed partial class DotNetPublishPipelineRunner
             new XAttribute("TreatAsLocalProperty",
                 "DirectoryBuildPropsPath;BaseIntermediateOutputPath;IntermediateOutputPath;" +
                 "MSBuildProjectExtensionsPath;BaseOutputPath;OutputPath"));
+        project.Add(new XElement("ItemGroup", verifiedPackageCatalogs
+            .SelectMany(catalog => catalog.ReadControlledTrustedPackageIdentities(rootRequest.TrustedBuildPackages))
+            .Distinct()
+            .Select(identity => new XElement("_PowerForgeControlledTrustedPackage",
+                new XAttribute("Include", EscapeMsBuildPropertyValue(identity.Key)),
+                new XElement("ContentHash", identity.Value)))));
         foreach (IGrouping<string, ProjectEvaluationRequest> group in contexts)
         {
             string controlledProjectPath = Path.GetFullPath(Path.Combine(
@@ -148,6 +152,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 failureReason = $"project '{group.Key}' has a restore-context property that cannot be matched safely.";
                 return false;
             }
+            string[] presenceSensitiveNames = propertyNames.Where(name =>
+                !name.Equals("DirectoryBuildPropsPath", StringComparison.OrdinalIgnoreCase) &&
+                !name.Equals("TargetFrameworks", StringComparison.OrdinalIgnoreCase) &&
+                representatives.Any(request => request.ReadEffectiveGlobalProperties().TryGetValue(name, out string? value) && value.Length == 0) &&
+                representatives.Any(request => !request.ReadEffectiveGlobalProperties().ContainsKey(name))).ToArray();
             var capturedProperties = propertyNames.Select((name, index) =>
                 (Name: name, Snapshot: "_PowerForgeInput_" + nonce + "_" + index))
                 .ToDictionary(entry => entry.Name, entry => entry.Snapshot, StringComparer.OrdinalIgnoreCase);
@@ -170,6 +179,23 @@ public sealed partial class DotNetPublishPipelineRunner
                             new XAttribute("Condition", "'$(" + useOriginalFrameworksProperty + ")' != 'true'"),
                             "$(TargetFrameworks)")
                     })));
+            // Ask MSBuild itself whether an incoming empty value is immutable. A
+            // global assignment ignores this probe; an absent/environment value is
+            // mutable. Restore the original value before importing any original props.
+            string presenceProbe = "PowerForgePresence_" + nonce;
+            foreach (string name in presenceSensitiveNames)
+            {
+                string supplied = capturedProperties[name] + "_Supplied";
+                project.Add(new XElement("ItemGroup", new XElement("_PowerForgeControlledPresenceProperty",
+                    new XAttribute("Include", name), new XElement("ProjectPath", EscapeMsBuildPropertyValue(controlledProjectPath)),
+                    new XElement("ResultProperty", supplied))));
+                string probeCondition = "$(" + name + ".Equals('" + presenceProbe + "', System.StringComparison.Ordinal))";
+                project.Add(new XElement("PropertyGroup", new XAttribute("Condition", projectCondition),
+                    new XElement(name, presenceProbe),
+                    new XElement(supplied, new XAttribute("Condition", probeCondition), "false"),
+                    new XElement(supplied, new XAttribute("Condition", probeCondition + " != 'True'"), "true"),
+                    new XElement(name, new XAttribute("Condition", "'$(" + supplied + ")' == 'false'"), "$(" + capturedProperties[name] + ")")));
+            }
             project.Add(new XElement("PropertyGroup",
                 new XAttribute("Condition", projectCondition),
                 new XElement("DirectoryBuildPropsPath",
@@ -251,6 +277,9 @@ public sealed partial class DotNetPublishPipelineRunner
                         condition.Append(" and '$(").Append(originalPropsSuppliedProperty)
                             .Append(")' == '").Append(suppliedByGraph ? "true" : "false")
                             .Append("'");
+                    if (presenceSensitiveNames.Contains(name, StringComparer.OrdinalIgnoreCase))
+                        condition.Append(" and '$(").Append(capturedProperties[name]).Append("_Supplied)' == '")
+                            .Append(suppliedByGraph ? "true" : "false").Append("'");
                 }
                 if (!matchedConditions.Add(condition.ToString()))
                 {

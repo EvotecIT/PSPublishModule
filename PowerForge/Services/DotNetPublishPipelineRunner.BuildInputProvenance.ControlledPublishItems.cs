@@ -146,7 +146,6 @@ public sealed partial class DotNetPublishPipelineRunner
                     request,
                     graphBuildNodes,
                     rootProjectReferences,
-                    evaluatedImports,
                     evaluatedProperties,
                     controlledGitRoot!,
                     controlledSourceRoot,

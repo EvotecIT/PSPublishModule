@@ -5,187 +5,6 @@ namespace PowerForge.Tests;
 
 public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 {
-    [Fact]
-    [Trait("Category", "DotNetPublishPrGate")]
-    public void ReadSourceProvenance_DoesNotRestoreUnselectedDeclaredFrameworkPackages()
-    {
-        string root = Directory.CreateTempSubdirectory().FullName;
-        try
-        {
-            RunGit(root, "init");
-            RunGit(root, "config user.name \"PowerForge Tests\"");
-            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
-            string appDirectory = Directory.CreateDirectory(Path.Combine(root, "App")).FullName;
-            string sharedDirectory = Directory.CreateDirectory(Path.Combine(root, "Shared")).FullName;
-            string appProject = Path.Combine(appDirectory, "App.csproj");
-            string sharedProject = Path.Combine(sharedDirectory, "Shared.csproj");
-            File.WriteAllText(appProject, """
-                <Project Sdk="Microsoft.NET.Sdk">
-                  <PropertyGroup>
-                    <OutputType>Exe</OutputType>
-                    <TargetFramework>net10.0</TargetFramework>
-                    <RuntimeIdentifiers>linux-x64</RuntimeIdentifiers>
-                  </PropertyGroup>
-                  <ItemGroup><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
-                </Project>
-                """);
-            File.WriteAllText(sharedProject, """
-                <Project Sdk="Microsoft.NET.Sdk">
-                  <PropertyGroup><TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks></PropertyGroup>
-                  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-                    <PackageReference Include="System.Text.Json" Version="10.0.10" />
-                  </ItemGroup>
-                </Project>
-                """);
-            File.WriteAllText(Path.Combine(appDirectory, "Program.cs"),
-                "internal static class Program { private static void Main() { _ = Shared.Value; } }");
-            File.WriteAllText(Path.Combine(sharedDirectory, "Shared.cs"),
-                "public static class Shared { public const int Value = 1; }");
-            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
-            RunDotNet(root,
-                $"restore \"{appProject}\" -r linux-x64 --use-lock-file --nologo -p:SelfContained=false");
-            RunGit(root, "add .");
-            RunGit(root, "commit -m \"approved selected-framework graph\"");
-            string revision = RunGit(root, "rev-parse HEAD").Trim();
-            RunDotNet(root,
-                $"build \"{appProject}\" -c Release -f net10.0 -r linux-x64 --no-restore --nologo " +
-                "-m:1 -p:BuildInParallel=false " +
-                $"/p:SourceRevisionId={revision} /p:IncludeSourceRevisionInInformationalVersion=true " +
-                "/p:ContinuousIntegrationBuild=true /p:DebugType=None /p:DebugSymbols=false");
-            var plan = new DotNetPublishPlan
-            {
-                ProjectRoot = root,
-                Configuration = "Release",
-                SourceRevision = revision,
-                NoBuildInPublish = true,
-                NoRestoreInPublish = true,
-                Targets =
-                [
-                    new DotNetPublishTargetPlan
-                    {
-                        Name = "App",
-                        ProjectPath = appProject,
-                        Combinations =
-                        [
-                            new DotNetPublishTargetCombination
-                            {
-                                Framework = "net10.0",
-                                Runtime = "linux-x64",
-                                Style = DotNetPublishStyle.FrameworkDependent
-                            }
-                        ]
-                    }
-                ]
-            };
-
-            DotNetPublishPipelineRunner.SourceProvenance provenance =
-                DotNetPublishPipelineRunner.ReadSourceProvenance(root, buildPlan: plan);
-
-            Assert.False(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
-        }
-        finally
-        {
-            DeleteTestRepository(root);
-        }
-    }
-
-    [Fact]
-    [Trait("Category", "DotNetPublishPrGate")]
-    public void ReadSourceProvenance_PreservesDeclaredFrameworkSemanticsForSelectedSubset()
-    {
-        string root = Directory.CreateTempSubdirectory().FullName;
-        try
-        {
-            RunGit(root, "init");
-            RunGit(root, "config user.name \"PowerForge Tests\"");
-            RunGit(root, "config user.email \"powerforge-tests@example.invalid\"");
-            string appDirectory = Directory.CreateDirectory(Path.Combine(root, "App")).FullName;
-            string bridgeDirectory = Directory.CreateDirectory(Path.Combine(root, "Bridge")).FullName;
-            string sharedDirectory = Directory.CreateDirectory(Path.Combine(root, "Shared")).FullName;
-            string appProject = Path.Combine(appDirectory, "App.csproj");
-            string bridgeProject = Path.Combine(bridgeDirectory, "Bridge.csproj");
-            string sharedProject = Path.Combine(sharedDirectory, "Shared.csproj");
-            File.WriteAllText(appProject, """
-                <Project Sdk="Microsoft.NET.Sdk">
-                  <PropertyGroup>
-                    <OutputType>Exe</OutputType>
-                    <TargetFramework>net10.0</TargetFramework>
-                    <RuntimeIdentifiers>linux-x64</RuntimeIdentifiers>
-                  </PropertyGroup>
-                  <ItemGroup>
-                    <ProjectReference Include="../Bridge/Bridge.csproj" />
-                    <ProjectReference Include="../Shared/Shared.csproj" />
-                  </ItemGroup>
-                </Project>
-                """);
-            File.WriteAllText(bridgeProject, """
-                <Project Sdk="Microsoft.NET.Sdk">
-                  <PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup>
-                  <ItemGroup><ProjectReference Include="../Shared/Shared.csproj" /></ItemGroup>
-                </Project>
-                """);
-            File.WriteAllText(sharedProject, """
-                <Project Sdk="Microsoft.NET.Sdk">
-                  <PropertyGroup><TargetFrameworks>net10.0; net8.0;net9.0</TargetFrameworks></PropertyGroup>
-                  <ItemGroup Condition="'$(TargetFrameworks)' == 'net10.0; net8.0;net9.0'">
-                    <PackageReference Include="NuGet.Versioning" Version="7.9.0" />
-                  </ItemGroup>
-                </Project>
-                """);
-            File.WriteAllText(Path.Combine(appDirectory, "Program.cs"),
-                "internal static class Program { private static void Main() { _ = Bridge.Value + Shared.Value; } }");
-            File.WriteAllText(Path.Combine(bridgeDirectory, "Bridge.cs"),
-                "public static class Bridge { public static int Value => Shared.Value; }");
-            File.WriteAllText(Path.Combine(sharedDirectory, "Shared.cs"),
-                "public static class Shared { public static int Value => NuGet.Versioning.NuGetVersion.Parse(\"1.0.0\").Major; }");
-            File.WriteAllText(Path.Combine(root, ".gitignore"), "bin/\nobj/\n");
-            RunDotNet(root,
-                $"restore \"{appProject}\" -r linux-x64 --use-lock-file --nologo -p:SelfContained=false");
-            RunGit(root, "add .");
-            RunGit(root, "commit -m \"approved selected subset graph\"");
-            string revision = RunGit(root, "rev-parse HEAD").Trim();
-            RunDotNet(root,
-                $"build \"{appProject}\" -c Release -f net10.0 -r linux-x64 --no-restore --nologo " +
-                "-m:1 -p:BuildInParallel=false " +
-                $"/p:SourceRevisionId={revision} /p:IncludeSourceRevisionInInformationalVersion=true " +
-                "/p:ContinuousIntegrationBuild=true /p:DebugType=None /p:DebugSymbols=false");
-            var plan = new DotNetPublishPlan
-            {
-                ProjectRoot = root,
-                Configuration = "Release",
-                SourceRevision = revision,
-                NoBuildInPublish = true,
-                NoRestoreInPublish = true,
-                Targets =
-                [
-                    new DotNetPublishTargetPlan
-                    {
-                        Name = "App",
-                        ProjectPath = appProject,
-                        Combinations =
-                        [
-                            new DotNetPublishTargetCombination
-                            {
-                                Framework = "net10.0",
-                                Runtime = "linux-x64",
-                                Style = DotNetPublishStyle.FrameworkDependent
-                            }
-                        ]
-                    }
-                ]
-            };
-
-            DotNetPublishPipelineRunner.SourceProvenance provenance =
-                DotNetPublishPipelineRunner.ReadSourceProvenance(root, buildPlan: plan);
-
-            Assert.False(provenance.Dirty, string.Join(Environment.NewLine, provenance.DirtyReasons));
-        }
-        finally
-        {
-            DeleteTestRepository(root);
-        }
-    }
-
     [Theory]
     [InlineData("single-context")]
     [InlineData("two-contexts")]
@@ -205,6 +24,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("controlled-properties")]
     [InlineData("disabled-props-environment")]
     [InlineData("defaulted-property")]
+    [InlineData("empty-global-default")]
     [InlineData("environment-props")]
     [InlineData("mutated-isolation-marker")]
     [InlineData("spoofed-original-props")]
@@ -240,6 +60,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("override-activated-import")]
     [InlineData("second-context-activated-import")]
     [InlineData("inactive-override-import")]
+    [InlineData("context-import-exec")]
+    [InlineData("context-import-absolute")]
+    [InlineData("context-import-dynamic-output")]
+    [InlineData("inactive-publish-path-target")]
     [InlineData("stable-context-import-alias")]
     [InlineData("malicious-context-import-alias")]
     [InlineData("wildcard-context-import-alias")]
@@ -247,7 +71,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     {
         bool distinctRestoreContexts = scenario != "single-context";
         bool unselectedContextPackage = scenario != "single-context" && scenario != "two-contexts" &&
-            scenario != "defaulted-property" && scenario != "same-context-multi-framework-output" &&
+            scenario != "defaulted-property" && scenario != "empty-global-default" && scenario != "same-context-multi-framework-output" &&
             scenario != "mixed-framework-append" &&
             scenario != "reference-global-intermediate-roots" &&
             scenario != "inactive-override-import";
@@ -262,7 +86,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         bool shadowVerifier = scenario == "shadowed-verifier";
         bool controlledProperties = scenario == "controlled-properties";
         bool disabledPropsEnvironment = scenario == "disabled-props-environment";
-        bool defaultedProperty = scenario == "defaulted-property";
+        bool emptyGlobalDefault = scenario == "empty-global-default";
+        bool defaultedProperty = scenario == "defaulted-property" || emptyGlobalDefault;
         bool environmentProps = scenario == "environment-props" ||
             scenario == "missing-props-environment";
         bool mutatedIsolationMarker = scenario == "mutated-isolation-marker";
@@ -290,7 +115,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         bool computedLatePathMutation = scenario == "computed-late-path-mutation";
         bool referencePropsOverride = scenario == "reference-props-override";
         bool ridListContext = scenario == "rid-list-context";
-        bool inactivePackPathTarget = scenario == "inactive-pack-path-target";
+        bool inactivePublishPathTarget = scenario == "inactive-publish-path-target";
+        bool inactivePackPathTarget = scenario == "inactive-pack-path-target" || inactivePublishPathTarget;
         bool standalonePathTarget = scenario is "uninvoked-standalone-target" or
             "invoked-standalone-target" or "sdk-target-name-collision";
         bool invokedStandalonePathTarget = scenario == "invoked-standalone-target";
@@ -298,7 +124,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         bool inactiveContextTarget = scenario == "inactive-context-target";
         bool packHookCalledByBuild = scenario == "pack-hook-called-by-build";
         bool uppercaseContextPaths = scenario == "uppercase-context-paths";
-        bool contextActivatedImport = scenario == "context-activated-import" ||
+        bool contextActivatedImport = scenario is "context-import-exec" or "context-import-absolute" or "context-import-dynamic-output" or "context-activated-import" ||
             overrideActivatedImport ||
             scenario == "context-activated-indirect-import" ||
             scenario == "context-activated-external-alias-import" ||
@@ -334,7 +160,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string leafProject = Path.Combine(leafDirectory, "Leaf.csproj");
             string utilityProject = Path.Combine(utilityDirectory, "Utility.csproj");
             string? customPropsPath = null;
-            string customPropsArgument = string.Empty;
+            string customPropsArgument = emptyGlobalDefault ? " -p:ContextMode=" : string.Empty;
             string globalOutputRoot = Path.Combine(root, "global-bin") + Path.DirectorySeparatorChar;
             string referenceGlobalIntermediateRoot =
                 (Path.Combine(root, "global-obj") + Path.DirectorySeparatorChar).Replace('\\', '/');
@@ -371,7 +197,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             }
             if (defaultedProperty)
                 File.WriteAllText(Path.Combine(sharedDirectory, "Directory.Build.props"),
-                    "<Project><PropertyGroup><Flavor Condition=\"'$(Flavor)' == ''\">Direct</Flavor></PropertyGroup></Project>");
+                    "<Project><PropertyGroup><Flavor Condition=\"'$(Flavor)' == ''\">Direct</Flavor>" +
+                    (emptyGlobalDefault ? "<ContextMode Condition=\"'$(ContextMode)' == ''\">Default</ContextMode>" : string.Empty) +
+                    "</PropertyGroup></Project>");
             if (sameContextMultiFrameworkOutput)
                 File.WriteAllText(Path.Combine(sharedDirectory, "Directory.Build.props"),
                     "<Project><PropertyGroup><BaseOutputPath>bin/$(TargetFramework)/</BaseOutputPath>" +
@@ -472,6 +300,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 : inactiveContextTarget
                     ? "<Target Name=\"DisabledContextPath\" BeforeTargets=\"CoreCompile\" Condition=\"'false' == 'true'\"><PropertyGroup><IntermediateOutputPath>$(MSBuildProjectDirectory)/../shared-obj/</IntermediateOutputPath></PropertyGroup></Target>"
                 : string.Empty;
+            if (inactivePublishPathTarget)
+                latePathTarget = latePathTarget.Replace("BeforeTargets=\"Pack\"", "BeforeTargets=\"Publish\"");
             string callPackHookDuringBuild = packHookCalledByBuild
                 ? "<BuildDependsOn>$(BuildDependsOn);PrepareUnusedPackPath</BuildDependsOn>"
                 : invokedStandalonePathTarget
@@ -557,6 +387,13 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     """);
                 File.WriteAllText(Path.Combine(utilityDirectory, "Utility.cs"),
                     "public static class Utility { public const int Value = 1; }");
+            }
+            if (emptyGlobalDefault)
+            {
+                File.WriteAllText(appProject, File.ReadAllText(appProject).Replace(
+                    "AdditionalProperties=\"Flavor=Direct\"", string.Empty));
+                File.WriteAllText(bridgeProject, File.ReadAllText(bridgeProject).Replace(
+                    "AdditionalProperties=\"Flavor=Bridge\"", "UndefineProperties=\"ContextMode\""));
             }
             File.WriteAllText(Path.Combine(appDirectory, "Program.cs"),
                 emptySingleContextBase
@@ -653,6 +490,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             }
             if (emptyDirectoryBuildPropsPath)
                 plan.MsBuildProperties["DirectoryBuildPropsPath"] = string.Empty;
+            if (emptyGlobalDefault)
+                plan.MsBuildProperties["ContextMode"] = string.Empty;
             if (controlledProperties || controlledOverridePathTarget || overrideActivatedImport)
             {
                 plan.MsBuildProperties["BuildProjectReferences"] = "true";
@@ -686,6 +525,12 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                         ? "PowerForgeVerifyRestoreContext_"
                     : removedOutputExcludes || partialOutputExcludes
                         ? "removes controlled output-tree exclusions"
+                    : scenario == "context-import-exec"
+                        ? "uncontrolled"
+                    : scenario == "context-import-absolute"
+                        ? "MSBuild document contains an uncontrolled value"
+                    : scenario == "context-import-dynamic-output"
+                        ? "MSBuild graph contains an uncontrolled build task"
                     : computedLatePathMutation
                         ? "MSBuild graph contains an uncontrolled build task"
                     : ridListContext

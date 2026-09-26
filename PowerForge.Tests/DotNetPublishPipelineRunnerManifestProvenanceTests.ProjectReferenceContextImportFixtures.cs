@@ -14,7 +14,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         bool wildcardAlias = scenario == "wildcard-context-import-alias";
         bool stablePathAlias = scenario is "stable-context-import-alias" or
             "malicious-context-import-alias" or "wildcard-context-import-alias";
-        bool malicious = scenario == "context-activated-import" || externalAlias || chained ||
+        bool execImport = scenario == "context-import-exec";
+        bool absoluteImport = scenario == "context-import-absolute";
+        bool dynamicOutput = scenario == "context-import-dynamic-output";
+        bool malicious = execImport || absoluteImport || dynamicOutput || scenario == "context-activated-import" || externalAlias || chained ||
             overrideActivated || indirect || propertyMethod ||
             scenario == "malicious-context-import-alias";
 
@@ -33,6 +36,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 ? $"<PropertyGroup><ContextTargetsPath>{(wildcardAlias ? "Context*.targets" : "Context.targets")}</ContextTargetsPath></PropertyGroup><Import Project=\"$(ContextTargetsPath)\" Condition=\"$(BaseIntermediateOutputPath.Contains('powerforge-context'))\" />"
             : propertyMethod
                 ? "<Import Project=\"Context.targets\" Condition=\"$(BaseIntermediateOutputPath.Contains('powerforge-context'))\" />"
+            : absoluteImport
+                ? $"<Import Project=\"{System.Security.SecurityElement.Escape(Path.Combine(sharedDirectory, "Context.targets"))}\" Condition=\"$(BaseIntermediateOutputPath.Contains('powerforge-context'))\" />"
             : malicious
                 ? "<Import Project=\"Context.targets\" Condition=\"$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))\" />"
                 : string.Empty;
@@ -43,7 +48,13 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 File.WriteAllText(Path.Combine(sharedDirectory, "Context.aliases.props"),
                     "<Project><PropertyGroup><ContextImportEnabled>$([System.String]::Copy('$(BaseIntermediateOutputPath)').Contains('powerforge-context'))</ContextImportEnabled></PropertyGroup></Project>");
             File.WriteAllText(Path.Combine(sharedDirectory, "Context.targets"),
-                malicious
+                execImport
+                    ? "<Project><Target Name=\"UnexpectedExec\" BeforeTargets=\"Build\"><Exec Command=\"echo contextual-exec\" /></Target></Project>"
+                : dynamicOutput
+                    ? "<Project><PropertyGroup><PropertyToSet>IntermediateOutputPath</PropertyToSet></PropertyGroup><Target Name=\"UnexpectedOutput\" BeforeTargets=\"Build\"><CreateProperty Value=\"$(MSBuildProjectDirectory)/../shared-obj/\"><Output TaskParameter=\"Value\" PropertyName=\"$(PropertyToSet)\" /></CreateProperty></Target></Project>"
+                : absoluteImport
+                    ? "<Project><PropertyGroup><HarmlessContextMarker>LoadedFromOriginal</HarmlessContextMarker></PropertyGroup></Project>"
+                : malicious
                     ? "<Project><Target Name=\"MutateImportedContext\" BeforeTargets=\"CoreCompile\"><PropertyGroup><IntermediateOutputPath>$(MSBuildProjectDirectory)/../shared-obj/</IntermediateOutputPath></PropertyGroup></Target></Project>"
                     : "<Project><PropertyGroup><HarmlessContextMarker>Loaded</HarmlessContextMarker></PropertyGroup></Project>");
             if (malicious)

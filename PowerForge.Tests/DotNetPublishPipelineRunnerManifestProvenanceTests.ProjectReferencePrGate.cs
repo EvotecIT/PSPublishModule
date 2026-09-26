@@ -16,7 +16,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("apostrophe-project-path")]
     [InlineData("inactive-pack-path-target")]
     [InlineData("second-context-activated-import")]
-    [InlineData("context-activated-indirect-import")]
+    [InlineData("empty-global-default")]
     [Trait("Category", "DotNetPublishPrGate")]
     public void ReadSourceProvenance_PrGateSharedMultiTargetReference(string scenario)
         => ReadSourceProvenance_RestoresEverySelectedFrameworkForSharedMultiTargetReference(scenario);
