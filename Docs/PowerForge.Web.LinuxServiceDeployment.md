@@ -216,12 +216,13 @@ install -o root -g example-deploy -m 0640 \
   /etc/powerforge/service-pull/example.env
 ```
 
-Set the example pull configuration to the actual repository, branch, workflow, artifact, and work root. Provision `/etc/powerforge/service-pull/example.token` separately as root:`example-deploy` mode `0640`, without passing the token on a command line. The named ACL grants traversal of the shared promoter-config directory without exposing other services' configuration files; `setfacl` is required on the host. Keep the promoter's example config at root:`example-deploy` mode `0640` after subsequent updates.
+Set the example pull configuration to the actual repository, branch, workflow, artifact, and work root. Add `ARTIFACT_PULL_STAGE_ROOT=/var/lib/powerforge/service-pull/example/.stage` to the matching root-owned promoter configuration. The puller requires this staging path to be inside its private work root, preventing another account from reserving a predictable `/tmp` name. Every poll invokes the promoter's recovery-only mode before reading GitHub, so an interrupted promotion can settle before stale staging is removed; it also clears abandoned bounded download directories while holding the per-service lock. Provision `/etc/powerforge/service-pull/example.token` separately as root:`example-deploy` mode `0640`, without passing the token on a command line. The named ACL grants traversal of the shared promoter-config directory without exposing other services' configuration files; `setfacl` is required on the host. Keep the promoter's example config at root:`example-deploy` mode `0640` after subsequent updates.
 
 For the pull lane, grant the fixed promoter command to `example-deploy` instead of the `powerforge-example` SSH account used by the push lane. Validate it with `visudo -cf` and `sudo -l -U example-deploy`:
 
 ```sudoers
 example-deploy ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-service-deploy --service example
+example-deploy ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-service-deploy --service example --recover-only
 ```
 
 ```bash

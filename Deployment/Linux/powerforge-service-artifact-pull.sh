@@ -32,9 +32,10 @@ primary_group_peer=$(getent passwd | awk -F: -v gid="$(id -g)" -v self="$(id -un
 # so an up-to-date decision cannot be made against a different release directory.
 # shellcheck disable=SC1090
 source "$pull_config"
+unset ARTIFACT_PULL_STAGE_ROOT
 # shellcheck disable=SC1090
 source "$service_config"
-: "${SOURCE_REPOSITORY:?}" "${SOURCE_BRANCH:?}" "${SOURCE_WORKFLOW:?}" "${ARTIFACT_NAME:?}" "${WORK_ROOT:?}" "${SERVICE_ROOT:?}"
+: "${SOURCE_REPOSITORY:?}" "${SOURCE_BRANCH:?}" "${SOURCE_WORKFLOW:?}" "${ARTIFACT_NAME:?}" "${WORK_ROOT:?}" "${SERVICE_ROOT:?}" "${ARTIFACT_PULL_STAGE_ROOT:?}"
 [[ $SOURCE_REPOSITORY =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail 'invalid GitHub repository'
 [[ $SOURCE_BRANCH =~ ^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$ ]] || fail 'invalid source branch'
 [[ $SOURCE_WORKFLOW =~ ^[A-Za-z0-9._-]+\.ya?ml$ ]] || fail 'invalid workflow filename'
@@ -42,6 +43,7 @@ source "$service_config"
 [[ $WORK_ROOT == /* && $WORK_ROOT != / && -d $WORK_ROOT && ! -L $WORK_ROOT ]] || fail 'invalid deployment work root'
 [[ $(stat -c %u -- "$WORK_ROOT") -eq $(id -u) && $(stat -c %a -- "$WORK_ROOT") == 700 ]] || fail 'deployment work root must belong only to the deployment account'
 [[ $(realpath -e -- "$WORK_ROOT") == "$WORK_ROOT" ]] || fail 'deployment work root must be canonical'
+[[ $ARTIFACT_PULL_STAGE_ROOT == "$WORK_ROOT/.stage" ]] || fail 'artifact pull staging path must be inside the private work root'
 [[ $SERVICE_ROOT == /* && $SERVICE_ROOT != / && -d $SERVICE_ROOT && ! -L $SERVICE_ROOT ]] || fail 'invalid service release root'
 [[ $(realpath -e -- "$SERVICE_ROOT") == "$SERVICE_ROOT" ]] || fail 'service release root must be canonical'
 assert_trusted_chain() {
@@ -67,6 +69,19 @@ done
 
 exec 9>"$WORK_ROOT/.deploy.lock"
 flock -n 9 || fail 'another service artifact pull is running'
+workflow_stage="$ARTIFACT_PULL_STAGE_ROOT"
+if [[ -e $workflow_stage || -L $workflow_stage ]]; then
+  [[ -d $workflow_stage && ! -L $workflow_stage && -O $workflow_stage && $(stat -c %a -- "$workflow_stage") == 700 ]] || fail 'unsafe interrupted staging directory'
+  [[ $(realpath -e -- "$workflow_stage") == "$workflow_stage" ]] || fail 'non-canonical interrupted staging directory'
+fi
+sudo -- /usr/local/sbin/powerforge-service-deploy --service "$service" --recover-only || fail 'unable to recover any interrupted service deployment'
+[[ ! -e $workflow_stage && ! -L $workflow_stage ]] || fail 'interrupted staging directory remains after recovery'
+for orphan in "$WORK_ROOT"/.download.*; do
+  [[ -e $orphan || -L $orphan ]] || continue
+  [[ -d $orphan && ! -L $orphan && -O $orphan && $(stat -c %a -- "$orphan") == 700 ]] || fail "unsafe abandoned download directory: $orphan"
+  [[ $(realpath -e -- "$orphan") == "$orphan" ]] || fail "non-canonical abandoned download directory: $orphan"
+  rm -rf -- "$orphan"
+done
 IFS= read -r GH_TOKEN <"$token_file" || [[ -n ${GH_TOKEN:-} ]]
 [[ ${GH_TOKEN:-} =~ ^[A-Za-z0-9_-]+$ ]] || fail 'GitHub read-only token file is empty or malformed'
 GH_HOST=github.com
@@ -100,7 +115,6 @@ if [[ -L $SERVICE_ROOT/current && -f $current_metadata && ! -L $current_metadata
   fi
 fi
 
-workflow_stage="/tmp/powerforge-service-${service}"
 [[ ! -e $workflow_stage && ! -L $workflow_stage ]] || fail 'fixed service staging path already exists'
 download_root=$(mktemp -d "$WORK_ROOT/.download.XXXXXXXX")
 cleanup() {
@@ -160,7 +174,7 @@ package_attempt=$(jq -er '.workflowRunAttempt' "$package_metadata") || fail 'ser
 [[ $package_attempt =~ ^[1-9][0-9]*$ && ${#package_attempt} -le 9 ]] || fail 'service package attempt is invalid'
 (( 10#$package_attempt <= 10#$run_attempt )) || fail 'service package attempt is newer than the selected workflow run'
 jq -e --arg repo "$SOURCE_REPOSITORY" --arg sha "$source_sha" --arg run "$run_id" --arg attempt "$package_attempt" --arg digest "$artifact_sha" \
-  '.schemaVersion == 1 and .sourceRepository == $repo and .sourceSha == $sha and .workflowRunId == $run and .workflowRunAttempt == $attempt and .artifactSha256 == $digest' \
+  '.schemaVersion == 1 and (.sourceRepository | ascii_downcase) == ($repo | ascii_downcase) and .sourceSha == $sha and .workflowRunId == $run and .workflowRunAttempt == $attempt and .artifactSha256 == $digest' \
   "$package_metadata" >/dev/null || fail 'service package does not match the selected source, workflow run, and SHA-256'
 
 install -d -m 0700 -- "$workflow_stage"

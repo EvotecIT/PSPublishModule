@@ -10,7 +10,7 @@ MAX_DEPLOYMENT_PAYLOAD_BYTES=1073741824
 MAX_DEPLOYMENT_METADATA_BYTES=1048576
 MAX_RELEASE_ARCHIVE_ENTRIES=100000
 deployment_shell_pid="$BASHPID"
-service_id="" archive="" metadata=""
+service_id="" archive="" metadata="" recover_only=0
 promoted=0 previous_target="" release_dir="" candidate_link=""
 workflow_stage="" trusted_stage=""
 systemd_drop_in_backup="" systemd_drop_in_dir="" systemd_drop_in_path=""
@@ -84,13 +84,17 @@ prepare_trusted_stage_root() {
   TRUSTED_STAGE_ROOT="$resolved"
 }
 usage() {
-  echo 'Usage: powerforge-service-deploy --service <id>'
+  echo 'Usage: powerforge-service-deploy --service <id> [--recover-only]'
 }
 while (($# > 0)); do
   case "$1" in
     --service)
       service_id="${2:-}"
       shift 2
+      ;;
+    --recover-only)
+      recover_only=1
+      shift
       ;;
     --help|-h)
       usage
@@ -103,9 +107,6 @@ while (($# > 0)); do
   esac
 done
 [[ "$service_id" =~ ^[a-z0-9][a-z0-9.-]{0,62}$ ]] || fail 'Invalid service identifier.'
-workflow_stage="/tmp/powerforge-service-${service_id}"
-archive="$workflow_stage/artifact.tar"
-metadata="$workflow_stage/deployment.json"
 assert_trusted_systemd_path() {
   local declared_path="$1"
   [[ ! -L "$declared_path" ]] || fail "Systemd writable path must not be a symlink: $declared_path"
@@ -410,11 +411,36 @@ if [[ "$(id -u)" -eq 0 ]]; then
   config_mode="$(stat -c '%a' "$config_path")"
   (( (8#$config_mode & 0022) == 0 )) || fail "Service config must not be group/world writable: $config_path"
 fi
-unset SERVICE_ROOT SYSTEMD_SERVICE SYSTEMD_READ_WRITE_PATHS LOCAL_HEALTH_URL RELEASES_TO_KEEP REQUIRED_RELEASE_PATHS PUBLIC_HEALTH_URLS REQUIRE_HEALTH_PROVENANCE
+unset SERVICE_ROOT SYSTEMD_SERVICE SYSTEMD_READ_WRITE_PATHS LOCAL_HEALTH_URL RELEASES_TO_KEEP REQUIRED_RELEASE_PATHS PUBLIC_HEALTH_URLS REQUIRE_HEALTH_PROVENANCE ARTIFACT_PULL_STAGE_ROOT
 # shellcheck disable=SC1090
 source "$config_path"
 : "${SERVICE_ROOT:?SERVICE_ROOT is required in $config_path}" "${SYSTEMD_SERVICE:?SYSTEMD_SERVICE is required in $config_path}" "${LOCAL_HEALTH_URL:?LOCAL_HEALTH_URL is required in $config_path}"
 : "${SYSTEMD_READ_WRITE_PATHS:=}" "${RELEASES_TO_KEEP:=5}" "${REQUIRED_RELEASE_PATHS:=}" "${PUBLIC_HEALTH_URLS:=}" "${REQUIRE_HEALTH_PROVENANCE:=1}"
+if [[ -n ${ARTIFACT_PULL_STAGE_ROOT:-} ]]; then
+  stage_parent="$(dirname -- "$ARTIFACT_PULL_STAGE_ROOT")"
+  [[ $ARTIFACT_PULL_STAGE_ROOT == "$stage_parent/.stage" && -d $stage_parent && ! -L $stage_parent ]] || fail 'Artifact pull staging must be a real private work directory.'
+  stage_uid=$(stat -c %u -- "$stage_parent")
+  [[ $stage_uid =~ ^[1-9][0-9]*$ && $(realpath -e -- "$stage_parent") == "$stage_parent" && $(stat -c %a -- "$stage_parent") == 700 ]] || fail 'Artifact pull staging parent must be canonical and private to a dedicated account.'
+  if [[ -n ${SUDO_UID:-} ]]; then
+    [[ $SUDO_UID =~ ^[1-9][0-9]*$ && $SUDO_UID -eq $stage_uid ]] || fail 'Artifact pull staging does not belong to the invoking account.'
+  fi
+  stage_chain=/
+  IFS=/ read -r -a stage_components <<<"${stage_parent#/}"
+  for stage_component in "${stage_components[@]}"; do
+    [[ -n $stage_component ]] || continue
+    stage_chain="${stage_chain%/}/$stage_component"
+    [[ -d $stage_chain && ! -L $stage_chain ]] || fail "Untrusted artifact pull staging parent: $stage_chain"
+    stage_owner=$(stat -c %u -- "$stage_chain")
+    stage_mode=$(stat -c %a -- "$stage_chain")
+    [[ $stage_owner -eq 0 || $stage_owner -eq $stage_uid ]] || fail "Untrusted artifact pull staging owner: $stage_chain"
+    (( (8#$stage_mode & 0022) == 0 )) || fail "Writable artifact pull staging parent: $stage_chain"
+  done
+  workflow_stage="$ARTIFACT_PULL_STAGE_ROOT"
+else
+  workflow_stage="/tmp/powerforge-service-${service_id}"
+fi
+archive="$workflow_stage/artifact.tar"
+metadata="$workflow_stage/deployment.json"
 [[ "$SERVICE_ROOT" == /* && "$SERVICE_ROOT" != '/' && "$SERVICE_ROOT" != *[[:space:]]* ]] || fail 'SERVICE_ROOT must be an absolute non-root path without whitespace.'
 [[ "$TRUSTED_STAGE_ROOT" == /* && "$TRUSTED_STAGE_ROOT" != '/' ]] || fail 'Trusted staging root must be an absolute non-root path.'
 [[ "$SYSTEMD_CONFIG_ROOT" == /* && "$SYSTEMD_CONFIG_ROOT" != '/' && "$SYSTEMD_CONFIG_ROOT" != *[[:space:]]* ]] || fail 'Systemd config root must be an absolute non-root path without whitespace.'
@@ -532,6 +558,10 @@ if [[ "$locked_service_root" != "$SERVICE_ROOT" ]]; then
   exec {configured_root_lock_fd}>"${LOCK_ROOT}/powerforge-root-${service_root_lock_key}.lock"
   flock -n "$configured_root_lock_fd" || fail "Another deployment is active for service root $SERVICE_ROOT."
 fi
+if [[ $recover_only == 1 ]]; then
+  log "Recovered pending deployment state for $service_id"
+  exit 0
+fi
 systemd_transaction_path="${TRANSACTION_ROOT}/service-${service_id}.transaction"
 prepare_systemd_drop_in_directory
 previous_target=""
@@ -625,7 +655,13 @@ if ! LC_ALL=C tar --list --verbose --numeric-owner --full-time --quoting-style=e
 ); then
   fail 'Unable to validate service artifact members and expanded size.'
 fi
-release_id="$(date -u +%Y%m%d%H%M%S)-${run_id}-${run_attempt}-${source_sha:0:12}"
+configuration_suffix=""
+pull_configuration_sha="$(json_string pullConfigurationSha256)"
+if [[ -n $pull_configuration_sha ]]; then
+  [[ $pull_configuration_sha =~ ^[0-9a-f]{64}$ ]] || fail 'Metadata pullConfigurationSha256 is invalid.'
+  configuration_suffix="-${pull_configuration_sha:0:12}"
+fi
+release_id="$(date -u +%Y%m%d%H%M%S)-${run_id}-${run_attempt}-${source_sha:0:12}${configuration_suffix}"
 release_dir="$resolved_release_root/$release_id"
 [[ ! -e "$release_dir" ]] || fail "Release already exists: $release_id"
 health_response() {

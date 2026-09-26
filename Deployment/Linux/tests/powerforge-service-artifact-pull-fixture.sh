@@ -54,11 +54,21 @@ PY
 printf 'fixture-token\n' >"$task_root/etc/powerforge/service-pull/${service}.token"
 printf 'SOURCE_REPOSITORY=%s\nSOURCE_BRANCH=main\nSOURCE_WORKFLOW=package-service.yml\nARTIFACT_NAME=powerforge-service-example\nWORK_ROOT=%s/work\n' \
   "$repo" "$task_root" >"$task_root/etc/powerforge/service-pull/${service}.env"
-printf 'SERVICE_ROOT=%s/service\n' "$task_root" >"$task_root/etc/powerforge/services/${service}.env"
+printf 'SERVICE_ROOT=%s/service\nARTIFACT_PULL_STAGE_ROOT=%s/work/.stage\nSYSTEMD_SERVICE=%s.service\nLOCAL_HEALTH_URL=http://127.0.0.1:12345/healthz\n' \
+  "$task_root" "$task_root" "$service" >"$task_root/etc/powerforge/services/${service}.env"
 chown "root:$deploy_user" "$task_root/etc/powerforge/service-pull/${service}.token" \
   "$task_root/etc/powerforge/service-pull/${service}.env" "$task_root/etc/powerforge/services/${service}.env"
 chmod 0640 "$task_root/etc/powerforge/service-pull/${service}.token" \
   "$task_root/etc/powerforge/service-pull/${service}.env" "$task_root/etc/powerforge/services/${service}.env"
+mkdir -m 0700 "$task_root/work/.stage"
+chown "$deploy_user:$deploy_user" "$task_root/work/.stage"
+env SUDO_UID="$(id -u "$deploy_user")" \
+  POWERFORGE_SERVICE_CONFIG_ROOT="$task_root/etc/powerforge/services" \
+  POWERFORGE_SERVICE_LOCK_ROOT="$task_root/locks" \
+  POWERFORGE_SERVICE_TRUSTED_STAGE_ROOT="$task_root/trusted" \
+  POWERFORGE_SERVICE_TRANSACTION_ROOT="$task_root/transactions" \
+  bash "$script_dir/../powerforge-service-deploy.sh" --service "$service" --recover-only >"$task_root/real-recovery.log"
+[[ ! -e $task_root/work/.stage ]]
 
 # Keep the production paths fixed; this copy only redirects the root-owned fixture config and tool shims.
 sed -e "s#^PATH=/usr/local/sbin:#PATH=$task_root/bin:/usr/local/sbin:#" \
@@ -70,6 +80,7 @@ set -Eeuo pipefail
 [[ ${GH_TOKEN:-} == fixture-token ]] || exit 1
 if [[ $1 == api ]]; then
   endpoint=${*: -1}
+  endpoint=${endpoint//exampleorg\/service/ExampleOrg\/Service}
   case "$endpoint" in
     repos/ExampleOrg/Service/branches/main)
       counter_file="$POWERFORGE_FIXTURE_ROOT/work/branch-reads"
@@ -130,7 +141,7 @@ set -Eeuo pipefail
 if [[ $* == *'--config -'* ]]; then
   config=$(cat)
   [[ $config == 'header = "Authorization: Bearer fixture-token"' ]]
-  [[ $* == *'api.github.com/repos/ExampleOrg/Service/actions/artifacts/54321/zip'* ]]
+  [[ $* == *'api.github.com/repos/'*'/actions/artifacts/54321/zip'* ]]
   printf 'https://artifact-storage.example.test/bundle.zip'
   exit 0
 fi
@@ -150,8 +161,13 @@ SH
 cat >"$task_root/bin/sudo" <<'SH'
 #!/usr/bin/env bash
 set -Eeuo pipefail
+stage="$POWERFORGE_FIXTURE_ROOT/work/.stage"
+if [[ "$*" == "-- /usr/local/sbin/powerforge-service-deploy --service $POWERFORGE_FIXTURE_SERVICE --recover-only" ]]; then
+  [[ ! -e $stage ]] || rm -rf -- "$stage"
+  printf 'recovered\n' >>"$POWERFORGE_FIXTURE_ROOT/work/recovery.log"
+  exit 0
+fi
 [[ "$*" == "-- /usr/local/sbin/powerforge-service-deploy --service $POWERFORGE_FIXTURE_SERVICE" ]]
-stage="/tmp/powerforge-service-${POWERFORGE_FIXTURE_SERVICE}"
 [[ -s $stage/artifact.tar && -s $stage/deployment.json ]]
 jq -e '.sourceSha == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" and .workflowRunId == "12345" and .workflowRunAttempt == "2" and (.packageRunAttempt == "1" or .packageRunAttempt == "2") and (.pullConfigurationSha256 | test("^[0-9a-f]{64}$"))' \
   "$stage/deployment.json" >/dev/null
@@ -196,16 +212,25 @@ if run_fixture success >"$task_root/token-mode.log" 2>&1; then
 fi
 grep -Fq 'configuration file must be root-owned' "$task_root/token-mode.log"
 chmod 0640 "$task_root/etc/powerforge/service-pull/${service}.token"
-mkdir "/tmp/powerforge-service-${service}"
-if run_fixture success >"$task_root/stale-stage.log" 2>&1; then
-  echo 'Accepted an occupied staging path.' >&2; exit 1
+mkdir "$task_root/work/.stage"
+chown "$deploy_user:$deploy_user" "$task_root/work/.stage"
+chmod 0700 "$task_root/work/.stage"
+if run_fixture missing >"$task_root/stale-stage.log" 2>&1; then
+  echo 'Accepted a missing package run after interrupted staging recovery.' >&2; exit 1
 fi
-grep -Fq 'fixed service staging path already exists' "$task_root/stale-stage.log"
+grep -Fq 'no successful service package run' "$task_root/stale-stage.log"
 [[ -z $(find "$task_root/work" -maxdepth 1 -name '.download.*' -print -quit) ]]
-rmdir "/tmp/powerforge-service-${service}"
+[[ ! -e $task_root/work/.stage ]]
 [[ ! -e $task_root/work/sudo.log ]]
-[[ ! -e /tmp/powerforge-service-${service} ]]
+[[ ! -e $task_root/work/.stage ]]
+mkdir -m 0700 "$task_root/work/.download.abandoned"
+printf 'orphan\n' >"$task_root/work/.download.abandoned/workflow-artifact.zip"
+chown -R "$deploy_user:$deploy_user" "$task_root/work/.download.abandoned"
+mkdir "/tmp/powerforge-service-${service}"
 run_fixture partial
+[[ ! -e $task_root/work/.download.abandoned ]]
+[[ -d /tmp/powerforge-service-${service} ]]
+rmdir "/tmp/powerforge-service-${service}"
 [[ $(jq -r '.packageRunAttempt' "$task_root/work/deployed.json") == 1 ]]
 [[ $(wc -l <"$task_root/work/sudo.log") -eq 1 ]]
 mkdir -p "$task_root/service/releases/verified/_powerforge"
@@ -225,4 +250,8 @@ printf 'SOURCE_REPOSITORY=%s\nSOURCE_BRANCH=release/1.x\nSOURCE_WORKFLOW=package
   "$repo" "$task_root" >"$task_root/etc/powerforge/service-pull/${service}.env"
 run_fixture slash
 [[ $(wc -l <"$task_root/work/sudo.log") -eq 3 ]]
+printf 'SOURCE_REPOSITORY=exampleorg/service\nSOURCE_BRANCH=main\nSOURCE_WORKFLOW=package-service.yml\nARTIFACT_NAME=powerforge-service-example\nWORK_ROOT=%s/work\n' \
+  "$task_root" >"$task_root/etc/powerforge/service-pull/${service}.env"
+run_fixture success
+[[ $(wc -l <"$task_root/work/sudo.log") -eq 4 ]]
 echo 'Host-initiated Linux service artifact pull fixture passed.'
