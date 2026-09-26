@@ -26,7 +26,9 @@ internal sealed partial class PowerShellSemanticBinder
             PowerShellAssignmentTargetPolicy.FindDirectVariable(authoredAssignment.Left, capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) is { } assignedVariable)
             symbols.TryGetValue(assignedVariable.VariablePath.UserPath, out assignedSymbol);
         var priorValueState = assignedSymbol?.ValueState;
-        var bound = BindStatementCore(document, statement, symbols, functions, diagnostics, isTerminal,
+        var bound = statement is FunctionDefinitionAst nested && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)
+            ? BindNativeFunctionDeclaration(document, nested, functions, diagnostics)
+            : BindStatementCore(document, statement, symbols, functions, diagnostics, isTerminal,
             targetFramework, capabilities, allowNonTerminalSuccessOutput, nonTerminalSuccessOutputType);
         if (bound is null) return null;
         // Native pipeline compilation owns the complete statement's error and status route.

@@ -1,0 +1,197 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Nested native function declarations; same-input per-function no-loss comparison.",
+  "baselineCompilerCommit": "870988559cf6151591818d4a6db7ec641816b5d4",
+  "baselineComparison": "m29a-method-block-comparison.net10.json",
+  "baselineComparisonSha256": "58545fcdd4ba00b2e80b4bb07447c2dcbb3e21d619874f611290f33040a88692",
+  "baselineRetainedInventory": "m29a-retained-functions.net10.json at baselineCompilerCommit",
+  "baselineRetainedInventorySha256": "922216acaeffefbe036ee607b1ea5ce346284f99a9830410e5d93a2e9b8dbb4d",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 440,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "candidateEmitted": 239,
+      "candidateExplanationSha256": "b91bac1fb3b763294581b1e0f721b555faff196929160c496bd3e7ab3a79a1ac",
+      "changes": [
+        {
+          "unitId": "5427092d53bf25dc528b0e2d",
+          "name": "Compare-MultipleObjects",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "20cb0c14c52dd293f43dea08",
+          "name": "Select-Properties",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "candidateEmitted": 53,
+      "candidateExplanationSha256": "5cc5a1851e4b51a2bb6b1e623a6e0f0a368ee89901fd0df393147cb10b528a58",
+      "changes": [
+        {
+          "unitId": "61e2d491e1099662ef8658ce",
+          "name": "Merge-CloudDeviceReportInventory",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "candidateEmitted": 55,
+      "candidateExplanationSha256": "eeda66ded0b2a18edcb08eba5f3191ea968f7f67b3069f21ce083286aa4523ce",
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "candidateEmitted": 78,
+      "candidateExplanationSha256": "77d154c2fad0c5e061efadfdea33190805c6008f99b16235234f405b370b9e8b",
+      "changes": [
+        {
+          "unitId": "ff3546e231c4c34eea105de5",
+          "name": "Get-FileItem",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "2f2b427e53c2e5786489c406",
+          "name": "Get-FolderSizeInfo",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "221af7ce565faaa37fceea96",
+          "name": "Get-ModuleCommand",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": [
+            {
+              "code": "CommandInvocation",
+              "featureId": "command.register-argumentcompleter",
+              "message": "Command invocation 'Register-ArgumentCompleter' requires a registered semantic provider or a hosted PowerShell command region.",
+              "line": 1,
+              "column": 1
+            }
+          ]
+        },
+        {
+          "unitId": "0eee1da3754825f87b6c5906",
+          "name": "Get-PathVariable",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "candidateEmitted": 24,
+      "candidateExplanationSha256": "30d691e44d386e72929b0f5640b6978883a1e261da70e1d266e323156f18f5d5",
+      "changes": [
+        {
+          "unitId": "1564e8cb7c7afb359d7ee415",
+          "name": "GetAboutTopicsFromPath",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "0abfa2bb8ea766da0c2a053e",
+          "name": "Merge-MarkdownHelp",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    }
+  ],
+  "lostEmittedMethods": 0,
+  "lostRetainedRegions": 0,
+  "compilerSourceHashes": [
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.ScriptBlocks.cs",
+      "sha256": "2258b4ef9a40fd3185789f4742414f36fcf4275476fb92de8b5b3e45c68b1c8b"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.cs",
+      "sha256": "9efd3933df669ace2893273c5cbdfa248525ba9018e2f40c77f3cf65401a6458"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
+      "sha256": "8f837f90dd95e756225c0eaa6fa476dd33647f6a93fcb742fe6bb0de1d35bcc1"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.ScriptBlocks.cs",
+      "sha256": "3b188a3264ab2db74c8e800ad812d323ac1074155d9a0f0c1fba6339c436251f"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs",
+      "sha256": "d9adbe7a37da32c9611cc98002e65407803f425ed11a5130b9d5620b39458f39"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeScriptBlock.cs",
+      "sha256": "c8464c8767f6536a1e45e84249be3647eb9aafe43aade2c296f2c91d91aaf00c"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeScriptBlock.cs",
+      "sha256": "e08abe3a1200789b4e41431b2e116030d1b0d479785b8c4b1d0d9844f8211c92"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs",
+      "sha256": "3f9928b1811c8a36537af15ba590ef6a22fc79da7d396950d128bc7cf96c3e40"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/PowerShellCommandHostRuntimeSource.cs",
+      "sha256": "d114f59358d4bbb0e19d36956d6ae7e00904d0cc5bc0d3dd34049805caff9fd3"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.cs",
+      "sha256": "af39a7d7a51e2f866e842b5c9820607f4287438228a26507903c58d94ad42770"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.NestedDeclarations.cs",
+      "sha256": "c6fb82da0ac365afb2c6e4e98a4b0a36d7df0f80febb7c35bdf725b5dbf61095"
+    }
+  ],
+  "candidateEmitted": 449
+}

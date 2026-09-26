@@ -3,6 +3,36 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationBoundPipelineTests
 {
     [Theory]
+    [InlineData("function Read-Child($Value) { $Value }")]
+    [InlineData("filter Read-Child { $_ }")]
+    [InlineData("function Read-Child { dynamicparam { } end { 'value' } }")]
+    [InlineData("function Read-Child { trap { continue }; 'value' }")]
+    [InlineData("function Read-Child { param($__writeOutput) $__writeOutput }")]
+    public void NestedFunctions_RetainOwnerWhenDeclarationOrChildCannotCompile(string declaration)
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Read-Owner { " + declaration + "; Read-Child }", TestPath("nested-function-fallback.psm1"));
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document }, "net10.0", PowerShellCompilationCapabilities.HybridModule);
+        Assert.Empty(result.Emitted.Methods);
+        Assert.NotEmpty(result.Emitted.Diagnostics);
+    }
+
+    [Theory]
+    [InlineData("net10.0")]
+    [InlineData("net472")]
+    public void NestedFunctions_RejectRuntimeFreeDynamicDeclarations(string framework)
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Read-Owner { param([string]$Value) function Read-Child { $Value }; Read-Child }",
+            TestPath("nested-function-strict.psm1"));
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document }, framework, PowerShellCompilationCapabilities.TypedExecutable);
+        Assert.Empty(result.Emitted.Methods);
+        Assert.NotEmpty(result.Emitted.Diagnostics);
+    }
+
+    [Theory]
     [InlineData("dynamicparam { } end { 'value' }")]
     [InlineData("trap { continue }; 'value'")]
     [InlineData("param($__writeOutput) $__writeOutput")]

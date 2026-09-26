@@ -425,7 +425,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         {
             PowerShellLoweredLiteralExpression literal => EmitLiteral(literal),
             PowerShellLoweredNativeVariableExpression variable => EmitNativeVariableRead(variable),
-            PowerShellLoweredNativeScriptBlockExpression block => NativeScriptBlockFactoryName(block.Target) + "(__nativeFunction)",
+            PowerShellLoweredNativeScriptBlockExpression block => EmitNativeBlockValue(block),
             PowerShellLoweredNativeLifecycleExpression lifecycle => "(__nativeFunction.LifecycleClause == " + lifecycle.Clause.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")",
             PowerShellLoweredVariableExpression variable => RenderStorage(variable.Symbol),
             PowerShellLoweredConstantBooleanDelegateExpression booleanDelegate => EmitConstantBooleanDelegate(booleanDelegate),

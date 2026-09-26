@@ -45,7 +45,8 @@ internal static class PowerShellCommandHostRuntimeSource
                 "PowerShellNativeFunctionContext.Output", "PowerShellNativeFunctionContext.Members", "PowerShellNativeFunctionContext.Indexing",
                 "PowerShellNativeFunctionContext.Conversions", "PowerShellNativeFunctionContext.Invocations",
                 "PowerShellNativeFunctionContext.CommandRegions", "PowerShellNativeFunctionContext.Compilation",
-                "PowerShellNativeFunctionContext.Declarations", "PowerShellNativeFunctionContext.AccessMutations", "PowerShellNativeFunctionContext.Enumeration",
+                "PowerShellNativeFunctionContext.Declarations", "PowerShellNativeFunctionContext.NestedDeclarations",
+                "PowerShellNativeFunctionContext.AccessMutations", "PowerShellNativeFunctionContext.Enumeration",
                 "PowerShellNativeFunctionContext.Switch",
                 "PowerShellNativeFunctionContext.StringJoin", "PowerShellNativeFunctionContext.ScriptBlocks", "PowerShellNativeFunctionContext.Patterns",
                 "PowerShellNativeFunctionContext.Membership" })

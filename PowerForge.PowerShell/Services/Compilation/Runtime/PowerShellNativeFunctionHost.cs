@@ -159,7 +159,7 @@ namespace PowerForge.Generated.Runtime
             return module.NewBoundScriptBlock(InstallCompiledClauses(body.GetScriptBlock(), begin, process, end, clean));
         }
 
-        private static ScriptBlock InstallCompiledClauses(ScriptBlock script, Action<PowerShellNativeFunctionContext>? begin,
+        internal static ScriptBlock InstallCompiledClauses(ScriptBlock script, Action<PowerShellNativeFunctionContext>? begin,
             Action<PowerShellNativeFunctionContext>? process, Action<PowerShellNativeFunctionContext>? end,
             Action<PowerShellNativeFunctionContext>? clean)
         {

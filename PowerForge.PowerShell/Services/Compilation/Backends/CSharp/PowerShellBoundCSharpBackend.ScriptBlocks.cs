@@ -27,7 +27,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 .Append(NativeScriptBlockFactoryName(block.Target))
                 .AppendLine("(global::PowerForge.Generated.Runtime.PowerShellNativeFunctionContext creationContext)")
                 .AppendLine("    {")
-                .Append("        return creationContext.CreateScriptBlock(").Append(PowerShellCSharpLiteral.QuoteString(block.SourceDocument))
+                .Append(block.DeclarationName is null ? "        return creationContext.CreateScriptBlock(" : "        return creationContext.CreateFunctionBody(")
+                .Append(PowerShellCSharpLiteral.QuoteString(block.SourceDocument))
                 .Append(", ").Append(block.Span.StartOffset).Append(", ").Append(block.Span.EndOffset).AppendLine(",")
                 .Append("            ").Append(Callback(binding.HasBegin, 0)).AppendLine(",")
                 .Append("            ").Append(Callback(binding.HasProcess, 1)).AppendLine(",")
@@ -44,4 +45,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
     private static string Callback(bool present, int clause)
         => PowerShellNativeCallbackSource.Callback(present, clause);
+
+    private static string EmitNativeBlockValue(PowerShellLoweredNativeScriptBlockExpression block)
+    {
+        var value = NativeScriptBlockFactoryName(block.Target) + "(__nativeFunction)";
+        return block.DeclarationName is null ? value : "__nativeFunction.DeclareFunction(" +
+            PowerShellCSharpLiteral.QuoteString(block.SourceDocument) + ", " + block.Span.StartOffset + ", " + block.Span.EndOffset + ", " + value + ")";
+    }
 }

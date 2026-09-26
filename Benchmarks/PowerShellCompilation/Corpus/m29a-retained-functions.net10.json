@@ -4,17 +4,17 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "emitted": 440,
-  "retained": 125,
+  "emitted": 449,
+  "retained": 116,
   "dispositionContract": "Every function identity matches the accepted constructor/object comparison and its full baseline; no previously emitted method or still-retained region is lost.",
   "packets": [
     {
       "packet": "pssg",
       "stableUnits": 286,
       "functions": 282,
-      "emitted": 237,
-      "retained": 45,
-      "sourceExplanationSha256": "9960df1795af959796d01312eb99a0672a170c94ffab54834dbe3e88ee44b970",
+      "emitted": 239,
+      "retained": 43,
+      "sourceExplanationSha256": "b91bac1fb3b763294581b1e0f721b555faff196929160c496bd3e7ab3a79a1ac",
       "functionsRetained": [
         {
           "unitId": "f05240d2c874ad6f03bce00b",
@@ -446,101 +446,10 @@
           "causes": [
             {
               "code": "UnsupportedSyntax",
-              "featureId": "semantic.lowering.missing",
-              "message": "The semantic pipeline did not produce a lowered compilation contract.",
-              "line": 1,
-              "column": 1
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'begin' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 59,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'process' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 68,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Syntax node 'FunctionDefinitionAst' is not supported by the typed compiler.",
+              "featureId": "syntax.unsupported",
+              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
               "line": 69,
               "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Syntax node 'FunctionDefinitionAst' is not supported by the typed compiler.",
-              "line": 74,
-              "column": 9
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 117,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 118,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 126,
-              "column": 21
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 128,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 130,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 131,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 139,
-              "column": 21
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 141,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 143,
-              "column": 17
             }
           ]
         },
@@ -589,66 +498,10 @@
           "causes": [
             {
               "code": "UnsupportedSyntax",
-              "featureId": "semantic.lowering.missing",
-              "message": "The semantic pipeline did not produce a lowered compilation contract.",
-              "line": 1,
-              "column": 1
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "parameter.default",
-              "message": "Parameter '$NewLineFormat' declares a default value that cannot be preserved by this typed target.",
-              "line": 83,
-              "column": 59
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "parameter.default",
-              "message": "Parameter '$NewLineFormatProperty' declares a default value that cannot be preserved by this typed target.",
-              "line": 88,
-              "column": 67
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'begin' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 99,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Syntax node 'FunctionDefinitionAst' is not supported by the typed compiler.",
+              "featureId": "syntax.unsupported",
+              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
               "line": 102,
               "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Syntax node 'FunctionDefinitionAst' is not supported by the typed compiler.",
-              "line": 107,
-              "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'process' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 117,
-              "column": 5
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.isoftype",
-              "message": "Command invocation 'IsOfType' requires the PowerShell runtime.",
-              "line": 137,
-              "column": 37
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.subexpression",
-              "message": "Syntax node 'SubExpressionAst' is not supported by the typed compiler.",
-              "line": 168,
-              "column": 15
             }
           ]
         },
@@ -681,73 +534,10 @@
           "causes": [
             {
               "code": "UnsupportedSyntax",
-              "featureId": "semantic.lowering.missing",
-              "message": "The semantic pipeline did not produce a lowered compilation contract.",
-              "line": 1,
-              "column": 1
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "parameter.default",
-              "message": "Parameter '$NewLineFormat' declares a default value that cannot be preserved by this typed target.",
-              "line": 91,
-              "column": 59
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "parameter.default",
-              "message": "Parameter '$NewLineFormatProperty' declares a default value that cannot be preserved by this typed target.",
-              "line": 96,
-              "column": 67
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'begin' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 107,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Syntax node 'FunctionDefinitionAst' is not supported by the typed compiler.",
+              "featureId": "syntax.unsupported",
+              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
               "line": 108,
               "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Syntax node 'FunctionDefinitionAst' is not supported by the typed compiler.",
-              "line": 113,
-              "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'process' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 122,
-              "column": 5
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.isnumeric",
-              "message": "Command invocation 'IsNumeric' requires the PowerShell runtime.",
-              "line": 186,
-              "column": 41
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.isoftype",
-              "message": "Command invocation 'IsOfType' requires the PowerShell runtime.",
-              "line": 201,
-              "column": 37
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.isnumeric",
-              "message": "Command invocation 'IsNumeric' requires the PowerShell runtime.",
-              "line": 263,
-              "column": 41
             }
           ]
         },
@@ -824,24 +614,6 @@
           ]
         },
         {
-          "unitId": "5427092d53bf25dc528b0e2d",
-          "name": "Compare-MultipleObjects",
-          "relativePath": "Public/Objects/Compare-MultipleObjects.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 99,
-              "column": 5
-            }
-          ]
-        },
-        {
           "unitId": "311f07ae1e97efe66a5d9ee2",
           "name": "Copy-DictionaryManual",
           "relativePath": "Public/Objects/Copy-DictionaryManual.ps1",
@@ -899,87 +671,6 @@
           ]
         },
         {
-          "unitId": "20cb0c14c52dd293f43dea08",
-          "name": "Select-Properties",
-          "relativePath": "Public/Objects/Select-Properties.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "semantic.lowering.missing",
-              "message": "The semantic pipeline did not produce a lowered compilation contract.",
-              "line": 1,
-              "column": 1
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'begin' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 69,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Syntax node 'FunctionDefinitionAst' is not supported by the typed compiler.",
-              "line": 70,
-              "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'process' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 91,
-              "column": 5
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-warning",
-              "message": "Command invocation 'Write-Warning' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 98,
-              "column": 13
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.select-unique",
-              "message": "Command invocation 'Select-Unique' requires the PowerShell runtime.",
-              "line": 107,
-              "column": 42
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.select-object",
-              "message": "Command invocation 'Select-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 143,
-              "column": 47
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.select-object",
-              "message": "Command invocation 'Select-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 145,
-              "column": 47
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.select-object",
-              "message": "Command invocation 'Select-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 147,
-              "column": 47
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.select-unique",
-              "message": "Command invocation 'Select-Unique' requires the PowerShell runtime.",
-              "line": 157,
-              "column": 42
-            }
-          ]
-        },
-        {
           "unitId": "ffe888fa05d905b08ee67e27",
           "name": "Initialize-ModulePortable",
           "relativePath": "Public/Programs/Initialize-ModulePortable.ps1",
@@ -988,41 +679,6 @@
           "usesNativeFunctionBinding": false,
           "generatedRegionMemberNames": [],
           "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 37,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 73,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 101,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 114,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 165,
-              "column": 5
-            },
             {
               "code": "UnsupportedSyntax",
               "featureId": "syntax.unsupported",
@@ -1254,9 +910,9 @@
       "packet": "cleanup",
       "stableUnits": 69,
       "functions": 68,
-      "emitted": 52,
-      "retained": 16,
-      "sourceExplanationSha256": "bc725ceeb886d787c8c6d1f5a136c17e32c75b001665e233538f28ebf9da5e07",
+      "emitted": 53,
+      "retained": 15,
+      "sourceExplanationSha256": "5cc5a1851e4b51a2bb6b1e623a6e0f0a368ee89901fd0df393147cb10b528a58",
       "functionsRetained": [
         {
           "unitId": "9620fa3e611793d93f7a99e7",
@@ -1309,59 +965,17 @@
           "causes": [
             {
               "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 18,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 58,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 73,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 84,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
+              "featureId": "syntax.unsupported",
+              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
               "line": 97,
               "column": 5
             },
             {
               "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 118,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 139,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 168,
-              "column": 5
+              "featureId": "syntax.unsupported",
+              "message": "Scalar switch whose $_, $PSItem, or $switch automatic-variable state is observed requires PowerShell runtime semantics.",
+              "line": 101,
+              "column": 13
             }
           ]
         },
@@ -1434,24 +1048,6 @@
               "message": "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
               "line": 41,
               "column": 19
-            }
-          ]
-        },
-        {
-          "unitId": "61e2d491e1099662ef8658ce",
-          "name": "Merge-CloudDeviceReportInventory",
-          "relativePath": "Private/Merge-CloudDeviceReportInventory.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 8,
-              "column": 5
             }
           ]
         },
@@ -1644,7 +1240,7 @@
       "functions": 66,
       "emitted": 55,
       "retained": 11,
-      "sourceExplanationSha256": "e637f8c6bb2b52aaebab9f6cf4be7cac71c4bc71c92ac07b5c7725fdad87fe0d",
+      "sourceExplanationSha256": "eeda66ded0b2a18edcb08eba5f3191ea968f7f67b3069f21ce083286aa4523ce",
       "functionsRetained": [
         {
           "unitId": "fc33881d5a7752031137ea07",
@@ -1942,9 +1538,9 @@
       "packet": "pst",
       "stableUnits": 121,
       "functions": 109,
-      "emitted": 74,
-      "retained": 35,
-      "sourceExplanationSha256": "040bb7fa6b86009b6e042c49708e3aa48b98435f1fe094ddc7289bd4d3a5374c",
+      "emitted": 78,
+      "retained": 31,
+      "sourceExplanationSha256": "77d154c2fad0c5e061efadfdea33190805c6008f99b16235234f405b370b9e8b",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -1981,11 +1577,11 @@
               "column": 17
             },
             {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 118,
-              "column": 17
+              "code": "ScriptBlock",
+              "featureId": "scriptblock.typed",
+              "message": "Typed script-block conversion currently requires a Boolean-returning delegate; 'System.Action' returns 'System.Void'.",
+              "line": 122,
+              "column": 67
             },
             {
               "code": "UnsupportedSyntax",
@@ -2366,396 +1962,20 @@
               "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
               "line": 1,
               "column": 1
-            }
-          ]
-        },
-        {
-          "unitId": "ff3546e231c4c34eea105de5",
-          "name": "Get-FileItem",
-          "relativePath": "functions/Get-FileItem.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 30,
-              "column": 5
-            }
-          ]
-        },
-        {
-          "unitId": "2f2b427e53c2e5786489c406",
-          "name": "Get-FolderSizeInfo",
-          "relativePath": "functions/Get-FolderSizeInfo.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "semantic.lowering.missing",
-              "message": "The semantic pipeline did not produce a lowered compilation contract.",
-              "line": 1,
-              "column": 1
             },
             {
               "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'begin' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 24,
-              "column": 5
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 27,
-              "column": 9
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 28,
-              "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Syntax node 'FunctionDefinitionAst' is not supported by the typed compiler.",
-              "line": 32,
-              "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'process' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 62,
-              "column": 5
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 66,
-              "column": 17
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.subexpression",
-              "message": "Syntax node 'SubExpressionAst' is not supported by the typed compiler.",
-              "line": 68,
-              "column": 30
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.convert-path",
-              "message": "Command invocation 'Convert-Path' requires the PowerShell runtime.",
-              "line": 75,
-              "column": 23
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 76,
-              "column": 13
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.test-path",
-              "message": "Command invocation 'Test-Path' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 78,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 92,
-              "column": 25
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 100,
-              "column": 21
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.subexpression",
-              "message": "Syntax node 'SubExpressionAst' is not supported by the typed compiler.",
-              "line": 101,
-              "column": 51
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 102,
-              "column": 21
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 112,
-              "column": 21
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 117,
-              "column": 25
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.subexpression",
-              "message": "Syntax node 'SubExpressionAst' is not supported by the typed compiler.",
-              "line": 122,
-              "column": 33
-            },
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks and script-block literals require PowerShell runtime semantics.",
-              "line": 122,
-              "column": 56
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 125,
-              "column": 21
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 134,
-              "column": 21
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.enumdir",
-              "message": "Command invocation '_EnumDir' requires the PowerShell runtime.",
-              "line": 139,
-              "column": 28
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 143,
-              "column": 25
-            },
-            {
-              "code": "ScriptBlock",
-              "featureId": "scriptblock.typed",
-              "message": "Nested script blocks and script-block literals require PowerShell runtime semantics.",
-              "line": 145,
-              "column": 41
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 174,
-              "column": 21
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.measure-object",
-              "message": "Command invocation 'Measure-Object' requires the PowerShell runtime.",
-              "line": 175,
-              "column": 39
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 180,
-              "column": 21
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.subexpression",
-              "message": "Syntax node 'SubExpressionAst' is not supported by the typed compiler.",
-              "line": 189,
-              "column": 36
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-warning",
-              "message": "Command invocation 'Write-Warning' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 195,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 201,
-              "column": 9
-            }
-          ]
-        },
-        {
-          "unitId": "221af7ce565faaa37fceea96",
-          "name": "Get-ModuleCommand",
-          "relativePath": "functions/Get-ModuleCommand.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.register-argumentcompleter",
-              "message": "Command invocation 'Register-ArgumentCompleter' requires a registered semantic provider or a hosted PowerShell command region.",
-              "line": 1,
-              "column": 1
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "semantic.lowering.missing",
-              "message": "The semantic pipeline did not produce a lowered compilation contract.",
-              "line": 1,
-              "column": 1
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'begin' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 28,
-              "column": 5
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 31,
-              "column": 9
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 32,
-              "column": 9
-            },
-            {
-              "code": "RuntimeScope",
-              "featureId": "runtime.scope",
-              "message": "Variable '$PSBoundParameters' depends on PowerShell runtime scope.",
+              "featureId": "psb2961",
+              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
               "line": 33,
               "column": 9
             },
             {
               "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Syntax node 'FunctionDefinitionAst' is not supported by the typed compiler.",
-              "line": 36,
-              "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'process' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 80,
-              "column": 5
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.get-module",
-              "message": "Command invocation 'Get-Module' requires the PowerShell runtime.",
-              "line": 83,
-              "column": 24
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.first",
-              "message": "Command invocation 'First' requires the PowerShell runtime.",
-              "line": 83,
-              "column": 52
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.foreach-object",
-              "message": "Command invocation 'ForEach-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 83,
-              "column": 62
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.get-installedmodule",
-              "message": "Command invocation 'Get-InstalledModule' requires the PowerShell runtime.",
-              "line": 102,
-              "column": 24
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.foreach-object",
-              "message": "Command invocation 'ForEach-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 102,
-              "column": 46
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.get-module",
-              "message": "Command invocation 'Get-Module' requires the PowerShell runtime.",
-              "line": 127,
-              "column": 24
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.first",
-              "message": "Command invocation 'First' requires the PowerShell runtime.",
-              "line": 127,
-              "column": 64
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.foreach-object",
-              "message": "Command invocation 'ForEach-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 127,
-              "column": 74
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.get-module",
-              "message": "Command invocation 'Get-Module' requires the PowerShell runtime.",
-              "line": 133,
-              "column": 24
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.foreach-object",
-              "message": "Command invocation 'ForEach-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 133,
-              "column": 49
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.sort-object",
-              "message": "Command invocation 'Sort-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 140,
-              "column": 16
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 143,
-              "column": 9
+              "featureId": "psb2611",
+              "message": "CLR type 'DirectoryStat' is not available in the generated project reference set for the requested target.",
+              "line": 46,
+              "column": 23
             }
           ]
         },
@@ -2925,24 +2145,6 @@
               "message": "CLR type 'System.Windows.WindowStartupLocation' is not available in the generated project reference set for the requested target.",
               "line": 48,
               "column": 39
-            }
-          ]
-        },
-        {
-          "unitId": "0eee1da3754825f87b6c5906",
-          "name": "Get-PathVariable",
-          "relativePath": "functions/PathUtilities.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 16,
-              "column": 5
             }
           ]
         },
@@ -3289,6 +2491,13 @@
               "code": "ScriptBlock",
               "featureId": "scriptblock.typed",
               "message": "Typed script-block conversion currently requires a Boolean-returning delegate; 'System.Action' returns 'System.Void'.",
+              "line": 248,
+              "column": 59
+            },
+            {
+              "code": "ScriptBlock",
+              "featureId": "scriptblock.typed",
+              "message": "Typed script-block conversion currently requires a Boolean-returning delegate; 'System.Action' returns 'System.Void'.",
               "line": 261,
               "column": 50
             }
@@ -3336,6 +2545,20 @@
           "generatedRegionMemberNames": [],
           "causes": [
             {
+              "code": "ScriptBlock",
+              "featureId": "scriptblock.typed",
+              "message": "Typed script-block conversion currently requires a Boolean-returning delegate; 'System.Action' returns 'System.Void'.",
+              "line": 40,
+              "column": 58
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'RunspaceFactory' is not available in the generated project reference set for the requested target.",
+              "line": 61,
+              "column": 32
+            },
+            {
               "code": "UnsupportedSyntax",
               "featureId": "syntax.unsupported",
               "message": "CLR type 'System.Windows.TextWrapping' is not available in the generated project reference set for the requested target.",
@@ -3362,164 +2585,10 @@
           "causes": [
             {
               "code": "UnsupportedSyntax",
-              "featureId": "semantic.lowering.missing",
-              "message": "The semantic pipeline did not produce a lowered compilation contract.",
-              "line": 29,
-              "column": 1
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'begin' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 45,
-              "column": 5
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.clear-host",
-              "message": "Command invocation 'Clear-Host' requires the PowerShell runtime.",
-              "line": 49,
+              "featureId": "syntax.unsupported",
+              "message": "break must be inside a supported loop or scalar switch.",
+              "line": 78,
               "column": 13
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 52,
-              "column": 9
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 53,
-              "column": 9
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 56,
-              "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Syntax node 'FunctionDefinitionAst' is not supported by the typed compiler.",
-              "line": 66,
-              "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'process' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 75,
-              "column": 5
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 77,
-              "column": 13
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 84,
-              "column": 13
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 90,
-              "column": 13
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 104,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.read-host",
-              "message": "Command invocation 'Read-Host' requires the PowerShell runtime.",
-              "line": 105,
-              "column": 22
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.clearprompt",
-              "message": "Command invocation '_clearPrompt' requires the PowerShell runtime.",
-              "line": 109,
-              "column": 21
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.clearprompt",
-              "message": "Command invocation '_clearPrompt' requires the PowerShell runtime.",
-              "line": 114,
-              "column": 29
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.clearprompt",
-              "message": "Command invocation '_clearPrompt' requires the PowerShell runtime.",
-              "line": 120,
-              "column": 29
-            },
-            {
-              "code": "RuntimeScope",
-              "featureId": "runtime.scope",
-              "message": "Variable '$PSBoundParameters' depends on PowerShell runtime scope.",
-              "line": 151,
-              "column": 19
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 152,
-              "column": 13
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 156,
-              "column": 13
-            },
-            {
-              "code": "RuntimeScope",
-              "featureId": "runtime.scope",
-              "message": "Variable '$PSBoundParameters' depends on PowerShell runtime scope.",
-              "line": 157,
-              "column": 19
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.out-string",
-              "message": "Command invocation 'Out-String' requires the PowerShell runtime.",
-              "line": 158,
-              "column": 22
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 162,
-              "column": 13
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 165,
-              "column": 9
             }
           ]
         },
@@ -3717,409 +2786,10 @@
           "causes": [
             {
               "code": "UnsupportedSyntax",
-              "featureId": "semantic.lowering.missing",
-              "message": "The semantic pipeline did not produce a lowered compilation contract.",
-              "line": 1,
-              "column": 1
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'begin' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 45,
-              "column": 5
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 48,
-              "column": 9
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 49,
-              "column": 9
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-debug",
-              "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 50,
-              "column": 9
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-debug",
-              "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 51,
-              "column": 9
-            },
-            {
-              "code": "RuntimeScope",
-              "featureId": "runtime.scope",
-              "message": "Variable '$PSBoundParameters' depends on PowerShell runtime scope.",
-              "line": 52,
-              "column": 9
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.out-string",
-              "message": "Command invocation 'Out-String' requires the PowerShell runtime.",
-              "line": 52,
-              "column": 30
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-debug",
-              "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 52,
-              "column": 43
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Syntax node 'FunctionDefinitionAst' is not supported by the typed compiler.",
-              "line": 55,
-              "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'process' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 77,
-              "column": 5
-            },
-            {
-              "code": "RuntimeScope",
-              "featureId": "runtime.scope",
-              "message": "Variable '$PSCmdlet' depends on PowerShell runtime scope.",
-              "line": 79,
-              "column": 13
-            },
-            {
-              "code": "RuntimeScope",
-              "featureId": "runtime.scope",
-              "message": "Variable '$PSCmdlet' depends on PowerShell runtime scope.",
-              "line": 82,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-debug",
-              "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 83,
-              "column": 13
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-debug",
-              "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 87,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-debug",
-              "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 93,
-              "column": 13
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-debug",
-              "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 108,
-              "column": 13
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.subexpression",
-              "message": "Syntax node 'SubExpressionAst' is not supported by the typed compiler.",
-              "line": 109,
-              "column": 20
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-debug",
-              "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 116,
-              "column": 13
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 117,
-              "column": 90
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.foreach-object",
-              "message": "Command invocation 'ForEach-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 130,
-              "column": 42
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-debug",
-              "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 145,
-              "column": 13
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 147,
-              "column": 64
-            },
-            {
-              "code": "UnsupportedOperator",
-              "featureId": "operator.dotdot",
-              "message": "Binary operator 'DotDot' is not supported by the typed compiler.",
-              "line": 149,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.foreach-object",
-              "message": "Command invocation 'ForEach-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 149,
+              "featureId": "syntax.unsupported",
+              "message": "Typed dictionary literals require String keys; the homogeneous String representation also requires String values.",
+              "line": 119,
               "column": 26
-            },
-            {
-              "code": "UnsupportedOperator",
-              "featureId": "operator.dotdot",
-              "message": "Binary operator 'DotDot' is not supported by the typed compiler.",
-              "line": 150,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.foreach-object",
-              "message": "Command invocation 'ForEach-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 150,
-              "column": 26
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.foreach-object",
-              "message": "Command invocation 'ForEach-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 152,
-              "column": 29
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.display",
-              "message": "Command invocation 'display' requires the PowerShell runtime.",
-              "line": 164,
-              "column": 21
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.display",
-              "message": "Command invocation 'display' requires the PowerShell runtime.",
-              "line": 167,
-              "column": 21
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 170,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 173,
-              "column": 75
-            },
-            {
-              "code": "UnsupportedOperator",
-              "featureId": "operator.dotdot",
-              "message": "Binary operator 'DotDot' is not supported by the typed compiler.",
-              "line": 174,
-              "column": 24
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.foreach-object",
-              "message": "Command invocation 'ForEach-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 174,
-              "column": 33
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.display",
-              "message": "Command invocation 'display' requires the PowerShell runtime.",
-              "line": 184,
-              "column": 21
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.display",
-              "message": "Command invocation 'display' requires the PowerShell runtime.",
-              "line": 187,
-              "column": 21
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-debug",
-              "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 195,
-              "column": 13
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 197,
-              "column": 64
-            },
-            {
-              "code": "UnsupportedOperator",
-              "featureId": "operator.dotdot",
-              "message": "Binary operator 'DotDot' is not supported by the typed compiler.",
-              "line": 198,
-              "column": 22
-            },
-            {
-              "code": "UnsupportedOperator",
-              "featureId": "operator.dotdot",
-              "message": "Binary operator 'DotDot' is not supported by the typed compiler.",
-              "line": 199,
-              "column": 23
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.foreach-object",
-              "message": "Command invocation 'ForEach-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 200,
-              "column": 29
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.display",
-              "message": "Command invocation 'display' requires the PowerShell runtime.",
-              "line": 211,
-              "column": 21
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.display",
-              "message": "Command invocation 'display' requires the PowerShell runtime.",
-              "line": 214,
-              "column": 21
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 217,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 221,
-              "column": 77
-            },
-            {
-              "code": "UnsupportedOperator",
-              "featureId": "operator.dotdot",
-              "message": "Binary operator 'DotDot' is not supported by the typed compiler.",
-              "line": 222,
-              "column": 24
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.foreach-object",
-              "message": "Command invocation 'ForEach-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 222,
-              "column": 33
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.display",
-              "message": "Command invocation 'display' requires the PowerShell runtime.",
-              "line": 232,
-              "column": 21
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.display",
-              "message": "Command invocation 'display' requires the PowerShell runtime.",
-              "line": 235,
-              "column": 21
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-debug",
-              "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 245,
-              "column": 13
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-warning",
-              "message": "Command invocation 'Write-Warning' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 247,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.where-object",
-              "message": "Command invocation 'Where-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 250,
-              "column": 28
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-warning",
-              "message": "Command invocation 'Write-Warning' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 252,
-              "column": 17
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 260,
-              "column": 13
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.subexpression",
-              "message": "Syntax node 'SubExpressionAst' is not supported by the typed compiler.",
-              "line": 261,
-              "column": 46
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.subexpression",
-              "message": "Syntax node 'SubExpressionAst' is not supported by the typed compiler.",
-              "line": 266,
-              "column": 34
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-host",
-              "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 273,
-              "column": 9
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.write-verbose",
-              "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 276,
-              "column": 9
             }
           ]
         }
@@ -4129,9 +2799,9 @@
       "packet": "platyps",
       "stableUnits": 41,
       "functions": 40,
-      "emitted": 22,
-      "retained": 18,
-      "sourceExplanationSha256": "1f9db57e7ca2680c99fb3c944c4a13bb3ad826381169da53f7c7f279e84df078",
+      "emitted": 24,
+      "retained": 16,
+      "sourceExplanationSha256": "30d691e44d386e72929b0f5640b6978883a1e261da70e1d266e323156f18f5d5",
       "functionsRetained": [
         {
           "unitId": "62d3e169b4f7eb162da5636b",
@@ -4148,6 +2818,20 @@
               "message": "Parameter '$Session' has CLR type 'System.Management.Automation.Runspaces.PSSession' that requires a target capability unavailable to this compilation.",
               "line": 60,
               "column": 9
+            },
+            {
+              "code": "UnsupportedParameterType",
+              "featureId": "parameter.type",
+              "message": "Parameter '$MamlCommandObject' uses authored type 'Markdown.MAML.Model.MAML.MamlCommand', which cannot be resolved in the selected compilation environment.",
+              "line": 135,
+              "column": 17
+            },
+            {
+              "code": "UnsupportedParameterType",
+              "featureId": "parameter.type",
+              "message": "Parameter '$mamlObject' uses authored type 'Markdown.MAML.Model.MAML.MamlCommand', which cannot be resolved in the selected compilation environment.",
+              "line": 167,
+              "column": 17
             }
           ]
         },
@@ -4184,94 +2868,6 @@
               "message": "Parameter '$Session' has CLR type 'System.Management.Automation.Runspaces.PSSession' that requires a target capability unavailable to this compilation.",
               "line": 380,
               "column": 9
-            }
-          ]
-        },
-        {
-          "unitId": "0abfa2bb8ea766da0c2a053e",
-          "name": "Merge-MarkdownHelp",
-          "relativePath": "platyPS.psm1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "semantic.lowering.missing",
-              "message": "The semantic pipeline did not produce a lowered compilation contract.",
-              "line": 478,
-              "column": 1
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "parameter.default",
-              "message": "Parameter '$Encoding' declares a default value that cannot be preserved by this typed target.",
-              "line": 490,
-              "column": 43
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'begin' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 499,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "pipeline.lifecycle",
-              "message": "The 'process' block requires PowerShell pipeline lifecycle semantics.",
-              "line": 505,
-              "column": 5
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Syntax node 'FunctionDefinitionAst' is not supported by the typed compiler.",
-              "line": 512,
-              "column": 9
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.log",
-              "message": "Command invocation 'log' requires the PowerShell runtime.",
-              "line": 532,
-              "column": 13
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Syntax node 'FunctionDefinitionAst' is not supported by the typed compiler.",
-              "line": 536,
-              "column": 9
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.gettags",
-              "message": "Command invocation 'getTags' requires the PowerShell runtime.",
-              "line": 544,
-              "column": 20
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.log",
-              "message": "Command invocation 'log' requires the PowerShell runtime.",
-              "line": 545,
-              "column": 9
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.group-object",
-              "message": "Command invocation 'Group-Object' requires the PowerShell runtime.",
-              "line": 546,
-              "column": 40
-            },
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.foreach-object",
-              "message": "Command invocation 'ForEach-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
-              "line": 549,
-              "column": 23
             }
           ]
         },
@@ -4322,10 +2918,10 @@
           "causes": [
             {
               "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 831,
-              "column": 13
+              "featureId": "control.finally.stream-stop",
+              "message": "Non-success streams from finally during downstream stop require PowerShell preference and variable-capture handling that the generated command host cannot yet preserve.",
+              "line": 782,
+              "column": 1
             }
           ]
         },
@@ -4344,24 +2940,6 @@
               "message": "Non-success streams from finally during downstream stop require PowerShell preference and variable-capture handling that the generated command host cannot yet preserve.",
               "line": 954,
               "column": 1
-            }
-          ]
-        },
-        {
-          "unitId": "1564e8cb7c7afb359d7ee415",
-          "name": "GetAboutTopicsFromPath",
-          "relativePath": "platyPS.psm1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 1432,
-              "column": 5
             }
           ]
         },
@@ -4491,36 +3069,36 @@
             },
             {
               "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
+              "featureId": "syntax.unsupported",
+              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
               "line": 2287,
               "column": 5
             },
             {
               "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
+              "featureId": "syntax.unsupported",
+              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
               "line": 2295,
               "column": 5
             },
             {
               "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
+              "featureId": "syntax.unsupported",
+              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
               "line": 2305,
               "column": 5
             },
             {
               "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
+              "featureId": "syntax.unsupported",
+              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
               "line": 2320,
               "column": 5
             },
             {
               "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
+              "featureId": "syntax.unsupported",
+              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; filters and header parameters remain hosted.",
               "line": 2325,
               "column": 5
             }
@@ -4541,13 +3119,6 @@
               "message": "Parameter '$Session' has CLR type 'System.Management.Automation.Runspaces.PSSession' that requires a target capability unavailable to this compilation.",
               "line": 2396,
               "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.functiondefinition",
-              "message": "Statement 'FunctionDefinitionAst' is not yet represented by the bound pipeline.",
-              "line": 2402,
-              "column": 5
             }
           ]
         },
@@ -4566,23 +3137,66 @@
               "message": "OutputType metadata requires literal names or resolvable CLR types representable on this target.",
               "line": 2518,
               "column": 5
+            },
+            {
+              "code": "UnsupportedParameterType",
+              "featureId": "parameter.type",
+              "message": "Parameter '$ParameterObject' uses authored type 'Markdown.MAML.Model.MAML.MamlParameter', which cannot be resolved in the selected compilation environment.",
+              "line": 2649,
+              "column": 13
             }
           ]
         }
       ]
     }
   ],
-  "compilerBaselineCommit": "e6d209809f049b71a31d881d8e713190b4cce0e4",
+  "compilerBaselineCommit": "870988559cf6151591818d4a6db7ec641816b5d4",
   "compilerSourceHashes": [
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.ScriptBlocks.cs",
-      "sha256": "15354386f96cfb53b71719d2ba196ff1cd4b9223b9770901a2b3a19390b49b10"
+      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.ScriptBlocks.cs",
+      "sha256": "2258b4ef9a40fd3185789f4742414f36fcf4275476fb92de8b5b3e45c68b1c8b"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.cs",
+      "sha256": "9efd3933df669ace2893273c5cbdfa248525ba9018e2f40c77f3cf65401a6458"
     },
     {
       "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
-      "sha256": "eac98e80f0374bea28b9dace1a727e332e8857006566a4f76e09b68014972f86"
+      "sha256": "8f837f90dd95e756225c0eaa6fa476dd33647f6a93fcb742fe6bb0de1d35bcc1"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.ScriptBlocks.cs",
+      "sha256": "3b188a3264ab2db74c8e800ad812d323ac1074155d9a0f0c1fba6339c436251f"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs",
+      "sha256": "d9adbe7a37da32c9611cc98002e65407803f425ed11a5130b9d5620b39458f39"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeScriptBlock.cs",
+      "sha256": "c8464c8767f6536a1e45e84249be3647eb9aafe43aade2c296f2c91d91aaf00c"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeScriptBlock.cs",
+      "sha256": "e08abe3a1200789b4e41431b2e116030d1b0d479785b8c4b1d0d9844f8211c92"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs",
+      "sha256": "3f9928b1811c8a36537af15ba590ef6a22fc79da7d396950d128bc7cf96c3e40"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/PowerShellCommandHostRuntimeSource.cs",
+      "sha256": "d114f59358d4bbb0e19d36956d6ae7e00904d0cc5bc0d3dd34049805caff9fd3"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.cs",
+      "sha256": "af39a7d7a51e2f866e842b5c9820607f4287438228a26507903c58d94ad42770"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.NestedDeclarations.cs",
+      "sha256": "c6fb82da0ac365afb2c6e4e98a4b0a36d7df0f80febb7c35bdf725b5dbf61095"
     }
   ],
-  "dispositionComparison": "m29a-method-block-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "e6d209809f049b71a31d881d8e713190b4cce0e4"
+  "dispositionComparison": "m29a-nested-function-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "870988559cf6151591818d4a6db7ec641816b5d4"
 }
