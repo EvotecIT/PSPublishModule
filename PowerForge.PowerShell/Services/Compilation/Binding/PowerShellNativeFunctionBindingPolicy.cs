@@ -94,6 +94,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
            RequiresNativeCommandSwitch(function, capabilities) ||
            RequiresNativeConditionalMemberCapture(function) ||
            RequiresNativeVariableIndex(function) ||
+           RequiresNativeModuleStateStringConversion(function) ||
            function.Body.Find(static node => node is ArrayExpressionAst array &&
                array.SubExpression.Statements.Any(static statement => statement is AssignmentStatementAst),
                searchNestedScriptBlocks: false) is not null ||
@@ -170,6 +171,35 @@ internal static class PowerShellNativeFunctionBindingPolicy
         return value is HashtableAst || value is ConvertExpressionAst conversion &&
             PowerShellDictionarySemanticBinder.IsOrderedHashtableConversion(conversion);
     }
+
+    // A direct typed module-state read needs invocation-owned conversion, but
+    // derived values that escape into locals, calls, or loops stay guarded.
+    private static bool RequiresNativeModuleStateStringConversion(FunctionDefinitionAst function)
+        => function.Body.Find(static node => node is ConvertExpressionAst conversion &&
+            conversion.Child is VariableExpressionAst variable &&
+            variable.VariablePath.IsScript &&
+            conversion.Type.TypeName.GetReflectionType() is { } targetType &&
+            PowerShellStringificationScopePolicy.HasStringElement(targetType) && IsDirectReturnedModuleStateRead(conversion),
+            searchNestedScriptBlocks: false) is not null;
+
+    private static bool IsDirectReturnedModuleStateRead(ConvertExpressionAst conversion)
+    {
+        if (conversion.Parent is not CommandExpressionAst { Parent: PipelineAst { Parent: ParenExpressionAst parenthesized } } ||
+            parenthesized.Parent is not Ast read || read is InvokeMemberExpressionAst)
+            return false;
+        if (read is MemberExpressionAst member &&
+            (member.Member is not StringConstantExpressionAst name ||
+             !name.Value.Equals("Length", StringComparison.OrdinalIgnoreCase)))
+            return false;
+        if (read is IndexExpressionAst index && !IsSimpleIndex(PowerShellSemanticBinder.UnwrapExpression(index.Index)))
+            return false;
+        if (read is not MemberExpressionAst and not IndexExpressionAst) return false;
+        return read.Parent is CommandExpressionAst { Parent: PipelineAst { Parent: ReturnStatementAst } };
+    }
+
+    private static bool IsSimpleIndex(Ast index)
+        => index is VariableExpressionAst or ConstantExpressionAst or StringConstantExpressionAst ||
+           index is UnaryExpressionAst { TokenKind: TokenKind.Plus or TokenKind.Minus, Child: ConstantExpressionAst };
 
     // Preserve already-qualified typed direct returns, assignments, and
     // indexed mutation. A map read consumed by an if condition or emitted as

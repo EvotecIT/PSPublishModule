@@ -18,6 +18,21 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             param([int] $Index)
             return ([string[]]$script:Items)[$Index]
         }
+        function Get-TypedStateLengthLowercase {
+            [CmdletBinding()]
+            param()
+            return ([string]$script:Text).length
+        }
+        function Get-TypedStateLastLiteral {
+            [CmdletBinding()]
+            param()
+            return ([string[]]$script:Items)[-1]
+        }
+        function Get-TypedStateLastSpaced {
+            [CmdletBinding()]
+            param()
+            return ([string[]]$script:Items)[ - 1 ]
+        }
         function Set-TypedStateText {
             [CmdletBinding()]
             param([AllowNull()][object] $Value)
@@ -28,11 +43,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             param([AllowNull()][object] $Value)
             $script:Items = $Value
         }
-        Export-ModuleMember -Function Get-TypedStateLength, Get-TypedStateItem, Set-TypedStateText, Set-TypedStateItems
+        Export-ModuleMember -Function Get-TypedStateLength, Get-TypedStateItem, Get-TypedStateLengthLowercase, Get-TypedStateLastLiteral, Get-TypedStateLastSpaced, Set-TypedStateText, Set-TypedStateItems
         """;
 
     [Fact]
-    public void Compile_AuthoredModuleStateConversionOwnsTypedAccessAndEvaluatesIndexInputsOnce()
+    public void Compile_AuthoredModuleStateStringConversionsUseNativeInvocation()
     {
         var document = PowerShellSourceParser.Parse(
             HybridTypedModuleStateAccessSource,
@@ -44,43 +59,43 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationCapabilities.HybridModule);
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
-        var lengthGetter = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Get-TypedStateLength");
-        var lengthMember = Assert.IsType<PowerShellBoundClrMemberExpression>(
-            Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(lengthGetter.Body.Statements)).Expression);
-        var lengthConversion = Assert.IsType<PowerShellBoundConversionExpression>(lengthMember.Receiver);
-        Assert.Equal(PowerShellTypeFactProvenance.Explicit, lengthConversion.Type.Provenance);
-        Assert.Equal(
-            PowerShellRuntimeStateIntrinsicKind.ModuleVariable,
-            Assert.IsType<PowerShellBoundRuntimeStateExpression>(lengthConversion.Operand).Kind);
+        foreach (var name in new[] { "Get-TypedStateLength", "Get-TypedStateItem", "Get-TypedStateLengthLowercase", "Get-TypedStateLastLiteral", "Get-TypedStateLastSpaced" })
+        {
+            Assert.NotNull(Assert.Single(result.Analyzed.Functions, function => function.Symbol.Name == name).NativeFunctionBinding);
+            Assert.NotNull(Assert.Single(result.Emitted.Methods, method => method.GeneratedName == name.Replace('-', '_')).NativeFunctionBinding);
+        }
+    }
 
-        var getter = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Get-TypedStateItem");
-        var index = Assert.IsType<PowerShellBoundIndexExpression>(
-            Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(getter.Body.Statements)).Expression);
-        var conversion = Assert.IsType<PowerShellBoundConversionExpression>(index.Target);
-        Assert.Equal(PowerShellTypeFactProvenance.Explicit, conversion.Type.Provenance);
-        Assert.Equal(
-            PowerShellRuntimeStateIntrinsicKind.ModuleVariable,
-            Assert.IsType<PowerShellBoundRuntimeStateExpression>(conversion.Operand).Kind);
+    [Theory]
+    [InlineData("return ([string]$script:Text).Length")]
+    [InlineData("return ([string[]]$script:Items)[0]")]
+    public void Compile_AuthoredModuleStateStringConversionsRemainGuardedWithoutNativeBinding(string body)
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Get-State { [CmdletBinding()] param() " + body + " }",
+            Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "hybrid-guarded-module-state-access.psm1"));
+        var capabilities = PowerShellCompilationCapabilities.HybridModule & ~PowerShellCompilationCapability.NativeFunctionBinding;
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0", capabilities);
 
-        var loweredGetter = Assert.Single(result.Lowered.Functions, static function => function.Symbol.Name == "Get-TypedStateItem");
-        var loweredIndex = Assert.IsType<PowerShellLoweredIndexExpression>(
-            Assert.IsType<PowerShellLoweredReturnStatement>(Assert.Single(loweredGetter.Statements)).Expression);
-        Assert.StartsWith("__pf_index_target_", loweredIndex.TargetTemporary, StringComparison.Ordinal);
-        Assert.StartsWith("__pf_index_key_", loweredIndex.IndexTemporary, StringComparison.Ordinal);
-        Assert.NotEqual(loweredIndex.TargetTemporary, loweredIndex.IndexTemporary);
+        Assert.Contains(result.Emitted.Diagnostics, static diagnostic =>
+            diagnostic.Code == PowerShellStringificationScopePolicy.DiagnosticCode);
+        Assert.DoesNotContain(result.Emitted.Methods, static method => method.GeneratedName == "Get_State");
+    }
 
-        var source = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Get_TypedStateItem").Source;
-        Assert.Equal(1, CountOccurrences(source, "__readPowerShellModuleVariable(\"Items\")"));
-        Assert.Equal(1, CountOccurrences(source, "var " + loweredIndex.TargetTemporary + " ="));
-        Assert.Equal(1, CountOccurrences(source, "var " + loweredIndex.IndexTemporary + " ="));
-        Assert.True(
-            source.IndexOf("var " + loweredIndex.TargetTemporary + " =", StringComparison.Ordinal) <
-            source.IndexOf("var " + loweredIndex.IndexTemporary + " =", StringComparison.Ordinal));
-        Assert.Equal(
-            1,
-            CountOccurrences(
-                Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Get_TypedStateLength").Source,
-                "__readPowerShellModuleVariable(\"Text\")"));
+    [Theory]
+    [InlineData("[string] $copy = [string]$script:Text; return $copy.Length")]
+    [InlineData("return ([string]$script:Text).Substring(1)")]
+    public void Analyze_DerivedModuleStateStringConversionDoesNotSelectNativeRead(string body)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-State { [CmdletBinding()] param() " + body + " }", ".psm1");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath, PowerShellCompilationMode.Analyze, targetFramework: "net10.0",
+            capabilities: PowerShellCompilationCapabilities.HybridModule));
+
+        var function = FindFunction(plan, "Get-State");
+        Assert.False(function.IsCompilable);
+        Assert.NotEmpty(function.Diagnostics);
     }
 
     [Theory]
@@ -104,21 +119,23 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(4, result.Manifest!.CompiledMethods);
+        Assert.Equal(7, result.Manifest!.CompiledMethods);
         var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest.UnitDispositionLedger);
         var item = Assert.Single(ledger.Entries, static entry => entry.Name == "Get-TypedStateItem");
         Assert.True(item.RuntimeRouted);
         Assert.False(item.ShapingFallback);
-        Assert.Equal(1, item.ModuleStateReadBoundaryCrossings);
-        Assert.Contains(item.BoundaryCauses, static cause =>
-            cause.Contains("$script:Items", StringComparison.Ordinal));
+        Assert.True(item.UsesNativeFunctionBinding);
+        Assert.Equal(0, item.ModuleStateReadBoundaryCrossings);
 
         const string proof =
             "'length:' + (Get-TypedStateLength); " +
             "'first:' + (Get-TypedStateItem -Index 0); " +
             "'last:' + (Get-TypedStateItem -Index -1); " +
+            "'lowercase-length:' + (Get-TypedStateLengthLowercase); 'literal-last:' + (Get-TypedStateLastLiteral); 'spaced-last:' + (Get-TypedStateLastSpaced); " +
             "$value = Get-TypedStateItem -Index 4; if ($null -eq $value) { 'missing:null' } else { 'missing:' + $value }; " +
             "Set-TypedStateText -Value $null; 'empty-length:' + (Get-TypedStateLength); " +
+            "$global:callbackHits=0; $token=[pscustomobject]@{}; Add-Member -InputObject $token -MemberType ScriptMethod -Name ToString -Force -Value { $global:callbackHits++; 'token' }; " +
+            "Set-TypedStateText -Value $token; 'callback-length:' + (Get-TypedStateLength); 'callback-count:' + $global:callbackHits; " +
             "Set-TypedStateItems -Value 'scalar'; 'scalar:' + (Get-TypedStateItem -Index 0); " +
             "Set-TypedStateItems -Value $null; try { Get-TypedStateItem -Index 0; 'null:missed' } catch { 'null:' + (($_.FullyQualifiedErrorId -split ',')[0]) }";
         var interpreted = RunModuleProof(fixture.ScriptPath, proof, host);
@@ -130,8 +147,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             "length:5",
             "first:one",
             "last:two",
+            "lowercase-length:5",
+            "literal-last:two",
+            "spaced-last:two",
             "missing:null",
             "empty-length:0",
+            "callback-length:5",
+            "callback-count:1",
             "scalar:scalar",
             "null:NullArray"
         }, compiled.Split(Environment.NewLine));
@@ -253,6 +275,4 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 
-    private static int CountOccurrences(string text, string value)
-        => (text.Length - text.Replace(value, string.Empty, StringComparison.Ordinal).Length) / value.Length;
 }

@@ -8,7 +8,7 @@ internal static class PowerShellStringificationScopePolicy
            value.Type.ClrType != typeof(void) &&
            !PowerShellStableScalarTypePolicy.IsSupported(value.Type);
 
-    private static bool HasStringElement(Type type)
+    internal static bool HasStringElement(Type type)
         => type == typeof(string) || type.IsArray && HasStringElement(type.GetElementType()!);
 
     internal const string DiagnosticCode = "PSB2240";
