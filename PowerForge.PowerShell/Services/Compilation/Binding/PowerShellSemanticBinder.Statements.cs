@@ -383,9 +383,13 @@ internal sealed partial class PowerShellSemanticBinder
             return new PowerShellBoundContinueStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));
         if (statement is BreakStatementAst labeledBreak && labeledBreak.Label is not null)
         {
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                PowerShellControlFlowBindingPolicy.FindLocalLabeledLoop(labeledBreak, labeledBreak.Label) is { } targetLoop)
+                return new PowerShellBoundBreakStatement(PowerShellSourceParser.GetSpan(document, labeledBreak.Extent),
+                    PowerShellSourceParser.GetSpan(document, targetLoop.Extent));
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2313",
-                "Labeled break is not supported by the typed compiler.",
+                "Labeled break requires a literal label resolving to one enclosing native loop in the same authored body.",
                 PowerShellSourceParser.GetSpan(document, labeledBreak.Extent)));
             return null;
         }
@@ -399,9 +403,13 @@ internal sealed partial class PowerShellSemanticBinder
         }
         if (statement is ContinueStatementAst labeledContinue && labeledContinue.Label is not null)
         {
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                PowerShellControlFlowBindingPolicy.FindLocalLabeledLoop(labeledContinue, labeledContinue.Label) is { } targetLoop)
+                return new PowerShellBoundContinueStatement(PowerShellSourceParser.GetSpan(document, labeledContinue.Extent),
+                    PowerShellSourceParser.GetSpan(document, targetLoop.Extent));
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2315",
-                "Labeled continue is not supported by the typed compiler.",
+                "Labeled continue requires a literal label resolving to one enclosing native loop in the same authored body.",
                 PowerShellSourceParser.GetSpan(document, labeledContinue.Extent)));
             return null;
         }

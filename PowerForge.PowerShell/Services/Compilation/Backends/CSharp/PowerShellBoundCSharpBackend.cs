@@ -58,6 +58,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             return candidate;
         }
         _getTemporaryIdentifier = GetTemporaryIdentifier;
+        InitializeLoopTransfers(function, GetTemporaryIdentifier);
         var discardHelper = ContainsDiscardValue(function.Statements)
             ? GetTemporaryIdentifier("discardValue")
             : null;
@@ -315,19 +316,20 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 {
                     builder.Append(prefix).Append("while (").Append(EmitExpression(loop.Condition)).AppendLine(")");
                     EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
-                        loop.CheckHostInterrupts, successOutputSink);
+                        loop.CheckHostInterrupts, successOutputSink, loop.Span);
                 }
                 else
                 {
                     builder.Append(prefix).AppendLine("do");
                     EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
-                        loop.CheckHostInterrupts, successOutputSink);
+                        loop.CheckHostInterrupts, successOutputSink, loop.Span);
                     builder.Append(prefix).Append("while (");
                     if (loop.Kind == PowerShellLoweredLoopKind.DoUntil) builder.Append("!(");
                     builder.Append(EmitExpression(loop.Condition));
                     if (loop.Kind == PowerShellLoweredLoopKind.DoUntil) builder.Append(')');
                     builder.AppendLine(");");
                 }
+                EmitLoopTransferTarget(builder, loop.Span, prefix, isContinue: false);
                 return;
             case PowerShellLoweredForStatement loop:
                 var initializer = loop.Initializer is null
@@ -337,10 +339,12 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 var iterator = loop.Iterator is null ? string.Empty : EmitExpression(loop.Iterator);
                 builder.Append(prefix).Append("for (").Append(initializer).Append("; ").Append(condition).Append("; ").Append(iterator).AppendLine(")");
                 EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
-                    loop.CheckHostInterrupts, successOutputSink);
+                    loop.CheckHostInterrupts, successOutputSink, loop.Span);
+                EmitLoopTransferTarget(builder, loop.Span, prefix, isContinue: false);
                 return;
             case PowerShellLoweredForEachStatement loop:
                 EmitForEach(builder, loop, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+                EmitLoopTransferTarget(builder, loop.Span, prefix, isContinue: false);
                 return;
             case PowerShellLoweredSwitchStatement switchStatement:
                 EmitSwitch(builder, switchStatement, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
@@ -409,11 +413,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
                         successOutputSink: successOutputSink);
                 }
                 return;
-            case PowerShellLoweredBreakStatement:
-                builder.Append(prefix).AppendLine("break;");
+            case PowerShellLoweredBreakStatement transfer:
+                EmitLoopTransfer(builder, transfer.TargetLoop, prefix, isContinue: false);
                 return;
-            case PowerShellLoweredContinueStatement:
-                builder.Append(prefix).AppendLine("continue;");
+            case PowerShellLoweredContinueStatement transfer:
+                EmitLoopTransfer(builder, transfer.TargetLoop, prefix, isContinue: true);
                 return;
             default:
                 throw new InvalidOperationException($"Lowered statement '{statement.GetType().Name}' has no C# rendering owner.");

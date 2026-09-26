@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Literal labels resolving to enclosing native loops in the same authored body; same-input no-loss comparison. Execution is distinct from emission.",
+  "baselineCompilerCommit": "93ede3e4b18fd50f80e3625b0ea92110b71b29ab",
+  "baselineComparison": "m29a-scalar-receiver-comparison.net10.json",
+  "baselineComparisonSha256": "8907688da74f4f82add5708f1a7dea13eed9e78c9acb78a6fc8cc5dc1529778a",
+  "baselineRetainedInventory": "m29a-retained-functions.net10.json at baselineCompilerCommit",
+  "baselineRetainedInventorySha256": "24249a882ef851fb7c83d3b13f088602c99f01686d57b8f9cf141fef5b12e3c0",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 455,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "baselineEmitted": 242,
+      "candidateEmitted": 242,
+      "candidateExplanationSha256": "2657e1acde0a75449fecacc1ec2a25a193ad83c9803ae674b6f2a3d847a143c0",
+      "changes": []
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "baselineEmitted": 55,
+      "candidateEmitted": 57,
+      "candidateExplanationSha256": "94577f0aa3ef83bc6b73bb0e78ed688c386fc30ed51c6b123c09477acbe991f6",
+      "changes": [
+        {
+          "unitId": "9620fa3e611793d93f7a99e7",
+          "name": "Get-ADComputersToProcess",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [
+            "__PowerForgeRegion_111d856537b14f20b6acdd20"
+          ],
+          "candidateRegionMembers": [],
+          "baselineCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "Labeled continue is not supported by the typed compiler.",
+              "line": 69,
+              "column": 29
+            }
+          ],
+          "candidateCauses": [],
+          "newExecutionQualification": true
+        },
+        {
+          "unitId": "9f24212f861897001c024cc6",
+          "name": "Request-ADComputersDelete",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "baselineCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "Labeled break is not supported by the typed compiler.",
+              "line": 96,
+              "column": 25
+            }
+          ],
+          "candidateCauses": [],
+          "newExecutionQualification": false
+        }
+      ]
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "baselineEmitted": 55,
+      "candidateEmitted": 55,
+      "candidateExplanationSha256": "eeda66ded0b2a18edcb08eba5f3191ea968f7f67b3069f21ce083286aa4523ce",
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "baselineEmitted": 79,
+      "candidateEmitted": 79,
+      "candidateExplanationSha256": "3f7a8255b426900d892072939533e56ff4fbfd82ac1c341ebc6f4d411f579f66",
+      "changes": []
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "baselineEmitted": 24,
+      "candidateEmitted": 24,
+      "candidateExplanationSha256": "33db727b972d0164311bb9bea1aa885067c91999c419f1f0775022b285fbe25e",
+      "changes": []
+    }
+  ],
+  "lostEmittedMethods": 0,
+  "lostRetainedRegions": 0,
+  "compilerSourceHashes": [
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.ControlFlow.cs",
+      "sha256": "f758e75e654bdd79e82f554415e1342188bb2b12dd79b832d3f136bae4c981f4"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.NativeEnumeration.cs",
+      "sha256": "dfb79f9d4704806f356864829952017938ff11fadf4c8c36276dab78f6ff7f59"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.cs",
+      "sha256": "7f42e16ea1d4bfdecb780ebd297b65ef9cf491c62b43bab5a1d08764025d9c6f"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellControlFlowBindingPolicy.cs",
+      "sha256": "b80eca72da6488ec431bfdfbaaeca7ef489dc4488ca43aac5433ceeb174644c1"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
+      "sha256": "3f38d64a1987f3dc2a9a49ee840a47496ba0529264a24edebc6828dabdadf177"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs",
+      "sha256": "c4719903ed4a7255bc4ca12acfd245ee344e482336dc9e770f9d370dfc748349"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundControlFlow.cs",
+      "sha256": "9bb416d7e9bdb5dd7cfe51a9a6c35ab682d736e69b4fa0841c9fed35dbda584e"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredControlFlow.cs",
+      "sha256": "3007d2eed139b70ff1de79e16b61603b88bbcb49c3b4bc6c0e7bee26f122048c"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.cs",
+      "sha256": "18997bf07150297fa6bab3da12fb8eb82a62203efc4472efc3079219061f148c"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.LoopTransfers.cs",
+      "sha256": "f5e5cfa30acaaece82496bff9cbf61f0f371eb7a4ddfef01d83d1ab7e9de5908"
+    }
+  ],
+  "newlyExecutedFunctions": [
+    "Get-ADComputersToProcess"
+  ],
+  "otherNewMethodsAreEmissionOnly": true,
+  "candidateEmitted": 457
+}

@@ -25,6 +25,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .Append("() => ").Append(scope).Append(".Cursor.Current").Append(EmitNativeAssignmentLocation(binding.Target)).AppendLine(";");
         foreach (var statement in loop.Statements)
             EmitStatement(builder, statement, indent + 2, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+        EmitLoopTransferTarget(builder, loop.Span, prefix + "        ", isContinue: true);
         builder.Append(prefix).AppendLine("    }");
         builder.Append(prefix).AppendLine("}");
     }

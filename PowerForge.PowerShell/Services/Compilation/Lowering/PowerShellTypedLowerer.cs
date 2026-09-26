@@ -549,8 +549,8 @@ internal sealed partial class PowerShellTypedLowerer
                 tryStatement.FinallyBlock is null ? null : LowerStatements(tryStatement.FinallyBlock, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
                 RequiresHostExceptionHandling(tryStatement, functions),
                 names.Allocate("pf_handler_exception"), names.Allocate("pf_handler_clause"), names.Allocate("pf_handler_record")),
-            PowerShellBoundBreakStatement => new PowerShellLoweredBreakStatement(statement.Span),
-            PowerShellBoundContinueStatement => new PowerShellLoweredContinueStatement(statement.Span),
+            PowerShellBoundBreakStatement transfer => new PowerShellLoweredBreakStatement(statement.Span, transfer.TargetLoop),
+            PowerShellBoundContinueStatement transfer => new PowerShellLoweredContinueStatement(statement.Span, transfer.TargetLoop),
             _ => throw new InvalidOperationException($"Bound statement '{statement.GetType().Name}' reached typed lowering without an owner.")
         };
 

@@ -4,8 +4,8 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "emitted": 455,
-  "retained": 110,
+  "emitted": 457,
+  "retained": 108,
   "dispositionContract": "Every function identity matches the accepted constructor/object comparison and its full baseline; no previously emitted method or still-retained region is lost.",
   "packets": [
     {
@@ -856,30 +856,10 @@
       "packet": "cleanup",
       "stableUnits": 69,
       "functions": 68,
-      "emitted": 55,
-      "retained": 13,
-      "sourceExplanationSha256": "659b8a7836f00f362051ca4983221e38e2b903ef9829259bd6b3eed058e1b22e",
+      "emitted": 57,
+      "retained": 11,
+      "sourceExplanationSha256": "94577f0aa3ef83bc6b73bb0e78ed688c386fc30ed51c6b123c09477acbe991f6",
       "functionsRetained": [
-        {
-          "unitId": "9620fa3e611793d93f7a99e7",
-          "name": "Get-ADComputersToProcess",
-          "relativePath": "Private/Get-ADComputersToProcess.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [
-            "__PowerForgeRegion_111d856537b14f20b6acdd20"
-          ],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Labeled continue is not supported by the typed compiler.",
-              "line": 69,
-              "column": 29
-            }
-          ]
-        },
         {
           "unitId": "2be0f84457750dd64ee0c5d1",
           "name": "Get-ADServiceAccountsToProcess",
@@ -987,31 +967,6 @@
               "message": "CLR type 'System.Collections.Generic.List[PSCustomObject]' is not available in the generated project reference set for the requested target.",
               "line": 14,
               "column": 29
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Labeled break is not supported by the typed compiler.",
-              "line": 151,
-              "column": 17
-            }
-          ]
-        },
-        {
-          "unitId": "9f24212f861897001c024cc6",
-          "name": "Request-ADComputersDelete",
-          "relativePath": "Private/Request-ADComputersDelete.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Labeled break is not supported by the typed compiler.",
-              "line": 96,
-              "column": 25
             }
           ]
         },
@@ -1030,13 +985,6 @@
               "message": "Typed dictionary literals require String keys; the homogeneous String representation also requires String values.",
               "line": 31,
               "column": 45
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Labeled break is not supported by the typed compiler.",
-              "line": 109,
-              "column": 25
             }
           ]
         },
@@ -1055,13 +1003,6 @@
               "message": "Typed dictionary literals require String keys; the homogeneous String representation also requires String values.",
               "line": 21,
               "column": 41
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Labeled break is not supported by the typed compiler.",
-              "line": 118,
-              "column": 33
             }
           ]
         },
@@ -1080,13 +1021,6 @@
               "message": "Parameter '$ObjectsToProcess' has CLR type 'System.Collections.Generic.List`1[[System.Management.Automation.PSObject, System.Management.Automation, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35]]' that requires a target capability unavailable to this compilation.",
               "line": 21,
               "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Labeled break is not supported by the typed compiler.",
-              "line": 32,
-              "column": 13
             }
           ]
         },
@@ -2993,13 +2927,49 @@
       ]
     }
   ],
-  "compilerBaselineCommit": "ffd255a049f89ace7bc63097bbb6839d2da60086",
+  "compilerBaselineCommit": "93ede3e4b18fd50f80e3625b0ea92110b71b29ab",
   "compilerSourceHashes": [
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeTypeArgumentPolicy.cs",
-      "sha256": "0d94a2b1e6b86de3c0403c23db8a0e23ee35d2414dcadf0213966128324e8743"
+      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.ControlFlow.cs",
+      "sha256": "f758e75e654bdd79e82f554415e1342188bb2b12dd79b832d3f136bae4c981f4"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.NativeEnumeration.cs",
+      "sha256": "dfb79f9d4704806f356864829952017938ff11fadf4c8c36276dab78f6ff7f59"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.cs",
+      "sha256": "7f42e16ea1d4bfdecb780ebd297b65ef9cf491c62b43bab5a1d08764025d9c6f"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellControlFlowBindingPolicy.cs",
+      "sha256": "b80eca72da6488ec431bfdfbaaeca7ef489dc4488ca43aac5433ceeb174644c1"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
+      "sha256": "3f38d64a1987f3dc2a9a49ee840a47496ba0529264a24edebc6828dabdadf177"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs",
+      "sha256": "c4719903ed4a7255bc4ca12acfd245ee344e482336dc9e770f9d370dfc748349"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundControlFlow.cs",
+      "sha256": "9bb416d7e9bdb5dd7cfe51a9a6c35ab682d736e69b4fa0841c9fed35dbda584e"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredControlFlow.cs",
+      "sha256": "3007d2eed139b70ff1de79e16b61603b88bbcb49c3b4bc6c0e7bee26f122048c"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.cs",
+      "sha256": "18997bf07150297fa6bab3da12fb8eb82a62203efc4472efc3079219061f148c"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.LoopTransfers.cs",
+      "sha256": "f5e5cfa30acaaece82496bff9cbf61f0f371eb7a4ddfef01d83d1ab7e9de5908"
     }
   ],
-  "dispositionComparison": "m29a-scalar-receiver-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "ffd255a049f89ace7bc63097bbb6839d2da60086"
+  "dispositionComparison": "m29a-labeled-loop-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "93ede3e4b18fd50f80e3625b0ea92110b71b29ab"
 }

@@ -19,6 +19,20 @@ internal static class PowerShellControlFlowBindingPolicy
 
     internal static bool HasContinuableAncestor(Ast syntax) => HasBreakableAncestor(syntax);
 
+    /// <summary>Resolves a literal label to its nearest matching loop in the current authored body.</summary>
+    internal static LoopStatementAst? FindLocalLabeledLoop(Ast transfer, ExpressionAst label)
+    {
+        if (label is not StringConstantExpressionAst literal || string.IsNullOrEmpty(literal.Value)) return null;
+        for (var parent = transfer.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst) return null;
+            if (parent is LabeledStatementAst labeled &&
+                string.Equals(labeled.Label, literal.Value, StringComparison.OrdinalIgnoreCase))
+                return parent as LoopStatementAst;
+        }
+        return null;
+    }
+
     internal static bool HasLoopTransferLeavingCapture(StatementAst capture)
         => capture.FindAll(static node => node is BreakStatementAst or ContinueStatementAst,
                 searchNestedScriptBlocks: false)

@@ -228,10 +228,14 @@ internal sealed class PowerShellLoweredTryStatement : PowerShellLoweredStatement
 
 internal sealed class PowerShellLoweredBreakStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredBreakStatement(SourceSpan span) : base(span) { }
+    internal PowerShellLoweredBreakStatement(SourceSpan span, SourceSpan? targetLoop = null) : base(span)
+        => TargetLoop = targetLoop;
+    internal SourceSpan? TargetLoop { get; }
 }
 
 internal sealed class PowerShellLoweredContinueStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredContinueStatement(SourceSpan span) : base(span) { }
+    internal PowerShellLoweredContinueStatement(SourceSpan span, SourceSpan? targetLoop = null) : base(span)
+        => TargetLoop = targetLoop;
+    internal SourceSpan? TargetLoop { get; }
 }

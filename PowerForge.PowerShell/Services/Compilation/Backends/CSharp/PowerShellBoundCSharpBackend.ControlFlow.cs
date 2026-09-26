@@ -35,7 +35,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         string? discardHelper,
         ICollection<PowerShellCompilationSourceMapEntry> sourceMap,
         bool checkHostInterrupts = false,
-        string? successOutputSink = null)
+        string? successOutputSink = null,
+        SourceSpan? continueTarget = null)
     {
         var prefix = new string(' ', indent * 4);
         builder.Append(prefix).AppendLine("{");
@@ -43,6 +44,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             builder.Append(prefix).AppendLine("    __checkLoopInterrupts();");
         foreach (var statement in statements)
             EmitStatement(builder, statement, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+        if (continueTarget is { } target) EmitLoopTransferTarget(builder, target, prefix + "    ", isContinue: true);
         builder.Append(prefix).AppendLine("}");
     }
 
@@ -182,6 +184,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         {
             EmitStatement(builder, nested, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
         }
+        EmitLoopTransferTarget(builder, loop.Span, prefix, isContinue: true);
     }
 
     private void EmitSwitch(

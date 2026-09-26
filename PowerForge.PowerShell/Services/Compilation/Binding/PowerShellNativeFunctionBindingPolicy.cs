@@ -96,6 +96,12 @@ internal static class PowerShellNativeFunctionBindingPolicy
                    TokenKind.Iin or TokenKind.Cin or TokenKind.Inotin or TokenKind.Cnotin } or
                UnaryExpressionAst { TokenKind: TokenKind.Join }, searchNestedScriptBlocks: false) is not null ||
            RequiresNativeObjectParameterForEach(function) ||
+           function.Body.Find(static node => node switch
+           {
+               BreakStatementAst { Label: not null } transfer => PowerShellControlFlowBindingPolicy.FindLocalLabeledLoop(transfer, transfer.Label) is not null,
+               ContinueStatementAst { Label: not null } transfer => PowerShellControlFlowBindingPolicy.FindLocalLabeledLoop(transfer, transfer.Label) is not null,
+               _ => false
+           }, searchNestedScriptBlocks: false) is not null ||
            RequiresNativeDictionaryKeyForEach(function) ||
            RequiresNativeStatementValue(function) ||
            RequiresNativeLiteralCommandValue(function, capabilities) ||

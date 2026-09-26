@@ -272,10 +272,14 @@ internal sealed class PowerShellBoundTryStatement : PowerShellBoundStatement
 
 internal sealed class PowerShellBoundBreakStatement : PowerShellBoundStatement
 {
-    internal PowerShellBoundBreakStatement(SourceSpan span) : base(span, PowerShellSemanticEffect.None) { }
+    internal PowerShellBoundBreakStatement(SourceSpan span, SourceSpan? targetLoop = null) : base(span, PowerShellSemanticEffect.None)
+        => TargetLoop = targetLoop;
+    internal SourceSpan? TargetLoop { get; }
 }
 
 internal sealed class PowerShellBoundContinueStatement : PowerShellBoundStatement
 {
-    internal PowerShellBoundContinueStatement(SourceSpan span) : base(span, PowerShellSemanticEffect.None) { }
+    internal PowerShellBoundContinueStatement(SourceSpan span, SourceSpan? targetLoop = null) : base(span, PowerShellSemanticEffect.None)
+        => TargetLoop = targetLoop;
+    internal SourceSpan? TargetLoop { get; }
 }
