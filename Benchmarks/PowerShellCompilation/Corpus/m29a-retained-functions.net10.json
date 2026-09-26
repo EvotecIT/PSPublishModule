@@ -4,17 +4,17 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "emitted": 469,
-  "retained": 96,
+  "emitted": 471,
+  "retained": 94,
   "dispositionContract": "Every function identity matches the accepted constructor/object comparison and its full baseline; no previously emitted method or still-retained region is lost.",
   "packets": [
     {
       "packet": "pssg",
       "stableUnits": 286,
       "functions": 282,
-      "emitted": 249,
-      "retained": 33,
-      "sourceExplanationSha256": "38ebc9592b5b9f9b20b9930dbdba3a6330edbd565f28e92d229a0c4bfc7ff1c1",
+      "emitted": 251,
+      "retained": 31,
+      "sourceExplanationSha256": "75dc64b4baed8822fd10e0db765fcf4345f5bce661ddcc7435586e26c893f993",
       "functionsRetained": [
         {
           "unitId": "005401f052dbe8e7f319d556",
@@ -322,26 +322,6 @@
           ]
         },
         {
-          "unitId": "1c672560f04a10b6199c1c2e",
-          "name": "Get-ComputerNetwork",
-          "relativePath": "Public/Computers/Get-ComputerNetwork.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [
-            "__PowerForgeRegion_d7ba65be688921b54b610de7"
-          ],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Typed indexed mutation requires simple '=' assignment to a local or parameter target.",
-              "line": 80,
-              "column": 21
-            }
-          ]
-        },
-        {
           "unitId": "ac21d9d86a616725839942bc",
           "name": "Get-ComputerOperatingSystem",
           "relativePath": "Public/Computers/Get-ComputerOperatingSystem.ps1",
@@ -523,24 +503,6 @@
               "message": "break must be inside a supported loop or scalar switch.",
               "line": 125,
               "column": 41
-            }
-          ]
-        },
-        {
-          "unitId": "be46767626a224a33e8835d3",
-          "name": "Format-TransposeTable",
-          "relativePath": "Public/Objects/Format-TransposeTable.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Typed indexed mutation requires simple '=' assignment to a local or parameter target.",
-              "line": 122,
-              "column": 25
             }
           ]
         },
@@ -2707,42 +2669,26 @@
   "compilerBaselineCommit": "e239ce8b9e17554a92f2189d2df277fb61034d6b",
   "compilerSourceHashes": [
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellSemanticAnalyzer.DictionaryOutput.cs",
-      "sha256": "401f398e4cb5d00b11d3991bc2cf378488c87c5417b70076150a92a906ebde6a"
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.AccessMutations.cs",
+      "sha256": "ee194eea80fd6f2cdddabced622d3be8bccb0b72cdac1510adfbd51f2ad763f2"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.cs",
-      "sha256": "ebd73b0b377d1a5da145e8c558198fd2d36f72a4ade3e6ddc93c954a81172e3b"
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Compilation.cs",
+      "sha256": "d9284ffd675cf659901fe06ac5ea9de72a806c69cbaa02f4f097545704521121"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellDictionarySemanticBinder.cs",
-      "sha256": "9f8e5da882c374ad28306a9c1a1ee023799c495d54bf7d11e0db9c5d40c0abd1"
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Declarations.cs",
+      "sha256": "eb65fdf2781d886fd4be62453f47eb72460e7fd03414a4ef52f631ecf82ad344"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
-      "sha256": "4c32c99123fa58a94c8140d9a1726c378a55482b4b8c54b4518cf1acb9278365"
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.NativeFunction.cs",
+      "sha256": "d7febe5f81efac492e467541f5c52a5351777f3f898932ab7a338d99d37b4e84"
     },
     {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Locals.cs",
-      "sha256": "ee1a0728839efa627379745a28c5e18598c623aa8a35bba23f1f6635708dc6b2"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundCollections.cs",
-      "sha256": "5cd7e445d069247e14ee614fc04af3c0f1dcbef5d085d9fa29bdffefab52d8d9"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/PowerShellCommandHostRuntimeSource.cs",
-      "sha256": "71ce3fe77565756e956bdd5cde1ef61c605cac9d19d7a24de4dc013029b6dfd6"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.NativeDictionaries.cs",
-      "sha256": "635fe5a5a8055bb728d32a3bea22ce7f91066048d77d219f4cac7af4a7a33511"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Dictionaries.cs",
-      "sha256": "5f5fb030df93211cc04f7eee0d141638bb7acbf66bfd94c73d27f33a4c5bc14c"
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.cs",
+      "sha256": "10cfde8f87916ea1f5dd00b12e124eb14fcf9692bbac53fa6c6a2c4da6dc3452"
     }
   ],
-  "dispositionComparison": "m29a-dictionary-key-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "e239ce8b9e17554a92f2189d2df277fb61034d6b"
+  "dispositionComparison": "m29a-expression-index-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "5feae23f61b598294e098280a6f423dbed06c36d"
 }

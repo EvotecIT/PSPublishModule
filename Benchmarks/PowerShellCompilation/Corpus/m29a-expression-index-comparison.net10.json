@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Bounded native arithmetic, parentheses and single-expression subexpression index targets preserve assignment ordering and failure positions. Transpose is executed offline; computer network inventory is emission-only.",
+  "baselineCompilerCommit": "5feae23f61b598294e098280a6f423dbed06c36d",
+  "baselineComparison": "m29a-bare-throw-comparison.net10.json",
+  "baselineComparisonSha256": "a844021c798bfd5c9c1bcb0188621e094fc8ffadb98ab146497012694b31cb83",
+  "baselineRetainedInventory": "m29a-retained-functions.net10.json at baselineCompilerCommit",
+  "baselineRetainedInventorySha256": "49e8adc78f24db3625dfd1777b7ca30f3f50a0e28b4714d5b31239423641b88e",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 469,
+  "candidateEmitted": 471,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "baselineEmitted": 249,
+      "candidateEmitted": 251,
+      "candidateExplanationSha256": "75dc64b4baed8822fd10e0db765fcf4345f5bce661ddcc7435586e26c893f993",
+      "changes": [
+        {
+          "unitId": "1c672560f04a10b6199c1c2e",
+          "name": "Get-ComputerNetwork",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [
+            "__PowerForgeRegion_d7ba65be688921b54b610de7"
+          ],
+          "candidateRegionMembers": [],
+          "baselineCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "Typed indexed mutation requires simple '=' assignment to a local or parameter target.",
+              "line": 80,
+              "column": 21
+            }
+          ],
+          "candidateCauses": [],
+          "newExecutionQualification": false
+        },
+        {
+          "unitId": "be46767626a224a33e8835d3",
+          "name": "Format-TransposeTable",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "baselineCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "Typed indexed mutation requires simple '=' assignment to a local or parameter target.",
+              "line": 122,
+              "column": 25
+            }
+          ],
+          "candidateCauses": [],
+          "newExecutionQualification": true
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "baselineEmitted": 59,
+      "candidateEmitted": 59,
+      "candidateExplanationSha256": "92a40a4958d900fb27b09057ce13c568be73b30382040bb54d829a9d7095f17e",
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "baselineEmitted": 57,
+      "candidateEmitted": 57,
+      "candidateExplanationSha256": "bf72f44dfd97021241aae4a9c408360dd6bd22f8c702c18da95ace1633fd917b",
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "baselineEmitted": 80,
+      "candidateEmitted": 80,
+      "candidateExplanationSha256": "d1b9bce9d03bcf1f2683664817564d0f9932a89295091206b10b7d75b06e2294",
+      "changes": []
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "baselineEmitted": 24,
+      "candidateEmitted": 24,
+      "candidateExplanationSha256": "33db727b972d0164311bb9bea1aa885067c91999c419f1f0775022b285fbe25e",
+      "changes": []
+    }
+  ],
+  "lostEmittedMethods": 0,
+  "lostRetainedRegions": 0,
+  "compilerSourceHashes": [
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.AccessMutations.cs",
+      "sha256": "ee194eea80fd6f2cdddabced622d3be8bccb0b72cdac1510adfbd51f2ad763f2"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Compilation.cs",
+      "sha256": "d9284ffd675cf659901fe06ac5ea9de72a806c69cbaa02f4f097545704521121"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Declarations.cs",
+      "sha256": "eb65fdf2781d886fd4be62453f47eb72460e7fd03414a4ef52f631ecf82ad344"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.NativeFunction.cs",
+      "sha256": "d7febe5f81efac492e467541f5c52a5351777f3f898932ab7a338d99d37b4e84"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.cs",
+      "sha256": "10cfde8f87916ea1f5dd00b12e124eb14fcf9692bbac53fa6c6a2c4da6dc3452"
+    }
+  ],
+  "newlyExecutedFunctions": [
+    "Format-TransposeTable"
+  ],
+  "executionLimits": {
+    "Format-TransposeTable": "Both Windows hosts: unchanged source, PSCustomObject/ordered dictionary input, legacy/nonlegacy, three sort choices, direct/pipeline output. Twelve scenarios per host.",
+    "Get-ComputerNetwork": "Emission-only. No CIM, network, firewall or full-module execution."
+  },
+  "workflowSourceHashes": [
+    {
+      "name": "Format-TransposeTable",
+      "sha256": "fd5782749a1829df2e2cb948191976404b9ff90a837869c5dd1dc85db8dacbbe"
+    }
+  ]
+}

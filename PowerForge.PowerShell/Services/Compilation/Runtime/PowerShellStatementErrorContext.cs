@@ -73,10 +73,10 @@ namespace PowerForge.Generated.Runtime
         {
             ThrowIfDisposed();
             var extent = CreateExtent(file, line, column, endLine, endColumn, sourceText);
-            if (_nativeFunction is null && _expressionErrorExtents?.TryGetValue(error, out var expressionExtent) == true)
+            if (_nativeFunction is null && ExpressionErrorExtents.TryGetValue(error, out var expressionExtent))
             {
                 extent = expressionExtent;
-                _expressionErrorExtents.Remove(error);
+                ExpressionErrorExtents.Remove(error);
             }
             _lastErrorExtent = extent;
             if (_nativeFunction is not null)

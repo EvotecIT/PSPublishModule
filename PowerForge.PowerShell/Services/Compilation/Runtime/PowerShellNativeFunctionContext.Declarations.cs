@@ -22,7 +22,7 @@ namespace PowerForge.Generated.Runtime
             if (!_assignments.TryGetValue(key, out var assignment))
                 _assignments.Add(key, assignment = CreateAssignmentTarget(target, operation, file, line, column,
                     sourceDocument, startOffset, endOffset));
-            return assignment.Invoke(FunctionContext, value);
+            return assignment.Invoke(FunctionContext, value, rightHandSideFirst: operation == "Assign");
         }
 
         private NativeAstOperation CreateAssignmentTarget(string target, string operation, string file, int line, int column,
@@ -67,7 +67,9 @@ namespace PowerForge.Generated.Runtime
             var placeholder = new CommandExpressionAst(extent, new ConstantExpressionAst(extent, null), null);
             var detached = new AssignmentStatementAst(extent, (ExpressionAst)targetAst.Copy(), token, placeholder, extent);
             var ast = new ScriptBlockAst(extent, null, new StatementBlockAst(extent, new[] { detached }, null), isFilter: false);
-            var native = new NativeAstCompiler(this, ast, assignmentVariables: true);
+            var native = new NativeAstCompiler(this, ast, assignmentVariables: true,
+                preserveSelectedSequencePoints: targetAst.Find(static node => node is SubExpressionAst,
+                    searchNestedScriptBlocks: false) is not null);
             var result = (Expression)native.Invoke("ReduceAssignment", detached.Left, token, Expression.Invoke(native.RightHandSide))!;
             native.Expressions.Add(Expression.Convert(result, typeof(object)));
             return native.Compile();
@@ -85,12 +87,26 @@ namespace PowerForge.Generated.Runtime
         /// <summary>Shares bounded target admission with the semantic binder; interpolation cannot introduce another body.</summary>
         internal static bool IsNativeAssignmentIndex(ExpressionAst index)
             => index is ConstantExpressionAst or StringConstantExpressionAst or VariableExpressionAst ||
+               index is BinaryExpressionAst { Operator: TokenKind.Plus or TokenKind.Minus or TokenKind.Multiply or
+                   TokenKind.Divide or TokenKind.Rem } binary &&
+               IsNativeAssignmentIndex(binary.Left) && IsNativeAssignmentIndex(binary.Right) ||
+               index is UnaryExpressionAst { TokenKind: TokenKind.Plus or TokenKind.Minus } unary &&
+               IsNativeAssignmentIndex(unary.Child) ||
+               index is ParenExpressionAst { Pipeline: PipelineAst parenthesized } && IsNativeAssignmentIndexPipeline(parenthesized) ||
+               index is SubExpressionAst { SubExpression.Statements.Count: 1 } subexpression &&
+               (subexpression.SubExpression.Traps is null || subexpression.SubExpression.Traps.Count == 0) &&
+               subexpression.SubExpression.Statements[0] is PipelineAst subPipeline && IsNativeAssignmentIndexPipeline(subPipeline) ||
                index is ExpandableStringExpressionAst expanded &&
                expanded.NestedExpressions.All(IsNativeAssignmentInterpolation) ||
                index is MemberExpressionAst { Static: false, Expression: VariableExpressionAst receiver, Member: StringConstantExpressionAst } member &&
                member is not InvokeMemberExpressionAst &&
                member.GetType().GetProperty("NullConditional")?.GetValue(member) is not true &&
                receiver.VariablePath.IsUnqualified;
+
+        private static bool IsNativeAssignmentIndexPipeline(PipelineAst pipeline)
+            => pipeline.PipelineElements.Count == 1 && !IsBackgroundAssignmentPipeline(pipeline) &&
+               pipeline.PipelineElements[0] is CommandExpressionAst { Redirections.Count: 0 } expression &&
+               IsNativeAssignmentIndex(expression.Expression);
 
         private static bool IsNativeAssignmentInterpolation(ExpressionAst expression)
             => expression is VariableExpressionAst { VariablePath.IsUnqualified: true } ||

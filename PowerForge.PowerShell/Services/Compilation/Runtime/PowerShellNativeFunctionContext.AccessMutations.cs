@@ -50,7 +50,9 @@ namespace PowerForge.Generated.Runtime
             var statement = new CommandExpressionAst(selected.Extent, selected, null);
             var ast = new ScriptBlockAst(selected.Extent, null,
                 new StatementBlockAst(selected.Extent, new[] { statement }, null), isFilter: false);
-            var native = new NativeAstCompiler(this, ast, assignmentVariables: true);
+            var native = new NativeAstCompiler(this, ast, assignmentVariables: true,
+                preserveSelectedSequencePoints: selected.Child.Find(static node => node is SubExpressionAst,
+                    searchNestedScriptBlocks: false) is not null);
             var result = (Expression)native.Invoke("VisitUnaryExpression", selected)!;
             native.Expressions.Add(Expression.Convert(result, typeof(object)));
             return native.Compile();

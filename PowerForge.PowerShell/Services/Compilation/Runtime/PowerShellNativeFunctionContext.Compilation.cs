@@ -33,9 +33,12 @@ namespace PowerForge.Generated.Runtime
             internal List<Expression> Expressions { get; }
             internal List<ParameterExpression> Temporaries { get; }
             private readonly IScriptExtent _fallbackExtent;
+            private readonly bool _preserveSelectedSequencePoints;
 
-            internal NativeAstCompiler(PowerShellNativeFunctionContext owner, ScriptBlockAst ast, bool assignmentVariables = false)
+            internal NativeAstCompiler(PowerShellNativeFunctionContext owner, ScriptBlockAst ast, bool assignmentVariables = false,
+                bool preserveSelectedSequencePoints = false)
             {
+                _preserveSelectedSequencePoints = preserveSelectedSequencePoints;
                 _fallbackExtent = ast.EndBlock.Statements[0].Extent;
                 var assembly = typeof(PSObject).Assembly;
                 CompilerType = assembly.GetType("System.Management.Automation.Language.Compiler", true)!;
@@ -96,8 +99,9 @@ namespace PowerForge.Generated.Runtime
                 var body = Expression.Lambda<Func<object, Func<object?>?, object?>>(
                     Expression.Invoke(lambda, Expression.Convert(context, Context.Type), RightHandSide), context, RightHandSide).Compile();
                 var points = ((IEnumerable<IScriptExtent>)CompilerType.GetField("_sequencePoints", Instance)!.GetValue(Compiler)!).ToArray();
+                var hasCompiledSequencePoints = _preserveSelectedSequencePoints && points.Length != 0;
                 if (points.Length == 0) points = new[] { _fallbackExtent };
-                return new NativeAstOperation(body, points, Context.Type);
+                return new NativeAstOperation(body, points, Context.Type, hasCompiledSequencePoints);
             }
         }
 
@@ -106,25 +110,47 @@ namespace PowerForge.Generated.Runtime
             private const BindingFlags Instance = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
             private readonly Func<object, Func<object?>?, object?> _body;
             private readonly IScriptExtent[] _points;
+            private readonly bool _hasCompiledSequencePoints;
             private readonly FieldInfo _sequencePoints, _sequenceIndex;
 
-            internal NativeAstOperation(Func<object, Func<object?>?, object?> body, IScriptExtent[] points, Type contextType)
+            internal NativeAstOperation(Func<object, Func<object?>?, object?> body, IScriptExtent[] points, Type contextType,
+                bool hasCompiledSequencePoints)
             {
                 _body = body;
                 _points = points;
+                _hasCompiledSequencePoints = hasCompiledSequencePoints;
                 _sequencePoints = contextType.GetField("_sequencePoints", Instance)!;
                 _sequenceIndex = contextType.GetField("_currentSequencePointIndex", Instance)!;
             }
 
-            internal object? Invoke(object context, Func<object?>? rightHandSide = null)
+            internal object? Invoke(object context, Func<object?>? rightHandSide = null, bool rightHandSideFirst = false)
             {
                 var previousPoints = _sequencePoints.GetValue(context);
                 var previousIndex = _sequenceIndex.GetValue(context);
+                var preTargetFailure = false;
+                if (_hasCompiledSequencePoints && rightHandSideFirst && rightHandSide != null)
+                {
+                    var evaluateRightHandSide = rightHandSide;
+                    rightHandSide = () =>
+                    {
+                        try { return evaluateRightHandSide(); }
+                        catch { preTargetFailure = true; throw; }
+                    };
+                }
                 try
                 {
                     _sequencePoints.SetValue(context, _points);
                     _sequenceIndex.SetValue(context, 0);
                     return _body(context, rightHandSide);
+                }
+                catch (Exception error) when (PowerShellStatementErrorContext.IsOperationFailure(error))
+                {
+                    var index = (int)_sequenceIndex.GetValue(context)!;
+                    // A simple assignment's RHS precedes the target. Compound assignment
+                    // has already visited its key, so its point remains active on RHS failure.
+                    if (_hasCompiledSequencePoints && !preTargetFailure && index >= 0 && index < _points.Length)
+                        PowerShellStatementErrorContext.RememberNativeExpressionFailure(error, _points[index]);
+                    throw;
                 }
                 finally
                 {

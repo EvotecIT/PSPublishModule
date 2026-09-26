@@ -8,6 +8,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("$Receiver.Value=$Value", false)]
     [InlineData("$Receiver.Nested[$Key]=$Value", true)]
     [InlineData("$Receiver[$Key.Name]=$Value", true)]
+    [InlineData("$Receiver[$Key+1]=$Value", true)]
+    [InlineData("$Receiver[(-$Key+1)]=$Value", true)]
+    [InlineData("$Receiver[$($Key.Name)]=$Value", true)]
     [InlineData("$Receiver[\"$Key\"]=$Value", true)]
     [InlineData("$Receiver[\"$($Key.Name)\"]=$Value", true)]
     [InlineData("$Receiver[$Key].Value+=$Value", true)]
@@ -48,6 +51,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Theory]
     [InlineData("$Key.Name")]
+    [InlineData("$Key+1")]
+    [InlineData("$($Key.Name)")]
     [InlineData("\"$($Key.Name)\"")]
     public void NativeTargetAssignments_DirectMemberIndexRemainsHybridOnlyForUntypedReceiver(string index)
     {
