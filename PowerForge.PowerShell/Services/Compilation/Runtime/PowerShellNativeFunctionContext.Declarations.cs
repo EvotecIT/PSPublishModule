@@ -82,11 +82,30 @@ namespace PowerForge.Generated.Runtime
                 _ => false
             };
 
-        private static bool IsNativeAssignmentIndex(ExpressionAst index)
+        /// <summary>Shares bounded target admission with the semantic binder; interpolation cannot introduce another body.</summary>
+        internal static bool IsNativeAssignmentIndex(ExpressionAst index)
             => index is ConstantExpressionAst or StringConstantExpressionAst or VariableExpressionAst ||
+               index is ExpandableStringExpressionAst expanded &&
+               expanded.NestedExpressions.All(IsNativeAssignmentInterpolation) ||
                index is MemberExpressionAst { Static: false, Expression: VariableExpressionAst receiver, Member: StringConstantExpressionAst } member &&
                member is not InvokeMemberExpressionAst &&
                member.GetType().GetProperty("NullConditional")?.GetValue(member) is not true &&
                receiver.VariablePath.IsUnqualified;
+
+        private static bool IsNativeAssignmentInterpolation(ExpressionAst expression)
+            => expression is VariableExpressionAst { VariablePath.IsUnqualified: true } ||
+               expression is MemberExpressionAst { Static: false, Expression: VariableExpressionAst receiver, Member: StringConstantExpressionAst } member &&
+               member is not InvokeMemberExpressionAst &&
+               member.GetType().GetProperty("NullConditional")?.GetValue(member) is not true &&
+               receiver.VariablePath.IsUnqualified ||
+               expression is SubExpressionAst { SubExpression.Statements.Count: 1 } sub &&
+               (sub.SubExpression.Traps is null || sub.SubExpression.Traps.Count == 0) &&
+               sub.SubExpression.Statements[0] is PipelineAst { PipelineElements.Count: 1 } pipeline &&
+               !IsBackgroundAssignmentPipeline(pipeline) &&
+               pipeline.PipelineElements[0] is CommandExpressionAst { Redirections.Count: 0 } command &&
+               IsNativeAssignmentInterpolation(command.Expression);
+
+        private static bool IsBackgroundAssignmentPipeline(PipelineAst pipeline)
+            => pipeline.GetType().GetProperty("Background")?.GetValue(pipeline) is true;
     }
 }

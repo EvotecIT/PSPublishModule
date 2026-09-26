@@ -29,11 +29,7 @@ internal sealed partial class PowerShellSemanticBinder
     // The PowerShell host evaluates this authored key after the compiled RHS. A direct
     // property read can participate without inventing a CLR/ETS member contract.
     private static bool IsNativeAssignmentIndex(ExpressionAst index)
-        => index is ConstantExpressionAst or StringConstantExpressionAst or VariableExpressionAst ||
-           index is MemberExpressionAst { Static: false, Expression: VariableExpressionAst receiver, Member: StringConstantExpressionAst } member &&
-           member is not InvokeMemberExpressionAst &&
-           member.GetType().GetProperty("NullConditional")?.GetValue(member) is not true &&
-           receiver.VariablePath.IsUnqualified;
+        => Generated.Runtime.PowerShellNativeFunctionContext.IsNativeAssignmentIndex(index);
 
     private static VariableExpressionAst? NativeReceiverRoot(ExpressionAst receiver)
         => receiver as VariableExpressionAst ?? NativeAssignmentReceiver(receiver);

@@ -8,6 +8,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("$Receiver.Value=$Value", false)]
     [InlineData("$Receiver.Nested[$Key]=$Value", true)]
     [InlineData("$Receiver[$Key.Name]=$Value", true)]
+    [InlineData("$Receiver[\"$Key\"]=$Value", true)]
+    [InlineData("$Receiver[\"$($Key.Name)\"]=$Value", true)]
     [InlineData("$Receiver[$Key].Value+=$Value", true)]
     public void NativeTargetAssignments_DescribeReceiverAndIndexDependencies(string body, bool readsKey)
     {
@@ -30,6 +32,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("$Receiver[$Key.Get()]=$Value")]
     [InlineData("$Receiver[$Key.$Property]=$Value")]
     [InlineData("$Receiver[${Key}?.Name]=$Value")]
+    [InlineData("$Receiver[\"$(Get-Date)\"]=$Value")]
+    [InlineData("$Receiver[\"$($Key.Get())\"]=$Value")]
+    [InlineData("$Receiver[\"$($Key &)\"]=$Value")]
+    [InlineData("$Receiver[\"$(trap { Get-Date; continue }; $Key)\"]=$Value")]
     public void NativeTargetAssignments_KeepComputedIndexesHosted(string body)
     {
         using var fixture = ArtifactFixture.Create(
@@ -40,11 +46,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Empty(hybrid.Methods);
     }
 
-    [Fact]
-    public void NativeTargetAssignments_DirectMemberIndexRemainsHybridOnlyForUntypedReceiver()
+    [Theory]
+    [InlineData("$Key.Name")]
+    [InlineData("\"$($Key.Name)\"")]
+    public void NativeTargetAssignments_DirectMemberIndexRemainsHybridOnlyForUntypedReceiver(string index)
     {
         using var fixture = ArtifactFixture.Create(
-            "function Write-Target { param([ValidateRange(1,9)][int]$Seed=1,[object]$Receiver,[object]$Key,$Value) $Receiver[$Key.Name]=$Value }", ".psm1");
+            "function Write-Target { param([ValidateRange(1,9)][int]$Seed=1,[object]$Receiver,[object]$Key,$Value) $Receiver[" + index + "]=$Value }", ".psm1");
         var transpiler = new PowerShellTypedCompilationTranspiler();
         var hybrid = transpiler.TranspileForBinaryModule(new[] { fixture.ScriptPath },
             "PowerForge.NativeTargetGraph", "CompiledPowerShell", "net10.0", PowerShellCompilationCapabilities.HybridModule);
