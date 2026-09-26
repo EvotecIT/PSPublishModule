@@ -12,6 +12,7 @@ service=$1
 pull_config="/etc/powerforge/service-pull/${service}.env"
 service_config="/etc/powerforge/services/${service}.env"
 token_file="/etc/powerforge/service-pull/${service}.token"
+command -v getfacl >/dev/null || fail 'missing command: getfacl'
 
 for config_dir in /etc /etc/powerforge /etc/powerforge/service-pull /etc/powerforge/services; do
   [[ -d $config_dir && ! -L $config_dir && $(stat -c %u -- "$config_dir") -eq 0 ]] || fail "untrusted configuration directory: $config_dir"
@@ -21,6 +22,8 @@ done
 for config_file in "$pull_config" "$service_config" "$token_file"; do
   [[ -f $config_file && ! -L $config_file && $(stat -c %u -- "$config_file") -eq 0 ]] || fail "missing root-owned regular configuration file: $config_file"
   [[ $(stat -c %g -- "$config_file") -eq $(id -g) && $(stat -c %a -- "$config_file") == 640 ]] || fail "configuration file must be root-owned and readable only by the deployment group: $config_file"
+  file_acl=$(getfacl -cp -- "$config_file") || fail "unable to inspect configuration ACL: $config_file"
+  [[ $file_acl == $'user::rw-\ngroup::r--\nother::---' ]] || fail "configuration file has unexpected extended ACL entries: $config_file"
 done
 group_entry=$(getent group "$(id -g)") || fail 'unable to inspect the deployment group'
 IFS=: read -r _ _ group_gid group_members <<<"$group_entry"
@@ -133,8 +136,10 @@ artifact_url=$(printf 'header = "Authorization: Bearer %s"\n' "$GH_TOKEN" | curl
   --header 'Accept: application/vnd.github+json' --output /dev/null --write-out '%{redirect_url}' \
   "https://api.github.com/repos/${SOURCE_REPOSITORY}/actions/artifacts/${artifact_id}/zip") || fail 'unable to authorize the workflow artifact download'
 [[ $artifact_url == https://* ]] || fail 'workflow artifact did not provide an HTTPS download URL'
-curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
-  --max-filesize 1074790400 --max-time 600 --output "$bundle" "$artifact_url" || fail 'unable to download the bounded workflow artifact'
+[[ $artifact_url =~ ^[[:graph:]]+$ && $artifact_url != *\"* && $artifact_url != *\\* ]] || fail 'workflow artifact download URL contains unsupported characters'
+printf 'url = "%s"\n' "$artifact_url" | curl --config - \
+  --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+  --max-filesize 1074790400 --max-time 600 --output "$bundle" || fail 'unable to download the bounded workflow artifact'
 python3 - "$bundle" "$download_root" <<'PY' || fail 'workflow artifact contains invalid or oversized members'
 import os
 import stat

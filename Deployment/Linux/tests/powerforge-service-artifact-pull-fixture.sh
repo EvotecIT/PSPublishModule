@@ -137,15 +137,15 @@ cat >"$task_root/bin/curl" <<'SH'
 #!/usr/bin/env bash
 set -Eeuo pipefail
 [[ ${GH_TOKEN:-} == fixture-token ]]
-[[ $* != *fixture-token* ]]
-if [[ $* == *'--config -'* ]]; then
-  config=$(cat)
-  [[ $config == 'header = "Authorization: Bearer fixture-token"' ]]
+[[ $* != *fixture-token* && $* != *fixture-signed-url* ]]
+[[ $* == *'--config -'* ]]
+config=$(cat)
+if [[ $config == 'header = "Authorization: Bearer fixture-token"' ]]; then
   [[ $* == *'api.github.com/repos/'*'/actions/artifacts/54321/zip'* ]]
-  printf 'https://artifact-storage.example.test/bundle.zip'
+  printf 'https://artifact-storage.example.test/bundle.zip?sig=fixture-signed-url&x=1'
   exit 0
 fi
-[[ $* == *'https://artifact-storage.example.test/bundle.zip'* ]]
+[[ $config == 'url = "https://artifact-storage.example.test/bundle.zip?sig=fixture-signed-url&x=1"' ]]
 while (($#)); do
   if [[ $1 == --output ]]; then destination=$2; shift 2; else shift; fi
 done
@@ -211,6 +211,14 @@ if run_fixture success >"$task_root/token-mode.log" 2>&1; then
   echo 'Accepted a group-writable GitHub token file.' >&2; exit 1
 fi
 grep -Fq 'configuration file must be root-owned' "$task_root/token-mode.log"
+chmod 0640 "$task_root/etc/powerforge/service-pull/${service}.token"
+setfacl -m u:nobody:r-- "$task_root/etc/powerforge/service-pull/${service}.token"
+[[ $(stat -c %a -- "$task_root/etc/powerforge/service-pull/${service}.token") == 640 ]]
+if run_fixture success >"$task_root/token-acl.log" 2>&1; then
+  echo 'Accepted a GitHub token file readable by a named ACL user.' >&2; exit 1
+fi
+grep -Fq 'unexpected extended ACL entries' "$task_root/token-acl.log"
+setfacl -b "$task_root/etc/powerforge/service-pull/${service}.token"
 chmod 0640 "$task_root/etc/powerforge/service-pull/${service}.token"
 mkdir "$task_root/work/.stage"
 chown "$deploy_user:$deploy_user" "$task_root/work/.stage"
