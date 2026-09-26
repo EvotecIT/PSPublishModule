@@ -237,6 +237,13 @@ public sealed partial class DotNetPublishPipelineRunner
         }
         while (discoveredContextImport);
 
+        if (!TryReadControlledToolchainTargetNames(rootEvaluatedImports, rootEvaluatedProperties,
+                graphNodes, out HashSet<string> toolchainTargetNames))
+        {
+            failureReason = "controlled restore context toolchain targets could not be inspected.";
+            return false;
+        }
+
         // A later imported target can mutate an output path after the verifier has
         // already run. Fail before controlled execution for custom target writes.
         bool unknownLocalProperties = false;
@@ -271,6 +278,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     }))
                     continue;
                 if (IsDefinitelyUninvokedControlledContextTarget(target, documents,
+                        toolchainTargetNames,
                         sourceProperties[path]))
                     continue;
                 foreach (XElement assignment in target.Descendants())
@@ -396,10 +404,12 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool IsDefinitelyUninvokedControlledContextTarget(
         XElement target,
         IReadOnlyDictionary<string, XDocument> documents,
+        ISet<string> toolchainTargetNames,
         IReadOnlyCollection<IReadOnlyDictionary<string, string>> contexts)
     {
         string? name = target.Attribute("Name")?.Value;
         if (string.IsNullOrWhiteSpace(name) ||
+            toolchainTargetNames.Contains(name!) ||
             new[] { "Restore", "Build", "GetTargetPath", "ComputeFilesToPublish" }
                 .Contains(name, StringComparer.OrdinalIgnoreCase))
             return false;
@@ -410,7 +420,7 @@ public sealed partial class DotNetPublishPipelineRunner
             .Select(value => value.Trim())
             .Where(value => value.Length > 0)
             .ToArray();
-        if (hooks.Length == 0 || hooks.Any(hook =>
+        if (hooks.Any(hook =>
                 !new[] { "Pack", "Clean", "Rebuild", "VSTest", "Test" }
                     .Contains(hook, StringComparer.OrdinalIgnoreCase)))
             return false;

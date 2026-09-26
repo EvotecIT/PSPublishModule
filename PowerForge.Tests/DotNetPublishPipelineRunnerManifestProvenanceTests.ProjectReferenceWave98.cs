@@ -221,6 +221,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     [InlineData("reference-props-override")]
     [InlineData("rid-list-context")]
     [InlineData("inactive-pack-path-target")]
+    [InlineData("uninvoked-standalone-target")]
+    [InlineData("invoked-standalone-target")]
+    [InlineData("sdk-target-name-collision")]
     [InlineData("inactive-context-target")]
     [InlineData("pack-hook-called-by-build")]
     [InlineData("uppercase-context-paths")]
@@ -284,6 +287,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         bool referencePropsOverride = scenario == "reference-props-override";
         bool ridListContext = scenario == "rid-list-context";
         bool inactivePackPathTarget = scenario == "inactive-pack-path-target";
+        bool standalonePathTarget = scenario is "uninvoked-standalone-target" or
+            "invoked-standalone-target" or "sdk-target-name-collision";
+        bool invokedStandalonePathTarget = scenario == "invoked-standalone-target";
+        bool sdkTargetNameCollision = scenario == "sdk-target-name-collision";
         bool inactiveContextTarget = scenario == "inactive-context-target";
         bool packHookCalledByBuild = scenario == "pack-hook-called-by-build";
         bool uppercaseContextPaths = scenario == "uppercase-context-paths";
@@ -298,7 +305,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         bool propertyMethodContextImport = scenario == "context-activated-property-method-import";
         bool chainedContextImport = scenario == "context-activated-chained-import";
         if (caseSensitiveContextValues || externalIntermediatePath || ridListContext ||
-            inactivePackPathTarget || inactiveContextTarget || packHookCalledByBuild || uppercaseContextPaths ||
+            inactivePackPathTarget || standalonePathTarget || inactiveContextTarget ||
+            packHookCalledByBuild || uppercaseContextPaths ||
             contextActivatedImport)
             unselectedContextPackage = false;
         if ((caseVariantSymbols || uppercaseContextPaths) && !OperatingSystem.IsWindows())
@@ -457,11 +465,15 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     ? "<PropertyGroup><DestinationProperty>IntermediateOutputPath</DestinationProperty></PropertyGroup><Target Name=\"MutateContextIntermediate\" BeforeTargets=\"Build\"><CreateProperty Value=\"$(MSBuildProjectDirectory)/../shared-obj/\"><Output TaskParameter=\"Value\" PropertyName=\"$(DestinationProperty)\" /></CreateProperty></Target>"
                 : inactivePackPathTarget || packHookCalledByBuild
                     ? "<Target Name=\"PrepareUnusedPackPath\" BeforeTargets=\"Pack\"><PropertyGroup><PublishDir>$(MSBuildProjectDirectory)/../pack-output/</PublishDir></PropertyGroup></Target>"
+                : standalonePathTarget
+                    ? $"<Target Name=\"{(sdkTargetNameCollision ? "BeforeBuild" : "StandalonePath")}\"><PropertyGroup><PublishDir>$(MSBuildProjectDirectory)/../standalone-output/</PublishDir></PropertyGroup></Target>"
                 : inactiveContextTarget
                     ? "<Target Name=\"DisabledContextPath\" BeforeTargets=\"CoreCompile\" Condition=\"'false' == 'true'\"><PropertyGroup><IntermediateOutputPath>$(MSBuildProjectDirectory)/../shared-obj/</IntermediateOutputPath></PropertyGroup></Target>"
                 : string.Empty;
             string callPackHookDuringBuild = packHookCalledByBuild
                 ? "<BuildDependsOn>$(BuildDependsOn);PrepareUnusedPackPath</BuildDependsOn>"
+                : invokedStandalonePathTarget
+                    ? "<BuildDependsOn>$(BuildDependsOn);StandalonePath</BuildDependsOn>"
                 : string.Empty;
             string requireFrameworkSplit = sameContextMultiFrameworkOutput
                 ? "<Target Name=\"RequireFrameworkSplit\" BeforeTargets=\"CoreCompile\" Condition=\"$(BaseOutputPath.Contains('powerforge-context')) and '$(AppendTargetFrameworkToOutputPath)' != 'true'\"><Error Condition=\"$(OutputPath.Contains('framework-')) != 'True' or $(IntermediateOutputPath.Contains('framework-')) != 'True'\" Text=\"Framework outputs were not isolated: OutputPath=$(OutputPath), IntermediateOutputPath=$(IntermediateOutputPath), BaseOutputPath=$(BaseOutputPath), Append=$(AppendTargetFrameworkToOutputPath).\" /></Target>"
@@ -685,7 +697,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             if (overrideSharedOutputPath || overrideSharedOutDir || overrideSharedAssets ||
                 disabledPropsEnvironment || disabledPropsProject || removedOutputExcludes ||
                 partialOutputExcludes || latePathMutation || computedLatePathMutation || referencePropsOverride ||
-                ridListContext || contextActivatedImport || packHookCalledByBuild || controlledOverridePathTarget)
+                ridListContext || contextActivatedImport || packHookCalledByBuild ||
+                invokedStandalonePathTarget || sdkTargetNameCollision || controlledOverridePathTarget)
             {
                 Assert.True(provenance.Dirty);
                 string expected = disabledPropsEnvironment || disabledPropsProject && !resetDisabledPropsProject
@@ -700,7 +713,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                         ? "different RuntimeIdentifiers lists"
                     : contextActivatedImport
                         ? "isolation-sensitive property"
-                    : packHookCalledByBuild
+                    : packHookCalledByBuild || invokedStandalonePathTarget || sdkTargetNameCollision
                         ? "target-time assignment to an isolation-sensitive property"
                     : latePathMutation || controlledOverridePathTarget
                         ? "target-time assignment to an isolation-sensitive property"
