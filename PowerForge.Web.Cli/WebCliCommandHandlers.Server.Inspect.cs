@@ -72,6 +72,14 @@ internal static partial class WebCliCommandHandlers
                 packages.Success ? "installed/missing from dpkg-query" : packages.Stderr.Trim());
         }
 
+        foreach (var account in manifest.Accounts ?? Array.Empty<PowerForgeServerAccount>())
+        {
+            if (string.IsNullOrWhiteSpace(account.Name)) continue;
+            AddCommandCheck(checks, $"account.{account.Name}.identity", "accounts", $"Account identity matches manifest: {account.Name}",
+                ExecuteRemote(sshCommand, target, BuildAccountIdentityCheckCommand(account)),
+                $"home={account.Home ?? "unspecified"}; shell={account.Shell ?? "unspecified"}");
+        }
+
         foreach (var repository in manifest.Repositories ?? Array.Empty<PowerForgeServerRepository>())
         {
             if (string.IsNullOrWhiteSpace(repository.Path)) continue;

@@ -443,7 +443,7 @@ internal static partial class WebCliCommandHandlers
         var stderrPath = Path.Combine(commandOutputDirectory, $"{id}.err.txt");
         var execution = RunProcessCaptureText(
             local ? "/usr/bin/env" : sshCommand,
-            local ? BuildCaptureShellArguments(command.Command ?? string.Empty) : BuildSshArguments(target, BuildCaptureShellCommand(command.Command ?? string.Empty)));
+            local ? BuildCaptureShellArguments(command.Command ?? string.Empty) : BuildCaptureSshArguments(target, BuildCaptureShellCommand(command.Command ?? string.Empty)));
 
         File.WriteAllText(stdoutPath, execution.Stdout);
         File.WriteAllText(stderrPath, execution.Stderr);
@@ -485,7 +485,7 @@ internal static partial class WebCliCommandHandlers
         bool local)
     {
         var script = BuildRemoteTarScript(files);
-        return RunProcessCaptureBinary(local ? "/usr/bin/env" : sshCommand, local ? BuildCaptureShellArguments(script) : BuildSshArguments(target, BuildCaptureShellCommand(script)), outputPath);
+        return RunProcessCaptureBinary(local ? "/usr/bin/env" : sshCommand, local ? BuildCaptureShellArguments(script) : BuildCaptureSshArguments(target, BuildCaptureShellCommand(script)), outputPath);
     }
 
     private static ProcessResult CaptureRemoteEncryptedTarArchive(
@@ -497,7 +497,7 @@ internal static partial class WebCliCommandHandlers
         bool local)
     {
         var script = BuildRemoteEncryptedTarScript(files, recipient);
-        return RunProcessCaptureBinary(local ? "/usr/bin/env" : sshCommand, local ? BuildCaptureShellArguments(script) : BuildSshArguments(target, BuildCaptureShellCommand(script)), outputPath);
+        return RunProcessCaptureBinary(local ? "/usr/bin/env" : sshCommand, local ? BuildCaptureShellArguments(script) : BuildCaptureSshArguments(target, BuildCaptureShellCommand(script)), outputPath);
     }
 
     internal static string BuildRemoteTarScript(PowerForgeServerManagedFile[] files)
@@ -587,6 +587,9 @@ internal static partial class WebCliCommandHandlers
         => "'" + value.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
 
     internal static string[] BuildSshArguments(string target, string command)
+        => new[] { "-o", "ConnectTimeout=30", target, $"sh -lc {ShellQuote(command)}" };
+
+    internal static string[] BuildCaptureSshArguments(string target, string command)
         => new[] { "-o", "ConnectTimeout=30", target, $"/bin/sh -c {ShellQuote(command)}" };
 
     private static ProcessResult RunProcessCaptureText(string fileName, IReadOnlyList<string> args)

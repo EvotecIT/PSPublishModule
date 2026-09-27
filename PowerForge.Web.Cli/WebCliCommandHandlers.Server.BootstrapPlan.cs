@@ -152,7 +152,8 @@ internal static partial class WebCliCommandHandlers
             }
             useradd.Add(ShellQuote(account.Name));
             AddStep(steps, ref order, "accounts", $"Create account {account.Name}",
-                $"id -u {ShellQuote(account.Name)} >/dev/null 2>&1 || {string.Join(' ', useradd)}",
+                $"(id -u {ShellQuote(account.Name)} >/dev/null 2>&1 || {string.Join(' ', useradd)}) && " +
+                $"({BuildAccountIdentityCheckCommand(account)}) || {{ printf '%s\\n' {ShellQuote("Account identity differs from manifest: " + account.Name)} >&2; exit 3; }}",
                 plannedCommands: plannedCommands);
         }
 

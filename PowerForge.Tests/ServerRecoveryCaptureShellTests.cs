@@ -50,7 +50,7 @@ public sealed class ServerRecoveryCaptureShellTests
                 if (remote)
                 {
                     start.ArgumentList.Add("-c");
-                    start.ArgumentList.Add(WebCliCommandHandlers.BuildSshArguments("fixture-target", WebCliCommandHandlers.BuildCaptureShellCommand(script))[^1]);
+                    start.ArgumentList.Add(WebCliCommandHandlers.BuildCaptureSshArguments("fixture-target", WebCliCommandHandlers.BuildCaptureShellCommand(script))[^1]);
                 }
                 else
                     foreach (var argument in WebCliCommandHandlers.BuildCaptureShellArguments(script))
