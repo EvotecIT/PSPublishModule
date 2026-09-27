@@ -14,14 +14,27 @@ namespace PowerForge.Generated.Runtime
         /// <summary>Executes an explicitly hosted pipeline region in the existing native invocation.</summary>
         public void InvokeCommandRegion(string source, string file, int line, int column,
             string? sourceDocument = null, int startOffset = -1, int endOffset = -1)
-            => GetCommandRegion(source, file, line, column, false, false, sourceDocument, startOffset, endOffset).Invoke(FunctionContext);
+            => InvokeCommandRegion(source, file, line, column, sourceDocument, startOffset, endOffset, null);
+
+        /// <summary>Executes a pipeline statement and hands its final authored position to the surrounding error owner.</summary>
+        /// <remarks>The completedPosition callback runs only on success, before SDK context restoration.</remarks>
+        public void InvokeCommandRegion(string source, string file, int line, int column,
+            string? sourceDocument, int startOffset, int endOffset, Action<IScriptExtent>? completedPosition)
+            => GetCommandRegion(source, file, line, column, false, false, sourceDocument, startOffset, endOffset)
+                .Invoke(FunctionContext, completedPosition: completedPosition);
 
         /// <summary>Writes pipeline records directly into an enclosing collector without scalarizing them.</summary>
         public void InvokeCommandRegion(string source, string file, int line, int column, Action<object?> output,
             string? sourceDocument = null, int startOffset = -1, int endOffset = -1)
+            => InvokeCommandRegion(source, file, line, column, output, sourceDocument, startOffset, endOffset, null);
+
+        /// <summary>Writes pipeline records and preserves the statement's last authored position for its enclosing operation.</summary>
+        /// <remarks>The completedPosition callback runs only on success, before SDK context restoration.</remarks>
+        public void InvokeCommandRegion(string source, string file, int line, int column, Action<object?> output,
+            string? sourceDocument, int startOffset, int endOffset, Action<IScriptExtent>? completedPosition)
         {
             using (RedirectOutput(output))
-                InvokeCommandRegion(source, file, line, column, sourceDocument, startOffset, endOffset);
+                InvokeCommandRegion(source, file, line, column, sourceDocument, startOffset, endOffset, completedPosition);
         }
 
         /// <summary>Captures an authored pipeline value with its explicit partial-output-on-error contract.</summary>
@@ -85,7 +98,9 @@ namespace PowerForge.Generated.Runtime
                     ast.EndBlock.Statements.Any(statement => statement is not PipelineAst))
                     throw new ArgumentException("A native command region requires explicit pipeline statements.", nameof(source));
 
-                var native = new NativeAstCompiler(owner, ast);
+                // Statement regions advance the surrounding source position.
+                // Expression captures keep their caller's existing boundary.
+                var native = new NativeAstCompiler(owner, ast, preserveSelectedSequencePoints: !capture);
                 var expressions = native.Expressions;
                 var temporaries = native.Temporaries;
                 var compilerType = native.CompilerType;

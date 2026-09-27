@@ -82,7 +82,8 @@ internal static class PowerShellArraySemanticBinder
             if (!collapseResult && statements.Statements.Count == 1 && value is PowerShellBoundMutationExpression { UsesNativeInvocation: true } mutation)
                 value = mutation.WithResultType(PowerShellTypeFact.Unknown,
                     nativeSetSequencePoint: mutation.Value is not null && mutation.NativeSetSequencePoint);
-            if (!collapseResult && statements.Statements.Count == 1 && command?.Expression is ArrayLiteralAst)
+            if (!collapseResult && syntax is ArrayExpressionAst && statements.Statements.Count == 1 &&
+                command?.Expression is ArrayLiteralAst)
                 return value;
             var sourceText = PowerShellSourceParser.GetSourceLines(document, PowerShellSourceParser.GetSpan(document, statement.Extent));
             items.Add(new PowerShellBoundNativeCollectionItem(PowerShellSourceParser.GetSpan(document, statement.Extent),

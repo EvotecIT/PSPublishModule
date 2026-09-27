@@ -26,6 +26,14 @@ namespace PowerForge.Generated.Runtime
             _hasNativeSequencePoint = true;
         }
 
+        /// <summary>Retains the active SDK position before a command region restores its invocation context.</summary>
+        internal void AdoptNativeSequencePoint(IScriptExtent extent)
+        {
+            ThrowIfDisposed();
+            _nativeExpressionPosition = new NativeExpressionPosition(extent);
+            _hasNativeSequencePoint = true;
+        }
+
         /// <summary>Preserves the extra error-variable observation of an escaping single-expression if value.</summary>
         internal void AppendEscapingConditionalError(Exception error)
         {
@@ -77,14 +85,24 @@ namespace PowerForge.Generated.Runtime
         {
             private readonly string _file, _sourceText;
             private readonly int _line, _column, _endLine, _endColumn;
+            private readonly IScriptExtent? _authoredExtent;
 
             internal NativeExpressionPosition(string file, int line, int column, int endLine, int endColumn, string sourceText)
             {
                 _file = file; _line = line; _column = column;
                 _endLine = endLine; _endColumn = endColumn; _sourceText = sourceText;
+                _authoredExtent = null;
             }
 
-            internal IScriptExtent ToExtent() => CreateExtent(_file, _line, _column, _endLine, _endColumn, _sourceText);
+            internal NativeExpressionPosition(IScriptExtent extent)
+            {
+                _authoredExtent = extent;
+                _file = extent.File ?? string.Empty; _sourceText = extent.Text;
+                _line = extent.StartLineNumber; _column = extent.StartColumnNumber;
+                _endLine = extent.EndLineNumber; _endColumn = extent.EndColumnNumber;
+            }
+
+            internal IScriptExtent ToExtent() => _authoredExtent ?? CreateExtent(_file, _line, _column, _endLine, _endColumn, _sourceText);
         }
 
         /// <summary>Uses the native function's scope, preferences, and stream registrations for compiled statements.</summary>

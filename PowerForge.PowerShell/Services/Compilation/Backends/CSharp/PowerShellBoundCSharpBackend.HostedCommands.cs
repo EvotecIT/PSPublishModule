@@ -13,7 +13,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 .Append(QuotePortableSourcePath(region.NativeSourcePath)).Append(", ")
                 .Append(region.Span.StartLine).Append(", ").Append(region.Span.StartColumn).Append(", ")
                 .Append(PowerShellCSharpLiteral.QuoteString(region.NativeSourceDocument!)).Append(", ")
-                .Append(region.Span.StartOffset).Append(", ").Append(region.Span.EndOffset).AppendLine(");");
+                .Append(region.Span.StartOffset).Append(", ").Append(region.Span.EndOffset)
+                .AppendLine(", __statementErrors.AdoptNativeSequencePoint);");
             return;
         }
         builder.Append(prefix).Append("__invokePowerShellRegion(__statementErrors, ")
@@ -30,7 +31,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private string EmitNativeCommandRecords(PowerShellLoweredNativeCommandExpression command, string sink)
         => $"__nativeFunction.InvokeCommandRegion({PowerShellCSharpLiteral.QuoteString(command.Source)}, " +
            $"{QuotePortableSourcePath(command.SourcePath)}, {command.Span.StartLine}, {command.Span.StartColumn}, " +
-           $"{sink}, {PowerShellCSharpLiteral.QuoteString(command.SourceDocument)}, {command.Span.StartOffset}, {command.Span.EndOffset})";
+           $"{sink}, {PowerShellCSharpLiteral.QuoteString(command.SourceDocument)}, {command.Span.StartOffset}, {command.Span.EndOffset}, __statementErrors.AdoptNativeSequencePoint)";
 
     private string EmitNativeCommandCapture(PowerShellLoweredNativeCommandExpression command)
         => $"__nativeFunction.CaptureCommandRegion({PowerShellCSharpLiteral.QuoteString(command.Source)}, " +

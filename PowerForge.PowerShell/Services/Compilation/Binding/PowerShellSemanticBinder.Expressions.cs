@@ -449,7 +449,7 @@ internal sealed partial class PowerShellSemanticBinder
         if (invocation is not { Static: true, Expression: TypeExpressionAst receiver,
                 Member: StringConstantExpressionAst member, Arguments: { } arguments } ||
             receiver.TypeName.GetReflectionType() is not { } type || !HasCatchAllObservation(invocation) ||
-            HasStatementValuedNativeArguments(invocation))
+            HasUnqualifiedStatementValuedNativeArguments(invocation))
             return false;
         var methods = type.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static |
                 System.Reflection.BindingFlags.FlattenHierarchy)
@@ -471,9 +471,9 @@ internal sealed partial class PowerShellSemanticBinder
 
     private static bool HasClosedEncodingVectorArgumentCatchAll(InvokeMemberExpressionAst invocation)
     {
-        // Statement-valued arguments can advance the native source position
-        // inside the collector. Preserve that hosted error-location boundary.
-        if (invocation.Arguments is null || HasStatementValuedNativeArguments(invocation)) return false;
+        // Conditional collectors preserve their latest authored position.
+        // Other statement-valued argument families retain their own boundary.
+        if (invocation.Arguments is null || HasUnqualifiedStatementValuedNativeArguments(invocation)) return false;
         // The one-value base64 entry point retains SDK byte-vector conversion.
         // Modern CLR reflection also exposes optional Span overloads, so it
         // cannot use the conservative all-overload static-value qualifier.
@@ -499,9 +499,9 @@ internal sealed partial class PowerShellSemanticBinder
                HasCatchAllObservation(invocation);
     }
 
-    private static bool HasStatementValuedNativeArguments(InvokeMemberExpressionAst invocation)
+    private static bool HasUnqualifiedStatementValuedNativeArguments(InvokeMemberExpressionAst invocation)
         => invocation.Arguments?.Any(static argument => argument.FindAll(
-            static node => node is IfStatementAst or SwitchStatementAst or TryStatementAst or LoopStatementAst,
+            static node => node is SwitchStatementAst or TryStatementAst or LoopStatementAst,
             searchNestedScriptBlocks: false).Any()) == true;
 
     private static bool CanAcceptNativeArgumentCount(System.Reflection.ParameterInfo[] parameters, int count)

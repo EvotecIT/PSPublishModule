@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "c71531fe385c578daf0ba85cad2b476aa7857c09",
+  "compilerBaselineCommit": "5b896e63dfd1798000c737a6e82ea4712f8623ef",
   "packets": [
     {
       "packet": "pssg",
@@ -1573,7 +1573,7 @@
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedEnumDeclarationPolicy.cs": "13c19ff47ae23ae9d641c6d76ea6fe605e3187ccf13ecd607e53b68e2909c4c9",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedValueClassPolicy.cs": "e161dce7abde611d1ec26825f59d2a8218ebbabe239a3e199fdb8e509956cc73",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "b89b9674e8efff29dc493563974504e415b98fd67a08a73bd860185227e800e3",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "c5ba50fdac850f24114bf4e0e61f46070a63ba254f6016a1cec426d7db444af4",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "08c0d5e0a958cf4421391c1c83f3f4ddb44907400f5a2542d08cee0558f2442c",
     "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeTypeExpression.cs": "33eed468f79993efecac2de58ea1241e077a6eccfc65924b46ef3954abf2c8de",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeTypeExpression.cs": "a0b77e29eb83c01bd67f4ae3cc8f0a3670cedb13d93822a49b2103ea61872227",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs": "3e6566d1d16a5b258eacf00ad95b28e6e171d31ab5f8995e27f8ca98124b4f66",
@@ -1582,7 +1582,7 @@
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeReferenceExpression.cs": "5d88678ead768a64b3c8de95a11ad231fb1bafde03b92e67a97196e3b9816ff7",
     "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.NativeAccess.cs": "68b03245e389021acc7796cda99b775e8003572b7fe847ea82d90ad735b28755",
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Invocations.cs": "9dfff29122b5dd0701ab9c9ca08ddda8f71983b7fa99d2c737d50e4403f71852",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.NativeFunction.cs": "456d4cb9623abb02a77681a495c7fae9133581b9f172e0efdcd1aa0e569ebfc7",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.NativeFunction.cs": "5ff00e3c69f38b2e4d8696c07f98491edf0de7fa963ff744302b19d96112239e",
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Declarations.cs": "bf75cfb5377e463fc4c5636ce948ffba779d9e258e7e6cbb19d1b8ff0cb723c8",
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.cs": "18c0f89fcace664b27b2327086d3195382d7cd648f10e27bbdd9b2e995f5a19b",
     "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellBoundOptimizer.cs": "e288f476ff4434ad0f8d6af0a1df46b42afe378103dcaf1dcd70dea2ef132b79",
@@ -1611,10 +1611,16 @@
     "Benchmarks/PowerShellCompilation/Corpus/m29a-infoblox-connection-boundaries.ps1": "62cab9226a47197b53b28639b3e33509f1cc0a7e1b6bcb26e81b432daabfe7a6",
     "PowerForge.Tests/PowerShellCompilationLocalExecutionTests.cs": "0cec897ce00f55ffa6b1e5292b94a94a3914a84bd91ea3cf979b67ba3ed50844",
     "PowerForge.Tests/PowerShellCompilationCommandProxyTests.cs": "51da66f3811b98d444d481be5dab82e2415c61996cf5e8ee5093521752778efb",
-    "PowerForge.Tests/PowerShellCompilationNativeValueArgumentTests.cs": "f792e86edc4edc5ece9b816164e795ee2c82893f0f6a8f553c3034eeb5a56f84"
+    "PowerForge.Tests/PowerShellCompilationNativeValueArgumentTests.cs": "069e599a367f43d1044468f1cf2542888d488e65a4eb8c5abfc449eb358764aa",
+    "PowerForge.Tests/PowerShellCompilationArgumentPositionTests.cs": "8c737e610664b3c175f9991760b83ee2be7415a389ac86a8feaf0909fb5c43c8",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.HostedCommands.cs": "9891fd59b770ded495f00994474274c576b8d9bb833ed735efce0c8fd0fe13d8",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.NativeCollections.cs": "ca64701a0567557d4d2a0f5d9f6db72af6f5b31719eb3c82a19068a24ce464e5",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellArraySemanticBinder.cs": "2a8509a6003a759b84ae90b308081c0dd91a43ada8c9303c15f6674f000eacd3",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.CommandRegions.cs": "dd02dce782334b83ef65378c101388cd32278101f5792a172b7e819dafe0e35d",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Compilation.cs": "e2497bb9469202f9f841668911328a6c422c947d9568cf4c826b35a64da2fbe4"
   },
-  "dispositionComparison": "m29a-native-value-argument-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "c71531fe385c578daf0ba85cad2b476aa7857c09",
+  "dispositionComparison": "m29a-argument-position-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "5b896e63dfd1798000c737a6e82ea4712f8623ef",
   "emitted": 521,
   "retained": 44
 }

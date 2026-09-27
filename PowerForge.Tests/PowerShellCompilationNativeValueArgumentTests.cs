@@ -153,7 +153,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             function Read-LaterWrite {[CmdletBinding()]param() $type=[int];$text="$type";foreach($item in 1,2){try{[Activator]::CreateInstance($text)}catch{$_.FullyQualifiedErrorId};$text=[int]}}
             """,Path.Combine(Path.GetTempPath(),"interpolation-origin-boundaries.ps1"));
         var hybrid=new PowerShellSemanticCompilationPipeline().Compile(new[]{source},framework,PowerShellCompilationCapabilities.HybridModule);
-        Assert.Equal(new[]{"Read_Closed"},hybrid.Emitted.Methods.Select(method=>method.GeneratedName).OrderBy(name=>name).ToArray());
+        Assert.Equal(new[]{"Read_Closed","Read_StatementArgument"},hybrid.Emitted.Methods.Select(method=>method.GeneratedName).OrderBy(name=>name).ToArray());
         Assert.Empty(new PowerShellSemanticCompilationPipeline().Compile(new[]{source},framework,PowerShellCompilationCapabilities.TypedLibrary).Emitted.Methods);
     }
 }

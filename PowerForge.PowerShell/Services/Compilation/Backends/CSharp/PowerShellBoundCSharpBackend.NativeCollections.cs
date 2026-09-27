@@ -22,7 +22,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
             {
                 // A single captured expression has an additional authored if-value error boundary.
                 // Direct pipeline statements and multi-statement branches already route their own errors.
-                var expression = EmitNativeCollection(collection);
+                var item = collection.Items[0];
+                var expression = EmitNativeExpressionPosition(EmitNativeCollection(collection),
+                    item.Span, collection.SourcePath, item.SourceText);
                 return "new global::System.Func<object?[]>(() => { try { return " + expression +
                     "; } catch (global::System.Exception __pfConditionalError) when (" + StatementErrorContextType +
                     ".IsOperationFailure(__pfConditionalError)) { __statementErrors.AppendEscapingConditionalError(__pfConditionalError); throw; } })()";
@@ -43,14 +45,12 @@ internal sealed partial class PowerShellBoundCSharpBackend
             if (item.IsPipelineStatement && item.Value is PowerShellLoweredNativeCommandExpression command)
             {
                 // The native statement owns its error boundary and writes records directly.
+                AppendNativeCollectionPosition(body, collection.SourcePath, item);
                 body.Append(EmitNativeCommandRecords(command, result + ".Add")).Append("; ");
                 continue;
             }
-            body.Append("try { __statementErrors.SetNativeSequencePoint(")
-                .Append(QuotePortableSourcePath(collection.SourcePath)).Append(", ")
-                .Append(item.Span.StartLine).Append(", ").Append(item.Span.StartColumn).Append(", ")
-                .Append(item.Span.EndLine).Append(", ").Append(item.Span.EndColumn).Append(", ")
-                .Append(PowerShellCSharpLiteral.QuoteString(item.SourceText)).Append("); ");
+            body.Append("try { ");
+            AppendNativeCollectionPosition(body, collection.SourcePath, item);
             // Evaluate the entire expression before emitting records. An authored comma array
             // produces no records when a later member fails during its construction.
             if (item.Value.ClrType == typeof(void))
@@ -83,6 +83,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
         body.Append("return ").Append(result).Append(".ToArray(); })()");
         return body.ToString();
     }
+
+    private void AppendNativeCollectionPosition(StringBuilder body, string sourcePath, PowerShellLoweredNativeCollectionItem item)
+        => body.Append("__statementErrors.SetNativeSequencePoint(")
+            .Append(QuotePortableSourcePath(sourcePath)).Append(", ")
+            .Append(item.Span.StartLine).Append(", ").Append(item.Span.StartColumn).Append(", ")
+            .Append(item.Span.EndLine).Append(", ").Append(item.Span.EndColumn).Append(", ")
+            .Append(PowerShellCSharpLiteral.QuoteString(item.SourceText)).Append("); ");
 
     private string EmitNativeConditionalValue(PowerShellLoweredNativeConditionalValueExpression conditionalValue)
     {

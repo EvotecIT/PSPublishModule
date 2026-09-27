@@ -123,7 +123,8 @@ namespace PowerForge.Generated.Runtime
                 _sequenceIndex = contextType.GetField("_currentSequencePointIndex", Instance)!;
             }
 
-            internal object? Invoke(object context, Func<object?>? rightHandSide = null, bool rightHandSideFirst = false)
+            internal object? Invoke(object context, Func<object?>? rightHandSide = null, bool rightHandSideFirst = false,
+                Action<IScriptExtent>? completedPosition = null)
             {
                 var previousPoints = _sequencePoints.GetValue(context);
                 var previousIndex = _sequenceIndex.GetValue(context);
@@ -141,7 +142,16 @@ namespace PowerForge.Generated.Runtime
                 {
                     _sequencePoints.SetValue(context, _points);
                     _sequenceIndex.SetValue(context, 0);
-                    return _body(context, rightHandSide);
+                    var result = _body(context, rightHandSide);
+                    // The caller retains the actual authored position before
+                    // finally restores the surrounding SDK context and index.
+                    if (completedPosition is not null && _hasCompiledSequencePoints)
+                    {
+                        var completedIndex = (int)_sequenceIndex.GetValue(context)!;
+                        if (completedIndex >= 0 && completedIndex < _points.Length)
+                            completedPosition(_points[completedIndex]);
+                    }
+                    return result;
                 }
                 catch (Exception error) when (PowerShellStatementErrorContext.IsOperationFailure(error))
                 {
