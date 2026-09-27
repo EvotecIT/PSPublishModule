@@ -41,7 +41,12 @@
 
   <ItemGroup Condition=" '$(TargetFramework)' == 'net472' ">
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.PowerShell.5.ReferenceAssemblies" Version="1.1.0" />
+    <PackageReference Include="Microsoft.PowerShell.5.ReferenceAssemblies" Version="1.1.0" GeneratePathProperty="true" />
+    <!-- The SDK ships MMI but its nuspec exposes only SMA. The active PowerShell host supplies the runtime assembly. -->
+    <Reference Include="Microsoft.Management.Infrastructure">
+      <HintPath>$(PkgMicrosoft_PowerShell_5_ReferenceAssemblies)/lib/net4/Microsoft.Management.Infrastructure.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <PackageReference Include="System.Text.Json" Version="10.0.12" />
     <!-- Explicit NU1903 override; NuGet resolves compatible net462 assets for net472. -->
     <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.12" />

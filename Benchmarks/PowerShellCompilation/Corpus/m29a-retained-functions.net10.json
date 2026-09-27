@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "b076ba5158255e5ec2a40b230158d85529f443cd",
+  "compilerBaselineCommit": "28166e7fefee1943ac96f82119296ba03cc0d510",
   "packets": [
     {
       "packet": "pssg",
@@ -320,10 +320,15 @@
       "packet": "pst",
       "functions": 109,
       "stableUnits": 121,
-      "emitted": 100,
-      "retained": 9,
-      "sourceExplanationSha256": "a5ca1488ab95c3f4bf0b3ce8c4c24c24cc36dcf0761a4d4c7ac09234fcb7ec68",
-      "gains": [],
+      "emitted": 101,
+      "retained": 8,
+      "sourceExplanationSha256": "91ec31b1ca3e1e7d1b1e180e653906aed178d31108a57b981a492cafbccd5e6d",
+      "gains": [
+        {
+          "unitId": "10ca22e8b6215064da37d706",
+          "name": "Find-CimClass"
+        }
+      ],
       "functionsRetained": [
         {
           "unitId": "e2de8ba6ca35935ce36593b7",
@@ -412,13 +417,6 @@
               "featureId": "syntax.unsupported",
               "message": "CLR type 'Windows.Markup.XamlReader' is not available in the generated project reference set for the requested target.",
               "line": 272,
-              "column": 15
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "binary-module.cmdlet-shape",
-              "message": "CLR type 'System.Management.Automation.Cmdlet' is not available in the generated project reference set for the requested target.",
-              "line": 277,
               "column": 15
             }
           ],
@@ -566,24 +564,6 @@
             }
           ],
           "relativePath": "functions/Utilities.ps1"
-        },
-        {
-          "unitId": "10ca22e8b6215064da37d706",
-          "name": "Find-CimClass",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$CimSession' has CLR type 'Microsoft.Management.Infrastructure.CimSession' that requires a target capability unavailable to this compilation.",
-              "line": 17,
-              "column": 9
-            }
-          ],
-          "relativePath": "functions/find-cimclass.ps1"
         }
       ]
     },
@@ -594,31 +574,20 @@
       "emitted": 40,
       "retained": 0,
       "sourceExplanationSha256": "2a9b3bedaa3e7c253d3719aa060f36a0a44bb852ba8246b07aed27e1b6dd116b",
-      "gains": [
-        {
-          "unitId": "c601d4895e012344d1339884",
-          "name": "NewModuleLandingPage"
-        },
-        {
-          "unitId": "71cfc9b5f84adf546472a3fc",
-          "name": "ConvertPsObjectsToMamlModel"
-        }
-      ],
+      "gains": [],
       "functionsRetained": []
     }
   ],
   "compilerSourceHashes": {
-    "PowerForge.PowerShell/Services/Compilation/Dependencies/PowerShellNativeDependencyTypes.cs": "863d2f6f0a057e2d2b536a341323f7b8b501263b1f08c7915597361280adc110",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellOutputTypeSemanticPolicy.cs": "d7d1afe7cd3166fbdcceb4e8a26a6d541fa92bee007975b221343f8dd1a2a8dc",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellLocalCallSemanticBinder.cs": "f14c2811b401ee19f5910eb318895cef5aba47ee4a83bf8213a0b4b8ea375e80",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.cs": "f4536d13937016691b0e6fc3b610e7dd837837234fa8149a699d286ea27fe298",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationAnalyzer.Metadata.cs": "3b217740dabb7f4fb17b507a65a2999adbe324d2dd27268ec369b80359dbead5",
-    "PowerForge.Tests/PowerShellCompilationNativeDependencyTypeTests.cs": "a59fecd797faf4e7344e9ff34e9267544759d6fbd1330132940c06042c0d5122"
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "15bc17ef39e24128650eabb311f6ba38f1ded600f27074765dcddd663dd8675f",
+    "PowerForge.PowerShell/PowerForge.PowerShell.csproj": "d5a166f3326af71a7afa027cd917f1fdba51881fa9ce1120f047a33ca4662740",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationArtifactBuilder.Infrastructure.cs": "451178aa788af86d37e2a5afea447b49774b128e029297e2a206da209f851d5a",
+    "PowerForge.Tests/PowerShellCompilationManagementHostDataTests.cs": "bdb16d865145ff70ca7b8517c77e82c08b9a4fdba22344c925708285766991c1"
   },
-  "dispositionComparison": "m29a-managed-container-metadata.net10.json",
-  "baselineRetainedInventoryCommit": "b076ba5158255e5ec2a40b230158d85529f443cd",
-  "emitted": 543,
-  "retained": 22,
+  "dispositionComparison": "m29a-management-sdk-data.net10.json",
+  "baselineRetainedInventoryCommit": "28166e7fefee1943ac96f82119296ba03cc0d510",
+  "emitted": 544,
+  "retained": 21,
   "hostedBoundaryEvidence": [
     "m29a-paging-transfer-boundaries.json",
     "m29a-external-transfer-boundaries.json",

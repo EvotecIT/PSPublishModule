@@ -47,6 +47,10 @@ internal static class PowerShellCompilationParameterTypePolicy
         // Command descriptions and proxy source generation retain active-host SDK semantics.
         typeof(CommandMetadata),
         typeof(ProxyCommand),
+        // Active-host command metadata and borrowed CIM sessions keep SDK identity.
+        typeof(Cmdlet),
+        typeof(Microsoft.Management.Infrastructure.CimSession),
+        typeof(Microsoft.Management.Infrastructure.CimClass),
         // Caller-owned variable cells require the native invocation and host binding.
         typeof(PSReference),
         // Execution objects remain caller-owned and use the active native binder.
@@ -144,6 +148,9 @@ internal static class PowerShellCompilationParameterTypePolicy
     private static bool RequiresNativeFunctionBinding(Type type)
         => type == typeof(PSReference) || type == typeof(PowerShell) ||
            type == typeof(CommandMetadata) || type == typeof(ProxyCommand) ||
+           type == typeof(Cmdlet) ||
+           type == typeof(Microsoft.Management.Infrastructure.CimSession) ||
+           type == typeof(Microsoft.Management.Infrastructure.CimClass) ||
            type == typeof(System.Management.Automation.Runspaces.Runspace) ||
            type == typeof(System.Management.Automation.Runspaces.RunspacePool) ||
            type == typeof(System.Management.Automation.Runspaces.RunspaceFactory) ||

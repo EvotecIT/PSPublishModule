@@ -1913,3 +1913,64 @@ across the two managed-type waves are execution-qualified; all API behavior,
 performance, arbitrary imports, foreign runtime-free types and provider effects
 are not. No AD, network, UI, installer, PR, merge or release operation occurs.
 The broader support-gap goal remains active.
+
+
+## Milestone 29a: SDK management data and generated reference closure
+
+The shared host-type policy now qualifies exact SDK Cmdlet, CimSession and
+CimClass identities only with native function binding and PowerShell host types.
+Existing supported arrays and closed containers inherit the recursive capability
+contract. Authored parameter declarations and borrowed resources remain owned by
+the active host; arbitrary same-name CLR types and runtime-free targets are not
+admitted.
+
+A compatibility build exposed the PowerShell 5 SDK package's reference-list limit:
+its nuspec lists only SMA, although the package also contains MMI. The net472
+compiler owner now explicitly references that existing SDK MMI file with
+Private=false. A sibling probe then reproduced the same missing-reference defect
+in generated net472 CIM static receivers and bare type literals. The canonical
+GetPowerShellReference owner now supplies the compile-only reference to generated
+projects too. Final receiver/type artifacts build and execute on both hosts, and
+neither artifact contains a copied MMI or SMA runtime DLL. No new package/version
+or product-specific type bridge is added.
+
+The unchanged pinned Find-CimClass function emits a complete native-bound method.
+Its exact UTF-8 source payload is preserved when assembled with authored helpers;
+only its leading file BOM is excluded. Twenty original/generated observations
+match on PowerShell 7/net10 and Windows PowerShell 5.1/net472. Real client-only CIM
+classes supply schema names; sessions are real SDK objects. The driver verifies
+ETS ScriptMethod replacements for both TestConnection and EnumerateClasses before
+calling the function. A module-owned namespace provider supplies in-memory rows.
+Matching, exclusion, empty results, pipeline binding, partial enumeration failure,
+platform/connection refusal, validation errors, metadata, borrowed identity, SDK
+common parameters, an owned-session factory and a bare CIM type literal are
+covered. All instances and sessions are disposed by the driver in finally. No
+connection, live WMI enumeration, AD, network or UI operation executes.
+
+Only Find-CimClass adds pinned coverage; nine helpers remain synthetic probes.
+The Cmdlet.CommonParameters blocker is also removed from
+New-PSDynamicParameterForm, but its WPF type retains the whole function. Generated
+artifacts contain ten methods. Their existing CS8321/NU1510 warnings are recorded
+without labeling artifact builds warning-free.
+
+Final focused host-data tests pass 2/2, including type literals and static calls.
+Strict analysis exits 1 with canProceed=false on both targets, preserving the
+host-only boundary. Final net472/net8 compiler builds have zero warnings/errors.
+One independent read-only review found no actionable defects after the paused
+initial pass resumed on the expanded SDK/generated-reference boundary. Saved
+runtime evidence and deployed DLL contents were inspected. No aggregate compiler
+gate was run. Non-Windows CIM availability, live provider behavior and all SDK
+containers were not separately executed; exact identity and recursive guards were
+reviewed.
+
+The fixed five-packet net10 comparison preserves every one of 565 function IDs
+and names and remains 584 complete units. Emitted methods rise from 543 to 544;
+21 remain retained. No emitted method or still-retained region is lost. Six have
+proven hosted boundaries; 15 remain unresolved. The
+[SDK data ledger](../Benchmarks/PowerShellCompilation/Corpus/m29a-management-sdk-data.net10.json)
+contains the exact source pin, compiler/build/lock/artifact hashes, complete host
+observations, review and failure resolution. The
+[reproduction driver](../Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/ManagementData/README.md)
+assembles the pinned external source without redistributing it. The complete
+net472 portfolio and performance were not refreshed. The broader goal stays
+active; no PR, merge or release occurs.
