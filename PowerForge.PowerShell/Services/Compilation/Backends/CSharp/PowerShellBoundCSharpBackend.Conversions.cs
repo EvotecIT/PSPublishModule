@@ -16,13 +16,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
             return $"__nativeFunction.ConvertCustomObject({EmitExpression(conversion.Operand)})";
         if (conversion.UseNativeConversion)
         {
+            var typeSpan = conversion.NativeRuntimeTypeSpan ?? conversion.Span;
             var target = conversion.NativeRuntimeTypeName is null
                 ? $"typeof({type})"
                 : "__nativeFunction.ResolveTypeName(" +
                   PowerShellCSharpLiteral.QuoteString(conversion.NativeRuntimeTypeName) + ", " +
                   QuotePortableSourcePath(conversion.NativeSourcePath) + ", " +
-                  conversion.Span.StartLine + ", " + conversion.Span.StartColumn + ", " +
-                  conversion.Span.EndLine + ", " + conversion.Span.EndColumn + ", " +
+                  typeSpan.StartLine + ", " + typeSpan.StartColumn + ", " +
+                  typeSpan.EndLine + ", " + typeSpan.EndColumn + ", " +
                   PowerShellCSharpLiteral.QuoteString(conversion.NativeSourceText) + ")";
             return $"({type})__nativeFunction.ConvertValue({target}, {EmitExpression(conversion.Operand)})!";
         }

@@ -32,6 +32,10 @@ internal static class PowerShellConversionSemanticBinder
         var targetType = syntax.Type.TypeName.GetReflectionType();
         if (targetType is null)
         {
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&
+                PowerShellCompilationConversionPolicy.IsHostProvidedEnumTypeName(syntax.Type.TypeName.FullName))
+                return BindNativeRuntimeConversion(document, syntax, bindExpression);
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2201",
                 $"Conversion target '{syntax.Type.TypeName.FullName}' requires runtime type resolution.", span));
             return null;
@@ -45,16 +49,7 @@ internal static class PowerShellConversionSemanticBinder
         {
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
             {
-                var runtimeOperand = bindExpression(syntax.Child, typeof(object));
-                return runtimeOperand is null ? null : new PowerShellBoundConversionExpression(
-                    span,
-                    new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.Explicit,
-                        "A target-incompatible CLR representation stays object-valued while the active PowerShell host resolves and applies the authored conversion."),
-                    runtimeOperand,
-                    nativeSourcePath: document.Path,
-                    nativeSourceText: PowerShellSourceParser.GetSourceLines(document, span),
-                    useNativeConversion: true,
-                    nativeRuntimeTypeName: syntax.Type.TypeName.FullName);
+                return BindNativeRuntimeConversion(document, syntax, bindExpression);
             }
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2201", $"Conversion target '{targetType.FullName}' is not available in the generated target contract.", span));
             return null;
@@ -99,6 +94,22 @@ internal static class PowerShellConversionSemanticBinder
                 preserveDictionaryShape ? operand.Type.DictionaryValueKind : PowerShellDictionaryValueKind.None),
             operand,
             usePowerShellLanguageRuntime);
+    }
+
+    private static PowerShellBoundExpression? BindNativeRuntimeConversion(
+        ParsedSourceDocument document, ConvertExpressionAst syntax,
+        Func<Ast, Type?, PowerShellBoundExpression?> bindExpression)
+    {
+        var operand = bindExpression(syntax.Child, typeof(object));
+        if (operand is null) return null;
+        var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
+        return new PowerShellBoundConversionExpression(span,
+            new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.Explicit,
+                "The active PowerShell host resolves the authored conversion target; its result remains object-valued in the generated CLR contract."),
+            operand, nativeSourcePath: document.Path,
+            nativeSourceText: PowerShellSourceParser.GetSourceLines(document, span),
+            useNativeConversion: true, nativeRuntimeTypeName: syntax.Type.TypeName.FullName,
+            nativeRuntimeTypeSpan: PowerShellSourceParser.GetSpan(document, syntax.Type.TypeName.Extent));
     }
 
     /// <summary>Preserves PowerShell's null-to-empty conversion for a closed string value.</summary>

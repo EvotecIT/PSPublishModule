@@ -1,0 +1,303 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Host-provided enum conversions; inventory emission separate from execution qualification.",
+  "baselineCompilerCommit": "90f632b0aadd7da2236e5d73bb674a7eed642539",
+  "baselineComparison": "m29a-literal-try-comparison.net10.json",
+  "baselineComparisonSha256": "3247e060e69c9a871e2eb6abac576844f30ed0a5882b45ed2723b1fd5bd7e403",
+  "baselineRetainedInventorySha256": "1035233c4fade528106b8bf791e71b37c065d6f2d637549f5e425819fd50ea65",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 492,
+  "packets": [
+    {
+      "packet": "pssg",
+      "functions": 282,
+      "stableUnits": 286,
+      "baselineEmitted": 257,
+      "candidateEmitted": 259,
+      "candidateExplanationSha256": "9af4099774d27986b946880e44ae9e28057257a53dcd5a5087469e104bca0cf2",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": [
+        {
+          "unitId": "ac21d9d86a616725839942bc",
+          "name": "Get-ComputerOperatingSystem",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [
+            "__PowerForgeRegion_d38f6908c36201510e93c915"
+          ],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "6f7f8ea42242680c357cd64a",
+          "name": "Get-ComputerSystem",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [
+            "__PowerForgeRegion_f5e8e186ba3dd826f351dc80"
+          ],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "functions": 68,
+      "stableUnits": 69,
+      "baselineEmitted": 63,
+      "candidateEmitted": 63,
+      "candidateExplanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "functions": 66,
+      "stableUnits": 67,
+      "baselineEmitted": 61,
+      "candidateEmitted": 61,
+      "candidateExplanationSha256": "73172aaac03d1c74782e361a0716d2c2d0c14b80abae98e870ef80c8253a8ee2",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "functions": 109,
+      "stableUnits": 121,
+      "baselineEmitted": 84,
+      "candidateEmitted": 84,
+      "candidateExplanationSha256": "bb7f462c3e2d95e8a13d75c4b0bef1d70fe6098c9821d5e99f709c70769ac6c3",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "platyps",
+      "functions": 40,
+      "stableUnits": 41,
+      "baselineEmitted": 27,
+      "candidateEmitted": 27,
+      "candidateExplanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    }
+  ],
+  "candidateEmitted": 494,
+  "candidateRetained": 71,
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellBoundOptimizer.cs": "795995ff4707205255743314b4cce2594a89bc0d4e259837d6d8e0d44cf1bd4b",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.Conversions.cs": "9568649230ff82d454100df68efc889b02cf7dc5b1f776b57d56a37ac574b3da",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellConversionSemanticBinder.cs": "85cd966dea299169a56d2da721c35c15205c17614f3dcd874d00d01f0bae8bf5",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "c5ed40749f5601c210896b46253589b82212cd70d033e1108ef9146a68f32934",
+    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundModel.cs": "4167c046ff637967dea580f7442e7eaade167329346f14289411ad759ce1de4f",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredModel.cs": "797e1cbf65580d90717bab06a71be616f8c254f0e0adf9a4c75c779bef9ee5a2",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs": "95c671a7d9ad7bbe3b198373386ea65aa954c6853f638ecf59dcc764077aea44",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationConversionPolicy.cs": "fc1fad9d0be2d4e2b25ee169dfefb8ba78e493f5e9a497b2bf08662ca74efc96",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellHybridModuleComposer.cs": "72e23475c9ef735b63b7d0543a901dd99cb12b630478402d87b7e1143a45655f"
+  },
+  "testSourceHashes": {
+    "PowerForge.Tests/PowerShellCompilationArtifactBuilderTests.cs": "2df6dfb2d303db73e21afb59e2b4fc1df3b950024421db50a07dcf6aa720c41b",
+    "PowerForge.Tests/PowerShellCompilationHostEnumConversionTests.cs": "1ea0bc5d9495f13f12da6b40f661ff29cbfb81e3d082c3f1faf4f4bfb0a49a18"
+  },
+  "retainedFunctionFeatureCounts": {
+    "assignment.target": 1,
+    "binary-module.cmdlet-shape": 2,
+    "command.foreach-object": 2,
+    "command.get-help": 1,
+    "command.get-item": 1,
+    "command.get-location": 1,
+    "command.new-object": 2,
+    "command.out-gridview": 1,
+    "command.out-string": 1,
+    "command.read-host": 1,
+    "command.resolve-path": 1,
+    "command.select-object": 1,
+    "command.set-clipboard": 1,
+    "command.showcontainer": 1,
+    "command.test-connection": 1,
+    "command.write-verbose": 4,
+    "command.write-warning": 2,
+    "control.finally.stream-stop": 2,
+    "expression.conversion": 2,
+    "parameter.default": 1,
+    "parameter.metadata": 3,
+    "parameter.type": 23,
+    "pipeline.lifecycle": 2,
+    "psb2611": 1,
+    "psb2961": 1,
+    "runtime.scope": 2,
+    "scriptblock.typed": 1,
+    "semantic.lowering.missing": 2,
+    "source.type-definition": 5,
+    "syntax.exitstatement": 1,
+    "syntax.foreachstatement": 1,
+    "syntax.functiondefinition": 1,
+    "syntax.invokememberexpression": 3,
+    "syntax.memberexpression": 2,
+    "syntax.pipeline": 1,
+    "syntax.subexpression": 1,
+    "syntax.typedefinition": 1,
+    "syntax.typeexpression": 2,
+    "syntax.unsupported": 34
+  },
+  "executionQualification": {
+    "sourceBaseline": "m29a-host-enum-design-baseline.json",
+    "sourceBaselineSha256": "2a6b0057b6d11fe3e0c8fd039a6e111f8c6935692bc072275954c8b6307d17b3",
+    "probe": "m29a-host-enum-probe.ps1",
+    "probeSha256": "505c75a8c9dcfdce89cac68ee41cff6a9e56ecaa1d9ade465f91cd0e7f1219da",
+    "unchangedWorkflows": [
+      {
+        "framework": "net10.0",
+        "host": "pwsh",
+        "observations": 36,
+        "buildReportSha256": "08bcec2f4041a00c02c4a390671fe3efc375e01c043e54e29ff1bcffa383421a",
+        "artifactSha256": "fc01461da3d2e59f0ef054aa306f4b1d75d2aa538c64f64f0d8968da05b82d26",
+        "generatedSourceSha256": "",
+        "generatedStdoutSha256": "ce02142c1aac1a7d25ea15891aa7c6ec5067c74a55e61452130a96efa4f67838",
+        "functions": [
+          {
+            "name": "Get-ComputerOperatingSystem",
+            "emittedClrMethod": true,
+            "usesNativeFunctionBinding": true,
+            "retainedHostedSource": false
+          },
+          {
+            "name": "Get-ComputerSystem",
+            "emittedClrMethod": true,
+            "usesNativeFunctionBinding": true,
+            "retainedHostedSource": false
+          },
+          {
+            "name": "ConvertFrom-LanguageCode",
+            "emittedClrMethod": true,
+            "usesNativeFunctionBinding": true,
+            "retainedHostedSource": false
+          },
+          {
+            "name": "ConvertTo-OperatingSystem",
+            "emittedClrMethod": true,
+            "usesNativeFunctionBinding": true,
+            "retainedHostedSource": false
+          }
+        ]
+      },
+      {
+        "framework": "net472",
+        "host": "powershell.exe",
+        "observations": 36,
+        "buildReportSha256": "87e8f5707856e066d1817f153449f16d612af22271424b6e47bba2743dd43504",
+        "artifactSha256": "fc01461da3d2e59f0ef054aa306f4b1d75d2aa538c64f64f0d8968da05b82d26",
+        "generatedSourceSha256": "",
+        "generatedStdoutSha256": "ce02142c1aac1a7d25ea15891aa7c6ec5067c74a55e61452130a96efa4f67838",
+        "functions": [
+          {
+            "name": "Get-ComputerOperatingSystem",
+            "emittedClrMethod": true,
+            "usesNativeFunctionBinding": true,
+            "retainedHostedSource": false
+          },
+          {
+            "name": "Get-ComputerSystem",
+            "emittedClrMethod": true,
+            "usesNativeFunctionBinding": true,
+            "retainedHostedSource": false
+          },
+          {
+            "name": "ConvertFrom-LanguageCode",
+            "emittedClrMethod": true,
+            "usesNativeFunctionBinding": true,
+            "retainedHostedSource": false
+          },
+          {
+            "name": "ConvertTo-OperatingSystem",
+            "emittedClrMethod": true,
+            "usesNativeFunctionBinding": true,
+            "retainedHostedSource": false
+          }
+        ]
+      }
+    ],
+    "syntheticObservationsPerHost": 29,
+    "limits": [
+      "Full five-packet census is net10.0 only; focused artifacts cover PowerShell 7/net10.0 and Windows PowerShell 5.1/net472.",
+      "Four-function closure uses a packaging wrapper; four source files are byte-identical to the pinned corpus.",
+      "Only qualified PCSystemType/OSProductSuite cast names gain unresolved-name admission; other unknown targets remain hosted.",
+      "Generated module bootstrap no longer auto-loads Management through Join-Path; missing-type ordering and source positions match originals.",
+      "No live CIM/WMI/network/administration operation, performance or non-Windows qualification.",
+      "The net472 desktop smoke fixture now explicitly declares CmdletBinding; its proof is the advanced-function surface."
+    ]
+  },
+  "validation": {
+    "host-enum-final-proof.trx": {
+      "sha256": "ce57e7032b43e6d7e8a952f856b29c3998d3161711020d397c724236f5c27225",
+      "counters": {
+        "total": "11",
+        "executed": "11",
+        "passed": "11",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "times": {
+        "creation": "2026-09-27T06:30:51.0366169+02:00",
+        "queuing": "2026-09-27T06:30:51.0366174+02:00",
+        "start": "2026-09-27T06:30:45.1817156+02:00",
+        "finish": "2026-09-27T06:31:16.0655854+02:00"
+      }
+    },
+    "net472OwnerBuild": {
+      "warnings": 0,
+      "errors": 0,
+      "elapsedSeconds": 4.4
+    },
+    "independentReview": {
+      "scope": "Nine production files and two test files, read-only against baseline compiler commit.",
+      "findings": [],
+      "limits": "Reviewer independently read final TRX and artifact ledger; census is primary-owned evidence. No non-Windows or aggregate regression run."
+    },
+    "host-enum-basic-boundary.trx": {
+      "sha256": "a66bab78c8b17d5a3b1260229d5ea1fa11d02393f40a0c884f8865c1f9743311",
+      "counters": {
+        "total": "2",
+        "executed": "2",
+        "passed": "2",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "times": {
+        "creation": "2026-09-27T06:33:52.5515625+02:00",
+        "queuing": "2026-09-27T06:33:52.5515626+02:00",
+        "start": "2026-09-27T06:33:45.8554485+02:00",
+        "finish": "2026-09-27T06:33:55.4500274+02:00"
+      }
+    }
+  }
+}

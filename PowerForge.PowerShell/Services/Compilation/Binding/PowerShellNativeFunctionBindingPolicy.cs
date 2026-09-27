@@ -140,8 +140,10 @@ internal static class PowerShellNativeFunctionBindingPolicy
            RequiresNativeDirectTryCapture(function) ||
            RequiresNativeDirectForEachCapture(function) ||
            function.Body.Find(node => node is ConvertExpressionAst conversion &&
-               conversion.Type.TypeName.GetReflectionType() is { } targetType &&
-               !PowerShellCompilationParameterTypePolicy.CanUseInMethod(targetType, targetFramework, capabilities),
+               (conversion.Type.TypeName.GetReflectionType() is { } targetType &&
+                !PowerShellCompilationParameterTypePolicy.CanUseInMethod(targetType, targetFramework, capabilities) ||
+                capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&
+                PowerShellCompilationConversionPolicy.IsHostProvidedEnumTypeName(conversion.Type.TypeName.FullName)),
                searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(static node => node is PipelineAst pipeline &&
                PowerShellCommandRegionSemanticBinder.RequiresPipelineSyntax(pipeline) && IsCapturedPipeline(pipeline),

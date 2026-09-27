@@ -51,7 +51,7 @@ internal sealed partial class PowerShellTypedLowerer
                 conversion.UsePowerShellTruthiness,
                 conversion.NormalizeNullString, conversion.NativeSourcePath, conversion.NativeSourceText,
                 conversion.NativePostTestCondition, conversion.UseNativeConversion,
-                conversion.UseNativeCustomObjectConversion, conversion.NativeRuntimeTypeName),
+                conversion.UseNativeCustomObjectConversion, conversion.NativeRuntimeTypeName, conversion.NativeRuntimeTypeSpan),
             PowerShellBoundRegionValueAlternativeExpression alternative => new PowerShellLoweredRegionValueAlternativeExpression(
                 alternative.Span,
                 alternative.AlternativeIndex,

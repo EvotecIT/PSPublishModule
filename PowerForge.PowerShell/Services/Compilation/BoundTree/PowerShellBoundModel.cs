@@ -296,7 +296,7 @@ internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpre
         bool normalizeNullString = false,
         string? nativeSourcePath = null,
         string nativeSourceText = "", bool nativePostTestCondition = false, bool useNativeConversion = false,
-        bool useNativeCustomObjectConversion = false, string? nativeRuntimeTypeName = null)
+        bool useNativeCustomObjectConversion = false, string? nativeRuntimeTypeName = null, SourceSpan? nativeRuntimeTypeSpan = null)
         : base(
             span,
             targetType,
@@ -325,6 +325,7 @@ internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpre
         UseNativeConversion = useNativeConversion;
         UseNativeCustomObjectConversion = useNativeCustomObjectConversion;
         NativeRuntimeTypeName = nativeRuntimeTypeName;
+        NativeRuntimeTypeSpan = nativeRuntimeTypeSpan;
     }
 
     internal PowerShellBoundExpression Operand { get; }
@@ -337,6 +338,7 @@ internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpre
     internal bool UseNativeConversion { get; }
     internal bool UseNativeCustomObjectConversion { get; }
     internal string? NativeRuntimeTypeName { get; }
+    internal SourceSpan? NativeRuntimeTypeSpan { get; }
 }
 
 internal enum PowerShellLocalCallResultProjection

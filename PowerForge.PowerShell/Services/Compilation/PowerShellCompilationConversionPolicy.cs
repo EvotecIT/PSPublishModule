@@ -4,6 +4,11 @@ namespace PowerForge;
 
 internal static class PowerShellCompilationConversionPolicy
 {
+    /// <summary>Known public Management enum casts resolve in the active host, not the compiler process.</summary>
+    internal static bool IsHostProvidedEnumTypeName(string name)
+        => name.Equals("Microsoft.PowerShell.Commands.PCSystemType", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("Microsoft.PowerShell.Commands.OSProductSuite", StringComparison.OrdinalIgnoreCase);
+
     internal static bool CanLower(
         ConvertExpressionAst conversion,
         string? targetFramework,

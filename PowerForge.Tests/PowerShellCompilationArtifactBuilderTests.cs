@@ -691,7 +691,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         using var fixture = ArtifactFixture.Create(
             """
             function Get-TriangularNumber {
-                param([int] $Count)
+                [CmdletBinding()]param([int] $Count)
                 [long] $total = 0
                 for ([int] $i = 1; $i -le $Count; $i++) { $total += $i }
                 return $total
