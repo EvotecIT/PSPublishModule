@@ -298,7 +298,7 @@ The Management-owned enum cast family is qualified for unchanged PSSharedGoods G
 
 
 - [x] Qualify ordinary non-CLR throws through the existing Hybrid invocation owner, independent of validation attributes. Basic/advanced error metadata, arbitrary values and cleanup retain both-host proof. Unchanged PowerInfoblox search/DNS-view functions emit and match 33 offline cases per host; no query network runs. Focused 27/27 plus metadata/lifecycle 8/8, net472 build and independent review passed. Same-input inventory is 502/565 with no losses; Strict non-CLR throws remain closed.
-- [ ] Continue the 31 retained-function boundaries from the current inventory. Separate unavailable authored/dependency types and unsafe provider effects from reusable syntax/storage/lifecycle gaps; require a real safe workflow and bounded semantic proof before changing admission. Do not count an emitted method as an executed or runtime-free workflow.
+- [ ] Continue the 30 retained-function boundaries from the current inventory. Separate unavailable authored/dependency types and unsafe provider effects from reusable syntax/storage/lifecycle gaps; require a real safe workflow and bounded semantic proof before changing admission. Do not count an emitted method as an executed or runtime-free workflow.
 
 
 - [x] Unify admitted native references around actual variable cells and qualify instance methods. Optimized/unoptimized/mixed storage, receiver/argument order, errors, native constraints, callback-retained references and module AllScope have both-host proof. Unchanged Initialize-ModulePortable matches ten owned local module-graph cases per host without downloads. Production compatibility 32/32, final retention/AllScope 2/2, net472 build and independent review passed. Same-input inventory reaches 504/565 with no losses; Test-ComputerPort is emission-only and Strict reference admission is unchanged.
@@ -347,5 +347,16 @@ The Management-owned enum cast family is qualified for unchanged PSSharedGoods G
 
 
 - [x] Qualify Hybrid dynamic-parameter metadata through the native declaration owner. Preserve SDK discovery timing and compile executable clauses; keep capability and clean guards. Unchanged Copy-HelpExample and Show-Tree match six/eight offline cases per Windows host, with module-owned help/grid/clipboard providers and an owned tree. Synthetic module and net10 executable proof cover binding, shared storage, caller-variable lookup and failure behavior. Independent owner review finds no actionable issue; same-input coverage reaches 534/565, 31 retained and 584 stable units with no losses. Runtime-free discovery, interactive effects and inner discovery coordinates remain unqualified.
-- [ ] Continue dependency-aware type qualification using the retained per-function ledger. Separate pure SDK data (EventLog/CIM), external MAML/AD/native-helper identities, target-unavailable APIs and WPF/UI providers. Require an available target-backed identity and a safe real workflow before admission; preserve fallback when the dependency cannot be established.
+- [ ] Continue dependency-aware type qualification using the retained per-function ledger. Separate remaining host data (CIM), external MAML/AD/native-helper identities, target-unavailable APIs and WPF/UI providers. Require an available target-backed identity and a safe real workflow before admission; preserve fallback when the dependency cannot be established.
 - [ ] Resolve remaining caller-scoped transfer workflows (including Format-Stream and Out-More) through original/generated caller-continuation evidence or a reusable control-flow design. Do not substitute ordinary return/exception behavior or reopen already justified hosted boundaries merely to increase emitted counts.
+
+
+- [x] Qualify exact borrowed Windows EventLogRecord inputs through the existing
+  Hybrid native binder, preserving recursive host/native capability guards and
+  caller-owned handle lifetime. Unchanged Convert-EventLogRecord has twelve real
+  read-only original/generated cases per Windows host; eight synthetic cases
+  preserve identity, containers and binding. Focused 6/6, net472/net8 owner builds,
+  one independent read-only pass and same-input no-loss census pass. The portfolio
+  reaches 535/565 emitted, 30 retained. No log writes, network or administration
+  runs; EventRecord base types, constructors, CIM and non-Windows runtime remain
+  unqualified. The wider support-gap goal remains active.

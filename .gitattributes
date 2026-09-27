@@ -53,3 +53,5 @@ Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Coordina
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/DynamicParameters/Copy-HelpExample.ps1 -text -eol -whitespace
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/DynamicParameters/ShowTree.ps1 -text -eol -whitespace
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/DynamicParameters/license.txt -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/EventRecord/Convert-EventLogRecord.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/EventRecord/license.txt -text -eol -whitespace

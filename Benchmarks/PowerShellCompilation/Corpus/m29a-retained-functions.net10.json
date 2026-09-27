@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "3bb756da1b8cd84b49a4067140bd9cc424b7dd00",
+  "compilerBaselineCommit": "2fb9718f62bdd3ec109849c605d50c7ecac9eaf9",
   "packets": [
     {
       "packet": "pssg",
@@ -14,13 +14,12 @@
       "emitted": 272,
       "retained": 10,
       "sourceExplanationSha256": "fddade31bb670e30e96f49b56754298aa71adf37ab8a7476d734b3476e3f2bf1",
-      "elapsedSeconds": 28.33,
+      "elapsedSeconds": 21.25,
       "gains": [],
       "functionsRetained": [
         {
           "unitId": "bde03b869be356b032686101",
           "name": "Get-ComputerSMBInfo",
-          "relativePath": "Private/Get-ComputerSMBInfo.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -42,12 +41,12 @@
               "line": 75,
               "column": 101
             }
-          ]
+          ],
+          "relativePath": "Private/Get-ComputerSMBInfo.ps1"
         },
         {
           "unitId": "c72f7b9fb7f89ad280e3bf0a",
           "name": "Get-LocalComputerSid",
-          "relativePath": "Private/Get-LocalComputerSid.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -60,12 +59,12 @@
               "line": 19,
               "column": 29
             }
-          ]
+          ],
+          "relativePath": "Private/Get-LocalComputerSid.ps1"
         },
         {
           "unitId": "a6e8a57a6342a4000f55ea16",
           "name": "Convert-ADGuidToSchema",
-          "relativePath": "Public/ActiveDirectory/Convert-ADGuidToSchema.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -87,12 +86,12 @@
               "line": 70,
               "column": 13
             }
-          ]
+          ],
+          "relativePath": "Public/ActiveDirectory/Convert-ADGuidToSchema.ps1"
         },
         {
           "unitId": "0f2489a391dbc4681d9d696e",
           "name": "Convert-ADSchemaToGuid",
-          "relativePath": "Public/ActiveDirectory/Convert-ADSchemaToGuid.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -107,12 +106,12 @@
               "line": 40,
               "column": 9
             }
-          ]
+          ],
+          "relativePath": "Public/ActiveDirectory/Convert-ADSchemaToGuid.ps1"
         },
         {
           "unitId": "17f55553dcb9ef7cc5e3af7f",
           "name": "Get-WinADForestDetails",
-          "relativePath": "Public/ActiveDirectory/Get-WinADForestDetails.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -127,12 +126,12 @@
               "line": 186,
               "column": 25
             }
-          ]
+          ],
+          "relativePath": "Public/ActiveDirectory/Get-WinADForestDetails.ps1"
         },
         {
           "unitId": "60f819cc0a9a0c963f4cb294",
           "name": "Get-ComputerDiskLogical",
-          "relativePath": "Public/Computers/Get-ComputerDiskLogical.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -147,12 +146,12 @@
               "line": 97,
               "column": 31
             }
-          ]
+          ],
+          "relativePath": "Public/Computers/Get-ComputerDiskLogical.ps1"
         },
         {
           "unitId": "9d40f1b46649a4f52dafa735",
           "name": "Set-PasswordRemotely",
-          "relativePath": "Public/Connectivity/Set-PasswordRemotely.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -165,12 +164,12 @@
               "line": 53,
               "column": 28
             }
-          ]
+          ],
+          "relativePath": "Public/Connectivity/Set-PasswordRemotely.ps1"
         },
         {
           "unitId": "975739889f75e147e751ffd4",
           "name": "ConvertTo-ImmutableID",
-          "relativePath": "Public/Converts/ConvertTo-ImmutableID.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -199,12 +198,12 @@
               "line": 40,
               "column": 58
             }
-          ]
+          ],
+          "relativePath": "Public/Converts/ConvertTo-ImmutableID.ps1"
         },
         {
           "unitId": "23f772789cacbab249c153b5",
           "name": "Format-Stream",
-          "relativePath": "Public/Objects/Format-Stream.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -217,12 +216,12 @@
               "line": 125,
               "column": 41
             }
-          ]
+          ],
+          "relativePath": "Public/Objects/Format-Stream.ps1"
         },
         {
           "unitId": "c4dc1ae9c4c4b22e84d4c0a1",
           "name": "Test-ModuleAvailability",
-          "relativePath": "Public/TestFunctionality/Test-ModuleAvailability.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -236,6 +235,7 @@
               "column": 9
             }
           ],
+          "relativePath": "Public/TestFunctionality/Test-ModuleAvailability.ps1",
           "qualificationBoundary": {
             "status": "JustifiedHosted",
             "family": "authored function exit",
@@ -253,13 +253,12 @@
       "emitted": 66,
       "retained": 2,
       "sourceExplanationSha256": "baa8d681c6113dde2fa749f067b9a9ac27e7cfdd33d9f0287d7de7b877de325a",
-      "elapsedSeconds": 21.88,
+      "elapsedSeconds": 15.52,
       "gains": [],
       "functionsRetained": [
         {
           "unitId": "2be0f84457750dd64ee0c5d1",
           "name": "Get-ADServiceAccountsToProcess",
-          "relativePath": "Private/Get-ADServiceAccountsToProcess.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -275,6 +274,7 @@
               "column": 5
             }
           ],
+          "relativePath": "Private/Get-ADServiceAccountsToProcess.ps1",
           "qualificationBoundary": {
             "status": "JustifiedHosted",
             "family": "caller-stack loop transfer",
@@ -286,7 +286,6 @@
         {
           "unitId": "78cf08da8e4e3bfb47233a33",
           "name": "Invoke-ADComputerInventoryChildProcess",
-          "relativePath": "Private/Invoke-ADComputerInventoryChildProcess.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -300,6 +299,7 @@
               "column": 9
             }
           ],
+          "relativePath": "Private/Invoke-ADComputerInventoryChildProcess.ps1",
           "qualificationBoundary": {
             "status": "JustifiedHosted",
             "family": "authored function exit",
@@ -317,13 +317,12 @@
       "emitted": 65,
       "retained": 1,
       "sourceExplanationSha256": "35f6919cdd439a762a9284cc3a90d32d6f984621307cafd753e71f40c9bc3d53",
-      "elapsedSeconds": 8.08,
+      "elapsedSeconds": 6.72,
       "gains": [],
       "functionsRetained": [
         {
           "unitId": "fc33881d5a7752031137ea07",
           "name": "Hide-SelfSignedCerts",
-          "relativePath": "Private/Hide-SelfSignedCerts.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -336,7 +335,8 @@
               "line": 24,
               "column": 9
             }
-          ]
+          ],
+          "relativePath": "Private/Hide-SelfSignedCerts.ps1"
         }
       ]
     },
@@ -344,37 +344,17 @@
       "packet": "pst",
       "functions": 109,
       "stableUnits": 121,
-      "emitted": 99,
-      "retained": 10,
-      "sourceExplanationSha256": "ab6df3a50c884b493f9fcbf4a448b753930b656d2dde9a174958c373f020cd83",
-      "elapsedSeconds": 13.938,
+      "emitted": 100,
+      "retained": 9,
+      "sourceExplanationSha256": "a5ca1488ab95c3f4bf0b3ce8c4c24c24cc36dcf0761a4d4c7ac09234fcb7ec68",
+      "elapsedSeconds": 15.23,
       "gains": [
-        "Copy-HelpExample",
-        "Show-Tree"
+        "Convert-EventLogRecord"
       ],
       "functionsRetained": [
         {
-          "unitId": "bebfe9a628f7f75ab8d88688",
-          "name": "Convert-EventLogRecord",
-          "relativePath": "functions/Convert-EventLogRecord.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$LogRecord' has CLR type 'System.Diagnostics.Eventing.Reader.EventLogRecord[]' that requires a target capability unavailable to this compilation.",
-              "line": 6,
-              "column": 9
-            }
-          ]
-        },
-        {
           "unitId": "e2de8ba6ca35935ce36593b7",
           "name": "ConvertTo-WPFGrid",
-          "relativePath": "functions/ConvertTo-WPFGrid.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -443,12 +423,12 @@
               "line": 324,
               "column": 37
             }
-          ]
+          ],
+          "relativePath": "functions/ConvertTo-WPFGrid.ps1"
         },
         {
           "unitId": "b669a68616829b343dc91676",
           "name": "New-PSDynamicParameterForm",
-          "relativePath": "functions/New-DynamicParamCode.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -468,12 +448,12 @@
               "line": 277,
               "column": 15
             }
-          ]
+          ],
+          "relativePath": "functions/New-DynamicParamCode.ps1"
         },
         {
           "unitId": "8c5dbe10dcc7e3a2f13e92ce",
           "name": "New-PSDriveHere",
-          "relativePath": "functions/New-PSDriveHere.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -487,6 +467,7 @@
               "column": 13
             }
           ],
+          "relativePath": "functions/New-PSDriveHere.ps1",
           "qualificationBoundary": {
             "status": "JustifiedHosted",
             "family": "caller-stack loop transfer",
@@ -498,7 +479,6 @@
         {
           "unitId": "0f49b0d93bead94178065edb",
           "name": "New-WPFMessageBox",
-          "relativePath": "functions/New-WPFMessageBox.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -511,12 +491,12 @@
               "line": 48,
               "column": 39
             }
-          ]
+          ],
+          "relativePath": "functions/New-WPFMessageBox.ps1"
         },
         {
           "unitId": "bbc6f74ca8facf49fb1bb749",
           "name": "Test-ExpressionForm",
-          "relativePath": "functions/Test-Expression.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -550,12 +530,12 @@
               "line": 300,
               "column": 40
             }
-          ]
+          ],
+          "relativePath": "functions/Test-Expression.ps1"
         },
         {
           "unitId": "6bf3b6db5fadf06390328270",
           "name": "Trace-Message",
-          "relativePath": "functions/Trace.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -582,12 +562,12 @@
               "line": 143,
               "column": 37
             }
-          ]
+          ],
+          "relativePath": "functions/Trace.ps1"
         },
         {
           "unitId": "8b0f1352c5b4b677ba198384",
           "name": "Out-More",
-          "relativePath": "functions/Utilities.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -600,12 +580,12 @@
               "line": 78,
               "column": 13
             }
-          ]
+          ],
+          "relativePath": "functions/Utilities.ps1"
         },
         {
           "unitId": "0f2509f48b1515bbeadae60b",
           "name": "Invoke-InputBox",
-          "relativePath": "functions/Utilities.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -618,12 +598,12 @@
               "line": 280,
               "column": 39
             }
-          ]
+          ],
+          "relativePath": "functions/Utilities.ps1"
         },
         {
           "unitId": "10ca22e8b6215064da37d706",
           "name": "Find-CimClass",
-          "relativePath": "functions/find-cimclass.ps1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -636,7 +616,8 @@
               "line": 17,
               "column": 9
             }
-          ]
+          ],
+          "relativePath": "functions/find-cimclass.ps1"
         }
       ]
     },
@@ -647,13 +628,12 @@
       "emitted": 32,
       "retained": 8,
       "sourceExplanationSha256": "b56ea24b4a5133d4976272a844bad89610d661a89a899f4427adfddf6bc22e3a",
-      "elapsedSeconds": 22.66,
+      "elapsedSeconds": 23.47,
       "gains": [],
       "functionsRetained": [
         {
           "unitId": "62d3e169b4f7eb162da5636b",
           "name": "New-MarkdownHelp",
-          "relativePath": "platyPS.psm1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -680,12 +660,12 @@
               "line": 167,
               "column": 17
             }
-          ]
+          ],
+          "relativePath": "platyPS.psm1"
         },
         {
           "unitId": "d2d71912c347b953da7048ce",
           "name": "Get-MarkdownMetadata",
-          "relativePath": "platyPS.psm1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -698,12 +678,12 @@
               "line": 350,
               "column": 20
             }
-          ]
+          ],
+          "relativePath": "platyPS.psm1"
         },
         {
           "unitId": "5ee4a7a53dcd1de47a890df6",
           "name": "New-YamlHelp",
-          "relativePath": "platyPS.psm1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -716,12 +696,12 @@
               "line": 773,
               "column": 25
             }
-          ]
+          ],
+          "relativePath": "platyPS.psm1"
         },
         {
           "unitId": "c96368db96471ed8b896af25",
           "name": "GetParserMode",
-          "relativePath": "platyPS.psm1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -734,12 +714,12 @@
               "line": 1572,
               "column": 16
             }
-          ]
+          ],
+          "relativePath": "platyPS.psm1"
         },
         {
           "unitId": "c3869fa353ba6eab0fd122a4",
           "name": "SetOnlineVersionUrlLink",
-          "relativePath": "platyPS.psm1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -752,12 +732,12 @@
               "line": 1699,
               "column": 9
             }
-          ]
+          ],
+          "relativePath": "platyPS.psm1"
         },
         {
           "unitId": "c601d4895e012344d1339884",
           "name": "NewModuleLandingPage",
-          "relativePath": "platyPS.psm1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -770,12 +750,12 @@
               "line": 2020,
               "column": 9
             }
-          ]
+          ],
+          "relativePath": "platyPS.psm1"
         },
         {
           "unitId": "d6e4134cee3f18e96062f742",
           "name": "ConvertMamlModelToMarkdown",
-          "relativePath": "platyPS.psm1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -788,12 +768,12 @@
               "line": 2116,
               "column": 9
             }
-          ]
+          ],
+          "relativePath": "platyPS.psm1"
         },
         {
           "unitId": "71cfc9b5f84adf546472a3fc",
           "name": "ConvertPsObjectsToMamlModel",
-          "relativePath": "platyPS.psm1",
           "retainedHostedSource": true,
           "semanticEligible": false,
           "usesNativeFunctionBinding": false,
@@ -813,112 +793,18 @@
               "line": 2649,
               "column": 13
             }
-          ]
+          ],
+          "relativePath": "platyPS.psm1"
         }
       ]
     }
   ],
   "compilerSourceHashes": {
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedAttributeDeclarationPolicy.cs": "ed1395b785f1b0c45b4821f3f301c8a7480c044882b35b8daa5c2588d361b78d",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSourceSemanticValidator.cs": "3ce3549b7055933fae786599104270055a5f209154fdd37af40c03e49cab8ecd",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationAnalyzer.Semantics.cs": "d9def0321bcef3ae3f038bf9dcc11e27261e5049e8d503bf773412bb643f86c9",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCommandHostRuntimeSource.cs": "dd9ca1a97e8e84c80499838930c04368e23dc445ef575f84970c1f914f505f08",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellNativeFunctionSourceGenerator.cs": "5edebb7612189637044a8ac0b0da2401a403a445b54c8105728dbda1ec088528",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.OwnedDeclaration.cs": "c4fe391a52ff0a057c00599e2dcfbc90487800e0ecd7af4e08f8c98e4003a074",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.cs": "bef359d76dbee21656c429002090b501f050d100adc41961d6c7fe888d2c0ecd",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "431b104f2aba5569a475022d9962610191ac21f80b6f13fd05bef4efa5210081",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedEnumDeclarationPolicy.cs": "13c19ff47ae23ae9d641c6d76ea6fe605e3187ccf13ecd607e53b68e2909c4c9",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedValueClassPolicy.cs": "e161dce7abde611d1ec26825f59d2a8218ebbabe239a3e199fdb8e509956cc73",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "b89b9674e8efff29dc493563974504e415b98fd67a08a73bd860185227e800e3",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "b23fc8abaf8fe5570e34398b46e3843d3a0f5082555c3255de4054afec8aec8e",
-    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeTypeExpression.cs": "33eed468f79993efecac2de58ea1241e077a6eccfc65924b46ef3954abf2c8de",
-    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeTypeExpression.cs": "a0b77e29eb83c01bd67f4ae3cc8f0a3670cedb13d93822a49b2103ea61872227",
-    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs": "3e6566d1d16a5b258eacf00ad95b28e6e171d31ab5f8995e27f8ca98124b4f66",
-    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.cs": "0a488bf77768ba49a3e68daf02ac93ba93032a14e0a1bd347d6e5e172b0e0d70",
-    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeReferenceExpression.cs": "4c9ab798686f3e67b8ea3aa8cd6205b43d4fc9f2998269dad95c1ef0b84e8007",
-    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeReferenceExpression.cs": "5d88678ead768a64b3c8de95a11ad231fb1bafde03b92e67a97196e3b9816ff7",
-    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.NativeAccess.cs": "68b03245e389021acc7796cda99b775e8003572b7fe847ea82d90ad735b28755",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Invocations.cs": "9dfff29122b5dd0701ab9c9ca08ddda8f71983b7fa99d2c737d50e4403f71852",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.NativeFunction.cs": "5ff00e3c69f38b2e4d8696c07f98491edf0de7fa963ff744302b19d96112239e",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Declarations.cs": "bf75cfb5377e463fc4c5636ce948ffba779d9e258e7e6cbb19d1b8ff0cb723c8",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.cs": "18c0f89fcace664b27b2327086d3195382d7cd648f10e27bbdd9b2e995f5a19b",
-    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellBoundOptimizer.cs": "e288f476ff4434ad0f8d6af0a1df46b42afe378103dcaf1dcd70dea2ef132b79",
-    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellStatementErrorCallPass.cs": "14a556345cb31501013a77983edf826124c7384fd0c50580335b0dcf52fc7336",
-    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.LoopTransfers.cs": "f9ee11e23f5f4df7a299bf3d873ae4ed99e71b9227d30b9a7a8ebb6535a5a8c3",
-    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.OutputCapture.cs": "7df1703fecafeb77afe28b9fe00b8d63ad0f97f35fdaea3aa913fe08b7837f54",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellControlFlowBindingPolicy.cs": "603da1db5a137290b482a45ecee7d72c9c732a96f888e27d4aa6628c1f47fbc8",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.OutputCapture.cs": "6ec5a58fd2eba8f92d648a1a017efe6b02b75f072791201de75dce538796974f",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs": "03cf4389089cb93b24b46ccb408dc293381d4a26a4c317fced380313628902d6",
-    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundOutputCaptureStatement.cs": "fe0fcebb5390383faef1d73a7f5cbc41df33370d4b938c72d47ef9cc13a7cbb4",
-    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundStatementRewriter.cs": "3807244ec5f24d7a96c9902c0a3d645064dc2fb72a860a40caa96d30c02d100e",
-    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredOutputCaptureStatement.cs": "89bda7c779d5313c595b59435091fcde6f977d116c266bad68c0703b5cae9897",
-    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.cs": "6539ad53759779357d9616dd55ecd28e4064260d4361d5d5a5218d6c07733837",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellCommandRegionSemanticBinder.cs": "15f3bb88806cd0529637cfbaf1a8aee585d9177bfab8f3f28a9b3551e6b3e0bb",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "9b72f1b9a66fd23530c72d025f7a51fc9a193680b62fa1d34e2e40f46df35a4d",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Conversions.cs": "1c8b2d0cdb168bbf4f52c83cfed1aeb819955aab78c21a181256313a13871631",
-    "PowerForge.Tests/PowerShellCompilationHostSessionConstructionTests.cs": "c3c7753b75e9bcc67034c042a92ab290c1d722ed7dc3b4f5c00664a564e5850b",
-    "Benchmarks/PowerShellCompilation/Corpus/m29a-web-session-probe.ps1": "e78e2269126126c7df0bdf0710a25cc95734806587f516a0c78e3b13c59c638a",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeTypeArgumentPolicy.cs": "ff940d7098ed93beefa02e16c65a99e7edab09bc2baf6de0fbb1c8805c493c2e",
-    "PowerForge.Tests/PowerShellCompilationTypeFactoryArgumentTests.cs": "b992c4cf7ee2445c11933d679c4ccd66593081fcc621b1be37205c7e6abb7315",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellConversionSemanticBinder.cs": "47af6f40ed25b941e60eec76f6aa45e9af823360a9a7848309b712465b6bda62",
-    "PowerForge.Tests/PowerShellCompilationReferenceParameterTests.cs": "c1dab2a79ad981884b2f11c50bfa1e78c01649dc67badf5d2b43d98c5ff05621",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.StaticAssignments.cs": "8a36e93ab618beaf1de56bf2a1e5452aeea096e690f85d266803b53d71c1550e",
-    "PowerForge.Tests/PowerShellCompilationStaticEnumAssignmentTests.cs": "4ca25ed159c6d93316285d93439fc2fe63dcd65f56c2915d92846fd909e5ece3",
-    "Benchmarks/PowerShellCompilation/Corpus/m29a-infoblox-connection-probe.ps1": "9fc3eac1c1ddbbead415cb30f947fd9d37d271349316d8cda577a7f30d739d04",
-    "Benchmarks/PowerShellCompilation/Corpus/m29a-infoblox-connection-boundaries.ps1": "62cab9226a47197b53b28639b3e33509f1cc0a7e1b6bcb26e81b432daabfe7a6",
-    "PowerForge.Tests/PowerShellCompilationLocalExecutionTests.cs": "70cbf7a628910362faeb0c6e9f86d071e380606582d5eb5204f466e3dc89d9af",
-    "PowerForge.Tests/PowerShellCompilationCommandProxyTests.cs": "a87996056f38dc0b300e74ec6207ce70b873dccc98f288575c0571f76e207858",
-    "PowerForge.Tests/PowerShellCompilationNativeValueArgumentTests.cs": "069e599a367f43d1044468f1cf2542888d488e65a4eb8c5abfc449eb358764aa",
-    "PowerForge.Tests/PowerShellCompilationArgumentPositionTests.cs": "8c737e610664b3c175f9991760b83ee2be7415a389ac86a8feaf0909fb5c43c8",
-    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.HostedCommands.cs": "9891fd59b770ded495f00994474274c576b8d9bb833ed735efce0c8fd0fe13d8",
-    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.NativeCollections.cs": "ca64701a0567557d4d2a0f5d9f6db72af6f5b31719eb3c82a19068a24ce464e5",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellArraySemanticBinder.cs": "2a8509a6003a759b84ae90b308081c0dd91a43ada8c9303c15f6674f000eacd3",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.CommandRegions.cs": "dd02dce782334b83ef65378c101388cd32278101f5792a172b7e819dafe0e35d",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Compilation.cs": "e2497bb9469202f9f841668911328a6c422c947d9568cf4c826b35a64da2fbe4",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedLocalEnumPolicy.cs": "35c398d2fb7070f5a36574fd2cacd7a0b45a078c77cffdc00963f006c8781574",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.cs": "e8232bdd2bd4c00c91862381ba59effe1f8dcaf86130469fda6e2f745cdc8f05",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.FunctionEnums.cs": "d829293c32e909ba16b73a55f4816dcdf6e7a2cade9b58ab02113b4260100c3f",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.cs": "39d99619c4d1846f760c947ac24536d161b7dbcb68293cbccb2283fda07d77ed",
-    "PowerForge.Tests/Fixtures/PowerShellCompilationStatementErrorFixture/NativeAuthoredMetadataFixture.cs": "c701f8af7ccaad627ed79042b12588bc950439bedda6922a177733bd6f92e0d5",
-    "PowerForge.Tests/PowerShellCompilationLocalEnumTests.cs": "fc6943dc82712cc07d4b95d4be85c23d523471b1e46b693d1955eaa37cdc43b5",
-    "PowerForge/Models/PowerShellCompilation/PowerShellNativeFunctionBinding.cs": "026cf2ecb85ad160208bb05156dbc33f637f9c6e41f6b153c560369b3ade609c",
-    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellSemanticAnalyzer.ValueConsumption.cs": "ed72489e5cad2151d440b844a09caecd25d6bff1e5ae316bd89c30091e819bb2",
-    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.ControlFlow.cs": "f7e3f0efb8f666571db0a399a4bbaa21ce569c8c75358a1aba00a3b2229683a9",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.StatementValues.cs": "269bb1542fa07e176bac844b33852fde5106129dcd3763236a4461e4acaf4c33",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Switch.cs": "de56802f0a646208c0f190642234e6d2186903963148f741a3c598fc94ea13f3",
-    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundControlFlow.cs": "3c5bc5a765a429f03feee5a5fe03304ed0016511a5bb8ecbadc45db91ad5cefb",
-    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredControlFlow.cs": "ec7e5db974cf1608706348bbcab65683e534948e48ef062ba842bfe8a1fddf07",
-    "PowerForge.Tests/PowerShellCompilationCollectorArgumentTests.cs": "2182c56f6e78219409dac5bb31c8254d83919eb3e761d732555b0d726a46e2dc",
-    "PowerForge.Tests/PowerShellCompilationBasicCommandHostTests.cs": "5f9f903666a33bd6514492e6aeb54b3f4e824abdf51dd686569f9c22f57ca6eb",
-    "PowerForge.Tests/PowerShellCompilationReviewerClosureRegressionTests.cs": "3402f69ef46c1b45fbc14526451ccbf93c39c6fa1fa19cda156f4671b2804943",
-    "PowerForge.Tests/PowerShellCompilationRuntimeStateTests.cs": "0e93884f931e093a49be4bbb840361963c72d75098cbf7871ae938c381688f32",
-    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellSemanticAnalyzer.Fallback.cs": "de7141332fa21967893e39031d1e88f366bb756942293d11bedd306dd51c99b3",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellRuntimeStateIntrinsicPolicy.cs": "b8049084ea18d688c1168d2e47c4f63889eb122db0af83a05a195333cef39946",
-    "PowerForge.Tests/PowerShellCompilationFinallyCommandValueTests.cs": "7f0cd9ca60b17279e4515602e78fd1b78a8d57aa34e5568a5db7d594df304b00",
-    "PowerForge.Tests/PowerShellCompilationFinallyReportWorkflowTests.cs": "af7ebd1798db331c47f2844a921e377104c1ca8209f8d022c91302e476f94bb4",
-    ".gitattributes": "3c70c376bfbd92ceaba79c48168e45bf43f71004830c9e433de4572c972245a0",
-    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/SessionCopy/Copy-PSFunction.ps1": "3b527d3e31221935e8c7c7f40ad3ffd0eb12eb194e02f4aeed8d65b9ecdbbdda",
-    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/SessionCopy/Observe.ps1": "92d6f7b15549faedb874427df8f504afe72555695af26a89fa695139601a4e9a",
-    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/SessionCopy/README.md": "6f914396f1c5111a07ee9b893a91135225d7196d10d9b9ad2f92fdfd2b0c3f12",
-    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/SessionCopy/license.txt": "fb7d4eb5de8741978ce3dc1338771a53756e87d1134dc19b0199b2ee43beef95",
-    "PowerForge.Tests/PowerShellCompilationPSSessionDataTests.cs": "007dc50e3949b401e8e83089d3b0ab8a076950fa967919596e1624959b95b73f",
-    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/platyPS/SessionData/Observe.ps1": "aa180ced4b395aeba632b7d7f592b7fdf8671d3251a5a05de52c0cc98ab23e7c",
-    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/platyPS/SessionData/README.md": "a0364554c8be513701c54613d4c53b7cf1b97a873042ef1fb7855cc9a08d5619",
-    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Coordinates/Observe.ps1": "a652b87678831e721e179cc776d1c2d328e853df80c82a3aaf9b7383fb6b7283",
-    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Coordinates/README.md": "961d32328ddf48444575379c172e70cb411f6d64863c44bc19a145abc686112c",
-    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Coordinates/Write-AnsiProgress.ps1": "2768f1fda6b2ecf58b0227b5a29b2f96c5c9ed2c93c58afec7dde764bfc7a493",
-    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Coordinates/license.txt": "fb7d4eb5de8741978ce3dc1338771a53756e87d1134dc19b0199b2ee43beef95",
-    "PowerForge.Tests/PowerShellCompilationCoordinateDataTests.cs": "56b26d4793b00f22f3afb018b688e1e1ce0132afd347272f2a43851559675ab7",
-    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/DynamicParameters/Copy-HelpExample.ps1": "50f8151458aadc0581a65c51a5fa72769dbf489131fd9075a645545585c760e5",
-    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/DynamicParameters/ObserveCopyHelp.ps1": "93d7ae58dd77c3fb2d261d87798c0c794a93864b84c6390b4fea111e1d1c0606",
-    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/DynamicParameters/ObserveTree.ps1": "cb721a003341547c8268040b1085c9a3ba5afaa84159c3404342d70086f38680",
-    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/DynamicParameters/ShowTree.ps1": "247ed38488726d4ffdd93a7a6af81779ffec825585513a78ed812cddcfca5548",
-    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/DynamicParameters/license.txt": "fb7d4eb5de8741978ce3dc1338771a53756e87d1134dc19b0199b2ee43beef95",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Program.cs": "d4866355b581afd6b972843ad8eec79a4363847965b69d7ac8634bcb0801504d",
-    "PowerForge.Tests/PowerShellCompilationDynamicParameterTests.cs": "af997b9b1685d1fa3da5ff29b8871dca7bac6c8c1c33a3112378a856cdc1b554"
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "22c8ea830bfd35341dc123b035f6beca32864df84d2353b4e926f1ce94ceec21",
+    "PowerForge.Tests/PowerShellCompilationEventRecordDataTests.cs": "9cfa224902db285247ed071d9bd42d90fd1db3ce30d9d782697ce2db90bcf27c"
   },
-  "dispositionComparison": "m29a-dynamic-parameters-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "3bb756da1b8cd84b49a4067140bd9cc424b7dd00",
-  "emitted": 534,
-  "retained": 31
+  "dispositionComparison": "m29a-event-record-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "2fb9718f62bdd3ec109849c605d50c7ecac9eaf9",
+  "emitted": 535,
+  "retained": 30
 }

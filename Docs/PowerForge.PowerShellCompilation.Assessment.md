@@ -1693,3 +1693,61 @@ Dynamic discovery remains SDK-hosted. Clean discovery, inner discovery source
 coordinate equivalence, general providers, performance, non-Windows behavior,
 full net472 census and reviewed dependency locks are unqualified. The broader
 support-gap goal remains open. No PR, merge or release is claimed.
+
+
+## 2026-09-27: borrowed Windows event-record data
+
+The shared parameter policy now admits exact EventLogRecord data through the
+existing Hybrid native binder. Scalar, one-dimensional array, List and Dictionary
+parameters retain SDK binding, reference identity and caller-owned handles. Both
+native-function and host-type capabilities are required recursively; TypedLibrary,
+BinaryModule and either missing Hybrid capability remain closed. No constructor,
+resource-ownership or disposal implementation is added.
+
+Unchanged pinned PSScriptTools Convert-EventLogRecord emits on net10.0 and net472.
+The two Windows host processes each read two real System log records and compare
+original/generated calls using the same objects. Twelve cases cover scalar/array/
+pipeline input, duplicates, actual verbose records, null/invalid binding,
+downstream stop and disposed-record errors. Mixed valid/disposed input preserves
+one output before the authored ToXml failure terminates under Continue,
+SilentlyContinue and Stop. Error IDs, types, messages and authored positions match.
+Eight synthetic scalar/array/List/Dictionary cases additionally compare reference
+identity, metadata and caller readability. Caller finally disposes its own records;
+generated invocation cleanup does not dispose them. The four synthetic methods
+add no external workload count.
+
+Final focused and adjacent declaration tests pass 6/6; TRX SHA-256:
+`8dcba8b33b9328653a0319612f52d2024b071aeaea1abb73e97b7ae2539ae9f1`.
+Owner builds for net472 and net8 pass with zero warnings/errors. The initial build
+failed on an unused xUnit theory argument; the subsequent baseline emission run
+passed both capability guards and failed both pinned complete-method assertions
+after successful artifact builds (2/4). Candidate artifact tests passed 4/4;
+the final six-test cohort includes positive recursive admission assertions.
+A test-only Count method-group compile error was corrected before that final run.
+Earlier driver assumptions about null identity, a nonexistent VerboseVariable
+parameter and recoverable disposed-record errors were corrected against original
+behavior; those failed runs are not claimed green. No long aggregate gate ran.
+
+One independent read-only pass found no actionable defects in the eight staged
+policy, test, provenance and observer files. Reviewed patch SHA-256:
+`e5142a9d5312ae5bd8b6ae6362e54913154cc7d3180884c62b3e28e4108a7bdf`.
+The reviewer inspected admission recursion, generated references, invocation and
+resource ownership, and the projected runtime evidence; it ran no builds/tests.
+
+Final-source five-packet Hybrid net10 explanation preserves 565 function IDs,
+584 units, all previous complete methods and regions of still-retained functions:
+**535 emitted, 30 retained**. PSScriptTools rises 99 to 100/109; PSSharedGoods stays
+272/282, CleanupMonster 66/68, PowerInfoblox 65/66 and platyPS 32/40. Four explicit
+justified hosted boundaries remain. The
+[event-record comparison](../Benchmarks/PowerShellCompilation/Corpus/m29a-event-record-comparison.net10.json)
+records the full disposition delta, exact staged source hashes, test counters,
+artifact-build hashes and both-host runtime observations. The
+[portable observers](../Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/EventRecord/README.md)
+describe the source/license pin and required Windows read access.
+
+Event payloads and verbose messages are hashed in memory; no raw event data is
+committed. Only two local log records are read, with no writes/export/network/admin
+operation. This does not qualify EventRecord base types, constructors, general
+providers, CIM, non-Windows runtime, full-module execution, performance, a full
+net472 portfolio census or reviewed dependency locks. The broader support-gap goal
+stays open. No PR, merge or release is claimed.

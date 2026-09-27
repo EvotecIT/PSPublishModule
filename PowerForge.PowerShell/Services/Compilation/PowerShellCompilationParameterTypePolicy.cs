@@ -58,6 +58,8 @@ internal static class PowerShellCompilationParameterTypePolicy
         typeof(System.Management.Automation.Runspaces.PSSession),
         // Mutable coordinate values retain SDK binding and value-copy semantics.
         typeof(System.Management.Automation.Host.Coordinates),
+        // Borrowed event records keep the Windows host's binding and caller-owned handles.
+        typeof(System.Diagnostics.Eventing.Reader.EventLogRecord),
         typeof(Parser),
         typeof(HashtableAst)
     };
@@ -147,6 +149,7 @@ internal static class PowerShellCompilationParameterTypePolicy
            type == typeof(System.Management.Automation.Runspaces.RunspaceFactory) ||
            type == typeof(System.Management.Automation.Runspaces.PSSession) ||
            type == typeof(System.Management.Automation.Host.Coordinates) ||
+           type == typeof(System.Diagnostics.Eventing.Reader.EventLogRecord) ||
            type.IsArray && RequiresNativeFunctionBinding(type.GetElementType()!) ||
            type.IsConstructedGenericType && type.GetGenericArguments().Any(RequiresNativeFunctionBinding);
 }
