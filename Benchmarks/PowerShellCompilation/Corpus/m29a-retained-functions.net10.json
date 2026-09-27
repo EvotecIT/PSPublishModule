@@ -217,7 +217,14 @@
               "column": 41
             }
           ],
-          "relativePath": "Public/Objects/Format-Stream.ps1"
+          "relativePath": "Public/Objects/Format-Stream.ps1",
+          "qualificationBoundary": {
+            "status": "JustifiedHosted",
+            "family": "caller-stack paging/format transfer",
+            "evidence": "m29a-paging-transfer-boundaries.json",
+            "reason": "Authored bare break ends a plain caller script or breaks an enclosing caller loop while preserving finally and partial output. Function-local return or ordinary exception lowering changes the observed behavior.",
+            "scope": "Both Windows hosts, unchanged isolated function source, bounded module-owned formatting/queued input providers; no keyboard/screen mutation or compiled-method gain."
+          }
         },
         {
           "unitId": "c4dc1ae9c4c4b22e84d4c0a1",
@@ -581,7 +588,14 @@
               "column": 13
             }
           ],
-          "relativePath": "functions/Utilities.ps1"
+          "relativePath": "functions/Utilities.ps1",
+          "qualificationBoundary": {
+            "status": "JustifiedHosted",
+            "family": "caller-stack paging/format transfer",
+            "evidence": "m29a-paging-transfer-boundaries.json",
+            "reason": "Authored bare break ends a plain caller script or breaks an enclosing caller loop while preserving finally and partial output. Function-local return or ordinary exception lowering changes the observed behavior.",
+            "scope": "Both Windows hosts, unchanged isolated function source, bounded module-owned formatting/queued input providers; no keyboard/screen mutation or compiled-method gain."
+          }
         },
         {
           "unitId": "0f2509f48b1515bbeadae60b",
@@ -806,5 +820,10 @@
   "dispositionComparison": "m29a-event-record-comparison.net10.json",
   "baselineRetainedInventoryCommit": "2fb9718f62bdd3ec109849c605d50c7ecac9eaf9",
   "emitted": 535,
-  "retained": 30
+  "retained": 30,
+  "hostedBoundaryEvidence": [
+    "m29a-paging-transfer-boundaries.json",
+    "m29a-external-transfer-boundaries.json",
+    "m29a-exit-boundaries.json"
+  ]
 }

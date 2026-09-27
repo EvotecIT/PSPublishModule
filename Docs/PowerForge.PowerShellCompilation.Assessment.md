@@ -1751,3 +1751,50 @@ operation. This does not qualify EventRecord base types, constructors, general
 providers, CIM, non-Windows runtime, full-module execution, performance, a full
 net472 portfolio census or reviewed dependency locks. The broader support-gap goal
 stays open. No PR, merge or release is claimed.
+
+
+## 2026-09-27: remaining formatting and paging caller transfers
+
+Format-Stream and Out-More are now qualified as justified hosted boundaries.
+Unchanged pinned source is delivered in isolated Hybrid modules on net10.0 and
+net472; all four artifacts retain their function with zero complete compiled
+methods. All four Strict explanations have canProceed false and no emitted
+method. These are hosted behavior observations, not new compilation coverage.
+
+Empty Format-Stream input ends a plain caller script or breaks its enclosing
+caller loop. The caller's finally runs; catch, statements after the call and
+later plain-script statements are bypassed. Nonempty input resumes normally and
+produces the expected six formatted records per invocation under an in-memory
+Format-PSTable provider.
+
+Out-More buffers the first page, receives a queued quit response, and executes
+bare break only when another input reaches process. That preserves the first two
+outputs before ending a plain caller script or breaking an enclosing loop.
+When quit is requested on the last input, the function returns normally: there
+is no subsequent process invocation to reach the break. More/All/Next and an
+invalid response followed by All preserve authored scalar/array output shapes,
+ANSI prompt-clearing strings and caller continuation. Prompt text and read counts
+are captured by module-owned providers; no keyboard is read or screen modified.
+
+The final observer asserts successful data output and expected transfer/finally
+before serializing its result. Twenty-six original/generated case/host comparisons
+match: eight formatting and eighteen paging across PowerShell 7 and Windows
+PowerShell 5.1. All child exit codes are zero, stderr is empty, and none records
+an ordinary caught error. The
+[boundary evidence](../Benchmarks/PowerShellCompilation/Corpus/m29a-paging-transfer-boundaries.json)
+includes exact build/explanation hashes, compiler commit, source pins and projected
+outputs/continuation. The [driver](../Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/ControlFlow/README.md#formatting-and-paging-transfers)
+documents reproduction and existing MIT license locations. Out-More is an exact
+unchanged function byte span from its pinned Utilities.ps1; the parent hash is
+also recorded.
+
+Production and pinned portfolio inputs are unchanged, so the accepted event-record
+same-input census remains authoritative: 535/565 emitted, 30 retained and 584 stable
+units. Two existing retained entries gain qualificationBoundary metadata; all
+method/region dispositions and four earlier boundaries are preserved. Six retained
+functions now have justified hosted proof and 24 remain unresolved. No aggregate
+gate or independent review was repeated for directly observed hosted behavior.
+Development dependency locks remain unreviewed. Physical display, ClearScreen,
+transpose, multiline/help recursion, arbitrary caller stacks and non-Windows
+behavior are outside the proof. General native caller-transfer ABI work remains
+open. No PR, merge, release or administration operation occurs.

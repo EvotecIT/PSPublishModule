@@ -329,3 +329,24 @@ The [comparison](../Benchmarks/PowerShellCompilation/Corpus/m29a-event-record-co
 contains hashes and safe projections rather than raw event payloads. EventRecord
 base types, construction, general providers, CIM and non-Windows runtime behavior
 remain unqualified.
+
+
+## Hosted formatting and paging transfers
+
+Unchanged Format-Stream and Out-More now have explicit both-host caller-transfer
+qualification. Empty Format-Stream input ends a plain caller script or breaks an
+enclosing loop. Out-More preserves the first page before a later process invocation
+reaches its quit break; quitting on the last input returns normally. Caller finally
+runs and ordinary catch is bypassed on transfer. Nonempty formatting and
+More/All/Next/invalid-response paging cases resume normally.
+
+Twenty-six original/generated case/host comparisons match under in-memory table
+and queued input/host providers. No keyboard or screen mutation runs. Four Hybrid
+artifacts retain the functions with zero complete-method gains, and four Strict
+explanations fail closed. The portfolio stays **535/565 emitted, 30 retained**;
+six retained entries are JustifiedHosted and 24 remain unresolved. The
+[paging boundary evidence](../Benchmarks/PowerShellCompilation/Corpus/m29a-paging-transfer-boundaries.json)
+records exact source pins, dispositions, outputs and caller continuation. Physical
+rendering, multiline/help recursion, ClearScreen, transpose, arbitrary caller stacks
+and non-Windows behavior remain unqualified. General native caller-transfer design
+is still a separate capability, rather than a function-local return substitution.
