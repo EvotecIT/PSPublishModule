@@ -58,15 +58,6 @@ namespace PowerForge.Generated.Runtime
             return native.Compile();
         }
 
-        internal static bool IsBoundedNativeAccessTarget(ExpressionAst target)
-            => target is MemberExpressionAst { Static: false, Expression: VariableExpressionAst memberReceiver,
-                Member: StringConstantExpressionAst } member && member is not InvokeMemberExpressionAst &&
-                memberReceiver.VariablePath.IsUnqualified &&
-                member.GetType().GetProperty("NullConditional")?.GetValue(member) is not true ||
-               target is IndexExpressionAst { Target: VariableExpressionAst indexReceiver } index &&
-                indexReceiver.VariablePath.IsUnqualified && IsNativeAssignmentIndex(index.Index) &&
-                index.GetType().GetProperty("NullConditional")?.GetValue(index) is not true;
-
         internal static VariableExpressionAst? FindNativeAccessMutationReceiver(ExpressionAst target)
             => target switch
             {

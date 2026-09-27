@@ -112,7 +112,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
            RequiresNativeLiteralCommandValue(function, capabilities) ||
            RequiresNativeCommandSwitch(function, capabilities) ||
            RequiresNativeObjectParameterSwitch(function, capabilities) ||
-           RequiresNativeConditionalAccessCapture(function) ||
+           RequiresNativeAccessOutputCapture(function) ||
            function.Body.Find(static node => node is AssignmentStatementAst assignment &&
                PowerShellSemanticBinder.NativeStaticAssignmentReceiver(assignment.Left) is not null,
                searchNestedScriptBlocks: false) is not null ||
@@ -194,12 +194,12 @@ internal static class PowerShellNativeFunctionBindingPolicy
             searchNestedScriptBlocks: false) is not null;
     }
 
-    private static bool RequiresNativeConditionalAccessCapture(FunctionDefinitionAst function)
-        => function.Body.Find(static node => node is AssignmentStatementAst
-            {
-                Operator: TokenKind.Equals,
-                Right: IfStatementAst
-            } assignment && PowerShellSemanticBinder.IsNativeConditionalAccessCaptureTarget(assignment.Left),
+    private static bool RequiresNativeAccessOutputCapture(FunctionDefinitionAst function)
+        => function.Body.Find(static node => node is AssignmentStatementAst { Operator: TokenKind.Equals } assignment &&
+            (assignment.Right is IfStatementAst or ForStatementAst or ForEachStatementAst or WhileStatementAst or DoWhileStatementAst or DoUntilStatementAst ||
+             PowerShellSemanticBinder.UnwrapExpression(assignment.Right) is ArrayExpressionAst collection &&
+             collection.SubExpression.Statements.Count == 1 && collection.SubExpression.Statements[0] is ForEachStatementAst or TryStatementAst) &&
+            PowerShellSemanticBinder.NativeCaptureAccessReceiver(assignment.Left, allowMemberOnly: assignment.Right is IfStatementAst) is not null,
             searchNestedScriptBlocks: false) is not null;
 
     /// <summary>Selects invocation-owned lookup for a locally constructed map used outside the typed index contract.</summary>

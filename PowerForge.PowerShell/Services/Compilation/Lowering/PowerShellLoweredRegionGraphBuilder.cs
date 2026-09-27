@@ -227,6 +227,15 @@ internal static class PowerShellLoweredRegionGraphBuilder
                     break;
                 case PowerShellLoweredOutputCaptureStatement capture:
                     if (capture.Target is not null) RecordFirst(writeOffsets, Symbol(capture.Target), statement.Span.EndOffset);
+                    if (capture.NativeTarget is { } nativeCapture)
+                    {
+                        RecordFirst(readOffsets, "PowerShellSessionState:*", statement.Span.StartOffset);
+                        RecordFirst(writeOffsets, "PowerShellSessionState:*", statement.Span.EndOffset);
+                        if (nativeCapture.ReceiverVariableName is { } receiver)
+                            RecordFirst(writeOffsets, "PowerShellSessionVariable:" + receiver.ToUpperInvariant() + ".*", statement.Span.EndOffset);
+                        foreach (var name in nativeCapture.ReadVariables ?? Array.Empty<string>())
+                            RecordFirst(readOffsets, "PowerShellSessionVariable:" + name.ToUpperInvariant(), statement.Span.StartOffset);
+                    }
                     break;
                 case PowerShellLoweredCommandRegionStatement region:
                     if (region.NativeSourcePath is not null)

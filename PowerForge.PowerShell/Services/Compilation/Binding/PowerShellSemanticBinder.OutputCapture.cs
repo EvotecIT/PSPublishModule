@@ -130,14 +130,19 @@ internal sealed partial class PowerShellSemanticBinder
         }
         var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, usesNativeInvocation);
         var operation = PowerShellMutationSemanticBinder.GetAssignmentOperator(assignment.Operator);
-        var nativeConditionalAccess = usesNativeInvocation && assignment.Right is IfStatementAst &&
-                                      assignment.Operator == TokenKind.Equals &&
-                                      IsNativeConditionalAccessCaptureTarget(assignment.Left);
+        var accessReceiver = usesNativeInvocation && assignment.Operator == TokenKind.Equals
+            ? NativeCaptureAccessReceiver(assignment.Left, allowMemberOnly: assignment.Right is IfStatementAst) : null;
+        if (accessReceiver is not null && !CaptureAccessTypesAreAvailable(assignment.Left, targetFramework, capabilities))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2611",
+                "A captured access destination requires literal type constraints available on the requested target.", span));
+            return null;
+        }
         PowerShellSemanticSymbolBinding? target = null;
         if (variable is not null) symbols.TryGetValue(variable.VariablePath.UserPath, out target);
         if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) ||
             !capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) ||
-            variable is null && !nativeConditionalAccess || operation is null ||
+            variable is null && accessReceiver is null || operation is null ||
             !usesNativeInvocation && (variable is null || assignment.Operator != TokenKind.Equals || assignment.Left is not VariableExpressionAst ||
                 IsRuntimeOwnedScope(variable.VariablePath.UserPath) || target is null ||
                 target.Type.Provenance != PowerShellTypeFactProvenance.Unknown && target.Type.ClrType != typeof(object) ||
@@ -194,7 +199,12 @@ internal sealed partial class PowerShellSemanticBinder
                 body,
                 new PowerShellNativeAssignmentTarget(assignment.Left.Extent.Text, document.Path, document.Text,
                     PowerShellSourceParser.GetSpan(document, assignment.Left.Extent),
-                    assignment.Left.Extent.StartOffset, assignment.Left.Extent.EndOffset), operation.Value,
+                    assignment.Left.Extent.StartOffset, assignment.Left.Extent.EndOffset,
+                    MutatesReceiver: accessReceiver is not null,
+                    ReadVariables: accessReceiver is null ? null : assignment.Left.FindAll(static node => node is VariableExpressionAst, false)
+                        .Cast<VariableExpressionAst>().Select(static node => node.VariablePath.UserPath)
+                        .Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+                    ReceiverVariableName: accessReceiver?.VariablePath.UserPath), operation.Value,
                 collectedArray is null ? PowerShellOutputCaptureKind.CollapsedPowerShellValue : PowerShellOutputCaptureKind.NativeObjectArray,
                 shareEmptyArray: collectedArray is not null &&
                                  _semanticProfile.Family == PowerShellCompilationSemanticHostFamily.PowerShell7);

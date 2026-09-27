@@ -12,14 +12,6 @@ internal sealed partial class PowerShellSemanticBinder
             ? root : null;
     }
 
-    // Keep conditional output capture on a direct receiver. The existing native
-    // assignment owner retains authored target evaluation and storage semantics.
-    internal static bool IsNativeConditionalAccessCaptureTarget(ExpressionAst target)
-        => Generated.Runtime.PowerShellNativeFunctionContext.IsBoundedNativeAccessTarget(target) &&
-           !PowerShellAssignmentTargetPolicy.IsAutomaticVariable(
-               (target is MemberExpressionAst member ? (VariableExpressionAst)member.Expression :
-                   (VariableExpressionAst)((IndexExpressionAst)target).Target).VariablePath.UserPath);
-
     // These targets use native storage semantics without introducing another command or body.
     // More complex receiver/index expressions require a separately bound evaluation contract.
     private static VariableExpressionAst? NativeAssignmentReceiver(ExpressionAst target)
