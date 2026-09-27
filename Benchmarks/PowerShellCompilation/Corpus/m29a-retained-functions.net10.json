@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the accepted constructor/object comparison and its full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "66a5422ac0c40c5b053636ac22ce8197acc3ef18",
+  "compilerBaselineCommit": "3556752a490d62fa8019477bd8b0668346327fed",
   "packets": [
     {
       "packet": "pssg",
@@ -666,7 +666,7 @@
       "functions": 68,
       "emitted": 63,
       "retained": 5,
-      "sourceExplanationSha256": "6c7bbe0901b21e4edb9ad10c1b4405b3679728319b529760a3bc630edc7de47d",
+      "sourceExplanationSha256": "0fe9323878dbf15bc173231b8ad447afc5ddf1d9833e9b2cd631e66cc998bee3",
       "functionsRetained": [
         {
           "unitId": "2be0f84457750dd64ee0c5d1",
@@ -755,10 +755,10 @@
           "causes": [
             {
               "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Captured statement output requires a qualified command success-stream host and either a native variable target or an unconstrained local.",
-              "line": 856,
-              "column": 5
+              "featureId": "control.finally.stream-stop",
+              "message": "Non-success streams from finally during downstream stop require PowerShell preference and variable-capture handling that the generated command host cannot yet preserve.",
+              "line": 1,
+              "column": 1
             }
           ]
         }
@@ -2396,42 +2396,15 @@
       ]
     }
   ],
-  "compilerSourceHashes": [
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellSemanticAnalyzer.DictionaryOutput.cs",
-      "sha256": "5101e8192eee5b8d80a6c00efa75ec6e25975790ae4f499df9ee048d402da90c"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellSemanticAnalyzer.Fallback.cs",
-      "sha256": "0a490c6d5963ad75ae3b535d34027ff726439bb07919458ca02a30214b300ecd"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
-      "sha256": "eb8aece2352d7e62c244a11ee601e9ffeaa21dec720c83dcd7d7e17395fd956c"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs",
-      "sha256": "0ce123ef05d77c98b814512b15ac05017600ee365009455c8d6d84f76615ad4b"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.StaticAssignments.cs",
-      "sha256": "fc9c8a13771c1fff54d5db1bc212e2adae3957627a17aff0ec70b3cd0049f4b4"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellNativeAssignmentTarget.cs",
-      "sha256": "09ecb40f5e793e1eb1a50e5bb99c12cadee7925430dbbf16abb47666b8139e8c"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredRegionGraphBuilder.cs",
-      "sha256": "6d8efe794f4d16cf6cf7e7af7c74fdd28413e0727f686fd91c1c140a20de2c74"
-    },
-    {
-      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Declarations.cs",
-      "sha256": "22220445ab7ff6e5f3daf5e5c8a3d7719292ce244c58f53fc4fd121bff525581"
-    }
-  ],
-  "dispositionComparison": "m29a-static-receiver-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "1d7e78c0e898a376f53e918fe9c6db2e0ac9b95a",
-  "emitted": 478,
-  "retained": 87
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "f350f26de7024f6afda69d16b84718b1b5d0ce49e3b5df480597ec103ccc6809",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.CaptureTargets.cs": "e053776e05a2d093248d3e90f467ceba108f0ff2d6d217ea161ac0b76c0f76c0",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.OutputCapture.cs": "8095a917bb17e744831b359f58c7f5c0b49566396c82e601305f4a80fa90fcd2",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellSemanticCompilationPipeline.cs": "b94c058d2f2a5f623cf072b0cd39f7c7994720934e1481c73a22882e594ad591",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.RetainedRegions.cs": "bfe676aaddd70684eb6c457219ca30ec9600a66533438808277fcbd358a7ed6e"
+  },
+  "dispositionComparison": "m29a-region-recovery-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "3556752a490d62fa8019477bd8b0668346327fed",
+  "emitted": 482,
+  "retained": 83
 }

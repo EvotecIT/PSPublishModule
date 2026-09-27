@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Preserve qualified regions after whole-function lowering rejects a bound body; qualify plain member statement-output destinations.",
+  "baselineCompilerCommit": "3556752a490d62fa8019477bd8b0668346327fed",
+  "baselineComparison": "m29a-access-capture-comparison.net10.json",
+  "baselineComparisonSha256": "cb9a634af5d0237db20a96323400c8d24818b679432ae748b1653d98b3854fa1",
+  "baselineRetainedInventorySha256": "996f0a979c1d5e5d59bcb04f18c1328740236a41a1ff1fe4409595b8bb360f28",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 482,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "baselineEmitted": 252,
+      "candidateEmitted": 252,
+      "candidateExplanationSha256": "2f8d5b6b124e805cf40af34bad7920de56760b7731fc0a08d150e11d22f2a636",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "baselineEmitted": 63,
+      "candidateEmitted": 63,
+      "candidateExplanationSha256": "0fe9323878dbf15bc173231b8ad447afc5ddf1d9833e9b2cd631e66cc998bee3",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": [
+        {
+          "unitId": "0cd5b407109c831e17445271",
+          "name": "Invoke-ADComputersCleanup",
+          "baselineEmitted": false,
+          "candidateEmitted": false,
+          "baselineRegionMembers": [
+            "__PowerForgeRegion_bff0dd8a0b6b9894c87b5739"
+          ],
+          "candidateRegionMembers": [
+            "__PowerForgeRegion_bff0dd8a0b6b9894c87b5739"
+          ],
+          "candidateCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "control.finally.stream-stop",
+              "message": "Non-success streams from finally during downstream stop require PowerShell preference and variable-capture handling that the generated command host cannot yet preserve.",
+              "line": 1,
+              "column": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "baselineEmitted": 60,
+      "candidateEmitted": 60,
+      "candidateExplanationSha256": "dff885fe4d0660da2265dd9e9bb43bf7ebe41b9f0c96ea10399850007c2f74d8",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "baselineEmitted": 81,
+      "candidateEmitted": 81,
+      "candidateExplanationSha256": "91cfcccc4915628cfe8c4f8ac62d1041a5d5b61869b63ae5933f55c0fde019d9",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "baselineEmitted": 26,
+      "candidateEmitted": 26,
+      "candidateExplanationSha256": "d5c2988c739a56a9159b7b165dc814e07f8e198e592b75f8015ed688e720415c",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    }
+  ],
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "f350f26de7024f6afda69d16b84718b1b5d0ce49e3b5df480597ec103ccc6809",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.CaptureTargets.cs": "e053776e05a2d093248d3e90f467ceba108f0ff2d6d217ea161ac0b76c0f76c0",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.OutputCapture.cs": "8095a917bb17e744831b359f58c7f5c0b49566396c82e601305f4a80fa90fcd2",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellSemanticCompilationPipeline.cs": "b94c058d2f2a5f623cf072b0cd39f7c7994720934e1481c73a22882e594ad591",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.RetainedRegions.cs": "bfe676aaddd70684eb6c457219ca30ec9600a66533438808277fcbd358a7ed6e"
+  },
+  "validation": {
+    "focusedTests": 18,
+    "focusedDurationSeconds": 47,
+    "focusedTrxSha256": "c6ef74c79f6921768ba7dd9d61b182d21a2b02a48ce5857db2e8bb90dac113c3",
+    "net472BuildWarnings": 0,
+    "net472BuildErrors": 0,
+    "independentReview": "Read-only targeted owner review; no actionable findings. Does not replace runtime or portfolio proof.",
+    "newlyExecutedCompletePortfolioFunctions": [],
+    "limits": [
+      "Cleanup domain inventory assignment is an exact unchanged excerpt executed in a synthetic wrapper, not whole AD workflow qualification.",
+      "Full portfolio census covers Hybrid net10.0 only.",
+      "No broad compiler matrix, live AD/network/admin operations, Linux, performance or release proof."
+    ],
+    "testSourceSha256": "dc696465396c664885a63a13c2d1e2afd473f7d6c46acdce0a1a5d984c96c9eb"
+  },
+  "cleanupPreservedRegion": "__PowerForgeRegion_bff0dd8a0b6b9894c87b5739",
+  "candidateEmitted": 482,
+  "candidateRetained": 83,
+  "workflowSourceHashes": {
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/CleanupMonster/FullModule/Public/Invoke-ADComputersCleanup.ps1": "fb3dd4819a28a2c8dd1ff16e835fdd31f4b04550aa905e45d70267daafc1b926"
+  }
+}

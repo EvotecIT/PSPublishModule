@@ -5,14 +5,13 @@ namespace PowerForge;
 internal sealed partial class PowerShellSemanticBinder
 {
     /// <summary>Finds the bounded invocation-owned receiver of a statement-output destination.</summary>
-    internal static VariableExpressionAst? NativeCaptureAccessReceiver(ExpressionAst target, bool allowMemberOnly = true)
+    internal static VariableExpressionAst? NativeCaptureAccessReceiver(ExpressionAst target)
     {
         while (target is AttributedExpressionAst attributed)
         {
             if (attributed.Attribute is not TypeConstraintAst) return null;
             target = attributed.Child;
         }
-        if (!allowMemberOnly && target is not IndexExpressionAst) return null;
         return NativeAccessMutationReceiver(target);
     }
 

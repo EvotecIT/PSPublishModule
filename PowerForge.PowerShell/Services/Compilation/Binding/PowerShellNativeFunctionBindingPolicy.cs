@@ -199,7 +199,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
             (assignment.Right is IfStatementAst or ForStatementAst or ForEachStatementAst or WhileStatementAst or DoWhileStatementAst or DoUntilStatementAst ||
              PowerShellSemanticBinder.UnwrapExpression(assignment.Right) is ArrayExpressionAst collection &&
              collection.SubExpression.Statements.Count == 1 && collection.SubExpression.Statements[0] is ForEachStatementAst or TryStatementAst) &&
-            PowerShellSemanticBinder.NativeCaptureAccessReceiver(assignment.Left, allowMemberOnly: assignment.Right is IfStatementAst) is not null,
+            PowerShellSemanticBinder.NativeCaptureAccessReceiver(assignment.Left) is not null,
             searchNestedScriptBlocks: false) is not null;
 
     /// <summary>Selects invocation-owned lookup for a locally constructed map used outside the typed index contract.</summary>

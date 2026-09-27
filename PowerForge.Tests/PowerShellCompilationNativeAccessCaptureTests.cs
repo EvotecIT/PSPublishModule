@@ -17,6 +17,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             "$Holder.Map[$Key.Value] = for($i=0;$i -lt $Items.Count;$i++){ $item=$Items[$i]; BODY }",
             "$Holder.Map[$Key.Value] = @(try { foreach($item in $Items){ BODY } } finally { $Trace.Add('inner-finally') })"
         };
+        assignments = assignments.Concat(assignments.Select(assignment =>
+            assignment.Replace("$Holder.Map[$Key.Value]", "$Holder.Map.slot"))).ToArray();
         var source = string.Join(Environment.NewLine, assignments.Select((assignment,index) =>
             "function Set-AccessCapture"+index+" { [CmdletBinding()]param($Holder,$Key,$Items,$Trace,[switch]$Fail); try { "+
             assignment.Replace("BODY",body)+" } catch {[pscustomobject]@{id=$_.FullyQualifiedErrorId;type=$_.Exception.GetType().FullName;line=$_.InvocationInfo.ScriptLineNumber;column=$_.InvocationInfo.OffsetInLine}} finally {$Trace.Add('outer-finally')} }"));
@@ -28,9 +30,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(built.Manifest!.CompiledMethods == assignments.Length,string.Join(Environment.NewLine,
             built.Manifest.UnitDispositionLedger!.Entries.SelectMany(unit=>unit.DiagnosticChain.Select(cause=>unit.Name+": "+cause.Message))));
         const string probe="""
-            foreach($index in 0..4) {
+            foreach($index in 0..9) {
                 foreach($items in @(@(),@(7),@(7,8),@('bad'),@($null))) {
-                    foreach($mode in 'normal','receiver','key') {
+                    $modes=if($index -lt 5){'normal','receiver','key'}else{'normal','receiver'}
+                    foreach($mode in $modes) {
                         foreach($fail in $false,$true) {
                             $global:AccessCaptureTrace=[Collections.Generic.List[string]]::new()
                             $global:AccessCaptureMode=$mode
@@ -60,7 +63,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var generated=RunModuleProof(built.ArtifactPath!,probe,host);
         var expected=original.Split(Environment.NewLine,StringSplitOptions.RemoveEmptyEntries);
         var actual=generated.Split(Environment.NewLine,StringSplitOptions.RemoveEmptyEntries);
-        Assert.Equal(150,expected.Length);
+        Assert.Equal(250,expected.Length);
         Assert.Equal(expected.Length,actual.Length);
         for(var index=0;index<expected.Length;index++)
             Assert.True(expected[index]==actual[index],"Original: "+expected[index]+Environment.NewLine+"Generated: "+actual[index]);
@@ -146,6 +149,41 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.DoesNotContain(typed.Methods, method => method.SourceName == "Invoke-ADComputersCleanup");
         Assert.True(typed.PromotedRegions.Any(region => region.SourceName == "Invoke-ADComputersCleanup"),
             System.Text.Json.JsonSerializer.Serialize(typed.RegionCandidates));
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
+    public void NativeAccessCaptures_CleanupDomainInventoryExcerptPreservesOfflineProjection(string framework, string host)
+    {
+        var path = FindCompleteConversionWorkflow("CleanupMonster", "FullModule", "Public", "Invoke-ADComputersCleanup.ps1");
+        var authored = PowerShellSourceParser.Parse(File.ReadAllText(path), path);
+        var assignment = authored.SyntaxRoot.Find(node => node is System.Management.Automation.Language.AssignmentStatementAst syntax &&
+            syntax.Left.Extent.Text == "$Export.DomainInventory", true)!;
+        using var fixture = ArtifactFixture.Create("function Get-OfflineDomainInventory { [CmdletBinding()]param($Export,$Report); " +
+            assignment.Extent.Text + "; return $Export }", ".psm1");
+        var built = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.DomainInventoryCapture", PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(built.Succeeded, built.Error + Environment.NewLine + built.BuildOutput);
+        Assert.Equal(1, built.Manifest!.CompiledMethods);
+        const string probe = """
+            foreach($count in 0..2) {
+                $report=[ordered]@{}
+                foreach($index in 1..2 | Select-Object -First $count) {
+                    $report['domain'+$index]=[pscustomobject]@{QueryStatus='Success';Server='offline';ComputerCount=$index;QueryAttempts=2;AttemptedServers=@('first','second');QueryError=$null}
+                }
+                $export=[pscustomobject]@{DomainInventory='prior';Unrelated='kept'}
+                $result=Get-OfflineDomainInventory -Export $export -Report $report
+                [pscustomobject]@{count=$count;result=$result;identity=[object]::ReferenceEquals($result,$export);type=$export.DomainInventory.GetType().FullName;records=$export.DomainInventory.Count}|ConvertTo-Json -Depth 8 -Compress
+            }
+            """;
+        var original = RunModuleProof(fixture.ScriptPath, probe, host);
+        var generated = RunModuleProof(built.ArtifactPath!, probe, host);
+        Assert.True(original == generated, "Original: " + original + Environment.NewLine + "Generated: " + generated);
+        Assert.Equal(3, generated.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries).Length);
+        Assert.Contains("\"identity\":true", generated);
+        Assert.Contains("first, second", generated);
     }
 
     [Fact]

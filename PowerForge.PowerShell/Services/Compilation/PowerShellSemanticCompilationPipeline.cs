@@ -71,11 +71,13 @@ internal sealed class PowerShellSemanticCompilationPipeline
         }
         var lowered = _lowerer.Lower(analyzed, capabilities);
         var emitted = _backend.Emit(lowered);
-        var regions = CompileRegions(binding.RegionCandidates, analyzed, capabilities, bound.SemanticHostFamily);
+        var regionCandidates = _binder.RecoverRetainedRegionCandidates(sourceDocuments, bound, lowered,
+            binding.RegionCandidates, binding.RegionOpportunities);
+        var regions = CompileRegions(regionCandidates, analyzed, capabilities, bound.SemanticHostFamily);
         var regionOpportunities = new PowerShellBoundRegionOpportunityAnalyzer(_optimizer, _analyzer, _lowerer).Analyze(
             binding.RegionOpportunities,
             bound,
-            binding.RegionCandidates,
+            regionCandidates,
             capabilities);
         return new PowerShellSemanticCompilationResult(
             bound,

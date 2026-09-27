@@ -131,7 +131,7 @@ internal sealed partial class PowerShellSemanticBinder
         var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, usesNativeInvocation);
         var operation = PowerShellMutationSemanticBinder.GetAssignmentOperator(assignment.Operator);
         var accessReceiver = usesNativeInvocation && assignment.Operator == TokenKind.Equals
-            ? NativeCaptureAccessReceiver(assignment.Left, allowMemberOnly: assignment.Right is IfStatementAst) : null;
+            ? NativeCaptureAccessReceiver(assignment.Left) : null;
         if (accessReceiver is not null && !CaptureAccessTypesAreAvailable(assignment.Left, targetFramework, capabilities))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2611",
