@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "compilerCommit": "7e05538c9e6029ce8ff9d905687bc81d3ff3b60a",
+  "purpose": "Reproduced current Hybrid root ABI and authored source-mapping regressions; no green execution claim.",
+  "tests": [
+    {
+      "name": "Build_HybridExecutableRunsCompiledPreboundScriptRoot",
+      "outcome": "Failed",
+      "detail": "Expected emitted explanation is retained at line 104.",
+      "trxSha256": "1ad02f95e7157111bb237bbc041a2ac4a325f742ee41422dcdfce66c37e92f48"
+    },
+    {
+      "name": "Compile_HybridPreboundEntryPreservesAuthoredRegionSource",
+      "outcome": "Failed",
+      "detail": "Generated source contains .powerforge-entry.ps1 at line 159.",
+      "trxSha256": "c3b1e6de4f937c9088cddcadccae72c99863a3f0bea81b21c3a7af41bb2f79b0"
+    }
+  ],
+  "reproducer": "param([string] $When = '2024-04-05')\nGet-Date -Date $When -Format yyyy",
+  "reproducerSha256": "0add88217ce43654623d5c94a38b68f0b8864657a11851633c981ae2093f2ffa",
+  "explanationSha256": "79f1bcfa48bca612d708a56779c9638a1894d87addfb3a7dac948499254880e8",
+  "emittedMethodSignature": "Invoke(global::PowerForge.Generated.Runtime.PowerShellNativeFunctionContext __nativeFunction, global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext __statementErrors)\r",
+  "entryContractParameterClrType": "System.Object",
+  "emissionFlags": {
+    "RequiresPowerShellStreams": false,
+    "RequiresProviderCancellation": false,
+    "RequiresPowerShellCommandRegions": true,
+    "RequiresPowerShellBoundParameters": false,
+    "RequiresPowerShellRuntimeState": false,
+    "RequiresPowerShellModuleStateRead": false,
+    "RequiresPowerShellModuleStateWrite": false,
+    "RequiresPowerShellStatementErrors": true,
+    "RequiresPowerShellStopping": false,
+    "RequiresPowerShellModuleState": false
+  },
+  "syntheticPathLeak": true,
+  "generatedEntrySourceSha256": "2bcf6a42a1ab4ad44601420c59f47d7415da68f7cf67f16791d37743655d4b01",
+  "requirements": [
+    "Use a canonical prebound script-entry ABI rather than rebind script parameters through a normal function.",
+    "Preserve actual variable cells, invocation context, command lookup and source sequence points.",
+    "Do not relax current rejection before compatible emitter/runtime support and differential proof.",
+    "Qualify omitted/defaulted/explicit parameters, state, streams, errors, command shadowing and cleanup before expanding roots."
+  ],
+  "suspectedBridgeCollision": "Unqualified bridge-name collision is not reproduced; current retained root prevents reachability. Inspect when repairing entry ABI.",
+  "portfolio": "No module disposition change or new source edit; 544/565 remains separate from this executable root failure."
+}
