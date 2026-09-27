@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the complete per-function baseline; no method or still-retained region from the accepted parser-reference checkpoint is lost.",
-  "compilerBaselineCommit": "acbeaed76a2a8d9ff2af2b0af78364274a96d506",
+  "compilerBaselineCommit": "f563842db082a50e82811eaaf6867218e35f2914",
   "packets": [
     {
       "packet": "pssg",
@@ -839,9 +839,9 @@
       "packet": "pst",
       "stableUnits": 121,
       "functions": 109,
-      "emitted": 83,
-      "retained": 26,
-      "sourceExplanationSha256": "e7535d0f82ec88abba570b995969fa36c7dfc9dc6571589a91eb525b94b75d3a",
+      "emitted": 84,
+      "retained": 25,
+      "sourceExplanationSha256": "bb7f462c3e2d95e8a13d75c4b0bef1d70fe6098c9821d5e99f709c70769ac6c3",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -1360,24 +1360,6 @@
               "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
               "line": 5,
               "column": 1
-            }
-          ]
-        },
-        {
-          "unitId": "4c3ffacf41eebcf5c624d53c",
-          "name": "Get-WhoIs",
-          "relativePath": "functions/Get-WhoIs.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "[pscustomobject] note-property values require one expression, a native-hosted conditional, or one qualified hosted command or local invocation value.",
-              "line": 66,
-              "column": 42
             }
           ]
         },
@@ -2245,11 +2227,10 @@
     }
   ],
   "compilerSourceHashes": {
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "2d90548658ac1b70e5b8b3a071f93fe80dbce970254992a8bc7c832142ffa1cb",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "2b49fa3566c76e7792f2f87e60cba2acf79b3cbeb611d340bd4c3c3d25c4e055"
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellCommandRegionSemanticBinder.cs": "5b7321fbf446d7270dd8d39a57f95dc809de067fdabc938d8af2c5fd64d672d9"
   },
-  "dispositionComparison": "m29a-static-variable-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "acbeaed76a2a8d9ff2af2b0af78364274a96d506",
-  "emitted": 489,
-  "retained": 76
+  "dispositionComparison": "m29a-literal-pipeline-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "f563842db082a50e82811eaaf6867218e35f2914",
+  "emitted": 490,
+  "retained": 75
 }

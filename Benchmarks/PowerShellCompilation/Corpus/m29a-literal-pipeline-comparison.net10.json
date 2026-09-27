@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Qualify ordinary hosted pipeline values in object/dictionary literals through existing native success capture; emission is separate from execution.",
+  "baselineCompilerCommit": "f563842db082a50e82811eaaf6867218e35f2914",
+  "baselineComparison": "m29a-static-variable-comparison.net10.json",
+  "baselineComparisonSha256": "9161447580dbd72a20bcecf0c89646603ab1aeff88d25ddfe845839594441f64",
+  "baselineRetainedInventorySha256": "abd94732e1594dda4a8efe8fcffa11d6639cced997417f59af08aa3351288ca5",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 489,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "baselineEmitted": 255,
+      "candidateEmitted": 255,
+      "candidateExplanationSha256": "f784d4955c37b9934f83fc94f0513a997e14c9dad6a1f2da3682e19d46c13da5",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "baselineEmitted": 63,
+      "candidateEmitted": 63,
+      "candidateExplanationSha256": "0fe9323878dbf15bc173231b8ad447afc5ddf1d9833e9b2cd631e66cc998bee3",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "baselineEmitted": 61,
+      "candidateEmitted": 61,
+      "candidateExplanationSha256": "73172aaac03d1c74782e361a0716d2c2d0c14b80abae98e870ef80c8253a8ee2",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "baselineEmitted": 83,
+      "candidateEmitted": 84,
+      "candidateExplanationSha256": "bb7f462c3e2d95e8a13d75c4b0bef1d70fe6098c9821d5e99f709c70769ac6c3",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": [
+        {
+          "unitId": "4c3ffacf41eebcf5c624d53c",
+          "name": "Get-WhoIs",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "baselineEmitted": 27,
+      "candidateEmitted": 27,
+      "candidateExplanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    }
+  ],
+  "candidateEmitted": 490,
+  "candidateRetained": 75,
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellCommandRegionSemanticBinder.cs": "5b7321fbf446d7270dd8d39a57f95dc809de067fdabc938d8af2c5fd64d672d9"
+  },
+  "workflowProvenance": {
+    "source": "https://github.com/jdhitsolutions/PSScriptTools",
+    "revisionKind": "GitCommit",
+    "revision": "549fa3e3d769532320054fc0b3c8f42df0452361",
+    "authoredPath": "functions/Get-WhoIs.ps1",
+    "license": "MIT",
+    "sourceSha256": "5eaed156f790294c4c144f72cf00034d4cabf7ef3a2845f919c741ffcddbfe4f",
+    "licenseSha256": "fb7d4eb5de8741978ce3dc1338771a53756e87d1134dc19b0199b2ee43beef95"
+  },
+  "workflowSourceHashes": {
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/WhoIs/Get-WhoIs.ps1": "5eaed156f790294c4c144f72cf00034d4cabf7ef3a2845f919c741ffcddbfe4f",
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/WhoIs/license.txt": "fb7d4eb5de8741978ce3dc1338771a53756e87d1134dc19b0199b2ee43beef95"
+  },
+  "validation": {
+    "focusedTests": 12,
+    "focusedDurationSeconds": 22,
+    "focusedTrxSha256": "0ba0e5d1c33f77d2ff04b161817c6208068dfff519746bda0692224e11f63100",
+    "testSourceHashes": {
+      "PowerForge.Tests/PowerShellCompilationLiteralPipelineValueTests.cs": "c4abe33064ced41a9b278aedf6f53f8a5703a827705d89ac5357bd46e9e4b084"
+    },
+    "net472BuildWarnings": 0,
+    "net472BuildErrors": 0,
+    "net472BuildDurationSeconds": 3.92,
+    "offlineWhoIsObservationsPerHost": 12,
+    "syntheticLiteralObservationsPerHost": 16,
+    "newlyExecutedCompleteFunctions": [
+      "Get-WhoIs"
+    ],
+    "independentReview": "One fresh read-only literal_pipeline_value_review pass found no actionable P0-P3 defects. Admission/capability guards, object/dictionary construction and property order, lowering, whole-pipeline capture in active scope, partial-output and error owner inspected. Fixture hash/license/attributes verified; no tests run or remote-source comparison by reviewer.",
+    "limits": [
+      "Ordinary qualified pipelines in literal values remain hosted while surrounding literal construction is compiled. This is not direct CLR translation of ForEach-Object or arbitrary pipeline commands.",
+      "Proof uses offline Invoke-RestMethod and clock functions, explicitly loaded utility/management modules, and disabled module autoload. Actual HTTP/ARIN, complete module execution and all IPv4 validation failures are unqualified.",
+      "Typed invocation continuations and Out-Null retain conservative wrapper/statement ownership and may emit wrapper methods without native binding. Redirection/background and runtime-free Strict gain no admission from this rule.",
+      "New direct differential cases cover ForEach-Object pipelines, cardinality, local state, order, partial failure/source positions and finally. Every other command or stream combination is not newly qualified.",
+      "Same-input full five-packet comparison is net10.0 only; focused generated modules execute on Windows PowerShell 5.1/net472 and PowerShell 7/net10.0. No other platform, performance, package or release proof.",
+      "Exploratory runs failed on a test Count compilation error, missing ConvertTo-Json after disabling autoload, and incorrectly treating conservative wrapper emission as native admission. Corrected probes passed; production source remained unchanged throughout."
+    ]
+  }
+}
