@@ -14,7 +14,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             "function Read-Record { param([System.Management.Automation.ErrorRecord[]]$Value) return $Value }",
             "function Read-Stop { param([System.Management.Automation.ActionPreferenceStopException[]]$Value) return $Value }",
             "function Read-Category { param([System.Management.Automation.ErrorCategory]$Value) return $Value }",
-            "function Read-Serialized { param([string]$Value) return [System.Management.Automation.PSSerializer]::Deserialize($Value) }"
+            "function Read-Serialized { param([string]$Value) return [System.Management.Automation.PSSerializer]::Deserialize($Value) }",
+            "function Read-MemberKind { param([System.Management.Automation.PSMemberTypes]$Value) return $Value }",
+            "function Read-CommandMetadata { param([System.Management.Automation.CommandInfo]$Value) return $Value }"
         })
         {
             using var fixture = ArtifactFixture.Create(source);

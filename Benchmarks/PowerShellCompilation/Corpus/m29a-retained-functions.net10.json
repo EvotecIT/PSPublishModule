@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the accepted constructor/object comparison and its full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "c19ead0dbba6a8560fba1d535f827b52771aaa0f",
+  "compilerBaselineCommit": "17f2d42662e8953fa67fbe10c899627bc6f5a295",
   "packets": [
     {
       "packet": "pssg",
@@ -919,9 +919,9 @@
       "packet": "pst",
       "stableUnits": 121,
       "functions": 109,
-      "emitted": 81,
-      "retained": 28,
-      "sourceExplanationSha256": "91cfcccc4915628cfe8c4f8ac62d1041a5d5b61869b63ae5933f55c0fde019d9",
+      "emitted": 82,
+      "retained": 27,
+      "sourceExplanationSha256": "bd1ed242853a52e3693b050ae10e81231b62de3dc3efb3e30eb693b97bb9e822",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -1523,24 +1523,6 @@
           ]
         },
         {
-          "unitId": "fbd8d469bd5e783f9c339fb2",
-          "name": "Show-HiddenMember",
-          "relativePath": "functions/Show-HiddenMember.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$MemberType' has CLR type 'System.Management.Automation.PSMemberTypes' that requires a target capability unavailable to this compilation.",
-              "line": 14,
-              "column": 9
-            }
-          ]
-        },
-        {
           "unitId": "e765aa90df5098c52d52f77c",
           "name": "Show-Tree",
           "relativePath": "functions/ShowTree.ps1",
@@ -2098,9 +2080,9 @@
       "packet": "platyps",
       "stableUnits": 41,
       "functions": 40,
-      "emitted": 26,
-      "retained": 14,
-      "sourceExplanationSha256": "d5c2988c739a56a9159b7b165dc814e07f8e198e592b75f8015ed688e720415c",
+      "emitted": 27,
+      "retained": 13,
+      "sourceExplanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea",
       "functionsRetained": [
         {
           "unitId": "62d3e169b4f7eb162da5636b",
@@ -2243,24 +2225,6 @@
           ]
         },
         {
-          "unitId": "169888f0d53b845d16127f9e",
-          "name": "GetHelpFileName",
-          "relativePath": "platyPS.psm1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$CommandInfo' has CLR type 'System.Management.Automation.CommandInfo' that requires a target capability unavailable to this compilation.",
-              "line": 1842,
-              "column": 9
-            }
-          ]
-        },
-        {
           "unitId": "c601d4895e012344d1339884",
           "name": "NewModuleLandingPage",
           "relativePath": "platyPS.psm1",
@@ -2379,10 +2343,10 @@
     }
   ],
   "compilerSourceHashes": {
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "13127f1612ef18620182eda8c3e4beda2b2dad7af95cc93b37a01d95640f2283"
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "320001791bf431c9998a07e2ed47b86f9f2ce61915aa42bae6e83583e6d0c298"
   },
-  "dispositionComparison": "m29a-static-string-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "c19ead0dbba6a8560fba1d535f827b52771aaa0f",
-  "emitted": 483,
-  "retained": 82
+  "dispositionComparison": "m29a-sdk-metadata-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "17f2d42662e8953fa67fbe10c899627bc6f5a295",
+  "emitted": 485,
+  "retained": 80
 }

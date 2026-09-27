@@ -32,7 +32,9 @@ internal static class PowerShellCompilationParameterTypePolicy
         typeof(PSSerializer),
         typeof(ErrorRecord),
         typeof(ActionPreferenceStopException),
-        typeof(ErrorCategory)
+        typeof(ErrorCategory),
+        typeof(PSMemberTypes),
+        typeof(CommandInfo)
     };
 
     internal static bool IsQualifiedHostDataType(Type type, string? targetFramework = null)

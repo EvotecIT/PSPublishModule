@@ -36,3 +36,5 @@ Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/TraceMes
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/TraceMessage/license.txt -text -eol -whitespace
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Culture/*.ps1 -text -eol -whitespace
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Culture/license.txt -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/MemberInspection/*.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/MemberInspection/license.txt -text -eol -whitespace
