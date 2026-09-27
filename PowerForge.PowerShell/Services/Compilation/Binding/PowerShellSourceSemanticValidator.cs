@@ -11,7 +11,8 @@ internal static class PowerShellSourceSemanticValidator
            !document.SyntaxRoot.FindAll(static node => node is UsingStatementAst { UsingStatementKind: not UsingStatementKind.Namespace },
                searchNestedScriptBlocks: false).Any();
 
-    internal static PowerShellSemanticDiagnostic[] Validate(ParsedSourceDocument document, string semanticProfileId)
+    internal static PowerShellSemanticDiagnostic[] Validate(ParsedSourceDocument document, string semanticProfileId,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None, string? targetFramework = null)
     {
         var diagnostics = document.SyntaxRoot
             .FindAll(static node => node is UsingStatementAst, searchNestedScriptBlocks: false)
@@ -31,7 +32,7 @@ internal static class PowerShellSourceSemanticValidator
                 PowerShellSourceParser.GetSpan(document, document.SyntaxRoot.Extent)));
         }
         var typeDefinition = document.TypeClosure.Declarations.FirstOrDefault();
-        if (typeDefinition is not null)
+        if (typeDefinition is not null && !PowerShellHostedAttributeDeclarationPolicy.IsQualified(document, targetFramework, capabilities))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 PowerShellCompilationFeatureIds.TypeDefinition,

@@ -47,9 +47,12 @@ internal static class PowerShellNativeFunctionSourceGenerator
         var binding = method.NativeFunctionBinding!;
         if (!binding.HasClean)
         {
-            builder.Append("        return global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.CreateDeclaredFunction(")
+            builder.Append("        return global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.CreateOwnedDeclaration(")
                 .Append(executable ? "sessionState" : "module").Append(", ")
                 .Append(PowerShellCSharpLiteral.QuoteString(method.SourceName)).AppendLine(",")
+                .Append("            ").Append(PowerShellCSharpLiteral.QuoteString(binding.ParameterDeclaration)).AppendLine(",")
+                .Append("            new string[] { ").Append(string.Join(", ", binding.LocalNames.Select(PowerShellCSharpLiteral.QuoteString))).AppendLine(" },")
+                .Append("            new string[] { ").Append(string.Join(", ", binding.LocalTypeDeclarations.Select(PowerShellCSharpLiteral.QuoteString))).AppendLine(" },")
                 .Append("            ").Append(Callback(binding.HasBegin, 0)).AppendLine(",")
                 .Append("            ").Append(Callback(binding.HasProcess, 1)).AppendLine(",")
                 .Append("            ").Append(Callback(binding.HasEnd, 2)).AppendLine(");");

@@ -39,6 +39,13 @@ public static class NativeAuthoredMetadataFixture
         Reject("Invoke-Compiled", fail, fail, null);
         Reject("Invoke-Dynamic", null, null, fail);
         Reject("Invoke-Trap", null, null, fail);
+        try
+        {
+            PowerShellNativeFunctionHost.CreateOwnedDeclaration(module, "Invoke-Compiled", "param()",
+                Array.Empty<string>(), Array.Empty<string>(), fail, fail, fail);
+            throw new InvalidOperationException("The stub owner accepted an authored body.");
+        }
+        catch (ArgumentException) { }
         void Reject(string name, Action<PowerShellNativeFunctionContext>? begin,
             Action<PowerShellNativeFunctionContext>? process, Action<PowerShellNativeFunctionContext>? end)
         {

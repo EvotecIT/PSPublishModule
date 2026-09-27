@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "90f632b0aadd7da2236e5d73bb674a7eed642539",
+  "compilerBaselineCommit": "dced28c9f67621eeeef1eb237b7567733538fd83",
   "packets": [
     {
       "packet": "pssg",
@@ -13,7 +13,7 @@
       "stableUnits": 286,
       "emitted": 259,
       "retained": 23,
-      "sourceExplanationSha256": "9af4099774d27986b946880e44ae9e28057257a53dcd5a5087469e104bca0cf2",
+      "sourceExplanationSha256": "7703c55d82630bce181342922eaf8c5d5500ea293e390fd7032ccf0b369b2b1a",
       "functionsRetained": [
         {
           "unitId": "a1bb1dcefddec8c45377fd27",
@@ -505,7 +505,7 @@
       "stableUnits": 69,
       "emitted": 63,
       "retained": 5,
-      "sourceExplanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1",
+      "sourceExplanationSha256": "51277db657806711a57853e04fa18848f05040d5c4343f18f3aad8e7627472d3",
       "functionsRetained": [
         {
           "unitId": "2be0f84457750dd64ee0c5d1",
@@ -609,7 +609,7 @@
       "stableUnits": 67,
       "emitted": 61,
       "retained": 5,
-      "sourceExplanationSha256": "73172aaac03d1c74782e361a0716d2c2d0c14b80abae98e870ef80c8253a8ee2",
+      "sourceExplanationSha256": "1e440e07730e829f4ca57f443a1f0b4f4c8b62c92311475d8fb13e2ee716d409",
       "functionsRetained": [
         {
           "unitId": "fc33881d5a7752031137ea07",
@@ -756,9 +756,9 @@
       "packet": "pst",
       "functions": 109,
       "stableUnits": 121,
-      "emitted": 84,
-      "retained": 25,
-      "sourceExplanationSha256": "bb7f462c3e2d95e8a13d75c4b0bef1d70fe6098c9821d5e99f709c70769ac6c3",
+      "emitted": 87,
+      "retained": 22,
+      "sourceExplanationSha256": "f05d12c29a20d606dc1c978b45e9c8a3fbb1c079952063b9710bf527330f0541",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -1223,60 +1223,6 @@
               "message": "CLR type 'powershell' is not available in the generated project reference set for the requested target.",
               "line": 19,
               "column": 11
-            }
-          ]
-        },
-        {
-          "unitId": "c68fcacf51b4a593bcd4aa05",
-          "name": "Get-MemberMethod",
-          "relativePath": "functions/Get-TypeMember.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "source.type-definition",
-              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
-              "line": 5,
-              "column": 1
-            }
-          ]
-        },
-        {
-          "unitId": "8c4981d0bcfd982a4747eda8",
-          "name": "Get-TypeMember",
-          "relativePath": "functions/Get-TypeMember.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "source.type-definition",
-              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
-              "line": 5,
-              "column": 1
-            }
-          ]
-        },
-        {
-          "unitId": "ff7cd1a6cbbbd3d50433805e",
-          "name": "Get-TypeConstructor",
-          "relativePath": "functions/Get-TypeMember.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "source.type-definition",
-              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
-              "line": 5,
-              "column": 1
             }
           ]
         },
@@ -1883,7 +1829,7 @@
       "stableUnits": 41,
       "emitted": 27,
       "retained": 13,
-      "sourceExplanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea",
+      "sourceExplanationSha256": "ffcef4ea501818413c6d7d2372b853388024b79b2361a537dd01889dbfcc6ab7",
       "functionsRetained": [
         {
           "unitId": "62d3e169b4f7eb162da5636b",
@@ -2144,18 +2090,15 @@
     }
   ],
   "compilerSourceHashes": {
-    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellBoundOptimizer.cs": "795995ff4707205255743314b4cce2594a89bc0d4e259837d6d8e0d44cf1bd4b",
-    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.Conversions.cs": "9568649230ff82d454100df68efc889b02cf7dc5b1f776b57d56a37ac574b3da",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellConversionSemanticBinder.cs": "85cd966dea299169a56d2da721c35c15205c17614f3dcd874d00d01f0bae8bf5",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "c5ed40749f5601c210896b46253589b82212cd70d033e1108ef9146a68f32934",
-    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundModel.cs": "4167c046ff637967dea580f7442e7eaade167329346f14289411ad759ce1de4f",
-    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredModel.cs": "797e1cbf65580d90717bab06a71be616f8c254f0e0adf9a4c75c779bef9ee5a2",
-    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs": "95c671a7d9ad7bbe3b198373386ea65aa954c6853f638ecf59dcc764077aea44",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationConversionPolicy.cs": "fc1fad9d0be2d4e2b25ee169dfefb8ba78e493f5e9a497b2bf08662ca74efc96",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellHybridModuleComposer.cs": "72e23475c9ef735b63b7d0543a901dd99cb12b630478402d87b7e1143a45655f"
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedAttributeDeclarationPolicy.cs": "ed1395b785f1b0c45b4821f3f301c8a7480c044882b35b8daa5c2588d361b78d",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSourceSemanticValidator.cs": "7e69ef372f08624bf7e8dc00f23b5355566ffd9941bed2752a1f93ddb38dd6b4",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationAnalyzer.Semantics.cs": "d9def0321bcef3ae3f038bf9dcc11e27261e5049e8d503bf773412bb643f86c9",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCommandHostRuntimeSource.cs": "ddd0c725442f5cdf52d6a187528dab44e4d49931a6f92244fe5e3d3a3ba69e58",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellNativeFunctionSourceGenerator.cs": "2f7b9e8d9c134953991cf98f9d5a6d4ad2e1f941b897a9f1a0cd3f68f3c37752",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.OwnedDeclaration.cs": "96048604389dbda2546cafb9a43e189c4620eeb05c744deb1a69b6cc3025e106"
   },
-  "dispositionComparison": "m29a-host-enum-comparison.net10.json",
+  "dispositionComparison": "m29a-hosted-attribute-comparison.net10.json",
   "baselineRetainedInventoryCommit": "90f632b0aadd7da2236e5d73bb674a7eed642539",
-  "emitted": 494,
-  "retained": 71
+  "emitted": 497,
+  "retained": 68
 }

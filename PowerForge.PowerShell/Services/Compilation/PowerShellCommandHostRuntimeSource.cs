@@ -41,7 +41,7 @@ internal static class PowerShellCommandHostRuntimeSource
         }
         if (requiresRegionHost || typed.Methods.Any(static method => method.NativeFunctionBinding is not null))
         {
-            foreach (var name in new[] { "PowerShellNativeFunctionHost", "PowerShellNativeFunctionHost.Declared", "PowerShellNativeFunctionContext", "PowerShellNativeFunctionContext.Operations",
+            foreach (var name in new[] { "PowerShellNativeFunctionHost", "PowerShellNativeFunctionHost.Declared", "PowerShellNativeFunctionHost.OwnedDeclaration", "PowerShellNativeFunctionContext", "PowerShellNativeFunctionContext.Operations",
                 "PowerShellNativeFunctionContext.Output", "PowerShellNativeFunctionContext.Members", "PowerShellNativeFunctionContext.Indexing",
                 "PowerShellNativeFunctionContext.Conversions", "PowerShellNativeFunctionContext.Invocations",
                 "PowerShellNativeFunctionContext.CommandRegions", "PowerShellNativeFunctionContext.Compilation",
