@@ -19,7 +19,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         if (returned.Expression is not null)
         {
-            if (returned.Expression.ClrType == typeof(void))
+            if (returned.Expression is PowerShellLoweredNativeCommandExpression { PreserveReturnRecords: true } pipeline && returned.EmitsValue)
+                builder.Append(prefix).Append(EmitNativeCommandRecords(pipeline, "__writeOutput")).AppendLine(";");
+            else if (returned.Expression.ClrType == typeof(void))
                 builder.Append(prefix).Append(EmitExpression(returned.Expression)).AppendLine(";");
             else if (returned.EmitsValue)
                 builder.Append(prefix).Append("__nativeFunction.WriteOutput(")

@@ -53,6 +53,8 @@ internal sealed partial class PowerShellSemanticBinder
             syntax is MemberExpressionAst nativeMember && syntax is not InvokeMemberExpressionAst &&
             (!nativeMember.Static || nativeMember.Member is not StringConstantExpressionAst ||
              PowerShellNativeTypeArgumentPolicy.RequiresNativeStaticValueRead(nativeMember) ||
+             nativeMember.Expression is TypeExpressionAst enumReceiver &&
+             PowerShellHostedEnumDeclarationPolicy.IsQualifiedMemberReceiver(document, enumReceiver, targetFramework, capabilities) ||
              nativeMember.Expression is VariableExpressionAst ||
              nativeMember.Expression is TypeExpressionAst hostDataType &&
              hostDataType.TypeName.GetReflectionType() is { } hostDataClrType &&
@@ -105,7 +107,8 @@ internal sealed partial class PowerShellSemanticBinder
                 return new PowerShellBoundLiteralExpression(span, constant.Value, LiteralType(constant.Value?.GetType() ?? typeof(object), "Literal syntax determines the CLR representation."), constant.Value is null ? PowerShellValueState.Null : PowerShellValueState.Known);
             case TypeExpressionAst typeExpression:
                 if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
-                    PowerShellHostedValueClassPolicy.IsQualifiedConstructorReceiver(document, typeExpression, targetFramework, capabilities))
+                    (PowerShellHostedValueClassPolicy.IsQualifiedConstructorReceiver(document, typeExpression, targetFramework, capabilities) ||
+                     PowerShellHostedEnumDeclarationPolicy.IsQualifiedMemberReceiver(document, typeExpression, targetFramework, capabilities)))
                     return new PowerShellBoundNativeTypeExpression(span, typeExpression.TypeName.FullName);
                 var typeValue = typeExpression.TypeName.GetReflectionType();
                 if (typeValue is null ||

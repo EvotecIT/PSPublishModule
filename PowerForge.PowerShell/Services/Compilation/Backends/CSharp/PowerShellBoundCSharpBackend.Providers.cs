@@ -34,6 +34,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
         {
             if (stream.Kind != PowerShellStreamCommandKind.Success)
                 throw new InvalidOperationException("Implicit stream output must target the success stream.");
+            if (stream.Message is PowerShellLoweredNativeCommandExpression { PreserveReturnRecords: true } returnedPipeline)
+            {
+                builder.Append(prefix).Append(EmitNativeCommandRecords(returnedPipeline, successSink)).AppendLine(";");
+                return;
+            }
             if (stream.Message.ClrType == typeof(void))
             {
                 builder.Append(prefix).Append(EmitExpression(stream.Message)).AppendLine(";");

@@ -100,7 +100,8 @@ internal static class PowerShellCommandRegionSemanticBinder
             .Invoke(wrapper, null)!);
         return new PowerShellBoundNativeCommandExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent),
             syntax.Extent.Text, document.Path, document.Text, preserve,
-            BindStages(document, new[] { syntax }, commandResolver, localFunctionNames, capabilities));
+            BindStages(document, new[] { syntax }, commandResolver, localFunctionNames, capabilities),
+            wrapper is null && syntax is PipelineAst { Parent: ReturnStatementAst returned } && ReferenceEquals(returned.Pipeline, syntax));
     }
 
     internal static bool TryBindNativePipeline(ParsedSourceDocument document, StatementAst statement,
