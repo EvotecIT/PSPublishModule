@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "3d245f195ba755b64222f184f0a8fb87fced463c",
+  "compilerBaselineCommit": "2e787da907d00691b07a7f04061404e9eeebd79a",
   "packets": [
     {
       "packet": "pssg",
@@ -13,7 +13,7 @@
       "stableUnits": 286,
       "emitted": 270,
       "retained": 12,
-      "sourceExplanationSha256": "10813e86b5035f79c818fd58921c591a2acd33e51660fa1fae28695379b24039",
+      "sourceExplanationSha256": "53bca594b302f074a789892171bf6155aff9450107d1b97e3e927bcea35242b3",
       "functionsRetained": [
         {
           "unitId": "bde03b869be356b032686101",
@@ -288,7 +288,7 @@
       "stableUnits": 69,
       "emitted": 63,
       "retained": 5,
-      "sourceExplanationSha256": "51277db657806711a57853e04fa18848f05040d5c4343f18f3aad8e7627472d3",
+      "sourceExplanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1",
       "functionsRetained": [
         {
           "unitId": "2be0f84457750dd64ee0c5d1",
@@ -392,7 +392,7 @@
       "stableUnits": 67,
       "emitted": 65,
       "retained": 1,
-      "sourceExplanationSha256": "0be6c42dae3f50456d294f128e9377a5d9ce3f3b0dc00f3f4fad31a8b9c71c47",
+      "sourceExplanationSha256": "35f6919cdd439a762a9284cc3a90d32d6f984621307cafd753e71f40c9bc3d53",
       "functionsRetained": [
         {
           "unitId": "fc33881d5a7752031137ea07",
@@ -418,9 +418,9 @@
       "packet": "pst",
       "functions": 109,
       "stableUnits": 121,
-      "emitted": 94,
-      "retained": 15,
-      "sourceExplanationSha256": "a89dcee275cac8031619aea7c5316f9390273ba09e5bc5f8ad3691059fff13ba",
+      "emitted": 95,
+      "retained": 14,
+      "sourceExplanationSha256": "752bfd55d5d829d42b1fdd6674f04d78e7576eca0f1dec833520f4f6c7fe3412",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -511,24 +511,6 @@
               "message": "CLR type 'System.Windows.Input.Mouse' is not available in the generated project reference set for the requested target.",
               "line": 324,
               "column": 37
-            }
-          ]
-        },
-        {
-          "unitId": "68839a83a07125affe4b1ef8",
-          "name": "Copy-Command",
-          "relativePath": "functions/Copy-Command.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "CLR type 'System.Management.Automation.ProxyCommand' is not available in the generated project reference set for the requested target.",
-              "line": 187,
-              "column": 18
             }
           ]
         },
@@ -1337,7 +1319,7 @@
       "stableUnits": 41,
       "emitted": 27,
       "retained": 13,
-      "sourceExplanationSha256": "c1693d9d13ef6349b1f21099dbcd22b8c2899388fe8e8f5df928c5867bea2144",
+      "sourceExplanationSha256": "f3a8acb7feecc018adfe9d5daf63170ea3af30eed2b718cb1426d9e2346c005f",
       "functionsRetained": [
         {
           "unitId": "62d3e169b4f7eb162da5636b",
@@ -1605,7 +1587,7 @@
     "PowerForge.PowerShell/Services/Compilation/PowerShellNativeFunctionSourceGenerator.cs": "2f7b9e8d9c134953991cf98f9d5a6d4ad2e1f941b897a9f1a0cd3f68f3c37752",
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.OwnedDeclaration.cs": "96048604389dbda2546cafb9a43e189c4620eeb05c744deb1a69b6cc3025e106",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.cs": "bef359d76dbee21656c429002090b501f050d100adc41961d6c7fe888d2c0ecd",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "371ad03e56dc97c17532f75486caf15c96effcc5bc70345862d7708c7439deeb",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "b933e2b2768fddb44c8594b009d0048795909961a75a4503bd182bb4de388042",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedEnumDeclarationPolicy.cs": "13c19ff47ae23ae9d641c6d76ea6fe605e3187ccf13ecd607e53b68e2909c4c9",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedValueClassPolicy.cs": "e161dce7abde611d1ec26825f59d2a8218ebbabe239a3e199fdb8e509956cc73",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "b89b9674e8efff29dc493563974504e415b98fd67a08a73bd860185227e800e3",
@@ -1633,7 +1615,7 @@
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredOutputCaptureStatement.cs": "89bda7c779d5313c595b59435091fcde6f977d116c266bad68c0703b5cae9897",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.cs": "f52a1b42b13a62928850c58bb712beb08eaf540ef7a68c889ef82aaab5a5eaca",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellCommandRegionSemanticBinder.cs": "15f3bb88806cd0529637cfbaf1a8aee585d9177bfab8f3f28a9b3551e6b3e0bb",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "1aeaf1552df16d944ad9960579c80b2b6422f787c9c039a50d8c06b095689cf5",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "9dd42f58da3dfc7d090e4ca69b446340f219cdbaf03406b67c0a64d067a78f3b",
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Conversions.cs": "1c8b2d0cdb168bbf4f52c83cfed1aeb819955aab78c21a181256313a13871631",
     "PowerForge.Tests/PowerShellCompilationHostSessionConstructionTests.cs": "c3c7753b75e9bcc67034c042a92ab290c1d722ed7dc3b4f5c00664a564e5850b",
     "Benchmarks/PowerShellCompilation/Corpus/m29a-web-session-probe.ps1": "e78e2269126126c7df0bdf0710a25cc95734806587f516a0c78e3b13c59c638a",
@@ -1645,10 +1627,11 @@
     "PowerForge.Tests/PowerShellCompilationStaticEnumAssignmentTests.cs": "4ca25ed159c6d93316285d93439fc2fe63dcd65f56c2915d92846fd909e5ece3",
     "Benchmarks/PowerShellCompilation/Corpus/m29a-infoblox-connection-probe.ps1": "9fc3eac1c1ddbbead415cb30f947fd9d37d271349316d8cda577a7f30d739d04",
     "Benchmarks/PowerShellCompilation/Corpus/m29a-infoblox-connection-boundaries.ps1": "62cab9226a47197b53b28639b3e33509f1cc0a7e1b6bcb26e81b432daabfe7a6",
-    "PowerForge.Tests/PowerShellCompilationLocalExecutionTests.cs": "0e3f5d315aa315dd8430a53e433a7c516377603e7e6287c16c6df3c9fc8cf4dd"
+    "PowerForge.Tests/PowerShellCompilationLocalExecutionTests.cs": "0cec897ce00f55ffa6b1e5292b94a94a3914a84bd91ea3cf979b67ba3ed50844",
+    "PowerForge.Tests/PowerShellCompilationCommandProxyTests.cs": "51da66f3811b98d444d481be5dab82e2415c61996cf5e8ee5093521752778efb"
   },
-  "dispositionComparison": "m29a-local-execution-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "cabe8002c53be2f2f792289d50850a71c406fd4c",
-  "emitted": 517,
-  "retained": 48
+  "dispositionComparison": "m29a-command-proxy-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "2e787da907d00691b07a7f04061404e9eeebd79a",
+  "emitted": 520,
+  "retained": 45
 }

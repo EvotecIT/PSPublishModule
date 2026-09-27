@@ -44,6 +44,9 @@ internal static class PowerShellCompilationParameterTypePolicy
         typeof(ErrorCategory),
         typeof(PSMemberTypes),
         typeof(CommandInfo),
+        // Command descriptions and proxy source generation retain active-host SDK semantics.
+        typeof(CommandMetadata),
+        typeof(ProxyCommand),
         // Caller-owned variable cells require the native invocation and host binding.
         typeof(PSReference),
         // Execution objects remain caller-owned and use the active native binder.
@@ -134,6 +137,7 @@ internal static class PowerShellCompilationParameterTypePolicy
     // Reference and execution-object identity must survive native binding, including containers.
     private static bool RequiresNativeFunctionBinding(Type type)
         => type == typeof(PSReference) || type == typeof(PowerShell) ||
+           type == typeof(CommandMetadata) || type == typeof(ProxyCommand) ||
            type == typeof(System.Management.Automation.Runspaces.Runspace) ||
            type == typeof(System.Management.Automation.Runspaces.RunspacePool) ||
            type == typeof(System.Management.Automation.Runspaces.RunspaceFactory) ||

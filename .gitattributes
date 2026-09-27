@@ -11,6 +11,8 @@ Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/RuntimeS
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/RuntimeSwitch/license.txt -text -eol -whitespace
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/SamErde/Format-Timespan.ps1 -text whitespace=cr-at-eol
 Benchmarks/PowerShellCompilation/Corpus/**/*.txt text eol=lf
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/CommandProxy/*.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/CommandProxy/license.txt -text -eol -whitespace
 Module/PSPublishModule.psd1 -text whitespace=cr-at-eol
 Module/PSPublishModule.psm1 -text whitespace=cr-at-eol
 Module/Docs/Import-BenchmarkResult.md -text whitespace=cr-at-eol
