@@ -97,6 +97,9 @@ internal static class PowerShellNativeFunctionBindingPolicy
                    TokenKind.Icontains or TokenKind.Ccontains or TokenKind.Inotcontains or TokenKind.Cnotcontains or
                    TokenKind.Iin or TokenKind.Cin or TokenKind.Inotin or TokenKind.Cnotin } or
                UnaryExpressionAst { TokenKind: TokenKind.Join }, searchNestedScriptBlocks: false) is not null ||
+           function.Body.Find(static node => node is MemberExpressionAst { Static: true, Expression: VariableExpressionAst,
+               Member: StringConstantExpressionAst } and not InvokeMemberExpressionAst,
+               searchNestedScriptBlocks: false) is not null ||
            RequiresNativeObjectParameterForEach(function) ||
            function.Body.Find(static node => node switch
            {
