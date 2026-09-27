@@ -123,6 +123,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
            RequiresNativeVariableIndex(function) ||
            RequiresNativeModuleStateStringConversion(function) ||
            RequiresNativeStaticNumericArgumentConversion(function) ||
+           RequiresNativeStaticStringArgumentConversion(function) ||
            PowerShellAutomaticVariableObservationPolicy.ObservesCatchState(function) ||
            function.Body.Find(static node => node is ConvertExpressionAst conversion &&
                PowerShellObjectConstructionPolicy.HasTypeNameMetadata(conversion),
@@ -277,6 +278,49 @@ internal static class PowerShellNativeFunctionBindingPolicy
             stringParameters.Contains(argument.VariablePath.UserPath) &&
             target.TypeName.GetReflectionType() is { } type &&
             HasSingleNumericOverload(type, method.Value), searchNestedScriptBlocks: false) is not null;
+    }
+
+    // An unconstrained argument may stringify through PowerShell callbacks.
+    // Leave that conversion with the native invocation, not a C# cast or an
+    // inferred CLR overload. Only a closed string-only arity selects this path.
+    private static bool RequiresNativeStaticStringArgumentConversion(FunctionDefinitionAst function)
+    {
+        var objectParameters = PowerShellParameterSyntax.GetParameters(function.Body)
+            .Where(static parameter => parameter.StaticType == typeof(object))
+            .Select(static parameter => parameter.Name.VariablePath.UserPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (objectParameters.Count == 0) return false;
+        return function.Body.Find(node => node is InvokeMemberExpressionAst
+            {
+                Static: true, Expression: TypeExpressionAst target,
+                Member: StringConstantExpressionAst method, Arguments: { Count: > 0 } arguments
+            } && arguments.Any(argument => IsDirectObjectParameterRead(argument, objectParameters)) &&
+            arguments.All(argument => argument is StringConstantExpressionAst ||
+                IsDirectObjectParameterRead(argument, objectParameters)) &&
+            target.TypeName.GetReflectionType() is { } type && HasSingleStringOverload(type, method.Value, arguments.Count),
+            searchNestedScriptBlocks: false) is not null;
+    }
+
+    private static bool IsDirectObjectParameterRead(Ast argument, ISet<string> names)
+        => argument is VariableExpressionAst variable &&
+           (variable.VariablePath.IsUnqualified || variable.VariablePath.IsLocal) &&
+           names.Contains(variable.VariablePath.UserPath.StartsWith("local:", StringComparison.OrdinalIgnoreCase)
+               ? variable.VariablePath.UserPath.Substring(6) : variable.VariablePath.UserPath);
+
+    private static bool HasSingleStringOverload(Type type, string methodName, int argumentCount)
+    {
+        var overloads = type.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static |
+                                        System.Reflection.BindingFlags.FlattenHierarchy)
+            .Where(candidate => candidate.Name.Equals(methodName, StringComparison.OrdinalIgnoreCase) && !candidate.IsSpecialName)
+            .Where(candidate => candidate.GetParameters() is { } parameters &&
+                (parameters.Length == argumentCount || parameters.Length > argumentCount &&
+                 parameters.Skip(argumentCount).All(static parameter => parameter.IsOptional) ||
+                 parameters.Length > 0 && parameters[parameters.Length - 1].GetCustomAttributes(typeof(ParamArrayAttribute), false).Length > 0 &&
+                 argumentCount >= parameters.Length - 1)).ToArray();
+        return overloads.Length == 1 && !overloads[0].ContainsGenericParameters &&
+               overloads[0].GetParameters().Length == argumentCount &&
+               overloads[0].GetParameters().All(static parameter => parameter.ParameterType == typeof(string) &&
+                   !parameter.IsOptional && !parameter.IsOut);
     }
 
     private static bool HasSingleNumericOverload(Type type, string methodName)

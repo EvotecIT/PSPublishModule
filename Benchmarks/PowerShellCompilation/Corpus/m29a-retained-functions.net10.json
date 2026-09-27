@@ -5,15 +5,15 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the accepted constructor/object comparison and its full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "3556752a490d62fa8019477bd8b0668346327fed",
+  "compilerBaselineCommit": "c19ead0dbba6a8560fba1d535f827b52771aaa0f",
   "packets": [
     {
       "packet": "pssg",
       "stableUnits": 286,
       "functions": 282,
-      "emitted": 252,
-      "retained": 30,
-      "sourceExplanationSha256": "2f8d5b6b124e805cf40af34bad7920de56760b7731fc0a08d150e11d22f2a636",
+      "emitted": 253,
+      "retained": 29,
+      "sourceExplanationSha256": "81fe2a60f0935e38a8410709b065cb6a72dde4295c29fba1077efb2060c5d280",
       "functionsRetained": [
         {
           "unitId": "005401f052dbe8e7f319d556",
@@ -51,24 +51,6 @@
               "message": "CLR member 'System.Object.Synchronize' was not found as one target-compatible readable field or property.",
               "line": 36,
               "column": 151
-            }
-          ]
-        },
-        {
-          "unitId": "45825c5933220f8d83961334",
-          "name": "Get-WinADOrganizationalUnitFromDN",
-          "relativePath": "Private/Deprecated/ActiveDirectory/Get-WinADOrganizationalUnitFromDN.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.invokememberexpression",
-              "message": "No exact CLR overload was found for method 'System.Text.RegularExpressions.Regex.Match' with the bound argument types.",
-              "line": 25,
-              "column": 12
             }
           ]
         },
@@ -2397,14 +2379,10 @@
     }
   ],
   "compilerSourceHashes": {
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "f350f26de7024f6afda69d16b84718b1b5d0ce49e3b5df480597ec103ccc6809",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.CaptureTargets.cs": "e053776e05a2d093248d3e90f467ceba108f0ff2d6d217ea161ac0b76c0f76c0",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.OutputCapture.cs": "8095a917bb17e744831b359f58c7f5c0b49566396c82e601305f4a80fa90fcd2",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellSemanticCompilationPipeline.cs": "b94c058d2f2a5f623cf072b0cd39f7c7994720934e1481c73a22882e594ad591",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.RetainedRegions.cs": "bfe676aaddd70684eb6c457219ca30ec9600a66533438808277fcbd358a7ed6e"
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "13127f1612ef18620182eda8c3e4beda2b2dad7af95cc93b37a01d95640f2283"
   },
-  "dispositionComparison": "m29a-region-recovery-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "3556752a490d62fa8019477bd8b0668346327fed",
-  "emitted": 482,
-  "retained": 83
+  "dispositionComparison": "m29a-static-string-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "c19ead0dbba6a8560fba1d535f827b52771aaa0f",
+  "emitted": 483,
+  "retained": 82
 }
