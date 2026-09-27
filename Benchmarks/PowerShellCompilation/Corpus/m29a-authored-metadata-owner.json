@@ -1,0 +1,79 @@
+{
+  "SchemaVersion": 1,
+  "Purpose": "Already-declared authored metadata preserved through fresh native compilation storage; synthetic runtime proof only, no new compiler admission.",
+  "BaselineCommit": "5869d15bd7600161434f39a33a2b6c937869988a",
+  "SourceAndTestHashes": [
+    {
+      "Path": "PowerForge.Tests/Fixtures/PowerShellCompilationStatementErrorFixture/NativeAuthoredMetadataFixture.cs",
+      "Sha256": "ee8be80d7dce0a0a3b5c274ac8dfdd35713a904ec8e530a80409c6d7b4e27f61"
+    },
+    {
+      "Path": "PowerForge.Tests/Fixtures/PowerShellCompilationStatementErrorFixture/NativeAuthoredMetadataProbe.ps1",
+      "Sha256": "89c9ece9f22433c024daf6c53a18af8067ee441ae12f6fc72a498dea6dc8441f"
+    },
+    {
+      "Path": "PowerForge.Tests/PowerShellCompilationNativeFunctionHostTests.cs",
+      "Sha256": "8b24a0e2dc5682235b81369e6a2ad2ee8cf1814b7b3c1a06516f6d71bd3e3a87"
+    }
+  ],
+  "Validation": {
+    "Test": "NativeDeclarations_PreserveAuthoredMetadataWithIndependentCompiledStorage",
+    "Passed": 2,
+    "Failed": 0,
+    "TrxSha256": "c202a166419be05a9902e7ae84f4d9cd4288304ee1e0862927189ac5d8bb652e",
+    "Hosts": [
+      {
+        "Target": "net10.0",
+        "Host": "pwsh",
+        "Version": "7.6.6"
+      },
+      {
+        "Target": "net472",
+        "Host": "powershell.exe",
+        "Version": "5.1.26100.9444"
+      }
+    ],
+    "CompiledProcessRecordsPerHost": 15,
+    "Checks": [
+      "same authored transformation and validation attribute type identities",
+      "same authored enum parameter type identity",
+      "module-owned command default",
+      "explicit and null arguments",
+      "two pipeline records per iteration",
+      "validation rejection before process",
+      "three repeated rounds",
+      "unchanged declaration text",
+      "separate private compilation storage",
+      "saved original body remains independent after replacement"
+    ]
+  },
+  "IndependentReview": {
+    "Scope": [
+      "PowerForge.Tests/Fixtures/PowerShellCompilationStatementErrorFixture/NativeAuthoredMetadataFixture.cs",
+      "PowerForge.Tests/Fixtures/PowerShellCompilationStatementErrorFixture/NativeAuthoredMetadataProbe.ps1",
+      "PowerForge.Tests/PowerShellCompilationNativeFunctionHostTests.cs"
+    ],
+    "Findings": 0,
+    "ReadOnly": true,
+    "TestsRerunByReviewer": false
+  },
+  "Boundaries": {
+    "NewEmittedFunctions": 0,
+    "ProductionSourceChanged": false,
+    "AdmissionChanged": false,
+    "PreviousNet10Emitted": 494,
+    "PreviousNet10Functions": 565,
+    "FullCensusRefreshed": false,
+    "StrictExpanded": false,
+    "ExternalWorkflowQualified": false
+  },
+  "Remaining": [
+    "generated compiler stub with matching tuple storage and all executable clauses covered",
+    "declaration lookup and binding before export in generated artifacts",
+    "lexical dependency qualification",
+    "effectful attribute constructors and defaults",
+    "reimport and module/runspace identity",
+    "pinned original/generated reflection workflow",
+    "same-input no-loss coverage after integration"
+  ]
+}

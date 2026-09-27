@@ -5,6 +5,23 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
+    public void NativeDeclarations_PreserveAuthoredMetadataWithIndependentCompiledStorage(string framework, string host)
+    {
+        var project = FindStatementErrorFixtureProject();
+        var build = RunProcess("dotnet", "build", project, "-c", "Release", "-f", framework, "--nologo");
+        Assert.True(build.ExitCode == 0, build.StandardOutput + build.StandardError);
+        var root = Path.GetDirectoryName(project)!;
+        var assembly = Path.Combine(root, "bin", "Release", framework, "Generic.Compiler.StatementErrors.dll");
+        var result = RunProcess(host, "-NoProfile", "-NonInteractive", "-File",
+            Path.Combine(root, "NativeAuthoredMetadataProbe.ps1"), "-Assembly", assembly);
+        Assert.True(result.ExitCode == 0, result.StandardOutput + result.StandardError);
+        Assert.True(string.IsNullOrWhiteSpace(result.StandardError), result.StandardError);
+        Assert.Contains("Native authored metadata qualification passed: 15 compiled records", result.StandardOutput);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
     public void NativeScriptBlocks_PreserveDynamicReadsAndChildLocalWrites(string framework, string host)
     {
         var project = FindStatementErrorFixtureProject();
