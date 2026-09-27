@@ -32,7 +32,9 @@ internal static class PowerShellSourceSemanticValidator
                 PowerShellSourceParser.GetSpan(document, document.SyntaxRoot.Extent)));
         }
         var typeDefinition = document.TypeClosure.Declarations.FirstOrDefault();
-        if (typeDefinition is not null && !PowerShellHostedAttributeDeclarationPolicy.IsQualified(document, targetFramework, capabilities))
+        if (typeDefinition is not null &&
+            !PowerShellHostedAttributeDeclarationPolicy.IsQualified(document, targetFramework, capabilities) &&
+            !PowerShellHostedEnumDeclarationPolicy.IsQualified(document, targetFramework, capabilities))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 PowerShellCompilationFeatureIds.TypeDefinition,

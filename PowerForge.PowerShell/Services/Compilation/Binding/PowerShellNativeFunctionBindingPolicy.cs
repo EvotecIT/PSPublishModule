@@ -74,6 +74,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
     private static bool RequiresNativeBinding(FunctionDefinitionAst function, string? targetFramework,
         PowerShellCompilationCapability capabilities)
         => function.Body.BeginBlock is not null || function.Body.ProcessBlock is not null ||
+           PowerShellHostedEnumDeclarationPolicy.RequiresNativeParameterBinding(function) ||
            function.Body.Find(static node => node is ThrowStatementAst { Pipeline: null } thrown &&
                !PowerShellControlFlowBindingPolicy.HasAncestor<CatchClauseAst>(thrown), searchNestedScriptBlocks: false) is not null ||
            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&

@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "dced28c9f67621eeeef1eb237b7567733538fd83",
+  "compilerBaselineCommit": "c0c27662121fb412659930a947bb3144c7867ac5",
   "packets": [
     {
       "packet": "pssg",
@@ -756,9 +756,9 @@
       "packet": "pst",
       "functions": 109,
       "stableUnits": 121,
-      "emitted": 87,
-      "retained": 22,
-      "sourceExplanationSha256": "f05d12c29a20d606dc1c978b45e9c8a3fbb1c079952063b9710bf527330f0541",
+      "emitted": 88,
+      "retained": 21,
+      "sourceExplanationSha256": "391f654b08642a6101b5312081b449f91d66c95eff3d0b7e048132e82c2dcecd",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -1736,31 +1736,6 @@
           ]
         },
         {
-          "unitId": "9ab14a5915e28cf2804c71e6",
-          "name": "Write-PSHorizontalRule",
-          "relativePath": "functions/Write-PSHorizontalRule.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "source.type-definition",
-              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
-              "line": 1,
-              "column": 1
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "parameter.type",
-              "message": "Parameter '$LineWeight' uses authored type 'psRuleWeight', which cannot be resolved in the selected compilation environment.",
-              "line": 33,
-              "column": 9
-            }
-          ]
-        },
-        {
           "unitId": "10ca22e8b6215064da37d706",
           "name": "Find-CimClass",
           "relativePath": "functions/find-cimclass.ps1",
@@ -2091,14 +2066,17 @@
   ],
   "compilerSourceHashes": {
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedAttributeDeclarationPolicy.cs": "ed1395b785f1b0c45b4821f3f301c8a7480c044882b35b8daa5c2588d361b78d",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSourceSemanticValidator.cs": "7e69ef372f08624bf7e8dc00f23b5355566ffd9941bed2752a1f93ddb38dd6b4",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSourceSemanticValidator.cs": "ee5a3b1f84e2641e06f11916461787aa55c4a71f2805909f7ee1052f28266597",
     "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationAnalyzer.Semantics.cs": "d9def0321bcef3ae3f038bf9dcc11e27261e5049e8d503bf773412bb643f86c9",
     "PowerForge.PowerShell/Services/Compilation/PowerShellCommandHostRuntimeSource.cs": "ddd0c725442f5cdf52d6a187528dab44e4d49931a6f92244fe5e3d3a3ba69e58",
     "PowerForge.PowerShell/Services/Compilation/PowerShellNativeFunctionSourceGenerator.cs": "2f7b9e8d9c134953991cf98f9d5a6d4ad2e1f941b897a9f1a0cd3f68f3c37752",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.OwnedDeclaration.cs": "96048604389dbda2546cafb9a43e189c4620eeb05c744deb1a69b6cc3025e106"
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.OwnedDeclaration.cs": "96048604389dbda2546cafb9a43e189c4620eeb05c744deb1a69b6cc3025e106",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.cs": "bef359d76dbee21656c429002090b501f050d100adc41961d6c7fe888d2c0ecd",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "26b8ebb4e184926095fd6af0ce253f55948a3ac0d7d983e112e3f1efb713fbc1",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedEnumDeclarationPolicy.cs": "3c73fa914308606aa8ec7dd41f99aa97d4a29a32fac1a5134574129719bcb9fb"
   },
-  "dispositionComparison": "m29a-hosted-attribute-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "90f632b0aadd7da2236e5d73bb674a7eed642539",
-  "emitted": 497,
-  "retained": 68
+  "dispositionComparison": "m29a-hosted-enum-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "c0c27662121fb412659930a947bb3144c7867ac5",
+  "emitted": 498,
+  "retained": 67
 }

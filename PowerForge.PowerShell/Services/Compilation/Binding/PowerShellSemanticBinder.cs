@@ -59,7 +59,8 @@ internal sealed partial class PowerShellSemanticBinder
         {
             if (PowerShellCompilationParameterTypePolicy.FindUnresolvedAuthoredType(parameter) is not { } unresolvedType ||
                 nativeFunctionBinding is not null &&
-                PowerShellCompilationParameterTypePolicy.IsHostProvidedParameterType(unresolvedType.TypeName.FullName))
+                (PowerShellCompilationParameterTypePolicy.IsHostProvidedParameterType(unresolvedType.TypeName.FullName) ||
+                 PowerShellHostedEnumDeclarationPolicy.IsQualifiedParameter(document, unresolvedType, targetFramework, capabilities)))
                 continue;
             unresolvedParameterTypeDiagnostic = new PowerShellSemanticDiagnostic(
                 PowerShellCompilationFeatureIds.ParameterType,
