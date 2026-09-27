@@ -41,7 +41,12 @@
               "column": 101
             }
           ],
-          "relativePath": "Private/Get-ComputerSMBInfo.ps1"
+          "relativePath": "Private/Get-ComputerSMBInfo.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-smb-native-boundary.json",
+            "scope": "Local Windows enumeration with exact authored native declaration and SkipDiskSpace; remote/partial-buffer paths unqualified."
+          }
         },
         {
           "unitId": "c72f7b9fb7f89ad280e3bf0a",
@@ -246,7 +251,12 @@
               "column": 41
             }
           ],
-          "relativePath": "Public/Objects/Format-Stream.ps1"
+          "relativePath": "Public/Objects/Format-Stream.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-paging-transfer-boundaries.json",
+            "scope": "Previously accepted authored nonlocal transfer or function exit boundary; no new execution or compilation credit."
+          }
         },
         {
           "unitId": "c4dc1ae9c4c4b22e84d4c0a1",
@@ -264,7 +274,12 @@
               "column": 9
             }
           ],
-          "relativePath": "Public/TestFunctionality/Test-ModuleAvailability.ps1"
+          "relativePath": "Public/TestFunctionality/Test-ModuleAvailability.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-exit-boundaries.json",
+            "scope": "Previously accepted authored nonlocal transfer or function exit boundary; no new execution or compilation credit."
+          }
         }
       ]
     },
@@ -295,7 +310,12 @@
               "column": 5
             }
           ],
-          "relativePath": "Private/Get-ADServiceAccountsToProcess.ps1"
+          "relativePath": "Private/Get-ADServiceAccountsToProcess.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-external-transfer-boundaries.json",
+            "scope": "Previously accepted authored nonlocal transfer or function exit boundary; no new execution or compilation credit."
+          }
         },
         {
           "unitId": "78cf08da8e4e3bfb47233a33",
@@ -313,7 +333,12 @@
               "column": 9
             }
           ],
-          "relativePath": "Private/Invoke-ADComputerInventoryChildProcess.ps1"
+          "relativePath": "Private/Invoke-ADComputerInventoryChildProcess.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-exit-boundaries.json",
+            "scope": "Previously accepted authored nonlocal transfer or function exit boundary; no new execution or compilation credit."
+          }
         }
       ]
     },
@@ -473,7 +498,12 @@
               "column": 13
             }
           ],
-          "relativePath": "functions/New-PSDriveHere.ps1"
+          "relativePath": "functions/New-PSDriveHere.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-external-transfer-boundaries.json",
+            "scope": "Previously accepted authored nonlocal transfer or function exit boundary; no new execution or compilation credit."
+          }
         },
         {
           "unitId": "0f49b0d93bead94178065edb",
@@ -580,7 +610,12 @@
               "column": 13
             }
           ],
-          "relativePath": "functions/Utilities.ps1"
+          "relativePath": "functions/Utilities.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-paging-transfer-boundaries.json",
+            "scope": "Previously accepted authored nonlocal transfer or function exit boundary; no new execution or compilation credit."
+          }
         },
         {
           "unitId": "0f2509f48b1515bbeadae60b",
@@ -631,6 +666,7 @@
     "m29a-disk-native-boundary.json",
     "m29a-ad-data-boundary.json",
     "m29a-local-sid-boundary.json",
-    "m29a-forest-details-boundary.json"
+    "m29a-forest-details-boundary.json",
+    "m29a-smb-native-boundary.json"
   ]
 }

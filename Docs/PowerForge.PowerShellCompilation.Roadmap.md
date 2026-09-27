@@ -1716,3 +1716,7 @@ The semantic compiler does not have a competing AST/emitter eligibility brain. P
 - [ ] Complete M29 workflow coverage, then M30 host-servicing/release qualification through the existing owners; M31 follows with measured workflow benefit.
 
 Broad percentage growth is useful only as a diagnostic trend. It never substitutes for these complete-program, clean-target, semantic, ecosystem, and product gates.
+
+## Retained boundary qualification checkpoint
+
+The current compiler portfolio is 544/565 complete emitted functions and 21 retained functions. Fourteen retained dispositions now have justified hosted execution boundaries; seven still require qualification (six WPF functions and Set-PasswordRemotely). Local SMB proof exercises the real authored native declaration and complete read-only local enumeration with disk-space access disabled. This checkpoint adds no compiled functions and does not close reusable runtime-created C#/native deployment translation. Exact evidence and remaining source-maintenance issues are in SupportGaps and the per-function inventory; do not substitute hosted compatibility for compilation progress.
