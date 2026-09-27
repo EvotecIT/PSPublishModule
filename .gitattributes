@@ -46,3 +46,5 @@ Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/WhoIs/*.
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/WhoIs/license.txt -text -eol -whitespace
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/LocalRunspace/*.ps1 -text -eol -whitespace
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/LocalRunspace/license.txt -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/SessionCopy/Copy-PSFunction.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/SessionCopy/license.txt -text -eol -whitespace

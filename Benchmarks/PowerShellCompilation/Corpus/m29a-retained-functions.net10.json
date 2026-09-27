@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "eeaefb26b7ba2de91b3c5c688aa9ef280943e096",
+  "compilerBaselineCommit": "99b231fe0fbd2fbf04afb7e123fd5838baaa0d91",
   "packets": [
     {
       "packet": "pssg",
@@ -317,9 +317,9 @@
       "packet": "pst",
       "functions": 109,
       "stableUnits": 121,
-      "emitted": 95,
-      "retained": 14,
-      "sourceExplanationSha256": "5f8a1cccb2860d79aebdd18eb387533cb0c9a5bf402d8a8bfed2655c4054e5f6",
+      "emitted": 96,
+      "retained": 13,
+      "sourceExplanationSha256": "73330ace01cace5a4c474be9b563c444da790254e50892408a59f02bb53eabe6",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -679,24 +679,6 @@
               "featureId": "command.write-verbose",
               "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
               "line": 170,
-              "column": 9
-            }
-          ]
-        },
-        {
-          "unitId": "becd932421296fad7f1bc24a",
-          "name": "Copy-PSFunction",
-          "relativePath": "functions/Copy-PSFunction.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$Session' has CLR type 'System.Management.Automation.Runspaces.PSSession' that requires a target capability unavailable to this compilation.",
-              "line": 27,
               "column": 9
             }
           ]
@@ -1216,9 +1198,9 @@
       "packet": "platyps",
       "functions": 40,
       "stableUnits": 41,
-      "emitted": 27,
-      "retained": 13,
-      "sourceExplanationSha256": "f3a8acb7feecc018adfe9d5daf63170ea3af30eed2b718cb1426d9e2346c005f",
+      "emitted": 32,
+      "retained": 8,
+      "sourceExplanationSha256": "b56ea24b4a5133d4976272a844bad89610d661a89a899f4427adfddf6bc22e3a",
       "functionsRetained": [
         {
           "unitId": "62d3e169b4f7eb162da5636b",
@@ -1230,10 +1212,10 @@
           "generatedRegionMemberNames": [],
           "causes": [
             {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$Session' has CLR type 'System.Management.Automation.Runspaces.PSSession' that requires a target capability unavailable to this compilation.",
-              "line": 60,
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; workflows and unsupported child bodies remain hosted.",
+              "line": 131,
               "column": 9
             },
             {
@@ -1267,42 +1249,6 @@
               "message": "CLR type 'Markdown.MAML.Parser.MarkdownParser' is not available in the generated project reference set for the requested target.",
               "line": 350,
               "column": 20
-            }
-          ]
-        },
-        {
-          "unitId": "c1500264ee330534bfe50e38",
-          "name": "Update-MarkdownHelp",
-          "relativePath": "platyPS.psm1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$Session' has CLR type 'System.Management.Automation.Runspaces.PSSession' that requires a target capability unavailable to this compilation.",
-              "line": 380,
-              "column": 9
-            }
-          ]
-        },
-        {
-          "unitId": "dd7b6124e95755e5b3082853",
-          "name": "Update-MarkdownHelpModule",
-          "relativePath": "platyPS.psm1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$Session' has CLR type 'System.Management.Automation.Runspaces.PSSession' that requires a target capability unavailable to this compilation.",
-              "line": 602,
-              "column": 9
             }
           ]
         },
@@ -1397,60 +1343,6 @@
           ]
         },
         {
-          "unitId": "2419b0859f68e604c557f693",
-          "name": "GetCommands",
-          "relativePath": "platyPS.psm1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$Session' has CLR type 'System.Management.Automation.Runspaces.PSSession' that requires a target capability unavailable to this compilation.",
-              "line": 2153,
-              "column": 9
-            }
-          ]
-        },
-        {
-          "unitId": "3b79bdc99fbb231c9ff1adbc",
-          "name": "MyGetCommand",
-          "relativePath": "platyPS.psm1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$Session' has CLR type 'System.Management.Automation.Runspaces.PSSession' that requires a target capability unavailable to this compilation.",
-              "line": 2256,
-              "column": 9
-            }
-          ]
-        },
-        {
-          "unitId": "52bcab88304d8a8c56917403",
-          "name": "GetMamlObject",
-          "relativePath": "platyPS.psm1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$Session' has CLR type 'System.Management.Automation.Runspaces.PSSession' that requires a target capability unavailable to this compilation.",
-              "line": 2396,
-              "column": 9
-            }
-          ]
-        },
-        {
           "unitId": "71cfc9b5f84adf546472a3fc",
           "name": "ConvertPsObjectsToMamlModel",
           "relativePath": "platyPS.psm1",
@@ -1514,7 +1406,7 @@
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredOutputCaptureStatement.cs": "89bda7c779d5313c595b59435091fcde6f977d116c266bad68c0703b5cae9897",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.cs": "6539ad53759779357d9616dd55ecd28e4064260d4361d5d5a5218d6c07733837",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellCommandRegionSemanticBinder.cs": "15f3bb88806cd0529637cfbaf1a8aee585d9177bfab8f3f28a9b3551e6b3e0bb",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "9dd42f58da3dfc7d090e4ca69b446340f219cdbaf03406b67c0a64d067a78f3b",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "65952504de9193ecdc1621396df91a0406e35e68dd71cefe60e92e35aa0b9657",
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Conversions.cs": "1c8b2d0cdb168bbf4f52c83cfed1aeb819955aab78c21a181256313a13871631",
     "PowerForge.Tests/PowerShellCompilationHostSessionConstructionTests.cs": "c3c7753b75e9bcc67034c042a92ab290c1d722ed7dc3b4f5c00664a564e5850b",
     "Benchmarks/PowerShellCompilation/Corpus/m29a-web-session-probe.ps1": "e78e2269126126c7df0bdf0710a25cc95734806587f516a0c78e3b13c59c638a",
@@ -1526,8 +1418,8 @@
     "PowerForge.Tests/PowerShellCompilationStaticEnumAssignmentTests.cs": "4ca25ed159c6d93316285d93439fc2fe63dcd65f56c2915d92846fd909e5ece3",
     "Benchmarks/PowerShellCompilation/Corpus/m29a-infoblox-connection-probe.ps1": "9fc3eac1c1ddbbead415cb30f947fd9d37d271349316d8cda577a7f30d739d04",
     "Benchmarks/PowerShellCompilation/Corpus/m29a-infoblox-connection-boundaries.ps1": "62cab9226a47197b53b28639b3e33509f1cc0a7e1b6bcb26e81b432daabfe7a6",
-    "PowerForge.Tests/PowerShellCompilationLocalExecutionTests.cs": "0cec897ce00f55ffa6b1e5292b94a94a3914a84bd91ea3cf979b67ba3ed50844",
-    "PowerForge.Tests/PowerShellCompilationCommandProxyTests.cs": "51da66f3811b98d444d481be5dab82e2415c61996cf5e8ee5093521752778efb",
+    "PowerForge.Tests/PowerShellCompilationLocalExecutionTests.cs": "6c3089e4d6385a123eaaf75261d08150b1139d0f9faa8267d587f0328c53e831",
+    "PowerForge.Tests/PowerShellCompilationCommandProxyTests.cs": "eb502a0f9747c74304cea20a9ad02c69a91b0ec433eb84e77febfcc6c47ec2e8",
     "PowerForge.Tests/PowerShellCompilationNativeValueArgumentTests.cs": "069e599a367f43d1044468f1cf2542888d488e65a4eb8c5abfc449eb358764aa",
     "PowerForge.Tests/PowerShellCompilationArgumentPositionTests.cs": "8c737e610664b3c175f9991760b83ee2be7415a389ac86a8feaf0909fb5c43c8",
     "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.HostedCommands.cs": "9891fd59b770ded495f00994474274c576b8d9bb833ed735efce0c8fd0fe13d8",
@@ -1555,10 +1447,18 @@
     "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellSemanticAnalyzer.Fallback.cs": "de7141332fa21967893e39031d1e88f366bb756942293d11bedd306dd51c99b3",
     "PowerForge.PowerShell/Services/Compilation/PowerShellRuntimeStateIntrinsicPolicy.cs": "b8049084ea18d688c1168d2e47c4f63889eb122db0af83a05a195333cef39946",
     "PowerForge.Tests/PowerShellCompilationFinallyCommandValueTests.cs": "7f0cd9ca60b17279e4515602e78fd1b78a8d57aa34e5568a5db7d594df304b00",
-    "PowerForge.Tests/PowerShellCompilationFinallyReportWorkflowTests.cs": "af7ebd1798db331c47f2844a921e377104c1ca8209f8d022c91302e476f94bb4"
+    "PowerForge.Tests/PowerShellCompilationFinallyReportWorkflowTests.cs": "af7ebd1798db331c47f2844a921e377104c1ca8209f8d022c91302e476f94bb4",
+    ".gitattributes": "5591dfa62c95c9da17ab192637d921ec64dd3efa0d34dc4b04f0220d52577464",
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/SessionCopy/Copy-PSFunction.ps1": "3b527d3e31221935e8c7c7f40ad3ffd0eb12eb194e02f4aeed8d65b9ecdbbdda",
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/SessionCopy/Observe.ps1": "92d6f7b15549faedb874427df8f504afe72555695af26a89fa695139601a4e9a",
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/SessionCopy/README.md": "6f914396f1c5111a07ee9b893a91135225d7196d10d9b9ad2f92fdfd2b0c3f12",
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/SessionCopy/license.txt": "fb7d4eb5de8741978ce3dc1338771a53756e87d1134dc19b0199b2ee43beef95",
+    "PowerForge.Tests/PowerShellCompilationPSSessionDataTests.cs": "007dc50e3949b401e8e83089d3b0ab8a076950fa967919596e1624959b95b73f",
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/platyPS/SessionData/Observe.ps1": "aa180ced4b395aeba632b7d7f592b7fdf8671d3251a5a05de52c0cc98ab23e7c",
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/platyPS/SessionData/README.md": "a0364554c8be513701c54613d4c53b7cf1b97a873042ef1fb7855cc9a08d5619"
   },
-  "dispositionComparison": "m29a-finally-command-values-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "eeaefb26b7ba2de91b3c5c688aa9ef280943e096",
-  "emitted": 525,
-  "retained": 40
+  "dispositionComparison": "m29a-session-data-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "99b231fe0fbd2fbf04afb7e123fd5838baaa0d91",
+  "emitted": 531,
+  "retained": 34
 }

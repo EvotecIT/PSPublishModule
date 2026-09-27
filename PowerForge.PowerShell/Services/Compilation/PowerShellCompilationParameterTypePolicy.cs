@@ -54,6 +54,8 @@ internal static class PowerShellCompilationParameterTypePolicy
         typeof(System.Management.Automation.Runspaces.Runspace),
         typeof(System.Management.Automation.Runspaces.RunspacePool),
         typeof(System.Management.Automation.Runspaces.RunspaceFactory),
+        // Sessions preserve the caller-owned remote runspace through native parameter binding.
+        typeof(System.Management.Automation.Runspaces.PSSession),
         typeof(Parser),
         typeof(HashtableAst)
     };
@@ -141,6 +143,7 @@ internal static class PowerShellCompilationParameterTypePolicy
            type == typeof(System.Management.Automation.Runspaces.Runspace) ||
            type == typeof(System.Management.Automation.Runspaces.RunspacePool) ||
            type == typeof(System.Management.Automation.Runspaces.RunspaceFactory) ||
+           type == typeof(System.Management.Automation.Runspaces.PSSession) ||
            type.IsArray && RequiresNativeFunctionBinding(type.GetElementType()!) ||
            type.IsConstructedGenericType && type.GetGenericArguments().Any(RequiresNativeFunctionBinding);
 }

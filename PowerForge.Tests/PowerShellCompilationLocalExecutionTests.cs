@@ -97,7 +97,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             function Read-Runspace {param([System.Management.Automation.Runspaces.Runspace]$Value);$Value}
             function Read-RunspaceArray {param([System.Management.Automation.Runspaces.Runspace[]]$Value);$Value}
             function Read-RunspaceList {param([Collections.Generic.List[System.Management.Automation.Runspaces.Runspace]]$Value);$Value}
-            function Read-Session {param([System.Management.Automation.Runspaces.PSSession]$Value);$Value}
+            function Read-Coordinates {param([System.Management.Automation.Host.Coordinates]$Value);$Value}
             """,Path.Combine(Path.GetTempPath(),"local-execution-boundaries.ps1"));
         var hybrid=new PowerShellSemanticCompilationPipeline().Compile(new[]{source},framework,PowerShellCompilationCapabilities.HybridModule);
         Assert.Equal(8,hybrid.Emitted.Methods.Length);
