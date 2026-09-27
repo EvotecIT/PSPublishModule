@@ -82,7 +82,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("& 'Write-Output' 'x'", "win-x64")]
     [InlineData("Write-Output 'x' > output.txt", "win-x64")]
     [InlineData("Write-Host 'x' 6>&1", "win-x64")]
-    [InlineData("Write-Warning 'x'", "win-x64")]
     [InlineData("param([int]$Count = 3) $Count + 1", "linux-x64")]
     public void Explain_HybridNativeScriptRootRetainsUnqualifiedOwners(string source, string runtimeIdentifier)
     {
@@ -241,6 +240,78 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal((original.ExitCode, original.StandardOutput, original.StandardError),
             (generated.ExitCode, generated.StandardOutput, generated.StandardError));
         Assert.Equal(new[] { "host:0", "output:0", "host:1", "output:1", "host:2", "output:2" },
+            generated.StandardOutput.Split('\n', System.StringSplitOptions.RemoveEmptyEntries)
+                .Select(static line => line.TrimEnd('\r')).ToArray());
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Build_HybridNativeScriptRootPreservesWarningAndSuccessOutput()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            for ($i = 0; $i -lt 2; $i++) {
+                Write-Warning "warning:$i"
+                Write-Output "output:$i"
+            }
+            """);
+        var spec = new PowerShellCompilationBuildSpec(fixture.ScriptPath, fixture.OutputPath,
+            "PowerForge.WarningRoot", PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid)
+        {
+            EmitSource = true,
+            TargetContract = PowerShellCompilationTargetContractService.Create(
+                PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid,
+                "net10.0", "win-x64", false, false, PowerShellCompilationExecutableOptimization.None, true)
+        };
+        spec.ExpectedDependencyLock = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(spec);
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+        Assert.True(result.Succeeded, result.Error + System.Environment.NewLine + result.BuildOutput);
+        var root = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries);
+        Assert.True(root.Emitted);
+        Assert.True(root.RuntimeRouted);
+        Assert.Contains("for (", System.IO.File.ReadAllText(System.IO.Path.Combine(
+            result.GeneratedSourcePath!, "CompiledPowerShellEntry.cs")));
+        var original = RunProcess("pwsh", "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath);
+        var generated = RunProcess(result.ArtifactPath!);
+        Assert.Equal((original.ExitCode, original.StandardOutput, original.StandardError),
+            (generated.ExitCode, generated.StandardOutput, generated.StandardError));
+        Assert.Equal(0, generated.ExitCode);
+        Assert.Equal(new[] { "WARNING: warning:0", "output:0", "WARNING: warning:1", "output:1" },
+            generated.StandardOutput.Split('\n', System.StringSplitOptions.RemoveEmptyEntries)
+                .Select(static line => line.TrimEnd('\r')).ToArray());
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Build_HybridNativeScriptRootPreservesAuthoredWarningShadow()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Write-Warning {
+                param([string]$Message)
+                "shadow:$Message"
+            }
+            Write-Warning 'careful'
+            Write-Output 'done'
+            """);
+        var spec = new PowerShellCompilationBuildSpec(fixture.ScriptPath, fixture.OutputPath,
+            "PowerForge.WarningShadowRoot", PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid)
+        {
+            EmitSource = true,
+            TargetContract = PowerShellCompilationTargetContractService.Create(
+                PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid,
+                "net10.0", "win-x64", false, false, PowerShellCompilationExecutableOptimization.None, true)
+        };
+        spec.ExpectedDependencyLock = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(spec);
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+        Assert.True(result.Succeeded, result.Error + System.Environment.NewLine + result.BuildOutput);
+        var root = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries,
+            static item => item.Name == "<script>");
+        Assert.True(root.Emitted);
+        Assert.True(root.RuntimeRouted);
+        var original = RunProcess("pwsh", "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath);
+        var generated = RunProcess(result.ArtifactPath!);
+        Assert.Equal((original.ExitCode, original.StandardOutput, original.StandardError),
+            (generated.ExitCode, generated.StandardOutput, generated.StandardError));
+        Assert.Equal(new[] { "shadow:careful", "done" },
             generated.StandardOutput.Split('\n', System.StringSplitOptions.RemoveEmptyEntries)
                 .Select(static line => line.TrimEnd('\r')).ToArray());
     }
