@@ -1,0 +1,284 @@
+{
+  "packets": [
+    {
+      "packet": "pssg",
+      "resourceMode": "CompleteModule",
+      "functions": 282,
+      "emitted": 271,
+      "retained": 11,
+      "gains": [
+        {
+          "name": "Get-TimeSettings",
+          "unitId": "c91cd47084fb63fe4bcc793f"
+        }
+      ],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "222a918ac156fc38984b2c56fceac060abf099287e67cc2b110acbb7d582db11",
+      "sourceFingerprint": "f79df7d81da0fc78eaa16684f56cfde41ad5e7017a27d7926d21c9681a5769fd"
+    },
+    {
+      "packet": "cleanup",
+      "resourceMode": "CompleteModule",
+      "functions": 68,
+      "emitted": 64,
+      "retained": 4,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "f35d5bcf42a429124ba4a76ac96d35f3ec2a6a41354119fe72df9ba1677b18cc",
+      "sourceFingerprint": "f61ee0bc114ead41793c9a810955f0c799fd42c6143c73c208c43499bbd3e71b"
+    },
+    {
+      "packet": "pinf",
+      "resourceMode": "Declared",
+      "functions": 66,
+      "emitted": 65,
+      "retained": 1,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "35f6919cdd439a762a9284cc3a90d32d6f984621307cafd753e71f40c9bc3d53",
+      "sourceFingerprint": "7d47e79fa51f82d51495c04dea2af260f86da92e1189375b3c66e89c258eaba8"
+    },
+    {
+      "packet": "pst",
+      "resourceMode": "CompleteModule",
+      "functions": 109,
+      "emitted": 95,
+      "retained": 14,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "c13a86c8f0d83ac6249cd4e7c3b8e3d003dc4e349a3ec8f51c1e1dbba85af8ae",
+      "sourceFingerprint": "17c8fd2417c6212fb4b8a529dc4074231b62598027ed4af3932a1583746425e3"
+    },
+    {
+      "packet": "platyps",
+      "resourceMode": "Declared",
+      "functions": 40,
+      "emitted": 27,
+      "retained": 13,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "f3a8acb7feecc018adfe9d5daf63170ea3af30eed2b718cb1426d9e2346c005f",
+      "sourceFingerprint": "adea968352a517d19e1367771bee576a543d1cfed5ad7ca2a118c47a1a7103ef"
+    }
+  ],
+  "changedDispositions": [
+    {
+      "packet": "pssg",
+      "unitId": "c91cd47084fb63fe4bcc793f",
+      "name": "Get-TimeSettings",
+      "baselineEmitted": false,
+      "candidateEmitted": true,
+      "retainedHostedSource": false,
+      "baselineNativeFunctionBinding": false,
+      "usesNativeFunctionBinding": true,
+      "baselineRegionMembers": [
+        "__PowerForgeRegion_9ac609e98359b596e5ca44dc"
+      ],
+      "candidateRegionMembers": []
+    }
+  ],
+  "verifiedFunctionIdentities": 565,
+  "observedStableUnits": 584,
+  "candidateEmitted": 522,
+  "candidateRetained": 43,
+  "schemaVersion": 1,
+  "purpose": "Qualified direct function-local native enum declaration and conversion; exact SDK lexical scope owner",
+  "baselineCompilerCommit": "47c0630d514c9f4ed86aa0c35e62140812cb9348",
+  "baselineDispositionLedger": "m29a-argument-position-comparison.net10.json",
+  "baselineEmitted": 521,
+  "retainedInventorySha256": "7a56b2967edd4c83aa499465182963c7819254bb4b6b4884f99b215e17a77b88",
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedLocalEnumPolicy.cs": "35c398d2fb7070f5a36574fd2cacd7a0b45a078c77cffdc00963f006c8781574",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "c720cb919eb70bbdbff658a58f3944b7f75b6593ee27d9b9aa2c7013bce12ee2",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "ee8386680b7f00584a75938d7edee1e55b651aff18bd99e4f229f60cf1f0b231",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs": "03cf4389089cb93b24b46ccb408dc293381d4a26a4c317fced380313628902d6",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCommandHostRuntimeSource.cs": "dd9ca1a97e8e84c80499838930c04368e23dc445ef575f84970c1f914f505f08",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellNativeFunctionSourceGenerator.cs": "f4ac566f8827acd658564fe1f391bbd4c82308abf919c3da82e64eaf7676ffe8",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.cs": "e8232bdd2bd4c00c91862381ba59effe1f8dcaf86130469fda6e2f745cdc8f05",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.FunctionEnums.cs": "d829293c32e909ba16b73a55f4816dcdf6e7a2cade9b58ab02113b4260100c3f",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.OwnedDeclaration.cs": "75af26461066cb24e9bb0b8f3f14e038ccfa54f300ef0982f86a06266232ff8c",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.cs": "ae0ed77f636766ed1fbd6cab3c0c2d15a54c252dd74f419c0d7f909edb0c9e46",
+    "PowerForge.Tests/Fixtures/PowerShellCompilationStatementErrorFixture/NativeAuthoredMetadataFixture.cs": "0a492735149ef849dd8d1a283fe1f9316a3e0ae31687351eb70c8f4f8416b57d",
+    "PowerForge.Tests/PowerShellCompilationLocalEnumTests.cs": "fc6943dc82712cc07d4b95d4be85c23d523471b1e46b693d1955eaa37cdc43b5",
+    "PowerForge/Models/PowerShellCompilation/PowerShellNativeFunctionBinding.cs": "bed9cadfabcda17777bbf64dbb8307a1391a917c7fab32f3e00758877861cba4"
+  },
+  "dispositionContract": "Replay the single gain through the complete baseline chain; all 565 function IDs and584units match, with no complete-method or still-retained-region losses.",
+  "executionProof": {
+    "sourcePath": "ExternalWorkflows/PSSharedGoods/FullModule/Public/Time/Get-TimeSettings.ps1",
+    "sourceRevision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+    "sourceSha256": "b0e7f3f20bff26e95e940861a0dc89e7e2f9980816fcd6ed086d51a181083e5a",
+    "hosts": [
+      "PowerShell7/net10.0 Windows",
+      "WindowsPowerShell5.1/net472"
+    ],
+    "jsonObservationsPerHost": 19,
+    "unchangedWorkflowCasesPerHost": 8,
+    "computersPerWorkflowCase": 2,
+    "syntheticEnumConversionsPerHost": 9,
+    "syntheticIsolationAndReimportObservationsPerHost": 2,
+    "visibleWarningRecordsPerHost": 6,
+    "syntheticCompiledFunctions": 1,
+    "newExecutedCompleteWorkloadFunctions": [
+      "Get-TimeSettings"
+    ],
+    "compatibilityCallbacksPerHost": 4,
+    "contracts": [
+      "Flags/null/zero/invalid/unknown conversion; repeated local Type identity and visibility; independent-module isolation and force reimport",
+      "Offline registry parameters and NTP-client fallback, query order/arguments, multiple computers, splitter/cardinality, secure time values and warning records",
+      "Prior authored declaration and script-block callbacks preserve class/enum acceptance; explicit enum underlying type only executed on PowerShell7"
+    ],
+    "limits": [
+      "Registry providers are in-memory; no local/remote registry, network or administrative operation runs",
+      "Get-TimeSettings is a basic function: supplied common-parameter-looking arguments do not suppress its authored warning output; six emitted warnings are compared explicitly",
+      "Enums remain native SDK declarations/identities; this is compiled surrounding function code, not runtime-free enum translation",
+      "No full-module execution, full net472 portfolio, standalone, performance or reviewed dependency lock claim"
+    ]
+  },
+  "validation": {
+    "productionCohort": {
+      "file": "local-enum-final.trx",
+      "sha256": "bc6f5abbc29fa9b1676a43bf80976c6a8b6b4137af076f8a7a29062bfc67457b",
+      "total": 46,
+      "passed": 45,
+      "failed": 1,
+      "times": {
+        "creation": "2026-09-27T15:59:51.4318802+02:00",
+        "queuing": "2026-09-27T15:59:51.4318804+02:00",
+        "start": "2026-09-27T15:59:49.1701595+02:00",
+        "finish": "2026-09-27T16:00:44.7103393+02:00"
+      },
+      "disposition": "45/46 passed at final production; sole failure was PowerShell5.1 compact test-driver syntax. Only driver changed; corrected focused compatibility2/2 passed. Do not label failed cohort fully green."
+    },
+    "correctedCompatibility": {
+      "file": "local-enum-compatibility-final.trx",
+      "sha256": "c5bbd80c612f0ecdfd9387475fa951ae8bc1fc95c56b3f02b386f87bc3c85f7a",
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "times": {
+        "creation": "2026-09-27T16:01:33.8064105+02:00",
+        "queuing": "2026-09-27T16:01:33.8064107+02:00",
+        "start": "2026-09-27T16:01:30.4736487+02:00",
+        "finish": "2026-09-27T16:01:34.9480135+02:00"
+      }
+    },
+    "net472Build": {
+      "succeeded": true,
+      "warnings": 0,
+      "errors": 0,
+      "elapsedSeconds": 1.9
+    },
+    "finalSourceCensus": true,
+    "fullAggregateGateRepeated": false,
+    "reviewedPatchGitBlob": "2357668d2685b840b84bd6e4c5a6df760572bdc8"
+  },
+  "failureAccounting": [
+    {
+      "file": "local-enum-first.trx",
+      "sha256": "04e0320093ff6d4efab4dc31080359dfa3780b14bfbae726b032f50af74d64d4",
+      "total": 10,
+      "passed": 6,
+      "failed": 4,
+      "times": {
+        "creation": "2026-09-27T15:45:26.8434570+02:00",
+        "queuing": "2026-09-27T15:45:26.8434575+02:00",
+        "start": "2026-09-27T15:45:21.6603901+02:00",
+        "finish": "2026-09-27T15:45:53.3437937+02:00"
+      }
+    },
+    {
+      "file": "local-enum-frame.trx",
+      "sha256": "2646ea6645dec8f1872328449a832ede394c886b86823f2f9e7d2f3094c3f276",
+      "total": 10,
+      "passed": 8,
+      "failed": 2,
+      "times": {
+        "creation": "2026-09-27T15:47:17.3604669+02:00",
+        "queuing": "2026-09-27T15:47:17.3604671+02:00",
+        "start": "2026-09-27T15:47:15.5401499+02:00",
+        "finish": "2026-09-27T15:47:29.8415646+02:00"
+      }
+    },
+    {
+      "file": "local-enum-qualified.trx",
+      "sha256": "234116880b8f4b6fb23999393c55c97923dca19239451880695ba7a440d65ed4",
+      "total": 36,
+      "passed": 36,
+      "failed": 0,
+      "times": {
+        "creation": "2026-09-27T15:50:36.7624052+02:00",
+        "queuing": "2026-09-27T15:50:36.7624053+02:00",
+        "start": "2026-09-27T15:50:35.2155004+02:00",
+        "finish": "2026-09-27T15:51:11.3061601+02:00"
+      }
+    },
+    {
+      "file": "local-enum-review-class-repro.trx",
+      "sha256": "1012bac5d9b674cc8cca42fd8bc0b7d48446e5713cbcd47c11aaf1c9cb20b39b",
+      "total": 2,
+      "passed": 0,
+      "failed": 2,
+      "times": {
+        "creation": "2026-09-27T15:58:02.7339018+02:00",
+        "queuing": "2026-09-27T15:58:02.7339020+02:00",
+        "start": "2026-09-27T15:57:59.3990581+02:00",
+        "finish": "2026-09-27T15:58:04.0221641+02:00"
+      }
+    },
+    {
+      "file": "local-enum-review-repro.trx",
+      "sha256": "1aff020ae78f27bb652a84f998ca2724da2902631e8268b41b82cd52b441d0ba",
+      "total": 2,
+      "passed": 0,
+      "failed": 2,
+      "times": {
+        "creation": "2026-09-27T15:56:58.5660566+02:00",
+        "queuing": "2026-09-27T15:56:58.5660568+02:00",
+        "start": "2026-09-27T15:56:46.3313242+02:00",
+        "finish": "2026-09-27T15:57:02.3396134+02:00"
+      }
+    },
+    {
+      "file": "local-enum-scope.trx",
+      "sha256": "80c4016641cff8ba5413fe8e062038c541bcc43af300539fdb05d3035461c7a9",
+      "total": 10,
+      "passed": 8,
+      "failed": 2,
+      "times": {
+        "creation": "2026-09-27T15:49:24.0581489+02:00",
+        "queuing": "2026-09-27T15:49:24.0581490+02:00",
+        "start": "2026-09-27T15:49:22.2967949+02:00",
+        "finish": "2026-09-27T15:49:33.1270219+02:00"
+      }
+    }
+  ],
+  "review": {
+    "task": "local_enum_review",
+    "independentScope": "One fresh read-only staged source pass",
+    "initialPatchGitBlob": "9db796fd82ff713f87df892e3322dba09ea4265c",
+    "finding": "P2: unconditional callback initialization rejected valid prior authored class/wider enum declarations",
+    "reproduction": "Direct class callback invocation reproduced on both hosts; logs hashed below. Initial wider-enum proof source failed to parse on5.1.",
+    "reproductionHashes": {
+      "review-class-powershell.log": "dd605e733c82e4b1dac0a08b664d42fccd5f2cd3eeea6c3c6e7d4b027e98c70a",
+      "review-class-pwsh.log": "dd605e733c82e4b1dac0a08b664d42fccd5f2cd3eeea6c3c6e7d4b027e98c70a"
+    },
+    "resolution": "Register new validated enum frames in a ConditionalWeakTable keyed by shared native compilation data; older callback paths remain unregistered",
+    "targetedConfirmation": "P2 closed, no concrete remaining defect in remediation scope",
+    "finalPatchGitBlob": "2357668d2685b840b84bd6e4c5a6df760572bdc8",
+    "limits": "Read-only static review/confirmation, no independent execution or census review"
+  },
+  "designDispositions": [
+    "Initial empty block return failed C# type checking; represented metadata-only declaration with an empty statement boundary instead.",
+    "File-wide type closure intentionally excludes nested bodies. Local qualification uses exact lexical AST ownership without expanding file-wide guard semantics.",
+    "First identity-only conversion produced matching values but failed dynamic local-name visibility on both hosts; removed shortcut and called SDK AddPowerShellTypesToTheScope in the native invocation.",
+    "Warning output accounted for separately from19JSON observations; no value or scope comparison weakened.",
+    "Scope initialization opt-in through weak compilation-data ownership fixes reproduced review finding.",
+    "Strict/runtime-free local enum qualification remains closed; conditional/nested/lifecycle/mixed declarations and broader enum consumers are unqualified."
+  ],
+  "sdkOwnerReference": "https://github.com/PowerShell/PowerShell/blob/v7.6.0/src/System.Management.Automation/engine/parser/Compiler.cs#L2367-L2408"
+}

@@ -111,7 +111,8 @@ internal sealed partial class PowerShellSemanticBinder
                 if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
                     (PowerShellCompilationParameterTypePolicy.IsHostProvidedConstructorReceiver(typeExpression, capabilities) ||
                      PowerShellHostedValueClassPolicy.IsQualifiedConstructorReceiver(document, typeExpression, targetFramework, capabilities) ||
-                     PowerShellHostedEnumDeclarationPolicy.IsQualifiedMemberReceiver(document, typeExpression, targetFramework, capabilities)))
+                     PowerShellHostedEnumDeclarationPolicy.IsQualifiedMemberReceiver(document, typeExpression, targetFramework, capabilities) ||
+                     PowerShellHostedLocalEnumPolicy.IsQualifiedDestination(document, typeExpression, targetFramework, capabilities)))
                     return new PowerShellBoundNativeTypeExpression(span, typeExpression.TypeName.FullName);
                 var typeValue = typeExpression.TypeName.GetReflectionType();
                 if (typeValue is null ||

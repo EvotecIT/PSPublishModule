@@ -20,10 +20,17 @@ public sealed class PowerShellNativeFunctionBinding
     /// <summary>Creates native storage and clause metadata for separately invoked compiled lifecycle blocks.</summary>
     public PowerShellNativeFunctionBinding(string parameterDeclaration, System.Collections.Generic.IEnumerable<string> localNames,
         System.Collections.Generic.IEnumerable<string> localTypeDeclarations, bool hasBegin, bool hasProcess, bool hasEnd, bool hasClean)
+        : this(parameterDeclaration, localNames, localTypeDeclarations, hasBegin, hasProcess, hasEnd, hasClean, System.Array.Empty<string>()) { }
+
+    /// <summary>Creates native storage and clause metadata with qualified function-scoped enum declarations.</summary>
+    public PowerShellNativeFunctionBinding(string parameterDeclaration, System.Collections.Generic.IEnumerable<string> localNames,
+        System.Collections.Generic.IEnumerable<string> localTypeDeclarations, bool hasBegin, bool hasProcess, bool hasEnd, bool hasClean,
+        System.Collections.Generic.IEnumerable<string> functionTypeDeclarations)
     {
         ParameterDeclaration = parameterDeclaration ?? throw new System.ArgumentNullException(nameof(parameterDeclaration));
         LocalNames = System.Array.AsReadOnly(System.Linq.Enumerable.ToArray(localNames));
         LocalTypeDeclarations = System.Array.AsReadOnly(System.Linq.Enumerable.ToArray(localTypeDeclarations));
+        FunctionTypeDeclarations = System.Array.AsReadOnly(System.Linq.Enumerable.ToArray(functionTypeDeclarations));
         HasBegin = hasBegin;
         HasProcess = hasProcess;
         HasEnd = hasEnd;
@@ -47,4 +54,7 @@ public sealed class PowerShellNativeFunctionBinding
 
     /// <summary>Authored type-only assignment targets used to allocate optimized slots; no initializers execute.</summary>
     public System.Collections.Generic.IReadOnlyList<string> LocalTypeDeclarations { get; }
+
+    /// <summary>Qualified enum declarations retained in the native function's own lexical scope; no authored executable body is hosted.</summary>
+    public System.Collections.Generic.IReadOnlyList<string> FunctionTypeDeclarations { get; }
 }

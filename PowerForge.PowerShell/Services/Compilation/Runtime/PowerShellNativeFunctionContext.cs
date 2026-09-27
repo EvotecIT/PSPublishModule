@@ -34,6 +34,10 @@ namespace PowerForge.Generated.Runtime
             var processor = _contract.CurrentCommandProcessor.GetValue(_executionContext, null);
             _runtime = (processor is null ? null : _contract.ProcessorRuntime.GetValue(processor, null)) as ICommandRuntime2
                 ?? throw new NotSupportedException("PowerShell's native command runtime is unavailable.");
+            var functionScript = (ScriptBlock)functionContext.GetType().GetField("_scriptBlock",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)!
+                .GetValue(functionContext)!;
+            PowerShellNativeFunctionHost.InitializeFunctionEnums(functionScript, _executionContext);
         }
 
         /// <summary>Reads the actual variable value, including changes made by binding callbacks.</summary>

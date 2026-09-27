@@ -18,16 +18,35 @@ namespace PowerForge.Generated.Runtime
             return CreateOwnedDeclaration(module.SessionState, name, parameterDeclaration, localNames, localTypeDeclarations, begin, process, end);
         }
 
+        /// <summary>Prepares a compiler-owned function frame with bounded lexical enum declarations.</summary>
+        public static ScriptBlock CreateOwnedDeclaration(PSModuleInfo module, string name, string parameterDeclaration,
+            string[] localNames, string[] localTypeDeclarations,
+            Action<PowerShellNativeFunctionContext>? begin, Action<PowerShellNativeFunctionContext>? process,
+            Action<PowerShellNativeFunctionContext>? end, string[] functionTypeDeclarations)
+        {
+            if (module == null) throw new ArgumentNullException(nameof(module));
+            return CreateOwnedDeclaration(module.SessionState, name, parameterDeclaration, localNames, localTypeDeclarations,
+                begin, process, end, functionTypeDeclarations);
+        }
+
         /// <summary>Prepares an executable's compiler-owned declaration without creating parameter attributes during registration.</summary>
         public static ScriptBlock CreateOwnedDeclaration(SessionState sessionState, string name, string parameterDeclaration,
             string[] localNames, string[] localTypeDeclarations,
             Action<PowerShellNativeFunctionContext>? begin, Action<PowerShellNativeFunctionContext>? process,
             Action<PowerShellNativeFunctionContext>? end)
+            => CreateOwnedDeclaration(sessionState, name, parameterDeclaration, localNames, localTypeDeclarations, begin, process, end, Array.Empty<string>());
+
+        /// <summary>Retains bounded enum identities in the executable function's exact declaration stub.</summary>
+        public static ScriptBlock CreateOwnedDeclaration(SessionState sessionState, string name, string parameterDeclaration,
+            string[] localNames, string[] localTypeDeclarations,
+            Action<PowerShellNativeFunctionContext>? begin, Action<PowerShellNativeFunctionContext>? process,
+            Action<PowerShellNativeFunctionContext>? end, string[] functionTypeDeclarations)
         {
             if (sessionState == null) throw new ArgumentNullException(nameof(sessionState));
             if (string.IsNullOrEmpty(name)) throw new ArgumentException("A function name is required.", nameof(name));
             if (localNames == null) throw new ArgumentNullException(nameof(localNames));
             if (localTypeDeclarations == null) throw new ArgumentNullException(nameof(localTypeDeclarations));
+            if (functionTypeDeclarations == null) throw new ArgumentNullException(nameof(functionTypeDeclarations));
             var contract = NativeContract.Shared;
             var session = contract.NativeSessionState.GetValue(sessionState, null)!;
             var function = (FunctionInfo?)Invoke(contract.GetFunction, session, new object[] { name });
@@ -36,7 +55,7 @@ namespace PowerForge.Generated.Runtime
             if (function != null && (function.Options & (ScopedItemOptions.ReadOnly | ScopedItemOptions.Constant)) != 0)
                 return function.ScriptBlock;
             var expected = "{\n" + CreateDeclarationSource(parameterDeclaration, null, localNames,
-                begin != null, process != null, end != null, false, localTypeDeclarations) + "\n}";
+                begin != null, process != null, end != null, false, localTypeDeclarations, functionTypeDeclarations) + "\n}";
             if (function?.ScriptBlock.Ast is not FunctionDefinitionAst declaration ||
                 !string.Equals(declaration.Body.Extent.Text.Replace("\r\n", "\n"), expected.Replace("\r\n", "\n"), StringComparison.Ordinal))
                 throw new ArgumentException("Only the exact compiler-owned declaration stub can retain shared native metadata.", nameof(name));
@@ -54,6 +73,7 @@ namespace PowerForge.Generated.Runtime
             {
                 Invoke(unoptimized, data, Array.Empty<object>());
                 Invoke(optimized, data, Array.Empty<object>());
+                if (functionTypeDeclarations.Length != 0) RegisterFunctionEnumScope(script, data);
                 if (begin != null) contract.Install(data, "BeginBlock", begin);
                 if (process != null) contract.Install(data, "ProcessBlock", process);
                 if (end != null || begin == null && process == null)

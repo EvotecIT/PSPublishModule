@@ -9,6 +9,17 @@ public static class NativeAuthoredMetadataFixture
 {
     public static int CallbackCount { get; private set; }
 
+    public static void InstallEndOnly(PSModuleInfo module, string name)
+    {
+        var script = PowerShellNativeFunctionHost.CreateDeclaredFunction(module, name, null, null,
+            context => context.WriteValue("compiled"));
+        PowerShellNativeFunctionHost.InstallDeclaredFunction(module, name, script);
+    }
+
+    public static ScriptBlock CreateEndOnlyBlock(PSModuleInfo module, string literal)
+        => PowerShellNativeFunctionHost.CreateCompiledScriptBlock(module, literal, "type-body.ps1", 0, literal.Length,
+            null, null, context => context.WriteValue("block"), null);
+
     public static void Install(PSModuleInfo module, string name)
     {
         var contract = PowerShellNativeFunctionHost.NativeContract.Shared;

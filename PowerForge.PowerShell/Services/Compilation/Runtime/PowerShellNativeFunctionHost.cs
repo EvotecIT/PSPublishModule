@@ -110,7 +110,15 @@ namespace PowerForge.Generated.Runtime
         /// <summary>Builds only compiler-owned storage and clause stubs around native parameter metadata.</summary>
         internal static string CreateDeclarationSource(string parameterDeclaration, string? sourcePath, string[] localNames,
             bool hasBegin, bool hasProcess, bool hasEnd, bool hasClean, string[]? localTypeDeclarations)
+            => CreateDeclarationSource(parameterDeclaration, sourcePath, localNames, hasBegin, hasProcess, hasEnd, hasClean,
+                localTypeDeclarations, null);
+
+        internal static string CreateDeclarationSource(string parameterDeclaration, string? sourcePath, string[] localNames,
+            bool hasBegin, bool hasProcess, bool hasEnd, bool hasClean, string[]? localTypeDeclarations, string[]? functionTypeDeclarations)
         {
+            var enums = FunctionEnumSource(functionTypeDeclarations);
+            if (enums.Length != 0 && (hasBegin || hasProcess || hasClean || !hasEnd))
+                throw new ArgumentException("Function-scoped enums require the qualified end-only native frame.", nameof(functionTypeDeclarations));
             var metadata = Parse(parameterDeclaration, sourcePath);
             if (metadata.ParamBlock == null || metadata.BeginBlock != null || metadata.ProcessBlock != null ||
                 metadata.DynamicParamBlock != null || HasUsingStatements(metadata) || metadata.ScriptRequirements != null ||
@@ -142,7 +150,7 @@ namespace PowerForge.Generated.Runtime
             if (hasProcess) source += "\nprocess { if ($false) { " + localDeclarations + " }; throw 'Compiled process callback was not installed.' }";
             if (hasEnd || !hasBegin && !hasProcess && !hasClean)
                 // These declarations allocate native tuple slots. The installed callback replaces the entire clause.
-                source += "\nend { if ($false) { " + localDeclarations + " }; throw 'Compiled end callback was not installed.' }";
+                source += "\nend { " + enums + "if ($false) { " + localDeclarations + " }; throw 'Compiled end callback was not installed.' }";
             if (hasClean) source += "\nclean { if ($false) { " + localDeclarations + " }; throw 'Compiled clean callback was not installed.' }";
             return source;
         }

@@ -21,6 +21,11 @@ internal sealed partial class PowerShellSemanticBinder
         Type? nonTerminalSuccessOutputType = null)
     {
         allowNonTerminalSuccessOutput |= capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding);
+        // The native function declaration compiles the enum in its lexical frame before invoking CLR clauses.
+        if (statement is TypeDefinitionAst && PowerShellHostedLocalEnumPolicy.IsQualified(document, targetFramework, capabilities))
+            return new PowerShellBoundStatementErrorBoundary(
+                new PowerShellBoundBlock(PowerShellSourceParser.GetSpan(document, statement.Extent), Array.Empty<PowerShellBoundStatement>()),
+                document.Path, PowerShellNativeFunctionBindingPolicy.SourceLines(document, PowerShellSourceParser.GetSpan(document, statement.Extent)));
         PowerShellSemanticSymbolBinding? assignedSymbol = null;
         if (statement is AssignmentStatementAst authoredAssignment &&
             PowerShellAssignmentTargetPolicy.FindDirectVariable(authoredAssignment.Left, capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) is { } assignedVariable)

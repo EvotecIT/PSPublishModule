@@ -62,7 +62,8 @@ internal static class PowerShellNativeFunctionBindingPolicy
         return new PowerShellNativeFunctionBinding(declaration, locals,
             PowerShellNativeVariableAnalysis.FindLocalTypeDeclarations(function, locals),
             function.Body.BeginBlock is not null, function.Body.ProcessBlock is not null,
-            function.Body.EndBlock is not null, function.Body.GetType().GetProperty("CleanBlock")?.GetValue(function.Body) is not null);
+            function.Body.EndBlock is not null, function.Body.GetType().GetProperty("CleanBlock")?.GetValue(function.Body) is not null,
+            PowerShellHostedLocalEnumPolicy.FindDeclarations(function).Select(static definition => definition.Extent.Text));
     }
 
     internal static Ast? FindNativePipelineOperator(FunctionDefinitionAst function, bool includeCommandRedirections = true)
@@ -75,6 +76,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
         PowerShellCompilationCapability capabilities)
         => function.Body.BeginBlock is not null || function.Body.ProcessBlock is not null ||
            PowerShellHostedEnumDeclarationPolicy.RequiresNativeParameterBinding(function) ||
+           PowerShellHostedLocalEnumPolicy.FindDeclarations(function).Length != 0 ||
            PowerShellHostedValueClassPolicy.RequiresNativeConstruction(function) ||
            function.Body.Find(node => node is TypeExpressionAst hostConstructor &&
                PowerShellCompilationParameterTypePolicy.IsHostProvidedConstructorReceiver(hostConstructor, capabilities),

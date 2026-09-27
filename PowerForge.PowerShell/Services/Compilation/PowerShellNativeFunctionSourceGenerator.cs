@@ -55,7 +55,8 @@ internal static class PowerShellNativeFunctionSourceGenerator
                 .Append("            new string[] { ").Append(string.Join(", ", binding.LocalTypeDeclarations.Select(PowerShellCSharpLiteral.QuoteString))).AppendLine(" },")
                 .Append("            ").Append(Callback(binding.HasBegin, 0)).AppendLine(",")
                 .Append("            ").Append(Callback(binding.HasProcess, 1)).AppendLine(",")
-                .Append("            ").Append(Callback(binding.HasEnd, 2)).AppendLine(");");
+                .Append("            ").Append(Callback(binding.HasEnd, 2)).AppendLine(",")
+                .Append("            new string[] { ").Append(string.Join(", ", binding.FunctionTypeDeclarations.Select(PowerShellCSharpLiteral.QuoteString))).AppendLine(" });");
         }
         else
         {
@@ -91,7 +92,7 @@ internal static class PowerShellNativeFunctionSourceGenerator
             ? binding.ParameterDeclaration + "\nthrow 'Compiled function body was not installed.'"
             : global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.CreateDeclarationSource(
                 binding.ParameterDeclaration, null, binding.LocalNames.ToArray(),
-                binding.HasBegin, binding.HasProcess, binding.HasEnd, false, binding.LocalTypeDeclarations.ToArray());
+                binding.HasBegin, binding.HasProcess, binding.HasEnd, false, binding.LocalTypeDeclarations.ToArray(), binding.FunctionTypeDeclarations.ToArray());
 
     private static string Callback(bool present, int clause)
         => PowerShellNativeCallbackSource.Callback(present, clause);
