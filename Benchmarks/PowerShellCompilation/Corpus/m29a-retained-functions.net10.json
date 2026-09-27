@@ -141,7 +141,12 @@
               "column": 25
             }
           ],
-          "relativePath": "Public/ActiveDirectory/Get-WinADForestDetails.ps1"
+          "relativePath": "Public/ActiveDirectory/Get-WinADForestDetails.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-forest-details-boundary.json",
+            "reason": "Installed RSAT typed exception and provider boundary; original/generated offline forest workflows match on both hosts. No complete-method or individually observed region execution credit."
+          }
         },
         {
           "unitId": "60f819cc0a9a0c963f4cb294",
@@ -625,6 +630,7 @@
     "m29a-certificate-policy-boundary.json",
     "m29a-disk-native-boundary.json",
     "m29a-ad-data-boundary.json",
-    "m29a-local-sid-boundary.json"
+    "m29a-local-sid-boundary.json",
+    "m29a-forest-details-boundary.json"
   ]
 }

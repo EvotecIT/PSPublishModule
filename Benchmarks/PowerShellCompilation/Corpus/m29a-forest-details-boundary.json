@@ -1,0 +1,1985 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Qualify unchanged forest-details hosted external exception/provider boundary with installed RSAT and offline providers; no complete workload gain.",
+  "compilerCommit": "a188dde362e39b2abaa76dcda5e880a442d5daeb",
+  "sourceRevision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+  "sourcePins": {
+    "Public/ActiveDirectory/Get-WinADForestDetails.ps1": "112b8ca5e27dc1e492d5f950bdd088065e2534d0b649de8a98d60d928dcb8400",
+    "Public/Objects/Copy-DictionaryManual.ps1": "755c5f8be375ce49029ebb04571e53082bd7f1e36e27620d76f53a1d15fe3625"
+  },
+  "fixtureSourceHashes": {
+    "Functions.psm1": "c046a22b6b69c2e1486dbc550f84148d87c09756144553a5fc9d4c76ccafcafb",
+    "Observe.ps1": "edab1e82d1442e376b24afa2145f717451a0d392419d75c55d10af18edee829e",
+    "Prepare.ps1": "419d973c54a0b9896d6b74cce3c9cedfe51e2ba8eb991d9e0419388be49e904d",
+    "README.md": "e5d85e7d9e9fadacc1aaf0db0da9167325437b41eb70d0b362dc6bc17d72393d"
+  },
+  "portfolio": {
+    "emitted": 544,
+    "retained": 21,
+    "functions": 565,
+    "stableUnits": 584,
+    "censusRepeated": false,
+    "reason": "Compiler and pinned five packets unchanged; hosted execution qualification only."
+  },
+  "hosts": [
+    {
+      "framework": "net10.0",
+      "artifactSha256": "217c0980b731c2fbef2ce6e40a24b5a84d7c7cecb19588d4d1d0bb05d36d1762",
+      "dependencyLockSha256": "e4b216dccc27376b844fe3e70ff36be4217fa042c641d3fc89e962b7aa770868",
+      "artifactCompleteMethods": 8,
+      "workloadDisposition": {
+        "unitId": "8594e54d42289dc951b2dbab",
+        "relativePath": "Fixture.psm1",
+        "name": "Get-WinADForestDetails",
+        "kind": "Function",
+        "startLine": 93,
+        "semanticEligible": false,
+        "emittedClrMethod": false,
+        "emittedBinaryCmdlet": false,
+        "retainedHostedSource": true,
+        "usesNativeFunctionBinding": false,
+        "runtimeCommandRegions": 0,
+        "boundaryCrossings": 1,
+        "shapingFallback": false,
+        "omitted": false,
+        "rejected": false,
+        "generatedMemberName": "",
+        "dependencyCauses": [],
+        "boundaryCauses": [
+          "Authored source remains on the hosted PowerShell path after artifact shaping.",
+          "The retained function delegates 1 typed region(s) to generated CLR helpers while keeping its PowerShell command surface.",
+          "Promoted initialization helpers require fresh invocation-local targets; regions with existing targets execute their original PowerShell statements in place."
+        ],
+        "diagnosticChain": [
+          {
+            "code": "UnsupportedSyntax",
+            "featureId": "syntax.unsupported",
+            "message": "Typed catch 'Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException' is outside the generated project reference set.",
+            "line": 278,
+            "column": 25
+          }
+        ],
+        "moduleStateReadBoundaryCrossings": 0,
+        "moduleStateWriteBoundaryCrossings": 0,
+        "regionGraph": {
+          "schemaVersion": 1,
+          "regions": [
+            {
+              "regionId": "region:2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a:7341:7363:Typed",
+              "ordinal": 0,
+              "execution": "Typed",
+              "startOffset": 7341,
+              "endOffset": 7363,
+              "startLine": 177,
+              "startColumn": 5,
+              "endLine": 177,
+              "endColumn": 27,
+              "inputs": [],
+              "outputs": [
+                "transfer:Local:credentialSplat"
+              ],
+              "mutations": [
+                "Local:CREDENTIALSPLAT"
+              ],
+              "streams": [],
+              "errors": [],
+              "ordering": "AuthoredSequentialSingleEvaluation",
+              "hostedCommandBoundarySites": 0,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 0,
+              "staticBoundaryValueTransfers": 0,
+              "staticBoundaryCostUnits": 0
+            }
+          ],
+          "scriptBlocks": [],
+          "hostedCommandBoundarySites": 0,
+          "moduleStateReadBoundarySites": 0,
+          "moduleStateWriteBoundarySites": 0,
+          "staticBoundaryCrossings": 0,
+          "staticBoundaryCostUnits": 0
+        },
+        "promotedTypedRegions": 1,
+        "generatedRegionMemberNames": [
+          "__PowerForgeRegion_a46d3d8d7660faf5d601c0a8"
+        ]
+      },
+      "strictCanProceed": false,
+      "strictExplanationSha256": "d4e398a42400d54da3cd687cd0c883b78f91dc70f562d3924b73b84308b1ce1d",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "originalSha256": "fe0aa15e8a566b6dbe0ccd65e5f7c9605e9fb3f2c9536494248f8abe258fc6ba",
+      "generatedSha256": "fe0aa15e8a566b6dbe0ccd65e5f7c9605e9fb3f2c9536494248f8abe258fc6ba",
+      "result": {
+        "hostVersion": "7.6.6",
+        "catchType": "Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException, Microsoft.ActiveDirectory.Management, Version=10.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+        "observations": [
+          {
+            "case": "normal",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.root.offline.invalid",
+                    "readOnly": true,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "dc.child.offline.invalid",
+                    "readOnly": false,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.child.offline.invalid",
+                    "readOnly": true,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid",
+              "list:child.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "typed-fallback",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.root.offline.invalid",
+                    "readOnly": true,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "dc.child.offline.invalid",
+                    "readOnly": false,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.child.offline.invalid",
+                    "readOnly": true,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "domain:root.offline.invalid",
+              "replica:dc.root.offline.invalid",
+              "replica:rodc.root.offline.invalid",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid",
+              "list:child.offline.invalid|credential:False",
+              "domain:child.offline.invalid",
+              "replica:dc.child.offline.invalid",
+              "replica:rodc.child.offline.invalid",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "fallback-partial",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "dc.child.offline.invalid",
+                    "readOnly": false,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [
+              "Get-WinADForestDetails - Error listing DC owned replica failure for domain root.offline.invalid during fallback - owned replica failure",
+              "Get-WinADForestDetails - Error listing DC owned replica failure for domain child.offline.invalid during fallback - owned replica failure"
+            ],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "domain:root.offline.invalid",
+              "replica:dc.root.offline.invalid",
+              "replica:rodc.root.offline.invalid",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "list:child.offline.invalid|credential:False",
+              "domain:child.offline.invalid",
+              "replica:dc.child.offline.invalid",
+              "replica:rodc.child.offline.invalid",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "listing-failure",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": null,
+                    "readOnly": null,
+                    "domain": null,
+                    "guid": null,
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [
+              "Get-WinADForestDetails - Error listing DCs for domain root.offline.invalid - owned ordinary listing failure",
+              "Get-WinADForestDetails - Error listing DCs for domain child.offline.invalid - owned ordinary listing failure"
+            ],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "list:child.offline.invalid|credential:False"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "forest-failure",
+            "result": [],
+            "warnings": [
+              "Get-WinADForestDetails - Error discovering DC for Forest - owned forest failure"
+            ],
+            "trace": [
+              "forest|credential:False"
+            ],
+            "progressAfter": "SilentlyContinue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "empty-forest",
+            "result": [],
+            "warnings": [],
+            "trace": [
+              "forest|credential:False"
+            ],
+            "progressAfter": "SilentlyContinue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "discovery-failure",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.root.offline.invalid",
+                    "readOnly": true,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [
+              "Get-WinADForestDetails - Error discovering DC for domain child.offline.invalid - owned discovery failure",
+              "Get-WinADForestDetails - Domain child.offline.invalid doesn't seem to be active (no DCs). Skipping."
+            ],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "include-domain",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.root.offline.invalid",
+                    "readOnly": true,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "include-controller",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "dc.child.offline.invalid",
+                    "readOnly": false,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "list:child.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "skip-rodc",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "dc.child.offline.invalid",
+                    "readOnly": false,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid",
+              "list:child.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "availability-ping",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": true,
+                    "winrm": null,
+                    "port": true
+                  },
+                  {
+                    "name": "rodc.root.offline.invalid",
+                    "readOnly": true,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": true,
+                    "winrm": null,
+                    "port": true
+                  },
+                  {
+                    "name": "dc.child.offline.invalid",
+                    "readOnly": false,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": true,
+                    "winrm": null,
+                    "port": true
+                  },
+                  {
+                    "name": "rodc.child.offline.invalid",
+                    "readOnly": true,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": true,
+                    "winrm": null,
+                    "port": true
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "ping:192.0.2.1",
+              "port:dc.root.offline.invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid",
+              "ping:192.0.2.1",
+              "port:rodc.root.offline.invalid",
+              "list:child.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "ping:192.0.2.1",
+              "port:dc.child.offline.invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid",
+              "ping:192.0.2.1",
+              "port:rodc.child.offline.invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "credential",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.root.offline.invalid",
+                    "readOnly": true,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "dc.child.offline.invalid",
+                    "readOnly": false,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.child.offline.invalid",
+                    "readOnly": true,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [],
+            "trace": [
+              "forest|credential:True",
+              "discover:root.offline.invalid|writable:True|credential:True",
+              "discover:child.offline.invalid|writable:True|credential:True",
+              "list:root.offline.invalid|credential:True",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid",
+              "list:child.offline.invalid|credential:True",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "extended",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.root.offline.invalid",
+                    "readOnly": true,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "dc.child.offline.invalid",
+                    "readOnly": false,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.child.offline.invalid",
+                    "readOnly": true,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [
+                  "child.offline.invalid",
+                  "root.offline.invalid"
+                ],
+                "netbiosKeys": [
+                  "CHILD",
+                  "ROOT"
+                ]
+              }
+            ],
+            "warnings": [],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid",
+              "list:child.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid",
+              "domain:root.offline.invalid",
+              "domain:child.offline.invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "cache-subset",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.root.offline.invalid",
+                    "readOnly": true,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [
+                  "root.offline.invalid"
+                ],
+                "netbiosKeys": [
+                  "CHILD",
+                  "ROOT"
+                ]
+              }
+            ],
+            "warnings": [],
+            "trace": [],
+            "progressAfter": "SilentlyContinue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "cache-skip-rodc",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "dc.child.offline.invalid",
+                    "readOnly": false,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [
+                  "child.offline.invalid",
+                  "root.offline.invalid"
+                ],
+                "netbiosKeys": [
+                  "CHILD",
+                  "ROOT"
+                ]
+              }
+            ],
+            "warnings": [],
+            "trace": [],
+            "progressAfter": "SilentlyContinue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          }
+        ]
+      },
+      "generatedSourceHashes": {
+        "2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a": "998a84f0c28a6a6e1e40023d9de836e184d151e78d1af02c5547c302534208aa",
+        "CompiledCmdlets.cs": "e98476e1545aa3d88b8fa97254e43456c8d72e03acf44184e57b18c10098d2c0",
+        "CompiledPowerShell.cs": "3661905a03507fec3929ccd937115acb9de090ddc11425196012a3cb5dc7c371",
+        "Directory.Build.props": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Build.targets": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Packages.props": "a96e6b8834dbdb32e1410abfdb50d0483c028bba2edd5fed4b6e5cfc583c6e46",
+        "ForestDetails.csproj": "56df568d6cec32458dfa8ad37e54f2e6cdcaa2b4912438f3f14b91491295ef2d",
+        "global.json": "1a9972198a8d91eb872d3b4d3f5d6603fa2b04620c9e5c6d057a59f0d0f32992",
+        "ModuleSessionState.g.cs": "c96e42f7ba20fe3819fbe69e936b44e8c8a8fd5141eefa148bff59743bd69981",
+        "NativeLanguageOperations.g.cs": "7f96f823b4489c97ddfcc8182e4828fba533bc986c8feb36263851ef8dbded55",
+        "NativeOutput.g.cs": "48100a5b25ca80ebdf62d8f5df0f4be7ae3ad8c951dec2e69a19d01c98ae10bd",
+        "NuGet.Config": "81afa9a2ee0dd27b21be56f5efed21aa8cf08c8b2d4db4763cbee5cf28fb402e",
+        "PowerForge.TargetContract.json": "90180f20d4060b1d15573552f333e59b81e8c77f1bdfb9e4b9a3da8bdc269c78",
+        "PowerShellHybridRegionHost.g.cs": "678bc094155a8b579acee3a7fed2a73c33f327582cd35311f95a621395e2e4ac",
+        "PowerShellNativeFunctionContext.AccessMutations.g.cs": "9aa4cbc51df123ce356de19afa73f94f08541955bfde3854ee77c33c5f9a52ca",
+        "PowerShellNativeFunctionContext.CommandRegions.g.cs": "96182f77be1aab8c9599412fcd6a89af1244cebeb97937ecf0a6cde68cb9136c",
+        "PowerShellNativeFunctionContext.Compilation.g.cs": "822e2ef82b3ccc4b7de4ad9eb6f44e915ec36c81abc4b9c2b5978230d3dd7a2a",
+        "PowerShellNativeFunctionContext.Conversions.g.cs": "fccc228c95b894808bf99cf6a0b570c5eef8c4367e85259fc9f631b2673043d6",
+        "PowerShellNativeFunctionContext.Declarations.g.cs": "c53589d78033200f4ae59a72baf67b741f59281dfc23ebe7c637ea16382eefb3",
+        "PowerShellNativeFunctionContext.Dictionaries.g.cs": "51f0138b4a97a58a092af7e6dc8b9a4dfdaf233a15b13f396c4f03197df45cc3",
+        "PowerShellNativeFunctionContext.Enumeration.g.cs": "bee5f9239a119cec47f2f392064d3096d0962ab2ce84a9c7758271e0c01c5485",
+        "PowerShellNativeFunctionContext.g.cs": "17cb966a966bab959cf8d58d87eb8c92c4733374cd6f5e944e9c65c00c96efc9",
+        "PowerShellNativeFunctionContext.Indexing.g.cs": "610bec93d533cd485bfa9f680930a6d90de7bc0734bafeca4450facd9f00204e",
+        "PowerShellNativeFunctionContext.Invocations.g.cs": "c96859c7f495a75dfae3504c43ad2e46952e2fe387d6b2595149e76463a529b2",
+        "PowerShellNativeFunctionContext.Members.g.cs": "baeb213b30012cbd52403668f0def2f647ccb1c0625a60369e98fb97aeac4ba7",
+        "PowerShellNativeFunctionContext.Membership.g.cs": "4fb699f522f312e6850daa25673426f0af1844ecb7a59522336aadb2efcea707",
+        "PowerShellNativeFunctionContext.NestedDeclarations.g.cs": "075a2fdcb76a93eddc62fd23ea7d9460b12d8232adcd60050ab824e6882fa7bf",
+        "PowerShellNativeFunctionContext.Operations.g.cs": "0c83401a614ade6a8b24868bcf929592ae16f9d2941cb8f8af03144c067f47e0",
+        "PowerShellNativeFunctionContext.Output.g.cs": "06b1c8e5bd77934f02247b5d0774ff8a2b8d7ca4275e9fd18f40afda1afab050",
+        "PowerShellNativeFunctionContext.Patterns.g.cs": "990a8056b63f05c7103aa627ea8681845e0c1eeab84311312cd3cb394c9f3f92",
+        "PowerShellNativeFunctionContext.ScriptBlocks.g.cs": "b576c61fb1a947d688eec0192be637ff6fa741c58948319770f2712e31685ae8",
+        "PowerShellNativeFunctionContext.StringJoin.g.cs": "1c1e1acedadee610fd3281d709cb09c1a85bc4bd61af5005e8a1f5fcb63f9542",
+        "PowerShellNativeFunctionContext.Switch.g.cs": "d7501e42167b4ad522a6f203398ab14ca3d4c1d36e8524541f1afa3c87288101",
+        "PowerShellNativeFunctionHost.Declared.g.cs": "1960ef3bdf465cd99336fc1f0415c291b7ae7515ef4eb64d159f15ed69c8dc22",
+        "PowerShellNativeFunctionHost.FunctionEnums.g.cs": "b3b4e9f2d5867986cfbbe26dbadf21a1a319b7ec14202fa80cde9637b2d7d5f5",
+        "PowerShellNativeFunctionHost.g.cs": "180e381ea4854f38001ec5fbea4a453c88a6606843c5ea915c5f8f8343c11ca4",
+        "PowerShellNativeFunctionHost.OwnedDeclaration.g.cs": "83ce60b1bc336bc19e589369de8a81a2858277b8216a6c0784ecda328a8d911a",
+        "PowerShellRegionLocalOwnership.g.cs": "29ae75381d0c86b8a0c9c963893cf3754658809321c3a0ee4a1c92cb4680a62d",
+        "source-map.json": "f93d5265ceb9749298435873bb528e41bffff03be1b3ca13c7ff4fc5781dce21",
+        "SourceExtent.g.cs": "daf263e4d386070ca90530b6765d52d9f8e0141a63c6f1097eae4d00744472e5",
+        "StatementErrors.g.cs": "4f8430b1a911496884f666ca7a74cbfc9a740803868a1dcb7965309b17bd1a44"
+      }
+    },
+    {
+      "framework": "net472",
+      "artifactSha256": "6c7c4f10c269561d3601743dfa58ca061179bda67ced3b240ffb916a7e25f411",
+      "dependencyLockSha256": "a4c2dd0f376bd11472d4f5beab61c4045ccbb22aa24a50a09f7cead1d882dbe0",
+      "artifactCompleteMethods": 8,
+      "workloadDisposition": {
+        "unitId": "8594e54d42289dc951b2dbab",
+        "relativePath": "Fixture.psm1",
+        "name": "Get-WinADForestDetails",
+        "kind": "Function",
+        "startLine": 93,
+        "semanticEligible": false,
+        "emittedClrMethod": false,
+        "emittedBinaryCmdlet": false,
+        "retainedHostedSource": true,
+        "usesNativeFunctionBinding": false,
+        "runtimeCommandRegions": 0,
+        "boundaryCrossings": 1,
+        "shapingFallback": false,
+        "omitted": false,
+        "rejected": false,
+        "generatedMemberName": "",
+        "dependencyCauses": [],
+        "boundaryCauses": [
+          "Authored source remains on the hosted PowerShell path after artifact shaping.",
+          "The retained function delegates 1 typed region(s) to generated CLR helpers while keeping its PowerShell command surface.",
+          "Promoted initialization helpers require fresh invocation-local targets; regions with existing targets execute their original PowerShell statements in place."
+        ],
+        "diagnosticChain": [
+          {
+            "code": "UnsupportedSyntax",
+            "featureId": "syntax.unsupported",
+            "message": "Typed catch 'Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException' is outside the generated project reference set.",
+            "line": 278,
+            "column": 25
+          }
+        ],
+        "moduleStateReadBoundaryCrossings": 0,
+        "moduleStateWriteBoundaryCrossings": 0,
+        "regionGraph": {
+          "schemaVersion": 1,
+          "regions": [
+            {
+              "regionId": "region:2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a:7341:7363:Typed",
+              "ordinal": 0,
+              "execution": "Typed",
+              "startOffset": 7341,
+              "endOffset": 7363,
+              "startLine": 177,
+              "startColumn": 5,
+              "endLine": 177,
+              "endColumn": 27,
+              "inputs": [],
+              "outputs": [
+                "transfer:Local:credentialSplat"
+              ],
+              "mutations": [
+                "Local:CREDENTIALSPLAT"
+              ],
+              "streams": [],
+              "errors": [],
+              "ordering": "AuthoredSequentialSingleEvaluation",
+              "hostedCommandBoundarySites": 0,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 0,
+              "staticBoundaryValueTransfers": 0,
+              "staticBoundaryCostUnits": 0
+            }
+          ],
+          "scriptBlocks": [],
+          "hostedCommandBoundarySites": 0,
+          "moduleStateReadBoundarySites": 0,
+          "moduleStateWriteBoundarySites": 0,
+          "staticBoundaryCrossings": 0,
+          "staticBoundaryCostUnits": 0
+        },
+        "promotedTypedRegions": 1,
+        "generatedRegionMemberNames": [
+          "__PowerForgeRegion_a46d3d8d7660faf5d601c0a8"
+        ]
+      },
+      "strictCanProceed": false,
+      "strictExplanationSha256": "7e8e1d547b165e3c389fba069e0801dc03d3094f550729ac88d9cff83d08c63d",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "originalSha256": "891282a79b80524c6f106fcdeea0df20981143b81fb9c9bf47c54a66221f5601",
+      "generatedSha256": "891282a79b80524c6f106fcdeea0df20981143b81fb9c9bf47c54a66221f5601",
+      "result": {
+        "hostVersion": "5.1.26100.9444",
+        "catchType": "Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException, Microsoft.ActiveDirectory.Management, Version=10.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+        "observations": [
+          {
+            "case": "normal",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.root.offline.invalid",
+                    "readOnly": true,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "dc.child.offline.invalid",
+                    "readOnly": false,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.child.offline.invalid",
+                    "readOnly": true,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid",
+              "list:child.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "typed-fallback",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.root.offline.invalid",
+                    "readOnly": true,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "dc.child.offline.invalid",
+                    "readOnly": false,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.child.offline.invalid",
+                    "readOnly": true,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "domain:root.offline.invalid",
+              "replica:dc.root.offline.invalid",
+              "replica:rodc.root.offline.invalid",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid",
+              "list:child.offline.invalid|credential:False",
+              "domain:child.offline.invalid",
+              "replica:dc.child.offline.invalid",
+              "replica:rodc.child.offline.invalid",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "fallback-partial",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "dc.child.offline.invalid",
+                    "readOnly": false,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [
+              "Get-WinADForestDetails - Error listing DC owned replica failure for domain root.offline.invalid during fallback - owned replica failure",
+              "Get-WinADForestDetails - Error listing DC owned replica failure for domain child.offline.invalid during fallback - owned replica failure"
+            ],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "domain:root.offline.invalid",
+              "replica:dc.root.offline.invalid",
+              "replica:rodc.root.offline.invalid",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "list:child.offline.invalid|credential:False",
+              "domain:child.offline.invalid",
+              "replica:dc.child.offline.invalid",
+              "replica:rodc.child.offline.invalid",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "listing-failure",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": null,
+                    "readOnly": null,
+                    "domain": null,
+                    "guid": null,
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [
+              "Get-WinADForestDetails - Error listing DCs for domain root.offline.invalid - owned ordinary listing failure",
+              "Get-WinADForestDetails - Error listing DCs for domain child.offline.invalid - owned ordinary listing failure"
+            ],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "list:child.offline.invalid|credential:False"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "forest-failure",
+            "result": [],
+            "warnings": [
+              "Get-WinADForestDetails - Error discovering DC for Forest - owned forest failure"
+            ],
+            "trace": [
+              "forest|credential:False"
+            ],
+            "progressAfter": "SilentlyContinue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "empty-forest",
+            "result": [],
+            "warnings": [],
+            "trace": [
+              "forest|credential:False"
+            ],
+            "progressAfter": "SilentlyContinue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "discovery-failure",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.root.offline.invalid",
+                    "readOnly": true,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [
+              "Get-WinADForestDetails - Error discovering DC for domain child.offline.invalid - owned discovery failure",
+              "Get-WinADForestDetails - Domain child.offline.invalid doesn't seem to be active (no DCs). Skipping."
+            ],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "include-domain",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.root.offline.invalid",
+                    "readOnly": true,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "include-controller",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "dc.child.offline.invalid",
+                    "readOnly": false,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "list:child.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "skip-rodc",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "dc.child.offline.invalid",
+                    "readOnly": false,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid",
+              "list:child.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "availability-ping",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": true,
+                    "winrm": null,
+                    "port": true
+                  },
+                  {
+                    "name": "rodc.root.offline.invalid",
+                    "readOnly": true,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": true,
+                    "winrm": null,
+                    "port": true
+                  },
+                  {
+                    "name": "dc.child.offline.invalid",
+                    "readOnly": false,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": true,
+                    "winrm": null,
+                    "port": true
+                  },
+                  {
+                    "name": "rodc.child.offline.invalid",
+                    "readOnly": true,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": true,
+                    "winrm": null,
+                    "port": true
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "ping:192.0.2.1",
+              "port:dc.root.offline.invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid",
+              "ping:192.0.2.1",
+              "port:rodc.root.offline.invalid",
+              "list:child.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "ping:192.0.2.1",
+              "port:dc.child.offline.invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid",
+              "ping:192.0.2.1",
+              "port:rodc.child.offline.invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "credential",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.root.offline.invalid",
+                    "readOnly": true,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "dc.child.offline.invalid",
+                    "readOnly": false,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.child.offline.invalid",
+                    "readOnly": true,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [],
+                "netbiosKeys": []
+              }
+            ],
+            "warnings": [],
+            "trace": [
+              "forest|credential:True",
+              "discover:root.offline.invalid|writable:True|credential:True",
+              "discover:child.offline.invalid|writable:True|credential:True",
+              "list:root.offline.invalid|credential:True",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid",
+              "list:child.offline.invalid|credential:True",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "extended",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.root.offline.invalid",
+                    "readOnly": true,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "dc.child.offline.invalid",
+                    "readOnly": false,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.child.offline.invalid",
+                    "readOnly": true,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [
+                  "child.offline.invalid",
+                  "root.offline.invalid"
+                ],
+                "netbiosKeys": [
+                  "CHILD",
+                  "ROOT"
+                ]
+              }
+            ],
+            "warnings": [],
+            "trace": [
+              "forest|credential:False",
+              "discover:root.offline.invalid|writable:False|credential:False",
+              "discover:child.offline.invalid|writable:False|credential:False",
+              "list:root.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid",
+              "list:child.offline.invalid|credential:False",
+              "object:CN=NTDS,CN=dc,DC=offline,DC=invalid",
+              "object:CN=NTDS,CN=rodc,DC=offline,DC=invalid",
+              "domain:root.offline.invalid",
+              "domain:child.offline.invalid"
+            ],
+            "progressAfter": "Continue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "cache-subset",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "rodc.root.offline.invalid",
+                    "readOnly": true,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [
+                  "root.offline.invalid"
+                ],
+                "netbiosKeys": [
+                  "CHILD",
+                  "ROOT"
+                ]
+              }
+            ],
+            "warnings": [],
+            "trace": [],
+            "progressAfter": "SilentlyContinue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          },
+          {
+            "case": "cache-skip-rodc",
+            "result": [
+              {
+                "domains": [
+                  "root.offline.invalid",
+                  "child.offline.invalid"
+                ],
+                "controllers": [
+                  {
+                    "name": "dc.root.offline.invalid",
+                    "readOnly": false,
+                    "domain": "root.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  },
+                  {
+                    "name": "dc.child.offline.invalid",
+                    "readOnly": false,
+                    "domain": "child.offline.invalid",
+                    "guid": "12345678-1234-1234-1234-1234567890ab",
+                    "ping": null,
+                    "winrm": null,
+                    "port": null
+                  }
+                ],
+                "queryKeys": [
+                  "child.offline.invalid",
+                  "Forest",
+                  "root.offline.invalid"
+                ],
+                "extendedKeys": [
+                  "child.offline.invalid",
+                  "root.offline.invalid"
+                ],
+                "netbiosKeys": [
+                  "CHILD",
+                  "ROOT"
+                ]
+              }
+            ],
+            "warnings": [],
+            "trace": [],
+            "progressAfter": "SilentlyContinue",
+            "callerCacheDomains": [
+              "root.offline.invalid",
+              "child.offline.invalid"
+            ]
+          }
+        ]
+      },
+      "generatedSourceHashes": {
+        "2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a": "998a84f0c28a6a6e1e40023d9de836e184d151e78d1af02c5547c302534208aa",
+        "CompiledCmdlets.cs": "e98476e1545aa3d88b8fa97254e43456c8d72e03acf44184e57b18c10098d2c0",
+        "CompiledPowerShell.cs": "8833a1b7c99fb0ed66c4fd8ea5552fb25a49ebd573f94d7d042eb8d794473e33",
+        "Directory.Build.props": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Build.targets": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Packages.props": "a96e6b8834dbdb32e1410abfdb50d0483c028bba2edd5fed4b6e5cfc583c6e46",
+        "ForestDetails.csproj": "732df2323f099679c6248a5168c42b3218dd1c18cf0b159e1bcb29450bae51c8",
+        "global.json": "1a9972198a8d91eb872d3b4d3f5d6603fa2b04620c9e5c6d057a59f0d0f32992",
+        "ModuleSessionState.g.cs": "c96e42f7ba20fe3819fbe69e936b44e8c8a8fd5141eefa148bff59743bd69981",
+        "NativeLanguageOperations.g.cs": "7f96f823b4489c97ddfcc8182e4828fba533bc986c8feb36263851ef8dbded55",
+        "NativeOutput.g.cs": "48100a5b25ca80ebdf62d8f5df0f4be7ae3ad8c951dec2e69a19d01c98ae10bd",
+        "NuGet.Config": "81afa9a2ee0dd27b21be56f5efed21aa8cf08c8b2d4db4763cbee5cf28fb402e",
+        "PowerForge.TargetContract.json": "50340bf76aea78627ddc1f69c8b49badd286303bafef1aa02f98e1c16a1ab688",
+        "PowerShellHybridRegionHost.g.cs": "678bc094155a8b579acee3a7fed2a73c33f327582cd35311f95a621395e2e4ac",
+        "PowerShellNativeFunctionContext.AccessMutations.g.cs": "9aa4cbc51df123ce356de19afa73f94f08541955bfde3854ee77c33c5f9a52ca",
+        "PowerShellNativeFunctionContext.CommandRegions.g.cs": "96182f77be1aab8c9599412fcd6a89af1244cebeb97937ecf0a6cde68cb9136c",
+        "PowerShellNativeFunctionContext.Compilation.g.cs": "822e2ef82b3ccc4b7de4ad9eb6f44e915ec36c81abc4b9c2b5978230d3dd7a2a",
+        "PowerShellNativeFunctionContext.Conversions.g.cs": "fccc228c95b894808bf99cf6a0b570c5eef8c4367e85259fc9f631b2673043d6",
+        "PowerShellNativeFunctionContext.Declarations.g.cs": "c53589d78033200f4ae59a72baf67b741f59281dfc23ebe7c637ea16382eefb3",
+        "PowerShellNativeFunctionContext.Dictionaries.g.cs": "51f0138b4a97a58a092af7e6dc8b9a4dfdaf233a15b13f396c4f03197df45cc3",
+        "PowerShellNativeFunctionContext.Enumeration.g.cs": "bee5f9239a119cec47f2f392064d3096d0962ab2ce84a9c7758271e0c01c5485",
+        "PowerShellNativeFunctionContext.g.cs": "17cb966a966bab959cf8d58d87eb8c92c4733374cd6f5e944e9c65c00c96efc9",
+        "PowerShellNativeFunctionContext.Indexing.g.cs": "610bec93d533cd485bfa9f680930a6d90de7bc0734bafeca4450facd9f00204e",
+        "PowerShellNativeFunctionContext.Invocations.g.cs": "c96859c7f495a75dfae3504c43ad2e46952e2fe387d6b2595149e76463a529b2",
+        "PowerShellNativeFunctionContext.Members.g.cs": "baeb213b30012cbd52403668f0def2f647ccb1c0625a60369e98fb97aeac4ba7",
+        "PowerShellNativeFunctionContext.Membership.g.cs": "4fb699f522f312e6850daa25673426f0af1844ecb7a59522336aadb2efcea707",
+        "PowerShellNativeFunctionContext.NestedDeclarations.g.cs": "075a2fdcb76a93eddc62fd23ea7d9460b12d8232adcd60050ab824e6882fa7bf",
+        "PowerShellNativeFunctionContext.Operations.g.cs": "0c83401a614ade6a8b24868bcf929592ae16f9d2941cb8f8af03144c067f47e0",
+        "PowerShellNativeFunctionContext.Output.g.cs": "06b1c8e5bd77934f02247b5d0774ff8a2b8d7ca4275e9fd18f40afda1afab050",
+        "PowerShellNativeFunctionContext.Patterns.g.cs": "990a8056b63f05c7103aa627ea8681845e0c1eeab84311312cd3cb394c9f3f92",
+        "PowerShellNativeFunctionContext.ScriptBlocks.g.cs": "b576c61fb1a947d688eec0192be637ff6fa741c58948319770f2712e31685ae8",
+        "PowerShellNativeFunctionContext.StringJoin.g.cs": "1c1e1acedadee610fd3281d709cb09c1a85bc4bd61af5005e8a1f5fcb63f9542",
+        "PowerShellNativeFunctionContext.Switch.g.cs": "d7501e42167b4ad522a6f203398ab14ca3d4c1d36e8524541f1afa3c87288101",
+        "PowerShellNativeFunctionHost.Declared.g.cs": "1960ef3bdf465cd99336fc1f0415c291b7ae7515ef4eb64d159f15ed69c8dc22",
+        "PowerShellNativeFunctionHost.FunctionEnums.g.cs": "b3b4e9f2d5867986cfbbe26dbadf21a1a319b7ec14202fa80cde9637b2d7d5f5",
+        "PowerShellNativeFunctionHost.g.cs": "180e381ea4854f38001ec5fbea4a453c88a6606843c5ea915c5f8f8343c11ca4",
+        "PowerShellNativeFunctionHost.OwnedDeclaration.g.cs": "83ce60b1bc336bc19e589369de8a81a2858277b8216a6c0784ecda328a8d911a",
+        "PowerShellRegionLocalOwnership.g.cs": "29ae75381d0c86b8a0c9c963893cf3754658809321c3a0ee4a1c92cb4680a62d",
+        "source-map.json": "f93d5265ceb9749298435873bb528e41bffff03be1b3ca13c7ff4fc5781dce21",
+        "SourceExtent.g.cs": "daf263e4d386070ca90530b6765d52d9f8e0141a63c6f1097eae4d00744472e5",
+        "StatementErrors.g.cs": "4f8430b1a911496884f666ca7a74cbfc9a740803868a1dcb7965309b17bd1a44"
+      }
+    }
+  ],
+  "authoredLimitations": [
+    "Early-return and cached-input paths leave caller ProgressPreference set to SilentlyContinue",
+    "Ping-only availability invokes port-probe path due a truthy literal in the OR condition",
+    "Cached domain exclusion removes DomainsExtended entry before reading NetBIOSName, leaving stale DomainsExtendedNetBIOS entry"
+  ],
+  "limits": [
+    "Installed Windows RSAT required; no assembly redistribution",
+    "Actual ADIdentityNotFoundException is constructed and thrown client-side; directory and network providers are module-local verified functions",
+    "No live directory query, ping, WinRM, port connection, account/password operation or credential lookup",
+    "Owned synthetic credential presence only is traced",
+    "Caller progress preference restored by driver finally after recording authored effect",
+    "No complete function gain or individually observed promoted-region execution credit",
+    "No full-module, portable, runtime-free, missing-RSAT deployment or performance qualification",
+    "net10 generated builds retain existing NU1510 warnings"
+  ]
+}
