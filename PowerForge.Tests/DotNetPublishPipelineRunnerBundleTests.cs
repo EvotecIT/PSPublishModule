@@ -637,6 +637,22 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
                         }
                     }));
             Assert.Contains("after publisher signing", exception.Message, StringComparison.OrdinalIgnoreCase);
+
+            byte[] previousEvidence = File.ReadAllBytes(result.EvidencePaths[0]);
+            using (ZipArchive mutableArchive = ZipFile.Open(result.ZipPath!, ZipArchiveMode.Update))
+            {
+                mutableArchive.GetEntry("after-hook.exe")!.Delete();
+                foreach (string name in new[] { PowerForgePortablePayloadInventory.InventoryFileName,
+                             PowerForgePortablePayloadInventory.SignatureFileName })
+                {
+                    using StreamWriter writer = new(mutableArchive.CreateEntry(name).Open());
+                    writer.Write("reserved evidence added by hook");
+                }
+            }
+            InvalidOperationException embeddedEvidence = Assert.Throws<InvalidOperationException>(() =>
+                runner.FinalizePortableEvidence(plan, new[] { result }));
+            Assert.Contains("embedded release-inventory", embeddedEvidence.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(previousEvidence, File.ReadAllBytes(result.EvidencePaths[0]));
         }
         finally
         {

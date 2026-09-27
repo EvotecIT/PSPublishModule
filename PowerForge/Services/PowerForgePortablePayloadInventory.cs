@@ -481,7 +481,8 @@ internal static class PowerForgePortablePayloadInventoryCms
                     continue;
                 }
                 if (IsRootMetadataPath(normalized))
-                    continue;
+                    throw new InvalidOperationException(
+                        $"Portable archive contains embedded release-inventory evidence '{normalized}'; detached evidence requires an application-only archive.");
                 if (string.Equals(normalized, PowerForgePortablePayloadInventory.InventoryFileName, StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(normalized, PowerForgePortablePayloadInventory.SignatureFileName, StringComparison.OrdinalIgnoreCase))
                 {

@@ -5292,7 +5292,7 @@ internal sealed partial class PowerForgeReleaseService
                fullPath.StartsWith(directory + Path.AltDirectorySeparatorChar, comparison);
     }
 
-    private static IEnumerable<PowerForgeReleaseAssetEntry> StageReleaseAssets(
+    internal static IEnumerable<PowerForgeReleaseAssetEntry> StageReleaseAssets(
         IEnumerable<PowerForgeReleaseAssetEntry> assetEntries,
         string stageRoot,
         PowerForgeReleaseStagingOptions? stagingOptions,
@@ -5312,7 +5312,7 @@ internal sealed partial class PowerForgeReleaseService
                     return null;
 
                 string categoryDirectory = ResolveStageDirectory(options, entry.Category);
-                string relativeStagePath = Path.Combine(
+                string relativeStagePath = ResolveDetachedPortableEvidenceStagePath(entry, entries, options) ?? Path.Combine(
                     categoryDirectory,
                     GetStageEntryName(entry, sourceIsDirectory, options));
                 string sourceFullPath = Path.GetFullPath(sourcePath);

@@ -283,7 +283,7 @@ internal sealed partial class PowerForgeReleaseService
             replacements[entry.Path] = stagedPath;
         }
 
-        foreach (var entry in targetAssets.Where(entry => entry.Direct && entry.Artefact.SignedFiles > 0))
+        foreach (var entry in targetAssets.Where(entry => entry.Artefact.SignedFiles > 0))
         {
             string finalExecutablePath = replacements.TryGetValue(entry.Path, out string? stagedPath)
                 ? stagedPath
@@ -298,7 +298,7 @@ internal sealed partial class PowerForgeReleaseService
                 if (!File.Exists(sourcePath))
                 {
                     throw new InvalidOperationException(
-                        $"Signed direct release artifact '{Path.GetFileName(entry.Path)}' is missing publisher-signed matrix evidence '{Path.GetFileName(sourcePath)}'.");
+                        $"Signed release artifact '{Path.GetFileName(entry.Path)}' is missing publisher-signed matrix evidence '{Path.GetFileName(sourcePath)}'.");
                 }
                 string finalPath = finalExecutablePath + suffix;
                 if (!string.Equals(sourcePath, finalPath, StringComparison.OrdinalIgnoreCase))
