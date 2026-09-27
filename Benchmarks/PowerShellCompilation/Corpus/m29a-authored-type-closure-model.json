@@ -1,0 +1,325 @@
+{
+  "SchemaVersion": 1,
+  "Purpose": "Neutral authored type source facts and unchanged fail-closed guard; no generated type/function qualification.",
+  "BaselineCommit": "bb915a749b393a0c1d272d1a35c3af166580e8f2",
+  "OriginalBaseline": "m29a-authored-types-design-baseline.json",
+  "OriginalBaselineSha256": "68326c1e62704a3013c010f91309052e1ce2012aebdd460cc5d041014559ea40",
+  "SourceAndTestHashes": [
+    {
+      "Path": "PowerForge.PowerShell/Services/Compilation/FrontEnd/PowerShellSourceTypeClosure.cs",
+      "Sha256": "66617b6b05e9fb550e070169719e4aaf344a711c117b7e5c61aebd78519a7110"
+    },
+    {
+      "Path": "PowerForge.PowerShell/Services/Compilation/FrontEnd/ParsedSourceDocument.cs",
+      "Sha256": "4c158dbd93598f6ceff10ac3756ea62c5da3e37c968675dd3a5eb9fe6f9e4b28"
+    },
+    {
+      "Path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSourceSemanticValidator.cs",
+      "Sha256": "9c671349c1f71b794b426c2c08c715ae45c92c812ec3895cdcf5f0b9e883276f"
+    },
+    {
+      "Path": "PowerForge.Tests/PowerShellSourceTypeClosureTests.cs",
+      "Sha256": "91e4109e76f043d0b924dad4b3f54f38c3736925da08d6b2bfbf3308bec1e8b3"
+    }
+  ],
+  "FocusedTests": {
+    "Passed": 5,
+    "Failed": 0,
+    "TrxSha256": "05b22c28333f52bee22342e5d3fa64506a12ad6d612763a49418e579cb3c8b8c"
+  },
+  "OwnerBuild": {
+    "Framework": "net472",
+    "Warnings": 0,
+    "Errors": 0,
+    "Seconds": 1.62
+  },
+  "GuardProof": [
+    {
+      "Target": "net10.0",
+      "File": "Get-TypeMember.ps1",
+      "SourceSha256": "cd1e4af714de527ff54216ecbcee22bfcff96a49cc8d6c527b4a2e36969d8011",
+      "Functions": 3,
+      "Emitted": 0,
+      "ExplanationSha256": "9201dcf9b020c936fd48b234cd639671288c6db5db3e086154329353a408b779",
+      "Decisions": [
+        {
+          "Name": "Get-MemberMethod",
+          "Decision": "RuntimeFallback",
+          "Causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "source.type-definition",
+              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+              "line": 5,
+              "column": 1
+            }
+          ]
+        },
+        {
+          "Name": "Get-TypeMember",
+          "Decision": "RuntimeFallback",
+          "Causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "source.type-definition",
+              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+              "line": 5,
+              "column": 1
+            }
+          ]
+        },
+        {
+          "Name": "Get-TypeConstructor",
+          "Decision": "RuntimeFallback",
+          "Causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "source.type-definition",
+              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+              "line": 5,
+              "column": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Target": "net10.0",
+      "File": "Get-DirectoryInfo.ps1",
+      "SourceSha256": "e2666d58c45474ee1bf0a15cde09cd683c2d67acdf3f26b972cd003b7e1eed36",
+      "Functions": 1,
+      "Emitted": 0,
+      "ExplanationSha256": "88940f248a990d5e8aa214d44b722a7631e5d18800c5f2ac7860a108f46312ff",
+      "Decisions": [
+        {
+          "Name": "Get-DirectoryInfo",
+          "Decision": "RuntimeFallback",
+          "Causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "source.type-definition",
+              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+              "line": 1,
+              "column": 1
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "psb2961",
+              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; workflows and unsupported child bodies remain hosted.",
+              "line": 33,
+              "column": 9
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "psb2611",
+              "message": "CLR type 'DirectoryStat' is not available in the generated project reference set for the requested target.",
+              "line": 46,
+              "column": 23
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Target": "net10.0",
+      "File": "Write-PSHorizontalRule.ps1",
+      "SourceSha256": "a3a596d8765ce73998708acf2d471b34732f192ad6ac512d2560edb24a5c2691",
+      "Functions": 1,
+      "Emitted": 0,
+      "ExplanationSha256": "e7f42f375beee8bb8d185f37e3b8bc19ceacc1c066549519df22342e17a50961",
+      "Decisions": [
+        {
+          "Name": "Write-PSHorizontalRule",
+          "Decision": "RuntimeFallback",
+          "Causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "source.type-definition",
+              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+              "line": 1,
+              "column": 1
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "parameter.type",
+              "message": "Parameter '$LineWeight' uses authored type 'psRuleWeight', which cannot be resolved in the selected compilation environment.",
+              "line": 33,
+              "column": 9
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Target": "net472",
+      "File": "Get-TypeMember.ps1",
+      "SourceSha256": "cd1e4af714de527ff54216ecbcee22bfcff96a49cc8d6c527b4a2e36969d8011",
+      "Functions": 3,
+      "Emitted": 0,
+      "ExplanationSha256": "7b9970fc6c04f975285f5bc34784a5be046ecfeb95d517d6ded6cf194cb5b84f",
+      "Decisions": [
+        {
+          "Name": "Get-MemberMethod",
+          "Decision": "RuntimeFallback",
+          "Causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "source.type-definition",
+              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+              "line": 5,
+              "column": 1
+            }
+          ]
+        },
+        {
+          "Name": "Get-TypeMember",
+          "Decision": "RuntimeFallback",
+          "Causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "source.type-definition",
+              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+              "line": 5,
+              "column": 1
+            }
+          ]
+        },
+        {
+          "Name": "Get-TypeConstructor",
+          "Decision": "RuntimeFallback",
+          "Causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "source.type-definition",
+              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+              "line": 5,
+              "column": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Target": "net472",
+      "File": "Get-DirectoryInfo.ps1",
+      "SourceSha256": "e2666d58c45474ee1bf0a15cde09cd683c2d67acdf3f26b972cd003b7e1eed36",
+      "Functions": 1,
+      "Emitted": 0,
+      "ExplanationSha256": "5cff62369cd2b4845093f4d25efcf96e57a9bad7d31f008e8239b34d8c0fb893",
+      "Decisions": [
+        {
+          "Name": "Get-DirectoryInfo",
+          "Decision": "RuntimeFallback",
+          "Causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "source.type-definition",
+              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+              "line": 1,
+              "column": 1
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "psb2961",
+              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; workflows and unsupported child bodies remain hosted.",
+              "line": 33,
+              "column": 9
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "psb2611",
+              "message": "CLR type 'DirectoryStat' is not available in the generated project reference set for the requested target.",
+              "line": 46,
+              "column": 23
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Target": "net472",
+      "File": "Write-PSHorizontalRule.ps1",
+      "SourceSha256": "a3a596d8765ce73998708acf2d471b34732f192ad6ac512d2560edb24a5c2691",
+      "Functions": 1,
+      "Emitted": 0,
+      "ExplanationSha256": "b9b6659e0be6ebd6f298559316e7f169f321add41ede5e1935e35dc7a42dbb06",
+      "Decisions": [
+        {
+          "Name": "Write-PSHorizontalRule",
+          "Decision": "RuntimeFallback",
+          "Causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "source.type-definition",
+              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+              "line": 1,
+              "column": 1
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "parameter.type",
+              "message": "Parameter '$LineWeight' uses authored type 'psRuleWeight', which cannot be resolved in the selected compilation environment.",
+              "line": 33,
+              "column": 9
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "Review": {
+    "Finding": "Function header parameter metadata initially omitted",
+    "Resolution": "Traverse full function AST once; focused header attribute and generic-array test passed",
+    "TargetedConfirmation": "Finding addressed; no additional actionable findings"
+  },
+  "RuntimeMetadata": {
+    "ReparsedParameterRoute": "CustomAttributeTypeNotFound on both Windows hosts",
+    "CopyRoute": "Unqualified: first PowerShell 7 attempt failed InvokeMethodOnNull; Windows security blocked the prototype",
+    "CompilerRuntimeChanged": false
+  },
+  "Limits": [
+    "Declaration candidates are not lexical type resolution or admission authority.",
+    "Class member dependency graphs, registration, metadata identity and generated execution remain open.",
+    "No new complete method or compiled class/enum is claimed.",
+    "No refreshed full portfolio census or broad aggregate gate; previous accepted count is 494/565.",
+    "Parser overhead and non-Windows execution are not measured."
+  ],
+  "StrictGuardProof": [
+    {
+      "Target": "net10.0",
+      "File": "Get-TypeMember.ps1",
+      "RejectedFunctions": 3,
+      "ExplanationSha256": "a1dc3ac525c980de957d68075c14e9f2a3d4f79e4c3dfc91a955cef8edec9b88"
+    },
+    {
+      "Target": "net10.0",
+      "File": "Get-DirectoryInfo.ps1",
+      "RejectedFunctions": 1,
+      "ExplanationSha256": "210763d767f9530f5dde244420c065038426c111c942a17936271aadb53eab7b"
+    },
+    {
+      "Target": "net10.0",
+      "File": "Write-PSHorizontalRule.ps1",
+      "RejectedFunctions": 1,
+      "ExplanationSha256": "2a77f7c4f0156a1c197530e295d99e98b26e3c37f4acd9b4163d135d2466c984"
+    },
+    {
+      "Target": "net472",
+      "File": "Get-TypeMember.ps1",
+      "RejectedFunctions": 3,
+      "ExplanationSha256": "394c260d843527d6ab89ac345877a29e483d28d3dd0750eb3bd584066caeca60"
+    },
+    {
+      "Target": "net472",
+      "File": "Get-DirectoryInfo.ps1",
+      "RejectedFunctions": 1,
+      "ExplanationSha256": "978250210a08e20adbc24a32a64a5a7ca882e6e7b6c480b4c0fb62695eebad39"
+    },
+    {
+      "Target": "net472",
+      "File": "Write-PSHorizontalRule.ps1",
+      "RejectedFunctions": 1,
+      "ExplanationSha256": "9705ff7c1f9e8acc0be5282e5da5d5f52ba555dfc7bef404242364bf7da18211"
+    }
+  ]
+}

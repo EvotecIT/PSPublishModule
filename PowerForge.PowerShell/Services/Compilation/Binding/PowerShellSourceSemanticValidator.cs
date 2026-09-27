@@ -7,8 +7,9 @@ internal static class PowerShellSourceSemanticValidator
 {
     /// <summary>Whether a function's metadata can be detached without recreating hosted type identities or imports.</summary>
     internal static bool SupportsDetachedFunctionMetadata(ParsedSourceDocument document)
-        => !document.SyntaxRoot.FindAll(static node => node is TypeDefinitionAst ||
-                node is UsingStatementAst { UsingStatementKind: not UsingStatementKind.Namespace }, searchNestedScriptBlocks: false).Any();
+        => document.TypeClosure.Declarations.Length == 0 &&
+           !document.SyntaxRoot.FindAll(static node => node is UsingStatementAst { UsingStatementKind: not UsingStatementKind.Namespace },
+               searchNestedScriptBlocks: false).Any();
 
     internal static PowerShellSemanticDiagnostic[] Validate(ParsedSourceDocument document, string semanticProfileId)
     {
@@ -29,16 +30,13 @@ internal static class PowerShellSourceSemanticValidator
                 requirementFailure,
                 PowerShellSourceParser.GetSpan(document, document.SyntaxRoot.Extent)));
         }
-        var typeDefinition = document.SyntaxRoot
-            .FindAll(static node => node is TypeDefinitionAst, searchNestedScriptBlocks: false)
-            .OfType<TypeDefinitionAst>()
-            .FirstOrDefault();
+        var typeDefinition = document.TypeClosure.Declarations.FirstOrDefault();
         if (typeDefinition is not null)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 PowerShellCompilationFeatureIds.TypeDefinition,
                 "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
-                PowerShellSourceParser.GetSpan(document, typeDefinition.Extent)));
+                typeDefinition.Span));
         }
         return diagnostics.ToArray();
     }

@@ -23,6 +23,7 @@ internal sealed class ParsedSourceDocument
         Tokens = tokens;
         Errors = errors;
         AuthoredProjection = authoredProjection;
+        TypeClosure = PowerShellSourceTypeClosure.Discover(this);
     }
 
     internal string DocumentId { get; }
@@ -32,4 +33,5 @@ internal sealed class ParsedSourceDocument
     internal Token[] Tokens { get; }
     internal ParseError[] Errors { get; }
     internal PowerShellAuthoredSourceProjection? AuthoredProjection { get; }
+    internal PowerShellSourceTypeClosure TypeClosure { get; }
 }
