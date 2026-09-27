@@ -135,6 +135,35 @@ powerforge-web cloudflare cache-policy apply \
   --site-config ./site.json
 ```
 
+### Dynamic sites with explicit public routes
+
+The static-site profile above overrides origin TTLs and is not suitable for a
+server-rendered application with private or cookie-bearing pages. A dynamic site
+can instead opt in to exact, anonymous public paths:
+
+```bash
+powerforge-web cloudflare cache-policy apply \
+  --zone-id <ZONE_ID> \
+  --token-env CLOUDFLARE_API_TOKEN \
+  --hostname changeintel.xyz \
+  --policy-name ChangeIntel \
+  --origin-respecting-dynamic \
+  --public-path /sources,/sitemap.xml,/robots.txt \
+  --dry-run
+```
+
+Remove `--dry-run` only after checking the current zone rules and origin
+responses. The rule matches only named paths and GET/PURGE requests with no
+Cookie or Authorization header. Truncated request headers fail closed. It
+uses Cloudflare's `bypass_by_default` edge mode: an origin response without
+cache directives is not cached, and no edge or browser TTL replaces the
+origin's public/private decisions. The default cache key retains the complete
+query string. The application must still emit `public`/`s-maxage` only for
+content safe to share with anonymous visitors. Do not nominate homepages that
+set anti-forgery cookies, personalized pages, API credentials, or private
+feeds. Static `--html-path` and `Cloudflare.Cache` override settings cannot be
+combined with this mode.
+
 ## GitHub Actions
 
 The complete policy action rejects pull-request events before reading protected

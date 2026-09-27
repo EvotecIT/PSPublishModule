@@ -35,7 +35,9 @@ internal static class CloudflareCachePolicyManager
         WebConsoleLogger? logger,
         HttpClient? httpClient = null,
         string? basePath = null,
-        CloudflareCacheSpec? cache = null)
+        CloudflareCacheSpec? cache = null,
+        bool originRespectingDynamic = false,
+        IReadOnlyCollection<string>? publicPaths = null)
     {
         if (!TryValidateInputs(zoneId, apiToken, ref hostname, ref policyName, out var error))
             return Failure(error, hostname, policyName, dryRun);
@@ -43,7 +45,13 @@ internal static class CloudflareCachePolicyManager
         JsonArray managedRules;
         try
         {
-            managedRules = CloudflareCachePolicyBuilder.BuildManagedRules(hostname, policyName, htmlPaths, basePath, cache);
+            if (originRespectingDynamic && ((htmlPaths?.Count ?? 0) > 0 || cache is not null))
+                return Failure("Dynamic origin caching cannot be combined with static HTML routes or a site cache override.", hostname, policyName, dryRun);
+            if (!originRespectingDynamic && (publicPaths?.Count ?? 0) > 0)
+                return Failure("Explicit public paths require dynamic origin caching.", hostname, policyName, dryRun);
+            managedRules = originRespectingDynamic
+                ? CloudflareDynamicOriginCachePolicyBuilder.BuildManagedRules(hostname, policyName, publicPaths, basePath)
+                : CloudflareCachePolicyBuilder.BuildManagedRules(hostname, policyName, htmlPaths, basePath, cache);
         }
         catch (ArgumentException ex)
         {
