@@ -37,7 +37,7 @@ while (($# > 0)); do
     continue
   fi
   path="$1"
-  [[ "$path" =~ ^/[A-Za-z0-9._/-]+$ ]] || die "unsafe capture path: $path"
+  [[ "$path" =~ ^/[A-Za-z0-9._@/-]+$ ]] || die "unsafe capture path: $path"
   [[ "$path" != *'//'* ]] || die "capture path contains an empty segment: $path"
   [[ ! "$path" =~ (^|/)\.{1,2}(/|$) ]] || die "capture path contains a traversal segment: $path"
   if (( optional_mode == 1 )); then

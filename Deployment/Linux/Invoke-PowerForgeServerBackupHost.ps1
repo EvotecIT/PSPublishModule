@@ -491,7 +491,8 @@ try {
         $captures = @(Get-BackupCaptureDirectory -TargetRoot $targetRoot)
         Assert-CaptureWithinRetention -Captures $captures -CaptureName $captureName -KeepLatest $keepLatest
         foreach ($stale in @($captures | Select-Object -Skip $keepLatest)) {
-            Remove-Item -LiteralPath $stale.FullName -Recurse
+            & find -P $stale.FullName -depth -delete
+            Assert-ExitCode 'Removing expired backup capture'
         }
         Update-BackupCatalog -TargetRoot $targetRoot -TargetRelative $backupPath -KeepLatestInTree $keepLatest
         & git -C $checkout add -- $backupPath
@@ -536,6 +537,9 @@ finally {
     if ($stage.StartsWith($workRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::Ordinal) -and
         (Test-Path -LiteralPath $stage -PathType Container) -and
         -not ((Get-Item -LiteralPath $stage -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-        Remove-Item -LiteralPath $stage -Recurse
+        # Git object files are read-only. Physical traversal removes them and links
+        # without following targets or depending on PowerShell's attribute handling.
+        & find -P $stage -depth -delete
+        Assert-ExitCode 'Removing completed backup stage'
     }
 }
