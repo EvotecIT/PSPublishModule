@@ -12,6 +12,18 @@ namespace PowerForge.Generated.Runtime
     public sealed partial class PowerShellNativeFunctionContext
     {
         private static readonly ConcurrentDictionary<InvocationSiteKey, Func<object?, object?[], object?>> InvocationSites = new();
+        private static readonly Lazy<MethodInfo> VariableReferenceOperation = new(() => typeof(PSObject).Assembly
+            .GetType("System.Management.Automation.VariableOps", true)!
+            .GetMethod("GetVariableAsRef", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
+            ?? throw new NotSupportedException("PowerShell's native variable-reference operation is unavailable."));
+
+        /// <summary>Acquires the existing variable cell, preserving native lookup, constraints and missing-variable errors.</summary>
+        public PSReference GetVariableReference(string name)
+        {
+            EnsureActive();
+            return (PSReference)PowerShellNativeFunctionHost.Invoke(VariableReferenceOperation.Value, null,
+                new object[] { new VariablePath(name), _executionContext, null! })!;
+        }
 
         /// <summary>Invokes a method or constructor on the already evaluated target using native overload resolution.</summary>
         public object? InvokeMember(object? receiver, string name, bool isStatic, object?[] arguments,

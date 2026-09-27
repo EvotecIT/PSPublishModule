@@ -21,6 +21,19 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         var arguments = "new object[] { " + string.Join(", ", invocation.Arguments.Select(EmitExpression)) + " }";
         var hasReferences = invocation.References.Count > 0;
+        if (hasReferences && invocation.References.All(reference =>
+                invocation.Arguments[reference.Index] is PowerShellLoweredNativeReferenceExpression))
+        {
+            var operands = _getTemporaryIdentifier("nativeReferenceOperands");
+            var receiver = invocation.Receiver is null ? EmitNativeTypeConstraint(invocation.LiteralTargetType) : EmitExpression(invocation.Receiver);
+            // Acquire the receiver before arguments, and let the native binder mutate real variable cells.
+            // There is no synthetic value-copy writeback or second constraint application.
+            return "__statementErrors.EvaluateNativeInvocation(() => new object[] { " + receiver + ", " + arguments + " }, " +
+                operands + " => __nativeFunction.InvokeMember(" + operands + "[0], " + PowerShellCSharpLiteral.QuoteString(invocation.Name) +
+                ", " + (invocation.IsStatic ? "true" : "false") + ", (object[])" + operands + "[1], " +
+                EmitNativeTypeConstraint(invocation.TargetConstraint) + ", new global::System.Type[] { " +
+                string.Join(", ", invocation.ArgumentConstraints.Select(EmitNativeTypeConstraint)) + " }))";
+        }
         var argumentTemporary = hasReferences ? _getTemporaryIdentifier("nativeArguments") : null;
         var call = "__nativeFunction." + (hasReferences ? "InvokeMemberWithReferenceWriteback(" : "InvokeMember(") +
            (invocation.Receiver is null ? EmitNativeTypeConstraint(invocation.LiteralTargetType) : EmitExpression(invocation.Receiver)) +

@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "068a505c7a108de1798d0e7ebfa363fe6dd03bca",
+  "compilerBaselineCommit": "ab8cf1ea2a06e4e30a793ea93c3f32aab1907ed0",
   "packets": [
     {
       "packet": "pssg",
@@ -13,7 +13,7 @@
       "stableUnits": 286,
       "emitted": 259,
       "retained": 23,
-      "sourceExplanationSha256": "ec83e7c4dcc792ce267fd6efa08f1b054bc79518e951e6b3d7c8bbf7d6b39299",
+      "sourceExplanationSha256": "e5634e4fa23e43a8b562130c4e33241bb2d73c83a816357a65b886f3dd4a6557",
       "functionsRetained": [
         {
           "unitId": "a1bb1dcefddec8c45377fd27",
@@ -329,7 +329,7 @@
             {
               "code": "UnsupportedSyntax",
               "featureId": "syntax.unsupported",
-              "message": "Native reference arguments require trailing direct locals and an unambiguous static CLR by-reference overload.",
+              "message": "Native reference arguments require distinct trailing locals in one storage family and a qualified static invocation.",
               "line": 214,
               "column": 17
             }
@@ -428,7 +428,7 @@
             {
               "code": "UnsupportedSyntax",
               "featureId": "syntax.unsupported",
-              "message": "Native reference arguments require trailing direct locals and an unambiguous static CLR by-reference overload.",
+              "message": "Native reference arguments require distinct trailing locals in one storage family and a qualified static invocation.",
               "line": 100,
               "column": 30
             }
@@ -609,7 +609,7 @@
       "stableUnits": 67,
       "emitted": 61,
       "retained": 5,
-      "sourceExplanationSha256": "73172aaac03d1c74782e361a0716d2c2d0c14b80abae98e870ef80c8253a8ee2",
+      "sourceExplanationSha256": "3f82e8390bab354ea742fb836918e4a36ca3306f9669027b567939b06a8a3a94",
       "functionsRetained": [
         {
           "unitId": "fc33881d5a7752031137ea07",
@@ -756,9 +756,9 @@
       "packet": "pst",
       "functions": 109,
       "stableUnits": 121,
-      "emitted": 89,
-      "retained": 20,
-      "sourceExplanationSha256": "7f24946fcdbb2e8d0158e02ed4f8458b2935089d307dda66a7ea4a70fc2bb2e6",
+      "emitted": 90,
+      "retained": 19,
+      "sourceExplanationSha256": "55d805d1f78cc0733d49bd7ffec0e4f73035047f773621167947ac9597507099",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -1722,27 +1722,9 @@
             {
               "code": "UnsupportedSyntax",
               "featureId": "syntax.unsupported",
-              "message": "Native reference arguments require distinct direct local variables and retain other reference shapes in PowerShell.",
+              "message": "Native reference arguments require distinct trailing locals in one storage family and a qualified static invocation.",
               "line": 46,
               "column": 13
-            }
-          ]
-        },
-        {
-          "unitId": "c71909b22967e5ec149ae38b",
-          "name": "Convert-CommandToHashtable",
-          "relativePath": "functions/hashtableTools.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Native reference arguments require distinct direct local variables and retain other reference shapes in PowerShell.",
-              "line": 303,
-              "column": 12
             }
           ]
         },

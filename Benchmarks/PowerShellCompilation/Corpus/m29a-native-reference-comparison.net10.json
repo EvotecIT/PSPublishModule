@@ -1,0 +1,3315 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Invocation-owned references for unoptimized ordinary local storage, including runtime static targets; qualified YAML scalar conversion and offline command-to-splat parsing.",
+  "baselineCompilerCommit": "ab8cf1ea2a06e4e30a793ea93c3f32aab1907ed0",
+  "baselineComparison": "m29a-hosted-enum-values-comparison.net10.json",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "baselineEmitted": 499,
+  "candidateEmitted": 500,
+  "candidateRetained": 65,
+  "packets": [
+    {
+      "packet": "pssg",
+      "functions": 282,
+      "emitted": 259,
+      "retained": 23,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [],
+      "explanationSha256": "e5634e4fa23e43a8b562130c4e33241bb2d73c83a816357a65b886f3dd4a6557"
+    },
+    {
+      "packet": "cleanup",
+      "functions": 68,
+      "emitted": 63,
+      "retained": 5,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [],
+      "explanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1"
+    },
+    {
+      "packet": "pinf",
+      "functions": 66,
+      "emitted": 61,
+      "retained": 5,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [],
+      "explanationSha256": "3f82e8390bab354ea742fb836918e4a36ca3306f9669027b567939b06a8a3a94"
+    },
+    {
+      "packet": "pst",
+      "functions": 109,
+      "emitted": 90,
+      "retained": 19,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [
+        {
+          "unitId": "c71909b22967e5ec149ae38b",
+          "name": "Convert-CommandToHashtable"
+        }
+      ],
+      "explanationSha256": "55d805d1f78cc0733d49bd7ffec0e4f73035047f773621167947ac9597507099"
+    },
+    {
+      "packet": "platyps",
+      "functions": 40,
+      "emitted": 27,
+      "retained": 13,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [],
+      "explanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea"
+    }
+  ],
+  "newlyExecutedFunctions": [
+    "Convert-ValueToProperType",
+    "Convert-CommandToHashtable"
+  ],
+  "retainedFunctionFeatureCounts": {
+    "assignment.target": 1,
+    "binary-module.cmdlet-shape": 2,
+    "command.foreach-object": 2,
+    "command.get-help": 1,
+    "command.get-item": 1,
+    "command.get-location": 1,
+    "command.new-object": 2,
+    "command.out-gridview": 1,
+    "command.out-string": 1,
+    "command.read-host": 1,
+    "command.resolve-path": 1,
+    "command.select-object": 1,
+    "command.set-clipboard": 1,
+    "command.showcontainer": 1,
+    "command.test-connection": 1,
+    "command.write-verbose": 4,
+    "command.write-warning": 2,
+    "control.finally.stream-stop": 2,
+    "expression.conversion": 2,
+    "parameter.default": 1,
+    "parameter.metadata": 3,
+    "parameter.type": 22,
+    "pipeline.lifecycle": 2,
+    "runtime.scope": 2,
+    "scriptblock.typed": 1,
+    "semantic.lowering.missing": 2,
+    "syntax.exitstatement": 1,
+    "syntax.foreachstatement": 1,
+    "syntax.functiondefinition": 1,
+    "syntax.invokememberexpression": 3,
+    "syntax.memberexpression": 2,
+    "syntax.pipeline": 1,
+    "syntax.subexpression": 1,
+    "syntax.typedefinition": 1,
+    "syntax.typeexpression": 2,
+    "syntax.unsupported": 33
+  },
+  "validation": {
+    "focusedRuns": [
+      {
+        "file": "native-reference-cells.trx",
+        "sha256": "37d1e635b12c4b165577ffc20ee31983772dc8fb764c2ff63d0d18f087e90155",
+        "counters": {
+          "total": "8",
+          "executed": "8",
+          "passed": "8",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "tests": [
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_DirectIntLocalPreservesTryParseWriteback(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.3092446"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeReferenceCells_PreserveUnoptimizedStorageAndRuntimeStaticTargets(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.3790516"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_UnsupportedStorageAndAliasingRemainHosted(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.3984745"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_DirectObjectLocalPreservesGenericTryParseWriteback(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.7604721"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_DirectObjectLocalPreservesGenericTryParseWriteback(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.3237033"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_DirectIntLocalPreservesTryParseWriteback(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.5861709"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeReferenceCells_PreserveUnoptimizedStorageAndRuntimeStaticTargets(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.7312462"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_UnsupportedStorageAndAliasingRemainHosted(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:14.7142066"
+          }
+        ]
+      },
+      {
+        "file": "native-reference-cells-failure.trx",
+        "sha256": "376b19b441cfc7481eb7ecb7ca68c67228f2f770b6173075f1a73fe033409513",
+        "counters": {
+          "total": "8",
+          "executed": "8",
+          "passed": "8",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "tests": [
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeReferenceCells_PreserveUnoptimizedStorageAndRuntimeStaticTargets(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.8772684"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_UnsupportedStorageAndAliasingRemainHosted(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.2289124"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_DirectObjectLocalPreservesGenericTryParseWriteback(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.7027923"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_DirectIntLocalPreservesTryParseWriteback(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.9315547"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_UnsupportedStorageAndAliasingRemainHosted(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:04.3854917"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeReferenceCells_PreserveUnoptimizedStorageAndRuntimeStaticTargets(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.8190601"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_DirectObjectLocalPreservesGenericTryParseWriteback(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.2180266"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_DirectIntLocalPreservesTryParseWriteback(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.2648153"
+          }
+        ]
+      },
+      {
+        "file": "native-reference-cells-order.trx",
+        "sha256": "d560714ad40a63832561bfd5ab88044e82816fe95a6adc35e89d3dc22e15bea8",
+        "counters": {
+          "total": "8",
+          "executed": "8",
+          "passed": "8",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "tests": [
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_DirectIntLocalPreservesTryParseWriteback(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.8151514"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_DirectObjectLocalPreservesGenericTryParseWriteback(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.7718748"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_UnsupportedStorageAndAliasingRemainHosted(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.3427932"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeReferenceCells_PreserveUnoptimizedStorageAndRuntimeStaticTargets(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.8612574"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeReferenceCells_PreserveUnoptimizedStorageAndRuntimeStaticTargets(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.7065536"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_UnsupportedStorageAndAliasingRemainHosted(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:04.3151195"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_DirectIntLocalPreservesTryParseWriteback(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.3636369"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_DirectObjectLocalPreservesGenericTryParseWriteback(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.3493372"
+          }
+        ]
+      },
+      {
+        "file": "native-reference-compatibility-positions.trx",
+        "sha256": "988937ff804025ef2c1a4c55d098d42d6363060501768a974438af4792f24b0f",
+        "counters": {
+          "total": "61",
+          "executed": "61",
+          "passed": "61",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "tests": [
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.HostedEnumStringEqualityUsesCanonicalPowerShellOperator(operation: \"-ceq\", expectedOperator: \"PowerShellEqualCaseSensitive\", expectedIgnoreCase: \"false\", expectedNegation: False)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0017251"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeAccessCaptures_PreserveCleanupHostedTerminalRegion",
+            "outcome": "Passed",
+            "duration": "00:00:07.2698951"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeReferenceCells_PreserveUnoptimizedStorageAndRuntimeStaticTargets(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.9026521"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { [object]$Name }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001560"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.HostedEnumStringEqualityUsesCanonicalPowerShellOperator(operation: \"-ne\", expectedOperator: \"PowerShellNotEqualIgnoreCase\", expectedIgnoreCase: \"true\", expectedNegation: True)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0010866"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::$Name\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0130156"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_BinaryModulePreservesNullSeededReferenceLocalBehavior(targetFramework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.2093960"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeAccessCaptures_PreserveTargetOrderRecordsConversionAndFailure(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:04.3238850"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeAccessCaptures_UnqualifiedTargetsRemainHosted(assignment: \"$Holder.GetMap()['slot'] = foreach($item in $Items\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0066118"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0006556"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.6264316"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_BinaryModulePreservesNullSeededReferenceLocalBehavior(targetFramework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.6889603"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001005"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0022467"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeAccessMutations_DoNotWidenRuntimeFreeAdmission",
+            "outcome": "Passed",
+            "duration": "00:00:00.0010355"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeReturnPipelines_PreserveCollectionRecordsAndParenthesizedScalarization(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.6681422"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.0065477"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeAccessMutations_PreserveValuesErrorsAndTargetEvaluation(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.3925123"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { static [string]$Name }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0764022"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0164785"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::Parse('One')\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0005069"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001512"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0000447"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_DirectIntLocalPreservesTryParseWriteback(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.7691659"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeAccessCaptures_UnqualifiedTargetsRemainHosted(assignment: \"$Holder.($Name) = foreach($item in $Items){$item}\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0094791"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0002972"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeReferenceCells_PreserveUnoptimizedStorageAndRuntimeStaticTargets(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.6773380"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue : Exception { [string]$Name }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0140485"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.HostedEnumStringEqualityUsesCanonicalPowerShellOperator(operation: \"-eq\", expectedOperator: \"PowerShellEqualIgnoreCase\", expectedIgnoreCase: \"true\", expectedNegation: False)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0010506"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::Missing\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0008958"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeAccessMutations_PreserveValuesErrorsAndTargetEvaluation(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.7429941"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.HostedEnumStringEqualityUsesCanonicalPowerShellOperator(operation: \"-cne\", expectedOperator: \"PowerShellNotEqualCaseSensitive\", expectedIgnoreCase: \"false\", expectedNegation: True)",
+            "outcome": "Passed",
+            "duration": "00:00:00.2656452"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumDeclarationDoesNotResolveUnrelatedUnknownParameterTypes",
+            "outcome": "Passed",
+            "duration": "00:00:00.0038605"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumValues_PreserveFlagsDefaultsAndModuleIsolation(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.0677708"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]$value=$null\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0000513"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeAccessCaptures_PreserveTargetOrderRecordsConversionAndFailure(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:04.0771397"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumLiteralMembersAndFlagsKeepNativeValueAndDefaultOwnership(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0052129"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeAccessCaptures_UnqualifiedTargetsRemainHosted(assignment: \"$Holder[(Get-Date)] = foreach($item in $Items){$it\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0097741"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_UnsupportedStorageAndAliasingRemainHosted(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:05.5484647"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]::Missing()\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0003201"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeAccessCaptures_CleanupDomainInventoryExcerptPreservesOfflineProjection(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.9481398"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::new()\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0531247"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeReturnPipelines_PreserveCollectionRecordsAndParenthesizedScalarization(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.2278527"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumLiteralMembersAndFlagsKeepNativeValueAndDefaultOwnership(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.1734013"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0006316"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_DirectObjectLocalPreservesGenericTryParseWriteback(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.7835899"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeAccessCaptures_DoNotWidenRuntimeFreeAdmission",
+            "outcome": "Passed",
+            "duration": "00:00:00.0006097"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassConstructionUsesNativeLexicalTypeAndKeepsStrictClosed(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.1054113"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeAccessCaptures_CleanupDomainInventoryExcerptPreservesOfflineProjection(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.6030697"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { [string]$Name=(Get-Date) }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0643350"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_DirectObjectLocalPreservesGenericTryParseWriteback(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.2385252"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeAccessCaptures_UnqualifiedTargetsRemainHosted(assignment: \"[Missing.Authored.Type]$Holder['slot'] = foreach($\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0094933"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_UnsupportedStorageAndAliasingRemainHosted(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.3127341"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumValues_PreserveFlagsDefaultsAndModuleIsolation(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.6461617"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { [string]Method() { return 'valu\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0004415"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice : long { Zero }; function Read-C\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0002709"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassConstructionUsesNativeLexicalTypeAndKeepsStrictClosed(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0021223"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]::new('argument')\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0002285"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ClrByReference_DirectIntLocalPreservesTryParseWriteback(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.1954874"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { OwnedValue() {} }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0025019"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"if($true) { enum NativeChoice { Zero } }; function\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0015592"
+          }
+        ]
+      }
+    ],
+    "net472OwnerBuild": {
+      "success": true,
+      "warnings": 0,
+      "errors": 0,
+      "seconds": 4.15
+    },
+    "independentReview": {
+      "task": "native_reference_cell_review",
+      "outcome": "No actionable P0-P3 findings",
+      "scope": "Seven modified compiler files plus two reference expression files and native reference-cell test; surrounding native invocation, storage, error, IR and lowering owners",
+      "reranTests": false
+    },
+    "aggregateCompilerGateRun": false
+  },
+  "yaml": {
+    "moduleVersion": "0.4.12",
+    "sourceArchiveSha256": "d4602bc7a4a093766520422d53ca8b09acde162286fae11e2ee6c8edfea07810",
+    "sourceSha256": "415b0de1b4d5af6980ec50316d3267fa19663b7dbf809d219783b41ed39b2e5d",
+    "license": "Apache-2.0",
+    "sourceIsExternal": true,
+    "binaryInventory": [
+      {
+        "relativePath": "lib/net47/PowerShellYamlSerializer.dll",
+        "identity": "PowerShellYamlSerializer, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "sha256": "a5bdd33675629ca88cf05cd08150a19a69bc20b21cbe1d1e5e55fe63a332062a",
+        "references": [
+          "mscorlib:4.0.0.0",
+          "YamlDotNet:16.0.0.0",
+          "System.Numerics:4.0.0.0",
+          "System.Management.Automation:3.0.0.0",
+          "System:4.0.0.0"
+        ],
+        "nativeImports": []
+      },
+      {
+        "relativePath": "lib/net47/YamlDotNet.dll",
+        "identity": "YamlDotNet, Version=16.0.0.0, Culture=neutral, PublicKeyToken=ec19458f3c15af5e",
+        "sha256": "d35c770d92632bd94bba4203db05eee5ebce6e6ea6d92e7ebe8997a942b5321c",
+        "references": [
+          "mscorlib:4.0.0.0",
+          "System:4.0.0.0",
+          "System.Core:4.0.0.0"
+        ],
+        "nativeImports": []
+      },
+      {
+        "relativePath": "lib/netstandard2.1/PowerShellYamlSerializer.dll",
+        "identity": "PowerShellYamlSerializer, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "sha256": "c9193f2fb5afa40af61d908589fdd0929ab58472be215fc2afb692194d53210d",
+        "references": [
+          "netstandard:2.1.0.0",
+          "YamlDotNet:16.0.0.0",
+          "System.Management.Automation:3.0.0.0"
+        ],
+        "nativeImports": []
+      },
+      {
+        "relativePath": "lib/netstandard2.1/YamlDotNet.dll",
+        "identity": "YamlDotNet, Version=16.0.0.0, Culture=neutral, PublicKeyToken=ec19458f3c15af5e",
+        "sha256": "d7543a03a69f14ca1e302aa2bbb09777200b72e0c6db0d0eb7614593f5c33e0f",
+        "references": [
+          "netstandard:2.1.0.0"
+        ],
+        "nativeImports": []
+      }
+    ],
+    "functions": 14,
+    "baselineEmitted": 13,
+    "candidateEmitted": 14,
+    "retained": [],
+    "sourceMode": "CompleteModule",
+    "artifactKind": "BinaryModule",
+    "mode": "Hybrid",
+    "dependencyResolution": "Unreviewed offline dependency resolution; no reviewed lock claimed",
+    "hosts": [
+      {
+        "host": "7.6.6",
+        "framework": "net10.0",
+        "observationCount": 40,
+        "observationsMatch": true,
+        "originalSha256": "6c486482c7adfb3819d43bdc67b5f5ab8358e1fa368e6eec040537172b340fc6",
+        "generatedSha256": "6c486482c7adfb3819d43bdc67b5f5ab8358e1fa368e6eec040537172b340fc6",
+        "observations": [
+          {
+            "id": "scalar-int32",
+            "records": [
+              {
+                "type": "System.Int32",
+                "value": "42"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-int32-min",
+            "records": [
+              {
+                "type": "System.Int32",
+                "value": "-2147483648"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-int64",
+            "records": [
+              {
+                "type": "System.Int64",
+                "value": "2147483648"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-int64-max",
+            "records": [
+              {
+                "type": "System.Int64",
+                "value": "9223372036854775807"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-bigint",
+            "records": [
+              {
+                "type": "System.Numerics.BigInteger",
+                "value": "9223372036854775808"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-negative-bigint",
+            "records": [
+              {
+                "type": "System.Numerics.BigInteger",
+                "value": "-9223372036854775809"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-decimal",
+            "records": [
+              {
+                "type": "System.Decimal",
+                "value": "123.45"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-scientific",
+            "records": [
+              {
+                "type": "System.Int32",
+                "value": "1250"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-bool",
+            "records": [
+              {
+                "type": "System.Boolean",
+                "value": "True"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-null",
+            "records": [
+              null
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-quoted",
+            "records": [
+              "true"
+            ],
+            "caught": null
+          },
+          {
+            "id": "tagged-string",
+            "records": [
+              "42"
+            ],
+            "caught": null
+          },
+          {
+            "id": "tagged-boolean",
+            "records": [
+              {
+                "type": "System.Boolean",
+                "value": "False"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "tagged-int-hex",
+            "records": [
+              {
+                "type": "System.Int32",
+                "value": "42"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "tagged-int-octal",
+            "records": [
+              {
+                "type": "System.Int32",
+                "value": "42"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "tagged-bigint",
+            "records": [
+              {
+                "type": "System.Numerics.BigInteger",
+                "value": "9223372036854775808"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "tagged-infinity",
+            "records": [
+              {
+                "type": "System.Double",
+                "value": "-Infinity"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "tagged-timestamp",
+            "records": [
+              {
+                "type": "System.DateTime",
+                "value": "2020-01-02T04:04:05.0000000Z"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "invalid-tagged-bool",
+            "records": [],
+            "caught": {
+              "error": "failed to parse scalar not-bool as boolean",
+              "exception": "System.Management.Automation.RuntimeException",
+              "category": "OperationStopped",
+              "message": "failed to parse scalar not-bool as boolean"
+            }
+          },
+          {
+            "id": "invalid-tagged-int",
+            "records": [],
+            "caught": {
+              "error": "failed to parse scalar not-int as long",
+              "exception": "System.Management.Automation.RuntimeException",
+              "category": "OperationStopped",
+              "message": "failed to parse scalar not-int as long"
+            }
+          },
+          {
+            "id": "invalid-tagged-float",
+            "records": [],
+            "caught": {
+              "error": "failed to parse scalar not-float as decimal",
+              "exception": "System.Management.Automation.RuntimeException",
+              "category": "OperationStopped",
+              "message": "failed to parse scalar not-float as decimal"
+            }
+          },
+          {
+            "id": "invalid-tagged-timestamp",
+            "records": [],
+            "caught": {
+              "error": "MethodArgumentConversionInvalidCastArgument,Convert-ValueToProperType",
+              "exception": "System.Management.Automation.MethodException",
+              "category": "NotSpecified",
+              "message": "Cannot convert argument \"value\", with value: \"not-date\", for \"SpecifyKind\" to type \"System.DateTime\": \"Cannot convert value \"not-date\" to type \"System.DateTime\". Error: \"The string 'not-date' was not recognized as a valid DateTime. There is an unknown word starting at index '0'.\"\""
+            }
+          },
+          {
+            "id": "all-documents",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "a",
+                    "value": {
+                      "type": "System.Int32",
+                      "value": "1"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "b",
+                    "value": {
+                      "type": "System.Boolean",
+                      "value": "True"
+                    }
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "pipeline-yaml",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "count",
+                    "value": {
+                      "type": "System.Int32",
+                      "value": "42"
+                    }
+                  },
+                  {
+                    "key": "name",
+                    "value": "pipeline"
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-map",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "active",
+                    "value": {
+                      "type": "System.Boolean",
+                      "value": "True"
+                    }
+                  },
+                  {
+                    "key": "count",
+                    "value": {
+                      "type": "System.Int32",
+                      "value": "3"
+                    }
+                  },
+                  {
+                    "key": "empty",
+                    "value": null
+                  },
+                  {
+                    "key": "name",
+                    "value": "example"
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-ordered",
+            "records": [
+              {
+                "type": "System.Collections.Specialized.OrderedDictionary",
+                "entries": [
+                  {
+                    "key": "a",
+                    "value": "first"
+                  },
+                  {
+                    "key": "z",
+                    "value": "last"
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-sequence",
+            "records": [
+              {
+                "type": "System.Collections.Generic.List`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+                "values": [
+                  "one",
+                  "two",
+                  "three"
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-nested",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "outer",
+                    "value": {
+                      "type": "System.Collections.Hashtable",
+                      "entries": [
+                        {
+                          "key": "children",
+                          "value": {
+                            "type": "System.Collections.Generic.List`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+                            "values": [
+                              {
+                                "type": "System.Collections.Hashtable",
+                                "entries": [
+                                  {
+                                    "key": "name",
+                                    "value": "alpha"
+                                  },
+                                  {
+                                    "key": "value",
+                                    "value": {
+                                      "type": "System.Int32",
+                                      "value": "7"
+                                    }
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "System.Collections.Hashtable",
+                                "entries": [
+                                  {
+                                    "key": "name",
+                                    "value": "beta"
+                                  },
+                                  {
+                                    "key": "value",
+                                    "value": {
+                                      "type": "System.Int32",
+                                      "value": "8"
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-alias",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "first",
+                    "value": {
+                      "type": "System.Collections.Generic.List`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+                      "values": [
+                        "one",
+                        "two"
+                      ]
+                    }
+                  },
+                  {
+                    "key": "second",
+                    "value": {
+                      "type": "System.Collections.Generic.List`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+                      "values": [
+                        "one",
+                        "two"
+                      ]
+                    }
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-multiple",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "a",
+                    "value": "one"
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-invalid",
+            "records": [],
+            "caught": {
+              "error": "SemanticErrorException,Get-YamlDocuments",
+              "exception": "System.Management.Automation.MethodInvocationException",
+              "category": "NotSpecified",
+              "message": "Exception calling \"Load\" with \"1\" argument(s): \"While parsing a flow sequence, did not find expected ',' or ']'.\""
+            }
+          },
+          {
+            "id": "serialize-map",
+            "records": [
+              "name: example\r\ncount: 3\r\nactive: true\r\nempty: \r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "serialize-json",
+            "records": [
+              "{\"name\": \"example\", \"count\": 3}\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "serialize-flags",
+            "records": [
+              "name: example\r\nvalues:\r\n  - one\r\n  - two\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "serialize-flow",
+            "records": [
+              "name: example\r\nvalues:\r\n- one\r\n- two\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "serialize-pipeline",
+            "records": [
+              "- id: 1\r\n- id: 2\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "invalid-option",
+            "records": [],
+            "caught": {
+              "error": "ParameterArgumentTransformationError,ConvertTo-Yaml",
+              "exception": "System.Management.Automation.ParameterBindingArgumentTransformationException",
+              "category": "InvalidData",
+              "message": "Cannot process argument transformation on parameter 'Options'. Cannot convert value \"Missing\" to type \"SerializationOptions\". Error: \"Unable to match the identifier name Missing to a valid enumerator name. Specify one of the following enumerator names and try again:\r\nNone, Roundtrip, DisableAliases, EmitDefaults, JsonCompatible, DefaultToStaticType, WithIndentedSequences, OmitNullValues, UseFlowStyle, UseSequenceFlowStyle\""
+            }
+          },
+          {
+            "id": "outfile",
+            "records": [
+              "name: owned\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "outfile-exists",
+            "records": [],
+            "caught": {
+              "error": "Target file already exists. Use -Force to overwrite.",
+              "exception": "System.Management.Automation.RuntimeException",
+              "category": "OperationStopped",
+              "message": "Target file already exists. Use -Force to overwrite."
+            }
+          },
+          {
+            "id": "outfile-force",
+            "records": [
+              "name: replacement\r\n"
+            ],
+            "caught": null
+          }
+        ],
+        "functionLedger": [
+          {
+            "unitId": "1a93db890c2230ab0b40c054",
+            "name": "Invoke-LoadFile",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "65be33f5f1e94af522277233",
+            "name": "Invoke-LoadAssembly",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "8edafbab3be6349baa6911f2",
+            "name": "Get-YamlDocuments",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "ed4f294607df6fcc2786e6d0",
+            "name": "Convert-ValueToProperType",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "f92a66cfccf886c3483a3193",
+            "name": "Convert-YamlMappingToHashtable",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "ef39b29f7583f49b716fe425",
+            "name": "Convert-YamlSequenceToArray",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "fd9eec7474056a1f1fd49623",
+            "name": "Convert-YamlDocumentToPSObject",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "21396e454d69c045cc215d43",
+            "name": "Convert-HashtableToDictionary",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "947d6513458008a35515dbda",
+            "name": "Convert-OrderedHashtableToDictionary",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "58bff30fe5879aec6f1e9e07",
+            "name": "Convert-ListToGenericList",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "086e6f3005b20cb3f0683fb3",
+            "name": "Convert-PSObjectToGenericObject",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "c321dbc631cc91c37776f777",
+            "name": "ConvertFrom-Yaml",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "a5b9f0e6a822e3bd6f8daed5",
+            "name": "Get-Serializer",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "c3234d51c5da948eb059ac5f",
+            "name": "ConvertTo-Yaml",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          }
+        ],
+        "dependencies": [
+          {
+            "name": "YamlDotNet.dll",
+            "identity": "YamlDotNet, Version=16.0.0.0, Culture=neutral, PublicKeyToken=ec19458f3c15af5e",
+            "sha256": "d7543a03a69f14ca1e302aa2bbb09777200b72e0c6db0d0eb7614593f5c33e0f",
+            "underModuleRoot": true
+          },
+          {
+            "name": "PowerShellYamlSerializer.dll",
+            "identity": "PowerShellYamlSerializer, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+            "sha256": "c9193f2fb5afa40af61d908589fdd0929ab58472be215fc2afb692194d53210d",
+            "underModuleRoot": true
+          }
+        ],
+        "options": {
+          "type": "SerializationOptions",
+          "names": [
+            "None",
+            "Roundtrip",
+            "DisableAliases",
+            "EmitDefaults",
+            "JsonCompatible",
+            "DefaultToStaticType",
+            "WithIndentedSequences",
+            "OmitNullValues",
+            "UseFlowStyle",
+            "UseSequenceFlowStyle"
+          ],
+          "values": [
+            0,
+            1,
+            2,
+            4,
+            8,
+            16,
+            32,
+            64,
+            128,
+            256
+          ],
+          "flags": true
+        }
+      },
+      {
+        "host": "5.1.26100.9444",
+        "framework": "net472",
+        "observationCount": 40,
+        "observationsMatch": true,
+        "originalSha256": "13aacf95f88762f068db36854a9108c097110c4b290ff4eaf009d6a86d32598f",
+        "generatedSha256": "13aacf95f88762f068db36854a9108c097110c4b290ff4eaf009d6a86d32598f",
+        "observations": [
+          {
+            "id": "scalar-int32",
+            "records": [
+              {
+                "type": "System.Int32",
+                "value": "42"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-int32-min",
+            "records": [
+              {
+                "type": "System.Int32",
+                "value": "-2147483648"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-int64",
+            "records": [
+              {
+                "type": "System.Int64",
+                "value": "2147483648"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-int64-max",
+            "records": [
+              {
+                "type": "System.Int64",
+                "value": "9223372036854775807"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-bigint",
+            "records": [
+              {
+                "type": "System.Numerics.BigInteger",
+                "value": "9223372036854775808"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-negative-bigint",
+            "records": [
+              {
+                "type": "System.Numerics.BigInteger",
+                "value": "-9223372036854775809"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-decimal",
+            "records": [
+              {
+                "type": "System.Decimal",
+                "value": "123.45"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-scientific",
+            "records": [
+              {
+                "type": "System.Int32",
+                "value": "1250"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-bool",
+            "records": [
+              {
+                "type": "System.Boolean",
+                "value": "True"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-null",
+            "records": [
+              null
+            ],
+            "caught": null
+          },
+          {
+            "id": "scalar-quoted",
+            "records": [
+              "true"
+            ],
+            "caught": null
+          },
+          {
+            "id": "tagged-string",
+            "records": [
+              "42"
+            ],
+            "caught": null
+          },
+          {
+            "id": "tagged-boolean",
+            "records": [
+              {
+                "type": "System.Boolean",
+                "value": "False"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "tagged-int-hex",
+            "records": [
+              {
+                "type": "System.Int32",
+                "value": "42"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "tagged-int-octal",
+            "records": [
+              {
+                "type": "System.Int32",
+                "value": "42"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "tagged-bigint",
+            "records": [
+              {
+                "type": "System.Numerics.BigInteger",
+                "value": "9223372036854775808"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "tagged-infinity",
+            "records": [
+              {
+                "type": "System.Double",
+                "value": "-Infinity"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "tagged-timestamp",
+            "records": [
+              {
+                "type": "System.DateTime",
+                "value": "2020-01-02T04:04:05.0000000Z"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "invalid-tagged-bool",
+            "records": [],
+            "caught": {
+              "error": "failed to parse scalar not-bool as boolean",
+              "exception": "System.Management.Automation.RuntimeException",
+              "category": "OperationStopped",
+              "message": "failed to parse scalar not-bool as boolean"
+            }
+          },
+          {
+            "id": "invalid-tagged-int",
+            "records": [],
+            "caught": {
+              "error": "failed to parse scalar not-int as long",
+              "exception": "System.Management.Automation.RuntimeException",
+              "category": "OperationStopped",
+              "message": "failed to parse scalar not-int as long"
+            }
+          },
+          {
+            "id": "invalid-tagged-float",
+            "records": [],
+            "caught": {
+              "error": "failed to parse scalar not-float as decimal",
+              "exception": "System.Management.Automation.RuntimeException",
+              "category": "OperationStopped",
+              "message": "failed to parse scalar not-float as decimal"
+            }
+          },
+          {
+            "id": "invalid-tagged-timestamp",
+            "records": [],
+            "caught": {
+              "error": "MethodArgumentConversionInvalidCastArgument,Convert-ValueToProperType",
+              "exception": "System.Management.Automation.MethodException",
+              "category": "NotSpecified",
+              "message": "Cannot convert argument \"value\", with value: \"not-date\", for \"SpecifyKind\" to type \"System.DateTime\": \"Cannot convert value \"not-date\" to type \"System.DateTime\". Error: \"The string was not recognized as a valid DateTime. There is an unknown word starting at index 0.\"\""
+            }
+          },
+          {
+            "id": "all-documents",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "a",
+                    "value": {
+                      "type": "System.Int32",
+                      "value": "1"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "b",
+                    "value": {
+                      "type": "System.Boolean",
+                      "value": "True"
+                    }
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "pipeline-yaml",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "count",
+                    "value": {
+                      "type": "System.Int32",
+                      "value": "42"
+                    }
+                  },
+                  {
+                    "key": "name",
+                    "value": "pipeline"
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-map",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "active",
+                    "value": {
+                      "type": "System.Boolean",
+                      "value": "True"
+                    }
+                  },
+                  {
+                    "key": "count",
+                    "value": {
+                      "type": "System.Int32",
+                      "value": "3"
+                    }
+                  },
+                  {
+                    "key": "empty",
+                    "value": null
+                  },
+                  {
+                    "key": "name",
+                    "value": "example"
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-ordered",
+            "records": [
+              {
+                "type": "System.Collections.Specialized.OrderedDictionary",
+                "entries": [
+                  {
+                    "key": "a",
+                    "value": "first"
+                  },
+                  {
+                    "key": "z",
+                    "value": "last"
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-sequence",
+            "records": [
+              {
+                "type": "System.Collections.Generic.List`1[[System.Object, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]",
+                "values": [
+                  "one",
+                  "two",
+                  "three"
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-nested",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "outer",
+                    "value": {
+                      "type": "System.Collections.Hashtable",
+                      "entries": [
+                        {
+                          "key": "children",
+                          "value": {
+                            "type": "System.Collections.Generic.List`1[[System.Object, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]",
+                            "values": [
+                              {
+                                "type": "System.Collections.Hashtable",
+                                "entries": [
+                                  {
+                                    "key": "name",
+                                    "value": "alpha"
+                                  },
+                                  {
+                                    "key": "value",
+                                    "value": {
+                                      "type": "System.Int32",
+                                      "value": "7"
+                                    }
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "System.Collections.Hashtable",
+                                "entries": [
+                                  {
+                                    "key": "name",
+                                    "value": "beta"
+                                  },
+                                  {
+                                    "key": "value",
+                                    "value": {
+                                      "type": "System.Int32",
+                                      "value": "8"
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-alias",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "first",
+                    "value": {
+                      "type": "System.Collections.Generic.List`1[[System.Object, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]",
+                      "values": [
+                        "one",
+                        "two"
+                      ]
+                    }
+                  },
+                  {
+                    "key": "second",
+                    "value": {
+                      "type": "System.Collections.Generic.List`1[[System.Object, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]",
+                      "values": [
+                        "one",
+                        "two"
+                      ]
+                    }
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-multiple",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "a",
+                    "value": "one"
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-invalid",
+            "records": [],
+            "caught": {
+              "error": "SemanticErrorException,Get-YamlDocuments",
+              "exception": "System.Management.Automation.MethodInvocationException",
+              "category": "NotSpecified",
+              "message": "Exception calling \"Load\" with \"1\" argument(s): \"While parsing a flow sequence, did not find expected ',' or ']'.\""
+            }
+          },
+          {
+            "id": "serialize-map",
+            "records": [
+              "name: example\r\ncount: 3\r\nactive: true\r\nempty: \r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "serialize-json",
+            "records": [
+              "{\"name\": \"example\", \"count\": 3}\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "serialize-flags",
+            "records": [
+              "name: example\r\nvalues:\r\n  - one\r\n  - two\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "serialize-flow",
+            "records": [
+              "name: example\r\nvalues:\r\n- one\r\n- two\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "serialize-pipeline",
+            "records": [
+              "- id: 1\r\n- id: 2\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "invalid-option",
+            "records": [],
+            "caught": {
+              "error": "ParameterArgumentTransformationError,ConvertTo-Yaml",
+              "exception": "System.Management.Automation.ParameterBindingArgumentTransformationException",
+              "category": "InvalidData",
+              "message": "Cannot process argument transformation on parameter 'Options'. Cannot convert value \"Missing\" to type \"SerializationOptions\". Error: \"Unable to match the identifier name Missing to a valid enumerator name. Specify one of the following enumerator names and try again:\r\nNone, Roundtrip, DisableAliases, EmitDefaults, JsonCompatible, DefaultToStaticType, WithIndentedSequences, OmitNullValues, UseFlowStyle, UseSequenceFlowStyle\""
+            }
+          },
+          {
+            "id": "outfile",
+            "records": [
+              "name: owned\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "outfile-exists",
+            "records": [],
+            "caught": {
+              "error": "Target file already exists. Use -Force to overwrite.",
+              "exception": "System.Management.Automation.RuntimeException",
+              "category": "OperationStopped",
+              "message": "Target file already exists. Use -Force to overwrite."
+            }
+          },
+          {
+            "id": "outfile-force",
+            "records": [
+              "name: replacement\r\n"
+            ],
+            "caught": null
+          }
+        ],
+        "functionLedger": [
+          {
+            "unitId": "1a93db890c2230ab0b40c054",
+            "name": "Invoke-LoadFile",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "65be33f5f1e94af522277233",
+            "name": "Invoke-LoadAssembly",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "8edafbab3be6349baa6911f2",
+            "name": "Get-YamlDocuments",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "ed4f294607df6fcc2786e6d0",
+            "name": "Convert-ValueToProperType",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "f92a66cfccf886c3483a3193",
+            "name": "Convert-YamlMappingToHashtable",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "ef39b29f7583f49b716fe425",
+            "name": "Convert-YamlSequenceToArray",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "fd9eec7474056a1f1fd49623",
+            "name": "Convert-YamlDocumentToPSObject",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "21396e454d69c045cc215d43",
+            "name": "Convert-HashtableToDictionary",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "947d6513458008a35515dbda",
+            "name": "Convert-OrderedHashtableToDictionary",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "58bff30fe5879aec6f1e9e07",
+            "name": "Convert-ListToGenericList",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "086e6f3005b20cb3f0683fb3",
+            "name": "Convert-PSObjectToGenericObject",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "c321dbc631cc91c37776f777",
+            "name": "ConvertFrom-Yaml",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "a5b9f0e6a822e3bd6f8daed5",
+            "name": "Get-Serializer",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "c3234d51c5da948eb059ac5f",
+            "name": "ConvertTo-Yaml",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          }
+        ],
+        "dependencies": [
+          {
+            "name": "YamlDotNet.dll",
+            "identity": "YamlDotNet, Version=16.0.0.0, Culture=neutral, PublicKeyToken=ec19458f3c15af5e",
+            "sha256": "d35c770d92632bd94bba4203db05eee5ebce6e6ea6d92e7ebe8997a942b5321c",
+            "underModuleRoot": true
+          },
+          {
+            "name": "PowerShellYamlSerializer.dll",
+            "identity": "PowerShellYamlSerializer, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+            "sha256": "a5bdd33675629ca88cf05cd08150a19a69bc20b21cbe1d1e5e55fe63a332062a",
+            "underModuleRoot": true
+          }
+        ],
+        "options": {
+          "type": "SerializationOptions",
+          "names": [
+            "None",
+            "Roundtrip",
+            "DisableAliases",
+            "EmitDefaults",
+            "JsonCompatible",
+            "DefaultToStaticType",
+            "WithIndentedSequences",
+            "OmitNullValues",
+            "UseFlowStyle",
+            "UseSequenceFlowStyle"
+          ],
+          "values": [
+            0,
+            1,
+            2,
+            4,
+            8,
+            16,
+            32,
+            64,
+            128,
+            256
+          ],
+          "flags": true
+        }
+      }
+    ],
+    "strictBoundary": [
+      {
+        "framework": "net10.0",
+        "typedUnits": 0,
+        "rejectedUnits": 15,
+        "canProceed": false,
+        "explanationSha256": "3500a328af2aff5876d3373f99ca829259edb9ddf95a80b8244309d34cb0876a"
+      },
+      {
+        "framework": "net472",
+        "typedUnits": 0,
+        "rejectedUnits": 15,
+        "canProceed": false,
+        "explanationSha256": "904b90d44c4b692f59ad992d96164eaff057c4e78f7a6e7c50147e4a830a1466"
+      }
+    ]
+  },
+  "pstCommandConversion": {
+    "sourceRevision": "549fa3e3d769532320054fc0b3c8f42df0452361",
+    "sourceFile": "functions/hashtableTools.ps1",
+    "sourceSha256": "8c84ab506998fb28e70c067eda893fad8fe48e2a7f2ccf98e9c87248d5c34293",
+    "unchangedFunctionSha256": "e2f0dde0ac5fa0135f75cf4fa76991fcdb28f20b94f05e49b42db7cbb73a0a7d",
+    "license": "MIT; upstream source retained externally",
+    "qualification": "Unchanged function excerpt in a mini module, not full-module generated execution. Command text is parsed and Get-Command resolves metadata; no input command is executed.",
+    "hosts": [
+      {
+        "host": "7.6.6",
+        "framework": "net10.0",
+        "observationCount": 11,
+        "observationsMatch": true,
+        "originalSha256": "1eb29d3188d8dc578fc3df6490b97a449aa8d742a4f53f0d27a51dc9ce8cbced",
+        "generatedSha256": "1eb29d3188d8dc578fc3df6490b97a449aa8d742a4f53f0d27a51dc9ce8cbced",
+        "observations": [
+          {
+            "id": "named",
+            "records": [
+              {
+                "kind": "information",
+                "tags": [
+                  "ast"
+                ],
+                "value": {
+                  "type": "System.Management.Automation.Language.ScriptBlockAst",
+                  "text": "Get-Date -Format yyyy-MM-dd"
+                }
+              },
+              {
+                "kind": "information",
+                "tags": [
+                  "tokens"
+                ],
+                "value": [
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "Get-Date"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-Format"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "yyyy-MM-dd"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "EndOfInput",
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "kind": "value",
+                "type": "System.String",
+                "value": "$paramHash = @{\n  Format = \"yyyy-MM-dd\"\n}\n\nGet-Date @paramHash"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "switch",
+            "records": [
+              {
+                "kind": "information",
+                "tags": [
+                  "ast"
+                ],
+                "value": {
+                  "type": "System.Management.Automation.Language.ScriptBlockAst",
+                  "text": "Get-ChildItem -Path C:\\owned -Recurse -File"
+                }
+              },
+              {
+                "kind": "information",
+                "tags": [
+                  "tokens"
+                ],
+                "value": [
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "Get-ChildItem"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-Path"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "C:\\owned"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-Recurse"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-File"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "EndOfInput",
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "kind": "value",
+                "type": "System.String",
+                "value": "$paramHash = @{\n  Path = \"C:\\owned\"\n   Recurse = $True\n   File = $True\n}\n\nGet-ChildItem @paramHash"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "alias",
+            "records": [
+              {
+                "kind": "information",
+                "tags": [
+                  "ast"
+                ],
+                "value": {
+                  "type": "System.Management.Automation.Language.ScriptBlockAst",
+                  "text": "gci -Path C:\\owned -Filter *.ps1"
+                }
+              },
+              {
+                "kind": "information",
+                "tags": [
+                  "tokens"
+                ],
+                "value": [
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Identifier",
+                    "text": "gci"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-Path"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "C:\\owned"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-Filter"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "*.ps1"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "EndOfInput",
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "kind": "value",
+                "type": "System.String",
+                "value": "$paramHash = @{\n  Path = \"C:\\owned\"\n   Filter = \"*.ps1\"\n}\n\nGet-ChildItem @paramHash"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "quoted",
+            "records": [
+              {
+                "kind": "information",
+                "tags": [
+                  "ast"
+                ],
+                "value": {
+                  "type": "System.Management.Automation.Language.ScriptBlockAst",
+                  "text": "Write-Output -InputObject \"hello world\""
+                }
+              },
+              {
+                "kind": "information",
+                "tags": [
+                  "tokens"
+                ],
+                "value": [
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "Write-Output"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-InputObject"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.StringExpandableToken",
+                    "kind": "StringExpandable",
+                    "text": "\"hello world\""
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "EndOfInput",
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "kind": "value",
+                "type": "System.String",
+                "value": "$paramHash = @{\n  InputObject = \"hello world\"\n}\n\nWrite-Output @paramHash"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "array",
+            "records": [
+              {
+                "kind": "information",
+                "tags": [
+                  "ast"
+                ],
+                "value": {
+                  "type": "System.Management.Automation.Language.ScriptBlockAst",
+                  "text": "Write-Output -InputObject one,two,3"
+                }
+              },
+              {
+                "kind": "information",
+                "tags": [
+                  "tokens"
+                ],
+                "value": [
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "Write-Output"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-InputObject"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Identifier",
+                    "text": "one"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Comma",
+                    "text": ","
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Identifier",
+                    "text": "two"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Comma",
+                    "text": ","
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.NumberToken",
+                    "kind": "Number",
+                    "text": "3"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "EndOfInput",
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "kind": "value",
+                "type": "System.String",
+                "value": "$paramHash = @{\n  InputObject = \"one\",\"two\",3\n}\n\nWrite-Output @paramHash"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "variable",
+            "records": [
+              {
+                "kind": "information",
+                "tags": [
+                  "ast"
+                ],
+                "value": {
+                  "type": "System.Management.Automation.Language.ScriptBlockAst",
+                  "text": "Write-Output -InputObject $ownedValue"
+                }
+              },
+              {
+                "kind": "information",
+                "tags": [
+                  "tokens"
+                ],
+                "value": [
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "Write-Output"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-InputObject"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.VariableToken",
+                    "kind": "Variable",
+                    "text": "$ownedValue"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "EndOfInput",
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "kind": "value",
+                "type": "System.String",
+                "value": "$paramHash = @{\n  InputObject = $ownedValue\n}\n\nWrite-Output @paramHash"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "hashtable",
+            "records": [
+              {
+                "kind": "information",
+                "tags": [
+                  "ast"
+                ],
+                "value": {
+                  "type": "System.Management.Automation.Language.ScriptBlockAst",
+                  "text": "Write-Output -InputObject @{Name='owned';Count=2}"
+                }
+              },
+              {
+                "kind": "information",
+                "tags": [
+                  "tokens"
+                ],
+                "value": [
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "Write-Output"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-InputObject"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "AtCurly",
+                    "text": "@{"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Identifier",
+                    "text": "Name"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Equals",
+                    "text": "="
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "StringLiteral",
+                    "text": "'owned'"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Semi",
+                    "text": ";"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Identifier",
+                    "text": "Count"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Equals",
+                    "text": "="
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.NumberToken",
+                    "kind": "Number",
+                    "text": "2"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "RCurly",
+                    "text": "}"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "EndOfInput",
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "kind": "value",
+                "type": "System.String",
+                "value": "$paramHash = @{\n  InputObject = @{Name='owned';Count=2}\n}\n\nWrite-Output @paramHash"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "numeric",
+            "records": [
+              {
+                "kind": "information",
+                "tags": [
+                  "ast"
+                ],
+                "value": {
+                  "type": "System.Management.Automation.Language.ScriptBlockAst",
+                  "text": "Get-Date -Year 2020 -Month 1 -Day 2"
+                }
+              },
+              {
+                "kind": "information",
+                "tags": [
+                  "tokens"
+                ],
+                "value": [
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "Get-Date"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-Year"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.NumberToken",
+                    "kind": "Number",
+                    "text": "2020"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-Month"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.NumberToken",
+                    "kind": "Number",
+                    "text": "1"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-Day"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.NumberToken",
+                    "kind": "Number",
+                    "text": "2"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "EndOfInput",
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "kind": "value",
+                "type": "System.String",
+                "value": "$paramHash = @{\n  Year = 2020\n   Month = 1\n   Day = 2\n}\n\nGet-Date @paramHash"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "leading-trailing",
+            "records": [
+              {
+                "kind": "information",
+                "tags": [
+                  "ast"
+                ],
+                "value": {
+                  "type": "System.Management.Automation.Language.ScriptBlockAst",
+                  "text": "Get-Date -Format o"
+                }
+              },
+              {
+                "kind": "information",
+                "tags": [
+                  "tokens"
+                ],
+                "value": [
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "Get-Date"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-Format"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Identifier",
+                    "text": "o"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "EndOfInput",
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "kind": "value",
+                "type": "System.String",
+                "value": "$paramHash = @{\n  Format = \"o\"\n}\n\nGet-Date @paramHash"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "unknown-command",
+            "records": [],
+            "caught": {
+              "kind": "error",
+              "id": "CommandNotFoundException,Microsoft.PowerShell.Commands.GetCommandCommand",
+              "type": "System.Management.Automation.CommandNotFoundException",
+              "category": "ObjectNotFound",
+              "message": "The term 'Missing-Owned-Command' is not recognized as a name of a cmdlet, function, script file, or executable program.\r\nCheck the spelling of the name, or if a path was included, verify that the path is correct and try again."
+            }
+          },
+          {
+            "id": "empty-validation",
+            "records": [],
+            "caught": {
+              "kind": "error",
+              "id": "ParameterArgumentValidationError,Convert-CommandToHashtable",
+              "type": "System.Management.Automation.ParameterBindingValidationException",
+              "category": "InvalidData",
+              "message": "Cannot validate argument on parameter 'Text'. The argument is null or empty. Provide an argument that is not null or empty, and then try the command again."
+            }
+          }
+        ],
+        "functionLedger": [
+          {
+            "unitId": "f9e91b5e49638f94ff6f176f",
+            "name": "Convert-CommandToHashtable",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          }
+        ]
+      },
+      {
+        "host": "5.1.26100.9444",
+        "framework": "net472",
+        "observationCount": 11,
+        "observationsMatch": true,
+        "originalSha256": "4e86e5e4c90595b8f1dee77dd52402e3f5c53c735d362fc4318dcb1817d6812b",
+        "generatedSha256": "4e86e5e4c90595b8f1dee77dd52402e3f5c53c735d362fc4318dcb1817d6812b",
+        "observations": [
+          {
+            "id": "named",
+            "records": [
+              {
+                "kind": "information",
+                "tags": [
+                  "ast"
+                ],
+                "value": {
+                  "type": "System.Management.Automation.Language.ScriptBlockAst",
+                  "text": "Get-Date -Format yyyy-MM-dd"
+                }
+              },
+              {
+                "kind": "information",
+                "tags": [
+                  "tokens"
+                ],
+                "value": [
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "Get-Date"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-Format"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "yyyy-MM-dd"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "EndOfInput",
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "kind": "value",
+                "type": "System.String",
+                "value": "$paramHash = @{\n  Format = \"yyyy-MM-dd\"\n}\n\nGet-Date @paramHash"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "switch",
+            "records": [
+              {
+                "kind": "information",
+                "tags": [
+                  "ast"
+                ],
+                "value": {
+                  "type": "System.Management.Automation.Language.ScriptBlockAst",
+                  "text": "Get-ChildItem -Path C:\\owned -Recurse -File"
+                }
+              },
+              {
+                "kind": "information",
+                "tags": [
+                  "tokens"
+                ],
+                "value": [
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "Get-ChildItem"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-Path"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "C:\\owned"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-Recurse"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-File"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "EndOfInput",
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "kind": "value",
+                "type": "System.String",
+                "value": "$paramHash = @{\n  Path = \"C:\\owned\"\n   Recurse = $True\n   File = $True\n}\n\nGet-ChildItem @paramHash"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "alias",
+            "records": [
+              {
+                "kind": "information",
+                "tags": [
+                  "ast"
+                ],
+                "value": {
+                  "type": "System.Management.Automation.Language.ScriptBlockAst",
+                  "text": "gci -Path C:\\owned -Filter *.ps1"
+                }
+              },
+              {
+                "kind": "information",
+                "tags": [
+                  "tokens"
+                ],
+                "value": [
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Identifier",
+                    "text": "gci"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-Path"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "C:\\owned"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-Filter"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "*.ps1"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "EndOfInput",
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "kind": "value",
+                "type": "System.String",
+                "value": "$paramHash = @{\n  Path = \"C:\\owned\"\n   Filter = \"*.ps1\"\n}\n\nGet-ChildItem @paramHash"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "quoted",
+            "records": [
+              {
+                "kind": "information",
+                "tags": [
+                  "ast"
+                ],
+                "value": {
+                  "type": "System.Management.Automation.Language.ScriptBlockAst",
+                  "text": "Write-Output -InputObject \"hello world\""
+                }
+              },
+              {
+                "kind": "information",
+                "tags": [
+                  "tokens"
+                ],
+                "value": [
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "Write-Output"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-InputObject"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.StringExpandableToken",
+                    "kind": "StringExpandable",
+                    "text": "\"hello world\""
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "EndOfInput",
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "kind": "value",
+                "type": "System.String",
+                "value": "$paramHash = @{\n  InputObject = \"hello world\"\n}\n\nWrite-Output @paramHash"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "array",
+            "records": [
+              {
+                "kind": "information",
+                "tags": [
+                  "ast"
+                ],
+                "value": {
+                  "type": "System.Management.Automation.Language.ScriptBlockAst",
+                  "text": "Write-Output -InputObject one,two,3"
+                }
+              },
+              {
+                "kind": "information",
+                "tags": [
+                  "tokens"
+                ],
+                "value": [
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "Write-Output"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-InputObject"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Identifier",
+                    "text": "one"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Comma",
+                    "text": ","
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Identifier",
+                    "text": "two"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Comma",
+                    "text": ","
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.NumberToken",
+                    "kind": "Number",
+                    "text": "3"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "EndOfInput",
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "kind": "value",
+                "type": "System.String",
+                "value": "$paramHash = @{\n  InputObject = \"one\",\"two\",3\n}\n\nWrite-Output @paramHash"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "variable",
+            "records": [
+              {
+                "kind": "information",
+                "tags": [
+                  "ast"
+                ],
+                "value": {
+                  "type": "System.Management.Automation.Language.ScriptBlockAst",
+                  "text": "Write-Output -InputObject $ownedValue"
+                }
+              },
+              {
+                "kind": "information",
+                "tags": [
+                  "tokens"
+                ],
+                "value": [
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "Write-Output"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-InputObject"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.VariableToken",
+                    "kind": "Variable",
+                    "text": "$ownedValue"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "EndOfInput",
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "kind": "value",
+                "type": "System.String",
+                "value": "$paramHash = @{\n  InputObject = $ownedValue\n}\n\nWrite-Output @paramHash"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "hashtable",
+            "records": [
+              {
+                "kind": "information",
+                "tags": [
+                  "ast"
+                ],
+                "value": {
+                  "type": "System.Management.Automation.Language.ScriptBlockAst",
+                  "text": "Write-Output -InputObject @{Name='owned';Count=2}"
+                }
+              },
+              {
+                "kind": "information",
+                "tags": [
+                  "tokens"
+                ],
+                "value": [
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "Write-Output"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-InputObject"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "AtCurly",
+                    "text": "@{"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Identifier",
+                    "text": "Name"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Equals",
+                    "text": "="
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "StringLiteral",
+                    "text": "'owned'"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Semi",
+                    "text": ";"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Identifier",
+                    "text": "Count"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Equals",
+                    "text": "="
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.NumberToken",
+                    "kind": "Number",
+                    "text": "2"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "RCurly",
+                    "text": "}"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "EndOfInput",
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "kind": "value",
+                "type": "System.String",
+                "value": "$paramHash = @{\n  InputObject = @{Name='owned';Count=2}\n}\n\nWrite-Output @paramHash"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "numeric",
+            "records": [
+              {
+                "kind": "information",
+                "tags": [
+                  "ast"
+                ],
+                "value": {
+                  "type": "System.Management.Automation.Language.ScriptBlockAst",
+                  "text": "Get-Date -Year 2020 -Month 1 -Day 2"
+                }
+              },
+              {
+                "kind": "information",
+                "tags": [
+                  "tokens"
+                ],
+                "value": [
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "Get-Date"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-Year"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.NumberToken",
+                    "kind": "Number",
+                    "text": "2020"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-Month"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.NumberToken",
+                    "kind": "Number",
+                    "text": "1"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-Day"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.NumberToken",
+                    "kind": "Number",
+                    "text": "2"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "EndOfInput",
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "kind": "value",
+                "type": "System.String",
+                "value": "$paramHash = @{\n  Year = 2020\n   Month = 1\n   Day = 2\n}\n\nGet-Date @paramHash"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "leading-trailing",
+            "records": [
+              {
+                "kind": "information",
+                "tags": [
+                  "ast"
+                ],
+                "value": {
+                  "type": "System.Management.Automation.Language.ScriptBlockAst",
+                  "text": "Get-Date -Format o"
+                }
+              },
+              {
+                "kind": "information",
+                "tags": [
+                  "tokens"
+                ],
+                "value": [
+                  {
+                    "type": "System.Management.Automation.Language.StringLiteralToken",
+                    "kind": "Generic",
+                    "text": "Get-Date"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.ParameterToken",
+                    "kind": "Parameter",
+                    "text": "-Format"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "Identifier",
+                    "text": "o"
+                  },
+                  {
+                    "type": "System.Management.Automation.Language.Token",
+                    "kind": "EndOfInput",
+                    "text": ""
+                  }
+                ]
+              },
+              {
+                "kind": "value",
+                "type": "System.String",
+                "value": "$paramHash = @{\n  Format = \"o\"\n}\n\nGet-Date @paramHash"
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "unknown-command",
+            "records": [],
+            "caught": {
+              "kind": "error",
+              "id": "CommandNotFoundException,Microsoft.PowerShell.Commands.GetCommandCommand",
+              "type": "System.Management.Automation.CommandNotFoundException",
+              "category": "ObjectNotFound",
+              "message": "The term 'Missing-Owned-Command' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again."
+            }
+          },
+          {
+            "id": "empty-validation",
+            "records": [],
+            "caught": {
+              "kind": "error",
+              "id": "ParameterArgumentValidationError,Convert-CommandToHashtable",
+              "type": "System.Management.Automation.ParameterBindingValidationException",
+              "category": "InvalidData",
+              "message": "Cannot validate argument on parameter 'Text'. The argument is null or empty. Provide an argument that is not null or empty, and then try the command again."
+            }
+          }
+        ],
+        "functionLedger": [
+          {
+            "unitId": "f9e91b5e49638f94ff6f176f",
+            "name": "Convert-CommandToHashtable",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          }
+        ]
+      }
+    ]
+  },
+  "limits": [
+    "Native reference acquisition, invocation overload selection, variable constraints and host context remain PowerShell-owned; this is Hybrid body emission, not runtime-free reference support.",
+    "Only unoptimized ordinary local references use actual variable cells; the previously qualified optimized-slot value-copy route remains unchanged. Distinct trailing references, static literal member names and one storage family are required. Scoped/member/alias/early/instance and mixed-storage forms remain hosted.",
+    "Runtime static targets qualify only when all references use the native-cell owner; literal targets retain their existing CLR overload-shape guard.",
+    "Both Windows hosts are qualified for the observed workflows. No non-Windows, performance, aggregate full-suite, public package or reviewed dependency-lock result is claimed.",
+    "The full five-packet census is net10.0 only. No input command or live external administrative/network/installer workflow was executed.",
+    "The authored YAML timestamp behavior is preserved, including host-local conversion results; this slice does not correct upstream YAML semantics."
+  ],
+  "sourceAndTestHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.NativeAccess.cs": "6f830a5f82e2cd673cab566df0a17b87af196e3d8c2b88b62692aed360756af8",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.cs": "56196341891394b52ea2354f5d46c38cfb60d56fa5fb6182cf5c424160fa583e",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "f012289c2573414971f31933bb383248bec2c9d65fe5693168389265c8a903a0",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeVariableAnalysis.cs": "579808f904e0e3bfa7091ea8e7ffacb367cc67cac3a02f1c3813d1713ac18232",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredRegionGraphBuilder.cs": "f17df5a283195b0922a7d46909f6d6ff7fe46dbdedba13dae5974d7059cafa2e",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs": "34bddf5376724d49596463cedc37716ddfb59e17e8ed95cd7968eb6b3bc7d4ae",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Invocations.cs": "f0b937be49103f2167f2da1eae058b0c33da01d29dc5d95f507e4a5e0d8490f6",
+    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeReferenceExpression.cs": "79372e5a3147ea2f64c2cd81d78fc434e0e3ddc177cf8e2803ba781619f464d9",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeReferenceExpression.cs": "489cf118c69f0f7f1fbf21b3bd081dc7df2d64b4ed6f5e57573c692823b581ab",
+    "PowerForge.Tests/PowerShellCompilationNativeReferenceCellTests.cs": "69b4a878f0ad298e53306f5c151bafd0349eb1564843beb3e04a123b54e2af77"
+  },
+  "probes": {
+    "m29a-native-reference-yaml-probe.ps1": "a264820b92ae45da025253d27a9c72fb2e3d30bb6dd70c82631ba19d0b7dfb01",
+    "m29a-native-reference-command-probe.ps1": "23135128ed4e998cc79a7253f4977cb6a2979198e36874f5c74836019e9f8452"
+  }
+}

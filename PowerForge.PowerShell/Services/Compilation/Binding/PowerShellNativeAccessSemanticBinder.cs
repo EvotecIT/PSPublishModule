@@ -101,7 +101,7 @@ internal static class PowerShellNativeAccessSemanticBinder
                 if (referenceConversions.Length != 1 ||
                     !ReferenceEquals(referenceConversions[0], argument) ||
                     referenceConversions[0].Child is not VariableExpressionAst variable ||
-                    !PowerShellNativeVariableAnalysis.IsDirectLocal(variable) ||
+                    !(PowerShellNativeVariableAnalysis.IsDirectLocal(variable) || PowerShellNativeVariableAnalysis.IsUnoptimizedLocal(variable)) ||
                     !referenceNames.Add(variable.VariablePath.UserPath.StartsWith("local:", StringComparison.OrdinalIgnoreCase)
                         ? variable.VariablePath.UserPath.Substring(6) : variable.VariablePath.UserPath))
                 {
@@ -110,6 +110,12 @@ internal static class PowerShellNativeAccessSemanticBinder
                     return null;
                 }
                 references.Add(new PowerShellNativeReferenceArgument(index, variable.VariablePath.UserPath));
+                if (PowerShellNativeVariableAnalysis.IsUnoptimizedLocal(variable))
+                {
+                    arguments.Add(new PowerShellBoundNativeReferenceExpression(
+                        PowerShellSourceParser.GetSpan(document, argument.Extent), variable.VariablePath.UserPath));
+                    continue;
+                }
             }
             var value = bindExpression(argument, null);
             if (value is null) return null;
@@ -117,11 +123,15 @@ internal static class PowerShellNativeAccessSemanticBinder
         }
         if (references.Count > 0 &&
             (references.Where((reference, index) => reference.Index != argumentSyntax.Length - references.Count + index).Any() ||
-             !syntax.Static || literalTargetType is null ||
-             !HasUnambiguousTrailingByReferenceOverload(literalTargetType, name.Value, argumentSyntax.Length, references.Count)))
+             references.Any(reference => arguments[reference.Index] is PowerShellBoundNativeReferenceExpression) &&
+             references.Any(reference => arguments[reference.Index] is not PowerShellBoundNativeReferenceExpression) ||
+             !syntax.Static ||
+             (literalTargetType is null
+                 ? references.Any(reference => arguments[reference.Index] is not PowerShellBoundNativeReferenceExpression)
+                 : !HasUnambiguousTrailingByReferenceOverload(literalTargetType, name.Value, argumentSyntax.Length, references.Count))))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2633",
-                "Native reference arguments require trailing direct locals and an unambiguous static CLR by-reference overload.", span));
+                "Native reference arguments require distinct trailing locals in one storage family and a qualified static invocation.", span));
             return null;
         }
         return new PowerShellBoundNativeInvocationExpression(span, receiver, literalTargetType, name.Value, syntax.Static,

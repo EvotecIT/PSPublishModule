@@ -38,6 +38,11 @@ internal static class PowerShellNativeVariableAnalysis
     internal static bool IsDirectLocal(VariableExpressionAst variable)
         => (int)TupleIndex.GetValue(variable)! >= 0 && !(bool)Automatic.GetValue(variable)!;
 
+    /// <summary>Identifies ordinary variable storage that native analysis deliberately leaves unoptimized.</summary>
+    internal static bool IsUnoptimizedLocal(VariableExpressionAst variable)
+        => (int)TupleIndex.GetValue(variable)! == -2 && !(bool)Automatic.GetValue(variable)! &&
+           (variable.VariablePath.IsUnqualified || variable.VariablePath.IsLocal);
+
     /// <summary>Retains the authored type metadata needed by the already-analyzed optimized slots.</summary>
     internal static string[] FindLocalTypeDeclarations(FunctionDefinitionAst function, IEnumerable<string> localNames)
     {

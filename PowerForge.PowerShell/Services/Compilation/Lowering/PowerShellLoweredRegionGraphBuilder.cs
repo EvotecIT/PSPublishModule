@@ -158,6 +158,17 @@ internal static class PowerShellLoweredRegionGraphBuilder
                 RecordFirst(readOffsets, "PowerShellSessionState:*", expression.Span.StartOffset);
                 RecordFirst(readOffsets, "PowerShellSessionVariable:" + nativeVariable.Name.ToUpperInvariant(), expression.Span.StartOffset);
             }
+            if (expression is PowerShellLoweredNativeReferenceExpression nativeReference)
+            {
+                RecordFirst(readOffsets, "PowerShellSessionState:*", expression.Span.StartOffset);
+                RecordFirst(readOffsets, "PowerShellSessionVariable:" + nativeReference.Name.ToUpperInvariant(), expression.Span.StartOffset);
+            }
+            if (expression is PowerShellLoweredNativeInvocationExpression referenceInvocation)
+                foreach (var reference in referenceInvocation.References)
+                {
+                    RecordFirst(writeOffsets, "PowerShellSessionState:*", expression.Span.EndOffset);
+                    RecordFirst(writeOffsets, "PowerShellSessionVariable:" + reference.VariableName.ToUpperInvariant(), expression.Span.EndOffset);
+                }
             if (expression is PowerShellLoweredMutationExpression mutation)
             {
                 var target = mutation.NativeTargetRead is { } nativeTarget
@@ -342,6 +353,7 @@ internal static class PowerShellLoweredRegionGraphBuilder
             .Any(static conversion => conversion.UsePowerShellLanguageRuntime || conversion.UseNativeConversion))
             result.Add("PowerShellLanguageRuntimeError");
         if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements).Any(static expression => expression is PowerShellLoweredNativeVariableExpression
+                or PowerShellLoweredNativeReferenceExpression
                 or PowerShellLoweredMutationExpression { NativeTargetRead: not null }) ||
             PowerShellLoweredTreeEnumerator.EnumerateStatements(statements).Any(static statement => statement is PowerShellLoweredNativeAssignmentStatement))
             result.Add("PowerShellSessionStateError");
