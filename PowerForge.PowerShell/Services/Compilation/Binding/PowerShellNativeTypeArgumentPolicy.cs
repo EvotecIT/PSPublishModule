@@ -6,6 +6,23 @@ namespace PowerForge;
 /// <summary>Distinguishes authored Type values from constructor and literal enum receivers in native call arguments.</summary>
 internal static class PowerShellNativeTypeArgumentPolicy
 {
+    /// <summary>Recognizes an exact static Type-producing call with scalar overload arguments.</summary>
+    internal static bool IsClosedTypeFactory(Ast syntax)
+    {
+        if (PowerShellSemanticBinder.UnwrapExpression(syntax, preservePipeline: true) is not
+            InvokeMemberExpressionAst { Static: true, Expression: TypeExpressionAst receiver,
+                Member: StringConstantExpressionAst member, Arguments: { } arguments } ||
+            receiver.TypeName.GetReflectionType() is not { } type)
+            return false;
+        var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)
+            .Where(method => method.Name.Equals(member.Value, StringComparison.OrdinalIgnoreCase) &&
+                method.GetParameters().Length == arguments.Count).ToArray();
+        return methods.Length > 0 && methods.All(static method =>
+            !method.ContainsGenericParameters && method.ReturnType == typeof(Type) &&
+            method.GetParameters().All(static parameter =>
+                PowerShellStableScalarTypePolicy.IsSupported(parameter.ParameterType)));
+    }
+
     internal static bool ContainsTypeValue(Ast syntax)
     {
         // The native interpolation owner produces a String value. Its child

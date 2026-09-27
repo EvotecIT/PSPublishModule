@@ -5,15 +5,15 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "fd897d59cb3e500914577bd0f60c6da6dfd38d1d",
+  "compilerBaselineCommit": "558e669a2b75a33f475fa87ab7d7877ab7c345a2",
   "packets": [
     {
       "packet": "pssg",
       "functions": 282,
       "stableUnits": 286,
-      "emitted": 263,
-      "retained": 19,
-      "sourceExplanationSha256": "38bf0858539f9280f34716a62207c79314b8322a4cd3c119671f3c506d48f856",
+      "emitted": 264,
+      "retained": 18,
+      "sourceExplanationSha256": "b400314a0a58e6a1f13435bc8c9d361cffdde9d165d7e26a5fcb8ef61b00991c",
       "functionsRetained": [
         {
           "unitId": "bde03b869be356b032686101",
@@ -75,13 +75,6 @@
               "message": "Parameter '$AllSucceededRef' has CLR type 'System.Management.Automation.PSReference' that requires a target capability unavailable to this compilation.",
               "line": 68,
               "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.invokememberexpression",
-              "message": "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
-              "line": 128,
-              "column": 42
             }
           ]
         },
@@ -239,24 +232,6 @@
               "message": "Command invocation 'Test-Connection' requires a registered semantic provider or a hosted PowerShell command region.",
               "line": 31,
               "column": 9
-            }
-          ]
-        },
-        {
-          "unitId": "782548ce522fdeba9135d68c",
-          "name": "Remove-FileItem",
-          "relativePath": "Public/FilesFolders/Remove-FileItem.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.invokememberexpression",
-              "message": "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
-              "line": 210,
-              "column": 46
             }
           ]
         },
@@ -534,7 +509,7 @@
       "stableUnits": 67,
       "emitted": 64,
       "retained": 2,
-      "sourceExplanationSha256": "1521c841ec8d6c7ae8c02240d6a945f904170d88ae8dfd7283f4dc94996bc137",
+      "sourceExplanationSha256": "dc4ead723c754d3554c2707baea55372489caa746ba3f56a6b6322d7e358f95d",
       "functionsRetained": [
         {
           "unitId": "fc33881d5a7752031137ea07",
@@ -1569,7 +1544,7 @@
       "stableUnits": 41,
       "emitted": 27,
       "retained": 13,
-      "sourceExplanationSha256": "555b6d9af7614be190ead08633e11bce2256cae0db86a6eeaf9ff2c3f586e374",
+      "sourceExplanationSha256": "f3a8acb7feecc018adfe9d5daf63170ea3af30eed2b718cb1426d9e2346c005f",
       "functionsRetained": [
         {
           "unitId": "62d3e169b4f7eb162da5636b",
@@ -1841,7 +1816,7 @@
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedEnumDeclarationPolicy.cs": "13c19ff47ae23ae9d641c6d76ea6fe605e3187ccf13ecd607e53b68e2909c4c9",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedValueClassPolicy.cs": "e161dce7abde611d1ec26825f59d2a8218ebbabe239a3e199fdb8e509956cc73",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "b89b9674e8efff29dc493563974504e415b98fd67a08a73bd860185227e800e3",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "d5e07808bb49ed4f6f23928210fafa73fdf678a0cf7681cd0ad39de1b6c16760",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "d0f79e157cfd945c6b67523786b90f37297a74f2b2c07be2301b8de7c4a56cbe",
     "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeTypeExpression.cs": "33eed468f79993efecac2de58ea1241e077a6eccfc65924b46ef3954abf2c8de",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeTypeExpression.cs": "a0b77e29eb83c01bd67f4ae3cc8f0a3670cedb13d93822a49b2103ea61872227",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs": "3e6566d1d16a5b258eacf00ad95b28e6e171d31ab5f8995e27f8ca98124b4f66",
@@ -1868,10 +1843,12 @@
     "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "2c5abb9700d66b1d2f57c98b05833e84ce3a240fe6375a3edba37327dd4af9d2",
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Conversions.cs": "1c8b2d0cdb168bbf4f52c83cfed1aeb819955aab78c21a181256313a13871631",
     "PowerForge.Tests/PowerShellCompilationHostSessionConstructionTests.cs": "c3c7753b75e9bcc67034c042a92ab290c1d722ed7dc3b4f5c00664a564e5850b",
-    "Benchmarks/PowerShellCompilation/Corpus/m29a-web-session-probe.ps1": "e78e2269126126c7df0bdf0710a25cc95734806587f516a0c78e3b13c59c638a"
+    "Benchmarks/PowerShellCompilation/Corpus/m29a-web-session-probe.ps1": "e78e2269126126c7df0bdf0710a25cc95734806587f516a0c78e3b13c59c638a",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeTypeArgumentPolicy.cs": "ff940d7098ed93beefa02e16c65a99e7edab09bc2baf6de0fbb1c8805c493c2e",
+    "PowerForge.Tests/PowerShellCompilationTypeFactoryArgumentTests.cs": "b992c4cf7ee2445c11933d679c4ccd66593081fcc621b1be37205c7e6abb7315"
   },
-  "dispositionComparison": "m29a-web-session-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "fd897d59cb3e500914577bd0f60c6da6dfd38d1d",
-  "emitted": 507,
-  "retained": 58
+  "dispositionComparison": "m29a-type-factory-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "558e669a2b75a33f475fa87ab7d7877ab7c345a2",
+  "emitted": 508,
+  "retained": 57
 }

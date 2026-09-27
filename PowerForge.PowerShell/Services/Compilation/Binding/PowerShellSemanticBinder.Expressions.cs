@@ -433,9 +433,11 @@ internal sealed partial class PowerShellSemanticBinder
 
     private static bool HasClosedDirectTypeArgumentCatchAll(InvokeMemberExpressionAst invocation)
     {
-        // Nested casts have a different evaluation contract. Direct literals
-        // and bound Type variables share catch-all record handling below.
-        if (invocation.Arguments is not { Count: 1 } arguments || arguments[0] is not TypeExpressionAst)
+        // Nested casts and unknown transformations retain their own contract.
+        // Scalar-argument Type factories use the same native catch-all owner.
+        if (invocation.Arguments is not { Count: 1 } arguments ||
+            arguments[0] is not TypeExpressionAst &&
+            !PowerShellNativeTypeArgumentPolicy.IsClosedTypeFactory(arguments[0]))
             return false;
         return HasCatchAllObservation(invocation);
     }
