@@ -182,6 +182,9 @@ internal sealed partial class PowerShellSemanticAnalyzer
                         return true;
                     foreach (var expression in EnumerateDirectExpressions(statement))
                     {
+                        // A native command value uses the same invocation-owned preferences,
+                        // captures and stopping scope as an authored native pipeline statement.
+                        if (HasQualifiedFinallyCommandValue(statement, expression)) continue;
                         if (expression.Effects.HasFlag(PowerShellSemanticEffect.NonSuccessStream)) return true;
                         foreach (var invocation in EnumerateInvocations(expression))
                             if (visited.Add(invocation.Target.StableKey) && functions.TryGetValue(invocation.Target.StableKey, out var target))
@@ -191,6 +194,26 @@ internal sealed partial class PowerShellSemanticAnalyzer
             }
             return false;
         }
+
+        /// <summary>Keeps the finally exemption attached to its qualified value and storage owner.</summary>
+        private static bool HasQualifiedFinallyCommandValue(PowerShellBoundStatement statement, PowerShellBoundExpression expression)
+            => expression switch
+            {
+                PowerShellBoundConversionExpression { UsePowerShellTruthiness: true,
+                    Operand: PowerShellBoundNativeCommandExpression } => true,
+                PowerShellBoundNativeCommandExpression => statement is PowerShellBoundNativeAssignmentStatement
+                    { Operation: PowerShellBoundMutationOperator.Assign, Target.MutatesReceiver: false } assignment &&
+                    IsOrdinaryNativeLocalName(assignment.Name),
+                PowerShellBoundMutationExpression { NativeTargetRead.DirectLocal: true,
+                    Operation: PowerShellBoundMutationOperator.Assign, NativeAssignmentTarget.MutatesReceiver: false,
+                    Value: PowerShellBoundNativeCommandExpression } mutation => IsOrdinaryNativeLocalName(mutation.Target.Name),
+                _ => false
+            };
+
+        private static bool IsOrdinaryNativeLocalName(string name)
+            => (name.IndexOf(':') < 0 || name.StartsWith("local:", StringComparison.OrdinalIgnoreCase)) &&
+               !PowerShellAssignmentTargetPolicy.IsAutomaticVariable(name) &&
+               !PowerShellRuntimeStateIntrinsicPolicy.IsActionPreference(PowerShellAssignmentTargetPolicy.GetUnscopedVariableName(name));
 
         private static bool BlockReturnsValue(PowerShellBoundBlock block)
             => block.Statements.LastOrDefault() switch

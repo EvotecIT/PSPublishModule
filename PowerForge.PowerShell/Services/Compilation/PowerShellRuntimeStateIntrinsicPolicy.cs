@@ -401,7 +401,8 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
     private static bool IsCoreProfile(PowerShellCompilationSemanticOracleProfile semanticProfile)
         => semanticProfile.Family == PowerShellCompilationSemanticHostFamily.PowerShell7;
 
-    private static bool IsActionPreference(string name)
+    /// <summary>Identifies action-preference slots that participate in native stream state.</summary>
+    internal static bool IsActionPreference(string name)
         => name.Equals("VerbosePreference", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("DebugPreference", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("WarningPreference", StringComparison.OrdinalIgnoreCase) ||

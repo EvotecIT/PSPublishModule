@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "b42897e64d15cae9aefc47630247d112ef6cf286",
+  "compilerBaselineCommit": "eeaefb26b7ba2de91b3c5c688aa9ef280943e096",
   "packets": [
     {
       "packet": "pssg",
@@ -241,9 +241,9 @@
       "packet": "cleanup",
       "functions": 68,
       "stableUnits": 69,
-      "emitted": 64,
-      "retained": 4,
-      "sourceExplanationSha256": "f35d5bcf42a429124ba4a76ac96d35f3ec2a6a41354119fe72df9ba1677b18cc",
+      "emitted": 66,
+      "retained": 2,
+      "sourceExplanationSha256": "baa8d681c6113dde2fa749f067b9a9ac27e7cfdd33d9f0287d7de7b877de325a",
       "functionsRetained": [
         {
           "unitId": "2be0f84457750dd64ee0c5d1",
@@ -280,44 +280,6 @@
               "message": "Statement 'ExitStatementAst' is not yet represented by the bound pipeline.",
               "line": 74,
               "column": 9
-            }
-          ]
-        },
-        {
-          "unitId": "928ace3e1cba59ff39d82b70",
-          "name": "New-HTMLProcessedComputers",
-          "relativePath": "Private/New-HTMLProcessedComputers.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "control.finally.stream-stop",
-              "message": "Non-success streams from finally during downstream stop require PowerShell preference and variable-capture handling that the generated command host cannot yet preserve.",
-              "line": 1,
-              "column": 1
-            }
-          ]
-        },
-        {
-          "unitId": "0cd5b407109c831e17445271",
-          "name": "Invoke-ADComputersCleanup",
-          "relativePath": "Public/Invoke-ADComputersCleanup.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [
-            "__PowerForgeRegion_bff0dd8a0b6b9894c87b5739"
-          ],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "control.finally.stream-stop",
-              "message": "Non-success streams from finally during downstream stop require PowerShell preference and variable-capture handling that the generated command host cannot yet preserve.",
-              "line": 1,
-              "column": 1
             }
           ]
         }
@@ -1589,10 +1551,14 @@
     "PowerForge.Tests/PowerShellCompilationCollectorArgumentTests.cs": "2182c56f6e78219409dac5bb31c8254d83919eb3e761d732555b0d726a46e2dc",
     "PowerForge.Tests/PowerShellCompilationBasicCommandHostTests.cs": "5f9f903666a33bd6514492e6aeb54b3f4e824abdf51dd686569f9c22f57ca6eb",
     "PowerForge.Tests/PowerShellCompilationReviewerClosureRegressionTests.cs": "3402f69ef46c1b45fbc14526451ccbf93c39c6fa1fa19cda156f4671b2804943",
-    "PowerForge.Tests/PowerShellCompilationRuntimeStateTests.cs": "0e93884f931e093a49be4bbb840361963c72d75098cbf7871ae938c381688f32"
+    "PowerForge.Tests/PowerShellCompilationRuntimeStateTests.cs": "0e93884f931e093a49be4bbb840361963c72d75098cbf7871ae938c381688f32",
+    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellSemanticAnalyzer.Fallback.cs": "de7141332fa21967893e39031d1e88f366bb756942293d11bedd306dd51c99b3",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellRuntimeStateIntrinsicPolicy.cs": "b8049084ea18d688c1168d2e47c4f63889eb122db0af83a05a195333cef39946",
+    "PowerForge.Tests/PowerShellCompilationFinallyCommandValueTests.cs": "7f0cd9ca60b17279e4515602e78fd1b78a8d57aa34e5568a5db7d594df304b00",
+    "PowerForge.Tests/PowerShellCompilationFinallyReportWorkflowTests.cs": "af7ebd1798db331c47f2844a921e377104c1ca8209f8d022c91302e476f94bb4"
   },
-  "dispositionComparison": "m29a-basic-command-host-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "b42897e64d15cae9aefc47630247d112ef6cf286",
-  "emitted": 523,
-  "retained": 42
+  "dispositionComparison": "m29a-finally-command-values-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "eeaefb26b7ba2de91b3c5c688aa9ef280943e096",
+  "emitted": 525,
+  "retained": 40
 }
