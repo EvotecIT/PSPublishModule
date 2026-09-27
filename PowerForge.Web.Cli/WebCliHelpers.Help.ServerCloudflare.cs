@@ -11,9 +11,10 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web server validate --manifest <serverrecovery.json> [--output json] (alias for plan)");
         Console.WriteLine("  powerforge-web server capture --manifest <serverrecovery.json> [--out <dir>] [--local | --ssh <command>] [--dry-run] [--skip-files] [--skip-encrypted] [--encrypt-remote] [--fail-on-failure] [--output json]");
         Console.WriteLine("  powerforge-web server deploy --manifest <serverrecovery.json> [--dry-run] [--fail-on-failure] [--output json]");
-        Console.WriteLine("  powerforge-web server verify --manifest <serverrecovery.json> [--fail-on-failure] [--url-timeout-seconds <n>] [--output json]");
+        Console.WriteLine("  powerforge-web server verify --manifest <serverrecovery.json> [--local | --ssh <command>] [--fail-on-failure] [--url-timeout-seconds <n>] [--output json]");
         Console.WriteLine("  powerforge-web server scaffold --domain <domain> --repository <owner/repo> --repository-ref <sha> --engine-ref <sha> --host <host> --backup-repository <owner/repo> --backup-recipient <age1...> [--acme-account-id <id>] [--branch <name>] [--website-root <dir>] [--ssh-port <n>] [--site-id <id>] [--smoke-paths <paths>] [--recovery-watch-path <glob>] [--private-repository] [--www] [--cloudflare] [--out <dir>] [--force] [--output json]");
         Console.WriteLine("  powerforge-web server bootstrap-plan --manifest <serverrecovery.json> [--out <dir>] [--output json]");
+        Console.WriteLine("  powerforge-web server bootstrap --manifest <serverrecovery.json> [--apply] [--out <dir>] [--output json] (host-local; plans unless --apply)");
         Console.WriteLine("  powerforge-web server restore-secrets-plan --manifest <serverrecovery.json> [--out <dir>] [--archive <encrypted-secrets.tar.gz.age>] [--output json]");
         Console.WriteLine("  powerforge-web cloudflare purge --zone-id <id> [--token <token> | --token-env <env>] [--current-manifest <path> --previous-manifest <path>] [--force-hostname-fallback | --force-hostname-fallback-reason <reason>]");
         Console.WriteLine("  powerforge-web cloudflare manifest create --site-config <site.json> --artifact <artifact.tar> --out <manifest.json>");

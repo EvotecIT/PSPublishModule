@@ -7,7 +7,7 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebCliCommandHandlers
 {
-    private const string SupportedServerActions = "inspect, plan, validate, capture, deploy, verify, scaffold, bootstrap-plan, restore-secrets-plan";
+    private const string SupportedServerActions = "inspect, plan, validate, capture, deploy, verify, scaffold, bootstrap-plan, bootstrap, restore-secrets-plan";
 
     internal static int HandleServer(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
@@ -29,6 +29,7 @@ internal static partial class WebCliCommandHandlers
                 "deploy" => HandleServerDeploy(actionArgs, outputJson, logger, outputSchemaVersion),
                 "scaffold" => HandleServerScaffold(actionArgs, outputJson, logger, outputSchemaVersion),
                 "bootstrap-plan" => HandleServerBootstrapPlan(actionArgs, outputJson, logger, outputSchemaVersion),
+                "bootstrap" => HandleServerBootstrap(actionArgs, outputJson, logger, outputSchemaVersion),
                 "restore-secrets-plan" => HandleServerRestoreSecretsPlan(actionArgs, outputJson, logger, outputSchemaVersion),
                 _ => Fail($"Unknown server action '{subArgs[0]}'. Supported actions: {SupportedServerActions}.", outputJson, logger, "web.server")
             };

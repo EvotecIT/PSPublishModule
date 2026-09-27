@@ -10,12 +10,20 @@ internal static partial class WebCliCommandHandlers
         if (loaded.Manifest is null)
             return loaded.ExitCode;
 
-        var manifest = loaded.Manifest;
-        var manifestPath = loaded.ManifestPath!;
+        return RunServerVerification(loaded.Manifest, loaded.ManifestPath!, subArgs, outputJson, logger, outputSchemaVersion);
+    }
+
+    private static int RunServerVerification(
+        PowerForgeServerRecoveryManifest manifest, string manifestPath, string[] subArgs,
+        bool outputJson, WebConsoleLogger logger, int outputSchemaVersion, string commandName = "web.server.verify")
+    {
+        var local = HasOption(subArgs, "--local");
+        if (local && HasOption(subArgs, "--ssh"))
+            throw new InvalidOperationException("Server verify cannot combine --local with --ssh.");
         var sshCommand = TryGetOptionValue(subArgs, "--ssh") ?? "ssh";
         var failOnFailure = HasOption(subArgs, "--fail-on-failure");
         var urlTimeoutSeconds = ParseIntOption(TryGetOptionValue(subArgs, "--url-timeout-seconds"), 30);
-        var target = BuildServerSshTarget(manifest.Target);
+        var target = local ? "local" : BuildServerSshTarget(manifest.Target);
         var commandResults = new List<PowerForgeServerVerifyCommandResult>();
         var urlResults = new List<PowerForgeServerVerifyUrlResult>();
         var warnings = new List<string>();
@@ -28,7 +36,9 @@ internal static partial class WebCliCommandHandlers
                 continue;
             }
 
-            var result = ExecuteRemote(sshCommand, target, command.Command ?? string.Empty);
+            var result = local
+                ? RunLocalServerScript(BuildLocalVerificationScript(command))
+                : ExecuteRemote(sshCommand, target, command.Command ?? string.Empty);
             commandResults.Add(new PowerForgeServerVerifyCommandResult
             {
                 Id = command.Id,
@@ -72,7 +82,7 @@ internal static partial class WebCliCommandHandlers
             WebCliJsonWriter.Write(new WebCliJsonEnvelope
             {
                 SchemaVersion = outputSchemaVersion,
-                Command = "web.server.verify",
+                Command = commandName,
                 Success = success || !failOnFailure,
                 ExitCode = success || !failOnFailure ? 0 : 1,
                 Config = "web.serverrecovery",
@@ -93,6 +103,11 @@ internal static partial class WebCliCommandHandlers
 
         return success || !failOnFailure ? 0 : 1;
     }
+
+    internal static string BuildLocalVerificationScript(PowerForgeServerNamedCommand command)
+        => string.IsNullOrWhiteSpace(command.WorkingDirectory)
+            ? command.Command ?? string.Empty
+            : $"cd -- {ShellQuote(command.WorkingDirectory)} && {{\n{command.Command}\n}}";
 
     private static PowerForgeServerVerifyUrlResult VerifyUrl(PowerForgeServerVerifyUrl verifyUrl, int timeoutSeconds)
     {

@@ -77,7 +77,8 @@ internal static partial class WebCliCommandHandlers
 
     internal static List<PowerForgeServerBootstrapPlanStep> BuildBootstrapPlanSteps(
         PowerForgeServerRecoveryManifest manifest,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        bool includeOperatorVerification = true)
     {
         var steps = new List<PowerForgeServerBootstrapPlanStep>();
         var plannedCommands = new HashSet<string>(StringComparer.Ordinal);
@@ -404,7 +405,8 @@ internal static partial class WebCliCommandHandlers
             PowerForgeServerSystemdActivation.AfterDeploy,
             plannedCommands);
 
-        AddStep(steps, ref order, "verify", "Run PowerForge server verify", "# Run from an operator workstation: powerforge-web server verify --manifest <manifest> --fail-on-failure", manual: true, plannedCommands: plannedCommands);
+        if (includeOperatorVerification)
+            AddStep(steps, ref order, "verify", "Run PowerForge server verify", "# Run from an operator workstation: powerforge-web server verify --manifest <manifest> --fail-on-failure", manual: true, plannedCommands: plannedCommands);
         return steps;
     }
 
@@ -751,6 +753,9 @@ internal static partial class WebCliCommandHandlers
     internal static void WriteBootstrapPlanScript(
         string path,
         IReadOnlyList<PowerForgeServerBootstrapPlanStep> steps)
+        => File.WriteAllText(path, RenderBootstrapPlanScript(steps));
+
+    internal static string RenderBootstrapPlanScript(IReadOnlyList<PowerForgeServerBootstrapPlanStep> steps)
     {
         var builder = new StringBuilder();
         builder.AppendLine("#!/usr/bin/env bash");
@@ -788,6 +793,6 @@ internal static partial class WebCliCommandHandlers
             builder.AppendLine();
         }
 
-        File.WriteAllText(path, builder.ToString().Replace("\r\n", "\n", StringComparison.Ordinal));
+        return builder.ToString().Replace("\r\n", "\n", StringComparison.Ordinal);
     }
 }

@@ -263,6 +263,42 @@ is temporary and is either committed or replayed by the next promoter invocation
 
 ## Recovery Coverage
 
+### Host-local bootstrap entrypoint
+
+Use the same reviewed server-recovery manifest for installation and recovery.
+`server bootstrap` generates the existing review plan by default; it does not
+install anything until `--apply` is supplied:
+
+```bash
+powerforge-web server bootstrap --manifest ./server-recovery.json --out ./bootstrap-review
+sudo powerforge-web server bootstrap --manifest /etc/powerforge/server-recovery.json --apply --output json
+```
+
+Apply runs on the Linux target, not over SSH. Install the reviewed manifest as a
+root-owned regular file under root-owned, non-group/world-writable ancestors.
+The installed CLI and its assemblies must also be trusted operator-owned inputs.
+Provision the manifest's protected credential files separately: do not put secret
+values in command arguments or the manifest. Keep application data, web settings,
+collector credentials, and recovery keys in their existing separate locations.
+
+The shared command reuses the planner's account, package, repository, managed-file,
+systemd, deployment, and lock ordering. It rejects unresolved manual/sensitive
+steps before applying any work, rather than partially installing an incomplete
+profile. At least one required verification command or URL is mandatory. After
+bootstrap it runs the same verification engine locally and returns failure if
+required checks fail. Local verification can also be invoked separately:
+
+```bash
+powerforge-web server verify --manifest ./server-recovery.json --local --fail-on-failure --output json
+```
+
+The command does not make whole-host bootstrap transactional. Package/account
+changes made before a later failure may remain; inspect the host and use the
+reviewed recovery plan before retrying. Service promotion still uses its existing
+transaction recovery and rollback. A profile needing interactive certificate
+issuance or a manual secret restore remains a review plan until that prerequisite
+is supplied. It does not silently skip those steps or activate DNS/private content.
+
 For a recoverable service, the repository recovery manifest should include:
 
 - the promoter and root-owned service configuration
