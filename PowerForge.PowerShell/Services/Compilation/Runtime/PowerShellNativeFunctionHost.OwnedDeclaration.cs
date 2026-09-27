@@ -76,26 +76,7 @@ namespace PowerForge.Generated.Runtime
                 !string.Equals(declaration.Body.Extent.Text.Replace("\r\n", "\n"), expected.Replace("\r\n", "\n"), StringComparison.Ordinal))
                 throw new ArgumentException("Only the exact compiler-owned declaration stub can retain shared native metadata.", nameof(name));
             var script = function.ScriptBlock;
-            var data = contract.Data.GetValue(script)!;
-            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            var unoptimized = data.GetType().GetMethod("CompileUnoptimized", flags, null, Type.EmptyTypes, null)
-                ?? throw new NotSupportedException("PowerShell's lazy declaration compilation is unavailable.");
-            var optimized = data.GetType().GetMethod("CompileOptimized", flags, null, Type.EmptyTypes, null)
-                ?? throw new NotSupportedException("PowerShell's optimized declaration compilation is unavailable.");
-            // These native operations retain security checks and normal compilation locks/flags, but
-            // leave parameter metadata initialization to the engine's ordinary command lookup/binder.
-            // Only generated stubs share this data; the general authored-body owner stays independent.
-            lock (data)
-            {
-                Invoke(unoptimized, data, Array.Empty<object>());
-                Invoke(optimized, data, Array.Empty<object>());
-                if (functionTypeDeclarations.Length != 0) RegisterFunctionEnumScope(script, data);
-                if (begin != null) contract.Install(data, "BeginBlock", begin);
-                if (process != null) contract.Install(data, "ProcessBlock", process);
-                if (end != null || begin == null && process == null)
-                    contract.Install(data, "EndBlock", end ?? (_ => { }));
-            }
-            return script;
+            return InstallLazyCompiledClauses(script, begin, process, end, functionTypeDeclarations);
         }
     }
 }

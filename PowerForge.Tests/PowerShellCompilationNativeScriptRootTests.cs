@@ -16,7 +16,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var source = probeAst.FindAll(static node => node is System.Management.Automation.Language.StringConstantExpressionAst,
                 searchNestedScriptBlocks: true).OfType<System.Management.Automation.Language.StringConstantExpressionAst>()
             .Single(static literal => literal.Value.StartsWith("param([ValidateScript", System.StringComparison.Ordinal)).Value;
-        using var fixture = ArtifactFixture.Create(source);
+        using var fixture = ArtifactFixture.Create(source + System.Environment.NewLine);
         var profile = framework == "net472"
             ? PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId
             : PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;
@@ -28,12 +28,18 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.NotNull(method.NativeFunctionBinding);
         var generated = new System.Text.StringBuilder("#nullable enable\nnamespace Generic.Compiler.StatementErrors;\npublic static class CompiledRoot {\n")
             .AppendLine(method.Source)
-            .AppendLine("public static global::System.Management.Automation.ExternalScriptInfo Create(string path) => NativeScriptEntryFixture.Create(path, context => {")
+            .AppendLine("public static global::System.Management.Automation.ExternalScriptInfo Create(global::System.Management.Automation.SessionState session, string path) {")
+            .AppendLine("NativeScriptEntryFixture.CallbackInvocations = 0;")
+            .Append("return global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.CreateScriptEntry(session, path, ")
+            .Append(PowerShellCSharpLiteral.QuoteString(System.Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(System.IO.File.ReadAllText(fixture.ScriptPath)))).ToLowerInvariant()))
+            .AppendLine(", context => {")
+            .AppendLine("NativeScriptEntryFixture.CallbackInvocations++;")
             .AppendLine("var clause = 2;");
         PowerShellNativeCallbackSource.AppendBody(generated, "    ", method.GeneratedName, "<script>",
             method.RequiresPowerShellStatementErrors, method.RequiresPowerShellStopping,
             method.RequiresPowerShellStreams, method.ReturnType == typeof(void), method.ReturnType.IsArray);
-        generated.AppendLine("});\n}");
+        generated.AppendLine("});\n}\n}");
         var projectRoot = System.IO.Path.GetDirectoryName(fixture.ScriptPath)!;
         var repositoryRoot = System.IO.Path.GetFullPath(System.IO.Path.Combine(fixtureRoot, "..", "..", ".."));
         var project = System.IO.Path.Combine(projectRoot, "NativeRoot.csproj");

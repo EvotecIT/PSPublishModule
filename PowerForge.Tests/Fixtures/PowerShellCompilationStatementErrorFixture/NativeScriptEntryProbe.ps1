@@ -1,4 +1,4 @@
-param([string]$Assembly, [string]$Factory = 'Generic.Compiler.StatementErrors.NativeScriptEntryFixture')
+param([string]$Assembly, [string]$Factory = 'Generic.Compiler.StatementErrors.CompiledRoot')
 $tempRoot=[IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $taskRoot=Join-Path $tempRoot ('pfc-native-script-entry-'+[guid]::NewGuid().ToString('N'))
 if(-not [IO.Path]::GetFullPath($taskRoot).StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase)){throw 'Probe output escaped its temporary root.'}
@@ -32,8 +32,8 @@ foreach($compiled in @($false,$true)) {
   $null=$ps.AddScript('$global:BindCount=0;$global:ValidateCount=0');$null=$ps.Invoke();$ps.Commands.Clear()
   try {
    if($compiled){
-    $null=$ps.AddScript('param($Info,$Named,$Positional) try { & $Info @Named @Positional } catch { throw }', $false)
-    $null=$ps.AddParameter('Info',$entryFactory::Create($Source))
+    $null=$ps.AddScript('param($Factory,$Path,$Named,$Positional) try { $Info = $Factory::Create($ExecutionContext.SessionState,$Path); & $Info @Named @Positional } catch { throw }', $false)
+    $null=$ps.AddParameter('Factory',$entryFactory);$null=$ps.AddParameter('Path',$Source)
     $named=@{};if($arguments.Count){$named['Value']=$arguments[1]}
     $extra=@();if($arguments.Count -gt 2){$extra=@($arguments[2])}
     $null=$ps.AddParameter('Named',$named);$null=$ps.AddParameter('Positional',$extra)
@@ -67,8 +67,8 @@ foreach($compiled in @($false,$true)) {
  $ps=[powershell]::Create();$ps.Runspace=$runspace
  try {
   if($compiled){
-   $null=$ps.AddScript('param($Info) try { & $Info -Value reject } catch { throw }', $false)
-   $null=$ps.AddParameter('Info',$entryFactory::Create($Source))
+   $null=$ps.AddScript('param($Factory,$Path) try { $Info = $Factory::Create($ExecutionContext.SessionState,$Path); & $Info -Value reject } catch { throw }', $false)
+   $null=$ps.AddParameter('Factory',$entryFactory);$null=$ps.AddParameter('Path',$Source)
   }else{$null=$ps.AddCommand($Source);$null=$ps.AddParameter('Value','reject')}
   $caught=$null
   try{$rejectedRecords=@($ps.Invoke())}catch{$caught=$_.Exception}

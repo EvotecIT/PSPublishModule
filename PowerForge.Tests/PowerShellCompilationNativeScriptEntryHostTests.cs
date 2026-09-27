@@ -5,7 +5,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
-    public void NativeScriptEntry_PreservesSingleBindingLiveStorageAndAuthoredContext(string framework, string host)
+    public void NativeScriptEntry_PreservesAuthorizationAndRejectsUnqualifiedSourceAndLanguage(string framework, string host)
     {
         var project = FindStatementErrorFixtureProject();
         var build = RunProcess("dotnet", "build", project, "-c", "Release", "-f", framework, "--nologo");
@@ -13,9 +13,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var root = Path.GetDirectoryName(project)!;
         var assembly = Path.Combine(root, "bin", "Release", framework, "Generic.Compiler.StatementErrors.dll");
         var result = RunProcess(host, "-NoProfile", "-NonInteractive", "-File",
-            Path.Combine(root, "NativeScriptEntryProbe.ps1"), "-Assembly", assembly);
+            Path.Combine(root, "NativeScriptEntryPolicyProbe.ps1"), "-Assembly", assembly);
         Assert.True(result.ExitCode == 0, result.StandardOutput + result.StandardError);
         Assert.True(string.IsNullOrWhiteSpace(result.StandardError), result.StandardError);
-        Assert.Contains("Native script entry scope/binding comparison passed: 4 cases plus binding rejection.", result.StandardOutput);
+        Assert.Contains("Native script entry policy comparison passed:", result.StandardOutput);
     }
+
 }
