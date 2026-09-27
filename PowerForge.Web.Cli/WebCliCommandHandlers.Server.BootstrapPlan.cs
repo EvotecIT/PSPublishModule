@@ -260,7 +260,7 @@ internal static partial class WebCliCommandHandlers
         {
             if (string.IsNullOrWhiteSpace(command.Command))
                 throw new InvalidOperationException($"Bootstrap command '{command.Id}' must contain a non-whitespace command.");
-            AddStep(steps, ref order, "bootstrap", command.Id ?? "bootstrap command", command.Command, command.Sensitive, plannedCommands: plannedCommands);
+            AddStep(steps, ref order, "bootstrap", command.Id ?? "bootstrap command", BuildScopedServerCommand(command), command.Sensitive, plannedCommands: plannedCommands);
         }
 
         var apacheModules = manifest.Packages?.ApacheModules ?? manifest.Apache?.Modules ?? Array.Empty<string>();
@@ -369,9 +369,7 @@ internal static partial class WebCliCommandHandlers
         {
             if (string.IsNullOrWhiteSpace(command.Command))
                 throw new InvalidOperationException($"Deploy command '{command.Id}' must contain a non-whitespace command.");
-            var shell = string.IsNullOrWhiteSpace(command.WorkingDirectory)
-                ? command.Command
-                : $"cd {ShellQuote(command.WorkingDirectory)} && {command.Command}";
+            var shell = BuildScopedServerCommand(command);
             AddStep(
                 steps,
                 ref order,
@@ -788,6 +786,9 @@ internal static partial class WebCliCommandHandlers
             else
             {
                 builder.AppendLine(step.Command);
+                // Non-final &&/|| commands are exempt from errexit; check the whole step's status too.
+                builder.AppendLine("powerforge_step_status=$?");
+                builder.AppendLine("if [ \"$powerforge_step_status\" -ne 0 ]; then exit \"$powerforge_step_status\"; fi");
             }
 
             builder.AppendLine();

@@ -42,6 +42,47 @@ public sealed class ServerRecoveryBootstrapCommandTests
         Assert.Throws<InvalidOperationException>(() => WebCliCommandHandlers.BuildExecutableBootstrapScript(manifest));
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not-a-url")]
+    [InlineData("file:///etc/passwd")]
+    [InlineData("https://name:password@example.test/")]
+    public void ApplyProgram_RejectsInvalidVerificationUrlsBeforeExecution(string? address)
+    {
+        var manifest = VerifiedManifest();
+        manifest.Verify = new() { Urls = [new() { Url = address }] };
+        Assert.Throws<InvalidOperationException>(() => WebCliCommandHandlers.BuildExecutableBootstrapScript(manifest));
+    }
+
+    [Fact]
+    public void StepFailure_StopsAndListAndWorkingDirectoryFailuresOnLinux()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        foreach (var failingCommand in new[] { "false && printf unexpected", "cd /no-such-powerforge-directory && printf unexpected" })
+        {
+            var script = WebCliCommandHandlers.RenderBootstrapPlanScript([
+                new() { Order = 1, Command = failingCommand }, new() { Order = 2, Command = "printf mutation" }
+            ]);
+            var result = WebCliCommandHandlers.RunLocalServerScript(script);
+            Assert.NotEqual(0, result.ExitCode);
+            Assert.Empty(result.Stdout);
+        }
+    }
+
+    [Fact]
+    public void BootstrapWorkingDirectory_IsDeclaredAndDoesNotAffectNextStepOnLinux()
+    {
+        var manifest = VerifiedManifest();
+        manifest.Bootstrap = new() { Commands = [new() { Id = "cwd", Command = "pwd", WorkingDirectory = "/" }, new() { Id = "next", Command = "pwd" }] };
+        var steps = WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        Assert.Contains("cd -- '/'", steps.Single(step => step.Title == "cwd").Command);
+        if (!OperatingSystem.IsLinux()) return;
+        var result = WebCliCommandHandlers.RunLocalServerScript(WebCliCommandHandlers.BuildExecutableBootstrapScript(manifest));
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("/\n" + Directory.GetCurrentDirectory() + "\n", result.Stdout);
+    }
+
     [Fact]
     public void LocalProgram_PreservesOrderingStdinIsolationAndFailureOnLinux()
     {

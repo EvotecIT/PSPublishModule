@@ -58,6 +58,10 @@ internal static partial class WebCliCommandHandlers
             throw new InvalidOperationException("Bootstrap --apply requires at least one required verification command or URL.");
         if (verification.Commands?.Any(static command => command.Sensitive || string.IsNullOrWhiteSpace(command.Command)) == true)
             throw new InvalidOperationException("Bootstrap verification cannot contain skipped sensitive or empty commands.");
+        if (verification.Urls?.Any(static url => !Uri.TryCreate(url.Url, UriKind.Absolute, out var address) ||
+            address.Scheme is not ("http" or "https") || address.UserInfo.Length > 0 ||
+            url.ExpectedStatus is < 100 or > 599) == true)
+            throw new InvalidOperationException("Bootstrap verification requires valid HTTP(S) URLs without credentials and valid expected status codes.");
         return RenderBootstrapPlanScript(steps);
     }
 

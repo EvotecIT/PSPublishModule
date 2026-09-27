@@ -37,7 +37,7 @@ internal static partial class WebCliCommandHandlers
             }
 
             var result = local
-                ? RunLocalServerScript(BuildLocalVerificationScript(command))
+                ? RunLocalServerScript(BuildScopedServerCommand(command))
                 : ExecuteRemote(sshCommand, target, command.Command ?? string.Empty);
             commandResults.Add(new PowerForgeServerVerifyCommandResult
             {
@@ -104,10 +104,10 @@ internal static partial class WebCliCommandHandlers
         return success || !failOnFailure ? 0 : 1;
     }
 
-    internal static string BuildLocalVerificationScript(PowerForgeServerNamedCommand command)
+    internal static string BuildScopedServerCommand(PowerForgeServerNamedCommand command)
         => string.IsNullOrWhiteSpace(command.WorkingDirectory)
             ? command.Command ?? string.Empty
-            : $"cd -- {ShellQuote(command.WorkingDirectory)} && {{\n{command.Command}\n}}";
+            : $"( cd -- {ShellQuote(command.WorkingDirectory)} && {{\n{command.Command}\n}} )";
 
     private static PowerForgeServerVerifyUrlResult VerifyUrl(PowerForgeServerVerifyUrl verifyUrl, int timeoutSeconds)
     {
