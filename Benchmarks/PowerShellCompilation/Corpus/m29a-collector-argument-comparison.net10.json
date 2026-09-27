@@ -1,0 +1,396 @@
+{
+  "packets": [
+    {
+      "packet": "pssg",
+      "resourceMode": "CompleteModule",
+      "functions": 282,
+      "emitted": 271,
+      "retained": 11,
+      "baselineSourceFingerprint": "f79df7d81da0fc78eaa16684f56cfde41ad5e7017a27d7926d21c9681a5769fd",
+      "semanticFingerprint": "c3b6bf454192e9fd74b7d4932eed898c9cbbf2d00f0e4e625385700a31e770cb",
+      "explanationSha256": "222a918ac156fc38984b2c56fceac060abf099287e67cc2b110acbb7d582db11",
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [],
+      "elapsedSeconds": 28.64
+    },
+    {
+      "packet": "cleanup",
+      "resourceMode": "CompleteModule",
+      "functions": 68,
+      "emitted": 64,
+      "retained": 4,
+      "baselineSourceFingerprint": "f61ee0bc114ead41793c9a810955f0c799fd42c6143c73c208c43499bbd3e71b",
+      "semanticFingerprint": "5300b7400f489b875243feed87c2ad1236bd28d9ab79ed7dc278cd85d8732003",
+      "explanationSha256": "f35d5bcf42a429124ba4a76ac96d35f3ec2a6a41354119fe72df9ba1677b18cc",
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [],
+      "elapsedSeconds": 15.34
+    },
+    {
+      "packet": "pinf",
+      "resourceMode": "Declared",
+      "functions": 66,
+      "emitted": 65,
+      "retained": 1,
+      "baselineSourceFingerprint": "7d47e79fa51f82d51495c04dea2af260f86da92e1189375b3c66e89c258eaba8",
+      "semanticFingerprint": "3f84fd01e3a698bd5386822e8401141d0930c238ebfd9af2c3fedfedac3a811f",
+      "explanationSha256": "35f6919cdd439a762a9284cc3a90d32d6f984621307cafd753e71f40c9bc3d53",
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [],
+      "elapsedSeconds": 7.33
+    },
+    {
+      "packet": "pst",
+      "resourceMode": "CompleteModule",
+      "functions": 109,
+      "emitted": 95,
+      "retained": 14,
+      "baselineSourceFingerprint": "17c8fd2417c6212fb4b8a529dc4074231b62598027ed4af3932a1583746425e3",
+      "semanticFingerprint": "103e4468378fb48d1d4a95b10f09f9c11b00f4008a80aa354cf343fab92471e5",
+      "explanationSha256": "c13a86c8f0d83ac6249cd4e7c3b8e3d003dc4e349a3ec8f51c1e1dbba85af8ae",
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [],
+      "elapsedSeconds": 18.21
+    },
+    {
+      "packet": "platyps",
+      "resourceMode": "Declared",
+      "functions": 40,
+      "emitted": 27,
+      "retained": 13,
+      "baselineSourceFingerprint": "adea968352a517d19e1367771bee576a543d1cfed5ad7ca2a118c47a1a7103ef",
+      "semanticFingerprint": "1a13f6624f90a07f02fe56a5415c4816054325be345db03dca6dec11ab8dfa34",
+      "explanationSha256": "f3a8acb7feecc018adfe9d5daf63170ea3af30eed2b718cb1426d9e2346c005f",
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [],
+      "elapsedSeconds": 21.93
+    }
+  ],
+  "changedDispositions": [],
+  "verifiedFunctionIdentities": 565,
+  "observedStableUnits": 584,
+  "candidateEmitted": 522,
+  "candidateRetained": 43,
+  "schemaVersion": 1,
+  "purpose": "Qualified closed native statement subexpressions in scalar/vector caught method arguments; shared switch input position owner",
+  "baselineCompilerCommit": "a92bb59862dd74fd2c820ba0bab144c69369a17e",
+  "baselineDispositionLedger": "m29a-local-enum-comparison.net10.json",
+  "baselineEmitted": 522,
+  "retainedInventorySha256": "f4295c36c5b768829928345de88e21bfab34ab46b4819a988e24425e68d0d1bc",
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellSemanticAnalyzer.ValueConsumption.cs": "ed72489e5cad2151d440b844a09caecd25d6bff1e5ae316bd89c30091e819bb2",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.ControlFlow.cs": "f7e3f0efb8f666571db0a399a4bbaa21ce569c8c75358a1aba00a3b2229683a9",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellControlFlowBindingPolicy.cs": "603da1db5a137290b482a45ecee7d72c9c732a96f888e27d4aa6628c1f47fbc8",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "b23fc8abaf8fe5570e34398b46e3843d3a0f5082555c3255de4054afec8aec8e",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.StatementValues.cs": "269bb1542fa07e176bac844b33852fde5106129dcd3763236a4461e4acaf4c33",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Switch.cs": "de56802f0a646208c0f190642234e6d2186903963148f741a3c598fc94ea13f3",
+    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundControlFlow.cs": "3c5bc5a765a429f03feee5a5fe03304ed0016511a5bb8ecbadc45db91ad5cefb",
+    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundStatementRewriter.cs": "3807244ec5f24d7a96c9902c0a3d645064dc2fb72a860a40caa96d30c02d100e",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredControlFlow.cs": "ec7e5db974cf1608706348bbcab65683e534948e48ef062ba842bfe8a1fddf07",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.cs": "6539ad53759779357d9616dd55ecd28e4064260d4361d5d5a5218d6c07733837",
+    "PowerForge.Tests/PowerShellCompilationCollectorArgumentTests.cs": "2182c56f6e78219409dac5bb31c8254d83919eb3e761d732555b0d726a46e2dc"
+  },
+  "dispositionContract": "Use all 565 baseline function identities from the web-session ledger and current 43 retained dispositions. All identities and 584 units match; no complete-method or still-retained-region loss.",
+  "executionProof": {
+    "hosts": [
+      "PowerShell7/net10.0 Windows",
+      "WindowsPowerShell5.1/net472"
+    ],
+    "finalJsonObservationsPerHost": 114,
+    "collectorFamilies": [
+      "switch",
+      "try",
+      "foreach",
+      "for",
+      "while",
+      "do-while",
+      "do-until"
+    ],
+    "primaryCollectorObservationsPerHost": 105,
+    "commandProviderObservationsPerHost": 8,
+    "downstreamStopObservationsPerHost": 1,
+    "qualifiedContracts": [
+      "Zero/one/multiple success records, invalid scalar and authored Type values, caught conversion errors with exact line/column/ID/type/message",
+      "Local break/continue, authored catch and finally output, ordered side effects and cleanup",
+      "Offline command providers with Stop/SilentlyContinue, ErrorVariable and global Error records",
+      "Select-Object -First1 downstream stop preserves provider trace and authored finally"
+    ],
+    "newExecutedCompleteWorkloadFunctions": [],
+    "syntheticCompiledFunctions": 2,
+    "existingWorkloadCompatibility": [
+      "Pinned unchanged CleanupMonster inventory-attempt offline wrapper",
+      "Pinned unchanged PSScriptTools formatting workflows"
+    ]
+  },
+  "validation": {
+    "focusedCompatibility": {
+      "file": "collector-final-focused.trx",
+      "sha256": "7e5c93bee03a4eaf70e0f919869385481c770e5bb8467cdb2b51ab615ea68463",
+      "counters": {
+        "total": "43",
+        "executed": "43",
+        "passed": "43",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "times": {
+        "creation": "2026-09-27T16:25:29.4243475+02:00",
+        "queuing": "2026-09-27T16:25:29.4243477+02:00",
+        "start": "2026-09-27T16:25:08.0136221+02:00",
+        "finish": "2026-09-27T16:27:01.3025865+02:00"
+      }
+    },
+    "finalCollectorAndBoundaryChecks": {
+      "file": "collector-stop-final.trx",
+      "sha256": "cf7129e6ad9c07a9cf927b7a15bfce27364ace562ab24a16863c641e57ee6bb5",
+      "counters": {
+        "total": "9",
+        "executed": "9",
+        "passed": "9",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "times": {
+        "creation": "2026-09-27T16:29:12.5623662+02:00",
+        "queuing": "2026-09-27T16:29:12.5623663+02:00",
+        "start": "2026-09-27T16:29:10.7472069+02:00",
+        "finish": "2026-09-27T16:29:24.0540104+02:00"
+      }
+    },
+    "net472Build": {
+      "succeeded": true,
+      "warnings": 0,
+      "errors": 0,
+      "elapsedSeconds": 6.73,
+      "logSha256": "3e738b848728424c79366d85ed8fa2e06f4257b949d003b9e16a8c73dca918fb"
+    },
+    "finalSourceCensus": true,
+    "fullAggregateGateRepeated": false
+  },
+  "failureAccounting": [
+    {
+      "file": "collector-baseline.trx",
+      "sha256": "8b5effdc6d7383cb4ef390511c5a2b37ddd69d45a6a3bf6e5aa74e2b882d2408",
+      "counters": {
+        "total": "2",
+        "executed": "2",
+        "passed": "0",
+        "failed": "2",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "times": {
+        "creation": "2026-09-27T16:15:07.9181760+02:00",
+        "queuing": "2026-09-27T16:15:07.9181765+02:00",
+        "start": "2026-09-27T16:14:47.7318369+02:00",
+        "finish": "2026-09-27T16:15:10.1734639+02:00"
+      }
+    },
+    {
+      "file": "collector-bind.trx",
+      "sha256": "831da99d44944bc17a6f45a8689db32af5f0756611e25a9c1dd4f6b7873ae902",
+      "counters": {
+        "total": "2",
+        "executed": "2",
+        "passed": "0",
+        "failed": "2",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "times": {
+        "creation": "2026-09-27T16:16:49.0948903+02:00",
+        "queuing": "2026-09-27T16:16:49.0948904+02:00",
+        "start": "2026-09-27T16:16:43.8761932+02:00",
+        "finish": "2026-09-27T16:16:50.8229179+02:00"
+      }
+    },
+    {
+      "file": "collector-expanded.trx",
+      "sha256": "f8f3f33b9aec0b2f10de0551bccdff8c3537e7bda12d016b969c239230d315e9",
+      "counters": {
+        "total": "7",
+        "executed": "7",
+        "passed": "7",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "times": {
+        "creation": "2026-09-27T16:23:28.6630663+02:00",
+        "queuing": "2026-09-27T16:23:28.6630664+02:00",
+        "start": "2026-09-27T16:23:26.8175395+02:00",
+        "finish": "2026-09-27T16:23:38.2855426+02:00"
+      }
+    },
+    {
+      "file": "collector-position-repro.trx",
+      "sha256": "beecd90d377a7997cf09066d627fabab9b830b4a8e7152a40e90e606e858e24e",
+      "counters": {
+        "total": "2",
+        "executed": "2",
+        "passed": "0",
+        "failed": "2",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "times": {
+        "creation": "2026-09-27T16:19:08.8026923+02:00",
+        "queuing": "2026-09-27T16:19:08.8026926+02:00",
+        "start": "2026-09-27T16:19:02.0048077+02:00",
+        "finish": "2026-09-27T16:19:12.1696600+02:00"
+      }
+    },
+    {
+      "file": "collector-switch-position.trx",
+      "sha256": "1ec26d72d05e0fac490c8ed9f5c71b533fb81845f71c15dcedeb7626b8fa6d31",
+      "counters": {
+        "total": "2",
+        "executed": "2",
+        "passed": "2",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "times": {
+        "creation": "2026-09-27T16:22:24.8784578+02:00",
+        "queuing": "2026-09-27T16:22:24.8784579+02:00",
+        "start": "2026-09-27T16:22:17.6870270+02:00",
+        "finish": "2026-09-27T16:22:28.5151973+02:00"
+      }
+    },
+    {
+      "file": "collector-value-use.trx",
+      "sha256": "64cce2022af032a8534de41052ebb4707e048f44b221e21432561ad006def2d9",
+      "counters": {
+        "total": "2",
+        "executed": "2",
+        "passed": "0",
+        "failed": "2",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "times": {
+        "creation": "2026-09-27T16:18:15.6238327+02:00",
+        "queuing": "2026-09-27T16:18:15.6238329+02:00",
+        "start": "2026-09-27T16:18:08.7622854+02:00",
+        "finish": "2026-09-27T16:18:19.2548862+02:00"
+      }
+    }
+  ],
+  "designDispositions": [
+    "Initial baseline emitted zero methods on both targets.",
+    "Initial shared transfer helper accepted StatementAst only; generalized its AST boundary without changing transfer resolution.",
+    "Flattened value-use analysis rejected an output-free for iterator. Preserve statement-root context while checking nested consumed arguments.",
+    "First executed candidate mismatched 8/105 switch error coordinates per host. Advance the input point on each native switch enumerator step, including final false and local continue.",
+    "The 43/43 compatibility cohort used 113 observations before the sole later test-driver addition; the final9/9 run includes downstream-stop proof at114 observations. Production is identical in both runs."
+  ],
+  "review": {
+    "scope": "One fresh independent read-only staged pass",
+    "findingCount": 0,
+    "reviewedPatchGitBlob": "50af1503b370e3ac83a6d53837cc5a918f1a33a6",
+    "finalPatchGitBlob": "60ac67637ee027e395fcf68cf464fd283b3df5ea",
+    "boundary": "candidate-reviewed: unchanged production plus one later validation-only downstream-stop observation",
+    "limits": "Static review only; runtime and census evidence supplied by coordinator. Later downstream-stop driver observation was outside the reviewed staged patch."
+  },
+  "limits": [
+    "Hybrid SDK operations remain host-owned; no runtime-free translation claim",
+    "Explicit return/trap, escaping or labeled loop transfers, unavailable catch types and unsupported switch forms retain guards",
+    "New statement capture route is for $() subexpressions, not arbitrary direct statement-valued arguments or a new @() declaration family",
+    "No additional complete pinned function; synthetic methods do not count as workload coverage",
+    "No raw CLR enumerator failure, nested callback escape or general cancellation qualification in this new collector packet",
+    "Five-packet census is net10.0 only; focused artifacts execute on both Windows hosts",
+    "No network, AD, administration, external process workflow, full-module execution, performance, non-Windows or reviewed dependency lock claim"
+  ],
+  "failedBuild": {
+    "file": "first.log",
+    "sha256": "2e578e1bdf382fb65af1dde78989e16696f300ad950a953c0aac72068cda4ea8",
+    "reason": "Initial collector admission build failed CS1503 because transfer helper accepted StatementAst; generalized its boundary to Ast before all passing proof."
+  }
+}

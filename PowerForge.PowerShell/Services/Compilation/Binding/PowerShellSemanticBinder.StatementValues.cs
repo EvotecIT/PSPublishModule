@@ -4,6 +4,43 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellSemanticBinder
 {
+    private static bool RequiresNativeStatementCapture(SubExpressionAst syntax)
+        => syntax.SubExpression.Find(static node => node is SwitchStatementAst or TryStatementAst or LoopStatementAst,
+            searchNestedScriptBlocks: false) is not null;
+
+    private static bool IsWithinNativeStatementCapture(Ast syntax, Ast boundary)
+    {
+        for (var parent = syntax.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent is SubExpressionAst collection && RequiresNativeStatementCapture(collection)) return true;
+            if (ReferenceEquals(parent, boundary)) return false;
+        }
+        return false;
+    }
+
+    /// <summary>Collects bounded statement subexpressions through the existing success-stream and control-flow owner.</summary>
+    private PowerShellBoundExpression? BindNativeCollectedStatements(ParsedSourceDocument document, SubExpressionAst syntax,
+        IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics, string? targetFramework,
+        PowerShellCompilationCapability capabilities)
+    {
+        var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) ||
+            !capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) ||
+            syntax.FindAll(static node => node is ReturnStatementAst or TrapStatementAst, false).Any() ||
+            PowerShellControlFlowBindingPolicy.HasLoopTransferLeavingCapture(syntax))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2506",
+                "Native statement subexpressions require the success-stream host and a closed enclosing-transfer boundary without traps.", span));
+            return null;
+        }
+        var body = BindBlock(document, syntax.SubExpression, symbols, functions, diagnostics, targetFramework,
+            capabilities, allowNonTerminalSuccessOutput: true);
+        return body is null ? null : new PowerShellBoundNativeStatementValueExpression(span,
+            PowerShellImplicitOutputPass.NormalizeNativeCapture(body, document.Path, document.Text));
+    }
+
     /// <summary>Binds an if-valued RHS without losing PowerShell's zero-versus-null success cardinality.</summary>
     private PowerShellBoundExpression? BindNativeConditionalValue(ParsedSourceDocument document, IfStatementAst syntax,
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,

@@ -136,7 +136,8 @@ internal sealed class PowerShellLoweredSwitchStatement : PowerShellLoweredStatem
         PowerShellLoweredStatement[]? defaultStatements,
         PowerShellBoundSwitchMatchMode matchMode,
         bool caseSensitive,
-        PowerShellBoundSwitchInputKind inputKind = PowerShellBoundSwitchInputKind.Scalar)
+        PowerShellBoundSwitchInputKind inputKind = PowerShellBoundSwitchInputKind.Scalar,
+        string nativeSourcePath = "", string nativeInputSourceText = "")
         : base(span)
     {
         Value = value;
@@ -145,6 +146,8 @@ internal sealed class PowerShellLoweredSwitchStatement : PowerShellLoweredStatem
         MatchMode = matchMode;
         CaseSensitive = caseSensitive;
         InputKind = inputKind;
+        NativeSourcePath = nativeSourcePath;
+        NativeInputSourceText = nativeInputSourceText;
     }
 
     internal PowerShellLoweredExpression Value { get; }
@@ -153,6 +156,8 @@ internal sealed class PowerShellLoweredSwitchStatement : PowerShellLoweredStatem
     internal PowerShellBoundSwitchMatchMode MatchMode { get; }
     internal bool CaseSensitive { get; }
     internal PowerShellBoundSwitchInputKind InputKind { get; }
+    internal string NativeSourcePath { get; }
+    internal string NativeInputSourceText { get; }
 }
 
 internal sealed class PowerShellLoweredThrowStatement : PowerShellLoweredStatement

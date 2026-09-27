@@ -92,6 +92,9 @@ internal sealed partial class PowerShellSemanticBinder
             case IfStatementAst conditional when capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding):
                 return BindNativeConditionalValue(document, conditional, symbols, functions, diagnostics,
                     targetFramework, capabilities, contextualType == typeof(object));
+            case SubExpressionAst subexpression when capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                RequiresNativeStatementCapture(subexpression):
+                return BindNativeCollectedStatements(document, subexpression, symbols, functions, diagnostics, targetFramework, capabilities);
             case SubExpressionAst subexpression when capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding):
                 return PowerShellArraySemanticBinder.BindNativeSubexpression(document, subexpression,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
@@ -472,8 +475,7 @@ internal sealed partial class PowerShellSemanticBinder
 
     private static bool HasClosedEncodingVectorArgumentCatchAll(InvokeMemberExpressionAst invocation)
     {
-        // Conditional collectors preserve their latest authored position.
-        // Other statement-valued argument families retain their own boundary.
+        // Qualified collectors preserve their authored output/error ownership.
         if (invocation.Arguments is null || HasUnqualifiedStatementValuedNativeArguments(invocation)) return false;
         // The one-value base64 entry point retains SDK byte-vector conversion.
         // Modern CLR reflection also exposes optional Span overloads, so it
@@ -502,7 +504,8 @@ internal sealed partial class PowerShellSemanticBinder
 
     private static bool HasUnqualifiedStatementValuedNativeArguments(InvokeMemberExpressionAst invocation)
         => invocation.Arguments?.Any(static argument => argument.FindAll(
-            static node => node is SwitchStatementAst or TryStatementAst or LoopStatementAst,
+            node => (node is SwitchStatementAst or TryStatementAst or LoopStatementAst) &&
+                !IsWithinNativeStatementCapture(node, argument),
             searchNestedScriptBlocks: false).Any()) == true;
 
     private static bool CanAcceptNativeArgumentCount(System.Reflection.ParameterInfo[] parameters, int count)

@@ -43,6 +43,20 @@ internal sealed partial class PowerShellSemanticAnalyzer
             IReadOnlyDictionary<string, PowerShellBoundFunction> functions, bool consumesValue)
         {
             if (consumesValue && ResolveType(expression, functions).ClrType == typeof(void)) return expression;
+            if (expression is PowerShellBoundNativeStatementValueExpression captured)
+            {
+                // The collector owns authored statements, not a flat list of
+                // consumed operands. Loop initializer/iterator and void calls
+                // can execute without output; their nested arguments still
+                // require values under the ordinary statement contract.
+                foreach (var statement in EnumerateStatements(captured.Body))
+                foreach (var root in EnumerateDirectExpressions(statement))
+                {
+                    var invalid = FindVoidValueUse(root, functions, !AllowsOutputFreeRoot(statement, root));
+                    if (invalid is not null) return invalid;
+                }
+                return null;
+            }
             // Native collected items are authored statements. Their roots may execute
             // without output; operands and arguments within those roots still need values.
             foreach (var child in EnumerateExpressionChildren(expression))

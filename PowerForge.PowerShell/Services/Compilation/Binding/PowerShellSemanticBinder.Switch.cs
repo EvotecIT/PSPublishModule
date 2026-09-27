@@ -178,7 +178,8 @@ internal sealed partial class PowerShellSemanticBinder
             matchMode,
             (statement.Flags & SwitchFlags.CaseSensitive) != 0,
             nativeRuntimeValues ? PowerShellBoundSwitchInputKind.NativeRuntimeValues :
-            nativeCommandResults ? PowerShellBoundSwitchInputKind.NativeCommandResults : PowerShellBoundSwitchInputKind.Scalar);
+            nativeCommandResults ? PowerShellBoundSwitchInputKind.NativeCommandResults : PowerShellBoundSwitchInputKind.Scalar,
+            document.Path, PowerShellSourceParser.GetSourceLines(document, value.Span));
     }
 
     private static bool IsClosedNativeCommandSwitchClause(StatementBlockAst body)

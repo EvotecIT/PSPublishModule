@@ -172,7 +172,8 @@ internal sealed class PowerShellBoundSwitchStatement : PowerShellBoundStatement
         PowerShellBoundBlock? defaultBlock,
         PowerShellBoundSwitchMatchMode matchMode,
         bool caseSensitive,
-        PowerShellBoundSwitchInputKind inputKind = PowerShellBoundSwitchInputKind.Scalar)
+        PowerShellBoundSwitchInputKind inputKind = PowerShellBoundSwitchInputKind.Scalar,
+        string nativeSourcePath = "", string nativeInputSourceText = "")
         : base(
             span,
             clauses.Aggregate(value.Effects | (defaultBlock?.Effects ?? PowerShellSemanticEffect.None) |
@@ -190,6 +191,8 @@ internal sealed class PowerShellBoundSwitchStatement : PowerShellBoundStatement
         MatchMode = matchMode;
         CaseSensitive = caseSensitive;
         InputKind = inputKind;
+        NativeSourcePath = nativeSourcePath;
+        NativeInputSourceText = nativeInputSourceText;
     }
 
     internal PowerShellBoundExpression Value { get; }
@@ -198,6 +201,8 @@ internal sealed class PowerShellBoundSwitchStatement : PowerShellBoundStatement
     internal PowerShellBoundSwitchMatchMode MatchMode { get; }
     internal bool CaseSensitive { get; }
     internal PowerShellBoundSwitchInputKind InputKind { get; }
+    internal string NativeSourcePath { get; }
+    internal string NativeInputSourceText { get; }
 }
 
 internal sealed class PowerShellBoundThrowStatement : PowerShellBoundStatement

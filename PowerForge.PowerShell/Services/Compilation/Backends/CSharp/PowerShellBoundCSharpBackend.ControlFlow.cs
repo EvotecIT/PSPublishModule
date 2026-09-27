@@ -216,7 +216,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
             }
             else
                 builder.Append(prefix).Append("    ").Append(scope).Append(".Initialize(").Append(EmitExpression(statement.Value)).AppendLine(");");
-            builder.Append(prefix).Append("    while (").Append(scope).AppendLine(".Cursor.MoveNext())");
+            // The SDK advances the switch input position on every enumerator
+            // step, including the final false result and after local continue.
+            builder.Append(prefix).Append("    while (")
+                .Append(EmitNativeExpressionPosition(scope + ".Cursor.MoveNext()", statement.Value.Span,
+                    statement.NativeSourcePath, statement.NativeInputSourceText)).AppendLine(")");
             builder.Append(prefix).AppendLine("    {");
             builder.Append(prefix).AppendLine("        try");
             builder.Append(prefix).AppendLine("        {");

@@ -33,7 +33,7 @@ internal static class PowerShellControlFlowBindingPolicy
         return null;
     }
 
-    internal static bool HasLoopTransferLeavingCapture(StatementAst capture)
+    internal static bool HasLoopTransferLeavingCapture(Ast capture)
         => capture.FindAll(static node => node is BreakStatementAst or ContinueStatementAst,
                 searchNestedScriptBlocks: false)
             .Any(transfer => LeavesCapture(transfer, capture));
@@ -56,7 +56,7 @@ internal static class PowerShellControlFlowBindingPolicy
         => capture.FindAll(static node => node is BreakStatementAst or ContinueStatementAst, false)
             .Any(transfer => LeavesCapture(transfer, capture) && FindLocalLoop(transfer) is null);
 
-    private static bool LeavesCapture(Ast transfer, StatementAst capture)
+    private static bool LeavesCapture(Ast transfer, Ast capture)
     {
         if (transfer is BreakStatementAst { Label: not null } or ContinueStatementAst { Label: not null }) return true;
         for (var parent = transfer.Parent; parent is not null; parent = parent.Parent)
