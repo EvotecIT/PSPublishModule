@@ -667,7 +667,7 @@ internal static partial class WebPipelineRunner
                 $"meta.generated_by: {YamlQuote("powerforge.project-docs-sync")}",
                 "---",
                 string.Empty,
-                $"Source-owned example maintained with {projectName}.",
+                $"An example script from the {projectName} repository.",
                 string.Empty
             };
 
@@ -755,7 +755,7 @@ internal static partial class WebPipelineRunner
             {
                 "---",
                 $"title: {YamlQuote(directory.Equals(targetExamplesRoot, StringComparison.OrdinalIgnoreCase) ? $"{projectName} Examples" : directoryName)}",
-                $"description: {YamlQuote(directory.Equals(targetExamplesRoot, StringComparison.OrdinalIgnoreCase) ? $"Project-scoped examples for {projectName}." : $"Example group for {directoryName}.")}",
+                $"description: {YamlQuote(directory.Equals(targetExamplesRoot, StringComparison.OrdinalIgnoreCase) ? $"Example scripts for {projectName}, taken from its source repository." : $"{directoryName} examples for {projectName}.")}",
                 "layout: docs",
                 $"meta.generated_by: {YamlQuote("powerforge.project-docs-sync")}",
                 "---",
@@ -840,13 +840,43 @@ internal static partial class WebPipelineRunner
         }
     }
 
-    private static string HumanizeExampleTitle(string? value)
+    private static readonly System.Text.RegularExpressions.Regex ExampleTitleWordBoundary = new(
+        "(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z]{2,})|(?<=[A-Za-z])(?=[0-9])",
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Turns an example file or folder name such as <c>Example-BuildingTags.ps1</c> into a readable title
+    /// (<c>Building Tags</c>). Existing capitals are kept (TextInfo.ToTitleCase would lowercase "BuildingTags"
+    /// to "Buildingtags"), leftover script extensions are removed, and a leading "Example" word is dropped when
+    /// other words remain because these titles are already listed under an Examples heading.
+    /// </summary>
+    internal static string HumanizeExampleTitle(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
             return "Example";
 
-        var normalized = value.Replace('_', ' ').Replace('-', ' ').Trim();
-        return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(normalized);
+        var name = value.Trim();
+        foreach (var extension in new[] { ".ps1", ".psm1", ".psd1", ".cs", ".md" })
+        {
+            while (name.EndsWith(extension, StringComparison.OrdinalIgnoreCase) && name.Length > extension.Length)
+                name = name[..^extension.Length];
+        }
+
+        var words = ExampleTitleWordBoundary
+            .Replace(name.Replace('_', ' ').Replace('-', ' ').Replace('.', ' '), " ")
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .ToList();
+        if (words.Count == 0)
+            return "Example";
+
+        if (words.Count > 1 &&
+            (words[0].Equals("Example", StringComparison.OrdinalIgnoreCase) || words[0].Equals("Examples", StringComparison.OrdinalIgnoreCase)) &&
+            !words.Skip(1).All(static word => word.All(char.IsDigit)))
+        {
+            words.RemoveAt(0);
+        }
+
+        return string.Join(' ', words.Select(static word => char.ToUpperInvariant(word[0]) + word[1..]));
     }
 
     private static string? GetMarkdownHeadingTitle(string? content)
