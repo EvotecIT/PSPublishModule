@@ -296,7 +296,13 @@ internal static partial class WebCliCommandHandlers
                          siteProfile?.Name ??
                          hostname;
         var htmlPaths = ReadOptionList(subArgs, "--html-path", "--html-paths");
-        if (siteProfile is not null)
+        var publicPaths = ReadOptionList(subArgs, "--public-path", "--public-paths");
+        var originRespectingDynamic = HasOption(subArgs, "--origin-respecting-dynamic");
+        if (originRespectingDynamic && (htmlPaths.Count > 0 || siteProfile?.Cloudflare?.Cache is not null))
+            return Fail("Dynamic origin caching cannot be combined with static HTML routes or a site cache override.", outputJson, logger, command);
+        if (!originRespectingDynamic && publicPaths.Count > 0)
+            return Fail("--public-path requires --origin-respecting-dynamic.", outputJson, logger, command);
+        if (siteProfile is not null && !originRespectingDynamic)
             htmlPaths.AddRange(siteProfile.VerifyPaths);
 
         var dryRun = HasOption(subArgs, "--dry-run") || HasOption(subArgs, "--dryRun");
@@ -309,7 +315,9 @@ internal static partial class WebCliCommandHandlers
             dryRun,
             logger,
             basePath: basePath,
-            cache: siteProfile?.Cloudflare?.Cache);
+            cache: siteProfile?.Cloudflare?.Cache,
+            originRespectingDynamic: originRespectingDynamic,
+            publicPaths: publicPaths);
 
         if (outputJson)
         {

@@ -26,6 +26,7 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web cloudflare cache-policy apply --zone-id <id> [--token <token> | --token-env <env>]");
         Console.WriteLine("                     [--site-config <site.json> | --hostname <host>] [--base-path <path>] [--policy-name <name>]");
         Console.WriteLine("                     [--html-path <p[,p...]>] [--dry-run]");
+        Console.WriteLine("                     [--origin-respecting-dynamic --public-path <exact-path[,exact-path...]>] [--dry-run]");
         Console.WriteLine("  powerforge-web cloudflare site-policy apply --zone-id <id> --site-config <site.json>");
         Console.WriteLine("                     [--token <token> | --token-env <env>] [--hostname <host>] [--base-path <path>] [--dry-run]");
         Console.WriteLine("  powerforge-web cloudflare dns-record apply --zone-name <zone> --record-name <name> --record-content <value>");

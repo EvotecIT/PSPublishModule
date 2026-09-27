@@ -135,6 +135,47 @@ powerforge-web cloudflare cache-policy apply \
   --site-config ./site.json
 ```
 
+### Dynamic sites with explicit public routes
+
+The static-site profile above overrides origin TTLs and is not suitable for a
+server-rendered application with private or cookie-bearing pages. A dynamic site
+can instead opt in to exact, anonymous public paths:
+
+```bash
+powerforge-web cloudflare cache-policy apply \
+  --zone-id <ZONE_ID> \
+  --token-env CLOUDFLARE_API_TOKEN \
+  --hostname changeintel.xyz \
+  --policy-name ChangeIntel \
+  --origin-respecting-dynamic \
+  --public-path /sources,/sitemap.xml,/robots.txt \
+  --dry-run
+```
+
+Remove `--dry-run` only after checking the current zone rules and origin
+responses. The rule matches only named paths and GET/PURGE requests with no
+Cookie or Authorization header. Truncated request headers fail closed. It
+uses Cloudflare's `bypass_by_default` edge mode: an origin response without
+cache directives is not cached, and no edge or browser TTL replaces the
+origin's public/private decisions. The default cache key retains the complete
+query string. The application must still emit `public`/`s-maxage` only for
+content safe to share with anonymous visitors. Do not nominate homepages that
+set anti-forgery cookies, personalized pages, API credentials, or private
+feeds. Static `--html-path` and `Cloudflare.Cache` override settings cannot be
+combined with this mode.
+
+The dynamic apply also preflights the current Cache Rules phase. It refuses an
+enabled, unowned cache-enabling rule, even if its expression appears to target
+another hostname: an arbitrary rule could override the anonymous route policy
+later in Cloudflare's rule order. Explicit operator bypass rules are preserved.
+Conversely, a later static `cache-policy apply` or `site-policy apply` refuses
+to replace an installed dynamic policy implicitly. Review the zone's other
+cache mechanisms (including Page Rules and Workers) before activation and
+after changing them; this command governs its managed Cache Rule, not those
+other products.
+When migrating from a static policy, the new allow rule is placed before all
+preserved operator bypass rules so those bypasses keep precedence.
+
 ## GitHub Actions
 
 The complete policy action rejects pull-request events before reading protected
