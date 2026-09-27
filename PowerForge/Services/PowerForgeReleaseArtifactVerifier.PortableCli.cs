@@ -108,10 +108,13 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         if (artifactIsArchive)
         {
             PortableArchiveVerification archive = VerifyPortableArchiveInventory(
+                projectRoot,
+                checksumsPath,
                 artifactPath,
                 expected.SignerThumbprint,
                 expected.SignerSubjectName,
                 expected.Sign.Provider == DotNetPublishSigningProvider.AzureArtifactSigning);
+            directInventoryEvidence = archive.Evidence;
             if (!string.Equals(archive.Inventory.ArtifactId, artifactId, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(archive.Inventory.Target, target, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(archive.Inventory.BundleId, bundleId, StringComparison.OrdinalIgnoreCase) ||

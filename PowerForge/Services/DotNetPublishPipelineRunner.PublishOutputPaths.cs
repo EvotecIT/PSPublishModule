@@ -34,7 +34,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 style);
             paths.Add(outputDirectory);
             if (target.Publish.Zip)
-                paths.Add(ResolvePublishZipPath(outputDirectory, plan, target, tokens));
+            {
+                string zipPath = ResolvePublishZipPath(outputDirectory, plan, target, tokens);
+                paths.Add(zipPath);
+                paths.Add(zipPath + PowerForgePortablePayloadInventory.DirectInventorySuffix);
+                paths.Add(zipPath + PowerForgePortablePayloadInventory.DirectSignatureSuffix);
+            }
         }
 
         return paths.OrderBy(path => path, comparer).ToArray();

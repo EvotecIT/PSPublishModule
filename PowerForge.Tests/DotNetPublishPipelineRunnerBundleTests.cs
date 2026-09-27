@@ -477,16 +477,17 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
         var root = CreateTempRoot();
         try
         {
-            string sourceRevision = InitializeGitRepository(root);
+            string projectPath = CreateSignedBundleProject(root);
+            string sourceRevision = RunGit(root, "rev-parse", "HEAD").Trim();
             string publishDir = Directory.CreateDirectory(Path.Combine(root, "publish", "app")).FullName;
             string executable = Path.Combine(publishDir, "PowerForge.Tests.dll");
             File.Copy(typeof(DotNetPublishPipelineRunnerBundleTests).Assembly.Location, executable);
             File.WriteAllText(Path.Combine(publishDir, "runtime-data.json"), "{\"data\":true}");
             File.WriteAllText(
-                Path.Combine(publishDir, PowerForgePortablePayloadInventory.InventoryFileName),
+                Path.Combine(root, "source.zip") + PowerForgePortablePayloadInventory.DirectInventorySuffix,
                 "source inventory");
             File.WriteAllText(
-                Path.Combine(publishDir, PowerForgePortablePayloadInventory.SignatureFileName),
+                Path.Combine(root, "source.zip") + PowerForgePortablePayloadInventory.DirectSignatureSuffix,
                 "source signature");
             string outputDir = Path.Combine(root, "Artifacts", "Bundles", "package");
             string zipPath = Path.Combine(root, "Artifacts", "Bundles", "package.zip");
@@ -508,7 +509,9 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
                         Name = "app",
                         Kind = DotNetPublishTargetKind.Cli,
                         ExecutableIdentities = new[] { "PowerForge.Tests" },
-                        Publish = new DotNetPublishPublishOptions { Sign = sign, Zip = true }
+                        Publish = new DotNetPublishPublishOptions { Sign = sign, Zip = true },
+                        ProjectPath = projectPath,
+                        Combinations = new[] { new DotNetPublishTargetCombination { Framework = "net10.0", Runtime = "win-x64", Style = DotNetPublishStyle.PortableCompat } }
                     }
                 ],
                 Bundles =
@@ -533,7 +536,12 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
                     Style = DotNetPublishStyle.PortableCompat,
                     OutputDir = publishDir,
                     PublishDir = publishDir,
-                    ExePath = executable
+                    ExePath = executable,
+                    EvidencePaths = new[]
+                    {
+                        Path.Combine(root, "source.zip") + PowerForgePortablePayloadInventory.DirectInventorySuffix,
+                        Path.Combine(root, "source.zip") + PowerForgePortablePayloadInventory.DirectSignatureSuffix
+                    }
                 }
             };
             var step = new DotNetPublishStep
@@ -566,10 +574,11 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
             Assert.True(File.Exists(result.ZipPath));
             using (ZipArchive archive = ZipFile.OpenRead(result.ZipPath!))
             {
-                ZipArchiveEntry inventoryEntry = Assert.Single(
-                    archive.Entries,
-                    entry => entry.FullName == PowerForgePortablePayloadInventory.InventoryFileName);
-                using Stream inventoryStream = inventoryEntry.Open();
+                Assert.DoesNotContain(archive.Entries, entry => entry.FullName == PowerForgePortablePayloadInventory.InventoryFileName);
+                Assert.DoesNotContain(archive.Entries, entry => entry.FullName == PowerForgePortablePayloadInventory.SignatureFileName);
+                Assert.Equal(new[] { zipPath + PowerForgePortablePayloadInventory.DirectInventorySuffix,
+                    zipPath + PowerForgePortablePayloadInventory.DirectSignatureSuffix }, result.EvidencePaths);
+                using Stream inventoryStream = File.OpenRead(result.EvidencePaths[0]);
                 PowerForgePortablePayloadInventory inventory = JsonSerializer.Deserialize<PowerForgePortablePayloadInventory>(inventoryStream)!;
                 Assert.Equal(5, inventory.SchemaVersion);
                 Assert.Equal("app", inventory.Target);
@@ -600,10 +609,8 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
 
             using (ZipArchive finalizedArchive = ZipFile.OpenRead(result.ZipPath!))
             {
-                ZipArchiveEntry finalizedInventoryEntry = Assert.Single(
-                    finalizedArchive.Entries,
-                    entry => entry.FullName == PowerForgePortablePayloadInventory.InventoryFileName);
-                using Stream finalizedInventoryStream = finalizedInventoryEntry.Open();
+                Assert.DoesNotContain(finalizedArchive.Entries, entry => entry.FullName == PowerForgePortablePayloadInventory.InventoryFileName);
+                using Stream finalizedInventoryStream = File.OpenRead(result.EvidencePaths[0]);
                 PowerForgePortablePayloadInventory finalizedInventory =
                     JsonSerializer.Deserialize<PowerForgePortablePayloadInventory>(finalizedInventoryStream)!;
                 Assert.Contains(finalizedInventory.Entries, entry => entry.Path == "after-hook.txt");
@@ -644,7 +651,8 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
         var root = CreateTempRoot();
         try
         {
-            string sourceRevision = InitializeGitRepository(root);
+            string projectPath = CreateSignedBundleProject(root);
+            string sourceRevision = RunGit(root, "rev-parse", "HEAD").Trim();
             string publishDir = Directory.CreateDirectory(Path.Combine(root, "publish", "app")).FullName;
             string executable = Path.Combine(publishDir, "PowerForge.Tests.dll");
             File.Copy(typeof(DotNetPublishPipelineRunnerBundleTests).Assembly.Location, executable);
@@ -673,7 +681,9 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
                         Name = "app",
                         Kind = DotNetPublishTargetKind.Cli,
                         ExecutableIdentities = new[] { "PowerForge.Tests" },
-                        Publish = new DotNetPublishPublishOptions { Sign = sign }
+                        Publish = new DotNetPublishPublishOptions { Sign = sign },
+                        ProjectPath = projectPath,
+                        Combinations = new[] { new DotNetPublishTargetCombination { Framework = "net10.0", Runtime = "win-x64", Style = DotNetPublishStyle.PortableCompat } }
                     }
                 ],
                 Bundles =
@@ -698,7 +708,12 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
                     Style = DotNetPublishStyle.PortableCompat,
                     OutputDir = publishDir,
                     PublishDir = publishDir,
-                    ExePath = executable
+                    ExePath = executable,
+                    EvidencePaths = new[]
+                    {
+                        executable + PowerForgePortablePayloadInventory.DirectInventorySuffix,
+                        executable + PowerForgePortablePayloadInventory.DirectSignatureSuffix
+                    }
                 }
             };
             var step = new DotNetPublishStep
@@ -1112,6 +1127,16 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
         RunGit(root, "add", "source.txt");
         RunGit(root, "commit", "--quiet", "-m", "Tracked source");
         return RunGit(root, "rev-parse", "HEAD").Trim();
+    }
+
+    private static string CreateSignedBundleProject(string root)
+    {
+        InitializeGitRepository(root);
+        string project = Path.Combine(root, "app.csproj");
+        File.WriteAllText(project, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+        RunGit(root, "add", "app.csproj");
+        RunGit(root, "commit", "--quiet", "-m", "Add bundle source project");
+        return project;
     }
 
     private static string RunGit(string workingDirectory, params string[] arguments)

@@ -528,9 +528,10 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         if (artefact is null)
             throw new ArgumentNullException(nameof(artefact));
-        return artefact.Category == DotNetPublishArtefactCategory.Installer
+        return (artefact.Category == DotNetPublishArtefactCategory.Installer
             ? artefact.OutputFiles ?? Array.Empty<string>()
-            : EnumerateFilesSafe(artefact.OutputDir, "*", SearchOption.AllDirectories);
+            : EnumerateFilesSafe(artefact.OutputDir, "*", SearchOption.AllDirectories))
+            .Concat(artefact.EvidencePaths);
     }
 
     private static List<DotNetPublishManifestEntry> BuildManifestEntries(
@@ -565,6 +566,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 StateTransfer = a.StateTransfer,
                 SignedFiles = a.SignedFiles > 0 ? a.SignedFiles : null,
                 SignedFilePaths = ToManifestOutputFiles(projectRoot, a.SignedFilePaths),
+                EvidencePaths = ToManifestOutputFiles(projectRoot, a.EvidencePaths),
                 SourceRevision = provenance.Revision,
                 SourceDirty = provenance.Dirty
             })
@@ -643,6 +645,7 @@ public sealed partial class DotNetPublishPipelineRunner
         public DotNetPublishStateTransferResult? StateTransfer { get; set; }
         public int? SignedFiles { get; set; }
         public string[]? SignedFilePaths { get; set; }
+        public string[]? EvidencePaths { get; set; }
         public DotNetPublishMsiPackageMetadata[]? PackageMetadata { get; set; }
         public string? SourceRevision { get; set; }
         public bool? SourceDirty { get; set; }

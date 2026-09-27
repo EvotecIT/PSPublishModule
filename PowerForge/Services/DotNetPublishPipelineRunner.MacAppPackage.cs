@@ -74,6 +74,7 @@ public sealed partial class DotNetPublishPipelineRunner
             Directory.CreateDirectory(macOsPath);
             Directory.CreateDirectory(resourcesPath);
             DirectoryCopy(sourceRoot, macOsPath, stagingRoot);
+            RemoveCopiedPortableEvidence(plan, source, macOsPath);
 
             string executablePath = Path.GetFullPath(Path.Combine(macOsPath, options.Executable.Replace('/', Path.DirectorySeparatorChar)));
             EnsurePathWithinRoot(macOsPath, executablePath, $"MacApp installer '{installerId}' executable");

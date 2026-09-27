@@ -141,8 +141,10 @@ public sealed class DotNetPublishPipelineRunnerMsiPrepareTests
         }
     }
 
-    [Fact]
-    public void PrepareMsiPackage_CopiesPayloadAndWritesManifest()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PrepareMsiPackage_CopiesApplicationPayloadWithoutPublisherEvidence(bool archive)
     {
         var root = CreateTempRoot();
         try
@@ -151,6 +153,14 @@ public sealed class DotNetPublishPipelineRunnerMsiPrepareTests
             File.WriteAllText(Path.Combine(outputDir, "Svc.exe"), "dummy");
             Directory.CreateDirectory(Path.Combine(outputDir, "data"));
             File.WriteAllText(Path.Combine(outputDir, "data", "settings.json"), "{ }");
+            string executable = Path.Combine(outputDir, "Svc.exe");
+            string artifactPath = archive ? Path.Combine(root, "svc.zip") : executable;
+            string[] evidencePaths = new[]
+            {
+                artifactPath + PowerForgePortablePayloadInventory.DirectInventorySuffix,
+                artifactPath + PowerForgePortablePayloadInventory.DirectSignatureSuffix
+            };
+            foreach (string path in evidencePaths) File.WriteAllText(path, "publisher evidence");
 
             var stagingPath = Path.Combine(root, "Artifacts", "Msi", "svc.msi", "payload");
             var manifestPath = Path.Combine(root, "Artifacts", "Msi", "svc.msi", "prepare.manifest.json");
@@ -173,7 +183,12 @@ public sealed class DotNetPublishPipelineRunnerMsiPrepareTests
             {
                 UseControlledSourceProvenance = true,
                 ProjectRoot = root,
-                AllowOutputOutsideProjectRoot = false
+                AllowOutputOutsideProjectRoot = false,
+                Targets = new[] { new DotNetPublishTargetPlan
+                {
+                    Name = "svc",
+                    Publish = new DotNetPublishPublishOptions { Zip = archive, Sign = new DotNetPublishSignOptions { Enabled = true } }
+                } }
             };
 
             var artefacts = new[]
@@ -184,7 +199,9 @@ public sealed class DotNetPublishPipelineRunnerMsiPrepareTests
                     Framework = "net10.0",
                     Runtime = "win-x64",
                     Style = DotNetPublishStyle.Portable,
-                    OutputDir = outputDir
+                    OutputDir = outputDir,
+                    ExePath = executable,
+                    EvidencePaths = evidencePaths
                 }
             };
 
@@ -199,6 +216,8 @@ public sealed class DotNetPublishPipelineRunnerMsiPrepareTests
             Assert.True(File.Exists(Path.Combine(result.StagingDir, "Svc.exe")));
             Assert.True(File.Exists(Path.Combine(result.StagingDir, "data", "settings.json")));
             Assert.True(File.Exists(result.ManifestPath));
+            Assert.Equal(2, Directory.GetFiles(result.StagingDir, "*", SearchOption.AllDirectories).Length);
+            Assert.All(evidencePaths, path => Assert.True(File.Exists(path)));
 
             var manifest = File.ReadAllText(result.ManifestPath);
             Assert.Contains("\"installerId\": \"svc.msi\"", manifest, StringComparison.OrdinalIgnoreCase);

@@ -12,12 +12,14 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         string root = Directory.CreateTempSubdirectory().FullName;
         try
         {
-            string executable = Path.Combine(root, "Sample.CLI.exe");
+            string outputDirectory = Directory.CreateDirectory(Path.Combine(root, "payload")).FullName;
+            string executable = Path.Combine(outputDirectory, "Sample.CLI.exe");
             File.WriteAllText(executable, "signed payload");
             (string inventoryPath, string signaturePath) = PowerForgePortablePayloadInventoryCms.ResolveEvidencePaths(
-                root,
+                outputDirectory,
                 executable,
-                archivePayload);
+                archivePayload,
+                archivePayload ? Path.Combine(root, "Sample.CLI.zip") : null);
             File.WriteAllText(inventoryPath, "application-owned payload");
 
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>

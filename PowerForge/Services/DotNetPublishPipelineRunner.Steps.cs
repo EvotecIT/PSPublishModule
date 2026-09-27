@@ -510,8 +510,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 (string inventoryPath, string signaturePath) = PowerForgePortablePayloadInventoryCms.ResolveEvidencePaths(
                     outputDir,
                     executable,
-                    target.Publish.Zip);
-                PowerForgePortablePayloadInventoryCms.EnsureEvidencePathsAvailable(inventoryPath, signaturePath);
+                    target.Publish.Zip,
+                    target.Publish.Zip ? ResolvePublishZipPath(outputDir, plan, target, tokens) : null);
+                if (target.Publish.Zip)
+                    Directory.CreateDirectory(Path.GetDirectoryName(inventoryPath)!);
+                else
+                    PowerForgePortablePayloadInventoryCms.EnsureEvidencePathsAvailable(inventoryPath, signaturePath);
                 PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
                     outputDir,
                     target.Name,
@@ -536,13 +540,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 byte[] signatureBytes = _signPortableInventory(
                     inventoryBytes,
                     ResolvePortableInventorySigningOptions(signedFilePaths, target.Publish.Sign));
-                PowerForgePortablePayloadInventoryCms.WriteEvidenceFiles(
-                    inventoryPath,
-                    inventoryBytes,
-                    signaturePath,
-                    signatureBytes);
-                if (!target.Publish.Zip)
-                    evidencePaths = new[] { inventoryPath, signaturePath };
+                if (target.Publish.Zip)
+                    PowerForgePortablePayloadInventoryCms.RewriteEvidenceFiles(inventoryPath, inventoryBytes, signaturePath, signatureBytes);
+                else
+                    PowerForgePortablePayloadInventoryCms.WriteEvidenceFiles(inventoryPath, inventoryBytes, signaturePath, signatureBytes);
+                evidencePaths = new[] { inventoryPath, signaturePath };
             }
         }
 
