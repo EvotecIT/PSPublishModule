@@ -122,9 +122,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             Assert.True(unit.EmittedClrMethod, System.Text.Json.JsonSerializer.Serialize(unit));
         }
         var blocked = Assert.Single(built.Manifest!.UnitDispositionLedger!.Entries, unit => unit.Name == "Read-BlockedCapture");
-        Assert.True(blocked.RetainedHostedSource);
-        Assert.False(blocked.EmittedClrMethod);
-        Assert.NotEmpty(blocked.GeneratedRegionMemberNames);
+        Assert.False(blocked.RetainedHostedSource);
+        Assert.True(blocked.EmittedClrMethod);
+        Assert.True(blocked.UsesNativeFunctionBinding);
         const string probe = """
             foreach($name in 'Read-ClosedStringCapture','Read-ClosedIntegerCapture') {
                 foreach($values in @(@(),@(0),@(1),@(0,1,2))) {

@@ -390,9 +390,15 @@ internal sealed partial class PowerShellSemanticBinder
                 finallyBlock is not null && PowerShellLoopInterruptContract.IsAvailable(capabilities));
         }
         if (statement is BreakStatementAst { Label: null } breakStatement && PowerShellControlFlowBindingPolicy.HasBreakableAncestor(breakStatement))
-            return new PowerShellBoundBreakStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));
+            return new PowerShellBoundBreakStatement(PowerShellSourceParser.GetSpan(document, statement.Extent),
+                capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                PowerShellControlFlowBindingPolicy.FindLocalLoop(breakStatement) is { } breakLoop
+                    ? PowerShellSourceParser.GetSpan(document, breakLoop.Extent) : null);
         if (statement is ContinueStatementAst { Label: null } continueStatement && PowerShellControlFlowBindingPolicy.HasContinuableAncestor(continueStatement))
-            return new PowerShellBoundContinueStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));
+            return new PowerShellBoundContinueStatement(PowerShellSourceParser.GetSpan(document, statement.Extent),
+                capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                PowerShellControlFlowBindingPolicy.FindLocalLoop(continueStatement) is { } continueLoop
+                    ? PowerShellSourceParser.GetSpan(document, continueLoop.Extent) : null);
         if (statement is BreakStatementAst labeledBreak && labeledBreak.Label is not null)
         {
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&

@@ -8,7 +8,7 @@ internal static class PowerShellBoundStatementRewriter
         {
             PowerShellBoundOutputCaptureStatement capture => new PowerShellBoundOutputCaptureStatement(
                 capture.Span, capture.Target, rewriteBlock(capture.Body), capture.NativeTarget, capture.Operation,
-                capture.Kind, capture.CapturedElementType, capture.ShareEmptyArray),
+                capture.Kind, capture.CapturedElementType, capture.ShareEmptyArray, capture.TransfersEnclosingLoop),
             PowerShellBoundStatementErrorBoundary boundary => new PowerShellBoundStatementErrorBoundary(
                 rewriteBlock(boundary.Body), boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus, boundary.NativeSequencePoint),
             PowerShellBoundIfStatement conditional => new PowerShellBoundIfStatement(

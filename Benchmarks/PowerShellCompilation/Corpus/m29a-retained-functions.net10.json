@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "672b533f1bb51f849a0923298475a8a0fdecba23",
+  "compilerBaselineCommit": "7cb410fed77b5ae4a3b68347826b9a60ae25ed55",
   "packets": [
     {
       "packet": "pssg",
@@ -13,7 +13,7 @@
       "stableUnits": 286,
       "emitted": 262,
       "retained": 20,
-      "sourceExplanationSha256": "a6e5a0758f5a650bde5f7987b1ba0221752e3180b3133e71c95d587ef3d16a7d",
+      "sourceExplanationSha256": "ca36311c25537c6b8b2bdb75152c1198cef0cc6a4f83e9c1041583df2ad9b306",
       "functionsRetained": [
         {
           "unitId": "a1bb1dcefddec8c45377fd27",
@@ -167,9 +167,9 @@
             {
               "code": "UnsupportedSyntax",
               "featureId": "syntax.unsupported",
-              "message": "A loop transfer leaving native captured output requires an explicit enclosing-control-flow transfer contract.",
-              "line": 183,
-              "column": 13
+              "message": "Typed catch 'Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException' is outside the generated project reference set.",
+              "line": 186,
+              "column": 25
             }
           ]
         },
@@ -1905,10 +1905,21 @@
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Invocations.cs": "9dfff29122b5dd0701ab9c9ca08ddda8f71983b7fa99d2c737d50e4403f71852",
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.NativeFunction.cs": "456d4cb9623abb02a77681a495c7fae9133581b9f172e0efdcd1aa0e569ebfc7",
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Declarations.cs": "bf75cfb5377e463fc4c5636ce948ffba779d9e258e7e6cbb19d1b8ff0cb723c8",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.cs": "18c0f89fcace664b27b2327086d3195382d7cd648f10e27bbdd9b2e995f5a19b"
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.cs": "18c0f89fcace664b27b2327086d3195382d7cd648f10e27bbdd9b2e995f5a19b",
+    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellBoundOptimizer.cs": "e288f476ff4434ad0f8d6af0a1df46b42afe378103dcaf1dcd70dea2ef132b79",
+    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellStatementErrorCallPass.cs": "603df39b43621e314fa287b39adb5ca8ad8b876b3b4a050de4ab166ad399b92e",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.LoopTransfers.cs": "f9ee11e23f5f4df7a299bf3d873ae4ed99e71b9227d30b9a7a8ebb6535a5a8c3",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.OutputCapture.cs": "7df1703fecafeb77afe28b9fe00b8d63ad0f97f35fdaea3aa913fe08b7837f54",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellControlFlowBindingPolicy.cs": "e0942912848695e188823e2921e57d7e1990939bd02b2d0c5285773be334e12b",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.OutputCapture.cs": "6ec5a58fd2eba8f92d648a1a017efe6b02b75f072791201de75dce538796974f",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs": "b7c0460f8dd9f8646bd27707b29e749d148d18dc48f7af76fda41cffdcecf853",
+    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundOutputCaptureStatement.cs": "fe0fcebb5390383faef1d73a7f5cbc41df33370d4b938c72d47ef9cc13a7cbb4",
+    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundStatementRewriter.cs": "2b6846dabcb6a89a75649e72df90e77c90e084df8db63908b8f9408ffb3c1775",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredOutputCaptureStatement.cs": "89bda7c779d5313c595b59435091fcde6f977d116c266bad68c0703b5cae9897",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.cs": "f52a1b42b13a62928850c58bb712beb08eaf540ef7a68c889ef82aaab5a5eaca"
   },
-  "dispositionComparison": "m29a-indexed-interpolation-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "672b533f1bb51f849a0923298475a8a0fdecba23",
+  "dispositionComparison": "m29a-captured-loops-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "7cb410fed77b5ae4a3b68347826b9a60ae25ed55",
   "emitted": 505,
   "retained": 60
 }

@@ -38,6 +38,24 @@ internal static class PowerShellControlFlowBindingPolicy
                 searchNestedScriptBlocks: false)
             .Any(transfer => LeavesCapture(transfer, capture));
 
+    /// <summary>Resolves a local loop without crossing a switch or callback boundary.</summary>
+    internal static LoopStatementAst? FindLocalLoop(Ast transfer)
+    {
+        var label = transfer is BreakStatementAst broken ? broken.Label :
+            transfer is ContinueStatementAst continued ? continued.Label : null;
+        if (label is not null) return FindLocalLabeledLoop(transfer, label);
+        for (var parent = transfer.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent is LoopStatementAst loop) return loop;
+            if (parent is SwitchStatementAst or FunctionDefinitionAst or ScriptBlockExpressionAst) return null;
+        }
+        return null;
+    }
+
+    internal static bool HasUnresolvedCaptureTransfer(StatementAst capture)
+        => capture.FindAll(static node => node is BreakStatementAst or ContinueStatementAst, false)
+            .Any(transfer => LeavesCapture(transfer, capture) && FindLocalLoop(transfer) is null);
+
     private static bool LeavesCapture(Ast transfer, StatementAst capture)
     {
         if (transfer is BreakStatementAst { Label: not null } or ContinueStatementAst { Label: not null }) return true;

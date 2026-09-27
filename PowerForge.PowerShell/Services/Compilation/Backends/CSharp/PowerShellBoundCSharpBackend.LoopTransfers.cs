@@ -38,6 +38,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
     private void EmitLoopTransfer(StringBuilder builder, SourceSpan? target, string prefix, bool isContinue)
     {
+        if (target is { } destination)
+            foreach (var capture in _arrayTransferCaptures)
+                if (destination.StartOffset < capture.Span.StartOffset || destination.EndOffset > capture.Span.EndOffset)
+                    builder.Append(prefix).Append(capture.Discard).AppendLine(" = true;");
         builder.Append(prefix);
         if (target is not { } span) { builder.AppendLine(isContinue ? "continue;" : "break;"); return; }
         if (!_loopTransferLabels.TryGetValue(span, out var labels) ||

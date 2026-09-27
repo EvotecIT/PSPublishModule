@@ -75,7 +75,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
-    public void TryArrayCapture_PreservesHostedBoundaryForEscapingLoopTransfer(string framework, string host)
+    public void TryArrayCapture_PreservesCompiledEscapingLoopTransfer(string framework, string host)
     {
         using var fixture = ArtifactFixture.Create("""
             function Read-TryBreak { param() foreach($item in 1,2) { $value=@(try { 'pending'; break } finally { 'finally' }); 'unreachable' }; 'done' }
@@ -88,9 +88,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(built.Succeeded, built.Error + Environment.NewLine + built.BuildOutput);
         Assert.All(built.Manifest!.UnitDispositionLedger!.Entries.Where(unit => unit.Kind == PowerShellCompilationUnitKind.Function), unit =>
         {
-            Assert.False(unit.EmittedClrMethod);
-            Assert.True(unit.RetainedHostedSource);
-            Assert.Contains(unit.DiagnosticChain, cause => cause.Message.Contains("enclosing-control-flow", StringComparison.Ordinal));
+            Assert.True(unit.EmittedClrMethod);
+            Assert.False(unit.RetainedHostedSource);
         });
         const string probe = "foreach($name in 'Read-TryBreak','Read-TryContinue') { [pscustomobject]@{name=$name;records=@(& $name)} | ConvertTo-Json -Compress }";
         Assert.Equal(RunModuleProof(fixture.ScriptPath, probe, host), RunModuleProof(built.ArtifactPath!, probe, host));

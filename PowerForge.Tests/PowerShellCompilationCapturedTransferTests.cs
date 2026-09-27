@@ -37,9 +37,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         foreach (var name in new[] { "Read-CapturedBreak", "Read-CapturedContinue" })
         {
             var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries, item => item.Name == name);
-            Assert.True(!native == unit.EmittedClrMethod, System.Text.Json.JsonSerializer.Serialize(unit));
-            Assert.Equal(native, unit.RetainedHostedSource);
-            if (native) Assert.Contains(unit.DiagnosticChain, cause => cause.Message.Contains("enclosing-control-flow", StringComparison.Ordinal));
+            Assert.True(unit.EmittedClrMethod, System.Text.Json.JsonSerializer.Serialize(unit));
+            Assert.False(unit.RetainedHostedSource);
         }
         const string probe = """
             foreach ($name in 'Read-CapturedBreak','Read-CapturedContinue') {

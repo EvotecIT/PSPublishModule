@@ -87,7 +87,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [InlineData("net10.0")]
     [InlineData("net472")]
-    public void AssignedSwitchCapture_RuntimeFreeAndEscapingLabelsRemainClosed(string framework)
+    public void AssignedSwitchCapture_RuntimeFreeRemainsClosedAndLocalLoopTransfersQualify(string framework)
     {
         var strict = PowerShellSourceParser.Parse(
             "function Test-StrictCapture {param([string]$Value);$result=switch($Value){'x'{1}default{2}};return $result}",
@@ -99,6 +99,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath, PowerShellCompilationMode.Hybrid, targetFramework: framework,
             capabilities: PowerShellCompilationCapabilities.HybridModule));
-        Assert.All(plan.Files.SelectMany(file => file.Units), unit => Assert.False(unit.IsCompilable));
+        Assert.All(plan.Files.SelectMany(file => file.Units), unit => Assert.True(unit.IsCompilable));
     }
 }

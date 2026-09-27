@@ -435,7 +435,7 @@ internal sealed partial class PowerShellTypedLowerer
                 capture.Kind, capture.CapturedElementType,
                 capture.CapturesStableScalarVector && capture.Target is not null &&
                 localTypes.ContainsKey(capture.Target.StableKey) && declared.Add(capture.Target.StableKey),
-                capture.ShareEmptyArray),
+                capture.ShareEmptyArray, capture.TransfersEnclosingLoop),
             PowerShellBoundStatementErrorBoundary boundary => new PowerShellLoweredStatementErrorBoundary(
                 boundary.Span, LowerStatements(boundary.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
                 boundary.SourcePath, boundary.SourceText, names.Allocate("pf_statement_error"), boundary.NativeSuccessStatus, boundary.NativeSequencePoint),

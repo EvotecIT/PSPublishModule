@@ -13,7 +13,7 @@ internal sealed class PowerShellBoundOutputCaptureStatement : PowerShellBoundSta
     internal PowerShellBoundOutputCaptureStatement(SourceSpan span, PowerShellSymbolId? target, PowerShellBoundBlock body,
         PowerShellNativeAssignmentTarget? nativeTarget = null, PowerShellBoundMutationOperator operation = PowerShellBoundMutationOperator.Assign,
         PowerShellOutputCaptureKind kind = PowerShellOutputCaptureKind.CollapsedPowerShellValue, Type? capturedElementType = null,
-        bool shareEmptyArray = false)
+        bool shareEmptyArray = false, bool transfersEnclosingLoop = false)
         : base(span, (body.Effects & ~PowerShellSemanticEffect.SuccessOutput) | PowerShellSemanticEffect.Mutation |
             (nativeTarget is not null ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.TerminatingError : 0),
             (kind == PowerShellOutputCaptureKind.StableScalarVector
@@ -39,6 +39,9 @@ internal sealed class PowerShellBoundOutputCaptureStatement : PowerShellBoundSta
         Kind = kind;
         CapturedElementType = capturedElementType;
         ShareEmptyArray = shareEmptyArray;
+        if (transfersEnclosingLoop && (nativeTarget is null || operation != PowerShellBoundMutationOperator.Assign))
+            throw new ArgumentException("Enclosing loop transfer requires a simple native capture assignment.");
+        TransfersEnclosingLoop = transfersEnclosingLoop;
     }
 
     internal PowerShellSymbolId? Target { get; }
@@ -48,6 +51,7 @@ internal sealed class PowerShellBoundOutputCaptureStatement : PowerShellBoundSta
     internal PowerShellOutputCaptureKind Kind { get; }
     internal Type? CapturedElementType { get; }
     internal bool ShareEmptyArray { get; }
+    internal bool TransfersEnclosingLoop { get; }
     internal Type? CapturedVectorType => CapturedElementType?.MakeArrayType();
     internal bool UsesNativeInvocation => NativeTarget is not null;
     internal bool CapturesStableScalarVector => Kind == PowerShellOutputCaptureKind.StableScalarVector;

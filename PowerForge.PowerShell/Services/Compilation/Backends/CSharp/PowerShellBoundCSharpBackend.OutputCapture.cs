@@ -4,6 +4,7 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellBoundCSharpBackend
 {
+    private readonly List<(SourceSpan Span, string Discard)> _arrayTransferCaptures = new();
     private void EmitOutputCapture(StringBuilder builder, PowerShellLoweredOutputCaptureStatement capture,
         int indent, Func<string, string> getTemporaryIdentifier, string? discardHelper,
         ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
@@ -12,6 +13,32 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (capture.CapturesStableScalarVector)
         {
             EmitStableScalarVectorCapture(builder, capture, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+            return;
+        }
+        if (capture.TransfersEnclosingLoop)
+        {
+            var result = getTemporaryIdentifier("completedCapture");
+            builder.Append(prefix).Append("object? ").Append(result).AppendLine(" = null;");
+            string? discard = null;
+            if (capture.Kind == PowerShellOutputCaptureKind.NativeObjectArray)
+            {
+                discard = getTemporaryIdentifier("discardTransferredArray");
+                builder.Append(prefix).Append("bool ").Append(discard).AppendLine(" = false;");
+                _arrayTransferCaptures.Add((capture.Span, discard));
+            }
+            try
+            {
+                EmitCapturedOutputBody(builder, capture.Statements, capture.RecordsTemporary, capture.SinkTemporary,
+                    capture.Target, true, capture.Kind, capture.ShareEmptyArray, indent,
+                    getTemporaryIdentifier, discardHelper, sourceMap, result, discard);
+            }
+            finally
+            {
+                if (capture.Kind == PowerShellOutputCaptureKind.NativeObjectArray)
+                    _arrayTransferCaptures.RemoveAt(_arrayTransferCaptures.Count - 1);
+            }
+            builder.Append(prefix).Append(EmitNativeAssignmentStart(capture.NativeTarget!, capture.Operation))
+                .Append("() => ").Append(result).Append(EmitNativeAssignmentLocation(capture.NativeTarget!)).AppendLine(";");
             return;
         }
         if (capture.NativeTarget is not null)
@@ -36,7 +63,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         string records, string previous, PowerShellSymbolId? target, bool usesNativeInvocation,
         PowerShellOutputCaptureKind kind, bool shareEmptyArray, int indent,
         Func<string, string> getTemporaryIdentifier, string? discardHelper,
-        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap, string? completedCapture = null, string? discardTransferredArray = null)
     {
         var prefix = new string(' ', indent * 4);
 
@@ -66,7 +93,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
             builder.Append(prefix).AppendLine("    }");
         builder.Append(prefix).Append("    ");
         var value = usesNativeInvocation ? getTemporaryIdentifier("collapsedCapture") : null;
-        if (value is not null)
+        if (completedCapture is not null)
+            builder.Append(completedCapture).Append(" = ");
+        else if (value is not null)
             builder.Append("object? ").Append(value).Append(" = ");
         else
             builder.Append(RenderStorage(target!)).Append(" = ");
@@ -79,7 +108,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 .Append(records).Append("[0] : ").Append(records).Append(".ToArray()")
                 .AppendLine(";");
         builder.Append(prefix).Append("    ").Append(records).AppendLine(".Clear();");
-        if (value is not null)
+        if (value is not null && completedCapture is null)
             builder.Append(prefix).Append("    return ").Append(value).AppendLine(";");
         builder.Append(prefix).AppendLine("}");
         // PowerShell discards assignment output for RuntimeException, but flushes
@@ -92,6 +121,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var flushedRecord = getTemporaryIdentifier("flushedCaptureRecord");
         builder.Append(prefix).AppendLine("finally");
         builder.Append(prefix).AppendLine("{");
+        if (discardTransferredArray is not null)
+            builder.Append(prefix).Append("    if (").Append(discardTransferredArray).Append(") ")
+                .Append(records).AppendLine(".Clear();");
         builder.Append(prefix).Append("    __writeOutput = ").Append(previous).AppendLine(";");
         builder.Append(prefix).Append("    foreach (var ").Append(flushedRecord).Append(" in ").Append(records)
             .Append(") ").Append(previous).Append('(').Append(flushedRecord).AppendLine(");");

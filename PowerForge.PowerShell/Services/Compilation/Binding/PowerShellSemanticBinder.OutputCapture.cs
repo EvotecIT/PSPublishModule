@@ -158,7 +158,9 @@ internal sealed partial class PowerShellSemanticBinder
                 "A return inside captured statement output requires an explicit enclosing-function transfer contract.", span));
             return null;
         }
-        if (usesNativeInvocation && PowerShellControlFlowBindingPolicy.HasLoopTransferLeavingCapture(assignment.Right))
+        var transfersLoop = usesNativeInvocation && PowerShellControlFlowBindingPolicy.HasLoopTransferLeavingCapture(assignment.Right);
+        if (transfersLoop && (assignment.Operator != TokenKind.Equals ||
+            PowerShellControlFlowBindingPolicy.HasUnresolvedCaptureTransfer(assignment.Right)))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2936",
                 "A loop transfer leaving native captured output requires an explicit enclosing-control-flow transfer contract.", span));
@@ -207,7 +209,8 @@ internal sealed partial class PowerShellSemanticBinder
                     ReceiverVariableName: accessReceiver?.VariablePath.UserPath), operation.Value,
                 collectedArray is null ? PowerShellOutputCaptureKind.CollapsedPowerShellValue : PowerShellOutputCaptureKind.NativeObjectArray,
                 shareEmptyArray: collectedArray is not null &&
-                                 _semanticProfile.Family == PowerShellCompilationSemanticHostFamily.PowerShell7);
+                                 _semanticProfile.Family == PowerShellCompilationSemanticHostFamily.PowerShell7,
+                transfersEnclosingLoop: transfersLoop);
         }
         target!.Refine(new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.Inferred,
             "Captured success output collapses to null, a single record, or an Object array."), PowerShellValueState.Unknown);
