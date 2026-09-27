@@ -34,7 +34,9 @@ internal static class PowerShellCompilationParameterTypePolicy
         typeof(ActionPreferenceStopException),
         typeof(ErrorCategory),
         typeof(PSMemberTypes),
-        typeof(CommandInfo)
+        typeof(CommandInfo),
+        typeof(Parser),
+        typeof(HashtableAst)
     };
 
     internal static bool IsQualifiedHostDataType(Type type, string? targetFramework = null)

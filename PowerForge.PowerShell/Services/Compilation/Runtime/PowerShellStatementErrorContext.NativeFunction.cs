@@ -53,6 +53,25 @@ namespace PowerForge.Generated.Runtime
             }
         }
 
+        /// <summary>Separates operand failures from invocation errors at the enclosing native sequence point.</summary>
+        internal TResult EvaluateNativeInvocation<TOperands, TResult>(Func<TOperands> operands, Func<TOperands, TResult> invocation)
+        {
+            ThrowIfDisposed();
+            var position = _nativeExpressionPosition;
+            var hasSequencePoint = _hasNativeSequencePoint;
+            // Reference casts may advance position or throw. Their failures retain
+            // their own position; only binding/calling/writeback uses the entry point.
+            var evaluated = operands();
+            _nativeExpressionPosition = position;
+            _hasNativeSequencePoint = hasSequencePoint;
+            try { return invocation(evaluated); }
+            catch (Exception error)
+            {
+                if (hasSequencePoint) RememberExpressionFailure(error, position.ToExtent());
+                throw;
+            }
+        }
+
         // A successful nested assignment also advances the native sequence point.
         // Keep the latest coordinates for later condition checks; allocate
         // PowerShell source objects only when an exception actually escapes.

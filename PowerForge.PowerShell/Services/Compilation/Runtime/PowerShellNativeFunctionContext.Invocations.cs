@@ -22,12 +22,13 @@ namespace PowerForge.Generated.Runtime
                 CreateInvocationSite)(receiver, arguments);
         }
 
-        /// <summary>Copies a native reference argument back to its caller slot only after successful invocation.</summary>
+        /// <summary>Copies distinct trailing references back in authored argument order after successful invocation.</summary>
         public object? InvokeMemberWithReferenceWriteback(object? receiver, string name, bool isStatic, object?[] arguments,
-            Type? targetConstraint, Type?[] argumentConstraints, int referenceArgumentIndex, string referenceVariableName)
+            Type? targetConstraint, Type?[] argumentConstraints, int[] referenceArgumentIndices, string[] referenceVariableNames)
         {
             var result = InvokeMember(receiver, name, isStatic, arguments, targetConstraint, argumentConstraints);
-            SetVariable(referenceVariableName, ((PSReference)arguments[referenceArgumentIndex]!).Value);
+            for (var index = 0; index < referenceArgumentIndices.Length; index++)
+                SetVariable(referenceVariableNames[index], ((PSReference)arguments[referenceArgumentIndices[index]]!).Value);
             return result;
         }
 

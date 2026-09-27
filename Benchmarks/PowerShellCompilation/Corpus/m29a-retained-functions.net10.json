@@ -4,8 +4,8 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "dispositionContract": "Every function identity matches the accepted constructor/object comparison and its full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "17f2d42662e8953fa67fbe10c899627bc6f5a295",
+  "dispositionContract": "Every function identity matches the complete per-function baseline; no method or still-retained region from the accepted SDK metadata checkpoint is lost.",
+  "compilerBaselineCommit": "aab0ee8107bca67efffc23de00abdbf4f5ff7038",
   "packets": [
     {
       "packet": "pssg",
@@ -13,7 +13,7 @@
       "functions": 282,
       "emitted": 253,
       "retained": 29,
-      "sourceExplanationSha256": "81fe2a60f0935e38a8410709b065cb6a72dde4295c29fba1077efb2060c5d280",
+      "sourceExplanationSha256": "e8b983ff921c9bf38734f931f1319a7e413fb1896ffab90855a4c74995fdb1bb",
       "functionsRetained": [
         {
           "unitId": "005401f052dbe8e7f319d556",
@@ -472,7 +472,7 @@
             {
               "code": "UnsupportedSyntax",
               "featureId": "syntax.unsupported",
-              "message": "Native reference arguments currently require one direct local variable and retain other reference shapes in PowerShell.",
+              "message": "Native reference arguments require trailing direct locals and an unambiguous static CLR by-reference overload.",
               "line": 214,
               "column": 17
             }
@@ -919,9 +919,9 @@
       "packet": "pst",
       "stableUnits": 121,
       "functions": 109,
-      "emitted": 82,
-      "retained": 27,
-      "sourceExplanationSha256": "bd1ed242853a52e3693b050ae10e81231b62de3dc3efb3e30eb693b97bb9e822",
+      "emitted": 83,
+      "retained": 26,
+      "sourceExplanationSha256": "e7535d0f82ec88abba570b995969fa36c7dfc9dc6571589a91eb525b94b75d3a",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -2014,27 +2014,9 @@
             {
               "code": "UnsupportedSyntax",
               "featureId": "syntax.unsupported",
-              "message": "Native reference arguments currently require one direct local variable and retain other reference shapes in PowerShell.",
+              "message": "Native reference arguments require distinct direct local variables and retain other reference shapes in PowerShell.",
               "line": 46,
               "column": 13
-            }
-          ]
-        },
-        {
-          "unitId": "7a39c35c2e90fa2a99971977",
-          "name": "Convert-HashtableString",
-          "relativePath": "functions/hashtableTools.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "CLR type 'System.Management.Automation.Language.Parser' is not available in the generated project reference set for the requested target.",
-              "line": 26,
-              "column": 16
             }
           ]
         },
@@ -2050,7 +2032,7 @@
             {
               "code": "UnsupportedSyntax",
               "featureId": "syntax.unsupported",
-              "message": "CLR type 'System.Management.Automation.Language.Parser' is not available in the generated project reference set for the requested target.",
+              "message": "Native reference arguments require distinct direct local variables and retain other reference shapes in PowerShell.",
               "line": 303,
               "column": 12
             }
@@ -2343,10 +2325,19 @@
     }
   ],
   "compilerSourceHashes": {
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "320001791bf431c9998a07e2ed47b86f9f2ce61915aa42bae6e83583e6d0c298"
+    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellBoundOptimizer.cs": "f4dcd25281b2d394e1e6bf58862323ab98facb46fb0c965faba2ca7eb58a80f0",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.NativeAccess.cs": "40097761aeb820382216e87fc865b94d00bb898c35f22bed65af0245cf026254",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "ebdc212ac64f5368f8a1ad8601fd7f519734e190773e92afe24df3b259ef2d69",
+    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeInvocationExpression.cs": "194017574cb8fc88c4529cb7c1527aea68da8ed19367a03c78db47f5e2a04d89",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeInvocationExpression.cs": "1ac8b26f325aead71b3d906217cf264495e901305acb9efd8559ba4392871384",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs": "7e23b9d58a7a78c0b1c23a1fb5227ab86d051391f9491e047b7eac69ab73c90e",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "0954b00bd1f3e375b0fe1921e72090868f1943199191059dfacc329e808e8552",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Invocations.cs": "cd24120310ce6652bd9daef67e417a716c789d287519587ae07140e89c1d68da",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.NativeFunction.cs": "150958289f5c344e663bb5dd10c1d0dc44a557aeac386e06153910f4706b1e4b",
+    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellNativeReferenceArgument.cs": "28e476029734e37f0ab6610600cc2939de3edda6951c14c38f1d7916cdeaf8fa"
   },
-  "dispositionComparison": "m29a-sdk-metadata-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "17f2d42662e8953fa67fbe10c899627bc6f5a295",
-  "emitted": 485,
-  "retained": 80
+  "dispositionComparison": "m29a-parser-references-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "aab0ee8107bca67efffc23de00abdbf4f5ff7038",
+  "emitted": 486,
+  "retained": 79
 }

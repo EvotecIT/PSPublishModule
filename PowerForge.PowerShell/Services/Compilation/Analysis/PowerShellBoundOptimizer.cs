@@ -240,8 +240,7 @@ internal sealed class PowerShellBoundOptimizer
                 nativeInvocation.Receiver is null ? null : OptimizeExpression(nativeInvocation.Receiver),
                 nativeInvocation.LiteralTargetType, nativeInvocation.Name, nativeInvocation.IsStatic,
                 nativeInvocation.Arguments.Select(OptimizeExpression).ToArray(), nativeInvocation.TargetConstraint,
-                nativeInvocation.ArgumentConstraints.ToArray(), nativeInvocation.ReferenceArgumentIndex,
-                nativeInvocation.ReferenceVariableName);
+                nativeInvocation.ArgumentConstraints.ToArray(), nativeInvocation.References.ToArray());
         if (expression is PowerShellBoundNativeIndexExpression nativeIndex)
             return new PowerShellBoundNativeIndexExpression(nativeIndex.Span, OptimizeExpression(nativeIndex.Receiver),
                 nativeIndex.Arguments.Select(OptimizeExpression).ToArray(), nativeIndex.TargetConstraint, nativeIndex.IndexConstraint);

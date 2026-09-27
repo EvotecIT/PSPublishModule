@@ -159,7 +159,7 @@ internal sealed partial class PowerShellTypedLowerer
                 nativeInvocation.LiteralTargetType, nativeInvocation.Name, nativeInvocation.IsStatic,
                 nativeInvocation.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray(),
                 nativeInvocation.TargetConstraint, nativeInvocation.ArgumentConstraints.ToArray(),
-                nativeInvocation.ReferenceArgumentIndex, nativeInvocation.ReferenceVariableName),
+                nativeInvocation.References.ToArray()),
             PowerShellBoundNativeIndexExpression nativeIndex => new PowerShellLoweredNativeIndexExpression(nativeIndex.Span,
                 LowerExpression(nativeIndex.Receiver, functions, names, targetCapabilities),
                 nativeIndex.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray(),

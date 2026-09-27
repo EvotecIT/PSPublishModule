@@ -1,0 +1,231 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Qualify multiple distinct trailing CLR references and exact parser SDK identities, Hybrid net10.0; execution is separate from emission.",
+  "baselineCompilerCommit": "aab0ee8107bca67efffc23de00abdbf4f5ff7038",
+  "baselineComparison": "m29a-sdk-metadata-comparison.net10.json",
+  "baselineComparisonSha256": "96314ee989e9c12ddf9603b897e2142d1afbfc6243dfaa21ab00e83d63a34802",
+  "baselineRetainedInventorySha256": "b2e23d65a119cefa7df2a2dd69bc6e8493bbfce9dd452f4b9961c3844e1cd655",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 485,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "baselineEmitted": 253,
+      "candidateEmitted": 253,
+      "candidateExplanationSha256": "e8b983ff921c9bf38734f931f1319a7e413fb1896ffab90855a4c74995fdb1bb",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": [
+        {
+          "unitId": "ffe888fa05d905b08ee67e27",
+          "name": "Initialize-ModulePortable",
+          "baselineEmitted": false,
+          "candidateEmitted": false,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "Native reference arguments require trailing direct locals and an unambiguous static CLR by-reference overload.",
+              "line": 214,
+              "column": 17
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "baselineEmitted": 63,
+      "candidateEmitted": 63,
+      "candidateExplanationSha256": "0fe9323878dbf15bc173231b8ad447afc5ddf1d9833e9b2cd631e66cc998bee3",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "baselineEmitted": 60,
+      "candidateEmitted": 60,
+      "candidateExplanationSha256": "dff885fe4d0660da2265dd9e9bb43bf7ebe41b9f0c96ea10399850007c2f74d8",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "baselineEmitted": 82,
+      "candidateEmitted": 83,
+      "candidateExplanationSha256": "e7535d0f82ec88abba570b995969fa36c7dfc9dc6571589a91eb525b94b75d3a",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": [
+        {
+          "unitId": "10ca22e8b6215064da37d706",
+          "name": "Find-CimClass",
+          "baselineEmitted": false,
+          "candidateEmitted": false,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": [
+            {
+              "code": "UnsupportedParameterType",
+              "featureId": "parameter.type",
+              "message": "Parameter '$CimSession' has CLR type 'Microsoft.Management.Infrastructure.CimSession' that requires a target capability unavailable to this compilation.",
+              "line": 17,
+              "column": 9
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "Native reference arguments require distinct direct local variables and retain other reference shapes in PowerShell.",
+              "line": 46,
+              "column": 13
+            }
+          ]
+        },
+        {
+          "unitId": "7a39c35c2e90fa2a99971977",
+          "name": "Convert-HashtableString",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "c71909b22967e5ec149ae38b",
+          "name": "Convert-CommandToHashtable",
+          "baselineEmitted": false,
+          "candidateEmitted": false,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "Native reference arguments require distinct direct local variables and retain other reference shapes in PowerShell.",
+              "line": 303,
+              "column": 12
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "baselineEmitted": 27,
+      "candidateEmitted": 27,
+      "candidateExplanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    }
+  ],
+  "candidateEmitted": 486,
+  "candidateRetained": 79,
+  "retainedFeatureImpact": {
+    "assignment.target": 1,
+    "binary-module.cmdlet-shape": 2,
+    "command.foreach-object": 2,
+    "command.get-help": 1,
+    "command.get-item": 1,
+    "command.get-location": 1,
+    "command.new-object": 2,
+    "command.out-gridview": 1,
+    "command.out-string": 1,
+    "command.read-host": 1,
+    "command.resolve-path": 1,
+    "command.select-object": 1,
+    "command.set-clipboard": 1,
+    "command.showcontainer": 1,
+    "command.test-connection": 1,
+    "command.write-verbose": 4,
+    "command.write-warning": 2,
+    "control.finally.stream-stop": 2,
+    "expression.conversion": 4,
+    "parameter.default": 1,
+    "parameter.metadata": 3,
+    "parameter.type": 23,
+    "pipeline.lifecycle": 2,
+    "psb2611": 1,
+    "psb2961": 1,
+    "runtime.scope": 2,
+    "scriptblock.typed": 1,
+    "semantic.lowering.missing": 2,
+    "source.type-definition": 5,
+    "syntax.foreachstatement": 1,
+    "syntax.functiondefinition": 1,
+    "syntax.invokememberexpression": 5,
+    "syntax.memberexpression": 3,
+    "syntax.pipeline": 1,
+    "syntax.subexpression": 1,
+    "syntax.switchstatement": 2,
+    "syntax.trystatement": 1,
+    "syntax.typedefinition": 1,
+    "syntax.typeexpression": 2,
+    "syntax.unsupported": 35
+  },
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellBoundOptimizer.cs": "f4dcd25281b2d394e1e6bf58862323ab98facb46fb0c965faba2ca7eb58a80f0",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.NativeAccess.cs": "40097761aeb820382216e87fc865b94d00bb898c35f22bed65af0245cf026254",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "ebdc212ac64f5368f8a1ad8601fd7f519734e190773e92afe24df3b259ef2d69",
+    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeInvocationExpression.cs": "194017574cb8fc88c4529cb7c1527aea68da8ed19367a03c78db47f5e2a04d89",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeInvocationExpression.cs": "1ac8b26f325aead71b3d906217cf264495e901305acb9efd8559ba4392871384",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs": "7e23b9d58a7a78c0b1c23a1fb5227ab86d051391f9491e047b7eac69ab73c90e",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "0954b00bd1f3e375b0fe1921e72090868f1943199191059dfacc329e808e8552",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Invocations.cs": "cd24120310ce6652bd9daef67e417a716c789d287519587ae07140e89c1d68da",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.NativeFunction.cs": "150958289f5c344e663bb5dd10c1d0dc44a557aeac386e06153910f4706b1e4b",
+    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellNativeReferenceArgument.cs": "28e476029734e37f0ab6610600cc2939de3edda6951c14c38f1d7916cdeaf8fa"
+  },
+  "workflowSourceHashes": {
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Parser/hashtableTools.ps1": "8c84ab506998fb28e70c067eda893fad8fe48e2a7f2ccf98e9c87248d5c34293"
+  },
+  "workflowSourceRevision": "PSScriptTools 549fa3e3d769532320054fc0b3c8f42df0452361; functions/hashtableTools.ps1, unchanged Convert-HashtableString extent extracted by Parser.ParseFile.",
+  "validation": {
+    "focusedTests": 12,
+    "focusedDurationSeconds": 39,
+    "focusedTrxSha256": "23a2e027ab92ea92f0cbaed91d929a64b9a511b638222517de024769b635dfda",
+    "testSourceHashes": {
+      "PowerForge.Tests/PowerShellCompilationParserReferenceTests.cs": "8b38417dd4a646ed44e32a0083b27e3a10a7ff32db65456cf8febf99546419d0",
+      "PowerForge.Tests/PowerShellCompilationHostDataContractsTests.cs": "20469263691744bf9e4c1cc05cd1b85994baea38a146b59d24e33677fb3b5da5"
+    },
+    "net472BuildWarnings": 0,
+    "net472BuildErrors": 0,
+    "net472BuildDurationSeconds": 6.43,
+    "independentReview": "One fresh read-only owner pass, parser_references_review: no actionable P0-P3 findings; binder, immutable reference metadata, backend, runtime storage/writeback and error positions, SDK capabilities and tests inspected. No review tests executed.",
+    "reviewFingerprints": {
+      "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "ebdc212ac64f5368f8a1ad8601fd7f519734e190773e92afe24df3b259ef2d69",
+      "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Invocations.cs": "cd24120310ce6652bd9daef67e417a716c789d287519587ae07140e89c1d68da",
+      "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.NativeFunction.cs": "150958289f5c344e663bb5dd10c1d0dc44a557aeac386e06153910f4706b1e4b",
+      "PowerForge.Tests/PowerShellCompilationParserReferenceTests.cs": "8b38417dd4a646ed44e32a0083b27e3a10a7ff32db65456cf8febf99546419d0"
+    },
+    "workflowObservationsPerHost": 14,
+    "syntheticReferenceObservationsPerHost": 10,
+    "newlyExecutedCompleteFunctions": [
+      "Convert-HashtableString"
+    ],
+    "preservedCompatibility": "Existing one-reference CLR TryParse artifacts and unsupported storage/aliasing checks; Strict SDK type rejection on both target frameworks.",
+    "limits": [
+      "Hybrid retains the active PowerShell runtime, invocation binder, SDK AST identities and native command regions; not runtime-free parsing.",
+      "Values are compared as structural JSON, ignoring unordered hashtable key order. Container identity and nested CLR type fidelity are not separate upstream workflow claims.",
+      "Callback effects/failure proof uses a CLR ToString override, not a PowerShell ScriptMethod reading or mutating caller locals.",
+      "No CLR method-body exception after writing both outputs, nor first-success/second-constraint-failure writeback case was executed. Sequential native-owner writeback is inspected, not rollback-qualified.",
+      "Convert-CommandToHashtable remains hosted: New-Variable-created reference slots lack direct optimized-local storage qualification. Changed co-blocker diagnostics do not count as support.",
+      "Full five-packet census is net10.0 only; both Windows hosts have focused artifact proof. No full-module import, live AD/network/admin, Linux/net8, performance, package or release proof."
+    ]
+  }
+}

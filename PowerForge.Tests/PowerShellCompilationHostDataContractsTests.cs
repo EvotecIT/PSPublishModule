@@ -16,7 +16,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             "function Read-Category { param([System.Management.Automation.ErrorCategory]$Value) return $Value }",
             "function Read-Serialized { param([string]$Value) return [System.Management.Automation.PSSerializer]::Deserialize($Value) }",
             "function Read-MemberKind { param([System.Management.Automation.PSMemberTypes]$Value) return $Value }",
-            "function Read-CommandMetadata { param([System.Management.Automation.CommandInfo]$Value) return $Value }"
+            "function Read-CommandMetadata { param([System.Management.Automation.CommandInfo]$Value) return $Value }",
+            "function Read-HashtableAst { param([System.Management.Automation.Language.HashtableAst]$Value) return $Value }",
+            "function Read-Parsed { param([string]$Value) $tokens=$null; $errors=$null; return [System.Management.Automation.Language.Parser]::ParseInput($Value,[ref]$tokens,[ref]$errors) }"
         })
         {
             using var fixture = ArtifactFixture.Create(source);
