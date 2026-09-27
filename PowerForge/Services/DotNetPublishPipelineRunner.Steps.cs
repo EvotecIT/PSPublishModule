@@ -817,19 +817,37 @@ public sealed partial class DotNetPublishPipelineRunner
 
                 if (properties.TryGetValue(propertyName, out var existing))
                 {
-                    if (!string.Equals(existing, value, StringComparison.OrdinalIgnoreCase))
+                    if (!PublishVersionPropertyMatches(propertyName, existing, value!, plan.SourceRevision))
                     {
                         throw new InvalidOperationException(
                             $"Installer '{installer.Id}' resolved publish property '{propertyName}' to '{value}', " +
                             $"but the target already has '{existing}'. Align installer versioning or publish the target separately.");
                     }
 
+                    // Keep source metadata in InformationalVersion; numeric identities use MSI's canonical shape.
+                    if (!propertyName.Equals("InformationalVersion", StringComparison.OrdinalIgnoreCase))
+                        properties[propertyName] = value!;
                     continue;
                 }
 
                 properties[propertyName] = value!;
             }
         }
+    }
+
+    private static bool PublishVersionPropertyMatches(
+        string propertyName, string existing, string resolved, string? sourceRevision)
+    {
+        if (string.Equals(existing, resolved, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (propertyName.Equals("AssemblyVersion", StringComparison.OrdinalIgnoreCase) ||
+            propertyName.Equals("FileVersion", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Equals(existing + ".0", resolved, StringComparison.OrdinalIgnoreCase);
+        }
+        return propertyName.Equals("InformationalVersion", StringComparison.OrdinalIgnoreCase) &&
+               !string.IsNullOrWhiteSpace(sourceRevision) &&
+               string.Equals(existing, resolved + "+" + sourceRevision, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TargetUsesPublishMsiVersionProperties(

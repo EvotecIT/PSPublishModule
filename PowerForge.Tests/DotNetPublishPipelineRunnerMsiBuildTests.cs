@@ -1486,8 +1486,14 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         }
     }
 
-    [Fact]
-    public void BuildPublishMsBuildProperties_AppliesResolvedMsiVersion_WhenInstallerOptsIn()
+    [Theory]
+    [InlineData("none", false)]
+    [InlineData("release", false)]
+    [InlineData("file-conflict", true)]
+    [InlineData("assembly-conflict", true)]
+    [InlineData("source-conflict", true)]
+    [InlineData("version-conflict", true)]
+    public void BuildPublishMsBuildProperties_AppliesResolvedMsiVersion_WhenInstallerOptsIn(string scenario, bool conflict)
     {
         var root = CreateTempRoot();
         try
@@ -1517,6 +1523,22 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
             var target = Assert.Single(plan.Targets);
             var expectedVersion = $"26.6.{DaysSince20000101(new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc))}";
+            const string revision = "0123456789abcdef0123456789abcdef01234567";
+            plan.SourceRevision = revision;
+            if (scenario != "none")
+            {
+                plan.MsBuildProperties["Version"] = scenario == "version-conflict" ? "26.6.1" : expectedVersion;
+                plan.MsBuildProperties["FileVersion"] = scenario == "file-conflict" ? expectedVersion + ".1" : expectedVersion;
+                plan.MsBuildProperties["AssemblyVersion"] = scenario == "assembly-conflict" ? expectedVersion + ".1" : expectedVersion;
+                plan.MsBuildProperties["InformationalVersion"] = expectedVersion + "+" + (scenario == "source-conflict" ? new string('f', 40) : revision);
+            }
+
+            if (conflict)
+            {
+                Assert.Throws<InvalidOperationException>(() => DotNetPublishPipelineRunner.BuildPublishMsBuildProperties(
+                    plan, target, "net10.0", "win-x64", DotNetPublishStyle.PortableCompat));
+                return;
+            }
 
             var properties = DotNetPublishPipelineRunner.BuildPublishMsBuildProperties(
                 plan,
@@ -1529,7 +1551,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             Assert.Equal(expectedVersion, properties["PackageVersion"]);
             Assert.Equal($"{expectedVersion}.0", properties["FileVersion"]);
             Assert.Equal($"{expectedVersion}.0", properties["AssemblyVersion"]);
-            Assert.Equal(expectedVersion, properties["InformationalVersion"]);
+            Assert.Equal(scenario == "none" ? expectedVersion : expectedVersion + "+" + revision, properties["InformationalVersion"]);
         }
         finally
         {
