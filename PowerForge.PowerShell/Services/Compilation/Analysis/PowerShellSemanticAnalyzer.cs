@@ -307,6 +307,8 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 (nativeInvocation.Receiver is null ? Array.Empty<PowerShellBoundExpression>() : new[] { nativeInvocation.Receiver }).Concat(nativeInvocation.Arguments),
             PowerShellBoundNativeIndexExpression nativeIndex => new[] { nativeIndex.Receiver }.Concat(nativeIndex.Arguments),
             PowerShellBoundNativeCollectionExpression collection => collection.Items.Select(static item => item.Value),
+            PowerShellBoundNativeStatementValueExpression statementValue =>
+                EnumerateStatements(statementValue.Body, descendIntoCaptures: false).SelectMany(EnumerateDirectExpressions),
             PowerShellBoundNativeConditionalValueExpression conditionalValue =>
                 conditionalValue.Clauses.SelectMany(static clause => new[] { clause.Condition, clause.Value })
                     .Concat(new[] { conditionalValue.Otherwise }),
@@ -360,6 +362,17 @@ internal sealed partial class PowerShellSemanticAnalyzer
             _ => null
         };
 
+    private static IEnumerable<PowerShellBoundBlock> EnumerateStatementValueBlocks(PowerShellBoundExpression expression)
+    {
+        if (expression is PowerShellBoundNativeStatementValueExpression value)
+        {
+            yield return value.Body;
+            yield break; // Its own statement walk discovers nested value captures.
+        }
+        foreach (var child in EnumerateExpressionChildren(expression))
+        foreach (var body in EnumerateStatementValueBlocks(child)) yield return body;
+    }
+
     internal static IEnumerable<PowerShellBoundStatement> EnumerateStatements(PowerShellBoundBlock block)
         => EnumerateStatements(block, descendIntoCaptures: true);
 
@@ -368,6 +381,9 @@ internal sealed partial class PowerShellSemanticAnalyzer
         foreach (var statement in block.Statements)
         {
             yield return statement;
+            if (descendIntoCaptures)
+            foreach (var body in EnumerateDirectExpressions(statement).SelectMany(EnumerateStatementValueBlocks))
+            foreach (var nested in EnumerateStatements(body, descendIntoCaptures)) yield return nested;
             if (descendIntoCaptures && statement is PowerShellBoundOutputCaptureStatement capture)
             {
                 foreach (var nested in EnumerateStatements(capture.Body, descendIntoCaptures)) yield return nested;
@@ -575,9 +591,9 @@ internal sealed partial class PowerShellSemanticAnalyzer
             foreach (var item in collection.Items)
             foreach (var read in EnumerateVariableReads(item.Value)) yield return read;
         }
-        if (expression is PowerShellBoundNativeConditionalValueExpression conditionalValue)
+        if (expression is PowerShellBoundNativeConditionalValueExpression or PowerShellBoundNativeStatementValueExpression)
         {
-            foreach (var child in EnumerateExpressionChildren(conditionalValue))
+            foreach (var child in EnumerateExpressionChildren(expression))
             foreach (var read in EnumerateVariableReads(child)) yield return read;
         }
         if (expression is PowerShellBoundArrayCopyExpression copy)
@@ -734,9 +750,9 @@ internal sealed partial class PowerShellSemanticAnalyzer
             foreach (var item in collection.Items)
             foreach (var nested in EnumerateInvocations(item.Value)) yield return nested;
         }
-        if (expression is PowerShellBoundNativeConditionalValueExpression conditionalValue)
+        if (expression is PowerShellBoundNativeConditionalValueExpression or PowerShellBoundNativeStatementValueExpression)
         {
-            foreach (var child in EnumerateExpressionChildren(conditionalValue))
+            foreach (var child in EnumerateExpressionChildren(expression))
             foreach (var nested in EnumerateInvocations(child)) yield return nested;
         }
         if (expression is PowerShellBoundArrayConcatenationExpression concatenation)

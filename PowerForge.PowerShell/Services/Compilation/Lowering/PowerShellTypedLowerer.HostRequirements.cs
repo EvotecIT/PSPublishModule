@@ -86,7 +86,10 @@ internal sealed partial class PowerShellTypedLowerer
             .Any(static expression => expression.RequiresHostBinding);
 
     private static bool ContainsPowerShellStreamWrite(PowerShellBoundBlock block)
-        => block.Statements.Any(StatementContainsPowerShellStreamWrite);
+        => block.Statements.Any(StatementContainsPowerShellStreamWrite) || block.Statements
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+            .Any(static expression => expression is PowerShellBoundNativeStatementValueExpression);
 
     private static bool ContainsCooperativeProvider(PowerShellBoundBlock block)
         => block.Statements.Any(StatementContainsCooperativeProvider);

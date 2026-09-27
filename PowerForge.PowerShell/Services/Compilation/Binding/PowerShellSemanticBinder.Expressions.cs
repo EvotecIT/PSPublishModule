@@ -83,6 +83,8 @@ internal sealed partial class PowerShellSemanticBinder
             return knownProperty;
         switch (syntax)
         {
+            case TryStatementAst attempted when capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding):
+                return BindNativeStatementValue(document, attempted, symbols, functions, diagnostics, targetFramework, capabilities);
             case IfStatementAst conditional when capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding):
                 return BindNativeConditionalValue(document, conditional, symbols, functions, diagnostics,
                     targetFramework, capabilities, contextualType == typeof(object));

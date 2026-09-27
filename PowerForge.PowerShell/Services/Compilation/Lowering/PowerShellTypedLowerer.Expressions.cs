@@ -5,7 +5,7 @@ internal sealed partial class PowerShellTypedLowerer
     private static PowerShellLoweredExpression LowerExpression(
         PowerShellBoundExpression expression,
         IReadOnlyDictionary<string, LoweringFunctionContext> functions,
-        LoweredNameAllocator names,
+        LoweredFunctionScope names,
         PowerShellCompilationCapability targetCapabilities)
         => expression switch
         {
@@ -170,6 +170,9 @@ internal sealed partial class PowerShellTypedLowerer
                     LowerExpression(item.Value, functions, names, targetCapabilities), item.SetSuccess,
                     names.Allocate("pf_collection_value"), names.Allocate("pf_collection_error"), item.EmitsOutput, item.IsPipelineStatement)).ToArray(),
                 collection.ShareEmptyResult, names.Allocate("pf_collection_result"), collection.SingleExpression, collection.CollapseResult),
+            PowerShellBoundNativeStatementValueExpression statementValue => new PowerShellLoweredNativeStatementValueExpression(
+                statementValue.Span, LowerStatements(statementValue.Body, functions, names.SymbolTypes, names.LocalTypes,
+                    names.Declared, names, targetCapabilities), names.Allocate("pf_value_records"), names.Allocate("pf_value_sink")),
             PowerShellBoundNativeConditionalValueExpression conditionalValue => new PowerShellLoweredNativeConditionalValueExpression(
                 conditionalValue.Span,
                 conditionalValue.Clauses.Select(clause => new PowerShellLoweredNativeConditionalValueClause(
@@ -271,7 +274,7 @@ internal sealed partial class PowerShellTypedLowerer
 
     private static string?[] CreateEvaluationTemporaryNames(
         PowerShellBoundInvocationExpression invocation,
-        LoweredNameAllocator names,
+        LoweredFunctionScope names,
         bool preserveCallerErrorScope)
     {
         var result = new string?[invocation.Arguments.Length];

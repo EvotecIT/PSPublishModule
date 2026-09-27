@@ -189,8 +189,8 @@ internal sealed partial class PowerShellTypedLowerer
             if (function.NativeFunctionBinding is not null) localTypes.Clear();
             var symbolTypes = function.Parameters.ToDictionary(static parameter => parameter.Symbol.StableKey, static parameter => parameter.Type.ClrType, StringComparer.Ordinal);
             foreach (var local in function.Locals) symbolTypes[local.Symbol.StableKey] = local.Type.ClrType;
-            var names = new LoweredNameAllocator(function.Parameters.Select(static parameter => parameter.Symbol.Name)
-                .Concat(function.Locals.Select(static local => local.Symbol.Name)));
+            var names = new LoweredFunctionScope(function.Parameters.Select(static parameter => parameter.Symbol.Name)
+                .Concat(function.Locals.Select(static local => local.Symbol.Name)), symbolTypes, localTypes, declared);
             var topLevelAssignments = function.Body.Statements.OfType<PowerShellBoundAssignmentStatement>()
                 .GroupBy(static assignment => assignment.Target.StableKey, StringComparer.Ordinal)
                 .ToDictionary(static group => group.Key, static group => group.Min(assignment => assignment.Span.StartOffset), StringComparer.Ordinal);
@@ -424,7 +424,7 @@ internal sealed partial class PowerShellTypedLowerer
         IReadOnlyDictionary<string, Type> symbolTypes,
         IReadOnlyDictionary<string, Type> localTypes,
         ISet<string> declared,
-        LoweredNameAllocator names,
+        LoweredFunctionScope names,
         PowerShellCompilationCapability targetCapabilities)
         => statement switch
         {
@@ -557,7 +557,7 @@ internal sealed partial class PowerShellTypedLowerer
     private static PowerShellLoweredStatement LowerExpressionStatement(
         PowerShellBoundExpressionStatement statement,
         IReadOnlyDictionary<string, LoweringFunctionContext> functions,
-        LoweredNameAllocator names,
+        LoweredFunctionScope names,
         PowerShellCompilationCapability targetCapabilities)
     {
         var expression = LowerExpression(statement.Expression, functions, names, targetCapabilities);
@@ -575,7 +575,7 @@ internal sealed partial class PowerShellTypedLowerer
         IReadOnlyDictionary<string, Type> symbolTypes,
         IReadOnlyDictionary<string, Type> localTypes,
         ISet<string> declared,
-        LoweredNameAllocator names,
+        LoweredFunctionScope names,
         PowerShellCompilationCapability targetCapabilities)
     {
         var declareInitializer = loop.Initializer is not null &&
@@ -597,7 +597,7 @@ internal sealed partial class PowerShellTypedLowerer
         IReadOnlyDictionary<string, Type> symbolTypes,
         IReadOnlyDictionary<string, Type> localTypes,
         ISet<string> declared,
-        LoweredNameAllocator names,
+        LoweredFunctionScope names,
         PowerShellCompilationCapability targetCapabilities)
     {
         declared.Add(loop.Variable.StableKey);
@@ -621,7 +621,7 @@ internal sealed partial class PowerShellTypedLowerer
         IReadOnlyDictionary<string, Type> symbolTypes,
         IReadOnlyDictionary<string, Type> localTypes,
         ISet<string> declared,
-        LoweredNameAllocator names,
+        LoweredFunctionScope names,
         PowerShellCompilationCapability targetCapabilities)
         => block.Statements.Select(statement => LowerStatement(statement, functions, symbolTypes, localTypes, declared, names, targetCapabilities)).ToArray();
 

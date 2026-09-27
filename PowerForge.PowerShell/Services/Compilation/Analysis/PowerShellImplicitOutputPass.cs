@@ -49,6 +49,11 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
             : function).ToArray());
     }
 
+    /// <summary>Uses the canonical native output rewrite before a statement block becomes an expression value.</summary>
+    internal static PowerShellBoundBlock NormalizeNativeCapture(PowerShellBoundBlock body, string sourcePath, string sourceText)
+        => RewriteBlock(body, true, true, new PowerShellBoundSourceDocument(body.Span.DocumentId,
+            sourcePath, body.Span, Array.Empty<PowerShellSymbolId>(), sourceText));
+
     private static PowerShellBoundBlock RewriteBlock(PowerShellBoundBlock block, bool usesNativeInvocation,
         bool commandEnumeration, PowerShellBoundSourceDocument document, bool alreadyProtected = false)
     {

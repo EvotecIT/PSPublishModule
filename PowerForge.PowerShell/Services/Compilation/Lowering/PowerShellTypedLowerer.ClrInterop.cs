@@ -5,7 +5,7 @@ internal sealed partial class PowerShellTypedLowerer
     private static PowerShellLoweredClrInvocationExpression LowerClrInvocation(
         PowerShellBoundClrInvocationExpression invocation,
         IReadOnlyDictionary<string, LoweringFunctionContext> functions,
-        LoweredNameAllocator names,
+        LoweredFunctionScope names,
         PowerShellCompilationCapability targetCapabilities)
         => new(
             invocation.Span,

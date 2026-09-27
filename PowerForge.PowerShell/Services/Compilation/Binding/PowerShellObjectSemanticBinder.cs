@@ -54,7 +54,7 @@ internal static class PowerShellObjectSemanticBinder
             Ast? valueSyntax = pair.Item2 is PipelineAst { PipelineElements.Count: 1 } pipeline &&
                                pipeline.PipelineElements[0] is CommandExpressionAst command
                 ? command.Expression
-                : capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && pair.Item2 is IfStatementAst
+                : capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && pair.Item2 is IfStatementAst or TryStatementAst
                     ? pair.Item2
                     : null;
             if (valueSyntax is null && PowerShellCommandRegionSemanticBinder.IsNativeLiteralInvocationValue(pair.Item2, capabilities))

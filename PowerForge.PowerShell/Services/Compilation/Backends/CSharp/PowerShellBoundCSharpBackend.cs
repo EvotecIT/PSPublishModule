@@ -62,6 +62,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var discardHelper = ContainsDiscardValue(function.Statements)
             ? GetTemporaryIdentifier("discardValue")
             : null;
+        _statementValueDiscardHelper = discardHelper;
         if (!initializer && function.Symbol.Kind != PowerShellSymbolKind.NativeScriptBlock)
             AppendPublicMethodDocumentation(builder, function);
         builder.Append(initializer ? "    private " : function.Symbol.Kind == PowerShellSymbolKind.NativeScriptBlock ? "    private static " : managedInstance ? "    public " : "    public static ")
@@ -203,7 +204,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .Append(statement.Span.StartLine.ToString(CultureInfo.InvariantCulture))
             .Append(" \"").Append(statement.Span.DocumentId).AppendLine("\"");
         var start = PowerShellGeneratedSourcePosition.Get(builder);
+        var expressionMapStart = _statementValueMaps.Count;
+        var fragmentStart = builder.Length;
         EmitStatementCore(builder, statement, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+        MapStatementValueFragments(builder, fragmentStart, expressionMapStart, sourceMap);
         var end = PowerShellGeneratedSourcePosition.Get(builder);
         builder.Append(prefix).AppendLine("#line default");
         sourceMap.Add(new PowerShellCompilationSourceMapEntry(
@@ -472,6 +476,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellLoweredNativeInvocationExpression nativeInvocation => EmitNativeInvocation(nativeInvocation),
             PowerShellLoweredNativeIndexExpression nativeIndex => EmitNativeIndex(nativeIndex),
             PowerShellLoweredNativeCollectionExpression collection => EmitNativeCollection(collection),
+            PowerShellLoweredNativeStatementValueExpression statementValue => EmitNativeStatementValue(statementValue),
             PowerShellLoweredNativeConditionalValueExpression conditionalValue => EmitNativeConditionalValue(conditionalValue),
             PowerShellLoweredArrayCopyExpression copy => EmitArrayCopy(copy),
             PowerShellLoweredArrayConcatenationExpression concatenation => EmitArrayConcatenation(concatenation),

@@ -166,9 +166,9 @@ internal static class PowerShellNativeFunctionBindingPolicy
             searchNestedScriptBlocks: false) is not null;
 
     private static bool RequiresNativeStatementValue(FunctionDefinitionAst function)
-        => function.Body.Find(static node => node is IfStatementAst conditional &&
-            (conditional.Parent is HashtableAst ||
-             conditional.Parent is StatementBlockAst { Parent: ArrayExpressionAst or SubExpressionAst }),
+        => function.Body.Find(static node => (node is IfStatementAst or TryStatementAst) &&
+            (node.Parent is HashtableAst ||
+             node.Parent is StatementBlockAst { Parent: ArrayExpressionAst or SubExpressionAst }),
             searchNestedScriptBlocks: false) is not null;
 
     private static bool RequiresNativeLiteralCommandValue(FunctionDefinitionAst function,

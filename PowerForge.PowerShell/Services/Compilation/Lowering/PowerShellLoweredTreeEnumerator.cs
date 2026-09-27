@@ -6,12 +6,25 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellLoweredTreeEnumerator
 {
+    private static IEnumerable<IEnumerable<PowerShellLoweredStatement>> EnumerateStatementValueBlocks(PowerShellLoweredExpression expression)
+    {
+        if (expression is PowerShellLoweredNativeStatementValueExpression value)
+        {
+            yield return value.Statements;
+            yield break;
+        }
+        foreach (var child in EnumerateChildExpressions(expression))
+        foreach (var body in EnumerateStatementValueBlocks(child)) yield return body;
+    }
+
     internal static IEnumerable<PowerShellLoweredStatement> EnumerateStatements(
         IEnumerable<PowerShellLoweredStatement> statements)
     {
         foreach (var statement in statements)
         {
             yield return statement;
+            foreach (var body in EnumerateDirectExpressions(statement).SelectMany(EnumerateStatementValueBlocks))
+            foreach (var embedded in EnumerateStatements(body)) yield return embedded;
             foreach (var nested in EnumerateNestedStatements(statement))
                 yield return nested;
         }
@@ -20,10 +33,11 @@ internal static class PowerShellLoweredTreeEnumerator
     internal static IEnumerable<PowerShellLoweredExpression> EnumerateExpressions(
         IEnumerable<PowerShellLoweredStatement> statements)
     {
+        var visited = new HashSet<PowerShellLoweredExpression>();
         foreach (var statement in EnumerateStatements(statements))
         foreach (var expression in EnumerateDirectExpressions(statement))
         foreach (var descendant in EnumerateExpressionTree(expression))
-            yield return descendant;
+            if (visited.Add(descendant)) yield return descendant;
     }
 
     private static IEnumerable<PowerShellLoweredStatement> EnumerateNestedStatements(
@@ -207,6 +221,10 @@ internal static class PowerShellLoweredTreeEnumerator
                 break;
             case PowerShellLoweredNativeCollectionExpression collection:
                 foreach (var item in collection.Items) yield return item.Value;
+                break;
+            case PowerShellLoweredNativeStatementValueExpression statementValue:
+                foreach (var value in EnumerateStatements(statementValue.Statements).SelectMany(EnumerateDirectExpressions))
+                    yield return value;
                 break;
             case PowerShellLoweredNativeConditionalValueExpression conditionalValue:
                 foreach (var clause in conditionalValue.Clauses)

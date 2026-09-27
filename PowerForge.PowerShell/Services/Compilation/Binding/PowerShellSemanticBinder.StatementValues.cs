@@ -58,4 +58,27 @@ internal sealed partial class PowerShellSemanticBinder
         MergeSymbolValueStates(symbols, paths.ToArray());
         return new PowerShellBoundNativeConditionalValueExpression(span, clauses.ToArray(), otherwise, preserveRecords);
     }
+    /// <summary>Binds a try-valued literal through the existing statement/error owner.</summary>
+    private PowerShellBoundExpression? BindNativeStatementValue(ParsedSourceDocument document, TryStatementAst syntax,
+        IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics, string? targetFramework,
+        PowerShellCompilationCapability capabilities)
+    {
+        var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) ||
+            !capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) ||
+            syntax.FindAll(static node => node is ReturnStatementAst or TrapStatementAst, false).Any() ||
+            PowerShellControlFlowBindingPolicy.HasLoopTransferLeavingCapture(syntax))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2506",
+                "Native try values require the success-stream host and a closed enclosing-transfer boundary without traps.", span));
+            return null;
+        }
+        var statement = BindStatementCore(document, syntax, symbols, functions, diagnostics, false,
+            targetFramework, capabilities, allowNonTerminalSuccessOutput: true);
+        return statement is null ? null : new PowerShellBoundNativeStatementValueExpression(span,
+            PowerShellImplicitOutputPass.NormalizeNativeCapture(new PowerShellBoundBlock(span, new[] { statement }), document.Path, document.Text));
+    }
+
 }

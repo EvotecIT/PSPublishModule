@@ -36,6 +36,24 @@ internal sealed partial class PowerShellTypedLowerer
             .OfType<PowerShellBoundInvocationExpression>()
             .Any(call => loopFunctions.Contains(call.Target.StableKey));
 
+    /// <summary>Shares method storage state with statement-valued expressions; it is not a new PowerShell scope.</summary>
+    private sealed class LoweredFunctionScope
+    {
+        private readonly LoweredNameAllocator _names;
+        internal LoweredFunctionScope(IEnumerable<string> authoredNames, IReadOnlyDictionary<string, Type> symbolTypes,
+            IReadOnlyDictionary<string, Type> localTypes, ISet<string> declared)
+        {
+            _names = new LoweredNameAllocator(authoredNames);
+            SymbolTypes = symbolTypes;
+            LocalTypes = localTypes;
+            Declared = declared;
+        }
+        internal IReadOnlyDictionary<string, Type> SymbolTypes { get; }
+        internal IReadOnlyDictionary<string, Type> LocalTypes { get; }
+        internal ISet<string> Declared { get; }
+        internal string Allocate(string prefix) => _names.Allocate(prefix);
+    }
+
     private sealed class LoweredNameAllocator
     {
         private readonly HashSet<string> _used;

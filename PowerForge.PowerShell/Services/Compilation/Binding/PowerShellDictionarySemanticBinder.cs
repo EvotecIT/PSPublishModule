@@ -23,7 +23,7 @@ internal static class PowerShellDictionarySemanticBinder
         {
             Ast? valueSyntax = GetValueExpression(pair.Item2);
             if (valueSyntax is null && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
-                pair.Item2 is IfStatementAst)
+                pair.Item2 is IfStatementAst or TryStatementAst)
                 valueSyntax = pair.Item2;
             if (valueSyntax is null && PowerShellCommandRegionSemanticBinder.IsNativeLiteralInvocationValue(pair.Item2, capabilities))
                 valueSyntax = pair.Item2;

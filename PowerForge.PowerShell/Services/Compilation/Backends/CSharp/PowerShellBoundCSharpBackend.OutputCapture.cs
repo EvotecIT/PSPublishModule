@@ -23,8 +23,24 @@ internal sealed partial class PowerShellBoundCSharpBackend
             indent++;
             prefix = new string(' ', indent * 4);
         }
-        var records = capture.RecordsTemporary;
-        var previous = capture.SinkTemporary;
+        EmitCapturedOutputBody(builder, capture.Statements, capture.RecordsTemporary, capture.SinkTemporary,
+            capture.Target, capture.UsesNativeInvocation, capture.Kind, capture.ShareEmptyArray,
+            indent, getTemporaryIdentifier, discardHelper, sourceMap);
+        if (capture.NativeTarget is not null)
+            builder.Append(new string(' ', (indent - 1) * 4)).Append('}')
+                .Append(EmitNativeAssignmentLocation(capture.NativeTarget)).AppendLine(";");
+    }
+
+    /// <summary>Shares output collection between assigned statements and literal statement values.</summary>
+    private void EmitCapturedOutputBody(StringBuilder builder, IEnumerable<PowerShellLoweredStatement> statements,
+        string records, string previous, PowerShellSymbolId? target, bool usesNativeInvocation,
+        PowerShellOutputCaptureKind kind, bool shareEmptyArray, int indent,
+        Func<string, string> getTemporaryIdentifier, string? discardHelper,
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+    {
+        var prefix = new string(' ', indent * 4);
+
+
         builder.Append(prefix).Append("var ").Append(records).AppendLine(" = new global::System.Collections.Generic.List<object?>();");
         builder.Append(prefix).Append("var ").Append(previous).AppendLine(" = __writeOutput;");
         var record = getTemporaryIdentifier("capturedRecord");
@@ -34,7 +50,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .Append(records).Append(".Add(").Append(record).AppendLine("); };");
         builder.Append(prefix).AppendLine("try");
         builder.Append(prefix).AppendLine("{");
-        if (capture.UsesNativeInvocation)
+        if (usesNativeInvocation)
         {
             builder.Append(prefix).AppendLine("    using (__nativeFunction.RedirectOutput(__writeOutput))");
             builder.Append(prefix).AppendLine("    {");
@@ -42,21 +58,21 @@ internal sealed partial class PowerShellBoundCSharpBackend
         _outputCaptureDepth++;
         try
         {
-            foreach (var statement in capture.Statements)
-                EmitStatement(builder, statement, indent + (capture.UsesNativeInvocation ? 2 : 1), getTemporaryIdentifier, discardHelper, sourceMap);
+            foreach (var statement in statements)
+                EmitStatement(builder, statement, indent + (usesNativeInvocation ? 2 : 1), getTemporaryIdentifier, discardHelper, sourceMap);
         }
         finally { _outputCaptureDepth--; }
-        if (capture.UsesNativeInvocation)
+        if (usesNativeInvocation)
             builder.Append(prefix).AppendLine("    }");
         builder.Append(prefix).Append("    ");
-        var value = capture.UsesNativeInvocation ? getTemporaryIdentifier("collapsedCapture") : null;
+        var value = usesNativeInvocation ? getTemporaryIdentifier("collapsedCapture") : null;
         if (value is not null)
             builder.Append("object? ").Append(value).Append(" = ");
         else
-            builder.Append(RenderStorage(capture.Target!)).Append(" = ");
-        if (capture.Kind == PowerShellOutputCaptureKind.NativeObjectArray)
+            builder.Append(RenderStorage(target!)).Append(" = ");
+        if (kind == PowerShellOutputCaptureKind.NativeObjectArray)
             builder.Append(records).Append(".Count == 0 ? ")
-                .Append(capture.ShareEmptyArray ? "global::System.Array.Empty<object>()" : "new object?[0]")
+                .Append(shareEmptyArray ? "global::System.Array.Empty<object>()" : "new object?[0]")
                 .Append(" : ").Append(records).AppendLine(".ToArray();");
         else
             builder.Append(records).Append(".Count == 0 ? global::System.Management.Automation.Internal.AutomationNull.Value : ").Append(records).Append(".Count == 1 ? ")
@@ -70,7 +86,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         // pending records when a raw CLR exception escapes (for example MoveNext).
         builder.Append(prefix).Append("catch (global::System.Management.Automation.RuntimeException) { ")
             .Append(records).AppendLine(".Clear(); throw; }");
-        if (capture.Kind == PowerShellOutputCaptureKind.NativeObjectArray)
+        if (kind == PowerShellOutputCaptureKind.NativeObjectArray)
             builder.Append(prefix).Append("catch (global::PowerForge.Generated.Runtime.PowerShellCapturedReturnSignal) { ")
                 .Append(records).AppendLine(".Clear(); throw; }");
         var flushedRecord = getTemporaryIdentifier("flushedCaptureRecord");
@@ -80,9 +96,6 @@ internal sealed partial class PowerShellBoundCSharpBackend
         builder.Append(prefix).Append("    foreach (var ").Append(flushedRecord).Append(" in ").Append(records)
             .Append(") ").Append(previous).Append('(').Append(flushedRecord).AppendLine(");");
         builder.Append(prefix).AppendLine("}");
-        if (capture.NativeTarget is not null)
-            builder.Append(new string(' ', (indent - 1) * 4)).Append('}')
-                .Append(EmitNativeAssignmentLocation(capture.NativeTarget)).AppendLine(";");
     }
 
     private void EmitStableScalarVectorCapture(
