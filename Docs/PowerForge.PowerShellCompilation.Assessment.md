@@ -1974,3 +1974,11 @@ observations, review and failure resolution. The
 assembles the pinned external source without redistributing it. The complete
 net472 portfolio and performance were not refreshed. The broader goal stays
 active; no PR, merge or release occurs.
+
+## M29a runtime-created certificate policy boundary
+
+At compiler head `a982612fad7037cca71601f807cd7e666ae229cd`, the unchanged pinned PowerInfoblox Hide-SelfSignedCerts source (SHA-256 `941e9b14af6083304002e0cb0e4ab435cbdc203537673cc2342be8fb45c3b16b`) was assembled externally and built as reviewed-lock Hybrid modules on net10.0 and net472. Each artifact retains its one function and emits zero methods. Both target Strict analyses reject (exit 1, canProceed false).
+
+Four case/host original-generated comparisons match, with two calls each: eight matching observations on PowerShell 7.6.6 and Windows PowerShell 5.1.26100.9444 combined. Eight fresh child executions exit zero. Windows PowerShell compiles the actual authored TrustAllCertsPolicy, installs it and returns true for an inert null-argument validation call; a module-local Add-Type failure warns and preserves the prior policy. PowerShell 7 returns before type compilation and sets only the module flag, including under the failure shadow. The driver asserts these outcomes and restores process-local policy in finally. No request, TLS handshake, remote operation, certificate-store or machine mutation occurs.
+
+The [durable evidence](../Benchmarks/PowerShellCompilation/Corpus/m29a-certificate-policy-boundary.json) records artifacts, reviewed locks, generated source, observer hashes, exact observations and limits. Pinned source remains external because licensing was not established. The net10 generated build reports existing NU1510 package warnings. Compiler source and five pinned packets are unchanged; no aggregate gate or repeated census is warranted. Existing 544/565 emitted and 21 retained counts remain authoritative; this resolves one disposition to justified hosted, raising that count to seven and leaving 14 unresolved. No compiled execution credit or general Add-Type/PInvoke support is claimed.

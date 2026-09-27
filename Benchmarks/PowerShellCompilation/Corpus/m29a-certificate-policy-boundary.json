@@ -1,0 +1,310 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Qualified hosted runtime-generated legacy certificate policy; zero new emitted methods or compiled execution credit.",
+  "compilerCommit": "a982612fad7037cca71601f807cd7e666ae229cd",
+  "source": {
+    "module": "PowerInfoblox",
+    "function": "Hide-SelfSignedCerts",
+    "revision": "33067f88cbd8afae2f35ee0436475f7087ad65cf",
+    "relativePath": "Private/Hide-SelfSignedCerts.ps1",
+    "sourceSha256": "941e9b14af6083304002e0cb0e4ab435cbdc203537673cc2342be8fb45c3b16b",
+    "redistribution": "External only; no license file found at pinned revision"
+  },
+  "driver": "ExternalWorkflows/PowerInfoblox/CertificatePolicy/Observe.ps1",
+  "driverSha256": "600e212dc4a4ebd02a95995de74b2f108c7a1dfb23890d433951dff0949e30e9",
+  "portfolio": {
+    "emitted": 544,
+    "retained": 21,
+    "functions": 565,
+    "stableUnits": 584,
+    "censusRepeated": false,
+    "reason": "Compiler and pinned source unchanged; isolated artifact/runtime qualification only."
+  },
+  "hosts": [
+    {
+      "framework": "net10.0",
+      "artifactSha256": "5b3af7ca2344f558bd62591c9d60be296bc9a0fde5d64d42563af7b8c177907e",
+      "dependencyLockSha256": "023753adca923a459838a48772b0369b71fff4bfe17d84a9cbbc1728a47769ba",
+      "strictCanProceed": false,
+      "strictExplanationSha256": "5fea4c526d58586d448e910f811beab9c4cdc265ffc3b4c594350fde5edb0fd6",
+      "disposition": {
+        "unitId": "3ab1cb816b7386e8a9a83f2b",
+        "relativePath": "Fixture.psm1",
+        "name": "Hide-SelfSignedCerts",
+        "kind": "Function",
+        "startLine": 1,
+        "semanticEligible": false,
+        "emittedClrMethod": false,
+        "emittedBinaryCmdlet": false,
+        "retainedHostedSource": true,
+        "usesNativeFunctionBinding": false,
+        "runtimeCommandRegions": 0,
+        "boundaryCrossings": 0,
+        "shapingFallback": false,
+        "omitted": false,
+        "rejected": false,
+        "generatedMemberName": "",
+        "dependencyCauses": [],
+        "boundaryCauses": [
+          "Authored source remains on the hosted PowerShell path after artifact shaping."
+        ],
+        "diagnosticChain": [
+          {
+            "code": "UnsupportedSyntax",
+            "featureId": "syntax.memberexpression",
+            "message": "CLR member 'System.Net.ServicePointManager.CertificatePolicy' was not found as one target-compatible readable and writable member.",
+            "line": 24,
+            "column": 9
+          }
+        ],
+        "moduleStateReadBoundaryCrossings": 0,
+        "moduleStateWriteBoundaryCrossings": 0,
+        "regionGraph": null,
+        "promotedTypedRegions": 0,
+        "generatedRegionMemberNames": []
+      },
+      "cases": [
+        {
+          "case": "real",
+          "originalExitCode": 0,
+          "generatedExitCode": 0,
+          "originalSha256": "5e932b285faa3a9419fe505de3acffa94d55ed6ab3ba1b36cd5f31b87a03449c",
+          "generatedSha256": "5e932b285faa3a9419fe505de3acffa94d55ed6ab3ba1b36cd5f31b87a03449c",
+          "result": {
+            "case": "real",
+            "hostVersion": "7.6.6",
+            "modern": true,
+            "restored": true,
+            "observations": [
+              {
+                "iteration": 1,
+                "state": {
+                  "skip": true,
+                  "addTypeCalls": 0
+                },
+                "warnings": [],
+                "caught": null,
+                "policyType": null,
+                "inertValidation": null,
+                "priorPreserved": true
+              },
+              {
+                "iteration": 2,
+                "state": {
+                  "skip": true,
+                  "addTypeCalls": 0
+                },
+                "warnings": [],
+                "caught": null,
+                "policyType": null,
+                "inertValidation": null,
+                "priorPreserved": true
+              }
+            ]
+          }
+        },
+        {
+          "case": "failure",
+          "originalExitCode": 0,
+          "generatedExitCode": 0,
+          "originalSha256": "e802d609954cf19efa549a538fd9138a7f7319ae2b973c4a8c85da9066286866",
+          "generatedSha256": "e802d609954cf19efa549a538fd9138a7f7319ae2b973c4a8c85da9066286866",
+          "result": {
+            "case": "failure",
+            "hostVersion": "7.6.6",
+            "modern": true,
+            "restored": true,
+            "observations": [
+              {
+                "iteration": 1,
+                "state": {
+                  "skip": true,
+                  "addTypeCalls": 0
+                },
+                "warnings": [],
+                "caught": null,
+                "policyType": null,
+                "inertValidation": null,
+                "priorPreserved": true
+              },
+              {
+                "iteration": 2,
+                "state": {
+                  "skip": true,
+                  "addTypeCalls": 0
+                },
+                "warnings": [],
+                "caught": null,
+                "policyType": null,
+                "inertValidation": null,
+                "priorPreserved": true
+              }
+            ]
+          }
+        }
+      ],
+      "generatedSourceHashes": {
+        "2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a": "fab90cf9546b3715d763ddfff805d0e47772f0c640c5976322a11d5e7a18bfeb",
+        "CertificatePolicy.csproj": "3ba806a1798eaf370a6444763feb9e9db788b84f3cbd263086c607bd3d782b9b",
+        "CompiledCmdlets.cs": "93c52ee9813388f12b305df28bc8402e17d164c0fc2fa987d857c6bd90000592",
+        "CompiledPowerShell.cs": "5356ac0fedcdabed02f84273b8cdc9e48ef8774189dbf915ad0d80143249ecbc",
+        "Directory.Build.props": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Build.targets": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Packages.props": "a96e6b8834dbdb32e1410abfdb50d0483c028bba2edd5fed4b6e5cfc583c6e46",
+        "global.json": "1a9972198a8d91eb872d3b4d3f5d6603fa2b04620c9e5c6d057a59f0d0f32992",
+        "NuGet.Config": "81afa9a2ee0dd27b21be56f5efed21aa8cf08c8b2d4db4763cbee5cf28fb402e",
+        "PowerForge.TargetContract.json": "90180f20d4060b1d15573552f333e59b81e8c77f1bdfb9e4b9a3da8bdc269c78",
+        "source-map.json": "37820042e37e95481bace82b27185307279355b625ea75eb31c2d5b9fc045db4"
+      }
+    },
+    {
+      "framework": "net472",
+      "artifactSha256": "b877b5e807e908d44abaeadf163003f9f0782458c9e187749a962e93a8473357",
+      "dependencyLockSha256": "bbe7bf63a0746e43e1b2b36f034a468d14b895266b0124e06d2a2584abd9e9dc",
+      "strictCanProceed": false,
+      "strictExplanationSha256": "6523f349ddf51600a69bc3963bed03bed134f1f582d34229772511e9d48a8b05",
+      "disposition": {
+        "unitId": "3ab1cb816b7386e8a9a83f2b",
+        "relativePath": "Fixture.psm1",
+        "name": "Hide-SelfSignedCerts",
+        "kind": "Function",
+        "startLine": 1,
+        "semanticEligible": false,
+        "emittedClrMethod": false,
+        "emittedBinaryCmdlet": false,
+        "retainedHostedSource": true,
+        "usesNativeFunctionBinding": false,
+        "runtimeCommandRegions": 0,
+        "boundaryCrossings": 0,
+        "shapingFallback": false,
+        "omitted": false,
+        "rejected": false,
+        "generatedMemberName": "",
+        "dependencyCauses": [],
+        "boundaryCauses": [
+          "Authored source remains on the hosted PowerShell path after artifact shaping."
+        ],
+        "diagnosticChain": [
+          {
+            "code": "UnsupportedSyntax",
+            "featureId": "syntax.memberexpression",
+            "message": "CLR member 'System.Net.ServicePointManager.CertificatePolicy' was not found as one target-compatible readable and writable member.",
+            "line": 24,
+            "column": 9
+          }
+        ],
+        "moduleStateReadBoundaryCrossings": 0,
+        "moduleStateWriteBoundaryCrossings": 0,
+        "regionGraph": null,
+        "promotedTypedRegions": 0,
+        "generatedRegionMemberNames": []
+      },
+      "cases": [
+        {
+          "case": "real",
+          "originalExitCode": 0,
+          "generatedExitCode": 0,
+          "originalSha256": "21ea26c7f542498b6f8749624f17a25c3a19a25cbc3f26411142cea94ba7dc19",
+          "generatedSha256": "21ea26c7f542498b6f8749624f17a25c3a19a25cbc3f26411142cea94ba7dc19",
+          "result": {
+            "case": "real",
+            "hostVersion": "5.1.26100.9444",
+            "modern": false,
+            "restored": true,
+            "observations": [
+              {
+                "iteration": 1,
+                "state": {
+                  "skip": false,
+                  "addTypeCalls": 0
+                },
+                "warnings": [],
+                "caught": null,
+                "policyType": "TrustAllCertsPolicy",
+                "inertValidation": true,
+                "priorPreserved": false
+              },
+              {
+                "iteration": 2,
+                "state": {
+                  "skip": false,
+                  "addTypeCalls": 0
+                },
+                "warnings": [],
+                "caught": null,
+                "policyType": "TrustAllCertsPolicy",
+                "inertValidation": true,
+                "priorPreserved": false
+              }
+            ]
+          }
+        },
+        {
+          "case": "failure",
+          "originalExitCode": 0,
+          "generatedExitCode": 0,
+          "originalSha256": "27619f1cb2f76a7c9de0b349048b64869603aa8af332a0fcca762dcf838691e0",
+          "generatedSha256": "27619f1cb2f76a7c9de0b349048b64869603aa8af332a0fcca762dcf838691e0",
+          "result": {
+            "case": "failure",
+            "hostVersion": "5.1.26100.9444",
+            "modern": false,
+            "restored": true,
+            "observations": [
+              {
+                "iteration": 1,
+                "state": {
+                  "skip": false,
+                  "addTypeCalls": 1
+                },
+                "warnings": [
+                  "Hide-SelfSignedCerts - Error when trying to hide self-signed certificates: owned offline type-definition failure"
+                ],
+                "caught": null,
+                "policyType": "System.Net.DefaultCertPolicy",
+                "inertValidation": null,
+                "priorPreserved": true
+              },
+              {
+                "iteration": 2,
+                "state": {
+                  "skip": false,
+                  "addTypeCalls": 2
+                },
+                "warnings": [
+                  "Hide-SelfSignedCerts - Error when trying to hide self-signed certificates: owned offline type-definition failure"
+                ],
+                "caught": null,
+                "policyType": "System.Net.DefaultCertPolicy",
+                "inertValidation": null,
+                "priorPreserved": true
+              }
+            ]
+          }
+        }
+      ],
+      "generatedSourceHashes": {
+        "2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a": "fab90cf9546b3715d763ddfff805d0e47772f0c640c5976322a11d5e7a18bfeb",
+        "CertificatePolicy.csproj": "277c2e1b51d90a1c3e9bf1828cac40481b8fd307270d5b2a6547bea7ed9baacb",
+        "CompiledCmdlets.cs": "93c52ee9813388f12b305df28bc8402e17d164c0fc2fa987d857c6bd90000592",
+        "CompiledPowerShell.cs": "5356ac0fedcdabed02f84273b8cdc9e48ef8774189dbf915ad0d80143249ecbc",
+        "Directory.Build.props": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Build.targets": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Packages.props": "a96e6b8834dbdb32e1410abfdb50d0483c028bba2edd5fed4b6e5cfc583c6e46",
+        "global.json": "1a9972198a8d91eb872d3b4d3f5d6603fa2b04620c9e5c6d057a59f0d0f32992",
+        "NuGet.Config": "81afa9a2ee0dd27b21be56f5efed21aa8cf08c8b2d4db4763cbee5cf28fb402e",
+        "PowerForge.TargetContract.json": "50340bf76aea78627ddc1f69c8b49badd286303bafef1aa02f98e1c16a1ab688",
+        "source-map.json": "37820042e37e95481bace82b27185307279355b625ea75eb31c2d5b9fc045db4"
+      }
+    }
+  ],
+  "limits": [
+    "Windows x64 only",
+    "No HTTP, TLS handshake, remote API, certificate-store or machine mutation",
+    "Fresh child processes; prior process-local policy restored in finally",
+    "Module-local failure shadow is a boundary probe, not translated Add-Type",
+    "No general runtime-generated C# or P/Invoke admission",
+    "Complete PowerInfoblox module not executed",
+    "net10 build retains existing NU1510 package warnings"
+  ]
+}

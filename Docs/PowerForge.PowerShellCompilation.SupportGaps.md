@@ -431,3 +431,9 @@ boundaries and 15 remain unresolved. The
 records exact source, artifact, reference, runtime and review evidence. Strict
 rejects these host-only forms. Live CIM, network/AD, GUI, non-Windows execution
 and performance remain unqualified.
+
+## Runtime-created legacy certificate policy
+
+PowerInfoblox `Hide-SelfSignedCerts` is now a qualified hosted boundary. PowerShell 7 sets the module configuration flag and returns; Windows PowerShell 5.1 compiles the authored policy type and changes a process-local legacy API absent from modern .NET. The generated Hybrid module preserves both paths, repeated calls and warning/state preservation on an injected Add-Type failure. Fresh child probes send no requests and restore the prior policy in finally. Strict rejects the source on both targets.
+
+This is zero additional compiled coverage: the current matrix remains **544/565 emitted, 21 retained**, now with **seven justified hosted boundaries and 14 unresolved functions**. The [boundary ledger](../Benchmarks/PowerShellCompilation/Corpus/m29a-certificate-policy-boundary.json) records source, artifact and exact runtime evidence. Arbitrary runtime-created C#, P/Invoke, portable TLS behavior and full-module execution remain unqualified.

@@ -312,7 +312,12 @@
               "column": 9
             }
           ],
-          "relativePath": "Private/Hide-SelfSignedCerts.ps1"
+          "relativePath": "Private/Hide-SelfSignedCerts.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-certificate-policy-boundary.json",
+            "reason": "Runtime-created legacy certificate policy and host-version-specific module state; both-host preservation proven with no requests."
+          }
         }
       ]
     },
@@ -591,6 +596,7 @@
   "hostedBoundaryEvidence": [
     "m29a-paging-transfer-boundaries.json",
     "m29a-external-transfer-boundaries.json",
-    "m29a-exit-boundaries.json"
+    "m29a-exit-boundaries.json",
+    "m29a-certificate-policy-boundary.json"
   ]
 }
