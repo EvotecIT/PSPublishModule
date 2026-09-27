@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "2e787da907d00691b07a7f04061404e9eeebd79a",
+  "compilerBaselineCommit": "c71531fe385c578daf0ba85cad2b476aa7857c09",
   "packets": [
     {
       "packet": "pssg",
@@ -286,9 +286,9 @@
       "packet": "cleanup",
       "functions": 68,
       "stableUnits": 69,
-      "emitted": 63,
-      "retained": 5,
-      "sourceExplanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1",
+      "emitted": 64,
+      "retained": 4,
+      "sourceExplanationSha256": "f35d5bcf42a429124ba4a76ac96d35f3ec2a6a41354119fe72df9ba1677b18cc",
       "functionsRetained": [
         {
           "unitId": "2be0f84457750dd64ee0c5d1",
@@ -307,24 +307,6 @@
               "message": "A loop transfer leaving native captured output requires an explicit enclosing-control-flow transfer contract.",
               "line": 19,
               "column": 5
-            }
-          ]
-        },
-        {
-          "unitId": "04397e2ebc4b9c24ce74a635",
-          "name": "Invoke-ADComputerInventoryAttempt",
-          "relativePath": "Private/Invoke-ADComputerInventoryAttempt.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.invokememberexpression",
-              "message": "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
-              "line": 76,
-              "column": 31
             }
           ]
         },
@@ -1591,7 +1573,7 @@
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedEnumDeclarationPolicy.cs": "13c19ff47ae23ae9d641c6d76ea6fe605e3187ccf13ecd607e53b68e2909c4c9",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedValueClassPolicy.cs": "e161dce7abde611d1ec26825f59d2a8218ebbabe239a3e199fdb8e509956cc73",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "b89b9674e8efff29dc493563974504e415b98fd67a08a73bd860185227e800e3",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "d0f79e157cfd945c6b67523786b90f37297a74f2b2c07be2301b8de7c4a56cbe",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "c5ba50fdac850f24114bf4e0e61f46070a63ba254f6016a1cec426d7db444af4",
     "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeTypeExpression.cs": "33eed468f79993efecac2de58ea1241e077a6eccfc65924b46ef3954abf2c8de",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeTypeExpression.cs": "a0b77e29eb83c01bd67f4ae3cc8f0a3670cedb13d93822a49b2103ea61872227",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs": "3e6566d1d16a5b258eacf00ad95b28e6e171d31ab5f8995e27f8ca98124b4f66",
@@ -1628,10 +1610,11 @@
     "Benchmarks/PowerShellCompilation/Corpus/m29a-infoblox-connection-probe.ps1": "9fc3eac1c1ddbbead415cb30f947fd9d37d271349316d8cda577a7f30d739d04",
     "Benchmarks/PowerShellCompilation/Corpus/m29a-infoblox-connection-boundaries.ps1": "62cab9226a47197b53b28639b3e33509f1cc0a7e1b6bcb26e81b432daabfe7a6",
     "PowerForge.Tests/PowerShellCompilationLocalExecutionTests.cs": "0cec897ce00f55ffa6b1e5292b94a94a3914a84bd91ea3cf979b67ba3ed50844",
-    "PowerForge.Tests/PowerShellCompilationCommandProxyTests.cs": "51da66f3811b98d444d481be5dab82e2415c61996cf5e8ee5093521752778efb"
+    "PowerForge.Tests/PowerShellCompilationCommandProxyTests.cs": "51da66f3811b98d444d481be5dab82e2415c61996cf5e8ee5093521752778efb",
+    "PowerForge.Tests/PowerShellCompilationNativeValueArgumentTests.cs": "f792e86edc4edc5ece9b816164e795ee2c82893f0f6a8f553c3034eeb5a56f84"
   },
-  "dispositionComparison": "m29a-command-proxy-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "2e787da907d00691b07a7f04061404e9eeebd79a",
-  "emitted": 520,
-  "retained": 45
+  "dispositionComparison": "m29a-native-value-argument-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "c71531fe385c578daf0ba85cad2b476aa7857c09",
+  "emitted": 521,
+  "retained": 44
 }

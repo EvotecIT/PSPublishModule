@@ -37,7 +37,9 @@ internal sealed partial class PowerShellSemanticBinder
             HasObservedCatchAncestor(nativeInvocation) &&
             (InvocationConsumesAuthoredTypeLiteral(nativeInvocation) || InvocationConsumesBoundTypeVariable(nativeInvocation, symbols)) &&
             !HasClosedDirectTypeArgumentCatchAll(nativeInvocation) &&
-            !HasClosedBoundTypeVariableCatchAll(nativeInvocation, symbols))
+            !HasClosedBoundTypeVariableCatchAll(nativeInvocation, symbols) &&
+            !HasClosedStaticValueArgumentCatchAll(nativeInvocation) &&
+            !HasClosedEncodingVectorArgumentCatchAll(nativeInvocation))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 PowerShellCompilationFeatureIds.ForSyntax(nameof(InvokeMemberExpressionAst)),
@@ -441,6 +443,73 @@ internal sealed partial class PowerShellSemanticBinder
             return false;
         return HasCatchAllObservation(invocation);
     }
+
+    private static bool HasClosedStaticValueArgumentCatchAll(InvokeMemberExpressionAst invocation)
+    {
+        if (invocation is not { Static: true, Expression: TypeExpressionAst receiver,
+                Member: StringConstantExpressionAst member, Arguments: { } arguments } ||
+            receiver.TypeName.GetReflectionType() is not { } type || !HasCatchAllObservation(invocation) ||
+            HasStatementValuedNativeArguments(invocation))
+            return false;
+        var methods = type.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static |
+                System.Reflection.BindingFlags.FlattenHierarchy)
+            .Where(method => method.Name.Equals(member.Value, StringComparison.OrdinalIgnoreCase) &&
+                CanAcceptNativeArgumentCount(method.GetParameters(), arguments.Count)).ToArray();
+        // The active SDK still converts and dispatches the arguments. This
+        // exception proves no candidate accepts a Type/object/delegate/reference
+        // cell as its value. Scalar vectors retain native element conversion,
+        // including conversion failures. Modern file-time APIs also accept a borrowed file
+        // handle; native dispatch retains its identity and does not dispose it.
+        // Check all applicable overloads, including optional/params candidates
+        // whose declared arity differs from the authored call.
+        return methods.Length > 0 && methods.All(static method => !method.ContainsGenericParameters &&
+            method.GetParameters().All(static parameter => PowerShellStableScalarTypePolicy.IsSupported(parameter.ParameterType) ||
+                parameter.ParameterType.IsArray && parameter.ParameterType.GetArrayRank() == 1 &&
+                parameter.ParameterType.GetElementType() is { } element && PowerShellStableScalarTypePolicy.IsSupported(element) ||
+                parameter.ParameterType == typeof(Microsoft.Win32.SafeHandles.SafeFileHandle)));
+    }
+
+    private static bool HasClosedEncodingVectorArgumentCatchAll(InvokeMemberExpressionAst invocation)
+    {
+        // Statement-valued arguments can advance the native source position
+        // inside the collector. Preserve that hosted error-location boundary.
+        if (invocation.Arguments is null || HasStatementValuedNativeArguments(invocation)) return false;
+        // The one-value base64 entry point retains SDK byte-vector conversion.
+        // Modern CLR reflection also exposes optional Span overloads, so it
+        // cannot use the conservative all-overload static-value qualifier.
+        if (invocation is { Static: true, Arguments.Count: 1,
+                Expression: TypeExpressionAst convert, Member: StringConstantExpressionAst base64 } &&
+            convert.TypeName.GetReflectionType() == typeof(Convert) &&
+            base64.Value.Equals("ToBase64String", StringComparison.OrdinalIgnoreCase))
+            return HasCatchAllObservation(invocation);
+        // These framework-owned encoding properties produce Encoding instances.
+        // GetBytes/GetString keep the SDK's string/vector conversion and caught
+        // error construction; arbitrary caller-owned/overridden receivers are
+        // not admitted by this exception.
+        return invocation is { Static: false, Arguments.Count: 1,
+                   Member: StringConstantExpressionAst method,
+                   Expression: MemberExpressionAst { Static: true,
+                       Expression: TypeExpressionAst receiver, Member: StringConstantExpressionAst property } } &&
+               receiver.TypeName.GetReflectionType() == typeof(System.Text.Encoding) &&
+               (property.Value.Equals("Unicode", StringComparison.OrdinalIgnoreCase) ||
+                property.Value.Equals("UTF8", StringComparison.OrdinalIgnoreCase) ||
+                property.Value.Equals("ASCII", StringComparison.OrdinalIgnoreCase)) &&
+               (method.Value.Equals("GetBytes", StringComparison.OrdinalIgnoreCase) ||
+                method.Value.Equals("GetString", StringComparison.OrdinalIgnoreCase)) &&
+               HasCatchAllObservation(invocation);
+    }
+
+    private static bool HasStatementValuedNativeArguments(InvokeMemberExpressionAst invocation)
+        => invocation.Arguments?.Any(static argument => argument.FindAll(
+            static node => node is IfStatementAst or SwitchStatementAst or TryStatementAst or LoopStatementAst,
+            searchNestedScriptBlocks: false).Any()) == true;
+
+    private static bool CanAcceptNativeArgumentCount(System.Reflection.ParameterInfo[] parameters, int count)
+        => parameters.Length == count ||
+           parameters.Length > count && parameters.Skip(count).All(static parameter =>
+               parameter.IsOptional || parameter.IsDefined(typeof(ParamArrayAttribute), false)) ||
+           parameters.Length < count && parameters.Length > 0 &&
+               parameters[parameters.Length - 1].IsDefined(typeof(ParamArrayAttribute), false);
 
     private static bool InvocationConsumesAuthoredTypeLiteral(InvokeMemberExpressionAst invocation)
     {
