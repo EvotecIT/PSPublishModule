@@ -27,28 +27,41 @@ internal sealed class PowerShellSourceTypeClosure
             return new PowerShellSourceTypeClosure(declarations, Array.Empty<PowerShellSourceTypeReference>());
         var references = new List<PowerShellSourceTypeReference>();
         foreach (var definition in syntax)
+        {
+            foreach (var attribute in definition.Attributes)
+                AddReferences(attribute, definition.Name, PowerShellSourceParser.GetSpan(document, definition.Extent));
             foreach (var baseType in definition.BaseTypes)
-                AddReference(baseType.TypeName, definition.Name, PowerShellSourceTypeReferenceKind.BaseType);
+                AddReference(baseType.TypeName, definition.Name, PowerShellSourceTypeReferenceKind.BaseType,
+                    PowerShellSourceParser.GetSpan(document, definition.Extent));
+            foreach (var member in definition.Members)
+                AddReferences(member, definition.Name, PowerShellSourceParser.GetSpan(document, member.Extent), member.Name);
+        }
         foreach (var function in document.SyntaxRoot.FindAll(static node => node is FunctionDefinitionAst,
                      searchNestedScriptBlocks: false).OfType<FunctionDefinitionAst>()
                      .Where(function => function.Parent is NamedBlockAst && ReferenceEquals(function.Parent.Parent, document.SyntaxRoot)))
-            foreach (var node in function.FindAll(static node => node is TypeConstraintAst or TypeExpressionAst or AttributeAst,
+            AddReferences(function, function.Name, PowerShellSourceParser.GetSpan(document, function.Extent));
+        return new PowerShellSourceTypeClosure(declarations, references.ToArray());
+
+        void AddReferences(Ast consumerSyntax, string consumer, SourceSpan consumerSpan, string? memberName = null)
+        {
+            foreach (var node in consumerSyntax.FindAll(static node => node is TypeConstraintAst or TypeExpressionAst or AttributeAst,
                          searchNestedScriptBlocks: true))
                 switch (node)
                 {
                     case AttributeAst attribute:
-                        AddReference(attribute.TypeName, function.Name, PowerShellSourceTypeReferenceKind.Attribute);
+                        AddReference(attribute.TypeName, consumer, PowerShellSourceTypeReferenceKind.Attribute, consumerSpan, memberName);
                         break;
                     case TypeConstraintAst constraint:
-                        AddReference(constraint.TypeName, function.Name, PowerShellSourceTypeReferenceKind.Constraint);
+                        AddReference(constraint.TypeName, consumer, PowerShellSourceTypeReferenceKind.Constraint, consumerSpan, memberName);
                         break;
                     case TypeExpressionAst expression:
-                        AddReference(expression.TypeName, function.Name, PowerShellSourceTypeReferenceKind.Value);
+                        AddReference(expression.TypeName, consumer, PowerShellSourceTypeReferenceKind.Value, consumerSpan, memberName);
                         break;
                 }
-        return new PowerShellSourceTypeClosure(declarations, references.ToArray());
+        }
 
-        void AddReference(ITypeName typeName, string consumer, PowerShellSourceTypeReferenceKind kind)
+        void AddReference(ITypeName typeName, string consumer, PowerShellSourceTypeReferenceKind kind,
+            SourceSpan consumerSpan, string? memberName = null)
         {
             // Keep all candidates: case-insensitive duplicate declarations and attribute suffix
             // ambiguities must not silently resolve to whichever declaration was encountered first.
@@ -59,13 +72,13 @@ internal sealed class PowerShellSourceTypeClosure
                     .Select(static declaration => declaration.Span).ToArray()
                 : Array.Empty<SourceSpan>();
             references.Add(new PowerShellSourceTypeReference(typeName.FullName, consumer, kind,
-                PowerShellSourceParser.GetSpan(document, typeName.Extent), matches));
+                PowerShellSourceParser.GetSpan(document, typeName.Extent), matches, consumerSpan, memberName));
             if (typeName is ArrayTypeName array)
-                AddReference(array.ElementType, consumer, kind);
+                AddReference(array.ElementType, consumer, kind, consumerSpan, memberName);
             else if (typeName is GenericTypeName generic)
             {
-                AddReference(generic.TypeName, consumer, kind);
-                foreach (var argument in generic.GenericArguments) AddReference(argument, consumer, kind);
+                AddReference(generic.TypeName, consumer, kind, consumerSpan, memberName);
+                foreach (var argument in generic.GenericArguments) AddReference(argument, consumer, kind, consumerSpan, memberName);
             }
         }
     }
@@ -94,13 +107,15 @@ internal sealed class PowerShellSourceTypeDeclaration
 internal sealed class PowerShellSourceTypeReference
 {
     internal PowerShellSourceTypeReference(string typeName, string consumer, PowerShellSourceTypeReferenceKind kind,
-        SourceSpan span, SourceSpan[] declarationCandidates)
+        SourceSpan span, SourceSpan[] declarationCandidates, SourceSpan consumerSpan, string? memberName)
     {
         TypeName = typeName;
         Consumer = consumer;
         Kind = kind;
         Span = span;
         DeclarationCandidates = declarationCandidates;
+        ConsumerSpan = consumerSpan;
+        MemberName = memberName;
     }
 
     internal string TypeName { get; }
@@ -108,6 +123,9 @@ internal sealed class PowerShellSourceTypeReference
     internal PowerShellSourceTypeReferenceKind Kind { get; }
     internal SourceSpan Span { get; }
     internal SourceSpan[] DeclarationCandidates { get; }
+    /// <summary>Identifies the consuming function or class member, including same-name overloads.</summary>
+    internal SourceSpan ConsumerSpan { get; }
+    internal string? MemberName { get; }
 }
 
 internal enum PowerShellSourceTypeReferenceKind { BaseType, Attribute, Constraint, Value }

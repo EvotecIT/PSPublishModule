@@ -39,6 +39,44 @@ public sealed class PowerShellSourceTypeClosureTests
     }
 
     [Fact]
+    public void ClassPropertiesAndOverloadedMethodsKeepSeparateConsumerIdentities()
+    {
+        const string source = """
+            enum Mode { First }
+            [Obsolete('static-facts')]
+            class Widget {
+                [Mode[]]$Modes
+                [Widget]$Next
+                [Mode] Read([Mode]$Value) { return [Mode]::First }
+                [Mode] Read([int]$Value) { return [Mode]::First }
+            }
+            """;
+        var document = Parse(source);
+        Assert.Empty(document.Errors);
+        var mode = Assert.Single(document.TypeClosure.Declarations, static declaration => declaration.Name == "Mode");
+        var references = document.TypeClosure.References.Where(static reference => reference.TypeName == "Mode").ToArray();
+        var property = Assert.Single(references, static reference => reference.MemberName == "Modes");
+        Assert.Equal(PowerShellSourceTypeReferenceKind.Constraint, property.Kind);
+        Assert.Equal("Widget", property.Consumer);
+        Assert.Equal("[Mode[]]$Modes", source.Substring(property.ConsumerSpan.StartOffset, property.ConsumerSpan.EndOffset - property.ConsumerSpan.StartOffset));
+        var overloads = references.Where(static reference => reference.MemberName == "Read")
+            .GroupBy(static reference => reference.ConsumerSpan).OrderBy(static group => group.Key.StartOffset).ToArray();
+        Assert.Equal(2, overloads.Length);
+        Assert.Equal(3, overloads[0].Count());
+        Assert.Equal(2, overloads[1].Count());
+        Assert.All(references, reference => Assert.Equal(mode.Span, Assert.Single(reference.DeclarationCandidates)));
+        var selfReference = Assert.Single(document.TypeClosure.References, static reference => reference.TypeName == "Widget");
+        Assert.Equal("Next", selfReference.MemberName);
+        Assert.Equal(Assert.Single(document.TypeClosure.Declarations, static declaration => declaration.Name == "Widget").Span,
+            Assert.Single(selfReference.DeclarationCandidates));
+        var classAttribute = Assert.Single(document.TypeClosure.References, static reference => reference.TypeName == "Obsolete");
+        Assert.Equal(PowerShellSourceTypeReferenceKind.Attribute, classAttribute.Kind);
+        Assert.Null(classAttribute.MemberName);
+        Assert.Equal(Assert.Single(document.TypeClosure.Declarations, static declaration => declaration.Name == "Widget").Span,
+            classAttribute.ConsumerSpan);
+    }
+
+    [Fact]
     public void FunctionHeaderParametersKeepAttributeAndNestedTypeDependencies()
     {
         var document = Parse("enum Mode { First }; class LocalAttribute {}; " +
