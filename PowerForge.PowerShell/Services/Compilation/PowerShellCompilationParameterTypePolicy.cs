@@ -46,6 +46,10 @@ internal static class PowerShellCompilationParameterTypePolicy
         typeof(CommandInfo),
         // Caller-owned variable cells require the native invocation and host binding.
         typeof(PSReference),
+        // Execution objects remain caller-owned and use the active native binder.
+        typeof(PowerShell),
+        typeof(System.Management.Automation.Runspaces.RunspacePool),
+        typeof(System.Management.Automation.Runspaces.RunspaceFactory),
         typeof(Parser),
         typeof(HashtableAst)
     };
@@ -119,16 +123,18 @@ internal static class PowerShellCompilationParameterTypePolicy
         var classified = Classify(type, targetFramework);
         if (!classified.HasFlag(PowerShellCompilationParameterTypeCapability.ClrMethod))
             return false;
-        if (ContainsReferenceCell(type) &&
+        if (RequiresNativeFunctionBinding(type) &&
             !capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
             return false;
         return !classified.HasFlag(PowerShellCompilationParameterTypeCapability.PowerShellHost) ||
                capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes);
     }
 
-    // Reference identity must survive binding, including existing supported containers.
-    private static bool ContainsReferenceCell(Type type)
-        => type == typeof(PSReference) ||
-           type.IsArray && ContainsReferenceCell(type.GetElementType()!) ||
-           type.IsConstructedGenericType && type.GetGenericArguments().Any(ContainsReferenceCell);
+    // Reference and execution-object identity must survive native binding, including containers.
+    private static bool RequiresNativeFunctionBinding(Type type)
+        => type == typeof(PSReference) || type == typeof(PowerShell) ||
+           type == typeof(System.Management.Automation.Runspaces.RunspacePool) ||
+           type == typeof(System.Management.Automation.Runspaces.RunspaceFactory) ||
+           type.IsArray && RequiresNativeFunctionBinding(type.GetElementType()!) ||
+           type.IsConstructedGenericType && type.GetGenericArguments().Any(RequiresNativeFunctionBinding);
 }

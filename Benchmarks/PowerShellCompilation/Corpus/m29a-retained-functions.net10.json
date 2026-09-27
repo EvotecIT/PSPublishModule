@@ -5,15 +5,15 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "e75a530151f3659ac4d7dd54da5498d140e81f90",
+  "compilerBaselineCommit": "cabe8002c53be2f2f792289d50850a71c406fd4c",
   "packets": [
     {
       "packet": "pssg",
       "functions": 282,
       "stableUnits": 286,
-      "emitted": 265,
-      "retained": 17,
-      "sourceExplanationSha256": "c300a698846ad8fb7598f53497f3d8aef4171302788ea3a59c435838dd889efb",
+      "emitted": 269,
+      "retained": 13,
+      "sourceExplanationSha256": "2114bf330c9a5c1cc8f2dd1397dda9443780c6c7cd8d04050ee70c123ad42450",
       "functionsRetained": [
         {
           "unitId": "bde03b869be356b032686101",
@@ -236,87 +236,6 @@
           ]
         },
         {
-          "unitId": "523c7f446c83fea454b06443",
-          "name": "Invoke-CommandCustom",
-          "relativePath": "Public/Programs/Invoke-CommandCustom.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [
-            "__PowerForgeRegion_41b660818cac276d1a9e3dde"
-          ],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "CLR type 'PowerShell' is not available in the generated project reference set for the requested target.",
-              "line": 54,
-              "column": 11
-            }
-          ]
-        },
-        {
-          "unitId": "a28fa9856c4fb8e2ad2bbbe5",
-          "name": "New-Runspace",
-          "relativePath": "Public/Runspaces/New-Runspace.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "CLR type 'RunspaceFactory' is not available in the generated project reference set for the requested target.",
-              "line": 29,
-              "column": 21
-            }
-          ]
-        },
-        {
-          "unitId": "87b78ba611eeb68ad6247667",
-          "name": "Start-Runspace",
-          "relativePath": "Public/Runspaces/Start-Runspace.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$RunspacePool' has CLR type 'System.Management.Automation.Runspaces.RunspacePool' that requires a target capability unavailable to this compilation.",
-              "line": 37,
-              "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Comparison operands must have the same static CLR type on the conservative compilation path.",
-              "line": 39,
-              "column": 9
-            }
-          ]
-        },
-        {
-          "unitId": "cab8c3dd7b27b00b84116b4e",
-          "name": "Stop-Runspace",
-          "relativePath": "Public/Runspaces/Stop-Runspace.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$RunspacePool' has CLR type 'System.Management.Automation.Runspaces.RunspacePool' that requires a target capability unavailable to this compilation.",
-              "line": 30,
-              "column": 9
-            }
-          ]
-        },
-        {
           "unitId": "c4dc1ae9c4c4b22e84d4c0a1",
           "name": "Test-ModuleAvailability",
           "relativePath": "Public/TestFunctionality/Test-ModuleAvailability.ps1",
@@ -517,9 +436,9 @@
       "packet": "pst",
       "functions": 109,
       "stableUnits": 121,
-      "emitted": 90,
-      "retained": 19,
-      "sourceExplanationSha256": "81cf743c9a5dae5a6adc79ecb6896ed2f380a40e2ab40d556ccafde08de57c15",
+      "emitted": 93,
+      "retained": 16,
+      "sourceExplanationSha256": "11b2e7c516caf93500e24a3471612edc585d8b32a98966a6a3a5ce291b0f9f1a",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -916,42 +835,6 @@
               "message": "Parameter '$Session' has CLR type 'System.Management.Automation.Runspaces.PSSession' that requires a target capability unavailable to this compilation.",
               "line": 27,
               "column": 9
-            }
-          ]
-        },
-        {
-          "unitId": "a63ce85887a982d477843842",
-          "name": "Get-MyAlias",
-          "relativePath": "functions/Get-MyAlias.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "CLR type 'powershell' is not available in the generated project reference set for the requested target.",
-              "line": 22,
-              "column": 15
-            }
-          ]
-        },
-        {
-          "unitId": "c2bf4e394f6db01038dfe459",
-          "name": "Get-MyVariable",
-          "relativePath": "functions/Get-MyVariable2.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "CLR type 'powershell' is not available in the generated project reference set for the requested target.",
-              "line": 19,
-              "column": 11
             }
           ]
         },
@@ -1372,9 +1255,9 @@
             {
               "code": "UnsupportedSyntax",
               "featureId": "syntax.unsupported",
-              "message": "CLR type 'RunspaceFactory' is not available in the generated project reference set for the requested target.",
-              "line": 61,
-              "column": 32
+              "message": "The script block requires a completely compiled native body and supported invocation metadata.",
+              "line": 77,
+              "column": 60
             },
             {
               "code": "UnsupportedSyntax",
@@ -1425,24 +1308,6 @@
               "message": "CLR type 'System.Windows.WindowStartupLocation' is not available in the generated project reference set for the requested target.",
               "line": 280,
               "column": 39
-            }
-          ]
-        },
-        {
-          "unitId": "14fe1c438037e0fc323e3ef9",
-          "name": "New-RunspaceCleanupJob",
-          "relativePath": "functions/Utilities.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$PowerShell' has CLR type 'System.Management.Automation.PowerShell' that requires a target capability unavailable to this compilation.",
-              "line": 340,
-              "column": 9
             }
           ]
         },
@@ -1804,7 +1669,7 @@
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredOutputCaptureStatement.cs": "89bda7c779d5313c595b59435091fcde6f977d116c266bad68c0703b5cae9897",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.cs": "f52a1b42b13a62928850c58bb712beb08eaf540ef7a68c889ef82aaab5a5eaca",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellCommandRegionSemanticBinder.cs": "15f3bb88806cd0529637cfbaf1a8aee585d9177bfab8f3f28a9b3551e6b3e0bb",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "7ef04e5849dc474314f43e36130df2bc7c77337c0425e43c52fa4f5245626014",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "1aeaf1552df16d944ad9960579c80b2b6422f787c9c039a50d8c06b095689cf5",
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Conversions.cs": "1c8b2d0cdb168bbf4f52c83cfed1aeb819955aab78c21a181256313a13871631",
     "PowerForge.Tests/PowerShellCompilationHostSessionConstructionTests.cs": "c3c7753b75e9bcc67034c042a92ab290c1d722ed7dc3b4f5c00664a564e5850b",
     "Benchmarks/PowerShellCompilation/Corpus/m29a-web-session-probe.ps1": "e78e2269126126c7df0bdf0710a25cc95734806587f516a0c78e3b13c59c638a",
@@ -1815,10 +1680,11 @@
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.StaticAssignments.cs": "8a36e93ab618beaf1de56bf2a1e5452aeea096e690f85d266803b53d71c1550e",
     "PowerForge.Tests/PowerShellCompilationStaticEnumAssignmentTests.cs": "4ca25ed159c6d93316285d93439fc2fe63dcd65f56c2915d92846fd909e5ece3",
     "Benchmarks/PowerShellCompilation/Corpus/m29a-infoblox-connection-probe.ps1": "9fc3eac1c1ddbbead415cb30f947fd9d37d271349316d8cda577a7f30d739d04",
-    "Benchmarks/PowerShellCompilation/Corpus/m29a-infoblox-connection-boundaries.ps1": "62cab9226a47197b53b28639b3e33509f1cc0a7e1b6bcb26e81b432daabfe7a6"
+    "Benchmarks/PowerShellCompilation/Corpus/m29a-infoblox-connection-boundaries.ps1": "62cab9226a47197b53b28639b3e33509f1cc0a7e1b6bcb26e81b432daabfe7a6",
+    "PowerForge.Tests/PowerShellCompilationLocalExecutionTests.cs": "0e3f5d315aa315dd8430a53e433a7c516377603e7e6287c16c6df3c9fc8cf4dd"
   },
-  "dispositionComparison": "m29a-static-enum-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "e75a530151f3659ac4d7dd54da5498d140e81f90",
-  "emitted": 510,
-  "retained": 55
+  "dispositionComparison": "m29a-local-execution-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "cabe8002c53be2f2f792289d50850a71c406fd4c",
+  "emitted": 517,
+  "retained": 48
 }
