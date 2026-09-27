@@ -1,4 +1,4 @@
-param([string]$Assembly)
+param([string]$Assembly, [string]$Factory = 'Generic.Compiler.StatementErrors.NativeScriptEntryFixture')
 $tempRoot=[IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $taskRoot=Join-Path $tempRoot ('pfc-native-script-entry-'+[guid]::NewGuid().ToString('N'))
 if(-not [IO.Path]::GetFullPath($taskRoot).StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase)){throw 'Probe output escaped its temporary root.'}
@@ -23,6 +23,7 @@ $Scratch
 
 $ErrorActionPreference='Stop'
 Add-Type -Path $Assembly
+$entryFactory = [Reflection.Assembly]::LoadFrom($Assembly).GetType($Factory, $true)
 $results=@()
 foreach($compiled in @($false,$true)) {
  foreach($arguments in @(@(), @('-Value','explicit'), @('-Value','rebind'), @('-Value','explicit','tail'))) {
@@ -32,7 +33,7 @@ foreach($compiled in @($false,$true)) {
   try {
    if($compiled){
     $null=$ps.AddScript('param($Info,$Named,$Positional) try { & $Info @Named @Positional } catch { throw }', $false)
-    $null=$ps.AddParameter('Info',[Generic.Compiler.StatementErrors.NativeScriptEntryFixture]::Create($Source))
+    $null=$ps.AddParameter('Info',$entryFactory::Create($Source))
     $named=@{};if($arguments.Count){$named['Value']=$arguments[1]}
     $extra=@();if($arguments.Count -gt 2){$extra=@($arguments[2])}
     $null=$ps.AddParameter('Named',$named);$null=$ps.AddParameter('Positional',$extra)
@@ -67,7 +68,7 @@ foreach($compiled in @($false,$true)) {
  try {
   if($compiled){
    $null=$ps.AddScript('param($Info) try { & $Info -Value reject } catch { throw }', $false)
-   $null=$ps.AddParameter('Info',[Generic.Compiler.StatementErrors.NativeScriptEntryFixture]::Create($Source))
+   $null=$ps.AddParameter('Info',$entryFactory::Create($Source))
   }else{$null=$ps.AddCommand($Source);$null=$ps.AddParameter('Value','reject')}
   $caught=$null
   try{$rejectedRecords=@($ps.Invoke())}catch{$caught=$_.Exception}

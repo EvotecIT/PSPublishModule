@@ -13,6 +13,9 @@ public static class NativeScriptEntryFixture
     public static int CallbackInvocations;
 
     public static ExternalScriptInfo Create(string path)
+        => Create(path, null);
+
+    public static ExternalScriptInfo Create(string path, Action<PowerShellNativeFunctionContext>? compiledBody)
     {
         CallbackInvocations = 0;
         var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
@@ -30,6 +33,11 @@ public static class NativeScriptEntryFixture
         void Body(PowerShellNativeFunctionContext context)
         {
             CallbackInvocations++;
+            if (compiledBody is not null)
+            {
+                compiledBody(context);
+                return;
+            }
             object? Read(string name) => context.GetVariable(
                 name, false, path, 1, 1, 1, name.Length + 2, "$" + name, true);
             context.SetVariable("Scratch", "owned");

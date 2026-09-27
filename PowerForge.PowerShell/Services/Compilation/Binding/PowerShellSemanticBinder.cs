@@ -50,7 +50,9 @@ internal sealed partial class PowerShellSemanticBinder
         var functionDiagnosticStart = diagnostics.Count;
         ClearFunctionRegionEvidence(regionCandidates, regionOpportunities, document.Path, functionSymbol.Name);
         var nativeFunctionBinding = PowerShellNativeFunctionBindingPolicy.Select(
-            function, capabilities, targetFramework, requiresNativeInvocation, document.NativeDependencyTypes);
+            function, capabilities, targetFramework,
+            requiresNativeInvocation || string.Equals(document.NativeScriptRootName, function.Name, StringComparison.Ordinal),
+            document.NativeDependencyTypes);
         // Native invocation re-evaluates the authored parameter declaration at import.
         // Keep an unresolved type out of the emitted method, but let the ordinary
         // binder discover independent regions inside the retained function first.
