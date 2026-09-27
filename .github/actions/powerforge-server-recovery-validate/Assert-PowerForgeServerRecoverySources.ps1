@@ -391,13 +391,21 @@ function Get-ExpectedCaptureSudoersCommand {
             throw "Privileged recovery capture command must include fixed arguments: $command"
         }
         [string]$approvedCommand = ''
-        # Exact cat reads may extract a deployment revision with this fixed sed form.
-        # Only the cat invocation is privileged; the capture runtime uses pipefail.
-        $catMatch = [regex]::Match($sudoersCommand, "^/usr/bin/cat (?<path>/[A-Za-z0-9._@/-]+)(?: \| sed -n -E 's/\^(?:[A-Za-z_][A-Za-z0-9_]*)=\(\[0-9a-fA-F\]\{40\}\)\$/\\1/p')?$")
+        # Privileged reads are limited to deployment revision markers, never raw files.
+        # The extractor is fixed and only emits a hexadecimal commit, with pipefail
+        # enforced by the capture runtime. The command must hydrate a repository ref.
+        $catMatch = [regex]::Match($sudoersCommand, "^/usr/bin/cat (?<path>/var/www/(?:[A-Za-z0-9_@.-]+/)+current/\.deploy-info\.env) \| sed -n -E 's/\^(?:content_[A-Za-z0-9_]+_commit|engine_commit)=\(\[0-9a-fA-F\]\{40\}\)\$/\\1/p'$")
         if ($catMatch.Success) {
             $catPath = $catMatch.Groups['path'].Value
-            if ($catPath -eq '/' -or $catPath.Contains('//') -or @($catPath.Split('/')).Where({ $_ -in @('.', '..') }).Count -gt 0) {
-                throw "Privileged cat capture must use an exact canonical path: $command"
+            if (@($catPath.Split('/')).Where({ $_ -in @('.', '..') }).Count -gt 0) {
+                throw "Privileged revision capture must use an exact canonical deployment marker: $command"
+            }
+            $refCommandIds = @($RecoveryManifest.repositories | ForEach-Object {
+                if ($_.refCaptureCommandId) { [string]$_.refCaptureCommandId }
+                @($_.refCaptureCommandIds) | Where-Object { $_ }
+            })
+            if ([string]$captureCommand.id -cnotin $refCommandIds) {
+                throw "Privileged revision capture must hydrate an explicitly declared repository ref: $command"
             }
             $commands.Add("/usr/bin/cat $catPath")
             continue

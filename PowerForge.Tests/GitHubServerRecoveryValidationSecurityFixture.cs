@@ -25,6 +25,7 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
         string recipient = Recipient,
         string? recipientEnv = null,
         string captureCommand = "sudo -n apachectl -S",
+        bool captureCommandHydratesRef = false,
         string? visudoPathOverride = null,
         string callerRepository = CallerRepository,
         string engineRepository = EngineRepository,
@@ -100,7 +101,7 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
             var manifestPath = Path.Combine(root, "manifest.json");
             var repositories = new List<object>
             {
-                new { url = repositoryUrl, path = "/srv/caller", @ref = callerRef },
+                new { url = repositoryUrl, path = "/srv/caller", @ref = callerRef, refCaptureCommandId = captureCommandHydratesRef ? "apache-vhosts" : null },
                 new { url = "https://github.com/EvotecIT/PSPublishModule.git", path = "/srv/engine", @ref = EngineRef }
             };
             if (usePublisherEngine)
