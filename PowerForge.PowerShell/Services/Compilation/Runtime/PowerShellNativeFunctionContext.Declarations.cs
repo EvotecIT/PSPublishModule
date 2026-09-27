@@ -124,6 +124,9 @@ namespace PowerForge.Generated.Runtime
 
         private static bool IsNativeAssignmentInterpolation(ExpressionAst expression)
             => expression is VariableExpressionAst { VariablePath.IsUnqualified: true } ||
+               expression is IndexExpressionAst index &&
+               index.GetType().GetProperty("NullConditional")?.GetValue(index) is not true &&
+               IsNativeAssignmentIndex(index.Index) && FindNativeAccessMutationReceiver(index.Target) is not null ||
                expression is MemberExpressionAst { Static: false, Expression: VariableExpressionAst receiver, Member: StringConstantExpressionAst } member &&
                member is not InvokeMemberExpressionAst &&
                member.GetType().GetProperty("NullConditional")?.GetValue(member) is not true &&

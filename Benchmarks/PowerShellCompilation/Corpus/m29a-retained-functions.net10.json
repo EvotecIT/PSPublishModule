@@ -5,15 +5,15 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "c5bcee252bf6a9e79e6a2a7ac1a79f784fc7be79",
+  "compilerBaselineCommit": "672b533f1bb51f849a0923298475a8a0fdecba23",
   "packets": [
     {
       "packet": "pssg",
       "functions": 282,
       "stableUnits": 286,
-      "emitted": 261,
-      "retained": 21,
-      "sourceExplanationSha256": "e03ac4ef89f5a6a08cdac4ea612107947218e05a36916aa80647ec7e0bb75146",
+      "emitted": 262,
+      "retained": 20,
+      "sourceExplanationSha256": "a6e5a0758f5a650bde5f7987b1ba0221752e3180b3133e71c95d587ef3d16a7d",
       "functionsRetained": [
         {
           "unitId": "a1bb1dcefddec8c45377fd27",
@@ -260,24 +260,6 @@
               "message": "Command invocation 'Test-Connection' requires a registered semantic provider or a hosted PowerShell command region.",
               "line": 31,
               "column": 9
-            }
-          ]
-        },
-        {
-          "unitId": "e8d15eaf1b344cb5fb44f80e",
-          "name": "Get-FileMetaData",
-          "relativePath": "Public/FilesFolders/Get-FileMetaData.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Typed indexed mutation requires a one-dimensional array, IList, or dictionary target.",
-              "line": 75,
-              "column": 29
             }
           ]
         },
@@ -1921,10 +1903,12 @@
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeReferenceExpression.cs": "5d88678ead768a64b3c8de95a11ad231fb1bafde03b92e67a97196e3b9816ff7",
     "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.NativeAccess.cs": "68b03245e389021acc7796cda99b775e8003572b7fe847ea82d90ad735b28755",
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Invocations.cs": "9dfff29122b5dd0701ab9c9ca08ddda8f71983b7fa99d2c737d50e4403f71852",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.NativeFunction.cs": "456d4cb9623abb02a77681a495c7fae9133581b9f172e0efdcd1aa0e569ebfc7"
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.NativeFunction.cs": "456d4cb9623abb02a77681a495c7fae9133581b9f172e0efdcd1aa0e569ebfc7",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Declarations.cs": "bf75cfb5377e463fc4c5636ce948ffba779d9e258e7e6cbb19d1b8ff0cb723c8",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.cs": "18c0f89fcace664b27b2327086d3195382d7cd648f10e27bbdd9b2e995f5a19b"
   },
-  "dispositionComparison": "m29a-instance-reference-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "c5bcee252bf6a9e79e6a2a7ac1a79f784fc7be79",
-  "emitted": 504,
-  "retained": 61
+  "dispositionComparison": "m29a-indexed-interpolation-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "672b533f1bb51f849a0923298475a8a0fdecba23",
+  "emitted": 505,
+  "retained": 60
 }

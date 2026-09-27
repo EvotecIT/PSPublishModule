@@ -58,8 +58,14 @@ namespace PowerForge.Generated.Runtime
         internal IDisposable EnterHandler()
         {
             ThrowIfDisposed();
+            // Native subexpressions and callbacks consult the live execution
+            // context before their errors reach our statement adapter. Match
+            // the authored try scope, including nested handler restoration.
+            var previousPropagation = _nativeFunction is null ? (bool?)null :
+                (bool)_contract.GetRequired(_contract.PropagateExceptions, _context);
+            if (previousPropagation.HasValue) _contract.PropagateExceptions.SetValue(_context, true, null);
             _handlerDepth++;
-            return new HandlerScope(this);
+            return new HandlerScope(this, previousPropagation);
         }
 
         internal void Handle(
@@ -155,13 +161,20 @@ namespace PowerForge.Generated.Runtime
         private sealed class HandlerScope : IDisposable
         {
             private PowerShellStatementErrorContext? _owner;
-            internal HandlerScope(PowerShellStatementErrorContext owner) => _owner = owner;
+            private readonly bool? _previousPropagation;
+            internal HandlerScope(PowerShellStatementErrorContext owner, bool? previousPropagation)
+            {
+                _owner = owner;
+                _previousPropagation = previousPropagation;
+            }
             public void Dispose()
             {
                 var owner = _owner;
                 if (owner is null) return;
                 _owner = null;
                 owner._handlerDepth--;
+                if (_previousPropagation.HasValue)
+                    owner._contract.PropagateExceptions.SetValue(owner._context, _previousPropagation.Value, null);
             }
         }
     }

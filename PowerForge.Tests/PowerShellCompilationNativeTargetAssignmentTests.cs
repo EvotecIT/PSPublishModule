@@ -13,6 +13,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("$Receiver[$($Key.Name)]=$Value", true)]
     [InlineData("$Receiver[\"$Key\"]=$Value", true)]
     [InlineData("$Receiver[\"$($Key.Name)\"]=$Value", true)]
+    [InlineData("$Receiver[\"$($Key[0])\"]=$Value", true)]
+    [InlineData("$Receiver[\"$($Key.Names[0][1])\"]=$Value", true)]
     [InlineData("$Receiver[$Key].Value+=$Value", true)]
     public void NativeTargetAssignments_DescribeReceiverAndIndexDependencies(string body, bool readsKey)
     {
@@ -37,6 +39,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("$Receiver[${Key}?.Name]=$Value")]
     [InlineData("$Receiver[\"$(Get-Date)\"]=$Value")]
     [InlineData("$Receiver[\"$($Key.Get())\"]=$Value")]
+    [InlineData("$Receiver[\"$($Key[$(Get-Date)])\"]=$Value")]
+    [InlineData("$Receiver[\"$($Key[$($Property; 1)])\"]=$Value")]
+    [InlineData("$Receiver[\"$($Key.Get()[0])\"]=$Value")]
+    [InlineData("$Receiver[\"$($script:Key[0])\"]=$Value")]
     [InlineData("$Receiver[\"$($Key &)\"]=$Value")]
     [InlineData("$Receiver[\"$(trap { Get-Date; continue }; $Key)\"]=$Value")]
     public void NativeTargetAssignments_KeepComputedIndexesHosted(string body)
@@ -54,6 +60,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("$Key+1")]
     [InlineData("$($Key.Name)")]
     [InlineData("\"$($Key.Name)\"")]
+    [InlineData("\"$($Key[0])\"")]
     public void NativeTargetAssignments_DirectMemberIndexRemainsHybridOnlyForUntypedReceiver(string index)
     {
         using var fixture = ArtifactFixture.Create(
