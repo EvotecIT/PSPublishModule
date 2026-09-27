@@ -1,0 +1,9 @@
+# PSSharedGoods AD data: hosted dependency boundary
+
+`Prepare.ps1` assembles three unchanged SHA-256-pinned external sources with four owned offline provider functions. Supply the pinned PSSharedGoods root and a new task-owned input directory. Do not add a substitute AD type or redistribute the Windows RSAT assembly.
+
+`Observe.ps1` requires the installed ActiveDirectory module and runs in a fresh noninteractive child. It creates real, client-side `ADObject` (an `ADEntity`) and `ADAccount` values. Module-local RootDSE, discovery and schema providers operate only on in-memory values; the driver verifies provider shadowing before any workload invocation. Seventeen observations per host cover schema/right maps, display/string/Guid results, cache hits, missing keys, provider failure, account conversion, exact parameter types and incompatible type rejection. No AD query or write, network connection, password operation or administrative action is part of this workflow.
+
+Two pinned-source limitations are preserved: the GUID-only ImmutableID path dereferences the missing User, and a call without either parameter has an ambiguous parameter set. Fixing those authored functions belongs in PSSharedGoods, separately from compiler type admission. This corpus records the defects; it does not repair or reinterpret them.
+
+The generated artifacts retain all three workload functions and advertise one region each. Only owned helpers emit complete methods. No pinned complete method gain or individually observed region execution is credited. Strict rejection remains required. The actual RSAT assembly contains P/Invoke methods and lives outside the pinned module's declared closure; supporting it as a generated dependency requires a separate, target-qualified host-module/native dependency contract. This proof is conditional on installed RSAT, not a portable or self-contained application or full PSSharedGoods module qualification.

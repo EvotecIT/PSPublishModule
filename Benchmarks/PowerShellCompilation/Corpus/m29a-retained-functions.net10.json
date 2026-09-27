@@ -86,7 +86,12 @@
               "column": 13
             }
           ],
-          "relativePath": "Public/ActiveDirectory/Convert-ADGuidToSchema.ps1"
+          "relativePath": "Public/ActiveDirectory/Convert-ADGuidToSchema.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-ad-data-boundary.json",
+            "reason": "Installed RSAT/native host dependency outside declared portable closure; real AD data and offline schema providers preserve both-host behavior. No complete-method or region execution credit."
+          }
         },
         {
           "unitId": "0f2489a391dbc4681d9d696e",
@@ -106,7 +111,12 @@
               "column": 9
             }
           ],
-          "relativePath": "Public/ActiveDirectory/Convert-ADSchemaToGuid.ps1"
+          "relativePath": "Public/ActiveDirectory/Convert-ADSchemaToGuid.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-ad-data-boundary.json",
+            "reason": "Installed RSAT/native host dependency outside declared portable closure; real AD data and offline schema providers preserve both-host behavior. No complete-method or region execution credit."
+          }
         },
         {
           "unitId": "17f55553dcb9ef7cc5e3af7f",
@@ -203,7 +213,12 @@
               "column": 58
             }
           ],
-          "relativePath": "Public/Converts/ConvertTo-ImmutableID.ps1"
+          "relativePath": "Public/Converts/ConvertTo-ImmutableID.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-ad-data-boundary.json",
+            "reason": "Installed RSAT/native host dependency outside declared portable closure; real AD data and offline schema providers preserve both-host behavior. No complete-method or region execution credit."
+          }
         },
         {
           "unitId": "23f772789cacbab249c153b5",
@@ -603,6 +618,7 @@
     "m29a-external-transfer-boundaries.json",
     "m29a-exit-boundaries.json",
     "m29a-certificate-policy-boundary.json",
-    "m29a-disk-native-boundary.json"
+    "m29a-disk-native-boundary.json",
+    "m29a-ad-data-boundary.json"
   ]
 }
