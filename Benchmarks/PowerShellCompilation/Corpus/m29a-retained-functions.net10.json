@@ -5,15 +5,15 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "933a40b539da1b1b26e4f3f0ef0695644f3f315b",
+  "compilerBaselineCommit": "3d245f195ba755b64222f184f0a8fb87fced463c",
   "packets": [
     {
       "packet": "pssg",
       "functions": 282,
       "stableUnits": 286,
-      "emitted": 269,
-      "retained": 13,
-      "sourceExplanationSha256": "9df714ed3ddcd04ed204441a14942343db9fe7d40a73199385df45d7d7ab0933",
+      "emitted": 270,
+      "retained": 12,
+      "sourceExplanationSha256": "10813e86b5035f79c818fd58921c591a2acd33e51660fa1fae28695379b24039",
       "functionsRetained": [
         {
           "unitId": "bde03b869be356b032686101",
@@ -200,24 +200,6 @@
           ]
         },
         {
-          "unitId": "5afce79b3913c8184f5e3fa2",
-          "name": "Set-DnsServerIpAddress",
-          "relativePath": "Public/DNS/Set-DNSServerIPAddress.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "CommandInvocation",
-              "featureId": "command.test-connection",
-              "message": "Command invocation 'Test-Connection' requires a registered semantic provider or a hosted PowerShell command region.",
-              "line": 31,
-              "column": 9
-            }
-          ]
-        },
-        {
           "unitId": "23f772789cacbab249c153b5",
           "name": "Format-Stream",
           "relativePath": "Public/Objects/Format-Stream.ps1",
@@ -245,10 +227,10 @@
           "generatedRegionMemberNames": [],
           "causes": [
             {
-              "code": "CommandInvocation",
-              "featureId": "command.write-warning",
-              "message": "Command invocation 'Write-Warning' must preserve PowerShell runtime command resolution because the source does not identify one canonical module-qualified provider command.",
-              "line": 21,
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.exitstatement",
+              "message": "Statement 'ExitStatementAst' is not yet represented by the bound pipeline.",
+              "line": 22,
               "column": 9
             }
           ]

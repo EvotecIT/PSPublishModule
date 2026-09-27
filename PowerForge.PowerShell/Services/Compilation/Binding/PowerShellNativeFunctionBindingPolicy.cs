@@ -122,6 +122,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
            RequiresNativeStatementValue(function) ||
            RequiresNativeLiteralCommandValue(function, capabilities) ||
            RequiresNativeCommandSwitch(function, capabilities) ||
+           RequiresNativeCommandCondition(function, capabilities) ||
            RequiresNativeObjectParameterSwitch(function, capabilities) ||
            RequiresNativeAccessOutputCapture(function) ||
            function.Body.Find(node => node is AssignmentStatementAst assignment &&
@@ -194,6 +195,16 @@ internal static class PowerShellNativeFunctionBindingPolicy
            function.Body.Find(node => node is SwitchStatementAst { Condition: PipelineAst pipeline } &&
                PowerShellCommandRegionSemanticBinder.IsNativeLiteralCommandValue(pipeline, capabilities),
                searchNestedScriptBlocks: false) is not null;
+
+    /// <summary>Named branch and loop command values retain active-host resolution and success cardinality.</summary>
+    private static bool RequiresNativeCommandCondition(FunctionDefinitionAst function,
+        PowerShellCompilationCapability capabilities)
+        => function.Body.Find(node =>
+            node is IfStatementAst conditional && conditional.Clauses.Any(clause =>
+                PowerShellCommandRegionSemanticBinder.IsNativeLiteralCommandValue(clause.Item1, capabilities)) ||
+            node is LoopStatementAst loop && loop.Condition is not null &&
+                PowerShellCommandRegionSemanticBinder.IsNativeLiteralCommandValue(loop.Condition, capabilities),
+            searchNestedScriptBlocks: false) is not null;
 
     private static bool RequiresNativeObjectParameterSwitch(FunctionDefinitionAst function,
         PowerShellCompilationCapability capabilities)
