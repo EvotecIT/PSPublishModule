@@ -57,6 +57,22 @@ public static class NativeAuthoredMetadataFixture
             throw new InvalidOperationException("The stub owner accepted an authored body.");
         }
         catch (ArgumentException) { }
+        // The explicit hosted-discovery field cannot carry another executable clause,
+        // and legacy parameter-only callers still cannot smuggle dynamic discovery.
+        RejectMetadata("param() dynamicparam { $null }", null, false);
+        RejectMetadata("param()", "dynamicparam { $null } end { 'authored body' }", false);
+        RejectMetadata("param()", "dynamicparam { $null } begin { 'authored body' }", false);
+        RejectMetadata("param()", "dynamicparam { $null }", true);
+        void RejectMetadata(string parameters, string? dynamic, bool clean)
+        {
+            try
+            {
+                PowerShellNativeFunctionHost.CreateDeclarationSource(parameters, null, Array.Empty<string>(),
+                    false, false, true, clean, Array.Empty<string>(), Array.Empty<string>(), dynamic);
+            }
+            catch (ArgumentException) { return; }
+            throw new InvalidOperationException("The declaration owner accepted uncovered executable metadata.");
+        }
         void Reject(string name, Action<PowerShellNativeFunctionContext>? begin,
             Action<PowerShellNativeFunctionContext>? process, Action<PowerShellNativeFunctionContext>? end)
         {

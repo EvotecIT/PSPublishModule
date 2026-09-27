@@ -26,6 +26,13 @@ public sealed class PowerShellNativeFunctionBinding
     public PowerShellNativeFunctionBinding(string parameterDeclaration, System.Collections.Generic.IEnumerable<string> localNames,
         System.Collections.Generic.IEnumerable<string> localTypeDeclarations, bool hasBegin, bool hasProcess, bool hasEnd, bool hasClean,
         System.Collections.Generic.IEnumerable<string> functionTypeDeclarations)
+        : this(parameterDeclaration, localNames, localTypeDeclarations, hasBegin, hasProcess, hasEnd, hasClean,
+            functionTypeDeclarations, null) { }
+
+    /// <summary>Creates native metadata retaining a binding-time dynamic parameter block in PowerShell.</summary>
+    public PowerShellNativeFunctionBinding(string parameterDeclaration, System.Collections.Generic.IEnumerable<string> localNames,
+        System.Collections.Generic.IEnumerable<string> localTypeDeclarations, bool hasBegin, bool hasProcess, bool hasEnd, bool hasClean,
+        System.Collections.Generic.IEnumerable<string> functionTypeDeclarations, string? dynamicParameterDeclaration)
     {
         ParameterDeclaration = parameterDeclaration ?? throw new System.ArgumentNullException(nameof(parameterDeclaration));
         LocalNames = System.Array.AsReadOnly(System.Linq.Enumerable.ToArray(localNames));
@@ -35,6 +42,7 @@ public sealed class PowerShellNativeFunctionBinding
         HasProcess = hasProcess;
         HasEnd = hasEnd;
         HasClean = hasClean;
+        DynamicParameterDeclaration = dynamicParameterDeclaration;
     }
 
     /// <summary>Whether the native invocation has a compiled begin block.</summary>
@@ -48,6 +56,9 @@ public sealed class PowerShellNativeFunctionBinding
 
     /// <summary>Authored parameter metadata, including defaults and attributes, without body statements.</summary>
     public string ParameterDeclaration { get; }
+
+    /// <summary>Authored binding-time discovery retained in the SDK declaration; executable lifecycle blocks remain compiled.</summary>
+    public string? DynamicParameterDeclaration { get; }
 
     /// <summary>Local slots allocated by the native host without initializing or executing authored body statements.</summary>
     public System.Collections.Generic.IReadOnlyList<string> LocalNames { get; }

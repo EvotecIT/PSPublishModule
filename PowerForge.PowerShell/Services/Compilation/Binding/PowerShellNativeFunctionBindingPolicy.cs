@@ -51,7 +51,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
         bool requiresNativeInvocation = false)
     {
         if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) ||
-            function.Body.DynamicParamBlock is not null)
+            function.Body.DynamicParamBlock is not null && !SupportsDynamicParameters(function.Body, capabilities))
             return null;
         var parameters = PowerShellParameterSyntax.GetParameters(function.Body).ToArray();
         if (!requiresNativeInvocation && !RequiresNativeBinding(function, targetFramework, capabilities)) return null;
@@ -63,8 +63,15 @@ internal static class PowerShellNativeFunctionBindingPolicy
             PowerShellNativeVariableAnalysis.FindLocalTypeDeclarations(function, locals),
             function.Body.BeginBlock is not null, function.Body.ProcessBlock is not null,
             function.Body.EndBlock is not null, function.Body.GetType().GetProperty("CleanBlock")?.GetValue(function.Body) is not null,
-            PowerShellHostedLocalEnumPolicy.FindDeclarations(function).Select(static definition => definition.Extent.Text));
+            PowerShellHostedLocalEnumPolicy.FindDeclarations(function).Select(static definition => definition.Extent.Text),
+            function.Body.DynamicParamBlock?.Extent.Text);
     }
+
+    internal static bool SupportsDynamicParameters(ScriptBlockAst body, PowerShellCompilationCapability capabilities)
+        => body.DynamicParamBlock is not null &&
+           capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+           capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&
+           body.GetType().GetProperty("CleanBlock")?.GetValue(body) is null;
 
     internal static Ast? FindNativePipelineOperator(FunctionDefinitionAst function, bool includeCommandRedirections = true)
         => function.Body.Find(node =>
@@ -75,6 +82,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
     private static bool RequiresNativeBinding(FunctionDefinitionAst function, string? targetFramework,
         PowerShellCompilationCapability capabilities)
         => RequiresNativeBasicCommandHost(function, capabilities) ||
+           SupportsDynamicParameters(function.Body, capabilities) ||
            function.Body.BeginBlock is not null || function.Body.ProcessBlock is not null ||
            PowerShellHostedEnumDeclarationPolicy.RequiresNativeParameterBinding(function) ||
            PowerShellHostedLocalEnumPolicy.FindDeclarations(function).Length != 0 ||

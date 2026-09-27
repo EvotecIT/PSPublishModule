@@ -1635,3 +1635,61 @@ Four development Hybrid artifacts build successfully with zero complete emitted 
 The [exit boundary evidence](../Benchmarks/PowerShellCompilation/Corpus/m29a-exit-boundaries.json) records source pins/hashes, manifests, Strict diagnostics, exact JSON cases, matched output hashes and the test hash. PSSharedGoods revision 2a807a4f11ba458b7bc405ce3674d93838639af1, Test-ModuleAvailability source SHA-256 176d4b89d8ac442c23783cfe4321e1bfb5f87cecd942d2aaeac6448bfe13711d. CleanupMonster revision f215b32ca86b38d9150629c08f6c0c232bfafb27, inventory source SHA-256 8ba232f42b924b81480f8f8c9da928535cce7603b1d7a344f2742d7960708112. External sources remain unchanged; two inventory entries now carry explicit JustifiedHosted evidence. Runtime cases do not add compiler-method coverage.
 
 Compiler source and pinned packets are unchanged, so the accepted coordinate-data no-loss census remains authoritative at 532/565 emitted, 33 retained and 584 stable units. No aggregate gate or fresh census was repeated. Development artifact warnings are recorded rather than called zero-warning builds; dependency locks remain unreviewed. No fresh code review is needed for the observer/docs-only change. General exit expressions, traps, callbacks, warning Stop, other caller arrangements, runtime-free exits, full-module execution, non-Windows and performance are not qualified. Packaged nested/catch exit guards remain intact. No PR, merge or release; wider support-gap work remains open.
+
+
+## Hybrid dynamic parameter discovery — September 27
+
+The native binding model now carries the unchanged authored dynamicparam block
+separately from parameter metadata. Admission requires native function binding
+and PowerShell host types and excludes clean blocks. Generated module/executable
+factories pass the same metadata into exact owned-declaration validation. SDK
+discovery remains installed while begin/process/end callbacks execute compiled
+code. Existing constructor and host overloads remain available; legacy
+parameter-only callers and the independent authored-body API retain their guards.
+The hosted-lifecycle adapter remains excluded because its dictionary rebinding
+does not establish this discovery/storage contract.
+
+The synthetic module proof matches 12 original/generated observations per
+Windows host: lazy import, conditional alias/ValidateSet, discovery failure,
+shared discovery/begin/process locals, argument-dependent Get-Command metadata,
+pipeline records and force reimport. Dynamic values remain in PSBoundParameters;
+direct same-name variable reads preserve the authored caller-scope behavior.
+A synthetic Hybrid net10 executable emits Read-DynamicEntry and matches six
+output/error cases and exit code. Executables do not support net472.
+
+Unchanged pinned PSScriptTools Copy-HelpExample and Show-Tree each emit one
+complete native-bound method on net10.0 and net472. Six help and eight tree cases
+match per host. Help, grid and clipboard are in-memory providers; the tree reads
+only driver-owned files. Source revision, byte hashes and MIT license are pinned
+in the DynamicParameters corpus folder. No interactive UI, clipboard mutation,
+visual terminal behavior or upstream full-module execution is claimed.
+
+Final storage proof passes 2/2 (TRX SHA-256
+267506eaff6acab7ea2be75d8f64469c89d272666ab31795a7a159181d75f200).
+The preceding corrected cohort proves six other cases (capability/clean guards,
+both pinned workflows and the net10 executable), but its two stale direct-read
+assertions failed; that 6/8 run is not called fully green. Four adjacent native
+metadata/storage checks passed in the unchanged-production owner cohort.
+Net472 owner build passes with zero warnings/errors in 5.74 seconds. Earlier
+failed builds and driver assumptions, exact TRX counters/hashes and named results
+are retained in the comparison. No long aggregate gate was repeated.
+
+One independent read-only pass found no actionable defects in the 15 staged
+API/binding/parser/declaration/storage and fixture files. Reviewed patch SHA-256:
+664f2c4126556d0b961e311b8458fca474358cbd9930cd464c5bb127774de570.
+The later caller-read/executable test additions and driver corrections leave
+production unchanged; they close proof gaps rather than expand the runtime owner.
+The reviewer did not execute builds or census.
+
+Final-source five-packet net10 explanation preserves all 565 function IDs and
+584 units, with no lost complete methods or regions of still-retained functions:
+**534 emitted, 31 retained**. PSScriptTools rises 97 to 99/109; PSSharedGoods stays
+272/282, CleanupMonster 66/68, PowerInfoblox 65/66 and platyPS 32/40. Four explicit
+justified hosted boundary records are preserved. The
+[dynamic comparison](../Benchmarks/PowerShellCompilation/Corpus/m29a-dynamic-parameters-comparison.net10.json)
+records every function disposition, staged source hashes, observations and limits.
+
+Dynamic discovery remains SDK-hosted. Clean discovery, inner discovery source
+coordinate equivalence, general providers, performance, non-Windows behavior,
+full net472 census and reviewed dependency locks are unqualified. The broader
+support-gap goal remains open. No PR, merge or release is claimed.

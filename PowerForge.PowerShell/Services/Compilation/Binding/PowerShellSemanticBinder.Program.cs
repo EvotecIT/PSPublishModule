@@ -188,7 +188,8 @@ internal sealed partial class PowerShellSemanticBinder
             body.ProcessBlock is null &&
             GetCleanBlock(body) is null) ||
            PowerShellRuntimeFreePipelineLifecyclePolicy.TryGetPipelineParameter(body, capabilities, out _, out _) ||
-           body.DynamicParamBlock is null && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding);
+           body.DynamicParamBlock is null && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) ||
+           PowerShellNativeFunctionBindingPolicy.SupportsDynamicParameters(body, capabilities);
 
     private static NamedBlockAst? GetCleanBlock(ScriptBlockAst body)
         => body.GetType().GetProperty("CleanBlock")?.GetValue(body) as NamedBlockAst;

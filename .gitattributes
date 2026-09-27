@@ -50,3 +50,6 @@ Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/SessionC
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/SessionCopy/license.txt -text -eol -whitespace
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Coordinates/Write-AnsiProgress.ps1 -text -eol -whitespace
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Coordinates/license.txt -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/DynamicParameters/Copy-HelpExample.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/DynamicParameters/ShowTree.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/DynamicParameters/license.txt -text -eol -whitespace

@@ -23,10 +23,18 @@ namespace PowerForge.Generated.Runtime
             string[] localNames, string[] localTypeDeclarations,
             Action<PowerShellNativeFunctionContext>? begin, Action<PowerShellNativeFunctionContext>? process,
             Action<PowerShellNativeFunctionContext>? end, string[] functionTypeDeclarations)
+            => CreateOwnedDeclaration(module, name, parameterDeclaration, localNames, localTypeDeclarations,
+                begin, process, end, functionTypeDeclarations, null);
+
+        /// <summary>Retains SDK dynamic discovery beside the exact generated executable-clause stubs.</summary>
+        public static ScriptBlock CreateOwnedDeclaration(PSModuleInfo module, string name, string parameterDeclaration,
+            string[] localNames, string[] localTypeDeclarations,
+            Action<PowerShellNativeFunctionContext>? begin, Action<PowerShellNativeFunctionContext>? process,
+            Action<PowerShellNativeFunctionContext>? end, string[] functionTypeDeclarations, string? dynamicParameterDeclaration)
         {
             if (module == null) throw new ArgumentNullException(nameof(module));
             return CreateOwnedDeclaration(module.SessionState, name, parameterDeclaration, localNames, localTypeDeclarations,
-                begin, process, end, functionTypeDeclarations);
+                begin, process, end, functionTypeDeclarations, dynamicParameterDeclaration);
         }
 
         /// <summary>Prepares an executable's compiler-owned declaration without creating parameter attributes during registration.</summary>
@@ -41,6 +49,14 @@ namespace PowerForge.Generated.Runtime
             string[] localNames, string[] localTypeDeclarations,
             Action<PowerShellNativeFunctionContext>? begin, Action<PowerShellNativeFunctionContext>? process,
             Action<PowerShellNativeFunctionContext>? end, string[] functionTypeDeclarations)
+            => CreateOwnedDeclaration(sessionState, name, parameterDeclaration, localNames, localTypeDeclarations,
+                begin, process, end, functionTypeDeclarations, null);
+
+        /// <summary>Prepares compiled clauses while preserving native binding-time dynamic discovery.</summary>
+        public static ScriptBlock CreateOwnedDeclaration(SessionState sessionState, string name, string parameterDeclaration,
+            string[] localNames, string[] localTypeDeclarations,
+            Action<PowerShellNativeFunctionContext>? begin, Action<PowerShellNativeFunctionContext>? process,
+            Action<PowerShellNativeFunctionContext>? end, string[] functionTypeDeclarations, string? dynamicParameterDeclaration)
         {
             if (sessionState == null) throw new ArgumentNullException(nameof(sessionState));
             if (string.IsNullOrEmpty(name)) throw new ArgumentException("A function name is required.", nameof(name));
@@ -55,7 +71,7 @@ namespace PowerForge.Generated.Runtime
             if (function != null && (function.Options & (ScopedItemOptions.ReadOnly | ScopedItemOptions.Constant)) != 0)
                 return function.ScriptBlock;
             var expected = "{\n" + CreateDeclarationSource(parameterDeclaration, null, localNames,
-                begin != null, process != null, end != null, false, localTypeDeclarations, functionTypeDeclarations) + "\n}";
+                begin != null, process != null, end != null, false, localTypeDeclarations, functionTypeDeclarations, dynamicParameterDeclaration) + "\n}";
             if (function?.ScriptBlock.Ast is not FunctionDefinitionAst declaration ||
                 !string.Equals(declaration.Body.Extent.Text.Replace("\r\n", "\n"), expected.Replace("\r\n", "\n"), StringComparison.Ordinal))
                 throw new ArgumentException("Only the exact compiler-owned declaration stub can retain shared native metadata.", nameof(name));

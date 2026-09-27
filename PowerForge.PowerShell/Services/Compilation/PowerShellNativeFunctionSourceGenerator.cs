@@ -16,6 +16,8 @@ internal static class PowerShellNativeFunctionSourceGenerator
 
     internal static void Validate(PowerShellCompiledMethod method)
     {
+        if (method.NativeFunctionBinding is { HasClean: true, DynamicParameterDeclaration: not null })
+            throw new InvalidOperationException("Dynamic discovery does not qualify the clean compatibility route.");
         if (method.RequiresPowerShellRuntimeState ||
             method.RequiresPowerShellModuleStateRead || method.RequiresPowerShellModuleStateWrite ||
             method.RequiresProviderCancellation ||
@@ -56,7 +58,8 @@ internal static class PowerShellNativeFunctionSourceGenerator
                 .Append("            ").Append(Callback(binding.HasBegin, 0)).AppendLine(",")
                 .Append("            ").Append(Callback(binding.HasProcess, 1)).AppendLine(",")
                 .Append("            ").Append(Callback(binding.HasEnd, 2)).AppendLine(",")
-                .Append("            new string[] { ").Append(string.Join(", ", binding.FunctionTypeDeclarations.Select(PowerShellCSharpLiteral.QuoteString))).AppendLine(" });");
+                .Append("            new string[] { ").Append(string.Join(", ", binding.FunctionTypeDeclarations.Select(PowerShellCSharpLiteral.QuoteString))).Append(" }, ")
+                .Append(binding.DynamicParameterDeclaration is null ? "null" : PowerShellCSharpLiteral.QuoteString(binding.DynamicParameterDeclaration)).AppendLine(");");
         }
         else
         {
@@ -92,7 +95,8 @@ internal static class PowerShellNativeFunctionSourceGenerator
             ? binding.ParameterDeclaration + "\nthrow 'Compiled function body was not installed.'"
             : global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.CreateDeclarationSource(
                 binding.ParameterDeclaration, null, binding.LocalNames.ToArray(),
-                binding.HasBegin, binding.HasProcess, binding.HasEnd, false, binding.LocalTypeDeclarations.ToArray(), binding.FunctionTypeDeclarations.ToArray());
+                binding.HasBegin, binding.HasProcess, binding.HasEnd, false, binding.LocalTypeDeclarations.ToArray(), binding.FunctionTypeDeclarations.ToArray(),
+                binding.DynamicParameterDeclaration);
 
     private static string Callback(bool present, int clause)
         => PowerShellNativeCallbackSource.Callback(present, clause);

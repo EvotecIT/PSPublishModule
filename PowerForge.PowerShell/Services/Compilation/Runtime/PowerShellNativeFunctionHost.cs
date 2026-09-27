@@ -115,6 +115,12 @@ namespace PowerForge.Generated.Runtime
 
         internal static string CreateDeclarationSource(string parameterDeclaration, string? sourcePath, string[] localNames,
             bool hasBegin, bool hasProcess, bool hasEnd, bool hasClean, string[]? localTypeDeclarations, string[]? functionTypeDeclarations)
+            => CreateDeclarationSource(parameterDeclaration, sourcePath, localNames, hasBegin, hasProcess, hasEnd, hasClean,
+                localTypeDeclarations, functionTypeDeclarations, null);
+
+        internal static string CreateDeclarationSource(string parameterDeclaration, string? sourcePath, string[] localNames,
+            bool hasBegin, bool hasProcess, bool hasEnd, bool hasClean, string[]? localTypeDeclarations, string[]? functionTypeDeclarations,
+            string? dynamicParameterDeclaration)
         {
             var enums = FunctionEnumSource(functionTypeDeclarations);
             if (enums.Length != 0 && (hasBegin || hasProcess || hasClean || !hasEnd))
@@ -129,6 +135,15 @@ namespace PowerForge.Generated.Runtime
             // Reparse a compiler-owned body. Never mutate ScriptBlock.Create's shared source cache.
             // ParamBlock.Extent excludes its function attributes, including CmdletBinding.
             var source = parameterDeclaration;
+            if (dynamicParameterDeclaration != null)
+            {
+                if (hasClean) throw new ArgumentException("Dynamic parameter declarations do not qualify the clean compatibility route.", nameof(dynamicParameterDeclaration));
+                var discovery = Parse("param()\n" + dynamicParameterDeclaration, sourcePath);
+                if (discovery.DynamicParamBlock == null || discovery.BeginBlock != null || discovery.ProcessBlock != null ||
+                    discovery.EndBlock != null || !string.Equals(discovery.DynamicParamBlock.Extent.Text, dynamicParameterDeclaration, StringComparison.Ordinal))
+                    throw new ArgumentException("Only one dynamic parameter block is accepted as hosted binding metadata.", nameof(dynamicParameterDeclaration));
+                source += "\n" + dynamicParameterDeclaration;
+            }
             var localDeclarations = string.Empty;
             var typedLocals = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var typedDeclarations = string.Empty;
