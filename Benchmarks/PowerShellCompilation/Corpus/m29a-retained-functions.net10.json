@@ -233,7 +233,14 @@
               "line": 22,
               "column": 9
             }
-          ]
+          ],
+          "qualificationBoundary": {
+            "status": "JustifiedHosted",
+            "family": "authored function exit",
+            "evidence": "m29a-exit-boundaries.json",
+            "reason": "Exit ends the caller script with an authored host exit code after finally. CLR return or ordinary exception lowering does not establish that contract.",
+            "scope": "Both Windows hosts, unchanged isolated source, offline providers and owned output files; no compiled-method gain."
+          }
         }
       ]
     },
@@ -288,7 +295,14 @@
               "line": 74,
               "column": 9
             }
-          ]
+          ],
+          "qualificationBoundary": {
+            "status": "JustifiedHosted",
+            "family": "authored function exit",
+            "evidence": "m29a-exit-boundaries.json",
+            "reason": "Exit ends the caller script with an authored host exit code after finally. CLR return or ordinary exception lowering does not establish that contract.",
+            "scope": "Both Windows hosts, unchanged isolated source, offline providers and owned output files; no compiled-method gain."
+          }
         }
       ]
     },
