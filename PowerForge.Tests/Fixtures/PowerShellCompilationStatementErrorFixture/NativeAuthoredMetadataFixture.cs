@@ -16,13 +16,7 @@ public static class NativeAuthoredMetadataFixture
         var function = (FunctionInfo)PowerShellNativeFunctionHost.Invoke(contract.GetFunction, session, new object[] { name })!;
         if (function.ScriptBlock.Ast is not FunctionDefinitionAst declaration)
             throw new InvalidOperationException("A declared function AST is required.");
-        // Preserve the original, already declared AST. No AST reconstruction, extent substitution,
-        // shared ScriptBlock clone, or transfer of private parameter metadata is involved.
-        var script = PowerShellNativeFunctionHost.CreateFunctionScriptBlock(declaration);
-        if (ReferenceEquals(contract.Data.GetValue(script), contract.Data.GetValue(function.ScriptBlock)))
-            throw new InvalidOperationException("The replacement shares mutable compilation data.");
-        script = module.NewBoundScriptBlock(script);
-        PowerShellNativeFunctionHost.InstallCompiledClauses(script,
+        var script = PowerShellNativeFunctionHost.CreateDeclaredFunction(module, name,
             context => context.SetVariable("Count", 0),
             context =>
             {
@@ -31,7 +25,26 @@ public static class NativeAuthoredMetadataFixture
                 context.SetVariable("Count", count);
                 context.WriteValue(context.GetVariable("Value") + "|" + context.GetVariable("Mode") + "|" +
                     context.GetVariable("script:Marker") + "|" + count);
-            }, context => context.WriteValue("end:" + context.GetVariable("Count")), null);
+            }, context => context.WriteValue("end:" + context.GetVariable("Count")));
+        if (ReferenceEquals(contract.Data.GetValue(script), contract.Data.GetValue(function.ScriptBlock)))
+            throw new InvalidOperationException("The bound replacement shares mutable compilation data.");
         PowerShellNativeFunctionHost.InstallDeclaredFunction(module, name, script);
+    }
+
+    public static void VerifyRejectedClauses(PSModuleInfo module)
+    {
+        Action<PowerShellNativeFunctionContext> fail = _ => throw new InvalidOperationException("Unsupported authored clause executed.");
+        Reject("Invoke-Compiled", null, fail, fail);
+        Reject("Invoke-Compiled", fail, null, fail);
+        Reject("Invoke-Compiled", fail, fail, null);
+        Reject("Invoke-Dynamic", null, null, fail);
+        Reject("Invoke-Trap", null, null, fail);
+        void Reject(string name, Action<PowerShellNativeFunctionContext>? begin,
+            Action<PowerShellNativeFunctionContext>? process, Action<PowerShellNativeFunctionContext>? end)
+        {
+            try { PowerShellNativeFunctionHost.CreateDeclaredFunction(module, name, begin, process, end); }
+            catch (ArgumentException) { return; }
+            throw new InvalidOperationException("An uncovered declaration clause was accepted: " + name);
+        }
     }
 }

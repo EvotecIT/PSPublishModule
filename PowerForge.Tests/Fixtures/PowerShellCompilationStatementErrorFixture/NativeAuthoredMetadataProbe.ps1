@@ -32,6 +32,16 @@ $module = New-Module -Name AuthoredMetadataOwner -ScriptBlock {
         process { $Count++; "$Value|$Mode|$script:Marker|$Count" }
         end { "end:$Count" }
     }
+    function Invoke-Dynamic {
+        [CmdletBinding()] param()
+        dynamicparam { throw 'Unsupported dynamic clause executed.' }
+        end { throw 'Unsupported dynamic function body executed.' }
+    }
+    function Invoke-Trap {
+        param()
+        end { trap { throw 'Unsupported trap executed.' }; throw 'Unsupported trap body executed.' }
+    }
+    [Generic.Compiler.StatementErrors.NativeAuthoredMetadataFixture]::VerifyRejectedClauses($ExecutionContext.SessionState.Module)
     $script:BeforeScript = (Get-Command Invoke-Compiled).ScriptBlock
     $script:BeforeText = $script:BeforeScript.ToString()
     [Generic.Compiler.StatementErrors.NativeAuthoredMetadataFixture]::Install($ExecutionContext.SessionState.Module, 'Invoke-Compiled')

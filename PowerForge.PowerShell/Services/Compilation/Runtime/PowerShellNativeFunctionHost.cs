@@ -9,7 +9,7 @@ namespace PowerForge.Generated.Runtime
 
     /// <summary>Hosts compiled clauses behind PowerShell's native script parameter binder.</summary>
     /// <remarks>This host requires PowerShell; it is not a runtime-free Strict implementation.</remarks>
-    public static class PowerShellNativeFunctionHost
+    public static partial class PowerShellNativeFunctionHost
     {
         /// <summary>Installs a prepared body after PowerShell has declared the function and its aliases.</summary>
         /// <remarks>The native declaration owns preferences, scope, and errors. A rejected read-only declaration is left intact.</remarks>
@@ -102,6 +102,15 @@ namespace PowerForge.Generated.Runtime
                 return CreateCore(parameterDeclaration, sourcePath, Array.Empty<string>(),
                     _ => throw new NotSupportedException("This command requires PowerShell 7.3 or newer because it has a clean block."),
                     null, null, null);
+            var source = CreateDeclarationSource(parameterDeclaration, sourcePath, localNames,
+                begin != null, process != null, end != null, clean != null, localTypeDeclarations);
+            return InstallCompiledClauses(Parse(source, sourcePath).GetScriptBlock(), begin, process, end, clean);
+        }
+
+        /// <summary>Builds only compiler-owned storage and clause stubs around native parameter metadata.</summary>
+        internal static string CreateDeclarationSource(string parameterDeclaration, string? sourcePath, string[] localNames,
+            bool hasBegin, bool hasProcess, bool hasEnd, bool hasClean, string[]? localTypeDeclarations)
+        {
             var metadata = Parse(parameterDeclaration, sourcePath);
             if (metadata.ParamBlock == null || metadata.BeginBlock != null || metadata.ProcessBlock != null ||
                 metadata.DynamicParamBlock != null || HasUsingStatements(metadata) || metadata.ScriptRequirements != null ||
@@ -129,13 +138,13 @@ namespace PowerForge.Generated.Runtime
                     localDeclarations += "; ${" + name.Replace("`", "``").Replace("}", "`}") + "} = $null";
             }
             localDeclarations += typedDeclarations;
-            if (begin != null) source += "\nbegin { if ($false) { " + localDeclarations + " }; throw 'Compiled begin callback was not installed.' }";
-            if (process != null) source += "\nprocess { if ($false) { " + localDeclarations + " }; throw 'Compiled process callback was not installed.' }";
-            if (end != null || begin == null && process == null && clean == null)
+            if (hasBegin) source += "\nbegin { if ($false) { " + localDeclarations + " }; throw 'Compiled begin callback was not installed.' }";
+            if (hasProcess) source += "\nprocess { if ($false) { " + localDeclarations + " }; throw 'Compiled process callback was not installed.' }";
+            if (hasEnd || !hasBegin && !hasProcess && !hasClean)
                 // These declarations allocate native tuple slots. The installed callback replaces the entire clause.
                 source += "\nend { if ($false) { " + localDeclarations + " }; throw 'Compiled end callback was not installed.' }";
-            if (clean != null) source += "\nclean { if ($false) { " + localDeclarations + " }; throw 'Compiled clean callback was not installed.' }";
-            return InstallCompiledClauses(Parse(source, sourcePath).GetScriptBlock(), begin, process, end, clean);
+            if (hasClean) source += "\nclean { if ($false) { " + localDeclarations + " }; throw 'Compiled clean callback was not installed.' }";
+            return source;
         }
 
         /// <summary>Preserves a literal block's source metadata while replacing all executable clauses with compiled callbacks.</summary>
