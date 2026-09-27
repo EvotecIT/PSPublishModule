@@ -1,0 +1,1294 @@
+{
+  "SchemaVersion": 1,
+  "Purpose": "Original-only authored-type workflow baseline and source closure design. No generated execution or new compiler support is claimed.",
+  "CompilerCommit": "93b561566cd4c10117c4d0633214839b0c2040c1",
+  "Source": "https://github.com/jdhitsolutions/PSScriptTools",
+  "SourceCommit": "549fa3e3d769532320054fc0b3c8f42df0452361",
+  "SourceFiles": [
+    {
+      "RelativePath": "functions/Get-TypeMember.ps1",
+      "Sha256": "cd1e4af714de527ff54216ecbcee22bfcff96a49cc8d6c527b4a2e36969d8011",
+      "Declarations": [
+        {
+          "Name": "ResolveType",
+          "IsEnum": false,
+          "IsClass": true,
+          "Line": 5,
+          "BaseTypes": [
+            "System.Management.Automation.ArgumentTransformationAttribute"
+          ],
+          "Members": [
+            {
+              "Name": "Transform",
+              "Kind": "FunctionMemberAst",
+              "Line": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "RelativePath": "functions/Get-DirectoryInfo.ps1",
+      "Sha256": "e2666d58c45474ee1bf0a15cde09cd683c2d67acdf3f26b972cd003b7e1eed36",
+      "Declarations": [
+        {
+          "Name": "DirectoryStat",
+          "IsEnum": false,
+          "IsClass": true,
+          "Line": 1,
+          "BaseTypes": [],
+          "Members": [
+            {
+              "Name": "Name",
+              "Kind": "PropertyMemberAst",
+              "Line": 2
+            },
+            {
+              "Name": "Path",
+              "Kind": "PropertyMemberAst",
+              "Line": 3
+            },
+            {
+              "Name": "FileCount",
+              "Kind": "PropertyMemberAst",
+              "Line": 4
+            },
+            {
+              "Name": "FileSize",
+              "Kind": "PropertyMemberAst",
+              "Line": 5
+            },
+            {
+              "Name": "Parent",
+              "Kind": "PropertyMemberAst",
+              "Line": 6
+            },
+            {
+              "Name": "Computername",
+              "Kind": "PropertyMemberAst",
+              "Line": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "RelativePath": "functions/Write-PSHorizontalRule.ps1",
+      "Sha256": "a3a596d8765ce73998708acf2d471b34732f192ad6ac512d2560edb24a5c2691",
+      "Declarations": [
+        {
+          "Name": "psRuleTextStyle",
+          "IsEnum": true,
+          "IsClass": false,
+          "Line": 1,
+          "BaseTypes": [],
+          "Members": [
+            {
+              "Name": "none",
+              "Kind": "PropertyMemberAst",
+              "Line": 2
+            },
+            {
+              "Name": "bold",
+              "Kind": "PropertyMemberAst",
+              "Line": 3
+            },
+            {
+              "Name": "faint",
+              "Kind": "PropertyMemberAst",
+              "Line": 4
+            },
+            {
+              "Name": "italic",
+              "Kind": "PropertyMemberAst",
+              "Line": 5
+            },
+            {
+              "Name": "blink",
+              "Kind": "PropertyMemberAst",
+              "Line": 6
+            },
+            {
+              "Name": "reverse",
+              "Kind": "PropertyMemberAst",
+              "Line": 7
+            }
+          ]
+        },
+        {
+          "Name": "psRuleWeight",
+          "IsEnum": true,
+          "IsClass": false,
+          "Line": 10,
+          "BaseTypes": [],
+          "Members": [
+            {
+              "Name": "Thin",
+              "Kind": "PropertyMemberAst",
+              "Line": 11
+            },
+            {
+              "Name": "Thick",
+              "Kind": "PropertyMemberAst",
+              "Line": 12
+            }
+          ]
+        },
+        {
+          "Name": "psRuleAlignment",
+          "IsEnum": true,
+          "IsClass": false,
+          "Line": 14,
+          "BaseTypes": [],
+          "Members": [
+            {
+              "Name": "Left",
+              "Kind": "PropertyMemberAst",
+              "Line": 15
+            },
+            {
+              "Name": "Center",
+              "Kind": "PropertyMemberAst",
+              "Line": 16
+            },
+            {
+              "Name": "Right",
+              "Kind": "PropertyMemberAst",
+              "Line": 17
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "Probe": "m29a-authored-types-probe.ps1",
+  "ProbeSha256": "31b4b51dd853ae532bdce9d08192e0ca5d070f98fb2cc5a28fea599c8fb6ddd2",
+  "Hosts": [
+    {
+      "Target": "net10",
+      "ObservationSha256": "caea1b3693c250297aa061a18cebbf27e2492c3d5ec7e582cdc12473bb012093",
+      "Original": {
+        "HostVersion": "7.6.6",
+        "Observations": [
+          {
+            "Id": "substring-bracketed",
+            "Count": 2,
+            "Records": [
+              {
+                "Kind": "string",
+                "Value": "$obj.Substring([Int32]startIndex)"
+              },
+              {
+                "Kind": "string",
+                "Value": "$obj.Substring([Int32]startIndex,[Int32]length)"
+              }
+            ],
+            "Warnings": [],
+            "Error": null
+          },
+          {
+            "Id": "substring-plain",
+            "Count": 2,
+            "Records": [
+              {
+                "Kind": "string",
+                "Value": "$obj.Substring([Int32]startIndex)"
+              },
+              {
+                "Kind": "string",
+                "Value": "$obj.Substring([Int32]startIndex,[Int32]length)"
+              }
+            ],
+            "Warnings": [],
+            "Error": null
+          },
+          {
+            "Id": "date-method",
+            "Count": 1,
+            "Records": [
+              {
+                "Kind": "string",
+                "Value": "$obj.AddDays([Double]value)"
+              }
+            ],
+            "Warnings": [],
+            "Error": null
+          },
+          {
+            "Id": "method-case-sensitive",
+            "Count": 0,
+            "Records": [],
+            "Warnings": [],
+            "Error": null
+          },
+          {
+            "Id": "missing-type",
+            "Count": 0,
+            "Records": [],
+            "Warnings": [],
+            "Error": {
+              "Id": "ParameterArgumentValidationError,Get-MemberMethod",
+              "Type": "System.Management.Automation.ParameterBindingValidationException",
+              "Category": "InvalidData"
+            }
+          },
+          {
+            "Id": "null-type",
+            "Count": 0,
+            "Records": [],
+            "Warnings": [],
+            "Error": {
+              "Id": "ParameterArgumentValidationError,Get-MemberMethod",
+              "Type": "System.Management.Automation.ParameterBindingValidationException",
+              "Category": "InvalidData"
+            }
+          },
+          {
+            "Id": "pipeline-property-transform",
+            "Count": 3,
+            "Records": [
+              {
+                "Kind": "string",
+                "Value": "$obj.Substring([Int32]startIndex)"
+              },
+              {
+                "Kind": "string",
+                "Value": "$obj.Substring([Int32]startIndex,[Int32]length)"
+              },
+              {
+                "Kind": "string",
+                "Value": "$obj.AddDays([Double]value)"
+              }
+            ],
+            "Warnings": [],
+            "Error": null
+          },
+          {
+            "Id": "string-constructors",
+            "Count": 9,
+            "Records": [
+              {
+                "Kind": "constructor",
+                "TypeNames": [
+                  "psTypeMemberConstructor",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Parameters": [
+                  {
+                    "Type": "System.Char[]",
+                    "Name": "value"
+                  }
+                ]
+              },
+              {
+                "Kind": "constructor",
+                "TypeNames": [
+                  "psTypeMemberConstructor",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Parameters": [
+                  {
+                    "Type": "System.Char[]",
+                    "Name": "value"
+                  },
+                  {
+                    "Type": "System.Int32",
+                    "Name": "startIndex"
+                  },
+                  {
+                    "Type": "System.Int32",
+                    "Name": "length"
+                  }
+                ]
+              },
+              {
+                "Kind": "constructor",
+                "TypeNames": [
+                  "psTypeMemberConstructor",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Parameters": [
+                  {
+                    "Type": "System.Char*",
+                    "Name": "value"
+                  }
+                ]
+              },
+              {
+                "Kind": "constructor",
+                "TypeNames": [
+                  "psTypeMemberConstructor",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Parameters": [
+                  {
+                    "Type": "System.Char*",
+                    "Name": "value"
+                  },
+                  {
+                    "Type": "System.Int32",
+                    "Name": "startIndex"
+                  },
+                  {
+                    "Type": "System.Int32",
+                    "Name": "length"
+                  }
+                ]
+              },
+              {
+                "Kind": "constructor",
+                "TypeNames": [
+                  "psTypeMemberConstructor",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Parameters": [
+                  {
+                    "Type": "System.SByte*",
+                    "Name": "value"
+                  }
+                ]
+              },
+              {
+                "Kind": "constructor",
+                "TypeNames": [
+                  "psTypeMemberConstructor",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Parameters": [
+                  {
+                    "Type": "System.SByte*",
+                    "Name": "value"
+                  },
+                  {
+                    "Type": "System.Int32",
+                    "Name": "startIndex"
+                  },
+                  {
+                    "Type": "System.Int32",
+                    "Name": "length"
+                  }
+                ]
+              },
+              {
+                "Kind": "constructor",
+                "TypeNames": [
+                  "psTypeMemberConstructor",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Parameters": [
+                  {
+                    "Type": "System.SByte*",
+                    "Name": "value"
+                  },
+                  {
+                    "Type": "System.Int32",
+                    "Name": "startIndex"
+                  },
+                  {
+                    "Type": "System.Int32",
+                    "Name": "length"
+                  },
+                  {
+                    "Type": "System.Text.Encoding",
+                    "Name": "enc"
+                  }
+                ]
+              },
+              {
+                "Kind": "constructor",
+                "TypeNames": [
+                  "psTypeMemberConstructor",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Parameters": [
+                  {
+                    "Type": "System.Char",
+                    "Name": "c"
+                  },
+                  {
+                    "Type": "System.Int32",
+                    "Name": "count"
+                  }
+                ]
+              },
+              {
+                "Kind": "constructor",
+                "TypeNames": [
+                  "psTypeMemberConstructor",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Parameters": [
+                  {
+                    "Type": "System.ReadOnlySpan`1[[System.Char, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+                    "Name": "value"
+                  }
+                ]
+              }
+            ],
+            "Warnings": [],
+            "Error": null
+          },
+          {
+            "Id": "static-type-constructors",
+            "Count": 0,
+            "Records": [],
+            "Warnings": [
+              "No constructors found for [System.Math]. This may be a static class or an [Enum]."
+            ],
+            "Error": null
+          },
+          {
+            "Id": "member-property",
+            "Count": 1,
+            "Records": [
+              {
+                "Kind": "member",
+                "TypeNames": [
+                  "psTypeMember",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Name": "Length",
+                "MemberType": "Property",
+                "PropertyType": "System.Int32",
+                "ReturnType": null,
+                "FieldType": null,
+                "IsStatic": null,
+                "IsEnum": false,
+                "Syntax": []
+              }
+            ],
+            "Warnings": [],
+            "Error": null
+          },
+          {
+            "Id": "member-method",
+            "Count": 1,
+            "Records": [
+              {
+                "Kind": "member",
+                "TypeNames": [
+                  "psTypeMember",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Name": "Substring",
+                "MemberType": "Method",
+                "PropertyType": null,
+                "ReturnType": "System.String",
+                "FieldType": null,
+                "IsStatic": false,
+                "IsEnum": null,
+                "Syntax": [
+                  "$obj.Substring([Int32]startIndex)",
+                  "$obj.Substring([Int32]startIndex,[Int32]length)"
+                ]
+              }
+            ],
+            "Warnings": [],
+            "Error": null
+          }
+        ],
+        "Metadata": [
+          {
+            "Command": "Get-MemberMethod",
+            "ParameterType": "System.Type",
+            "Attributes": [
+              "System.Management.Automation.AliasAttribute",
+              "ResolveType",
+              "System.Management.Automation.ValidateNotNullOrEmptyAttribute",
+              "System.Management.Automation.ParameterAttribute",
+              "System.Management.Automation.ArgumentTypeConverterAttribute"
+            ],
+            "Transformations": [
+              {
+                "Name": "ResolveType",
+                "BaseType": "System.Management.Automation.ArgumentTransformationAttribute"
+              },
+              {
+                "Name": "System.Management.Automation.ArgumentTypeConverterAttribute",
+                "BaseType": "System.Management.Automation.ArgumentTransformationAttribute"
+              }
+            ]
+          },
+          {
+            "Command": "Get-TypeMember",
+            "ParameterType": "System.Type",
+            "Attributes": [
+              "ResolveType",
+              "System.Management.Automation.ValidateNotNullOrEmptyAttribute",
+              "System.Management.Automation.ParameterAttribute",
+              "System.Management.Automation.ArgumentTypeConverterAttribute"
+            ],
+            "Transformations": [
+              {
+                "Name": "ResolveType",
+                "BaseType": "System.Management.Automation.ArgumentTransformationAttribute"
+              },
+              {
+                "Name": "System.Management.Automation.ArgumentTypeConverterAttribute",
+                "BaseType": "System.Management.Automation.ArgumentTransformationAttribute"
+              }
+            ]
+          },
+          {
+            "Command": "Get-TypeConstructor",
+            "ParameterType": "System.Type",
+            "Attributes": [
+              "ResolveType",
+              "System.Management.Automation.ValidateNotNullOrEmptyAttribute",
+              "System.Management.Automation.ParameterAttribute",
+              "System.Management.Automation.ArgumentTypeConverterAttribute"
+            ],
+            "Transformations": [
+              {
+                "Name": "ResolveType",
+                "BaseType": "System.Management.Automation.ArgumentTransformationAttribute"
+              },
+              {
+                "Name": "System.Management.Automation.ArgumentTypeConverterAttribute",
+                "BaseType": "System.Management.Automation.ArgumentTransformationAttribute"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "Target": "net472",
+      "ObservationSha256": "072186f5055b01bd4c9f1bed0d2e5eeeb188cd2f7d5e30904a55f2f07eddc14e",
+      "Original": {
+        "HostVersion": "5.1.26100.9444",
+        "Observations": [
+          {
+            "Id": "substring-bracketed",
+            "Count": 2,
+            "Records": [
+              {
+                "Kind": "string",
+                "Value": "$obj.Substring([Int32]startIndex)"
+              },
+              {
+                "Kind": "string",
+                "Value": "$obj.Substring([Int32]startIndex,[Int32]length)"
+              }
+            ],
+            "Warnings": [],
+            "Error": null
+          },
+          {
+            "Id": "substring-plain",
+            "Count": 2,
+            "Records": [
+              {
+                "Kind": "string",
+                "Value": "$obj.Substring([Int32]startIndex)"
+              },
+              {
+                "Kind": "string",
+                "Value": "$obj.Substring([Int32]startIndex,[Int32]length)"
+              }
+            ],
+            "Warnings": [],
+            "Error": null
+          },
+          {
+            "Id": "date-method",
+            "Count": 1,
+            "Records": [
+              {
+                "Kind": "string",
+                "Value": "$obj.AddDays([Double]value)"
+              }
+            ],
+            "Warnings": [],
+            "Error": null
+          },
+          {
+            "Id": "method-case-sensitive",
+            "Count": 0,
+            "Records": [],
+            "Warnings": [],
+            "Error": null
+          },
+          {
+            "Id": "missing-type",
+            "Count": 0,
+            "Records": [],
+            "Warnings": [],
+            "Error": {
+              "Id": "ParameterArgumentValidationError,Get-MemberMethod",
+              "Type": "System.Management.Automation.ParameterBindingValidationException",
+              "Category": "InvalidData"
+            }
+          },
+          {
+            "Id": "null-type",
+            "Count": 0,
+            "Records": [],
+            "Warnings": [],
+            "Error": {
+              "Id": "ParameterArgumentValidationError,Get-MemberMethod",
+              "Type": "System.Management.Automation.ParameterBindingValidationException",
+              "Category": "InvalidData"
+            }
+          },
+          {
+            "Id": "pipeline-property-transform",
+            "Count": 3,
+            "Records": [
+              {
+                "Kind": "string",
+                "Value": "$obj.Substring([Int32]startIndex)"
+              },
+              {
+                "Kind": "string",
+                "Value": "$obj.Substring([Int32]startIndex,[Int32]length)"
+              },
+              {
+                "Kind": "string",
+                "Value": "$obj.AddDays([Double]value)"
+              }
+            ],
+            "Warnings": [],
+            "Error": null
+          },
+          {
+            "Id": "string-constructors",
+            "Count": 8,
+            "Records": [
+              {
+                "Kind": "constructor",
+                "TypeNames": [
+                  "psTypeMemberConstructor",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Parameters": [
+                  {
+                    "Type": "System.Char*",
+                    "Name": "value"
+                  }
+                ]
+              },
+              {
+                "Kind": "constructor",
+                "TypeNames": [
+                  "psTypeMemberConstructor",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Parameters": [
+                  {
+                    "Type": "System.Char*",
+                    "Name": "value"
+                  },
+                  {
+                    "Type": "System.Int32",
+                    "Name": "startIndex"
+                  },
+                  {
+                    "Type": "System.Int32",
+                    "Name": "length"
+                  }
+                ]
+              },
+              {
+                "Kind": "constructor",
+                "TypeNames": [
+                  "psTypeMemberConstructor",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Parameters": [
+                  {
+                    "Type": "System.SByte*",
+                    "Name": "value"
+                  }
+                ]
+              },
+              {
+                "Kind": "constructor",
+                "TypeNames": [
+                  "psTypeMemberConstructor",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Parameters": [
+                  {
+                    "Type": "System.SByte*",
+                    "Name": "value"
+                  },
+                  {
+                    "Type": "System.Int32",
+                    "Name": "startIndex"
+                  },
+                  {
+                    "Type": "System.Int32",
+                    "Name": "length"
+                  }
+                ]
+              },
+              {
+                "Kind": "constructor",
+                "TypeNames": [
+                  "psTypeMemberConstructor",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Parameters": [
+                  {
+                    "Type": "System.SByte*",
+                    "Name": "value"
+                  },
+                  {
+                    "Type": "System.Int32",
+                    "Name": "startIndex"
+                  },
+                  {
+                    "Type": "System.Int32",
+                    "Name": "length"
+                  },
+                  {
+                    "Type": "System.Text.Encoding",
+                    "Name": "enc"
+                  }
+                ]
+              },
+              {
+                "Kind": "constructor",
+                "TypeNames": [
+                  "psTypeMemberConstructor",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Parameters": [
+                  {
+                    "Type": "System.Char[]",
+                    "Name": "value"
+                  },
+                  {
+                    "Type": "System.Int32",
+                    "Name": "startIndex"
+                  },
+                  {
+                    "Type": "System.Int32",
+                    "Name": "length"
+                  }
+                ]
+              },
+              {
+                "Kind": "constructor",
+                "TypeNames": [
+                  "psTypeMemberConstructor",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Parameters": [
+                  {
+                    "Type": "System.Char[]",
+                    "Name": "value"
+                  }
+                ]
+              },
+              {
+                "Kind": "constructor",
+                "TypeNames": [
+                  "psTypeMemberConstructor",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Parameters": [
+                  {
+                    "Type": "System.Char",
+                    "Name": "c"
+                  },
+                  {
+                    "Type": "System.Int32",
+                    "Name": "count"
+                  }
+                ]
+              }
+            ],
+            "Warnings": [],
+            "Error": null
+          },
+          {
+            "Id": "static-type-constructors",
+            "Count": 0,
+            "Records": [],
+            "Warnings": [
+              "No constructors found for [System.Math]. This may be a static class or an [Enum]."
+            ],
+            "Error": null
+          },
+          {
+            "Id": "member-property",
+            "Count": 1,
+            "Records": [
+              {
+                "Kind": "member",
+                "TypeNames": [
+                  "psTypeMember",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Name": "Length",
+                "MemberType": "Property",
+                "PropertyType": "System.Int32",
+                "ReturnType": null,
+                "FieldType": null,
+                "IsStatic": null,
+                "IsEnum": false,
+                "Syntax": []
+              }
+            ],
+            "Warnings": [],
+            "Error": null
+          },
+          {
+            "Id": "member-method",
+            "Count": 1,
+            "Records": [
+              {
+                "Kind": "member",
+                "TypeNames": [
+                  "psTypeMember",
+                  "System.Management.Automation.PSCustomObject",
+                  "System.Object"
+                ],
+                "Type": "System.String",
+                "Name": "Substring",
+                "MemberType": "Method",
+                "PropertyType": null,
+                "ReturnType": "System.String",
+                "FieldType": null,
+                "IsStatic": false,
+                "IsEnum": null,
+                "Syntax": [
+                  "$obj.Substring([Int32]startIndex)",
+                  "$obj.Substring([Int32]startIndex,[Int32]length)"
+                ]
+              }
+            ],
+            "Warnings": [],
+            "Error": null
+          }
+        ],
+        "Metadata": [
+          {
+            "Command": "Get-MemberMethod",
+            "ParameterType": "System.Type",
+            "Attributes": [
+              "System.Management.Automation.AliasAttribute",
+              "ResolveType",
+              "System.Management.Automation.ValidateNotNullOrEmptyAttribute",
+              "System.Management.Automation.ParameterAttribute",
+              "System.Management.Automation.ArgumentTypeConverterAttribute"
+            ],
+            "Transformations": [
+              {
+                "Name": "ResolveType",
+                "BaseType": "System.Management.Automation.ArgumentTransformationAttribute"
+              },
+              {
+                "Name": "System.Management.Automation.ArgumentTypeConverterAttribute",
+                "BaseType": "System.Management.Automation.ArgumentTransformationAttribute"
+              }
+            ]
+          },
+          {
+            "Command": "Get-TypeMember",
+            "ParameterType": "System.Type",
+            "Attributes": [
+              "ResolveType",
+              "System.Management.Automation.ValidateNotNullOrEmptyAttribute",
+              "System.Management.Automation.ParameterAttribute",
+              "System.Management.Automation.ArgumentTypeConverterAttribute"
+            ],
+            "Transformations": [
+              {
+                "Name": "ResolveType",
+                "BaseType": "System.Management.Automation.ArgumentTransformationAttribute"
+              },
+              {
+                "Name": "System.Management.Automation.ArgumentTypeConverterAttribute",
+                "BaseType": "System.Management.Automation.ArgumentTransformationAttribute"
+              }
+            ]
+          },
+          {
+            "Command": "Get-TypeConstructor",
+            "ParameterType": "System.Type",
+            "Attributes": [
+              "ResolveType",
+              "System.Management.Automation.ValidateNotNullOrEmptyAttribute",
+              "System.Management.Automation.ParameterAttribute",
+              "System.Management.Automation.ArgumentTypeConverterAttribute"
+            ],
+            "Transformations": [
+              {
+                "Name": "ResolveType",
+                "BaseType": "System.Management.Automation.ArgumentTransformationAttribute"
+              },
+              {
+                "Name": "System.Management.Automation.ArgumentTypeConverterAttribute",
+                "BaseType": "System.Management.Automation.ArgumentTransformationAttribute"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "Explanations": [
+    {
+      "Target": "net10.0",
+      "ExplanationSha256": "9201dcf9b020c936fd48b234cd639671288c6db5db3e086154329353a408b779",
+      "Functions": [
+        {
+          "unitId": "da3dccaeac3ca5e7efb66b95",
+          "name": "Get-MemberMethod",
+          "kind": "Function",
+          "startLine": 22,
+          "returnType": "System.Object",
+          "parameters": [
+            {
+              "name": "TypeName",
+              "typeName": "System.Type",
+              "allowNull": false,
+              "hasDefaultValue": false
+            },
+            {
+              "name": "MethodName",
+              "typeName": "System.String",
+              "allowNull": false,
+              "hasDefaultValue": false
+            }
+          ],
+          "decision": "RuntimeFallback",
+          "loweringRoute": "PowerShellRuntime",
+          "artifactDisposition": "HostedSource",
+          "semanticEligible": false,
+          "emitted": false,
+          "retainedHostedSource": true,
+          "usesNativeFunctionBinding": false,
+          "runtimeCommandRegions": 0,
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "boundaryCrossings": 0,
+          "promotedTypedRegions": 0,
+          "generatedRegionMemberNames": [],
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "source.type-definition",
+              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+              "line": 5,
+              "column": 1
+            }
+          ]
+        },
+        {
+          "unitId": "c46d1662e708e4ea4e23b3a2",
+          "name": "Get-TypeMember",
+          "kind": "Function",
+          "startLine": 76,
+          "returnType": "System.Object",
+          "parameters": [
+            {
+              "name": "TypeName",
+              "typeName": "System.Type",
+              "allowNull": false,
+              "hasDefaultValue": false
+            },
+            {
+              "name": "StaticOnly",
+              "typeName": "System.Boolean",
+              "allowNull": false,
+              "hasDefaultValue": false
+            },
+            {
+              "name": "EnumOnly",
+              "typeName": "System.Boolean",
+              "allowNull": false,
+              "hasDefaultValue": false
+            },
+            {
+              "name": "MemberType",
+              "typeName": "System.String",
+              "allowNull": false,
+              "hasDefaultValue": false
+            },
+            {
+              "name": "MemberName",
+              "typeName": "System.String",
+              "allowNull": false,
+              "hasDefaultValue": false
+            }
+          ],
+          "decision": "RuntimeFallback",
+          "loweringRoute": "PowerShellRuntime",
+          "artifactDisposition": "HostedSource",
+          "semanticEligible": false,
+          "emitted": false,
+          "retainedHostedSource": true,
+          "usesNativeFunctionBinding": false,
+          "runtimeCommandRegions": 0,
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "boundaryCrossings": 0,
+          "promotedTypedRegions": 0,
+          "generatedRegionMemberNames": [],
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "source.type-definition",
+              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+              "line": 5,
+              "column": 1
+            }
+          ]
+        },
+        {
+          "unitId": "dbdbd1ac86f3ab831fe0defe",
+          "name": "Get-TypeConstructor",
+          "kind": "Function",
+          "startLine": 163,
+          "returnType": "System.Object",
+          "parameters": [
+            {
+              "name": "TypeName",
+              "typeName": "System.Type",
+              "allowNull": false,
+              "hasDefaultValue": false
+            }
+          ],
+          "decision": "RuntimeFallback",
+          "loweringRoute": "PowerShellRuntime",
+          "artifactDisposition": "HostedSource",
+          "semanticEligible": false,
+          "emitted": false,
+          "retainedHostedSource": true,
+          "usesNativeFunctionBinding": false,
+          "runtimeCommandRegions": 0,
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "boundaryCrossings": 0,
+          "promotedTypedRegions": 0,
+          "generatedRegionMemberNames": [],
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "source.type-definition",
+              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+              "line": 5,
+              "column": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Target": "net472",
+      "ExplanationSha256": "7b9970fc6c04f975285f5bc34784a5be046ecfeb95d517d6ded6cf194cb5b84f",
+      "Functions": [
+        {
+          "unitId": "da3dccaeac3ca5e7efb66b95",
+          "name": "Get-MemberMethod",
+          "kind": "Function",
+          "startLine": 22,
+          "returnType": "System.Object",
+          "parameters": [
+            {
+              "name": "TypeName",
+              "typeName": "System.Type",
+              "allowNull": false,
+              "hasDefaultValue": false
+            },
+            {
+              "name": "MethodName",
+              "typeName": "System.String",
+              "allowNull": false,
+              "hasDefaultValue": false
+            }
+          ],
+          "decision": "RuntimeFallback",
+          "loweringRoute": "PowerShellRuntime",
+          "artifactDisposition": "HostedSource",
+          "semanticEligible": false,
+          "emitted": false,
+          "retainedHostedSource": true,
+          "usesNativeFunctionBinding": false,
+          "runtimeCommandRegions": 0,
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "boundaryCrossings": 0,
+          "promotedTypedRegions": 0,
+          "generatedRegionMemberNames": [],
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "source.type-definition",
+              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+              "line": 5,
+              "column": 1
+            }
+          ]
+        },
+        {
+          "unitId": "c46d1662e708e4ea4e23b3a2",
+          "name": "Get-TypeMember",
+          "kind": "Function",
+          "startLine": 76,
+          "returnType": "System.Object",
+          "parameters": [
+            {
+              "name": "TypeName",
+              "typeName": "System.Type",
+              "allowNull": false,
+              "hasDefaultValue": false
+            },
+            {
+              "name": "StaticOnly",
+              "typeName": "System.Boolean",
+              "allowNull": false,
+              "hasDefaultValue": false
+            },
+            {
+              "name": "EnumOnly",
+              "typeName": "System.Boolean",
+              "allowNull": false,
+              "hasDefaultValue": false
+            },
+            {
+              "name": "MemberType",
+              "typeName": "System.String",
+              "allowNull": false,
+              "hasDefaultValue": false
+            },
+            {
+              "name": "MemberName",
+              "typeName": "System.String",
+              "allowNull": false,
+              "hasDefaultValue": false
+            }
+          ],
+          "decision": "RuntimeFallback",
+          "loweringRoute": "PowerShellRuntime",
+          "artifactDisposition": "HostedSource",
+          "semanticEligible": false,
+          "emitted": false,
+          "retainedHostedSource": true,
+          "usesNativeFunctionBinding": false,
+          "runtimeCommandRegions": 0,
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "boundaryCrossings": 0,
+          "promotedTypedRegions": 0,
+          "generatedRegionMemberNames": [],
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "source.type-definition",
+              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+              "line": 5,
+              "column": 1
+            }
+          ]
+        },
+        {
+          "unitId": "dbdbd1ac86f3ab831fe0defe",
+          "name": "Get-TypeConstructor",
+          "kind": "Function",
+          "startLine": 163,
+          "returnType": "System.Object",
+          "parameters": [
+            {
+              "name": "TypeName",
+              "typeName": "System.Type",
+              "allowNull": false,
+              "hasDefaultValue": false
+            }
+          ],
+          "decision": "RuntimeFallback",
+          "loweringRoute": "PowerShellRuntime",
+          "artifactDisposition": "HostedSource",
+          "semanticEligible": false,
+          "emitted": false,
+          "retainedHostedSource": true,
+          "usesNativeFunctionBinding": false,
+          "runtimeCommandRegions": 0,
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "boundaryCrossings": 0,
+          "promotedTypedRegions": 0,
+          "generatedRegionMemberNames": [],
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "source.type-definition",
+              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
+              "line": 5,
+              "column": 1
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "Limits": [
+    "Original-only execution; generated artifacts are not qualified.",
+    "No external module import, external tools, network, CIM, AD or administration workflow executes.",
+    "Reflection counts and ordering are host/runtime-specific.",
+    "Declaration names and member locations are read-only AST provenance, not a lowering contract; source stays external.",
+    "The five-packet count remains 494/565 with 71 retained; no compiler source changed."
+  ]
+}

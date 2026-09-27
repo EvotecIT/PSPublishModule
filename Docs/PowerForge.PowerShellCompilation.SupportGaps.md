@@ -23,7 +23,7 @@ The final-source five-packet, two-target census summary has SHA-256 `250abe61cdc
 | Method-invocation expressions | 12 / 12 | Eleven reported diagnostics are calls inside observed `catch` boundaries; argument effects and caught-error identity are not yet preserved there. |
 | `Register-ArgumentCompleter` | 9 / 5 | PSScriptTools registration has a PowerShell host/session effect and no admitted typed equivalent. |
 | `begin`/`process` lifecycle | 9 / 0 | Advanced function lifecycle and its missing lowering contract occur together. |
-| File-scoped class/enum declarations | 8 / 3 | PSScriptTools functions sharing a file with authored types remain hosted. The separate pinned powershell-yaml packet has 0/14 complete methods because of a top-level enum and still needs loader qualification. |
+| File-scoped class/enum declarations | 8 / 3 | PSScriptTools functions sharing a file with authored types remain hosted. The three ResolveType-dependent reflection functions now have an original-only offline baseline on both Windows hosts; declaration closure and generated parameter transformation remain unqualified. The separate pinned powershell-yaml packet has 0/14 complete methods because of a top-level enum and still needs loader qualification. |
 | Typed nested script blocks | 6 / 3 | A delegate or explicit hosted boundary is needed for the observed captures. |
 | Parameter defaults | 5 / 0 | Runtime-evaluated defaults, including platyPS `$Encoding`, are outside the current typed parameter contract; PSScriptTools also reports `ValidateScript` metadata separately. |
 | Unqualified `Write-Verbose` | 6 / 0 | The host can resolve a different command than the built-in provider; this often co-occurs with other blockers. |
