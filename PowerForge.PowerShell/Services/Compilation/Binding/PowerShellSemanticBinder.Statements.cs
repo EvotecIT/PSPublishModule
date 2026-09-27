@@ -91,7 +91,7 @@ internal sealed partial class PowerShellSemanticBinder
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && assignment.Right is SwitchStatementAst or TryStatementAst)
                 return BindOutputCapture(document, assignment, symbols, functions, diagnostics, targetFramework, capabilities);
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
-                NativeStaticAssignmentReceiver(assignment.Left) is { } staticReceiver)
+                NativeStaticAssignmentReceiver(assignment.Left, targetFramework) is { } staticReceiver)
                 return BindNativeStaticAssignment(document, assignment, staticReceiver, symbols, functions,
                     diagnostics, targetFramework, capabilities);
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&

@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "367a3d15d94fbeeaf801c99f6aef5bb17626f0c2",
+  "compilerBaselineCommit": "e75a530151f3659ac4d7dd54da5498d140e81f90",
   "packets": [
     {
       "packet": "pssg",
@@ -489,9 +489,9 @@
       "packet": "pinf",
       "functions": 66,
       "stableUnits": 67,
-      "emitted": 64,
-      "retained": 2,
-      "sourceExplanationSha256": "dc4ead723c754d3554c2707baea55372489caa746ba3f56a6b6322d7e358f95d",
+      "emitted": 65,
+      "retained": 1,
+      "sourceExplanationSha256": "35f6919cdd439a762a9284cc3a90d32d6f984621307cafd753e71f40c9bc3d53",
       "functionsRetained": [
         {
           "unitId": "fc33881d5a7752031137ea07",
@@ -510,24 +510,6 @@
               "column": 9
             }
           ]
-        },
-        {
-          "unitId": "db4045ac87a8a7f41b9d4fe7",
-          "name": "Connect-Infoblox",
-          "relativePath": "Public/Connect-Infoblox.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Member assignment value is not assignable to 'System.Net.SecurityProtocolType'.",
-              "line": 74,
-              "column": 55
-            }
-          ]
         }
       ]
     },
@@ -537,7 +519,7 @@
       "stableUnits": 121,
       "emitted": 90,
       "retained": 19,
-      "sourceExplanationSha256": "58f9421a20c0f866af3b63740ecfd6679f2f92004ba59f7f267e50533d715e70",
+      "sourceExplanationSha256": "81cf743c9a5dae5a6adc79ecb6896ed2f380a40e2ab40d556ccafde08de57c15",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -1794,7 +1776,7 @@
     "PowerForge.PowerShell/Services/Compilation/PowerShellNativeFunctionSourceGenerator.cs": "2f7b9e8d9c134953991cf98f9d5a6d4ad2e1f941b897a9f1a0cd3f68f3c37752",
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.OwnedDeclaration.cs": "96048604389dbda2546cafb9a43e189c4620eeb05c744deb1a69b6cc3025e106",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.cs": "bef359d76dbee21656c429002090b501f050d100adc41961d6c7fe888d2c0ecd",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "4a07bbd5068bd7c3d53c1b08362092b4815f3c6a9e5411df7a23c8eab06c618e",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "371ad03e56dc97c17532f75486caf15c96effcc5bc70345862d7708c7439deeb",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedEnumDeclarationPolicy.cs": "13c19ff47ae23ae9d641c6d76ea6fe605e3187ccf13ecd607e53b68e2909c4c9",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedValueClassPolicy.cs": "e161dce7abde611d1ec26825f59d2a8218ebbabe239a3e199fdb8e509956cc73",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "b89b9674e8efff29dc493563974504e415b98fd67a08a73bd860185227e800e3",
@@ -1816,7 +1798,7 @@
     "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.OutputCapture.cs": "7df1703fecafeb77afe28b9fe00b8d63ad0f97f35fdaea3aa913fe08b7837f54",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellControlFlowBindingPolicy.cs": "e0942912848695e188823e2921e57d7e1990939bd02b2d0c5285773be334e12b",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.OutputCapture.cs": "6ec5a58fd2eba8f92d648a1a017efe6b02b75f072791201de75dce538796974f",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs": "4553e416ca876b8da169fbe31b742a71cda4c48a16c1f1399e0ac5adccd986f5",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs": "c0dfbe5f09ebd5c37eee4ffb520a8990f1b8ad442f4887c8f1691584fe958d7c",
     "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundOutputCaptureStatement.cs": "fe0fcebb5390383faef1d73a7f5cbc41df33370d4b938c72d47ef9cc13a7cbb4",
     "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundStatementRewriter.cs": "2b6846dabcb6a89a75649e72df90e77c90e084df8db63908b8f9408ffb3c1775",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredOutputCaptureStatement.cs": "89bda7c779d5313c595b59435091fcde6f977d116c266bad68c0703b5cae9897",
@@ -1829,10 +1811,14 @@
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeTypeArgumentPolicy.cs": "ff940d7098ed93beefa02e16c65a99e7edab09bc2baf6de0fbb1c8805c493c2e",
     "PowerForge.Tests/PowerShellCompilationTypeFactoryArgumentTests.cs": "b992c4cf7ee2445c11933d679c4ccd66593081fcc621b1be37205c7e6abb7315",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellConversionSemanticBinder.cs": "47af6f40ed25b941e60eec76f6aa45e9af823360a9a7848309b712465b6bda62",
-    "PowerForge.Tests/PowerShellCompilationReferenceParameterTests.cs": "c1dab2a79ad981884b2f11c50bfa1e78c01649dc67badf5d2b43d98c5ff05621"
+    "PowerForge.Tests/PowerShellCompilationReferenceParameterTests.cs": "c1dab2a79ad981884b2f11c50bfa1e78c01649dc67badf5d2b43d98c5ff05621",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.StaticAssignments.cs": "8a36e93ab618beaf1de56bf2a1e5452aeea096e690f85d266803b53d71c1550e",
+    "PowerForge.Tests/PowerShellCompilationStaticEnumAssignmentTests.cs": "4ca25ed159c6d93316285d93439fc2fe63dcd65f56c2915d92846fd909e5ece3",
+    "Benchmarks/PowerShellCompilation/Corpus/m29a-infoblox-connection-probe.ps1": "9fc3eac1c1ddbbead415cb30f947fd9d37d271349316d8cda577a7f30d739d04",
+    "Benchmarks/PowerShellCompilation/Corpus/m29a-infoblox-connection-boundaries.ps1": "62cab9226a47197b53b28639b3e33509f1cc0a7e1b6bcb26e81b432daabfe7a6"
   },
-  "dispositionComparison": "m29a-reference-parameter-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "367a3d15d94fbeeaf801c99f6aef5bb17626f0c2",
-  "emitted": 509,
-  "retained": 56
+  "dispositionComparison": "m29a-static-enum-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "e75a530151f3659ac4d7dd54da5498d140e81f90",
+  "emitted": 510,
+  "retained": 55
 }

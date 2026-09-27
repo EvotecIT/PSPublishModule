@@ -1,14 +1,29 @@
 using System.Management.Automation.Language;
+using System.Reflection;
 
 namespace PowerForge;
 
 internal sealed partial class PowerShellSemanticBinder
 {
-    // Direct static '=' assignment keeps its existing CLR owner. This route owns
-    // nested accesses whose runtime receiver/conversion is observed by PowerShell.
-    internal static TypeExpressionAst? NativeStaticAssignmentReceiver(ExpressionAst target)
-        => target is MemberExpressionAst { Static: false } or IndexExpressionAst
+    // Enum-valued static properties require PowerShell's native conversion, including
+    // flags produced by runtime-valued operators. Other direct static storage keeps
+    // its existing CLR owner; nested access already uses native receiver semantics.
+    internal static TypeExpressionAst? NativeStaticAssignmentReceiver(ExpressionAst target, string? targetFramework)
+    {
+        if (target is MemberExpressionAst { Static: true, Expression: TypeExpressionAst type,
+                Member: StringConstantExpressionAst name } && type.TypeName.GetReflectionType() is { } receiver)
+        {
+            var members = receiver.GetMember(name.Value, MemberTypes.Field | MemberTypes.Property,
+                BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy | BindingFlags.IgnoreCase);
+            if (members.Length == 1 && members[0] is PropertyInfo property && property.PropertyType.IsEnum &&
+                property.GetMethod is { IsPublic: true } && property.SetMethod is { IsPublic: true } &&
+                property.GetIndexParameters().Length == 0 &&
+                (string.IsNullOrWhiteSpace(targetFramework) ||
+                 PowerShellGeneratedMemberPolicy.IsWritableSupported(property, targetFramework!))) return type;
+        }
+        return target is MemberExpressionAst { Static: false } or IndexExpressionAst
             ? Generated.Runtime.PowerShellNativeFunctionContext.FindNativeStaticAccessReceiver(target) : null;
+    }
 
     private PowerShellBoundStatement? BindNativeStaticAssignment(ParsedSourceDocument document,
         AssignmentStatementAst assignment, TypeExpressionAst receiver,

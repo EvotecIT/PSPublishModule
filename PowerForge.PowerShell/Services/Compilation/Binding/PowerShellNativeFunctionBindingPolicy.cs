@@ -124,8 +124,8 @@ internal static class PowerShellNativeFunctionBindingPolicy
            RequiresNativeCommandSwitch(function, capabilities) ||
            RequiresNativeObjectParameterSwitch(function, capabilities) ||
            RequiresNativeAccessOutputCapture(function) ||
-           function.Body.Find(static node => node is AssignmentStatementAst assignment &&
-               PowerShellSemanticBinder.NativeStaticAssignmentReceiver(assignment.Left) is not null,
+           function.Body.Find(node => node is AssignmentStatementAst assignment &&
+               PowerShellSemanticBinder.NativeStaticAssignmentReceiver(assignment.Left, targetFramework) is not null,
                searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(static node => node is UnaryExpressionAst
                { TokenKind: TokenKind.PlusPlus or TokenKind.MinusMinus or TokenKind.PostfixPlusPlus or TokenKind.PostfixMinusMinus } increment &&
