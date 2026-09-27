@@ -4,8 +4,8 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "dispositionContract": "Every function identity matches the complete per-function baseline; no method or still-retained region from the accepted literal-pipeline checkpoint is lost.",
-  "compilerBaselineCommit": "777fe430f899b1144f432f01ab948bec20d16314",
+  "dispositionContract": "Every function identity matches the complete per-function baseline; no method or still-retained region from the accepted object-parameter checkpoint is lost.",
+  "compilerBaselineCommit": "64a40ddd59bfc8ddc721dc2a86756645ffae797b",
   "packets": [
     {
       "packet": "pssg",
@@ -13,7 +13,7 @@
       "functions": 282,
       "emitted": 257,
       "retained": 25,
-      "sourceExplanationSha256": "de43d2109214ab4d6e20cb06b83d5942bc742262c3412f726dc5ea0de67aee5b",
+      "sourceExplanationSha256": "26e055e8e347fc96d2ee8453fa1bd40cdd65a72defe393456e355cb3c14173d2",
       "functionsRetained": [
         {
           "unitId": "a1bb1dcefddec8c45377fd27",
@@ -467,8 +467,8 @@
           "causes": [
             {
               "code": "UnsupportedSyntax",
-              "featureId": "syntax.invokememberexpression",
-              "message": "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
+              "featureId": "syntax.unsupported",
+              "message": "Native reference arguments require trailing direct locals and an unambiguous static CLR by-reference overload.",
               "line": 100,
               "column": 30
             }
@@ -545,7 +545,7 @@
       "functions": 68,
       "emitted": 63,
       "retained": 5,
-      "sourceExplanationSha256": "0fe9323878dbf15bc173231b8ad447afc5ddf1d9833e9b2cd631e66cc998bee3",
+      "sourceExplanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1",
       "functionsRetained": [
         {
           "unitId": "2be0f84457750dd64ee0c5d1",
@@ -596,9 +596,9 @@
           "causes": [
             {
               "code": "UnsupportedSyntax",
-              "featureId": "syntax.invokememberexpression",
-              "message": "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
-              "line": 15,
+              "featureId": "syntax.exitstatement",
+              "message": "Statement 'ExitStatementAst' is not yet represented by the bound pipeline.",
+              "line": 74,
               "column": 9
             }
           ]
@@ -2184,13 +2184,11 @@
     }
   ],
   "compilerSourceHashes": {
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "84d3f63a14cec31e00fd2c121c72a2196f9e25d78e796225da34783fc494b9dc",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeLanguageOperations.cs": "8865ef3db2a829712a3f3fb1b748319c07faecaa2aed18f0e39edbfbe79b2c76",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.cs": "2424898c41453e8195e6d731b78f4a48b8cd227e0245e093725c8d660304778f",
-    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.Strings.cs": "6a761cd0c38660d41d98e0b27b635e300a517a5f34d18f1e54f439449dbb6b9b"
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeTypeArgumentPolicy.cs": "6f5f10bf4e5e0eb7e0ef763b427a72cc3ac7287a7bc0139cb9dd61dc54fa3c1e",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "b80da55a91e8b2909a235219689317096aa920fa5a1388605097738bef64f096"
   },
-  "dispositionComparison": "m29a-object-parameter-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "777fe430f899b1144f432f01ab948bec20d16314",
+  "dispositionComparison": "m29a-static-value-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "64a40ddd59bfc8ddc721dc2a86756645ffae797b",
   "emitted": 492,
   "retained": 73
 }

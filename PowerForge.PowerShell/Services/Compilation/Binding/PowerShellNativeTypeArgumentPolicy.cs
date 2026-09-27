@@ -60,22 +60,27 @@ internal static class PowerShellNativeTypeArgumentPolicy
 
     private static bool IsClosedValueReceiver(TypeExpressionAst syntax, Ast valueBoundary)
     {
-        if (syntax.Parent is not InvokeMemberExpressionAst { Static: true,
-                Member: StringConstantExpressionAst member } call ||
-            !ReferenceEquals(call.Expression, syntax))
+        if (syntax.Parent is not MemberExpressionAst { Static: true,
+                Member: StringConstantExpressionAst member } rootAccess || !ReferenceEquals(rootAccess.Expression, syntax))
             return false;
         var type = syntax.TypeName.GetReflectionType();
         if (type is null) return false;
-        // A resolved static closed-value call cannot pass its receiver Type
-        // as its result. Keep object/Type/generic returns and unresolved members
-        // conservative; this is not general return-value or alias analysis.
-        var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)
-            .Where(method => method.Name.Equals(member.Value, StringComparison.OrdinalIgnoreCase)).ToArray();
-        if (methods.Length == 0 || methods.Any(static method =>
-                method.ContainsGenericParameters || !IsClosedNonTypeResult(method.ReturnType)))
-            return false;
-        var resultTypes = methods.Select(static method => method.ReturnType).Distinct().ToArray();
-        for (Ast value = call; ;)
+        Type[] resultTypes;
+        if (rootAccess is InvokeMemberExpressionAst)
+        {
+            // Preserve the existing scalar/vector method-result proof.
+            var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)
+                .Where(method => method.Name.Equals(member.Value, StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (methods.Length == 0 || methods.Any(static method =>
+                    method.ContainsGenericParameters || !IsClosedNonTypeResult(method.ReturnType)))
+                return false;
+            resultTypes = methods.Select(static method => method.ReturnType).Distinct().ToArray();
+        }
+        else
+        {
+            if (!TryGetClosedStaticValueTypes(type, member.Value, out resultTypes)) return false;
+        }
+        for (Ast value = rootAccess; ;)
         {
             // Success requires a proof up to the exact analyzed value. A
             // collection/index/subexpression or other unknown wrapper can
@@ -119,6 +124,38 @@ internal static class PowerShellNativeTypeArgumentPolicy
             value = access;
         }
     }
+
+    /// <summary>Proves a resolved static field/property value without evaluating its getter.</summary>
+    internal static bool RequiresNativeStaticValueRead(MemberExpressionAst access)
+        => access is not InvokeMemberExpressionAst && access.Static &&
+           access.Expression is TypeExpressionAst receiver && receiver.TypeName.GetReflectionType() is { } type &&
+           access.Member is StringConstantExpressionAst member &&
+           TryGetClosedStaticValueTypes(type, member.Value, out var results) &&
+           results.All(IsClosedNonTypeReferenceResult);
+
+    private static bool TryGetClosedStaticValueTypes(Type type, string name, out Type[] results)
+    {
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+        var fields = type.GetFields(flags).Where(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var properties = type.GetProperties(flags).Where(property =>
+            property.Name.Equals(name, StringComparison.OrdinalIgnoreCase) &&
+            property.GetMethod is { IsPublic: true, IsStatic: true } && property.GetIndexParameters().Length == 0).ToArray();
+        results = fields.Select(static field => field.FieldType)
+            .Concat(properties.Select(static property => property.PropertyType)).Distinct().ToArray();
+        // Inert scalar fields retain CLR facts. New class-valued reads use the SDK owner.
+        // Scalar getters need separate failure/evaluation proof and retain the existing guard.
+        return results.Length > 0 && fields.All(static field =>
+                IsClosedNonTypeResult(field.FieldType) || IsClosedNonTypeReferenceResult(field.FieldType)) &&
+            properties.All(static property => IsClosedNonTypeReferenceResult(property.PropertyType));
+    }
+
+    private static bool IsClosedNonTypeReferenceResult(Type result)
+        // A non-generic, non-enumerable class unrelated to Type cannot return a Type instance.
+        // Object, Type ancestry, interfaces, wrappers, and unknown collection shapes stay conservative.
+        => result.IsClass && !result.IsArray && !typeof(System.Collections.IEnumerable).IsAssignableFrom(result) &&
+           !result.IsGenericType && !result.ContainsGenericParameters &&
+           !result.IsAssignableFrom(typeof(Type)) && !typeof(Type).IsAssignableFrom(result) &&
+           !typeof(System.Management.Automation.PSObject).IsAssignableFrom(result);
 
     private static bool IsClosedNonTypeResult(Type type)
         => PowerShellStableScalarTypePolicy.IsSupported(type) ||

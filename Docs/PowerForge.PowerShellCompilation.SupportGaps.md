@@ -94,13 +94,13 @@ The current retained inventory reports these **distinct affected retained functi
 
 | Current observed family | Retained functions | Work or explicit boundary |
 | --- | ---: | --- |
-| Unsupported syntax umbrella | 32 | Split the authored forms before implementation; do not relax a generic syntax check. |
+| Unsupported syntax umbrella | 33 | Split the authored forms before implementation; do not relax a generic syntax check. |
 | Unresolved or unavailable parameter types | 23 | Preserve authored identity and target/dependency availability. |
 | Remaining scriptblock.typed diagnostics | 1 | An unsupported child body still keeps its owner hosted; other callback co-blockers report through type and syntax families. |
 | Remaining nested declarations/body failures | 2 | Ordinary functions, filters, and header parameters preserve native declaration/metadata ownership. Remaining child co-blockers, workflows, and dynamic parameters stay hosted. |
 | Pipeline lifecycle and lowering | 2 each | Qualify the joint begin/process/stream/stop contract; counts refer to overlapping functions. |
 | Unqualified Write-Verbose | 4 | Keep session resolution and stream preferences; fix reachable co-blockers first. |
-| Member invocation expressions | 5 | Inspect the specific argument/catch/receiver contract; ordinary member calls already work. |
+| Member invocation expressions | 3 | Inspect the specific argument/catch/receiver contract; ordinary member calls already work. |
 | Finally downstream-stop streams | 2 | Native statement pipelines keep the active invocation owner; direct generated stream sinks and captures retain their guard. `New-HTMLProcessedComputers` and `Invoke-ADComputersCleanup` remain blocked, with their existing qualified regions preserved. |
 | Runtime scope; Write-Warning | 2 each | Keep invocation context and stream/command identity explicit. |
 | Authored types; ForEach-Object | 5; 2 | Separate source closure, pipeline script-block behavior, and value-capture forms. |
@@ -199,3 +199,5 @@ Literal static member reads through variable receivers now reuse native member s
 Ordinary qualified hosted pipelines can now provide object/dictionary literal values through the existing native whole-pipeline capture owner. The surrounding literal construction compiles; commands such as ForEach-Object remain PowerShell operations. Unchanged Get-WhoIs matches 12 offline cases per Windows host with in-memory REST and clock providers; 16 synthetic cases preserve cardinality/types, local mutation, property order, error positions and finally. Typed invocation continuations, explicit suppression, background/redirection and Strict retain existing ownership. Real HTTP/ARIN, full module execution and broader stream/command variants remain unqualified. Coverage rises 489 → 490/565 without losses; 75 functions remain retained.
 
 Direct declared object-parameter interpolation and literal equality/inequality now use the existing Hybrid native invocation owner. Unchanged Add-ToHashTable and Set-EmailBodyPreparedTable match 56 offline cases per Windows host; callback/equality/failure probes add 14 cases. Native interpolation uses the host string binder, preserving wrapped scalar behavior, culture, OFS and error continuation. Concatenation retains its separate conversion contract. Strict and broader transformed/scoped reads remain closed. Coverage rises 490 → 492/565 with no losses; 73 functions remain retained. No email or external operation runs.
+
+Resolved static member values now have a bounded Hybrid argument proof: inert scalar/vector fields preserve CLR facts; closed non-Type class-valued reads use the existing native SDK owner. Encoding/culture/thread values and owned-file/error cases match both Windows hosts. Scalar property arguments, Type-producing transformations and unknown result shapes remain guarded. Coverage stays 492/565 with no losses. CleanupMonster inventory child exit and Test-ComputerPort instance reference invocation are newly exposed co-blockers, not accepted workflow gains; neither AD nor network execution is claimed. Deliberately failing or side-effecting getters have no new dedicated proof.

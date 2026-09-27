@@ -52,6 +52,7 @@ internal sealed partial class PowerShellSemanticBinder
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
             syntax is MemberExpressionAst nativeMember && syntax is not InvokeMemberExpressionAst &&
             (!nativeMember.Static || nativeMember.Member is not StringConstantExpressionAst ||
+             PowerShellNativeTypeArgumentPolicy.RequiresNativeStaticValueRead(nativeMember) ||
              nativeMember.Expression is VariableExpressionAst ||
              nativeMember.Expression is TypeExpressionAst hostDataType &&
              hostDataType.TypeName.GetReflectionType() is { } hostDataClrType &&
