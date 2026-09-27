@@ -26,7 +26,8 @@ internal static class PowerShellNativeFunctionBindingPolicy
 
     internal static HashSet<string> FindInvocationClosure(IEnumerable<FunctionDefinitionAst> functions,
         PowerShellCompilationCapability capabilities,
-        string? targetFramework)
+        string? targetFramework,
+        PowerShellNativeDependencyTypes? dependencyTypes = null)
     {
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) return result;
@@ -34,7 +35,8 @@ internal static class PowerShellNativeFunctionBindingPolicy
             .Where(static group => group.Count() == 1)
             .ToDictionary(static group => group.Key, static group => group.Single(), StringComparer.OrdinalIgnoreCase);
         var pending = new Queue<FunctionDefinitionAst>(declarations.Values.Where(function =>
-            RequiresNativeBinding(function, targetFramework, capabilities)));
+            RequiresNativeBinding(function, targetFramework, capabilities) ||
+            dependencyTypes?.IsUsedBy(function, capabilities) == true));
         while (pending.Count > 0)
         {
             var function = pending.Dequeue();
@@ -48,13 +50,15 @@ internal static class PowerShellNativeFunctionBindingPolicy
 
     internal static PowerShellNativeFunctionBinding? Select(FunctionDefinitionAst function, PowerShellCompilationCapability capabilities,
         string? targetFramework,
-        bool requiresNativeInvocation = false)
+        bool requiresNativeInvocation = false,
+        PowerShellNativeDependencyTypes? dependencyTypes = null)
     {
         if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) ||
             function.Body.DynamicParamBlock is not null && !SupportsDynamicParameters(function.Body, capabilities))
             return null;
         var parameters = PowerShellParameterSyntax.GetParameters(function.Body).ToArray();
-        if (!requiresNativeInvocation && !RequiresNativeBinding(function, targetFramework, capabilities)) return null;
+        if (!requiresNativeInvocation && !RequiresNativeBinding(function, targetFramework, capabilities) &&
+            dependencyTypes?.IsUsedBy(function, capabilities) != true) return null;
         var declaration = function.Body.ParamBlock is { } block
             ? string.Join("\n", block.Attributes.Select(static attribute => attribute.Extent.Text).Concat(new[] { block.Extent.Text }))
             : "param(" + string.Join(",", parameters.Select(static parameter => parameter.Extent.Text)) + ")";

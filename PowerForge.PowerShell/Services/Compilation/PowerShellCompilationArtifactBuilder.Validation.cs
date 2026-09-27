@@ -119,9 +119,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string targetFramework,
         string semanticProfileId,
         PowerShellCompilationCapability capabilities,
-        IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders)
+        IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders,
+        PowerShellNativeDependencyTypes? nativeDependencyTypes = null)
     {
-        var analyzer = new PowerShellCompilationAnalyzer(commandProviders, semanticProfileId);
+        var analyzer = new PowerShellCompilationAnalyzer(PowerShellCommandSemanticRegistry.Create(commandProviders), semanticProfileId,
+            nativeDependencyTypes ?? PowerShellNativeDependencyTypes.Empty);
         var paths = sourcePaths.Select(Path.GetFullPath).Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
         var basePath = paths.Length == 0
             ? Directory.GetCurrentDirectory()

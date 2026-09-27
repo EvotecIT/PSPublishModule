@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "2fb9718f62bdd3ec109849c605d50c7ecac9eaf9",
+  "compilerBaselineCommit": "e3b4c9a5848f105a5b26661fa70586ff132d1e76",
   "packets": [
     {
       "packet": "pssg",
@@ -14,7 +14,6 @@
       "emitted": 272,
       "retained": 10,
       "sourceExplanationSha256": "fddade31bb670e30e96f49b56754298aa71adf37ab8a7476d734b3476e3f2bf1",
-      "elapsedSeconds": 21.25,
       "gains": [],
       "functionsRetained": [
         {
@@ -217,14 +216,7 @@
               "column": 41
             }
           ],
-          "relativePath": "Public/Objects/Format-Stream.ps1",
-          "qualificationBoundary": {
-            "status": "JustifiedHosted",
-            "family": "caller-stack paging/format transfer",
-            "evidence": "m29a-paging-transfer-boundaries.json",
-            "reason": "Authored bare break ends a plain caller script or breaks an enclosing caller loop while preserving finally and partial output. Function-local return or ordinary exception lowering changes the observed behavior.",
-            "scope": "Both Windows hosts, unchanged isolated function source, bounded module-owned formatting/queued input providers; no keyboard/screen mutation or compiled-method gain."
-          }
+          "relativePath": "Public/Objects/Format-Stream.ps1"
         },
         {
           "unitId": "c4dc1ae9c4c4b22e84d4c0a1",
@@ -242,14 +234,7 @@
               "column": 9
             }
           ],
-          "relativePath": "Public/TestFunctionality/Test-ModuleAvailability.ps1",
-          "qualificationBoundary": {
-            "status": "JustifiedHosted",
-            "family": "authored function exit",
-            "evidence": "m29a-exit-boundaries.json",
-            "reason": "Exit ends the caller script with an authored host exit code after finally. CLR return or ordinary exception lowering does not establish that contract.",
-            "scope": "Both Windows hosts, unchanged isolated source, offline providers and owned output files; no compiled-method gain."
-          }
+          "relativePath": "Public/TestFunctionality/Test-ModuleAvailability.ps1"
         }
       ]
     },
@@ -260,7 +245,6 @@
       "emitted": 66,
       "retained": 2,
       "sourceExplanationSha256": "baa8d681c6113dde2fa749f067b9a9ac27e7cfdd33d9f0287d7de7b877de325a",
-      "elapsedSeconds": 15.52,
       "gains": [],
       "functionsRetained": [
         {
@@ -281,14 +265,7 @@
               "column": 5
             }
           ],
-          "relativePath": "Private/Get-ADServiceAccountsToProcess.ps1",
-          "qualificationBoundary": {
-            "status": "JustifiedHosted",
-            "family": "caller-stack loop transfer",
-            "evidence": "m29a-external-transfer-boundaries.json",
-            "reason": "Authored unresolved continue label or break without a local loop changes caller control flow. Function-local CLR return or loop-depth reinterpretation would change behavior.",
-            "scope": "Both Windows hosts, isolated unchanged source, offline providers; no compiled-method gain."
-          }
+          "relativePath": "Private/Get-ADServiceAccountsToProcess.ps1"
         },
         {
           "unitId": "78cf08da8e4e3bfb47233a33",
@@ -306,14 +283,7 @@
               "column": 9
             }
           ],
-          "relativePath": "Private/Invoke-ADComputerInventoryChildProcess.ps1",
-          "qualificationBoundary": {
-            "status": "JustifiedHosted",
-            "family": "authored function exit",
-            "evidence": "m29a-exit-boundaries.json",
-            "reason": "Exit ends the caller script with an authored host exit code after finally. CLR return or ordinary exception lowering does not establish that contract.",
-            "scope": "Both Windows hosts, unchanged isolated source, offline providers and owned output files; no compiled-method gain."
-          }
+          "relativePath": "Private/Invoke-ADComputerInventoryChildProcess.ps1"
         }
       ]
     },
@@ -324,7 +294,6 @@
       "emitted": 65,
       "retained": 1,
       "sourceExplanationSha256": "35f6919cdd439a762a9284cc3a90d32d6f984621307cafd753e71f40c9bc3d53",
-      "elapsedSeconds": 6.72,
       "gains": [],
       "functionsRetained": [
         {
@@ -354,10 +323,7 @@
       "emitted": 100,
       "retained": 9,
       "sourceExplanationSha256": "a5ca1488ab95c3f4bf0b3ce8c4c24c24cc36dcf0761a4d4c7ac09234fcb7ec68",
-      "elapsedSeconds": 15.23,
-      "gains": [
-        "Convert-EventLogRecord"
-      ],
+      "gains": [],
       "functionsRetained": [
         {
           "unitId": "e2de8ba6ca35935ce36593b7",
@@ -474,14 +440,7 @@
               "column": 13
             }
           ],
-          "relativePath": "functions/New-PSDriveHere.ps1",
-          "qualificationBoundary": {
-            "status": "JustifiedHosted",
-            "family": "caller-stack loop transfer",
-            "evidence": "m29a-external-transfer-boundaries.json",
-            "reason": "Authored unresolved continue label or break without a local loop changes caller control flow. Function-local CLR return or loop-depth reinterpretation would change behavior.",
-            "scope": "Both Windows hosts, isolated unchanged source, offline providers; no compiled-method gain."
-          }
+          "relativePath": "functions/New-PSDriveHere.ps1"
         },
         {
           "unitId": "0f49b0d93bead94178065edb",
@@ -588,14 +547,7 @@
               "column": 13
             }
           ],
-          "relativePath": "functions/Utilities.ps1",
-          "qualificationBoundary": {
-            "status": "JustifiedHosted",
-            "family": "caller-stack paging/format transfer",
-            "evidence": "m29a-paging-transfer-boundaries.json",
-            "reason": "Authored bare break ends a plain caller script or breaks an enclosing caller loop while preserving finally and partial output. Function-local return or ordinary exception lowering changes the observed behavior.",
-            "scope": "Both Windows hosts, unchanged isolated function source, bounded module-owned formatting/queued input providers; no keyboard/screen mutation or compiled-method gain."
-          }
+          "relativePath": "functions/Utilities.ps1"
         },
         {
           "unitId": "0f2509f48b1515bbeadae60b",
@@ -639,116 +591,18 @@
       "packet": "platyps",
       "functions": 40,
       "stableUnits": 41,
-      "emitted": 32,
-      "retained": 8,
-      "sourceExplanationSha256": "b56ea24b4a5133d4976272a844bad89610d661a89a899f4427adfddf6bc22e3a",
-      "elapsedSeconds": 23.47,
-      "gains": [],
+      "emitted": 38,
+      "retained": 2,
+      "sourceExplanationSha256": "f77580541d19dd5341ba0a8f5b4cf740be4c10300d645abf705b4353fcf13aa4",
+      "gains": [
+        "New-MarkdownHelp",
+        "Get-MarkdownMetadata",
+        "New-YamlHelp",
+        "GetParserMode",
+        "SetOnlineVersionUrlLink",
+        "ConvertMamlModelToMarkdown"
+      ],
       "functionsRetained": [
-        {
-          "unitId": "62d3e169b4f7eb162da5636b",
-          "name": "New-MarkdownHelp",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; workflows and unsupported child bodies remain hosted.",
-              "line": 131,
-              "column": 9
-            },
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$MamlCommandObject' uses authored type 'Markdown.MAML.Model.MAML.MamlCommand', which cannot be resolved in the selected compilation environment.",
-              "line": 135,
-              "column": 17
-            },
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$mamlObject' uses authored type 'Markdown.MAML.Model.MAML.MamlCommand', which cannot be resolved in the selected compilation environment.",
-              "line": 167,
-              "column": 17
-            }
-          ],
-          "relativePath": "platyPS.psm1"
-        },
-        {
-          "unitId": "d2d71912c347b953da7048ce",
-          "name": "Get-MarkdownMetadata",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "CLR type 'Markdown.MAML.Parser.MarkdownParser' is not available in the generated project reference set for the requested target.",
-              "line": 350,
-              "column": 20
-            }
-          ],
-          "relativePath": "platyPS.psm1"
-        },
-        {
-          "unitId": "5ee4a7a53dcd1de47a890df6",
-          "name": "New-YamlHelp",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "CLR type 'Markdown.MAML.Renderer.YamlRenderer' is not available in the generated project reference set for the requested target.",
-              "line": 773,
-              "column": 25
-            }
-          ],
-          "relativePath": "platyPS.psm1"
-        },
-        {
-          "unitId": "c96368db96471ed8b896af25",
-          "name": "GetParserMode",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "CLR type 'Markdown.MAML.Parser.ParserMode' is not available in the generated project reference set for the requested target.",
-              "line": 1572,
-              "column": 16
-            }
-          ],
-          "relativePath": "platyPS.psm1"
-        },
-        {
-          "unitId": "c3869fa353ba6eab0fd122a4",
-          "name": "SetOnlineVersionUrlLink",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$MamlCommandObject' uses authored type 'Markdown.MAML.Model.MAML.MamlCommand', which cannot be resolved in the selected compilation environment.",
-              "line": 1699,
-              "column": 9
-            }
-          ],
-          "relativePath": "platyPS.psm1"
-        },
         {
           "unitId": "c601d4895e012344d1339884",
           "name": "NewModuleLandingPage",
@@ -768,24 +622,6 @@
           "relativePath": "platyPS.psm1"
         },
         {
-          "unitId": "d6e4134cee3f18e96062f742",
-          "name": "ConvertMamlModelToMarkdown",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$mamlCommand' uses authored type 'Markdown.MAML.Model.MAML.MamlCommand', which cannot be resolved in the selected compilation environment.",
-              "line": 2116,
-              "column": 9
-            }
-          ],
-          "relativePath": "platyPS.psm1"
-        },
-        {
           "unitId": "71cfc9b5f84adf546472a3fc",
           "name": "ConvertPsObjectsToMamlModel",
           "retainedHostedSource": true,
@@ -799,13 +635,6 @@
               "message": "OutputType metadata requires literal names or resolvable CLR types representable on this target.",
               "line": 2518,
               "column": 5
-            },
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$ParameterObject' uses authored type 'Markdown.MAML.Model.MAML.MamlParameter', which cannot be resolved in the selected compilation environment.",
-              "line": 2649,
-              "column": 13
             }
           ],
           "relativePath": "platyPS.psm1"
@@ -814,13 +643,29 @@
     }
   ],
   "compilerSourceHashes": {
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "22c8ea830bfd35341dc123b035f6beca32864df84d2353b4e926f1ce94ceec21",
-    "PowerForge.Tests/PowerShellCompilationEventRecordDataTests.cs": "9cfa224902db285247ed071d9bd42d90fd1db3ce30d9d782697ce2db90bcf27c"
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellConversionSemanticBinder.cs": "ddc1b0ea7fc624fd4bef24031f0573b789446df300951bd6d9e4e26ca8b2c9ec",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "86d93febf0685f071a0a2da8a6ef50c65f952d71b62280fc6b8a8b539d641578",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "f17f8653b904eefeb09b02642a75006b0e9c6cd8d77d6a6d62f7a236e0853270",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "f2f52819e2577c39602da2fca01dda8428d97e9f6ba85e3eeb66f1a5d5667d9c",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Program.cs": "6338852eb7dce35285ae666f04c2ef74708e2ad72b46ee405b991a4dc87e00aa",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.cs": "6d1670ed6439070d3d0896f64433701905508c6262d0859b097296853ca512d9",
+    "PowerForge.PowerShell/Services/Compilation/FrontEnd/ParsedSourceDocument.cs": "619ed44f5562b0a79d47cc01a5571eeceb540dde1af3af9617e5bfa2f45a902d",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationAnalyzer.Semantics.cs": "579beb587b96c3f22cd22c4def1b4493c6563662d68cbf3d15ac34b06823c066",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationAnalyzer.Sources.cs": "d822f5b8e9f8c23b7c432fa56ef08608d76efd7589a47a98822d40f2b872053a",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationAnalyzer.cs": "d1b7f01b8c19543fc3c865c10d65a320d3bd11611c611a4c015af00beaa42219",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationArtifactBuilder.Validation.cs": "172f15f436585525634aaca0aa1a1bf1da9fdaae6cbe1398fbebe2a22b2d3465",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationArtifactBuilder.cs": "22cbdc815d7d8fdebbbb04de8224cd17faea9b2ac4a7ed0788e360d74bc696c7",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationExplainShaper.cs": "c251bc7b10fc097db4758f915ff84a2909c7d571118ae5de97628aa3bf767c3c",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellHybridFunctionCollisionResolver.cs": "46eb0122dce3830ba1deee071ebafcf724f743f8bb5b0f19d4b9bff071ce5400",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellSemanticCompilationPipeline.cs": "091a93fa0fa04fe59cadab3349fadf68a69667a186eb23be6f24aefa9ff60c92",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellTypedCompilationTranspiler.cs": "23f56c6db54cfcce360c2103830e76e2a78e7785cdd63a5e3da6940bd5ea9727",
+    "PowerForge.PowerShell/Services/Compilation/Dependencies/PowerShellNativeDependencyTypes.cs": "d66624f3376f7106e9df8ffbafee0b1eaf92298ef4dbb482c207228dab7238aa",
+    "PowerForge.Tests/PowerShellCompilationNativeDependencyTypeTests.cs": "7d9254d822633df4fca9644117807a033db0e766b43fbc306445a96b4e9ff230"
   },
-  "dispositionComparison": "m29a-event-record-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "2fb9718f62bdd3ec109849c605d50c7ecac9eaf9",
-  "emitted": 535,
-  "retained": 30,
+  "dispositionComparison": "m29a-managed-dependency-types.net10.json",
+  "baselineRetainedInventoryCommit": "e3b4c9a5848f105a5b26661fa70586ff132d1e76",
+  "emitted": 541,
+  "retained": 24,
   "hostedBoundaryEvidence": [
     "m29a-paging-transfer-boundaries.json",
     "m29a-external-transfer-boundaries.json",

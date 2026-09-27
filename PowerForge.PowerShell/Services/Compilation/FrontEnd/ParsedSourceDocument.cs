@@ -14,7 +14,8 @@ internal sealed class ParsedSourceDocument
         ScriptBlockAst syntaxRoot,
         Token[] tokens,
         ParseError[] errors,
-        PowerShellAuthoredSourceProjection? authoredProjection = null)
+        PowerShellAuthoredSourceProjection? authoredProjection = null,
+        PowerShellNativeDependencyTypes? nativeDependencyTypes = null)
     {
         DocumentId = documentId;
         Path = path;
@@ -23,6 +24,7 @@ internal sealed class ParsedSourceDocument
         Tokens = tokens;
         Errors = errors;
         AuthoredProjection = authoredProjection;
+        NativeDependencyTypes = nativeDependencyTypes ?? PowerShellNativeDependencyTypes.Empty;
         TypeClosure = PowerShellSourceTypeClosure.Discover(this);
     }
 
@@ -34,4 +36,8 @@ internal sealed class ParsedSourceDocument
     internal ParseError[] Errors { get; }
     internal PowerShellAuthoredSourceProjection? AuthoredProjection { get; }
     internal PowerShellSourceTypeClosure TypeClosure { get; }
+    internal PowerShellNativeDependencyTypes NativeDependencyTypes { get; }
+    internal ParsedSourceDocument WithNativeDependencyTypes(PowerShellNativeDependencyTypes types)
+        => ReferenceEquals(types, NativeDependencyTypes) ? this : new ParsedSourceDocument(
+            DocumentId, Path, Text, SyntaxRoot, Tokens, Errors, AuthoredProjection, types);
 }

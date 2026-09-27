@@ -1798,3 +1798,55 @@ Development dependency locks remain unreviewed. Physical display, ClearScreen,
 transpose, multiline/help recursion, arbitrary caller stacks and non-Windows
 behavior are outside the proof. General native caller-transfer ABI work remains
 open. No PR, merge, release or administration operation occurs.
+
+
+## Milestone 29a: declared managed dependency types
+
+The root manifest's delivered `RequiredAssemblies` now supplies a metadata-only
+catalog of exact public nongeneric top-level type names to native binding.
+Containment, link checks, graph identity and held-stream SHA-256 validation precede
+metadata reading. Ambiguous names and assemblies declaring P/Invoke are excluded.
+The compiler does not load these assemblies, infer generated CLR references or
+widen runtime-free/Strict type admission. Final explain and name-collision
+rerouting preserve the same catalog as analysis and artifact generation.
+
+The unchanged external platyPS 0.14.2 source gains six complete methods:
+New-MarkdownHelp, Get-MarkdownMetadata, New-YamlHelp, GetParserMode,
+SetOnlineVersionUrlLink and ConvertMamlModelToMarkdown. Reviewed-lock Hybrid
+artifacts emit 38/40 functions on net10 and net472. Each generated artifact
+matches its original in 21 Windows-host observations: YAML headers, parser modes,
+model rendering and link mutation, actual Markdown/YAML files, invalid model
+binding and authored parameter types. Both runs include the explicitly declared
+localization resource required by module initialization. Upstream source and
+assemblies remain external verification inputs.
+
+Independent review identified two reachable cast defects. Qualified plain casts
+now use runtime type resolution before reflection lookup. Dependency-valued
+constrained invocation and indexing remain hosted; no foreign `typeof` reference
+or silently discarded overload constraint is emitted. Targeted confirmation found
+both issues addressed. The fresh four-test TRX records unresolved authored CLR
+type before explicit test-owned assembly loading and resolved afterward, with
+consistent emission/fallback. A separate synthetic three-function module emits
+one cast helper and retains two constrained accesses; 12 original/generated cases
+match per host, covering null, caller identity, hashtable conversion and errors.
+These synthetic functions do not count as upstream coverage.
+
+Validation is selected for the changed contracts: 12/12 focused dependency/index/
+reference checks, 4/4 focused load-state checks, clean net472/net8 compiler builds,
+both-host reviewed-lock artifacts and real execution, and a complete five-packet
+net10 same-input comparison. All 584 unit identities match; complete methods rise
+535 to 541, with no lost emitted method or still-retained region. The 24 remaining
+functions include six justified hosted boundaries and 18 unresolved dispositions.
+An earlier adjacent graph run passed 20 tests and failed one standalone NativeAOT
+build because its child process could not find `where`/the platform linker. It is
+not a fully green aggregate result, and no broad compiler gate is claimed.
+
+[The durable ledger](../Benchmarks/PowerShellCompilation/Corpus/m29a-managed-dependency-types.net10.json)
+contains exact source/dependency hashes, final-source dispositions, validation
+hashes, observations and review resolution.
+[The observation drivers](../Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/platyPS/ManagedTypes/README.md)
+provide the reproduction route. Runtime proof is limited to Windows x64
+PowerShell 7/net10 and Windows PowerShell 5.1/net472. The net8 build is not runtime
+qualification. Generic/nested types, arbitrary imports, constrained-access native
+lowering, external OutputType expansion, complete platyPS API execution and
+performance remain outside this wave. The broader goal stays active.

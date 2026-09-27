@@ -19,9 +19,11 @@ public sealed partial class PowerShellCompilationAnalyzer
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
         PowerShellCommandSemanticRegistry commandRegistry,
-        string semanticProfileId)
+        string semanticProfileId,
+        PowerShellNativeDependencyTypes? nativeDependencyTypes = null)
     {
-        var documents = sourcePaths.Select(path => PowerShellSourceParser.ParseFile(path, identityRoot)).ToArray();
+        var documents = sourcePaths.Select(path => PowerShellSourceParser.ParseFile(path, identityRoot)
+            .WithNativeDependencyTypes(nativeDependencyTypes ?? PowerShellNativeDependencyTypes.Empty)).ToArray();
         var documentsByPath = documents.ToDictionary(static document => document.Path, PowerShellCompilationPathSafety.PathComparer);
         var sourceDiagnosticsByPath = documents.ToDictionary(
             static document => document.Path,
@@ -101,7 +103,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                 synthetic: true));
         }
 
-        var semantic = new PowerShellSemanticCompilationPipeline(commandRegistry, semanticProfileId).Compile(compilationDocuments, targetFramework, capabilities);
+        var semantic = new PowerShellSemanticCompilationPipeline(commandRegistry, semanticProfileId).Compile(
+            compilationDocuments, targetFramework, capabilities, nativeDependencyTypes);
         var result = structural.Select(file => new PowerShellCompilationFilePlan(
             file.FullPath,
             file.RelativePath,

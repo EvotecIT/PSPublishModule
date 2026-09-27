@@ -48,9 +48,11 @@ internal sealed class PowerShellSemanticCompilationPipeline
     internal PowerShellSemanticCompilationResult Compile(
         IEnumerable<ParsedSourceDocument> documents,
         string? targetFramework = null,
-        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
+        PowerShellNativeDependencyTypes? nativeDependencyTypes = null)
     {
-        var sourceDocuments = documents.ToArray();
+        var sourceDocuments = documents.Select(document => document.WithNativeDependencyTypes(
+            nativeDependencyTypes ?? document.NativeDependencyTypes)).ToArray();
         var binding = _binder.BindWithRegionCandidates(sourceDocuments, targetFramework, capabilities);
         var bound = binding.Program;
         capabilities = bound.TargetCapabilities;

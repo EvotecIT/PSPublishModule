@@ -50,7 +50,7 @@ internal sealed partial class PowerShellSemanticBinder
         var functionDiagnosticStart = diagnostics.Count;
         ClearFunctionRegionEvidence(regionCandidates, regionOpportunities, document.Path, functionSymbol.Name);
         var nativeFunctionBinding = PowerShellNativeFunctionBindingPolicy.Select(
-            function, capabilities, targetFramework, requiresNativeInvocation);
+            function, capabilities, targetFramework, requiresNativeInvocation, document.NativeDependencyTypes);
         // Native invocation re-evaluates the authored parameter declaration at import.
         // Keep an unresolved type out of the emitted method, but let the ordinary
         // binder discover independent regions inside the retained function first.
@@ -60,7 +60,8 @@ internal sealed partial class PowerShellSemanticBinder
             if (PowerShellCompilationParameterTypePolicy.FindUnresolvedAuthoredType(parameter) is not { } unresolvedType ||
                 nativeFunctionBinding is not null &&
                 (PowerShellCompilationParameterTypePolicy.IsHostProvidedParameterType(unresolvedType.TypeName.FullName) ||
-                 PowerShellHostedEnumDeclarationPolicy.IsQualifiedParameter(document, unresolvedType, targetFramework, capabilities)))
+                 PowerShellHostedEnumDeclarationPolicy.IsQualifiedParameter(document, unresolvedType, targetFramework, capabilities) ||
+                 document.NativeDependencyTypes.Qualifies(unresolvedType.TypeName, capabilities)))
                 continue;
             unresolvedParameterTypeDiagnostic = new PowerShellSemanticDiagnostic(
                 PowerShellCompilationFeatureIds.ParameterType,
@@ -352,7 +353,9 @@ internal sealed partial class PowerShellSemanticBinder
             }
 
             var contract = PowerShellParameterContractBinder.Bind(parameter, targetFramework, capabilities, _semanticProfile.ProfileId);
-            var clrType = parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)
+            var dependencyParameter = parameter.Attributes.OfType<TypeConstraintAst>().Any(constraint =>
+                document.NativeDependencyTypes.Qualifies(constraint.TypeName, capabilities));
+            var clrType = dependencyParameter ? typeof(object) : parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)
                 ? typeof(bool)
                 : parameter.StaticType;
             if (!PowerShellCompilationParameterTypePolicy.CanUseInMethod(clrType, targetFramework, capabilities))

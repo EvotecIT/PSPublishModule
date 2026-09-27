@@ -32,7 +32,8 @@ internal sealed partial class PowerShellSemanticBinder
                     _runtimeFreeModule.Initializer.Name, PowerShellSourceParser.GetSpan(_runtimeFreeModule.Document,
                         _runtimeFreeModule.Initializer.Extent)))).ToArray();
         var nativeInvocationClosure = PowerShellNativeFunctionBindingPolicy.FindInvocationClosure(
-            declarations.Select(static declaration => declaration.Syntax), capabilities, targetFramework);
+            declarations.Select(static declaration => declaration.Syntax), capabilities, targetFramework,
+            orderedDocuments.FirstOrDefault()?.NativeDependencyTypes);
         var numericErrorObservedCallees = PowerShellRuntimeExceptionCatchPolicy.FindNumericErrorObservedCallees(orderedDocuments);
         var functionsByName = declarations
             .GroupBy(static declaration => declaration.Syntax.Name, StringComparer.OrdinalIgnoreCase)

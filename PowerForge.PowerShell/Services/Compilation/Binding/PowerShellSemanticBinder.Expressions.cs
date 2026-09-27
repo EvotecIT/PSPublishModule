@@ -32,7 +32,7 @@ internal sealed partial class PowerShellSemanticBinder
                 _commandResolver, functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase), capabilities);
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && syntax is IndexExpressionAst nativeIndex)
             return PowerShellNativeAccessSemanticBinder.BindIndex(document, nativeIndex,
-                (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities), diagnostics);
+                (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities), capabilities, diagnostics);
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && syntax is InvokeMemberExpressionAst nativeInvocation &&
             HasObservedCatchAncestor(nativeInvocation) &&
             (InvocationConsumesAuthoredTypeLiteral(nativeInvocation) || InvocationConsumesBoundTypeVariable(nativeInvocation, symbols)) &&
@@ -60,7 +60,9 @@ internal sealed partial class PowerShellSemanticBinder
              nativeMember.Expression is VariableExpressionAst ||
              nativeMember.Expression is TypeExpressionAst hostDataType &&
              hostDataType.TypeName.GetReflectionType() is { } hostDataClrType &&
-             PowerShellCompilationParameterTypePolicy.IsQualifiedHostDataType(hostDataClrType, targetFramework)))
+             PowerShellCompilationParameterTypePolicy.IsQualifiedHostDataType(hostDataClrType, targetFramework) ||
+             nativeMember.Expression is TypeExpressionAst dependencyReceiver &&
+             document.NativeDependencyTypes.Qualifies(dependencyReceiver.TypeName, capabilities)))
             return PowerShellNativeAccessSemanticBinder.BindMember(document, nativeMember,
                 (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
                 targetFramework, capabilities, diagnostics);
@@ -115,7 +117,8 @@ internal sealed partial class PowerShellSemanticBinder
                     (PowerShellCompilationParameterTypePolicy.IsHostProvidedConstructorReceiver(typeExpression, capabilities) ||
                      PowerShellHostedValueClassPolicy.IsQualifiedConstructorReceiver(document, typeExpression, targetFramework, capabilities) ||
                      PowerShellHostedEnumDeclarationPolicy.IsQualifiedMemberReceiver(document, typeExpression, targetFramework, capabilities) ||
-                     PowerShellHostedLocalEnumPolicy.IsQualifiedDestination(document, typeExpression, targetFramework, capabilities)))
+                     PowerShellHostedLocalEnumPolicy.IsQualifiedDestination(document, typeExpression, targetFramework, capabilities) ||
+                     document.NativeDependencyTypes.Qualifies(typeExpression.TypeName, capabilities)))
                     return new PowerShellBoundNativeTypeExpression(span, typeExpression.TypeName.FullName);
                 var typeValue = typeExpression.TypeName.GetReflectionType();
                 if (typeValue is null ||

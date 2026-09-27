@@ -81,7 +81,9 @@ public static class PowerShellCompilationExplainShaper
                 irSnapshots: executable.IrSnapshots);
         }
 
-        var transpiler = new PowerShellTypedCompilationTranspiler(commandProviders ?? Array.Empty<PowerShellCompilationCommandProviderContract>(), profile);
+        var nativeDependencyTypes = plan.DependencyGraph is null ? PowerShellNativeDependencyTypes.Empty :
+            PowerShellNativeDependencyTypes.Create(input.ModuleManifestPath, plan.Dependencies, plan.DependencyGraph, input.ModuleRoot);
+        var transpiler = new PowerShellTypedCompilationTranspiler(commandProviders ?? Array.Empty<PowerShellCompilationCommandProviderContract>(), profile, nativeDependencyTypes);
         var typeName = PowerShellCSharpSymbolRenderer.Identifier(input.ArtifactName) + "Methods";
         var capabilities = PowerShellCompilationBuildSpec.GetCapabilities(input.Kind, plan.Mode);
         var typed = input.Kind is PowerShellCompilationArtifactKind.BinaryModule or PowerShellCompilationArtifactKind.Executable
@@ -90,7 +92,7 @@ public static class PowerShellCompilationExplainShaper
         if (plan.Mode == PowerShellCompilationMode.Hybrid &&
             input.Kind is PowerShellCompilationArtifactKind.BinaryModule or PowerShellCompilationArtifactKind.Executable)
         {
-            typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, targetFramework, profile, capabilities);
+            typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, targetFramework, profile, capabilities, nativeDependencyTypes);
         }
         if (input.Kind == PowerShellCompilationArtifactKind.BinaryModule)
         {

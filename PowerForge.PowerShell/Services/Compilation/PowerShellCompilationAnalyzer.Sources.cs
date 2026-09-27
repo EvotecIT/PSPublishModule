@@ -73,12 +73,6 @@ public sealed partial class PowerShellCompilationAnalyzer
             input.SourcePath,
             target?.Mode ?? mode,
             targetFramework: target?.TargetFramework ?? targetFramework ?? PowerShellCompilationTargetFrameworkPolicy.Default).TargetFramework;
-        var plan = AnalyzeFiles(
-            target?.Mode ?? mode,
-            input.CompilationSourceFiles,
-            input.ModuleRoot,
-            normalizedTargetFramework,
-            PowerShellCompilationBuildSpec.GetCapabilities(input.Kind, capabilityMode));
         beforeDependencyAnalysis?.Invoke();
         var dependencyPlanner = new PowerShellCompilationDependencyPlanner();
         var dependencies = dependencyPlanner.Analyze(
@@ -114,6 +108,10 @@ public sealed partial class PowerShellCompilationAnalyzer
                                     target.Deployment != PowerShellCompilationDeploymentModel.FrameworkDependent,
                 nuGetPackageRoot);
         }
+        var nativeTypes = PowerShellNativeDependencyTypes.Create(input.ModuleManifestPath, dependencies, dependencyGraph, input.ModuleRoot);
+        var plan = new PowerShellCompilationAnalyzer(_commandRegistry, _semanticProfileId, nativeTypes).AnalyzeFiles(
+            target?.Mode ?? mode, input.CompilationSourceFiles, input.ModuleRoot, normalizedTargetFramework,
+            PowerShellCompilationBuildSpec.GetCapabilities(input.Kind, capabilityMode));
         var combined = new PowerShellCompilationPlan(
             plan.Mode,
             plan.Files,
@@ -190,7 +188,8 @@ public sealed partial class PowerShellCompilationAnalyzer
         var structural = files.Select(file => AnalyzeFile(file, basePath, analysisTargetFramework, capabilities, localFunctionNames)).ToArray();
         var analyzed = mode == PowerShellCompilationMode.Package
             ? structural
-            : ApplySemanticEvidence(structural, files, basePath, analysisTargetFramework, capabilities, _commandRegistry, _semanticProfileId);
+            : ApplySemanticEvidence(structural, files, basePath, analysisTargetFramework, capabilities, _commandRegistry, _semanticProfileId,
+                _nativeDependencyTypes);
         return new PowerShellCompilationPlan(mode, analyzed, targetFramework);
     }
 

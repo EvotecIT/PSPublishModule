@@ -11,6 +11,7 @@ public sealed class PowerShellTypedCompilationTranspiler
     private const string TemplateResourceName = "PowerForge.PowerShell.Compilation.TypedLibrary.cs.template";
     private readonly PowerShellCommandSemanticRegistry _commandRegistry;
     private readonly string _semanticProfileId;
+    private readonly PowerShellNativeDependencyTypes _nativeDependencyTypes;
 
     /// <summary>Creates a transpiler with the built-in deterministic command providers.</summary>
     public PowerShellTypedCompilationTranspiler()
@@ -26,9 +27,16 @@ public sealed class PowerShellTypedCompilationTranspiler
 
     /// <summary>Creates a transpiler with additional providers under one exact named semantic profile.</summary>
     public PowerShellTypedCompilationTranspiler(IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders, string semanticProfileId)
+        : this(commandProviders, semanticProfileId, PowerShellNativeDependencyTypes.Empty)
+    {
+    }
+
+    internal PowerShellTypedCompilationTranspiler(IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders, string semanticProfileId,
+        PowerShellNativeDependencyTypes nativeDependencyTypes)
     {
         _commandRegistry = PowerShellCommandSemanticRegistry.Create(commandProviders);
         _semanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId).ProfileId;
+        _nativeDependencyTypes = nativeDependencyTypes;
     }
 
     /// <summary>Translates all eligible functions in one PowerShell source file.</summary>
@@ -61,7 +69,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             excludedMethods: null,
             capabilities,
             _commandRegistry,
-            _semanticProfileId);
+            _semanticProfileId,
+            _nativeDependencyTypes);
 
     internal PowerShellTypedCompilationResult TranspileExcluding(
         IEnumerable<string> sourcePaths,
@@ -70,7 +79,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         string? targetFramework,
         ISet<string> excludedMethods,
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
-        => TranspileCore(sourcePaths, namespaceName, typeName, targetFramework, excludedMethods, capabilities, _commandRegistry, _semanticProfileId);
+        => TranspileCore(sourcePaths, namespaceName, typeName, targetFramework, excludedMethods, capabilities, _commandRegistry, _semanticProfileId, _nativeDependencyTypes);
 
     private static PowerShellTypedCompilationResult TranspileCore(
         IEnumerable<string> sourcePaths,
@@ -80,7 +89,8 @@ public sealed class PowerShellTypedCompilationTranspiler
         ISet<string>? excludedMethods,
         PowerShellCompilationCapability capabilities,
         PowerShellCommandSemanticRegistry commandRegistry,
-        string semanticProfileId)
+        string semanticProfileId,
+        PowerShellNativeDependencyTypes? nativeDependencyTypes = null)
     {
         if (sourcePaths is null)
             throw new ArgumentNullException(nameof(sourcePaths));
@@ -100,7 +110,8 @@ public sealed class PowerShellTypedCompilationTranspiler
         var diagnostics = new List<PowerShellCompilationDiagnostic>();
         var parsedFiles = new List<ParsedSource>();
         var basePath = Path.GetDirectoryName(fullPaths[0]) ?? Directory.GetCurrentDirectory();
-        var combinedPlan = new PowerShellCompilationAnalyzer(commandRegistry, semanticProfileId).AnalyzeFiles(
+        var combinedPlan = new PowerShellCompilationAnalyzer(commandRegistry, semanticProfileId,
+            nativeDependencyTypes ?? PowerShellNativeDependencyTypes.Empty).AnalyzeFiles(
             PowerShellCompilationMode.Analyze,
             fullPaths,
             basePath,
@@ -121,7 +132,8 @@ public sealed class PowerShellTypedCompilationTranspiler
         }
         if (parsedFiles.Count != fullPaths.Length)
             return CreateResult(fullPaths, namespaceName, typeName, Array.Empty<PowerShellCompiledMethod>(), Array.Empty<string>(), diagnostics, parsedFiles, targetFramework, semanticProfileId);
-        var boundResult = CreateBoundEmissionIndex(parsedFiles, targetFramework, capabilities, diagnostics, commandRegistry, semanticProfileId);
+        var boundResult = CreateBoundEmissionIndex(parsedFiles, targetFramework, capabilities, diagnostics, commandRegistry, semanticProfileId,
+            nativeDependencyTypes);
         var boundEmissions = boundResult.Emissions;
         if (boundResult.RuntimeFreeModule is not null &&
             PowerShellRuntimeFreeModuleDefinition.IsReservedMemberName(PowerShellClrSymbolMapper.MapIdentifier(typeName)))
@@ -350,12 +362,14 @@ public sealed class PowerShellTypedCompilationTranspiler
         PowerShellCompilationCapability capabilities,
         ICollection<PowerShellCompilationDiagnostic> diagnostics,
         PowerShellCommandSemanticRegistry commandRegistry,
-        string semanticProfileId)
+        string semanticProfileId,
+        PowerShellNativeDependencyTypes? nativeDependencyTypes = null)
     {
         var result = new PowerShellSemanticCompilationPipeline(commandRegistry, semanticProfileId).Compile(
             sources.Select(static source => source.Document),
             targetFramework,
-            capabilities);
+            capabilities,
+            nativeDependencyTypes);
         var paths = sources.ToDictionary(static source => source.Document.DocumentId, static source => source.Path, StringComparer.Ordinal);
         foreach (var diagnostic in result.Lowered.Diagnostics
                      .Where(static diagnostic => diagnostic.Code != "PSB1002")
