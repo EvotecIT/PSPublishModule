@@ -295,3 +295,7 @@ The Management-owned enum cast family is qualified for unchanged PSSharedGoods G
 4. Validate real artifacts on claimed hosts, including negative/failure paths. Report values, types, identity, streams, errors, continuation, cleanup, and actual retained boundaries.
 5. For hard-to-observe changes, freeze a candidate for one independent read-only review, then resolve validated findings and run focused confirmation.
 6. Record exact evidence and remaining limitations in the assessment. Update only current roadmap state, preserve user-owned work, and clean task-created heavy outputs before handoff.
+
+
+- [x] Qualify ordinary non-CLR throws through the existing Hybrid invocation owner, independent of validation attributes. Basic/advanced error metadata, arbitrary values and cleanup retain both-host proof. Unchanged PowerInfoblox search/DNS-view functions emit and match 33 offline cases per host; no query network runs. Focused 27/27 plus metadata/lifecycle 8/8, net472 build and independent review passed. Same-input inventory is 502/565 with no losses; Strict non-CLR throws remain closed.
+- [ ] Continue the 63 retained-function boundaries from the current inventory. Separate unavailable authored/dependency types and unsafe provider effects from reusable syntax/storage/lifecycle gaps; require a real safe workflow and bounded semantic proof before changing admission. Do not count an emitted method as an executed or runtime-free workflow.

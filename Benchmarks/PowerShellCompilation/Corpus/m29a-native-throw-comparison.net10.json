@@ -1,0 +1,1629 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Ordinary non-CLR throw operands select the existing Hybrid native invocation owner without unrelated parameter metadata.",
+  "baselineCompilerCommit": "89123bdb221330cfb5c01da0a39627c798383ba6",
+  "baselineComparison": "m29a-native-reference-comparison.net10.json",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "baselineEmitted": 500,
+  "candidateEmitted": 502,
+  "candidateRetained": 63,
+  "packets": [
+    {
+      "packet": "pssg",
+      "functions": 282,
+      "emitted": 259,
+      "retained": 23,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [],
+      "explanationSha256": "e5634e4fa23e43a8b562130c4e33241bb2d73c83a816357a65b886f3dd4a6557"
+    },
+    {
+      "packet": "cleanup",
+      "functions": 68,
+      "emitted": 63,
+      "retained": 5,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [],
+      "explanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1"
+    },
+    {
+      "packet": "pinf",
+      "functions": 66,
+      "emitted": 63,
+      "retained": 3,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [
+        {
+          "unitId": "5691bce9f5a93d94797d28a1",
+          "name": "Get-InfoBloxSearch"
+        },
+        {
+          "unitId": "180b64e35f568f1ec6e346c2",
+          "name": "Get-InfobloxDNSView"
+        }
+      ],
+      "explanationSha256": "8ce5d2b37dcb39c8dd6eb00cb62715db8a5a0d7791d9b2cb3eee7d3701b00f10"
+    },
+    {
+      "packet": "pst",
+      "functions": 109,
+      "emitted": 90,
+      "retained": 19,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [],
+      "explanationSha256": "55d805d1f78cc0733d49bd7ffec0e4f73035047f773621167947ac9597507099"
+    },
+    {
+      "packet": "platyps",
+      "functions": 40,
+      "emitted": 27,
+      "retained": 13,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [],
+      "explanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea"
+    }
+  ],
+  "newlyExecutedFunctions": [
+    "Get-InfoBloxSearch",
+    "Get-InfobloxDNSView"
+  ],
+  "retainedFunctionFeatureCounts": {
+    "binary-module.cmdlet-shape": 2,
+    "command.foreach-object": 2,
+    "command.get-help": 1,
+    "command.get-item": 1,
+    "command.get-location": 1,
+    "command.new-object": 2,
+    "command.out-gridview": 1,
+    "command.out-string": 1,
+    "command.read-host": 1,
+    "command.resolve-path": 1,
+    "command.select-object": 1,
+    "command.set-clipboard": 1,
+    "command.showcontainer": 1,
+    "command.test-connection": 1,
+    "command.write-verbose": 2,
+    "command.write-warning": 2,
+    "control.finally.stream-stop": 2,
+    "parameter.default": 1,
+    "parameter.metadata": 3,
+    "parameter.type": 22,
+    "pipeline.lifecycle": 2,
+    "runtime.scope": 2,
+    "scriptblock.typed": 1,
+    "semantic.lowering.missing": 2,
+    "syntax.exitstatement": 1,
+    "syntax.foreachstatement": 1,
+    "syntax.functiondefinition": 1,
+    "syntax.invokememberexpression": 3,
+    "syntax.memberexpression": 2,
+    "syntax.pipeline": 1,
+    "syntax.subexpression": 1,
+    "syntax.typedefinition": 1,
+    "syntax.typeexpression": 2,
+    "syntax.unsupported": 31
+  },
+  "sourceAndTestHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "f931a5e34f28ddc8d07436f9c4ee095081a8ae8eea9730a24a6a8c5cda34291d",
+    "PowerForge.Tests/PowerShellCompilationNativeThrowTests.cs": "2bf09678e20d14fd7295e1a0a229950a16ad2b38d8d82eeced16b7587bd5643a"
+  },
+  "probes": {
+    "m29a-native-throw-infoblox-probe.ps1": "9e241d68c1fe8b1c57e6693535764a5b8f9be8f9a1245f17a9e0aeed15bb3ccd"
+  },
+  "sourceProvenance": {
+    "source": "https://github.com/EvotecIT/PowerInfoblox",
+    "revision": "33067f88cbd8afae2f35ee0436475f7087ad65cf",
+    "licenseDisposition": "No license found in pinned snapshot; source remains external",
+    "files": {
+      "Public/Get-InfoBloxSearch.ps1": "12d5906e52f9005848ed480cd09b42ff9ff470ad834ecf5f467eac506943b4ee",
+      "Public/Get-InfobloxDNSView.ps1": "169b35864a65acd99f13fe0539926b1ffd1d1c476787fd1d19800922c239dcb2"
+    },
+    "unchangedConcatenatedSourceSha256": "55fbb1e0720e2830a0a8360c0bd59cee505fb0705801493e94e67948194c73b6"
+  },
+  "validation": {
+    "testRuns": [
+      {
+        "file": "native-throw.trx",
+        "sha256": "7c7ffa60c574a4f7f1a4eacc974d84fc4f08c41b27ad06385e120121c0261946",
+        "counters": {
+          "total": "8",
+          "executed": "8",
+          "passed": "8",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        }
+      },
+      {
+        "file": "throw-compatibility.trx",
+        "sha256": "8bea8c714a318b1bdf4a25f970656ce4580dcb756b5a9d33f4d66065f57fb687",
+        "counters": {
+          "total": "27",
+          "executed": "27",
+          "passed": "27",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        }
+      },
+      {
+        "file": "throw-host-metadata.trx",
+        "sha256": "132b7b383f5bbfe86378339d47aa65306c7d89f2be7d29f5b7f615bd764006be",
+        "counters": {
+          "total": "8",
+          "executed": "8",
+          "passed": "8",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        }
+      }
+    ],
+    "net472OwnerBuild": {
+      "succeeded": true,
+      "warnings": 0,
+      "errors": 0,
+      "seconds": 3.87
+    },
+    "independentReview": {
+      "status": "completed",
+      "findings": [],
+      "scope": "Frozen ordinary throw selector, tests and offline probe; surrounding binding, capability, native conversion, closure and storage paths inspected read-only",
+      "limits": "Reviewer did not rerun commands; final platyPS census completed separately with no losses. General parameter shape qualification remains in existing metadata/lifecycle evidence."
+    }
+  },
+  "offlineWorkflow": {
+    "net10": {
+      "host": "7.6.6",
+      "cases": 33,
+      "matched": true,
+      "compiledMethods": 2,
+      "dependencyLockReviewed": false,
+      "buildEvidenceSha256": "8991449b9ef190ded1f259434800e7bc07aea60fd3839cfd9f1829f4bb78ac21",
+      "originalSha256": "2fcdbe81ca850d8563667bc96f24065216e052ce0e2ac12dc4a7d4861fa95aa4",
+      "generatedSha256": "2fcdbe81ca850d8563667bc96f24065216e052ce0e2ac12dc4a7d4861fa95aa4",
+      "observations": [
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": false,
+          "action": "Continue",
+          "shape": "one",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Get-InfobloxDNSView - You must first connect to an Infoblox server using Connect-Infoblox"
+            }
+          ],
+          "caught": null,
+          "calls": 0
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": false,
+          "action": "Continue",
+          "shape": "empty",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Get-InfobloxDNSView - You must first connect to an Infoblox server using Connect-Infoblox"
+            }
+          ],
+          "caught": null,
+          "calls": 0
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": false,
+          "action": "Continue",
+          "shape": "many",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Get-InfobloxDNSView - You must first connect to an Infoblox server using Connect-Infoblox"
+            }
+          ],
+          "caught": null,
+          "calls": 0
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": false,
+          "action": "Continue",
+          "shape": "partial-failure",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Get-InfobloxDNSView - You must first connect to an Infoblox server using Connect-Infoblox"
+            }
+          ],
+          "caught": null,
+          "calls": 0
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": false,
+          "action": "Stop",
+          "shape": "one",
+          "records": [],
+          "caught": {
+            "kind": "error",
+            "id": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "line": 22,
+            "column": 13
+          },
+          "calls": 0
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": false,
+          "action": "Stop",
+          "shape": "empty",
+          "records": [],
+          "caught": {
+            "kind": "error",
+            "id": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "line": 22,
+            "column": 13
+          },
+          "calls": 0
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": false,
+          "action": "Stop",
+          "shape": "many",
+          "records": [],
+          "caught": {
+            "kind": "error",
+            "id": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "line": 22,
+            "column": 13
+          },
+          "calls": 0
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": false,
+          "action": "Stop",
+          "shape": "partial-failure",
+          "records": [],
+          "caught": {
+            "kind": "error",
+            "id": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "line": 22,
+            "column": 13
+          },
+          "calls": 0
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": true,
+          "action": "Continue",
+          "shape": "one",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfobloxDNSView - Requesting DNS View"
+            },
+            {
+              "kind": "value",
+              "uri": "view",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": true,
+          "action": "Continue",
+          "shape": "empty",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfobloxDNSView - Requesting DNS View"
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": true,
+          "action": "Continue",
+          "shape": "many",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfobloxDNSView - Requesting DNS View"
+            },
+            {
+              "kind": "value",
+              "uri": "view",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            },
+            {
+              "kind": "value",
+              "uri": "second",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": true,
+          "action": "Continue",
+          "shape": "partial-failure",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfobloxDNSView - Requesting DNS View"
+            },
+            {
+              "kind": "value",
+              "uri": "view",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": {
+            "kind": "error",
+            "id": "offline-provider-failure",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "offline-provider-failure",
+            "line": 12,
+            "column": 54
+          },
+          "calls": 1
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": true,
+          "action": "Stop",
+          "shape": "one",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfobloxDNSView - Requesting DNS View"
+            },
+            {
+              "kind": "value",
+              "uri": "view",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": true,
+          "action": "Stop",
+          "shape": "empty",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfobloxDNSView - Requesting DNS View"
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": true,
+          "action": "Stop",
+          "shape": "many",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfobloxDNSView - Requesting DNS View"
+            },
+            {
+              "kind": "value",
+              "uri": "view",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            },
+            {
+              "kind": "value",
+              "uri": "second",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": true,
+          "action": "Stop",
+          "shape": "partial-failure",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfobloxDNSView - Requesting DNS View"
+            },
+            {
+              "kind": "value",
+              "uri": "view",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": {
+            "kind": "error",
+            "id": "offline-provider-failure",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "offline-provider-failure",
+            "line": 12,
+            "column": 54
+          },
+          "calls": 1
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": false,
+          "action": "Continue",
+          "shape": "one",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Get-InfoBloxSearch - You must first connect to an Infoblox server using Connect-Infoblox"
+            }
+          ],
+          "caught": null,
+          "calls": 0
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": false,
+          "action": "Continue",
+          "shape": "empty",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Get-InfoBloxSearch - You must first connect to an Infoblox server using Connect-Infoblox"
+            }
+          ],
+          "caught": null,
+          "calls": 0
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": false,
+          "action": "Continue",
+          "shape": "many",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Get-InfoBloxSearch - You must first connect to an Infoblox server using Connect-Infoblox"
+            }
+          ],
+          "caught": null,
+          "calls": 0
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": false,
+          "action": "Continue",
+          "shape": "partial-failure",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Get-InfoBloxSearch - You must first connect to an Infoblox server using Connect-Infoblox"
+            }
+          ],
+          "caught": null,
+          "calls": 0
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": false,
+          "action": "Stop",
+          "shape": "one",
+          "records": [],
+          "caught": {
+            "kind": "error",
+            "id": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "line": 64,
+            "column": 13
+          },
+          "calls": 0
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": false,
+          "action": "Stop",
+          "shape": "empty",
+          "records": [],
+          "caught": {
+            "kind": "error",
+            "id": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "line": 64,
+            "column": 13
+          },
+          "calls": 0
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": false,
+          "action": "Stop",
+          "shape": "many",
+          "records": [],
+          "caught": {
+            "kind": "error",
+            "id": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "line": 64,
+            "column": 13
+          },
+          "calls": 0
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": false,
+          "action": "Stop",
+          "shape": "partial-failure",
+          "records": [],
+          "caught": {
+            "kind": "error",
+            "id": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "line": 64,
+            "column": 13
+          },
+          "calls": 0
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": true,
+          "action": "Continue",
+          "shape": "one",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfoBloxSearch - Requesting IPv4Address [192.0.2.17]"
+            },
+            {
+              "kind": "value",
+              "uri": "search",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000,
+                "address": "192.0.2.17"
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": true,
+          "action": "Continue",
+          "shape": "empty",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfoBloxSearch - Requesting IPv4Address [192.0.2.17]"
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": true,
+          "action": "Continue",
+          "shape": "many",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfoBloxSearch - Requesting IPv4Address [192.0.2.17]"
+            },
+            {
+              "kind": "value",
+              "uri": "search",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000,
+                "address": "192.0.2.17"
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            },
+            {
+              "kind": "value",
+              "uri": "second",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000,
+                "address": "192.0.2.17"
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": true,
+          "action": "Continue",
+          "shape": "partial-failure",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfoBloxSearch - Requesting IPv4Address [192.0.2.17]"
+            },
+            {
+              "kind": "value",
+              "uri": "search",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000,
+                "address": "192.0.2.17"
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": {
+            "kind": "error",
+            "id": "offline-provider-failure",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "offline-provider-failure",
+            "line": 12,
+            "column": 54
+          },
+          "calls": 1
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": true,
+          "action": "Stop",
+          "shape": "one",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfoBloxSearch - Requesting IPv4Address [192.0.2.17]"
+            },
+            {
+              "kind": "value",
+              "uri": "search",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000,
+                "address": "192.0.2.17"
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": true,
+          "action": "Stop",
+          "shape": "empty",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfoBloxSearch - Requesting IPv4Address [192.0.2.17]"
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": true,
+          "action": "Stop",
+          "shape": "many",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfoBloxSearch - Requesting IPv4Address [192.0.2.17]"
+            },
+            {
+              "kind": "value",
+              "uri": "search",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000,
+                "address": "192.0.2.17"
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            },
+            {
+              "kind": "value",
+              "uri": "second",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000,
+                "address": "192.0.2.17"
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": true,
+          "action": "Stop",
+          "shape": "partial-failure",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfoBloxSearch - Requesting IPv4Address [192.0.2.17]"
+            },
+            {
+              "kind": "value",
+              "uri": "search",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000,
+                "address": "192.0.2.17"
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": {
+            "kind": "error",
+            "id": "offline-provider-failure",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "offline-provider-failure",
+            "line": 12,
+            "column": 54
+          },
+          "calls": 1
+        },
+        {
+          "name": "search-without-address",
+          "records": [
+            {
+              "kind": "value",
+              "uri": "search",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "calls": 1
+        }
+      ]
+    },
+    "net472": {
+      "host": "5.1.26100.9444",
+      "cases": 33,
+      "matched": true,
+      "compiledMethods": 2,
+      "dependencyLockReviewed": false,
+      "buildEvidenceSha256": "504477116b9817abc75de9ac627bfc3dd39d5819db8c6af3e653b9a3faaa9e73",
+      "originalSha256": "006c83decf74d70d0320c895780c1554ce0fec9a4093607d9c34c6d9520a6085",
+      "generatedSha256": "006c83decf74d70d0320c895780c1554ce0fec9a4093607d9c34c6d9520a6085",
+      "observations": [
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": false,
+          "action": "Continue",
+          "shape": "one",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Get-InfobloxDNSView - You must first connect to an Infoblox server using Connect-Infoblox"
+            }
+          ],
+          "caught": null,
+          "calls": 0
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": false,
+          "action": "Continue",
+          "shape": "empty",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Get-InfobloxDNSView - You must first connect to an Infoblox server using Connect-Infoblox"
+            }
+          ],
+          "caught": null,
+          "calls": 0
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": false,
+          "action": "Continue",
+          "shape": "many",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Get-InfobloxDNSView - You must first connect to an Infoblox server using Connect-Infoblox"
+            }
+          ],
+          "caught": null,
+          "calls": 0
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": false,
+          "action": "Continue",
+          "shape": "partial-failure",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Get-InfobloxDNSView - You must first connect to an Infoblox server using Connect-Infoblox"
+            }
+          ],
+          "caught": null,
+          "calls": 0
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": false,
+          "action": "Stop",
+          "shape": "one",
+          "records": [],
+          "caught": {
+            "kind": "error",
+            "id": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "line": 22,
+            "column": 13
+          },
+          "calls": 0
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": false,
+          "action": "Stop",
+          "shape": "empty",
+          "records": [],
+          "caught": {
+            "kind": "error",
+            "id": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "line": 22,
+            "column": 13
+          },
+          "calls": 0
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": false,
+          "action": "Stop",
+          "shape": "many",
+          "records": [],
+          "caught": {
+            "kind": "error",
+            "id": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "line": 22,
+            "column": 13
+          },
+          "calls": 0
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": false,
+          "action": "Stop",
+          "shape": "partial-failure",
+          "records": [],
+          "caught": {
+            "kind": "error",
+            "id": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "line": 22,
+            "column": 13
+          },
+          "calls": 0
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": true,
+          "action": "Continue",
+          "shape": "one",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfobloxDNSView - Requesting DNS View"
+            },
+            {
+              "kind": "value",
+              "uri": "view",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": true,
+          "action": "Continue",
+          "shape": "empty",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfobloxDNSView - Requesting DNS View"
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": true,
+          "action": "Continue",
+          "shape": "many",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfobloxDNSView - Requesting DNS View"
+            },
+            {
+              "kind": "value",
+              "uri": "view",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            },
+            {
+              "kind": "value",
+              "uri": "second",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": true,
+          "action": "Continue",
+          "shape": "partial-failure",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfobloxDNSView - Requesting DNS View"
+            },
+            {
+              "kind": "value",
+              "uri": "view",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": {
+            "kind": "error",
+            "id": "offline-provider-failure",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "offline-provider-failure",
+            "line": 12,
+            "column": 54
+          },
+          "calls": 1
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": true,
+          "action": "Stop",
+          "shape": "one",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfobloxDNSView - Requesting DNS View"
+            },
+            {
+              "kind": "value",
+              "uri": "view",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": true,
+          "action": "Stop",
+          "shape": "empty",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfobloxDNSView - Requesting DNS View"
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": true,
+          "action": "Stop",
+          "shape": "many",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfobloxDNSView - Requesting DNS View"
+            },
+            {
+              "kind": "value",
+              "uri": "view",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            },
+            {
+              "kind": "value",
+              "uri": "second",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfobloxDNSView",
+          "connected": true,
+          "action": "Stop",
+          "shape": "partial-failure",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfobloxDNSView - Requesting DNS View"
+            },
+            {
+              "kind": "value",
+              "uri": "view",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": {
+            "kind": "error",
+            "id": "offline-provider-failure",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "offline-provider-failure",
+            "line": 12,
+            "column": 54
+          },
+          "calls": 1
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": false,
+          "action": "Continue",
+          "shape": "one",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Get-InfoBloxSearch - You must first connect to an Infoblox server using Connect-Infoblox"
+            }
+          ],
+          "caught": null,
+          "calls": 0
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": false,
+          "action": "Continue",
+          "shape": "empty",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Get-InfoBloxSearch - You must first connect to an Infoblox server using Connect-Infoblox"
+            }
+          ],
+          "caught": null,
+          "calls": 0
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": false,
+          "action": "Continue",
+          "shape": "many",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Get-InfoBloxSearch - You must first connect to an Infoblox server using Connect-Infoblox"
+            }
+          ],
+          "caught": null,
+          "calls": 0
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": false,
+          "action": "Continue",
+          "shape": "partial-failure",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Get-InfoBloxSearch - You must first connect to an Infoblox server using Connect-Infoblox"
+            }
+          ],
+          "caught": null,
+          "calls": 0
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": false,
+          "action": "Stop",
+          "shape": "one",
+          "records": [],
+          "caught": {
+            "kind": "error",
+            "id": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "line": 64,
+            "column": 13
+          },
+          "calls": 0
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": false,
+          "action": "Stop",
+          "shape": "empty",
+          "records": [],
+          "caught": {
+            "kind": "error",
+            "id": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "line": 64,
+            "column": 13
+          },
+          "calls": 0
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": false,
+          "action": "Stop",
+          "shape": "many",
+          "records": [],
+          "caught": {
+            "kind": "error",
+            "id": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "line": 64,
+            "column": 13
+          },
+          "calls": 0
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": false,
+          "action": "Stop",
+          "shape": "partial-failure",
+          "records": [],
+          "caught": {
+            "kind": "error",
+            "id": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "You must first connect to an Infoblox server using Connect-Infoblox",
+            "line": 64,
+            "column": 13
+          },
+          "calls": 0
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": true,
+          "action": "Continue",
+          "shape": "one",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfoBloxSearch - Requesting IPv4Address [192.0.2.17]"
+            },
+            {
+              "kind": "value",
+              "uri": "search",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000,
+                "address": "192.0.2.17"
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": true,
+          "action": "Continue",
+          "shape": "empty",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfoBloxSearch - Requesting IPv4Address [192.0.2.17]"
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": true,
+          "action": "Continue",
+          "shape": "many",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfoBloxSearch - Requesting IPv4Address [192.0.2.17]"
+            },
+            {
+              "kind": "value",
+              "uri": "search",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000,
+                "address": "192.0.2.17"
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            },
+            {
+              "kind": "value",
+              "uri": "second",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000,
+                "address": "192.0.2.17"
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": true,
+          "action": "Continue",
+          "shape": "partial-failure",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfoBloxSearch - Requesting IPv4Address [192.0.2.17]"
+            },
+            {
+              "kind": "value",
+              "uri": "search",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000,
+                "address": "192.0.2.17"
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": {
+            "kind": "error",
+            "id": "offline-provider-failure",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "offline-provider-failure",
+            "line": 12,
+            "column": 54
+          },
+          "calls": 1
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": true,
+          "action": "Stop",
+          "shape": "one",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfoBloxSearch - Requesting IPv4Address [192.0.2.17]"
+            },
+            {
+              "kind": "value",
+              "uri": "search",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000,
+                "address": "192.0.2.17"
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": true,
+          "action": "Stop",
+          "shape": "empty",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfoBloxSearch - Requesting IPv4Address [192.0.2.17]"
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": true,
+          "action": "Stop",
+          "shape": "many",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfoBloxSearch - Requesting IPv4Address [192.0.2.17]"
+            },
+            {
+              "kind": "value",
+              "uri": "search",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000,
+                "address": "192.0.2.17"
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            },
+            {
+              "kind": "value",
+              "uri": "second",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000,
+                "address": "192.0.2.17"
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": null,
+          "calls": 1
+        },
+        {
+          "name": "Get-InfoBloxSearch",
+          "connected": true,
+          "action": "Stop",
+          "shape": "partial-failure",
+          "records": [
+            {
+              "kind": "verbose",
+              "message": "Get-InfoBloxSearch - Requesting IPv4Address [192.0.2.17]"
+            },
+            {
+              "kind": "value",
+              "uri": "search",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000,
+                "address": "192.0.2.17"
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "caught": {
+            "kind": "error",
+            "id": "offline-provider-failure",
+            "type": "System.Management.Automation.RuntimeException",
+            "message": "offline-provider-failure",
+            "line": 12,
+            "column": 54
+          },
+          "calls": 1
+        },
+        {
+          "name": "search-without-address",
+          "records": [
+            {
+              "kind": "value",
+              "uri": "search",
+              "method": "GET",
+              "query": {
+                "_max_results": 1000000
+              },
+              "whatIf": {
+                "IsPresent": false
+              }
+            }
+          ],
+          "calls": 1
+        }
+      ]
+    }
+  },
+  "limits": [
+    "Hybrid PowerShell-runtime-backed semantics; no runtime-free throw expansion",
+    "Offline module-owned query stand-in; no network/admin execution or full-module generated import",
+    "Unchanged two-function excerpt with concatenated source positions; no reviewed dependency lock",
+    "No fresh full net472 portfolio, aggregate gate, non-Windows qualification, performance claim or release"
+  ]
+}

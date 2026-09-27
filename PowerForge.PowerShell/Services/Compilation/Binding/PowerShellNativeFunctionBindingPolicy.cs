@@ -78,6 +78,9 @@ internal static class PowerShellNativeFunctionBindingPolicy
            PowerShellHostedValueClassPolicy.RequiresNativeConstruction(function) ||
            function.Body.Find(static node => node is ThrowStatementAst { Pipeline: null } thrown &&
                !PowerShellControlFlowBindingPolicy.HasAncestor<CatchClauseAst>(thrown), searchNestedScriptBlocks: false) is not null ||
+           function.Body.Find(static node => node is ThrowStatementAst { Pipeline: not null } thrown &&
+               !typeof(Exception).IsAssignableFrom((thrown.Pipeline as PipelineAst)?.GetPureExpression()?.StaticType ?? typeof(object)),
+               searchNestedScriptBlocks: false) is not null ||
            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&
            function.Body.Find(node => node is TypeExpressionAst expression &&
                expression.TypeName.GetReflectionType() is { } expressionType &&
