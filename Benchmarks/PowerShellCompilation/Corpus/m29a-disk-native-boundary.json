@@ -1,0 +1,1362 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Qualify unchanged local Windows disk workflow with its runtime-created native type retained; zero complete workload method gains.",
+  "compilerCommit": "2cbe59e3652a7f48582d11c91ac1e5b1ef7c9e61",
+  "source": {
+    "module": "PSSharedGoods",
+    "function": "Get-ComputerDiskLogical",
+    "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+    "relativePath": "Public/Computers/Get-ComputerDiskLogical.ps1",
+    "sourceSha256": "d18b86d9406e900a411641cc69e842bcde2e449e9b8eeb11bc25e5a654ebe3f1"
+  },
+  "driver": "ExternalWorkflows/PSSharedGoods/DiskLogical/Observe.ps1",
+  "driverSha256": "b03cde199cd8c98106b8fcb7b17a6ac54434f30ebd45b12c19ceb86802159b60",
+  "portfolio": {
+    "emitted": 544,
+    "retained": 21,
+    "functions": 565,
+    "stableUnits": 584,
+    "censusRepeated": false,
+    "reason": "Compiler and five pinned inputs unchanged; isolated artifact/runtime evidence only."
+  },
+  "hosts": [
+    {
+      "framework": "net10.0",
+      "artifactSha256": "770525755ab239f77d9f43c77fd9f26933beb799410f1b7dd7e8696dd000ddad",
+      "dependencyLockSha256": "68b84b7bb8411671a1efbea89e88ec1c9ac0b19e0eff2205eec77ce94d9034e2",
+      "artifactCompleteMethods": 1,
+      "workloadDisposition": {
+        "unitId": "9f85d3360f2ee6a759982d29",
+        "relativePath": "Fixture.psm1",
+        "name": "Get-ComputerDiskLogical",
+        "kind": "Function",
+        "startLine": 9,
+        "semanticEligible": false,
+        "emittedClrMethod": false,
+        "emittedBinaryCmdlet": false,
+        "retainedHostedSource": true,
+        "usesNativeFunctionBinding": false,
+        "runtimeCommandRegions": 0,
+        "boundaryCrossings": 1,
+        "shapingFallback": false,
+        "omitted": false,
+        "rejected": false,
+        "generatedMemberName": "",
+        "dependencyCauses": [],
+        "boundaryCauses": [
+          "Authored source remains on the hosted PowerShell path after artifact shaping.",
+          "The retained function delegates 1 typed region(s) to generated CLR helpers while keeping its PowerShell command surface.",
+          "Promoted initialization helpers require fresh invocation-local targets; regions with existing targets execute their original PowerShell statements in place."
+        ],
+        "diagnosticChain": [
+          {
+            "code": "UnsupportedSyntax",
+            "featureId": "syntax.unsupported",
+            "message": "CLR type 'PInvoke.Win32Utils' is not available in the generated project reference set for the requested target.",
+            "line": 105,
+            "column": 31
+          }
+        ],
+        "moduleStateReadBoundaryCrossings": 0,
+        "moduleStateWriteBoundaryCrossings": 0,
+        "regionGraph": {
+          "schemaVersion": 1,
+          "regions": [
+            {
+              "regionId": "region:2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a:3202:3662:Typed",
+              "ordinal": 0,
+              "execution": "Typed",
+              "startOffset": 3202,
+              "endOffset": 3662,
+              "startLine": 77,
+              "startColumn": 5,
+              "endLine": 92,
+              "endColumn": 6,
+              "inputs": [
+                "Parameter:ALL"
+              ],
+              "outputs": [
+                "transfer:Local:Class",
+                "transfer:Local:DriveType",
+                "transfer:Local:Properties"
+              ],
+              "mutations": [
+                "Local:CLASS",
+                "Local:DRIVETYPE",
+                "Local:PROPERTIES"
+              ],
+              "streams": [],
+              "errors": [],
+              "ordering": "AuthoredSequentialSingleEvaluation",
+              "hostedCommandBoundarySites": 0,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 0,
+              "staticBoundaryValueTransfers": 0,
+              "staticBoundaryCostUnits": 0
+            }
+          ],
+          "scriptBlocks": [],
+          "hostedCommandBoundarySites": 0,
+          "moduleStateReadBoundarySites": 0,
+          "moduleStateWriteBoundarySites": 0,
+          "staticBoundaryCrossings": 0,
+          "staticBoundaryCostUnits": 0
+        },
+        "promotedTypedRegions": 1,
+        "generatedRegionMemberNames": [
+          "__PowerForgeRegion_8580ce94d2d0a2d5787731ad"
+        ]
+      },
+      "strictCanProceed": false,
+      "strictExplanationSha256": "7ef042dd4283cd3bad4b57cf7ce6468db8b45596b8dddce9582f6ce236338d21",
+      "cases": [
+        {
+          "case": "real",
+          "originalExitCode": 0,
+          "generatedExitCode": 0,
+          "originalSha256": "fa56683bdbd0b248b541ec9b241e2f53288122d6cba39804ce825096ad05dec4",
+          "generatedSha256": "fa56683bdbd0b248b541ec9b241e2f53288122d6cba39804ce825096ad05dec4",
+          "result": {
+            "case": "real",
+            "hostVersion": "7.6.6",
+            "abi": {
+              "type": "pinvoke.Win32Utils",
+              "library": "kernel32.dll",
+              "charSet": "Auto",
+              "setLastError": true,
+              "returnType": "System.UInt32",
+              "parameters": [
+                "System.String",
+                "System.Text.StringBuilder",
+                "System.Int32"
+              ]
+            },
+            "observations": [
+              {
+                "case": "first",
+                "records": [
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": "C:",
+                    "DriveType": "Local Disk",
+                    "ProviderName": "",
+                    "FreeSpace": 3.0,
+                    "UsedSpace": 7.0,
+                    "TotalSpace": 10.0,
+                    "FreePercent": 30.0,
+                    "UsedPercent": 70.0,
+                    "VolumeName": "owned-local",
+                    "DiskPartition": "\\Device\\HarddiskVolume2"
+                  },
+                  {
+                    "ComputerName": "offline-remote.invalid",
+                    "DeviceID": "R:",
+                    "DriveType": "Network Drive",
+                    "ProviderName": "offline-provider",
+                    "FreeSpace": 0.0,
+                    "UsedSpace": 0.0,
+                    "TotalSpace": 0.0,
+                    "FreePercent": 33.33,
+                    "UsedPercent": 66.67,
+                    "VolumeName": "owned-remote",
+                    "DiskPartition": ""
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": null,
+                    "DriveType": "Removable Disk",
+                    "ProviderName": "",
+                    "FreeSpace": 0.0,
+                    "UsedSpace": 0.0,
+                    "TotalSpace": 0.0,
+                    "FreePercent": "0",
+                    "UsedPercent": "0",
+                    "VolumeName": "owned-zero",
+                    "DiskPartition": ""
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": "compiler-offline-unmapped:",
+                    "DriveType": "Unknown",
+                    "ProviderName": "",
+                    "FreeSpace": 0.0,
+                    "UsedSpace": 0.0,
+                    "TotalSpace": 0.0,
+                    "FreePercent": "0",
+                    "UsedPercent": "0",
+                    "VolumeName": "owned-unmapped",
+                    "DiskPartition": ""
+                  }
+                ],
+                "trace": [
+                  {
+                    "computers": [
+                      "EVOMAGIC"
+                    ],
+                    "protocol": "Default",
+                    "credential": false,
+                    "class": "win32_logicalDisk",
+                    "properties": [
+                      "DeviceID",
+                      "DriveType",
+                      "ProviderName",
+                      "FreeSpace",
+                      "Size",
+                      "VolumeName",
+                      "PSComputerName"
+                    ]
+                  }
+                ],
+                "caught": null,
+                "nativeTypeLoaded": true
+              },
+              {
+                "case": "repeat",
+                "records": [
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": "C:",
+                    "DriveType": "Local Disk",
+                    "ProviderName": "",
+                    "FreeSpace": 3.0,
+                    "UsedSpace": 7.0,
+                    "TotalSpace": 10.0,
+                    "FreePercent": 30.0,
+                    "UsedPercent": 70.0,
+                    "VolumeName": "owned-local",
+                    "DiskPartition": "\\Device\\HarddiskVolume2"
+                  },
+                  {
+                    "ComputerName": "offline-remote.invalid",
+                    "DeviceID": "R:",
+                    "DriveType": "Network Drive",
+                    "ProviderName": "offline-provider",
+                    "FreeSpace": 0.0,
+                    "UsedSpace": 0.0,
+                    "TotalSpace": 0.0,
+                    "FreePercent": 33.33,
+                    "UsedPercent": 66.67,
+                    "VolumeName": "owned-remote",
+                    "DiskPartition": ""
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": null,
+                    "DriveType": "Removable Disk",
+                    "ProviderName": "",
+                    "FreeSpace": 0.0,
+                    "UsedSpace": 0.0,
+                    "TotalSpace": 0.0,
+                    "FreePercent": "0",
+                    "UsedPercent": "0",
+                    "VolumeName": "owned-zero",
+                    "DiskPartition": ""
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": "compiler-offline-unmapped:",
+                    "DriveType": "Unknown",
+                    "ProviderName": "",
+                    "FreeSpace": 0.0,
+                    "UsedSpace": 0.0,
+                    "TotalSpace": 0.0,
+                    "FreePercent": "0",
+                    "UsedPercent": "0",
+                    "VolumeName": "owned-unmapped",
+                    "DiskPartition": ""
+                  }
+                ],
+                "trace": [
+                  {
+                    "computers": [
+                      "EVOMAGIC"
+                    ],
+                    "protocol": "Default",
+                    "credential": false,
+                    "class": "win32_logicalDisk",
+                    "properties": [
+                      "DeviceID",
+                      "DriveType",
+                      "ProviderName",
+                      "FreeSpace",
+                      "Size",
+                      "VolumeName",
+                      "PSComputerName"
+                    ]
+                  }
+                ],
+                "caught": null,
+                "nativeTypeLoaded": true
+              },
+              {
+                "case": "local-only",
+                "records": [
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": "C:",
+                    "DriveType": "Local Disk",
+                    "ProviderName": "",
+                    "FreeSpace": 3.0,
+                    "UsedSpace": 7.0,
+                    "TotalSpace": 10.0,
+                    "FreePercent": 30.0,
+                    "UsedPercent": 70.0,
+                    "VolumeName": "owned-local",
+                    "DiskPartition": "\\Device\\HarddiskVolume2"
+                  }
+                ],
+                "trace": [
+                  {
+                    "computers": [
+                      "EVOMAGIC"
+                    ],
+                    "protocol": "Default",
+                    "credential": false,
+                    "class": "win32_logicalDisk",
+                    "properties": [
+                      "DeviceID",
+                      "DriveType",
+                      "ProviderName",
+                      "FreeSpace",
+                      "Size",
+                      "VolumeName",
+                      "PSComputerName"
+                    ]
+                  }
+                ],
+                "caught": null,
+                "nativeTypeLoaded": true
+              },
+              {
+                "case": "all",
+                "records": [
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "PSComputerName": "EVOMAGIC",
+                    "DeviceID": "C:",
+                    "DriveType": 3,
+                    "ProviderName": "",
+                    "FreeSpace": 3221225472,
+                    "Size": 10737418240,
+                    "VolumeName": "owned-local"
+                  },
+                  {
+                    "ComputerName": "offline-remote.invalid",
+                    "PSComputerName": "offline-remote.invalid",
+                    "DeviceID": "R:",
+                    "DriveType": 4,
+                    "ProviderName": "offline-provider",
+                    "FreeSpace": 1,
+                    "Size": 3,
+                    "VolumeName": "owned-remote"
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "PSComputerName": null,
+                    "DeviceID": null,
+                    "DriveType": 2,
+                    "ProviderName": "",
+                    "FreeSpace": 0,
+                    "Size": 0,
+                    "VolumeName": "owned-zero"
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "PSComputerName": null,
+                    "DeviceID": "compiler-offline-unmapped:",
+                    "DriveType": 0,
+                    "ProviderName": "",
+                    "FreeSpace": 0,
+                    "Size": 0,
+                    "VolumeName": "owned-unmapped"
+                  }
+                ],
+                "trace": [
+                  {
+                    "computers": [
+                      "EVOMAGIC"
+                    ],
+                    "protocol": "Default",
+                    "credential": false,
+                    "class": "win32_logicalDisk",
+                    "properties": [
+                      "*"
+                    ]
+                  }
+                ],
+                "caught": null,
+                "nativeTypeLoaded": true
+              },
+              {
+                "case": "mb-rounding",
+                "records": [
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": "C:",
+                    "DriveType": "Local Disk",
+                    "ProviderName": "",
+                    "FreeSpace": 3072.0,
+                    "UsedSpace": 7168.0,
+                    "TotalSpace": 10240.0,
+                    "FreePercent": 30.0,
+                    "UsedPercent": 70.0,
+                    "VolumeName": "owned-local",
+                    "DiskPartition": "\\Device\\HarddiskVolume2"
+                  },
+                  {
+                    "ComputerName": "offline-remote.invalid",
+                    "DeviceID": "R:",
+                    "DriveType": "Network Drive",
+                    "ProviderName": "offline-provider",
+                    "FreeSpace": 0.0,
+                    "UsedSpace": 0.0,
+                    "TotalSpace": 0.0,
+                    "FreePercent": 33.3333,
+                    "UsedPercent": 66.6667,
+                    "VolumeName": "owned-remote",
+                    "DiskPartition": ""
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": null,
+                    "DriveType": "Removable Disk",
+                    "ProviderName": "",
+                    "FreeSpace": 0.0,
+                    "UsedSpace": 0.0,
+                    "TotalSpace": 0.0,
+                    "FreePercent": "0",
+                    "UsedPercent": "0",
+                    "VolumeName": "owned-zero",
+                    "DiskPartition": ""
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": "compiler-offline-unmapped:",
+                    "DriveType": "Unknown",
+                    "ProviderName": "",
+                    "FreeSpace": 0.0,
+                    "UsedSpace": 0.0,
+                    "TotalSpace": 0.0,
+                    "FreePercent": "0",
+                    "UsedPercent": "0",
+                    "VolumeName": "owned-unmapped",
+                    "DiskPartition": ""
+                  }
+                ],
+                "trace": [
+                  {
+                    "computers": [
+                      "offline-one.invalid",
+                      "offline-two.invalid"
+                    ],
+                    "protocol": "Dcom",
+                    "credential": false,
+                    "class": "win32_logicalDisk",
+                    "properties": [
+                      "DeviceID",
+                      "DriveType",
+                      "ProviderName",
+                      "FreeSpace",
+                      "Size",
+                      "VolumeName",
+                      "PSComputerName"
+                    ]
+                  }
+                ],
+                "caught": null,
+                "nativeTypeLoaded": true
+              },
+              {
+                "case": "tb",
+                "records": [
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": "C:",
+                    "DriveType": "Local Disk",
+                    "ProviderName": "",
+                    "FreeSpace": 0.00293,
+                    "UsedSpace": 0.00684,
+                    "TotalSpace": 0.00977,
+                    "FreePercent": 30.0,
+                    "UsedPercent": 70.0,
+                    "VolumeName": "owned-local",
+                    "DiskPartition": "\\Device\\HarddiskVolume2"
+                  },
+                  {
+                    "ComputerName": "offline-remote.invalid",
+                    "DeviceID": "R:",
+                    "DriveType": "Network Drive",
+                    "ProviderName": "offline-provider",
+                    "FreeSpace": 0.0,
+                    "UsedSpace": 0.0,
+                    "TotalSpace": 0.0,
+                    "FreePercent": 33.33,
+                    "UsedPercent": 66.67,
+                    "VolumeName": "owned-remote",
+                    "DiskPartition": ""
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": null,
+                    "DriveType": "Removable Disk",
+                    "ProviderName": "",
+                    "FreeSpace": 0.0,
+                    "UsedSpace": 0.0,
+                    "TotalSpace": 0.0,
+                    "FreePercent": "0",
+                    "UsedPercent": "0",
+                    "VolumeName": "owned-zero",
+                    "DiskPartition": ""
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": "compiler-offline-unmapped:",
+                    "DriveType": "Unknown",
+                    "ProviderName": "",
+                    "FreeSpace": 0.0,
+                    "UsedSpace": 0.0,
+                    "TotalSpace": 0.0,
+                    "FreePercent": "0",
+                    "UsedPercent": "0",
+                    "VolumeName": "owned-unmapped",
+                    "DiskPartition": ""
+                  }
+                ],
+                "trace": [
+                  {
+                    "computers": [
+                      "EVOMAGIC"
+                    ],
+                    "protocol": "Default",
+                    "credential": false,
+                    "class": "win32_logicalDisk",
+                    "properties": [
+                      "DeviceID",
+                      "DriveType",
+                      "ProviderName",
+                      "FreeSpace",
+                      "Size",
+                      "VolumeName",
+                      "PSComputerName"
+                    ]
+                  }
+                ],
+                "caught": null,
+                "nativeTypeLoaded": true
+              },
+              {
+                "case": "provider-failure",
+                "records": [],
+                "trace": [
+                  {
+                    "computers": [
+                      "EVOMAGIC"
+                    ],
+                    "protocol": "Default",
+                    "credential": false,
+                    "class": "win32_logicalDisk",
+                    "properties": [
+                      "DeviceID",
+                      "DriveType",
+                      "ProviderName",
+                      "FreeSpace",
+                      "Size",
+                      "VolumeName",
+                      "PSComputerName"
+                    ]
+                  }
+                ],
+                "caught": {
+                  "type": "System.Management.Automation.RuntimeException",
+                  "id": "owned offline disk provider failure",
+                  "message": "owned offline disk provider failure"
+                },
+                "nativeTypeLoaded": true
+              },
+              {
+                "case": "empty",
+                "records": [],
+                "trace": [
+                  {
+                    "computers": [
+                      "EVOMAGIC"
+                    ],
+                    "protocol": "Default",
+                    "credential": false,
+                    "class": "win32_logicalDisk",
+                    "properties": [
+                      "DeviceID",
+                      "DriveType",
+                      "ProviderName",
+                      "FreeSpace",
+                      "Size",
+                      "VolumeName",
+                      "PSComputerName"
+                    ]
+                  }
+                ],
+                "caught": null,
+                "nativeTypeLoaded": true
+              },
+              {
+                "case": "invalid-size",
+                "records": [],
+                "trace": [],
+                "caught": {
+                  "type": "System.Management.Automation.ParameterBindingValidationException",
+                  "id": "ParameterArgumentValidationError,Get-ComputerDiskLogical",
+                  "message": "Cannot validate argument on parameter 'Size'. The argument \"invalid\" does not belong to the set \"GB,TB,MB\" specified by the ValidateSet attribute. Supply an argument that is in the set and then try the command again."
+                },
+                "nativeTypeLoaded": true
+              }
+            ]
+          }
+        },
+        {
+          "case": "type-failure",
+          "originalExitCode": 0,
+          "generatedExitCode": 0,
+          "originalSha256": "cd92c99c1f678edc68d8f07324d51eb0e67dd657f437946f9856d8c605c41ce2",
+          "generatedSha256": "cd92c99c1f678edc68d8f07324d51eb0e67dd657f437946f9856d8c605c41ce2",
+          "result": {
+            "case": "type-failure",
+            "hostVersion": "7.6.6",
+            "abi": null,
+            "observations": [
+              {
+                "case": "type-failure",
+                "records": [],
+                "trace": [],
+                "caught": {
+                  "type": "System.Management.Automation.RuntimeException",
+                  "id": "owned offline native type failure",
+                  "message": "owned offline native type failure"
+                },
+                "nativeTypeLoaded": false
+              }
+            ]
+          }
+        }
+      ],
+      "generatedSourceHashes": {
+        "2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a": "3d0793a0168d51fef757621e1c0cbf81ec82650ba69397929bc4cee44644c4ce",
+        "CompiledCmdlets.cs": "e65b81d14dd3c9aacedfe2aad09f4bd2588462f02ee0e2f47215ac90ded9784e",
+        "CompiledPowerShell.cs": "c73c0008c83f5c54d2758153ba971bbcadb9a218325677c7c0674ff5182b80e5",
+        "Directory.Build.props": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Build.targets": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Packages.props": "a96e6b8834dbdb32e1410abfdb50d0483c028bba2edd5fed4b6e5cfc583c6e46",
+        "DiskLogical.csproj": "44f370e83831deebcff6f822bd366611649ead3d1f145a254dbcfea88ef0761e",
+        "global.json": "1a9972198a8d91eb872d3b4d3f5d6603fa2b04620c9e5c6d057a59f0d0f32992",
+        "ModuleSessionState.g.cs": "c96e42f7ba20fe3819fbe69e936b44e8c8a8fd5141eefa148bff59743bd69981",
+        "NativeLanguageOperations.g.cs": "7f96f823b4489c97ddfcc8182e4828fba533bc986c8feb36263851ef8dbded55",
+        "NativeOutput.g.cs": "48100a5b25ca80ebdf62d8f5df0f4be7ae3ad8c951dec2e69a19d01c98ae10bd",
+        "NuGet.Config": "81afa9a2ee0dd27b21be56f5efed21aa8cf08c8b2d4db4763cbee5cf28fb402e",
+        "PowerForge.TargetContract.json": "90180f20d4060b1d15573552f333e59b81e8c77f1bdfb9e4b9a3da8bdc269c78",
+        "PowerShellHybridRegionHost.g.cs": "678bc094155a8b579acee3a7fed2a73c33f327582cd35311f95a621395e2e4ac",
+        "PowerShellNativeFunctionContext.AccessMutations.g.cs": "9aa4cbc51df123ce356de19afa73f94f08541955bfde3854ee77c33c5f9a52ca",
+        "PowerShellNativeFunctionContext.CommandRegions.g.cs": "96182f77be1aab8c9599412fcd6a89af1244cebeb97937ecf0a6cde68cb9136c",
+        "PowerShellNativeFunctionContext.Compilation.g.cs": "822e2ef82b3ccc4b7de4ad9eb6f44e915ec36c81abc4b9c2b5978230d3dd7a2a",
+        "PowerShellNativeFunctionContext.Conversions.g.cs": "fccc228c95b894808bf99cf6a0b570c5eef8c4367e85259fc9f631b2673043d6",
+        "PowerShellNativeFunctionContext.Declarations.g.cs": "c53589d78033200f4ae59a72baf67b741f59281dfc23ebe7c637ea16382eefb3",
+        "PowerShellNativeFunctionContext.Dictionaries.g.cs": "51f0138b4a97a58a092af7e6dc8b9a4dfdaf233a15b13f396c4f03197df45cc3",
+        "PowerShellNativeFunctionContext.Enumeration.g.cs": "bee5f9239a119cec47f2f392064d3096d0962ab2ce84a9c7758271e0c01c5485",
+        "PowerShellNativeFunctionContext.g.cs": "17cb966a966bab959cf8d58d87eb8c92c4733374cd6f5e944e9c65c00c96efc9",
+        "PowerShellNativeFunctionContext.Indexing.g.cs": "610bec93d533cd485bfa9f680930a6d90de7bc0734bafeca4450facd9f00204e",
+        "PowerShellNativeFunctionContext.Invocations.g.cs": "c96859c7f495a75dfae3504c43ad2e46952e2fe387d6b2595149e76463a529b2",
+        "PowerShellNativeFunctionContext.Members.g.cs": "baeb213b30012cbd52403668f0def2f647ccb1c0625a60369e98fb97aeac4ba7",
+        "PowerShellNativeFunctionContext.Membership.g.cs": "4fb699f522f312e6850daa25673426f0af1844ecb7a59522336aadb2efcea707",
+        "PowerShellNativeFunctionContext.NestedDeclarations.g.cs": "075a2fdcb76a93eddc62fd23ea7d9460b12d8232adcd60050ab824e6882fa7bf",
+        "PowerShellNativeFunctionContext.Operations.g.cs": "0c83401a614ade6a8b24868bcf929592ae16f9d2941cb8f8af03144c067f47e0",
+        "PowerShellNativeFunctionContext.Output.g.cs": "06b1c8e5bd77934f02247b5d0774ff8a2b8d7ca4275e9fd18f40afda1afab050",
+        "PowerShellNativeFunctionContext.Patterns.g.cs": "990a8056b63f05c7103aa627ea8681845e0c1eeab84311312cd3cb394c9f3f92",
+        "PowerShellNativeFunctionContext.ScriptBlocks.g.cs": "b576c61fb1a947d688eec0192be637ff6fa741c58948319770f2712e31685ae8",
+        "PowerShellNativeFunctionContext.StringJoin.g.cs": "1c1e1acedadee610fd3281d709cb09c1a85bc4bd61af5005e8a1f5fcb63f9542",
+        "PowerShellNativeFunctionContext.Switch.g.cs": "d7501e42167b4ad522a6f203398ab14ca3d4c1d36e8524541f1afa3c87288101",
+        "PowerShellNativeFunctionHost.Declared.g.cs": "1960ef3bdf465cd99336fc1f0415c291b7ae7515ef4eb64d159f15ed69c8dc22",
+        "PowerShellNativeFunctionHost.FunctionEnums.g.cs": "b3b4e9f2d5867986cfbbe26dbadf21a1a319b7ec14202fa80cde9637b2d7d5f5",
+        "PowerShellNativeFunctionHost.g.cs": "180e381ea4854f38001ec5fbea4a453c88a6606843c5ea915c5f8f8343c11ca4",
+        "PowerShellNativeFunctionHost.OwnedDeclaration.g.cs": "83ce60b1bc336bc19e589369de8a81a2858277b8216a6c0784ecda328a8d911a",
+        "PowerShellRegionLocalOwnership.g.cs": "29ae75381d0c86b8a0c9c963893cf3754658809321c3a0ee4a1c92cb4680a62d",
+        "RegionValueAlternative.g.cs": "439ad044a8b053d601a8d089baec6585306a244224b73ef35851de4b7139c14f",
+        "source-map.json": "a871d3765f680ddb13e7e09cf45bade38d78b5a7f2f1e84b527532ad9fa5587f",
+        "SourceExtent.g.cs": "daf263e4d386070ca90530b6765d52d9f8e0141a63c6f1097eae4d00744472e5",
+        "StatementErrors.g.cs": "4f8430b1a911496884f666ca7a74cbfc9a740803868a1dcb7965309b17bd1a44"
+      }
+    },
+    {
+      "framework": "net472",
+      "artifactSha256": "61775062fbb96f6fc6e040716c7ab5599df019b63021a13a18fcbc7c8f30560d",
+      "dependencyLockSha256": "df4a05ad7a8f53ac6c7f561ed585a14227d6e500ccdea187c6ab6f53a10c9c4a",
+      "artifactCompleteMethods": 1,
+      "workloadDisposition": {
+        "unitId": "9f85d3360f2ee6a759982d29",
+        "relativePath": "Fixture.psm1",
+        "name": "Get-ComputerDiskLogical",
+        "kind": "Function",
+        "startLine": 9,
+        "semanticEligible": false,
+        "emittedClrMethod": false,
+        "emittedBinaryCmdlet": false,
+        "retainedHostedSource": true,
+        "usesNativeFunctionBinding": false,
+        "runtimeCommandRegions": 0,
+        "boundaryCrossings": 1,
+        "shapingFallback": false,
+        "omitted": false,
+        "rejected": false,
+        "generatedMemberName": "",
+        "dependencyCauses": [],
+        "boundaryCauses": [
+          "Authored source remains on the hosted PowerShell path after artifact shaping.",
+          "The retained function delegates 1 typed region(s) to generated CLR helpers while keeping its PowerShell command surface.",
+          "Promoted initialization helpers require fresh invocation-local targets; regions with existing targets execute their original PowerShell statements in place."
+        ],
+        "diagnosticChain": [
+          {
+            "code": "UnsupportedSyntax",
+            "featureId": "syntax.unsupported",
+            "message": "CLR type 'PInvoke.Win32Utils' is not available in the generated project reference set for the requested target.",
+            "line": 105,
+            "column": 31
+          }
+        ],
+        "moduleStateReadBoundaryCrossings": 0,
+        "moduleStateWriteBoundaryCrossings": 0,
+        "regionGraph": {
+          "schemaVersion": 1,
+          "regions": [
+            {
+              "regionId": "region:2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a:3202:3662:Typed",
+              "ordinal": 0,
+              "execution": "Typed",
+              "startOffset": 3202,
+              "endOffset": 3662,
+              "startLine": 77,
+              "startColumn": 5,
+              "endLine": 92,
+              "endColumn": 6,
+              "inputs": [
+                "Parameter:ALL"
+              ],
+              "outputs": [
+                "transfer:Local:Class",
+                "transfer:Local:DriveType",
+                "transfer:Local:Properties"
+              ],
+              "mutations": [
+                "Local:CLASS",
+                "Local:DRIVETYPE",
+                "Local:PROPERTIES"
+              ],
+              "streams": [],
+              "errors": [],
+              "ordering": "AuthoredSequentialSingleEvaluation",
+              "hostedCommandBoundarySites": 0,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 0,
+              "staticBoundaryValueTransfers": 0,
+              "staticBoundaryCostUnits": 0
+            }
+          ],
+          "scriptBlocks": [],
+          "hostedCommandBoundarySites": 0,
+          "moduleStateReadBoundarySites": 0,
+          "moduleStateWriteBoundarySites": 0,
+          "staticBoundaryCrossings": 0,
+          "staticBoundaryCostUnits": 0
+        },
+        "promotedTypedRegions": 1,
+        "generatedRegionMemberNames": [
+          "__PowerForgeRegion_8580ce94d2d0a2d5787731ad"
+        ]
+      },
+      "strictCanProceed": false,
+      "strictExplanationSha256": "6f33a1cc9f79d222111a2b6d5361a36823abb3c8c8e733e3ab025b0111c4ed17",
+      "cases": [
+        {
+          "case": "real",
+          "originalExitCode": 0,
+          "generatedExitCode": 0,
+          "originalSha256": "68a2cfd80203debdab21181d7eab4878b41651e27b2e35b800c68b7ddbbb2aaf",
+          "generatedSha256": "68a2cfd80203debdab21181d7eab4878b41651e27b2e35b800c68b7ddbbb2aaf",
+          "result": {
+            "case": "real",
+            "hostVersion": "5.1.26100.9444",
+            "abi": {
+              "type": "pinvoke.Win32Utils",
+              "library": "kernel32.dll",
+              "charSet": "Auto",
+              "setLastError": true,
+              "returnType": "System.UInt32",
+              "parameters": [
+                "System.String",
+                "System.Text.StringBuilder",
+                "System.Int32"
+              ]
+            },
+            "observations": [
+              {
+                "case": "first",
+                "records": [
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": "C:",
+                    "DriveType": "Local Disk",
+                    "ProviderName": "",
+                    "FreeSpace": 3,
+                    "UsedSpace": 7,
+                    "TotalSpace": 10,
+                    "FreePercent": 30,
+                    "UsedPercent": 70,
+                    "VolumeName": "owned-local",
+                    "DiskPartition": "\\Device\\HarddiskVolume2"
+                  },
+                  {
+                    "ComputerName": "offline-remote.invalid",
+                    "DeviceID": "R:",
+                    "DriveType": "Network Drive",
+                    "ProviderName": "offline-provider",
+                    "FreeSpace": 0,
+                    "UsedSpace": 0,
+                    "TotalSpace": 0,
+                    "FreePercent": 33.33,
+                    "UsedPercent": 66.67,
+                    "VolumeName": "owned-remote",
+                    "DiskPartition": ""
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": null,
+                    "DriveType": "Removable Disk",
+                    "ProviderName": "",
+                    "FreeSpace": 0,
+                    "UsedSpace": 0,
+                    "TotalSpace": 0,
+                    "FreePercent": "0",
+                    "UsedPercent": "0",
+                    "VolumeName": "owned-zero",
+                    "DiskPartition": ""
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": "compiler-offline-unmapped:",
+                    "DriveType": "Unknown",
+                    "ProviderName": "",
+                    "FreeSpace": 0,
+                    "UsedSpace": 0,
+                    "TotalSpace": 0,
+                    "FreePercent": "0",
+                    "UsedPercent": "0",
+                    "VolumeName": "owned-unmapped",
+                    "DiskPartition": ""
+                  }
+                ],
+                "trace": [
+                  {
+                    "computers": [
+                      "EVOMAGIC"
+                    ],
+                    "protocol": "Default",
+                    "credential": false,
+                    "class": "win32_logicalDisk",
+                    "properties": [
+                      "DeviceID",
+                      "DriveType",
+                      "ProviderName",
+                      "FreeSpace",
+                      "Size",
+                      "VolumeName",
+                      "PSComputerName"
+                    ]
+                  }
+                ],
+                "caught": null,
+                "nativeTypeLoaded": true
+              },
+              {
+                "case": "repeat",
+                "records": [
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": "C:",
+                    "DriveType": "Local Disk",
+                    "ProviderName": "",
+                    "FreeSpace": 3,
+                    "UsedSpace": 7,
+                    "TotalSpace": 10,
+                    "FreePercent": 30,
+                    "UsedPercent": 70,
+                    "VolumeName": "owned-local",
+                    "DiskPartition": "\\Device\\HarddiskVolume2"
+                  },
+                  {
+                    "ComputerName": "offline-remote.invalid",
+                    "DeviceID": "R:",
+                    "DriveType": "Network Drive",
+                    "ProviderName": "offline-provider",
+                    "FreeSpace": 0,
+                    "UsedSpace": 0,
+                    "TotalSpace": 0,
+                    "FreePercent": 33.33,
+                    "UsedPercent": 66.67,
+                    "VolumeName": "owned-remote",
+                    "DiskPartition": ""
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": null,
+                    "DriveType": "Removable Disk",
+                    "ProviderName": "",
+                    "FreeSpace": 0,
+                    "UsedSpace": 0,
+                    "TotalSpace": 0,
+                    "FreePercent": "0",
+                    "UsedPercent": "0",
+                    "VolumeName": "owned-zero",
+                    "DiskPartition": ""
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": "compiler-offline-unmapped:",
+                    "DriveType": "Unknown",
+                    "ProviderName": "",
+                    "FreeSpace": 0,
+                    "UsedSpace": 0,
+                    "TotalSpace": 0,
+                    "FreePercent": "0",
+                    "UsedPercent": "0",
+                    "VolumeName": "owned-unmapped",
+                    "DiskPartition": ""
+                  }
+                ],
+                "trace": [
+                  {
+                    "computers": [
+                      "EVOMAGIC"
+                    ],
+                    "protocol": "Default",
+                    "credential": false,
+                    "class": "win32_logicalDisk",
+                    "properties": [
+                      "DeviceID",
+                      "DriveType",
+                      "ProviderName",
+                      "FreeSpace",
+                      "Size",
+                      "VolumeName",
+                      "PSComputerName"
+                    ]
+                  }
+                ],
+                "caught": null,
+                "nativeTypeLoaded": true
+              },
+              {
+                "case": "local-only",
+                "records": [
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": "C:",
+                    "DriveType": "Local Disk",
+                    "ProviderName": "",
+                    "FreeSpace": 3,
+                    "UsedSpace": 7,
+                    "TotalSpace": 10,
+                    "FreePercent": 30,
+                    "UsedPercent": 70,
+                    "VolumeName": "owned-local",
+                    "DiskPartition": "\\Device\\HarddiskVolume2"
+                  }
+                ],
+                "trace": [
+                  {
+                    "computers": [
+                      "EVOMAGIC"
+                    ],
+                    "protocol": "Default",
+                    "credential": false,
+                    "class": "win32_logicalDisk",
+                    "properties": [
+                      "DeviceID",
+                      "DriveType",
+                      "ProviderName",
+                      "FreeSpace",
+                      "Size",
+                      "VolumeName",
+                      "PSComputerName"
+                    ]
+                  }
+                ],
+                "caught": null,
+                "nativeTypeLoaded": true
+              },
+              {
+                "case": "all",
+                "records": [
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "PSComputerName": "EVOMAGIC",
+                    "DeviceID": "C:",
+                    "DriveType": 3,
+                    "ProviderName": "",
+                    "FreeSpace": 3221225472,
+                    "Size": 10737418240,
+                    "VolumeName": "owned-local"
+                  },
+                  {
+                    "ComputerName": "offline-remote.invalid",
+                    "PSComputerName": "offline-remote.invalid",
+                    "DeviceID": "R:",
+                    "DriveType": 4,
+                    "ProviderName": "offline-provider",
+                    "FreeSpace": 1,
+                    "Size": 3,
+                    "VolumeName": "owned-remote"
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "PSComputerName": null,
+                    "DeviceID": null,
+                    "DriveType": 2,
+                    "ProviderName": "",
+                    "FreeSpace": 0,
+                    "Size": 0,
+                    "VolumeName": "owned-zero"
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "PSComputerName": null,
+                    "DeviceID": "compiler-offline-unmapped:",
+                    "DriveType": 0,
+                    "ProviderName": "",
+                    "FreeSpace": 0,
+                    "Size": 0,
+                    "VolumeName": "owned-unmapped"
+                  }
+                ],
+                "trace": [
+                  {
+                    "computers": [
+                      "EVOMAGIC"
+                    ],
+                    "protocol": "Default",
+                    "credential": false,
+                    "class": "win32_logicalDisk",
+                    "properties": [
+                      "*"
+                    ]
+                  }
+                ],
+                "caught": null,
+                "nativeTypeLoaded": true
+              },
+              {
+                "case": "mb-rounding",
+                "records": [
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": "C:",
+                    "DriveType": "Local Disk",
+                    "ProviderName": "",
+                    "FreeSpace": 3072,
+                    "UsedSpace": 7168,
+                    "TotalSpace": 10240,
+                    "FreePercent": 30,
+                    "UsedPercent": 70,
+                    "VolumeName": "owned-local",
+                    "DiskPartition": "\\Device\\HarddiskVolume2"
+                  },
+                  {
+                    "ComputerName": "offline-remote.invalid",
+                    "DeviceID": "R:",
+                    "DriveType": "Network Drive",
+                    "ProviderName": "offline-provider",
+                    "FreeSpace": 0,
+                    "UsedSpace": 0,
+                    "TotalSpace": 0,
+                    "FreePercent": 33.3333,
+                    "UsedPercent": 66.6667,
+                    "VolumeName": "owned-remote",
+                    "DiskPartition": ""
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": null,
+                    "DriveType": "Removable Disk",
+                    "ProviderName": "",
+                    "FreeSpace": 0,
+                    "UsedSpace": 0,
+                    "TotalSpace": 0,
+                    "FreePercent": "0",
+                    "UsedPercent": "0",
+                    "VolumeName": "owned-zero",
+                    "DiskPartition": ""
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": "compiler-offline-unmapped:",
+                    "DriveType": "Unknown",
+                    "ProviderName": "",
+                    "FreeSpace": 0,
+                    "UsedSpace": 0,
+                    "TotalSpace": 0,
+                    "FreePercent": "0",
+                    "UsedPercent": "0",
+                    "VolumeName": "owned-unmapped",
+                    "DiskPartition": ""
+                  }
+                ],
+                "trace": [
+                  {
+                    "computers": [
+                      "offline-one.invalid",
+                      "offline-two.invalid"
+                    ],
+                    "protocol": "Dcom",
+                    "credential": false,
+                    "class": "win32_logicalDisk",
+                    "properties": [
+                      "DeviceID",
+                      "DriveType",
+                      "ProviderName",
+                      "FreeSpace",
+                      "Size",
+                      "VolumeName",
+                      "PSComputerName"
+                    ]
+                  }
+                ],
+                "caught": null,
+                "nativeTypeLoaded": true
+              },
+              {
+                "case": "tb",
+                "records": [
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": "C:",
+                    "DriveType": "Local Disk",
+                    "ProviderName": "",
+                    "FreeSpace": 0.00293,
+                    "UsedSpace": 0.00684,
+                    "TotalSpace": 0.00977,
+                    "FreePercent": 30,
+                    "UsedPercent": 70,
+                    "VolumeName": "owned-local",
+                    "DiskPartition": "\\Device\\HarddiskVolume2"
+                  },
+                  {
+                    "ComputerName": "offline-remote.invalid",
+                    "DeviceID": "R:",
+                    "DriveType": "Network Drive",
+                    "ProviderName": "offline-provider",
+                    "FreeSpace": 0,
+                    "UsedSpace": 0,
+                    "TotalSpace": 0,
+                    "FreePercent": 33.33,
+                    "UsedPercent": 66.67,
+                    "VolumeName": "owned-remote",
+                    "DiskPartition": ""
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": null,
+                    "DriveType": "Removable Disk",
+                    "ProviderName": "",
+                    "FreeSpace": 0,
+                    "UsedSpace": 0,
+                    "TotalSpace": 0,
+                    "FreePercent": "0",
+                    "UsedPercent": "0",
+                    "VolumeName": "owned-zero",
+                    "DiskPartition": ""
+                  },
+                  {
+                    "ComputerName": "EVOMAGIC",
+                    "DeviceID": "compiler-offline-unmapped:",
+                    "DriveType": "Unknown",
+                    "ProviderName": "",
+                    "FreeSpace": 0,
+                    "UsedSpace": 0,
+                    "TotalSpace": 0,
+                    "FreePercent": "0",
+                    "UsedPercent": "0",
+                    "VolumeName": "owned-unmapped",
+                    "DiskPartition": ""
+                  }
+                ],
+                "trace": [
+                  {
+                    "computers": [
+                      "EVOMAGIC"
+                    ],
+                    "protocol": "Default",
+                    "credential": false,
+                    "class": "win32_logicalDisk",
+                    "properties": [
+                      "DeviceID",
+                      "DriveType",
+                      "ProviderName",
+                      "FreeSpace",
+                      "Size",
+                      "VolumeName",
+                      "PSComputerName"
+                    ]
+                  }
+                ],
+                "caught": null,
+                "nativeTypeLoaded": true
+              },
+              {
+                "case": "provider-failure",
+                "records": [],
+                "trace": [
+                  {
+                    "computers": [
+                      "EVOMAGIC"
+                    ],
+                    "protocol": "Default",
+                    "credential": false,
+                    "class": "win32_logicalDisk",
+                    "properties": [
+                      "DeviceID",
+                      "DriveType",
+                      "ProviderName",
+                      "FreeSpace",
+                      "Size",
+                      "VolumeName",
+                      "PSComputerName"
+                    ]
+                  }
+                ],
+                "caught": {
+                  "type": "System.Management.Automation.RuntimeException",
+                  "id": "owned offline disk provider failure",
+                  "message": "owned offline disk provider failure"
+                },
+                "nativeTypeLoaded": true
+              },
+              {
+                "case": "empty",
+                "records": [],
+                "trace": [
+                  {
+                    "computers": [
+                      "EVOMAGIC"
+                    ],
+                    "protocol": "Default",
+                    "credential": false,
+                    "class": "win32_logicalDisk",
+                    "properties": [
+                      "DeviceID",
+                      "DriveType",
+                      "ProviderName",
+                      "FreeSpace",
+                      "Size",
+                      "VolumeName",
+                      "PSComputerName"
+                    ]
+                  }
+                ],
+                "caught": null,
+                "nativeTypeLoaded": true
+              },
+              {
+                "case": "invalid-size",
+                "records": [],
+                "trace": [],
+                "caught": {
+                  "type": "System.Management.Automation.ParameterBindingValidationException",
+                  "id": "ParameterArgumentValidationError,Get-ComputerDiskLogical",
+                  "message": "Cannot validate argument on parameter 'Size'. The argument \"invalid\" does not belong to the set \"GB,TB,MB\" specified by the ValidateSet attribute. Supply an argument that is in the set and then try the command again."
+                },
+                "nativeTypeLoaded": true
+              }
+            ]
+          }
+        },
+        {
+          "case": "type-failure",
+          "originalExitCode": 0,
+          "generatedExitCode": 0,
+          "originalSha256": "b3e66dce0eccbad1dcef0234d7b36a60bfedc4c8a011a1044f268d42525e3f3c",
+          "generatedSha256": "b3e66dce0eccbad1dcef0234d7b36a60bfedc4c8a011a1044f268d42525e3f3c",
+          "result": {
+            "case": "type-failure",
+            "hostVersion": "5.1.26100.9444",
+            "abi": null,
+            "observations": [
+              {
+                "case": "type-failure",
+                "records": [],
+                "trace": [],
+                "caught": {
+                  "type": "System.Management.Automation.RuntimeException",
+                  "id": "owned offline native type failure",
+                  "message": "owned offline native type failure"
+                },
+                "nativeTypeLoaded": false
+              }
+            ]
+          }
+        }
+      ],
+      "generatedSourceHashes": {
+        "2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a": "3d0793a0168d51fef757621e1c0cbf81ec82650ba69397929bc4cee44644c4ce",
+        "CompiledCmdlets.cs": "e65b81d14dd3c9aacedfe2aad09f4bd2588462f02ee0e2f47215ac90ded9784e",
+        "CompiledPowerShell.cs": "6848b4cac29e46f8fc4eb4001fecd993d71a23327261ff5dac650346cb3c839d",
+        "Directory.Build.props": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Build.targets": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Packages.props": "a96e6b8834dbdb32e1410abfdb50d0483c028bba2edd5fed4b6e5cfc583c6e46",
+        "DiskLogical.csproj": "bce9636aadd55ff3c5aa8d303d4f84d2872f3305b862efd68b2b19bbcfe9649e",
+        "global.json": "1a9972198a8d91eb872d3b4d3f5d6603fa2b04620c9e5c6d057a59f0d0f32992",
+        "ModuleSessionState.g.cs": "c96e42f7ba20fe3819fbe69e936b44e8c8a8fd5141eefa148bff59743bd69981",
+        "NativeLanguageOperations.g.cs": "7f96f823b4489c97ddfcc8182e4828fba533bc986c8feb36263851ef8dbded55",
+        "NativeOutput.g.cs": "48100a5b25ca80ebdf62d8f5df0f4be7ae3ad8c951dec2e69a19d01c98ae10bd",
+        "NuGet.Config": "81afa9a2ee0dd27b21be56f5efed21aa8cf08c8b2d4db4763cbee5cf28fb402e",
+        "PowerForge.TargetContract.json": "50340bf76aea78627ddc1f69c8b49badd286303bafef1aa02f98e1c16a1ab688",
+        "PowerShellHybridRegionHost.g.cs": "678bc094155a8b579acee3a7fed2a73c33f327582cd35311f95a621395e2e4ac",
+        "PowerShellNativeFunctionContext.AccessMutations.g.cs": "9aa4cbc51df123ce356de19afa73f94f08541955bfde3854ee77c33c5f9a52ca",
+        "PowerShellNativeFunctionContext.CommandRegions.g.cs": "96182f77be1aab8c9599412fcd6a89af1244cebeb97937ecf0a6cde68cb9136c",
+        "PowerShellNativeFunctionContext.Compilation.g.cs": "822e2ef82b3ccc4b7de4ad9eb6f44e915ec36c81abc4b9c2b5978230d3dd7a2a",
+        "PowerShellNativeFunctionContext.Conversions.g.cs": "fccc228c95b894808bf99cf6a0b570c5eef8c4367e85259fc9f631b2673043d6",
+        "PowerShellNativeFunctionContext.Declarations.g.cs": "c53589d78033200f4ae59a72baf67b741f59281dfc23ebe7c637ea16382eefb3",
+        "PowerShellNativeFunctionContext.Dictionaries.g.cs": "51f0138b4a97a58a092af7e6dc8b9a4dfdaf233a15b13f396c4f03197df45cc3",
+        "PowerShellNativeFunctionContext.Enumeration.g.cs": "bee5f9239a119cec47f2f392064d3096d0962ab2ce84a9c7758271e0c01c5485",
+        "PowerShellNativeFunctionContext.g.cs": "17cb966a966bab959cf8d58d87eb8c92c4733374cd6f5e944e9c65c00c96efc9",
+        "PowerShellNativeFunctionContext.Indexing.g.cs": "610bec93d533cd485bfa9f680930a6d90de7bc0734bafeca4450facd9f00204e",
+        "PowerShellNativeFunctionContext.Invocations.g.cs": "c96859c7f495a75dfae3504c43ad2e46952e2fe387d6b2595149e76463a529b2",
+        "PowerShellNativeFunctionContext.Members.g.cs": "baeb213b30012cbd52403668f0def2f647ccb1c0625a60369e98fb97aeac4ba7",
+        "PowerShellNativeFunctionContext.Membership.g.cs": "4fb699f522f312e6850daa25673426f0af1844ecb7a59522336aadb2efcea707",
+        "PowerShellNativeFunctionContext.NestedDeclarations.g.cs": "075a2fdcb76a93eddc62fd23ea7d9460b12d8232adcd60050ab824e6882fa7bf",
+        "PowerShellNativeFunctionContext.Operations.g.cs": "0c83401a614ade6a8b24868bcf929592ae16f9d2941cb8f8af03144c067f47e0",
+        "PowerShellNativeFunctionContext.Output.g.cs": "06b1c8e5bd77934f02247b5d0774ff8a2b8d7ca4275e9fd18f40afda1afab050",
+        "PowerShellNativeFunctionContext.Patterns.g.cs": "990a8056b63f05c7103aa627ea8681845e0c1eeab84311312cd3cb394c9f3f92",
+        "PowerShellNativeFunctionContext.ScriptBlocks.g.cs": "b576c61fb1a947d688eec0192be637ff6fa741c58948319770f2712e31685ae8",
+        "PowerShellNativeFunctionContext.StringJoin.g.cs": "1c1e1acedadee610fd3281d709cb09c1a85bc4bd61af5005e8a1f5fcb63f9542",
+        "PowerShellNativeFunctionContext.Switch.g.cs": "d7501e42167b4ad522a6f203398ab14ca3d4c1d36e8524541f1afa3c87288101",
+        "PowerShellNativeFunctionHost.Declared.g.cs": "1960ef3bdf465cd99336fc1f0415c291b7ae7515ef4eb64d159f15ed69c8dc22",
+        "PowerShellNativeFunctionHost.FunctionEnums.g.cs": "b3b4e9f2d5867986cfbbe26dbadf21a1a319b7ec14202fa80cde9637b2d7d5f5",
+        "PowerShellNativeFunctionHost.g.cs": "180e381ea4854f38001ec5fbea4a453c88a6606843c5ea915c5f8f8343c11ca4",
+        "PowerShellNativeFunctionHost.OwnedDeclaration.g.cs": "83ce60b1bc336bc19e589369de8a81a2858277b8216a6c0784ecda328a8d911a",
+        "PowerShellRegionLocalOwnership.g.cs": "29ae75381d0c86b8a0c9c963893cf3754658809321c3a0ee4a1c92cb4680a62d",
+        "RegionValueAlternative.g.cs": "439ad044a8b053d601a8d089baec6585306a244224b73ef35851de4b7139c14f",
+        "source-map.json": "a871d3765f680ddb13e7e09cf45bade38d78b5a7f2f1e84b527532ad9fa5587f",
+        "SourceExtent.g.cs": "daf263e4d386070ca90530b6765d52d9f8e0141a63c6f1097eae4d00744472e5",
+        "StatementErrors.g.cs": "4f8430b1a911496884f666ca7a74cbfc9a740803868a1dcb7965309b17bd1a44"
+      }
+    }
+  ],
+  "limits": [
+    "Windows x64 only; no non-Windows/native-deployment certification",
+    "Exact authored Add-Type and QueryDosDevice execute; in-memory CIM provider never opens a session",
+    "No network, remote CIM, disk mutation or machine configuration changes",
+    "Generated workload function retains one promoted region; its execution is not individually observed or credited",
+    "Only the added in-memory provider emits a complete method; no new pinned function coverage",
+    "Authored native failure ignores return code and yields an empty mapping",
+    "No complete PSSharedGoods module execution",
+    "net10 generated builds retain existing NU1510 package warnings"
+  ]
+}

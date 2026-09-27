@@ -1,0 +1,9 @@
+# PSSharedGoods logical disk native boundary
+
+`Prepare.ps1` pins the unchanged external `Get-ComputerDiskLogical` source by SHA-256. Supply its source path and a new task-owned input directory. The only added function is the in-memory `Get-CimData` provider, which records arguments and never opens a CIM session.
+
+Run `Observe.ps1` in fresh noninteractive Windows child processes for each original/generated artifact and `real` or `type-failure` case. The real path compiles the exact authored C# P/Invoke definition and queries the existing system-drive mapping using `QueryDosDevice`. It checks repeated calls, remote-row bypass, missing/unmapped devices, local filtering, All's borrowed provider records, MB/TB conversion, rounding, empty results, provider failure and invalid parameter binding. The type-failure path shadows only module-local `Add-Type` and proves failure occurs before provider access. The observer also records the actual DllImport signature.
+
+No disk mutation, remote query, network access or machine configuration is involved. Synthetic provider names and rows are input data; native mapping comes from the running Windows host. Each generated artifact retains the workload function and advertises one promoted typed region; the added provider emits a method. Neither is counted as a new complete workload function, and this fixture makes no claim of observed execution inside that promoted region. Strict must reject the runtime-defined native type on both targets.
+
+This qualifies a deliberate Hybrid hosted boundary for the unchanged workflow. General Add-Type source closure, compile-time ownership of runtime-created names, native ABI/deployment certification, non-Windows portability and full-module execution remain separate work. The authored function ignores the native return code and leaves an empty mapping on failure; the fixture preserves that behavior rather than repairing the upstream source.

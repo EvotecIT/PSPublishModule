@@ -146,7 +146,12 @@
               "column": 31
             }
           ],
-          "relativePath": "Public/Computers/Get-ComputerDiskLogical.ps1"
+          "relativePath": "Public/Computers/Get-ComputerDiskLogical.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-disk-native-boundary.json",
+            "reason": "Authored runtime-created Windows PInvoke type; original/generated local mapping and offline provider contracts match on both hosts. No full-function or region execution credit."
+          }
         },
         {
           "unitId": "9d40f1b46649a4f52dafa735",
@@ -597,6 +602,7 @@
     "m29a-paging-transfer-boundaries.json",
     "m29a-external-transfer-boundaries.json",
     "m29a-exit-boundaries.json",
-    "m29a-certificate-policy-boundary.json"
+    "m29a-certificate-policy-boundary.json",
+    "m29a-disk-native-boundary.json"
   ]
 }
