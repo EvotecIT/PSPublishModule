@@ -100,6 +100,27 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(root.RetainedHostedSource);
     }
 
+    [Theory]
+    [InlineData("Write-Output 1; function Get-Later { 2 }; Get-Later")]
+    [InlineData("function Get-Blocked { exit 1 }; Get-Blocked")]
+    [InlineData("function Foo { 1 }; $function:Foo = { 2 }; Foo")]
+    public void Explain_HybridNativeScriptRootRetainsUnsupportedDeclarations(string source)
+    {
+        using var fixture = ArtifactFixture.Create(source);
+        var input = new PowerShellCompilationInputResolver().Resolve(fixture.ScriptPath,
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
+        var target = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid,
+            "net10.0", "win-x64", false, false, PowerShellCompilationExecutableOptimization.None, true);
+        var plan = new PowerShellCompilationAnalyzer().Analyze(input, PowerShellCompilationMode.Hybrid,
+            "net10.0", PowerShellCompilationResourceMode.Declared, null, null, fixture.OutputPath, target);
+        var root = Assert.Single(Assert.Single(PowerShellCompilationExplainShaper
+            .CreateFinalExplanation(input, plan, "net10.0").Files).Units,
+            static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
+        Assert.False(root.Emitted);
+        Assert.True(root.RetainedHostedSource);
+    }
+
     [Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootRunsUnchangedOfflineBaklava()
@@ -222,5 +243,69 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(new[] { "host:0", "output:0", "host:1", "output:1", "host:2", "output:2" },
             generated.StandardOutput.Split('\n', System.StringSplitOptions.RemoveEmptyEntries)
                 .Select(static line => line.TrimEnd('\r')).ToArray());
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Build_HybridNativeScriptRootPreservesOwnedFunctionDeclarations()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            param([int]$Count = 4)
+            function Invoke {
+                param([int]$Value)
+                if (($Value % 2) -eq 0) { return $Value * 2 }
+                return -1
+            }
+            function Get-A { 7 }
+            function Get_A { 8 }
+            Get-A
+            Get_A
+            for ($i = 0; $i -lt $Count; $i++) { Invoke $i }
+            """);
+        var spec = new PowerShellCompilationBuildSpec(fixture.ScriptPath, fixture.OutputPath,
+            "PowerForge.DeclaredRoot", PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid)
+        {
+            EmitSource = true,
+            TargetContract = PowerShellCompilationTargetContractService.Create(
+                PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid,
+                "net10.0", "win-x64", false, false, PowerShellCompilationExecutableOptimization.None, true)
+        };
+        spec.ExpectedDependencyLock = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(spec);
+        var input = new PowerShellCompilationInputResolver().Resolve(fixture.ScriptPath,
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
+        var plan = new PowerShellCompilationAnalyzer().Analyze(input, PowerShellCompilationMode.Hybrid,
+            "net10.0", PowerShellCompilationResourceMode.Declared, null, null, fixture.OutputPath, spec.TargetContract);
+        var compiled = PowerShellTypedExecutableCompiler.CompileHybridNativeEntry(
+            fixture.ScriptPath, plan, "net10.0", spec.SemanticProfileId);
+        Assert.Empty(compiled.LocalMethods);
+        Assert.Contains("DeclareFunction", compiled.EntryPointMethod.Source);
+        Assert.True(Assert.Single(Assert.Single(PowerShellCompilationExplainShaper
+            .CreateFinalExplanation(input, plan, "net10.0").Files).Units,
+            static item => item.Kind == PowerShellCompilationUnitKind.Script).Emitted);
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+        Assert.True(result.Succeeded, result.Error + System.Environment.NewLine + result.BuildOutput);
+        var root = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries,
+            static item => item.Name == "<script>");
+        Assert.True(root.Emitted);
+        Assert.Equal(3, root.RegionGraph!.ScriptBlocks.Count);
+        var generated = System.IO.File.ReadAllText(System.IO.Path.Combine(
+            result.GeneratedSourcePath!, "CompiledPowerShellEntry.cs"));
+        Assert.Contains("DeclareFunction", generated);
+        Assert.Contains("for (", generated);
+        Assert.Equal(System.IO.File.ReadAllText(fixture.ScriptPath), System.IO.File.ReadAllText(
+            System.IO.Path.Combine(result.GeneratedSourcePath!, "Source.ps1")));
+        foreach (var arguments in new[] { System.Array.Empty<string>(), new[] { "-Count", "0" },
+                     new[] { "-Count", "5" } })
+        {
+            var originalRun = RunProcess("pwsh", new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }
+                .Concat(arguments).ToArray());
+            var generatedRun = RunProcess(result.ArtifactPath!, arguments);
+            Assert.Equal((originalRun.ExitCode, originalRun.StandardOutput, originalRun.StandardError),
+                (generatedRun.ExitCode, generatedRun.StandardOutput, generatedRun.StandardError));
+            Assert.Equal(arguments.Length == 0 ? new[] { "7", "8", "0", "-1", "4", "-1" } :
+                    arguments[1] == "0" ? new[] { "7", "8" } : new[] { "7", "8", "0", "-1", "4", "-1", "8" },
+                generatedRun.StandardOutput.Split('\n', System.StringSplitOptions.RemoveEmptyEntries)
+                    .Select(static line => line.TrimEnd('\r')).ToArray());
+        }
     }
 }

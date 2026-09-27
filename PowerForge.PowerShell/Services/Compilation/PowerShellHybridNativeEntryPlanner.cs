@@ -24,19 +24,27 @@ internal static class PowerShellHybridNativeEntryPlanner
             .Units.SingleOrDefault(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
         if (root?.IsCompilable != true) return null;
         var ast = Parser.ParseFile(path, out _, out var errors);
+        var declarations = ast.EndBlock?.Statements.OfType<FunctionDefinitionAst>().ToArray()
+            ?? Array.Empty<FunctionDefinitionAst>();
+        var admittedCommands = new HashSet<string>(QualifiedHostedRootCommands, StringComparer.OrdinalIgnoreCase);
+        admittedCommands.UnionWith(declarations.Select(static declaration => declaration.Name));
         // Caller-frame observations need their own launcher contract. This first route
         // owns the native script frame, not the wrapper's caller identity or input pipe.
-        if (errors.Length != 0 || ast.ParamBlock?.FindAll(static node => node is CommandAst, true).Any() == true ||
+        if (errors.Length != 0 || ast.FindAll(static node => node is ParamBlockAst, true)
+                .OfType<ParamBlockAst>().Any(static block => block.FindAll(static node => node is CommandAst, true).Any()) ||
             ast.FindAll(static node => node is VariableExpressionAst variable &&
                 (variable.VariablePath.UserPath.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase) ||
                  variable.VariablePath.UserPath.Equals("PSCmdlet", StringComparison.OrdinalIgnoreCase) ||
-                 variable.VariablePath.UserPath.Equals("input", StringComparison.OrdinalIgnoreCase)), true).Any())
+                 variable.VariablePath.UserPath.Equals("input", StringComparison.OrdinalIgnoreCase) ||
+                 variable.VariablePath.IsDriveQualified &&
+                 (variable.VariablePath.DriveName.Equals("function", StringComparison.OrdinalIgnoreCase) ||
+                  variable.VariablePath.DriveName.Equals("alias", StringComparison.OrdinalIgnoreCase))), true).Any())
             return null;
         var hostedCommands = ast.EndBlock?.FindAll(static node => node is CommandAst, true)
             .OfType<CommandAst>().ToArray() ?? Array.Empty<CommandAst>();
         if (hostedCommands.Any(command => command.InvocationOperator != TokenKind.Unknown ||
                 command.Redirections.Count != 0 || command.GetCommandName() is not string name ||
-                !QualifiedHostedRootCommands.Contains(name)))
+                !admittedCommands.Contains(name)))
             return null;
         try
         {

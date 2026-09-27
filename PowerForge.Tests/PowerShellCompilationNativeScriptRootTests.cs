@@ -78,10 +78,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Theory]
-    [InlineData("function Helper { 1 }\nHelper")]
     [InlineData("enum Kind { One }\n1")]
     [InlineData("#requires -Version 7.0\n1")]
-    public void Compile_NativeScriptRootKeepsUnqualifiedDeclarationOwnersClosed(string source)
+    public void Compile_NativeScriptRootKeepsTypesAndRequirementsClosed(string source)
     {
         using var fixture = ArtifactFixture.Create(source);
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
@@ -90,6 +89,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var error = Assert.Throws<System.InvalidOperationException>(() =>
             PowerShellTypedExecutableCompiler.CompileHybridNativeEntry(fixture.ScriptPath,
                 plan, "net10.0", PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId));
-        Assert.Contains("without declarations, requirements or dependencies", error.Message);
+        Assert.Contains("without types, requirements or dependencies", error.Message);
     }
 }

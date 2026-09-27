@@ -84,16 +84,16 @@ internal static class PowerShellTypedExecutableCompiler
             .SelectMany(source => GetTopLevelFunctions(source)
                 .Select(function => new LocalDefinition(source.Path, function, GetUnit(plan, source.Path, function.Name))))
             .ToArray();
-        ValidateDefinitions(definitions);
+        ValidateDefinitions(definitions, emitTopLevelMethods: !nativeScriptEntry);
         ValidateDependencyTopLevels(parsed.Values, entryPoint);
         ValidateEntryPointDeclarationOrder(entrySource);
-        if (nativeScriptEntry && (definitions.Length != 0 || requestedSources.Length != 1 ||
+        if (nativeScriptEntry && (requestedSources.Length != 1 ||
             entrySource.Ast.UsingStatements.Count != 0 || entrySource.Ast.ScriptRequirements is not null ||
             entrySource.Ast.EndBlock?.Statements.Any(static statement => statement is TypeDefinitionAst) == true ||
             entrySource.Ast.BeginBlock is not null || entrySource.Ast.ProcessBlock is not null ||
             entrySource.Ast.DynamicParamBlock is not null ||
             entrySource.Ast.GetType().GetProperty("CleanBlock")?.GetValue(entrySource.Ast) is not null))
-            throw new InvalidOperationException("Native script-root lowering currently requires a single end-only source without declarations, requirements or dependencies.");
+            throw new InvalidOperationException("Native script-root lowering currently requires a single end-only source without types, requirements or dependencies.");
 
         var statements = entrySource.Ast.EndBlock?.Statements
             .Where(static statement => statement is not FunctionDefinitionAst && !IsTopLevelDotSource(statement))
@@ -132,7 +132,8 @@ internal static class PowerShellTypedExecutableCompiler
 
         var localMethods = new List<PowerShellCSharpMethodEmission>();
         var descriptions = new List<PowerShellCompiledMethod>();
-        foreach (var definition in definitions.OrderBy(static definition => definition.Path, PowerShellCompilationPathSafety.PathComparer)
+        foreach (var definition in (nativeScriptEntry ? Array.Empty<LocalDefinition>() : definitions)
+                     .OrderBy(static definition => definition.Path, PowerShellCompilationPathSafety.PathComparer)
                      .ThenBy(static definition => definition.Function.Extent.StartOffset))
         {
             var documentId = parsed[definition.Path].Document.DocumentId;
@@ -206,12 +207,13 @@ internal static class PowerShellTypedExecutableCompiler
         throw new InvalidOperationException($"The typed executable compilation source set must exactly match the entrypoint's contained dot-source closure; {details}.");
     }
 
-    private static void ValidateDefinitions(LocalDefinition[] definitions)
+    private static void ValidateDefinitions(LocalDefinition[] definitions, bool emitTopLevelMethods)
     {
         var duplicate = definitions.GroupBy(static definition => definition.Function.Name, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault(static group => group.Count() > 1);
         if (duplicate is not null)
             throw new InvalidOperationException($"Typed executable local function '{duplicate.Key}' is declared more than once in the source closure.");
+        if (!emitTopLevelMethods) return;
         var generatedCollision = definitions.GroupBy(static definition => PowerShellClrSymbolMapper.MapIdentifier(definition.Function.Name), StringComparer.Ordinal)
             .FirstOrDefault(static group => group.Count() > 1);
         if (generatedCollision is not null)
