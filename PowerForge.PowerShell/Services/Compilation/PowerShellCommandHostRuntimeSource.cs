@@ -5,7 +5,8 @@ internal static class PowerShellCommandHostRuntimeSource
 {
     internal static IReadOnlyDictionary<string, string> Render(
         PowerShellTypedCompilationResult typed,
-        bool requiresExecutableEntryHost = false)
+        bool requiresExecutableEntryHost = false,
+        bool requiresNativeEntryHost = false)
     {
         var sources = new Dictionary<string, string>(StringComparer.Ordinal);
         var requiresRegionHost = typed.PromotedRegions.Any(static region => region.RequiresLocalOwnershipGuard);
@@ -39,7 +40,7 @@ internal static class PowerShellCommandHostRuntimeSource
                 sources.Add(name + ".g.cs", "#nullable enable\n" + reader.ReadToEnd());
             }
         }
-        if (requiresRegionHost || typed.Methods.Any(static method => method.NativeFunctionBinding is not null))
+        if (requiresNativeEntryHost || requiresRegionHost || typed.Methods.Any(static method => method.NativeFunctionBinding is not null))
         {
             foreach (var name in new[] { "PowerShellNativeFunctionHost", "PowerShellNativeFunctionHost.Declared", "PowerShellNativeFunctionHost.OwnedDeclaration", "PowerShellNativeFunctionHost.LazyClauses", "PowerShellNativeFunctionHost.ScriptEntry", "PowerShellNativeFunctionHost.FunctionEnums", "PowerShellNativeFunctionContext", "PowerShellNativeFunctionContext.Operations",
                 "PowerShellNativeFunctionContext.Output", "PowerShellNativeFunctionContext.Members", "PowerShellNativeFunctionContext.Indexing",
@@ -58,7 +59,7 @@ internal static class PowerShellCommandHostRuntimeSource
                 sources.Add(name + ".g.cs", "#nullable enable\n" + reader.ReadToEnd());
             }
         }
-        var requiresModuleState = requiresExecutableEntryHost || requiresRegionHost || typed.Methods.Any(PowerShellModuleSessionStatePolicy.RequiresState) ||
+        var requiresModuleState = requiresNativeEntryHost || requiresExecutableEntryHost || requiresRegionHost || typed.Methods.Any(PowerShellModuleSessionStatePolicy.RequiresState) ||
             typed.PromotedRegions.Any(static region => region.RequiresPowerShellStopping) ||
             typed.Methods.Any(static method => method.NativeFunctionBinding is not null && method.RequiresPowerShellStatementErrors);
         if (requiresModuleState)

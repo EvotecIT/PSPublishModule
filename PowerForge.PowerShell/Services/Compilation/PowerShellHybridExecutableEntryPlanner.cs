@@ -21,6 +21,16 @@ internal static class PowerShellHybridExecutableEntryPlanner
         string targetFramework,
         string semanticProfileId,
         IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders)
+        => TryPlanPrebound(sourcePath, sourcePaths, plan, targetFramework, semanticProfileId, commandProviders)
+           ?? PowerShellHybridNativeEntryPlanner.TryPlan(sourcePath, sourcePaths, plan, targetFramework, semanticProfileId);
+
+    private static PowerShellTypedExecutableCompilation? TryPlanPrebound(
+        string sourcePath,
+        IReadOnlyCollection<string> sourcePaths,
+        PowerShellCompilationPlan plan,
+        string targetFramework,
+        string semanticProfileId,
+        IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders)
     {
         if (plan.Mode != PowerShellCompilationMode.Hybrid || sourcePaths.Count != 1)
             return null;

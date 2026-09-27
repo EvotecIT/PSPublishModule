@@ -18,6 +18,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         var entry = PowerShellHybridExecutableEntryPlanner.TryPlan(
             spec.SourcePath, compilationSourcePaths, plan, spec.TargetFramework,
             spec.SemanticProfileId, commandProviders);
+        var nativeEntry = entry?.EntryPointMethod.NativeFunctionBinding is not null;
         var typed = new PowerShellTypedCompilationTranspiler(commandProviders, spec.SemanticProfileId).TranspileForBinaryModule(
             compilationSourcePaths,
             "PowerForge.Compiled",
@@ -28,12 +29,14 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions: null, targetFramework: spec.TargetFramework, semanticProfileId: spec.SemanticProfileId, capabilities: capabilities);
         WriteCompiledPowerShellSource(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode,
             spec.SourcePath, compilationSourcePaths);
-        WriteBinaryHostRuntime(workspace, typed, requiresExecutableEntryHost: entry is not null);
+        WriteBinaryHostRuntime(workspace, typed, requiresExecutableEntryHost: entry is not null,
+            requiresNativeEntryHost: nativeEntry);
         if (entry is not null)
             WriteCompiledPowerShellSource(
                 Path.Combine(workspace, "CompiledPowerShellEntry.cs"),
-                PowerShellHybridExecutableEntryEmitter.GenerateSource(entry),
-                spec.SourcePath, compilationSourcePaths, includeSyntheticEntry: true);
+                nativeEntry ? PowerShellHybridNativeEntryEmitter.GenerateSource(entry, spec.SourcePath)
+                    : PowerShellHybridExecutableEntryEmitter.GenerateSource(entry),
+                spec.SourcePath, compilationSourcePaths, includeSyntheticEntry: !nativeEntry);
         File.WriteAllText(
             Path.Combine(workspace, "CompiledCmdlets.cs"),
             PowerShellBinaryCmdletSourceGenerator.Generate(typed, exportedFunctions: null, targetFramework: spec.TargetFramework),
@@ -41,14 +44,18 @@ public sealed partial class PowerShellCompilationArtifactBuilder
 
         var packagedSources = PreparePackagedSources(workspace, spec.SourcePath, compilationSourcePaths, dependencyPlan, typed);
         var parameterInitializers = PowerShellPackagedParameterBindingPolicy.Generate(spec.SourcePath, spec.TargetFramework);
-        var packagedScript = GeneratePackagedScript(spec.SourcePath, packagedSources, typed);
-        if (entry is not null)
+        // The native owner reparses exact authored text. Do not rewrite its variables,
+        // insert registrations or replace its body before hashing/native script dispatch.
+        var packagedScript = nativeEntry ? File.ReadAllText(spec.SourcePath)
+            : GeneratePackagedScript(spec.SourcePath, packagedSources, typed);
+        if (entry is not null && !nativeEntry)
             packagedScript = PowerShellHybridExecutableEntryEmitter.ComposeScript(packagedScript, spec.SourcePath, entry);
         var packagedScriptPath = Path.Combine(workspace, "Source.ps1");
         File.WriteAllText(packagedScriptPath, packagedScript, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         File.WriteAllText(
             Path.Combine(workspace, "Program.cs"),
             ReadTemplate(PackagedProgramTemplate)
+                .Replace("{{ENTRY_INVOCATION}}", PowerShellPackagedEntryInvocationSource.Render(nativeEntry))
                 .Replace("{{PARAMETERS}}", parameterInitializers.Parameters)
                 .Replace("{{SWITCH_PARAMETERS}}", parameterInitializers.SwitchParameters)
                 .Replace("{{BOOLEAN_PARAMETERS}}", parameterInitializers.BooleanParameters)

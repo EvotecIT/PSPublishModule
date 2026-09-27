@@ -118,6 +118,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             var nativeDependencyTypes = PowerShellNativeDependencyTypes.Create(nativeManifestPath, dependencyPlan, dependencyGraph);
             var plan = AnalyzeCompilationSources(compilationSourcePaths, spec.Mode, spec.TargetFramework, spec.SemanticProfileId, capabilities,
                 commandProviderInputs, nativeDependencyTypes);
+            // Artifact shaping must use the same resolved target as explain, locks
+            // and publication. Source-only analysis intentionally has no delivery target.
+            plan = new PowerShellCompilationPlan(plan.Mode, plan.Files, plan.TargetFramework,
+                plan.Dependencies, plan.DependencyGraph, targetContract);
             failurePlan = plan;
             if (plan.ParseErrorFiles > 0)
                 throw new InvalidOperationException("PowerShell source contains parser errors; no artifact was produced.");
@@ -299,6 +303,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 File.WriteAllText(
                     Path.Combine(workspace, "Program.cs"),
                     ReadTemplate(PackagedProgramTemplate)
+                        .Replace("{{ENTRY_INVOCATION}}", PowerShellPackagedEntryInvocationSource.Render(nativeEntry: false))
                         .Replace("{{PARAMETERS}}", parameterInitializers.Parameters)
                         .Replace("{{SWITCH_PARAMETERS}}", parameterInitializers.SwitchParameters)
                         .Replace("{{BOOLEAN_PARAMETERS}}", parameterInitializers.BooleanParameters)
