@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Direct try assignment capture through existing native success collector; execution separate from inventory emission.",
+  "baselineCompilerCommit": "f69181b1a20510687e229dbb1a34c237b052abed",
+  "baselineComparison": "m29a-static-value-comparison.net10.json",
+  "baselineComparisonSha256": "42e912326cb9841e1fe44932fadea4a3e458498e8cb5c94a491113cee2a734ae",
+  "baselineRetainedInventorySha256": "48448ba03fd7f2c2b668a30e72f5c4b81aaf79283e17943b105b73e491530344",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 492,
+  "packets": [
+    {
+      "packet": "pssg",
+      "functions": 282,
+      "stableUnits": 286,
+      "baselineEmitted": 257,
+      "candidateEmitted": 257,
+      "candidateExplanationSha256": "8ef94786e70f058bb1db026a57f1b2492567faab6a851d3feca61fe3878b02a5",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": [
+        {
+          "unitId": "17f55553dcb9ef7cc5e3af7f",
+          "name": "Get-WinADForestDetails",
+          "baselineEmitted": false,
+          "candidateEmitted": false,
+          "baselineRegionMembers": [
+            "__PowerForgeRegion_d713aad620217f4018cc0c47"
+          ],
+          "candidateRegionMembers": [
+            "__PowerForgeRegion_d713aad620217f4018cc0c47"
+          ],
+          "candidateCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "A loop transfer leaving native captured output requires an explicit enclosing-control-flow transfer contract.",
+              "line": 183,
+              "column": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "functions": 68,
+      "stableUnits": 69,
+      "baselineEmitted": 63,
+      "candidateEmitted": 63,
+      "candidateExplanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "functions": 66,
+      "stableUnits": 67,
+      "baselineEmitted": 61,
+      "candidateEmitted": 61,
+      "candidateExplanationSha256": "73172aaac03d1c74782e361a0716d2c2d0c14b80abae98e870ef80c8253a8ee2",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "functions": 109,
+      "stableUnits": 121,
+      "baselineEmitted": 84,
+      "candidateEmitted": 84,
+      "candidateExplanationSha256": "bb7f462c3e2d95e8a13d75c4b0bef1d70fe6098c9821d5e99f709c70769ac6c3",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "platyps",
+      "functions": 40,
+      "stableUnits": 41,
+      "baselineEmitted": 27,
+      "candidateEmitted": 27,
+      "candidateExplanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    }
+  ],
+  "candidateEmitted": 492,
+  "candidateRetained": 73,
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "8bee510a1aff54c6ddba8186443a9531df41ed817c3166abd175b65d39c040ea",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs": "bc75e18a43b26f2de5e547a7620dd82055494351b5f6f022e7a814fa5c013ab9"
+  },
+  "qualification": {
+    "testSourceSha256": "9f160ad08c29a48d75888cc3ed39fe9018035f90d5f4e496a0662da5741ffe2e",
+    "externalWorkflow": [
+      {
+        "framework": "net10.0",
+        "host": "pwsh",
+        "observations": 16,
+        "emittedClrMethod": true,
+        "usesNativeFunctionBinding": true,
+        "retainedHostedSource": false,
+        "sourceSha256": "0fdd2f4fff5ada22d2b8b0d821d32d8450ccd91a0d3f99ffca4a7ba24d935633",
+        "originalOutputSha256": "d257a9ca264d1f74158031df3b03e5edc911545eb4a88f5771b3e21a188f2c74",
+        "generatedOutputSha256": "d257a9ca264d1f74158031df3b03e5edc911545eb4a88f5771b3e21a188f2c74"
+      },
+      {
+        "framework": "net472",
+        "host": "powershell",
+        "observations": 16,
+        "emittedClrMethod": true,
+        "usesNativeFunctionBinding": true,
+        "retainedHostedSource": false,
+        "sourceSha256": "0fdd2f4fff5ada22d2b8b0d821d32d8450ccd91a0d3f99ffca4a7ba24d935633",
+        "originalOutputSha256": "d257a9ca264d1f74158031df3b03e5edc911545eb4a88f5771b3e21a188f2c74",
+        "generatedOutputSha256": "d257a9ca264d1f74158031df3b03e5edc911545eb4a88f5771b3e21a188f2c74"
+      }
+    ],
+    "newExecutedPortfolioFunctions": [],
+    "limits": [
+      "Five-packet census net10.0 only; artifact differentials on Windows PowerShell 5.1/net472 and PowerShell 7/net10.0.",
+      "GpoZaurr qualification is one external function, not full-module execution.",
+      "No AD/network/GPO operations executed; unavailable authored catch types and escaping loop transfers remain hosted."
+    ],
+    "externalSource": {
+      "repository": "https://github.com/EvotecIT/GPOZaurr",
+      "commit": "7bda3134afabbaab93fb5f21a66e2f08a9606209",
+      "relativePath": "Private/ConvertTo-XMLSecurityOptions.ps1",
+      "gitBlobSha256": "b57bc25c12995440d3908feebf6a82e2b74e6d3f2669da6d742cb3df8ba81e72",
+      "checkoutSourceSha256": "0fdd2f4fff5ada22d2b8b0d821d32d8450ccd91a0d3f99ffca4a7ba24d935633",
+      "sourceRetainedExternally": true,
+      "pinComparison": "Exact pinned Git source after checkout CRLF normalization."
+    },
+    "externalProbe": "m29a-direct-try-gpo-probe.ps1",
+    "externalProbeSha256": "c24f2834bb7970b07f49036866a2d98f448437b15fd83d070e10cc8ed32299ea",
+    "validation": {
+      "focused": {
+        "passed": 18,
+        "failed": 0,
+        "runs": [
+          {
+            "tests": 12,
+            "seconds": 24,
+            "trxSha256": "a2ec72ee2d294b2b3e08729a6977195ae9b05030b15fe61a4b96325b1371e7e7"
+          },
+          {
+            "tests": 6,
+            "seconds": 40,
+            "trxSha256": "fa3dbce001e552fcd5e6d742b75e4259c4de55229768bec73cabb117dc02181e"
+          }
+        ]
+      },
+      "net472OwnerBuild": {
+        "succeeded": true,
+        "warnings": 0,
+        "errors": 0,
+        "seconds": 4.59
+      },
+      "review": {
+        "kind": "One fresh read-only direct-try capture owner pass",
+        "actionableFindings": 0,
+        "residualGaps": [
+          "Nested direct try captures and return from catch have source inspection but no new dedicated differential cases."
+        ]
+      },
+      "externalStrict": {
+        "net10.0": "not emitted",
+        "net472": "not emitted"
+      }
+    }
+  }
+}

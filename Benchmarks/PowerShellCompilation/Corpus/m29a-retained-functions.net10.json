@@ -4,8 +4,8 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "dispositionContract": "Every function identity matches the complete per-function baseline; no method or still-retained region from the accepted object-parameter checkpoint is lost.",
-  "compilerBaselineCommit": "64a40ddd59bfc8ddc721dc2a86756645ffae797b",
+  "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
+  "compilerBaselineCommit": "f69181b1a20510687e229dbb1a34c237b052abed",
   "packets": [
     {
       "packet": "pssg",
@@ -13,7 +13,7 @@
       "functions": 282,
       "emitted": 257,
       "retained": 25,
-      "sourceExplanationSha256": "26e055e8e347fc96d2ee8453fa1bd40cdd65a72defe393456e355cb3c14173d2",
+      "sourceExplanationSha256": "8ef94786e70f058bb1db026a57f1b2492567faab6a851d3feca61fe3878b02a5",
       "functionsRetained": [
         {
           "unitId": "a1bb1dcefddec8c45377fd27",
@@ -166,10 +166,10 @@
           "causes": [
             {
               "code": "UnsupportedSyntax",
-              "featureId": "syntax.trystatement",
-              "message": "Expression 'TryStatementAst' is not yet represented by the bound pipeline.",
+              "featureId": "syntax.unsupported",
+              "message": "A loop transfer leaving native captured output requires an explicit enclosing-control-flow transfer contract.",
               "line": 183,
-              "column": 30
+              "column": 13
             }
           ]
         },
@@ -2184,11 +2184,11 @@
     }
   ],
   "compilerSourceHashes": {
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeTypeArgumentPolicy.cs": "6f5f10bf4e5e0eb7e0ef763b427a72cc3ac7287a7bc0139cb9dd61dc54fa3c1e",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "b80da55a91e8b2909a235219689317096aa920fa5a1388605097738bef64f096"
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "8bee510a1aff54c6ddba8186443a9531df41ed817c3166abd175b65d39c040ea",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs": "bc75e18a43b26f2de5e547a7620dd82055494351b5f6f022e7a814fa5c013ab9"
   },
-  "dispositionComparison": "m29a-static-value-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "64a40ddd59bfc8ddc721dc2a86756645ffae797b",
+  "dispositionComparison": "m29a-direct-try-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "f69181b1a20510687e229dbb1a34c237b052abed",
   "emitted": 492,
   "retained": 73
 }

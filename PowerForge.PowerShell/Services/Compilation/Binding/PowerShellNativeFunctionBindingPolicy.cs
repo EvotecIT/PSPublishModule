@@ -137,6 +137,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
                searchNestedScriptBlocks: false) is not null ||
            RequiresNativeStatementArrayCapture(function) ||
            RequiresNativeSwitchOutputCapture(function) ||
+           RequiresNativeDirectTryCapture(function) ||
            RequiresNativeDirectForEachCapture(function) ||
            function.Body.Find(node => node is ConvertExpressionAst conversion &&
                conversion.Type.TypeName.GetReflectionType() is { } targetType &&
@@ -391,6 +392,13 @@ internal static class PowerShellNativeFunctionBindingPolicy
     private static bool RequiresNativeSwitchOutputCapture(FunctionDefinitionAst function)
         => function.Body.Find(static node => node is AssignmentStatementAst
             { Operator: TokenKind.Equals, Right: SwitchStatementAst }, searchNestedScriptBlocks: false) is not null;
+
+    // Direct try assignment uses the same native success-record collector as
+    // @(try ...). Destination conversion and failed-RHS rollback stay owned by
+    // the assignment; catch/finally remain owned by the existing try binder.
+    private static bool RequiresNativeDirectTryCapture(FunctionDefinitionAst function)
+        => function.Body.Find(static node => node is AssignmentStatementAst
+            { Operator: TokenKind.Equals, Right: TryStatementAst }, searchNestedScriptBlocks: false) is not null;
 
     // A direct foreach assigned to [Array] is statement-output capture, not
     // a CLR array expression. Select native binding so the existing collector
