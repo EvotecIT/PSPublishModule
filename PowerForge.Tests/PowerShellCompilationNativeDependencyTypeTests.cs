@@ -78,6 +78,62 @@ public sealed class PowerShellCompilationNativeDependencyTypeTests
     }
 
     [Fact]
+    public void DeclaredContainersAndOutputMetadata_StayAdvisoryAndNativeOwned()
+    {
+        using var fixture = new DependencyFixture();
+        var input = new PowerShellCompilationInputResolver().Resolve(fixture.Manifest,
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
+        var planner = new PowerShellCompilationDependencyPlanner();
+        var catalog = PowerShellNativeDependencyTypes.Create(fixture.Manifest, planner.Analyze(input),
+            planner.AnalyzeGraph(input, targetFramework: "net10.0"));
+        const string text = """
+            function Read-DeclaredList {param([Collections.Generic.List[Generic.External.Binary.Dependency.GenericValueSource]]$Value) $Value}
+            function Read-DeclaredMap {param([Collections.Generic.Dictionary[string,Collections.Generic.List[Generic.External.Binary.Dependency.GenericValueSource]]]$Value) $Value}
+            function Read-DeclaredSet {param([Collections.Generic.HashSet[Generic.External.Binary.Dependency.GenericValueSource]]$Value) $Value}
+            function Read-DeclaredArray {param([Generic.External.Binary.Dependency.GenericValueSource[]]$Value) $Value}
+            function Read-AdvisoryOutput {[OutputType([Generic.External.Binary.Dependency.GenericValueSource])]param() 7}
+            function Read-MissingElement {param([Collections.Generic.List[Undeclared.Missing]]$Value) $Value}
+            """;
+        var source = PowerShellSourceParser.Parse(text, fixture.Source);
+        var authored = (TypeConstraintAst)source.SyntaxRoot.Find(
+            static node => node is TypeConstraintAst, searchNestedScriptBlocks: true)!;
+        foreach (var loaded in new[] { false, true })
+        {
+            if (loaded) System.Reflection.Assembly.LoadFrom(fixture.Assembly);
+            _output.WriteLine($"Container fixture load requested: {loaded}; authored CLR shape resolved: {authored.TypeName.GetReflectionType() is not null}");
+            foreach (var framework in new[] { "net10.0", "net472" })
+            {
+                var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { source }, framework,
+                    PowerShellCompilationCapabilities.HybridModule, catalog);
+                Assert.Equal(5, result.Emitted.Methods.Length);
+                Assert.All(result.Emitted.Methods, method =>
+                    Assert.DoesNotContain("typeof(global::Generic.External.Binary.Dependency", method.Source, StringComparison.Ordinal));
+                var output = source.SyntaxRoot.FindAll(static node => node is FunctionDefinitionAst, true)
+                    .OfType<FunctionDefinitionAst>().Single(function => function.Name == "Read-AdvisoryOutput");
+                Assert.True(PowerShellOutputTypeSemanticPolicy.TryResolve(output.Body, framework,
+                    PowerShellCompilationCapabilities.HybridModule, out var metadata, out _, out _, catalog));
+                Assert.Null(metadata.SemanticType);
+                Assert.False(Assert.Single(metadata.Declarations).UseClrTypes);
+                Assert.Equal("Generic.External.Binary.Dependency.GenericValueSource", metadata.MetadataTypeName);
+                foreach (var capabilities in new[]
+                {
+                    PowerShellCompilationCapabilities.TypedLibrary,
+                    PowerShellCompilationCapabilities.BinaryModule,
+                    PowerShellCompilationCapabilities.HybridModule & ~PowerShellCompilationCapability.NativeFunctionBinding,
+                    PowerShellCompilationCapabilities.HybridModule & ~PowerShellCompilationCapability.PowerShellHostTypes
+                })
+                {
+                    Assert.False(catalog.Qualifies(authored.TypeName, capabilities));
+                    // Already-loaded OutputType metadata has a separate existing advisory
+                    // path; disabling this catalog must still reject every container body.
+                    var restricted = new PowerShellSemanticCompilationPipeline().Compile(new[] { source }, framework, capabilities, catalog);
+                    Assert.All(restricted.Emitted.Methods, method => Assert.Equal("Read_AdvisoryOutput", method.GeneratedName));
+                }
+            }
+        }
+    }
+
+    [Fact]
     public void DeclaredManagedTypes_RejectChangedBytesAndDoNotInferUndeclaredTypes()
     {
         using var fixture = new DependencyFixture();

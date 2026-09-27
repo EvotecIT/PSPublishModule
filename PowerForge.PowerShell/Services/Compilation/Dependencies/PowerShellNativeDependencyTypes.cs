@@ -21,7 +21,37 @@ internal sealed class PowerShellNativeDependencyTypes
     internal bool Qualifies(ITypeName name, PowerShellCompilationCapability capabilities)
         => capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&
-           name is TypeName && string.IsNullOrEmpty(name.AssemblyName) && _names.Contains(name.FullName);
+           IsClosedShape(name, capabilities, out var containsDependency) && containsDependency;
+
+    // These unconstrained containers share the ordinary generated type policy. Their
+    // element identities stay with the host; we never construct a foreign CLR Type.
+    private bool IsClosedShape(ITypeName name, PowerShellCompilationCapability capabilities, out bool containsDependency)
+    {
+        containsDependency = false;
+        if (!string.IsNullOrEmpty(name.AssemblyName)) return false;
+        if (name is ArrayTypeName array)
+            return array.Rank == 1 && array.ElementType is not ArrayTypeName &&
+                   IsClosedShape(array.ElementType, capabilities, out containsDependency);
+        if (name is GenericTypeName generic)
+        {
+            if (!string.IsNullOrEmpty(generic.TypeName.AssemblyName)) return false;
+            var definition = new[] { typeof(List<>), typeof(Dictionary<,>), typeof(HashSet<>) }
+                .SingleOrDefault(candidate => candidate.GetGenericArguments().Length == generic.GenericArguments.Count &&
+                    (candidate.FullName!.Split('`')[0].Equals(generic.TypeName.FullName, StringComparison.OrdinalIgnoreCase) ||
+                     candidate.FullName!.Split('`')[0].Substring("System.".Length).Equals(generic.TypeName.FullName, StringComparison.OrdinalIgnoreCase)));
+            if (definition is null || !PowerShellGeneratedTypePolicy.IsSupportedContainerDefinition(definition, "net472")) return false;
+            foreach (var argument in generic.GenericArguments)
+            {
+                if (!IsClosedShape(argument, capabilities, out var dependency)) return false;
+                containsDependency |= dependency;
+            }
+            return true;
+        }
+        if (name is not TypeName) return false;
+        if (_names.Contains(name.FullName)) return containsDependency = true;
+        return name.GetReflectionType() is { } known &&
+               PowerShellCompilationParameterTypePolicy.CanUseInMethod(known, "net472", capabilities);
+    }
 
     internal bool IsUsedBy(FunctionDefinitionAst function, PowerShellCompilationCapability capabilities)
         => function.Body.Find(node => node is TypeExpressionAst expression && Qualifies(expression.TypeName, capabilities) ||

@@ -91,7 +91,8 @@ internal sealed partial class PowerShellSemanticBinder
                 capabilities,
                 out var outputTypeContract,
                 out var outputTypeErrorNode,
-                out var outputTypeError))
+                out var outputTypeError,
+                document.NativeDependencyTypes))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB1201",

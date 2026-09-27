@@ -107,7 +107,8 @@ internal static class PowerShellLocalCallSemanticBinder
             capabilities,
             out var outputTypeContract,
             out _,
-            out _);
+            out _,
+            document.NativeDependencyTypes);
         PowerShellClosedLocalCollectionFactoryPolicy.TryCreate(function, symbol, parameters, out var closedCollectionFactory);
         var declaredReturnType = closedCollectionFactory is null
             ? outputTypeContract.SemanticType

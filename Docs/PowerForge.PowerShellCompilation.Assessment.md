@@ -1850,3 +1850,66 @@ PowerShell 7/net10 and Windows PowerShell 5.1/net472. The net8 build is not runt
 qualification. Generic/nested types, arbitrary imports, constrained-access native
 lowering, external OutputType expansion, complete platyPS API execution and
 performance remain outside this wave. The broader goal stays active.
+
+
+## Milestone 29a: closed managed containers and model metadata
+
+The shared metadata-only dependency catalog now admits bounded closed native
+shapes: List, Dictionary, HashSet and one-dimensional arrays over declared
+managed identities and already-supported known leaves. Assembly-qualified names,
+external generic definitions, unresolved elements, and direct jagged or
+multidimensional arrays stay outside this catalog. Native function binding and
+PowerShell host capabilities are required. The compiler does not load dependency
+code, construct foreign CLR types or add generated assembly references.
+
+Declared dependency OutputType attributes use the shared advisory metadata owner
+before reflection lookup. Authored names, mixed CLR type lists, repeated
+attributes and parameter-set metadata survive without seeding CLR return
+inference. The catalog reaches semantic binding, local-call signatures and
+structural metadata analysis through the existing pipeline.
+
+The exact unchanged platyPS 0.14.2 package now emits all 40 methods on both
+reviewed-lock Hybrid targets. NewModuleLandingPage and ConvertPsObjectsToMamlModel
+match 14 original/generated observations per Windows host: real CommandInfo/help
+conversion with eight option combinations, output metadata, generic parameter
+identity, actual landing-page creation and refresh, caller list/model identity
+and authored errors. The prior six managed-type functions retain all 21 matching
+observations per host. Upstream sources and the two managed DLLs remain external
+verification inputs because exact-version redistribution licensing is unresolved.
+
+A separate five-function synthetic module matches ten observations per host for
+List, nested Dictionary/List, HashSet, array identity and caller mutation,
+pipeline binding, invalid inputs and mixed/repeated/parameter-set OutputType.
+Those functions are contract probes and add no pinned portfolio coverage.
+Generated artifacts contain 40 and five complete methods respectively. Their
+builds report existing NU1510 package and CS8321 unused-local warnings; the
+net472/net8 compiler compatibility builds have zero warnings and errors.
+
+The selected validation passed five owner tests, seven existing output-metadata
+checks and a fresh one-test controlled unloaded/loaded run. An earlier load-state
+attempt failed because its capability assertion incorrectly required every
+already-loaded advisory OutputType function to remain hosted. The corrected test
+requires catalog exclusion and rejection of every container body when its native
+capabilities are disabled; production source did not change. The fresh TRX
+records an unresolved authored generic shape before explicit known-fixture
+loading and a resolved shape afterward, preserving native emission and advisory
+return behavior on both targets. One independent read-only review found no
+actionable defects. No aggregate compiler gate was run.
+
+The complete fixed five-packet net10 explanation preserves all 565 function IDs
+and names against the preceding 541-method ledger. The complete unit count stays
+584; methods rise to 543 with 22 retained. No emitted method or still-retained
+region is lost. Six retained functions have justified hosted proof, leaving 16
+unresolved boundaries. The
+[durable comparison and runtime evidence](../Benchmarks/PowerShellCompilation/Corpus/m29a-managed-container-metadata.net10.json)
+and [drivers](../Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/platyPS/ManagedTypes/README.md)
+record reproduction and exact hashes.
+
+This qualification covers Windows x64 PowerShell 7/net10 and Windows PowerShell
+5.1/net472. The net8 build is compatibility evidence, not runtime proof; the
+whole net472 portfolio was not refreshed. Hybrid C# methods still use PowerShell
+for native binding and authored runtime operations. Eight named platyPS workflows
+across the two managed-type waves are execution-qualified; all API behavior,
+performance, arbitrary imports, foreign runtime-free types and provider effects
+are not. No AD, network, UI, installer, PR, merge or release operation occurs.
+The broader support-gap goal remains active.

@@ -298,7 +298,7 @@ The Management-owned enum cast family is qualified for unchanged PSSharedGoods G
 
 
 - [x] Qualify ordinary non-CLR throws through the existing Hybrid invocation owner, independent of validation attributes. Basic/advanced error metadata, arbitrary values and cleanup retain both-host proof. Unchanged PowerInfoblox search/DNS-view functions emit and match 33 offline cases per host; no query network runs. Focused 27/27 plus metadata/lifecycle 8/8, net472 build and independent review passed. Same-input inventory is 502/565 with no losses; Strict non-CLR throws remain closed.
-- [ ] Continue the 24 retained-function boundaries from the current inventory (six justified hosted, 18 unresolved). Separate unavailable authored/dependency types and unsafe provider effects from reusable syntax/storage/lifecycle gaps; require a real safe workflow and bounded semantic proof before changing admission. Do not count an emitted method as an executed or runtime-free workflow.
+- [ ] Continue the 22 retained-function boundaries from the current inventory (six justified hosted, 16 unresolved). Separate unavailable authored/dependency types and unsafe provider effects from reusable syntax/storage/lifecycle gaps; require a real safe workflow and bounded semantic proof before changing admission. Do not count an emitted method as an executed or runtime-free workflow.
 
 
 - [x] Unify admitted native references around actual variable cells and qualify instance methods. Optimized/unoptimized/mixed storage, receiver/argument order, errors, native constraints, callback-retained references and module AllScope have both-host proof. Unchanged Initialize-ModulePortable matches ten owned local module-graph cases per host without downloads. Production compatibility 32/32, final retention/AllScope 2/2, net472 build and independent review passed. Same-input inventory reaches 504/565 with no losses; Test-ComputerPort is emission-only and Strict reference admission is unchanged.
@@ -375,3 +375,15 @@ The Management-owned enum cast family is qualified for unchanged PSSharedGoods G
   CLR references. Generic MAML containers and unresolved OutputType metadata remain
   separate qualification work. Continue CIM, AD/native-helper and UI/provider
   boundaries only with target availability and a safe real workflow.
+
+
+- [x] Qualify closed root-declared managed containers and advisory OutputType
+  metadata in the shared native type/metadata owners. The final two unchanged
+  platyPS functions now emit and execute: 40/40 complete methods, with 14 new
+  matching observations per Windows host and all 21 prior observations preserved.
+  Synthetic container identity/mutation/binding probes match ten observations per
+  host. Focused contracts, explicit unloaded/loaded proof, clean net472/net8
+  compiler builds and one independent review support this boundary. The same-input
+  portfolio reaches 543/565 with zero method or still-retained-region loss.
+  Six of the 22 retained functions have justified hosted proof; 16 remain open.
+  Whole API execution and runtime-free dependency types are not implied.

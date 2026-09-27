@@ -19,7 +19,8 @@ internal static class PowerShellOutputTypeSemanticPolicy
         PowerShellCompilationCapability capabilities,
         out Contract contract,
         out Ast? errorNode,
-        out string? error)
+        out string? error,
+        PowerShellNativeDependencyTypes? nativeDependencyTypes = null)
     {
         contract = Contract.None;
         errorNode = null;
@@ -34,7 +35,7 @@ internal static class PowerShellOutputTypeSemanticPolicy
         var declarations = new List<PowerShellOutputTypeDeclaration>();
         foreach (var attribute in attributes)
         {
-            if (!TryResolve(attribute, targetFramework, capabilities, out var resolved, out errorNode, out error))
+            if (!TryResolve(attribute, targetFramework, capabilities, out var resolved, out errorNode, out error, nativeDependencyTypes))
                 return false;
             declarations.AddRange(resolved.Declarations);
             if (attributes.Length == 1)
@@ -59,7 +60,8 @@ internal static class PowerShellOutputTypeSemanticPolicy
         PowerShellCompilationCapability capabilities,
         out Contract contract,
         out Ast? errorNode,
-        out string? error)
+        out string? error,
+        PowerShellNativeDependencyTypes? nativeDependencyTypes = null)
     {
         contract = Contract.None;
         errorNode = null;
@@ -95,6 +97,20 @@ internal static class PowerShellOutputTypeSemanticPolicy
         var types = attribute.PositionalArguments.OfType<TypeExpressionAst>().ToArray();
         if (types.Length == attribute.PositionalArguments.Count)
         {
+            var dependencyTypes = types.Select(type => nativeDependencyTypes?.Qualifies(type.TypeName, capabilities) == true).ToArray();
+            if (dependencyTypes.Any(static dependency => dependency) &&
+                capabilities.HasFlag(PowerShellCompilationCapability.AdvisoryOutputTypeMetadata))
+            {
+                // The native declaration keeps the authored Type-valued attribute. This
+                // neutral metadata does not assert a CLR return type or add a reference.
+                var names = types.Select((type, index) => dependencyTypes[index] ? type.TypeName.FullName : Resolve(type.TypeName)?.FullName).ToArray();
+                if (names.All(static name => !string.IsNullOrWhiteSpace(name)))
+                {
+                    contract = new Contract(null, names.Length == 1 && parameterSetName is null ? names[0]! : string.Empty,
+                        new[] { new PowerShellOutputTypeDeclaration(names.Select(static name => name!).ToArray(), parameterSetName, useClrTypes: false) });
+                    return true;
+                }
+            }
             var resolved = types.Select(static type => Resolve(type.TypeName)).ToArray();
             if (resolved.All(static type => type is not null && !string.IsNullOrWhiteSpace(type.FullName)))
             {

@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "e3b4c9a5848f105a5b26661fa70586ff132d1e76",
+  "compilerBaselineCommit": "b076ba5158255e5ec2a40b230158d85529f443cd",
   "packets": [
     {
       "packet": "pssg",
@@ -591,81 +591,34 @@
       "packet": "platyps",
       "functions": 40,
       "stableUnits": 41,
-      "emitted": 38,
-      "retained": 2,
-      "sourceExplanationSha256": "f77580541d19dd5341ba0a8f5b4cf740be4c10300d645abf705b4353fcf13aa4",
+      "emitted": 40,
+      "retained": 0,
+      "sourceExplanationSha256": "2a9b3bedaa3e7c253d3719aa060f36a0a44bb852ba8246b07aed27e1b6dd116b",
       "gains": [
-        "New-MarkdownHelp",
-        "Get-MarkdownMetadata",
-        "New-YamlHelp",
-        "GetParserMode",
-        "SetOnlineVersionUrlLink",
-        "ConvertMamlModelToMarkdown"
-      ],
-      "functionsRetained": [
         {
           "unitId": "c601d4895e012344d1339884",
-          "name": "NewModuleLandingPage",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$Module' uses authored type 'System.Collections.Generic.List[Markdown.MAML.Model.MAML.MamlCommand]', which cannot be resolved in the selected compilation environment.",
-              "line": 2020,
-              "column": 9
-            }
-          ],
-          "relativePath": "platyPS.psm1"
+          "name": "NewModuleLandingPage"
         },
         {
           "unitId": "71cfc9b5f84adf546472a3fc",
-          "name": "ConvertPsObjectsToMamlModel",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "parameter.metadata",
-              "message": "OutputType metadata requires literal names or resolvable CLR types representable on this target.",
-              "line": 2518,
-              "column": 5
-            }
-          ],
-          "relativePath": "platyPS.psm1"
+          "name": "ConvertPsObjectsToMamlModel"
         }
-      ]
+      ],
+      "functionsRetained": []
     }
   ],
   "compilerSourceHashes": {
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellConversionSemanticBinder.cs": "ddc1b0ea7fc624fd4bef24031f0573b789446df300951bd6d9e4e26ca8b2c9ec",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "86d93febf0685f071a0a2da8a6ef50c65f952d71b62280fc6b8a8b539d641578",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "f17f8653b904eefeb09b02642a75006b0e9c6cd8d77d6a6d62f7a236e0853270",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "f2f52819e2577c39602da2fca01dda8428d97e9f6ba85e3eeb66f1a5d5667d9c",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Program.cs": "6338852eb7dce35285ae666f04c2ef74708e2ad72b46ee405b991a4dc87e00aa",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.cs": "6d1670ed6439070d3d0896f64433701905508c6262d0859b097296853ca512d9",
-    "PowerForge.PowerShell/Services/Compilation/FrontEnd/ParsedSourceDocument.cs": "619ed44f5562b0a79d47cc01a5571eeceb540dde1af3af9617e5bfa2f45a902d",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationAnalyzer.Semantics.cs": "579beb587b96c3f22cd22c4def1b4493c6563662d68cbf3d15ac34b06823c066",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationAnalyzer.Sources.cs": "d822f5b8e9f8c23b7c432fa56ef08608d76efd7589a47a98822d40f2b872053a",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationAnalyzer.cs": "d1b7f01b8c19543fc3c865c10d65a320d3bd11611c611a4c015af00beaa42219",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationArtifactBuilder.Validation.cs": "172f15f436585525634aaca0aa1a1bf1da9fdaae6cbe1398fbebe2a22b2d3465",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationArtifactBuilder.cs": "22cbdc815d7d8fdebbbb04de8224cd17faea9b2ac4a7ed0788e360d74bc696c7",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationExplainShaper.cs": "c251bc7b10fc097db4758f915ff84a2909c7d571118ae5de97628aa3bf767c3c",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellHybridFunctionCollisionResolver.cs": "46eb0122dce3830ba1deee071ebafcf724f743f8bb5b0f19d4b9bff071ce5400",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellSemanticCompilationPipeline.cs": "091a93fa0fa04fe59cadab3349fadf68a69667a186eb23be6f24aefa9ff60c92",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellTypedCompilationTranspiler.cs": "23f56c6db54cfcce360c2103830e76e2a78e7785cdd63a5e3da6940bd5ea9727",
-    "PowerForge.PowerShell/Services/Compilation/Dependencies/PowerShellNativeDependencyTypes.cs": "d66624f3376f7106e9df8ffbafee0b1eaf92298ef4dbb482c207228dab7238aa",
-    "PowerForge.Tests/PowerShellCompilationNativeDependencyTypeTests.cs": "7d9254d822633df4fca9644117807a033db0e766b43fbc306445a96b4e9ff230"
+    "PowerForge.PowerShell/Services/Compilation/Dependencies/PowerShellNativeDependencyTypes.cs": "863d2f6f0a057e2d2b536a341323f7b8b501263b1f08c7915597361280adc110",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellOutputTypeSemanticPolicy.cs": "d7d1afe7cd3166fbdcceb4e8a26a6d541fa92bee007975b221343f8dd1a2a8dc",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellLocalCallSemanticBinder.cs": "f14c2811b401ee19f5910eb318895cef5aba47ee4a83bf8213a0b4b8ea375e80",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.cs": "f4536d13937016691b0e6fc3b610e7dd837837234fa8149a699d286ea27fe298",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationAnalyzer.Metadata.cs": "3b217740dabb7f4fb17b507a65a2999adbe324d2dd27268ec369b80359dbead5",
+    "PowerForge.Tests/PowerShellCompilationNativeDependencyTypeTests.cs": "a59fecd797faf4e7344e9ff34e9267544759d6fbd1330132940c06042c0d5122"
   },
-  "dispositionComparison": "m29a-managed-dependency-types.net10.json",
-  "baselineRetainedInventoryCommit": "e3b4c9a5848f105a5b26661fa70586ff132d1e76",
-  "emitted": 541,
-  "retained": 24,
+  "dispositionComparison": "m29a-managed-container-metadata.net10.json",
+  "baselineRetainedInventoryCommit": "b076ba5158255e5ec2a40b230158d85529f443cd",
+  "emitted": 543,
+  "retained": 22,
   "hostedBoundaryEvidence": [
     "m29a-paging-transfer-boundaries.json",
     "m29a-external-transfer-boundaries.json",
