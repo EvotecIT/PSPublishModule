@@ -318,6 +318,87 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Fact]
     [Trait("Category", "PowerShellCompilerGate")]
+    public void Build_HybridNativeScriptRootPreservesVerboseDebugAndInformationOutput()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            for ($i = 0; $i -lt 2; $i++) {
+                Write-Verbose "verbose:$i" -Verbose
+                Write-Debug "debug:$i" -Debug
+                Write-Information "information:$i" -InformationAction Continue
+                Write-Output "output:$i"
+            }
+            """);
+        var spec = new PowerShellCompilationBuildSpec(fixture.ScriptPath, fixture.OutputPath,
+            "PowerForge.OtherStreamsRoot", PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid)
+        {
+            EmitSource = true,
+            TargetContract = PowerShellCompilationTargetContractService.Create(
+                PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid,
+                "net10.0", "win-x64", false, false, PowerShellCompilationExecutableOptimization.None, true)
+        };
+        spec.ExpectedDependencyLock = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(spec);
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+        Assert.True(result.Succeeded, result.Error + System.Environment.NewLine + result.BuildOutput);
+        var root = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries);
+        Assert.True(root.Emitted);
+        Assert.True(root.RuntimeRouted);
+        Assert.Contains("for (", System.IO.File.ReadAllText(System.IO.Path.Combine(
+            result.GeneratedSourcePath!, "CompiledPowerShellEntry.cs")));
+        var original = RunProcess("pwsh", "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath);
+        var generated = RunProcess(result.ArtifactPath!);
+        Assert.Equal((original.ExitCode, original.StandardOutput, original.StandardError),
+            (generated.ExitCode, generated.StandardOutput, generated.StandardError));
+        Assert.Equal(new[]
+        {
+            "VERBOSE: verbose:0", "DEBUG: debug:0", "information:0", "output:0",
+            "VERBOSE: verbose:1", "DEBUG: debug:1", "information:1", "output:1"
+        }, generated.StandardOutput.Split('\n', System.StringSplitOptions.RemoveEmptyEntries)
+            .Select(static line => line.TrimEnd('\r')).ToArray());
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Build_HybridNativeScriptRootPreservesErrorActionContinuationAndStop()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            param([switch]$Stop)
+            Write-Output 'before'
+            if ($Stop) { Write-Error 'stopped' -ErrorAction Stop }
+            else { Write-Error 'continuing' -ErrorAction Continue }
+            Write-Output 'after'
+            """);
+        var spec = new PowerShellCompilationBuildSpec(fixture.ScriptPath, fixture.OutputPath,
+            "PowerForge.ErrorRoot", PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid)
+        {
+            EmitSource = true,
+            TargetContract = PowerShellCompilationTargetContractService.Create(
+                PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid,
+                "net10.0", "win-x64", false, false, PowerShellCompilationExecutableOptimization.None, true)
+        };
+        spec.ExpectedDependencyLock = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(spec);
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+        Assert.True(result.Succeeded, result.Error + System.Environment.NewLine + result.BuildOutput);
+        var root = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries);
+        Assert.True(root.Emitted);
+        Assert.True(root.RuntimeRouted);
+        foreach (var arguments in new[] { System.Array.Empty<string>(), new[] { "-Stop" } })
+        {
+            var original = RunProcess("pwsh", new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }
+                .Concat(arguments).ToArray());
+            var generated = RunProcess(result.ArtifactPath!, arguments);
+            Assert.Equal(original.ExitCode, generated.ExitCode);
+            Assert.Equal(original.StandardOutput, generated.StandardOutput);
+            Assert.Contains(arguments.Length == 0 ? "continuing" : "stopped", original.StandardError);
+            Assert.Contains(arguments.Length == 0 ? "continuing" : "stopped", generated.StandardError);
+            Assert.Equal(arguments.Length == 0 ? 0 : 1, generated.ExitCode);
+            Assert.Equal(arguments.Length == 0 ? new[] { "before", "after" } : new[] { "before" },
+                generated.StandardOutput.Split('\n', System.StringSplitOptions.RemoveEmptyEntries)
+                    .Select(static line => line.TrimEnd('\r')).ToArray());
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootPreservesOwnedFunctionDeclarations()
     {
         using var fixture = ArtifactFixture.Create("""

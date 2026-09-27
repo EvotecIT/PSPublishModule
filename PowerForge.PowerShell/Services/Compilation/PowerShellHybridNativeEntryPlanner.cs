@@ -6,7 +6,11 @@ namespace PowerForge;
 internal static class PowerShellHybridNativeEntryPlanner
 {
     private static readonly HashSet<string> QualifiedHostedRootCommands =
-        new(StringComparer.OrdinalIgnoreCase) { "Write-Output", "Write-Host", "Write-Warning" };
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "Write-Output", "Write-Host", "Write-Warning", "Write-Verbose", "Write-Debug", "Write-Information",
+            "Write-Error"
+        };
 
     internal static PowerShellTypedExecutableCompilation? TryPlan(string sourcePath,
         IReadOnlyCollection<string> sourcePaths, PowerShellCompilationPlan plan,
@@ -51,8 +55,7 @@ internal static class PowerShellHybridNativeEntryPlanner
             var compiled = PowerShellTypedExecutableCompiler.CompileHybridNativeEntry(path, plan, targetFramework, semanticProfileId);
             var method = compiled.EntryPointMethod;
             // Reuse canonical semantics rather than widening the scalar route's command list.
-            // Qualified output/host/warning sites retain PowerShell command lookup
-            // and native stream behavior;
+            // Qualified stream sites retain PowerShell command lookup and routing;
             // parent module/runtime state and provider effects remain outside this route.
             // Native lowering also rejects declaration/dependency owners.
             return method.NativeFunctionBinding is not null && compiled.LocalMethods.Length == 0 &&
