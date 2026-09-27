@@ -238,7 +238,7 @@ function Get-ValidatedCaptureTarget {
     $targets = foreach ($file in $files) {
         $target = [string]$file.target
         $segments = @($target.Split('/', [StringSplitOptions]::RemoveEmptyEntries))
-        if ($target -notmatch '^/[A-Za-z0-9._/-]+$' -or
+        if ($target -notmatch '^/[A-Za-z0-9._@/-]+$' -or
             $target -eq '/' -or
             $target.Contains('//', [StringComparison]::Ordinal) -or
             @($segments).Where({ $_ -in @('.', '..') }).Count -gt 0) {
@@ -387,10 +387,21 @@ function Get-ExpectedCaptureSudoersCommand {
         if ($comparisonSudoersCommand -match '(?<![A-Za-z0-9_.-])sudo(?![A-Za-z0-9_.-])') {
             throw "Privileged recovery capture command must contain exactly one canonical sudo -n prefix: $command"
         }
-        if ($sudoersCommand -match '^/[A-Za-z0-9._/-]+$') {
+        if ($sudoersCommand -match '^/[A-Za-z0-9._@/-]+$') {
             throw "Privileged recovery capture command must include fixed arguments: $command"
         }
         [string]$approvedCommand = ''
+        # Exact cat reads may extract a deployment revision with this fixed sed form.
+        # Only the cat invocation is privileged; the capture runtime uses pipefail.
+        $catMatch = [regex]::Match($sudoersCommand, "^/usr/bin/cat (?<path>/[A-Za-z0-9._@/-]+)(?: \| sed -n -E 's/\^(?:[A-Za-z_][A-Za-z0-9_]*)=\(\[0-9a-fA-F\]\{40\}\)\$/\\1/p')?$")
+        if ($catMatch.Success) {
+            $catPath = $catMatch.Groups['path'].Value
+            if ($catPath -eq '/' -or $catPath.Contains('//') -or @($catPath.Split('/')).Where({ $_ -in @('.', '..') }).Count -gt 0) {
+                throw "Privileged cat capture must use an exact canonical path: $command"
+            }
+            $commands.Add("/usr/bin/cat $catPath")
+            continue
+        }
         if (-not $approvedPrivilegedCaptureCommands.TryGetValue($sudoersCommand, [ref]$approvedCommand)) {
             throw "Privileged recovery capture command is not in the approved read-only command set: $command"
         }

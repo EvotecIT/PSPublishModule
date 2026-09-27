@@ -686,7 +686,7 @@ internal static partial class WebCliCommandHandlers
             return null;
         }
 
-        if (normalized.Any(static character => !(IsAsciiLetterOrDigit(character) || character is '/' or '.' or '_' or '-' or '*' or '?' or '[' or ']')))
+        if (normalized.Any(static character => !(IsAsciiLetterOrDigit(character) || character is '/' or '.' or '_' or '-' or '@' or '*' or '?' or '[' or ']')))
         {
             errors.Add($"{field} contains unsupported characters.");
             return null;

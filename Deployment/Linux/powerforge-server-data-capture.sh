@@ -33,7 +33,7 @@ assert_database_name() {
 
 assert_absolute_path() {
   local path="$1"
-  [[ "$path" =~ ^/[A-Za-z0-9._/-]+$ ]] || die "unsafe absolute path: $path"
+  [[ "$path" =~ ^/[A-Za-z0-9._@/-]+$ ]] || die "unsafe absolute path: $path"
   [[ "$path" != '/' && "$path" != *'//'* && "$path" != */ ]] || die "path must be a dedicated exact path: $path"
   [[ ! "$path" =~ (^|/)\.{1,2}(/|$) ]] || die "path contains a traversal segment: $path"
 }

@@ -442,8 +442,8 @@ internal static partial class WebCliCommandHandlers
         var stdoutPath = Path.Combine(commandOutputDirectory, $"{id}.out.txt");
         var stderrPath = Path.Combine(commandOutputDirectory, $"{id}.err.txt");
         var execution = RunProcessCaptureText(
-            local ? "sh" : sshCommand,
-            local ? ["-lc", command.Command ?? string.Empty] : BuildSshArguments(target, command.Command ?? string.Empty));
+            local ? "bash" : sshCommand,
+            local ? ["-o", "pipefail", "-lc", command.Command ?? string.Empty] : BuildSshArguments(target, "bash -o pipefail -lc " + ShellQuote(command.Command ?? string.Empty)));
 
         File.WriteAllText(stdoutPath, execution.Stdout);
         File.WriteAllText(stderrPath, execution.Stderr);
@@ -566,7 +566,7 @@ internal static partial class WebCliCommandHandlers
                 !path.Split('/', StringSplitOptions.RemoveEmptyEntries)
                     .Any(static segment => segment is "." or "..") &&
                 path.All(character => IsAsciiLetterOrDigit(character) ||
-                character is '/' or '.' or '_' or '-' ||
+                character is '/' or '.' or '_' or '-' or '@' ||
                 (allowWildcards && character is '*' or '?' or '[' or ']'));
             if (!valid)
                 throw new InvalidOperationException($"Capture path contains unsupported characters: {path}");
