@@ -442,8 +442,8 @@ internal static partial class WebCliCommandHandlers
         var stdoutPath = Path.Combine(commandOutputDirectory, $"{id}.out.txt");
         var stderrPath = Path.Combine(commandOutputDirectory, $"{id}.err.txt");
         var execution = RunProcessCaptureText(
-            local ? "bash" : sshCommand,
-            local ? ["-o", "pipefail", "-lc", command.Command ?? string.Empty] : BuildSshArguments(target, "bash -o pipefail -lc " + ShellQuote(command.Command ?? string.Empty)));
+            local ? "/usr/bin/env" : sshCommand,
+            local ? BuildCaptureShellArguments(command.Command ?? string.Empty) : BuildSshArguments(target, BuildCaptureShellCommand(command.Command ?? string.Empty)));
 
         File.WriteAllText(stdoutPath, execution.Stdout);
         File.WriteAllText(stderrPath, execution.Stderr);
@@ -469,6 +469,14 @@ internal static partial class WebCliCommandHandlers
         return $"{commandIndex:D4}-{id}";
     }
 
+    // Local publisher accounts own their homes. Never load shell startup files or
+    // noninteractive shell hooks around a privileged capture operation.
+    internal static string[] BuildCaptureShellArguments(string command)
+        => ["-u", "BASH_ENV", "-u", "ENV", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "/bin/bash", "--noprofile", "--norc", "-p", "-o", "pipefail", "-c", command];
+
+    internal static string BuildCaptureShellCommand(string command)
+        => "/usr/bin/env " + string.Join(" ", BuildCaptureShellArguments(command).Select(ShellQuote));
+
     private static ProcessResult CaptureRemoteTarArchive(
         string sshCommand,
         string target,
@@ -477,7 +485,7 @@ internal static partial class WebCliCommandHandlers
         bool local)
     {
         var script = BuildRemoteTarScript(files);
-        return RunProcessCaptureBinary(local ? "sh" : sshCommand, local ? ["-lc", script] : BuildSshArguments(target, script), outputPath);
+        return RunProcessCaptureBinary(local ? "/usr/bin/env" : sshCommand, local ? BuildCaptureShellArguments(script) : BuildSshArguments(target, BuildCaptureShellCommand(script)), outputPath);
     }
 
     private static ProcessResult CaptureRemoteEncryptedTarArchive(
@@ -489,7 +497,7 @@ internal static partial class WebCliCommandHandlers
         bool local)
     {
         var script = BuildRemoteEncryptedTarScript(files, recipient);
-        return RunProcessCaptureBinary(local ? "sh" : sshCommand, local ? ["-lc", script] : BuildSshArguments(target, script), outputPath);
+        return RunProcessCaptureBinary(local ? "/usr/bin/env" : sshCommand, local ? BuildCaptureShellArguments(script) : BuildSshArguments(target, BuildCaptureShellCommand(script)), outputPath);
     }
 
     internal static string BuildRemoteTarScript(PowerForgeServerManagedFile[] files)
@@ -578,8 +586,8 @@ internal static partial class WebCliCommandHandlers
     private static string ShellQuote(string value)
         => "'" + value.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
 
-    private static string[] BuildSshArguments(string target, string command)
-        => new[] { "-o", "ConnectTimeout=30", target, $"sh -lc {ShellQuote(command)}" };
+    internal static string[] BuildSshArguments(string target, string command)
+        => new[] { "-o", "ConnectTimeout=30", target, $"/bin/sh -c {ShellQuote(command)}" };
 
     private static ProcessResult RunProcessCaptureText(string fileName, IReadOnlyList<string> args)
     {

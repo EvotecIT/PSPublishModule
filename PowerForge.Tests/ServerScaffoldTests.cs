@@ -197,6 +197,11 @@ public sealed class ServerScaffoldTests
         Assert.Contains("\"sshKnownHostsFile\": \"/etc/powerforge/repository-ssh/github_known_hosts\"", manifest, StringComparison.Ordinal);
         Assert.Contains("\"refCaptureCommandId\": \"static-source-ref\"", manifest, StringComparison.Ordinal);
         var manifestNode = JsonNode.Parse(manifest)!;
+        var startup = Assert.Single(manifestNode["paths"]!.AsArray(), entry =>
+            entry!["path"]!.GetValue<string>() == "/var/lib/powerforge-example-backup/.bashrc");
+        Assert.Equal("root", startup!["owner"]!.GetValue<string>());
+        Assert.Equal("644", startup["mode"]!.GetValue<string>());
+        Assert.StartsWith("#", files["deploy/linux/powerforge-example-backup.bashrc"], StringComparison.Ordinal);
         Assert.Equal(EngineRef, manifestNode["repositories"]![0]!["ref"]!.GetValue<string>());
         Assert.Contains("deployment.json", manifest, StringComparison.Ordinal);
         Assert.DoesNotContain("{40,64}", manifest, StringComparison.Ordinal);

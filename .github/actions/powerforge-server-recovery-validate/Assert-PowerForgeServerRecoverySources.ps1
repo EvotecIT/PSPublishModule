@@ -394,7 +394,7 @@ function Get-ExpectedCaptureSudoersCommand {
         # Privileged reads are limited to deployment revision markers, never raw files.
         # The extractor is fixed and only emits a hexadecimal commit, with pipefail
         # enforced by the capture runtime. The command must hydrate a repository ref.
-        $catMatch = [regex]::Match($sudoersCommand, "^/usr/bin/cat (?<path>/var/www/(?:[A-Za-z0-9_@.-]+/)+current/\.deploy-info\.env) \| sed -n -E 's/\^(?:content_[A-Za-z0-9_]+_commit|engine_commit)=\(\[0-9a-fA-F\]\{40\}\)\$/\\1/p'$")
+        $catMatch = [regex]::Match($sudoersCommand, "^/usr/bin/cat (?<path>/var/www/(?:[A-Za-z0-9_@.-]+/)+current/\.deploy-info\.env) \| /usr/bin/sed -n -E 's/\^(?:content_[A-Za-z0-9_]+_commit|engine_commit)=\(\[0-9a-fA-F\]\{(?:40|64)\}(?:\|\[0-9a-fA-F\]\{(?:40|64)\})?\)\$/\\1/p'$")
         if ($catMatch.Success) {
             $catPath = $catMatch.Groups['path'].Value
             if (@($catPath.Split('/')).Where({ $_ -in @('.', '..') }).Count -gt 0) {
@@ -563,6 +563,27 @@ if (-not [string]::IsNullOrWhiteSpace($expectedEncryptedCommand)) {
         throw 'Encrypted recovery capture requires exactly one managed capture account with an explicit home directory.'
     }
     $captureAccountHome = ([string]$captureAccounts[0].home).TrimEnd('/')
+    $captureShell = [string]$captureAccounts[0].shell
+    if ($captureShell -notin @('/bin/sh', '/usr/bin/sh', '/bin/bash', '/usr/bin/bash')) {
+        throw 'Inbound recovery capture requires an explicit supported sh or bash account shell.'
+    }
+    if ($captureShell -in @('/bin/bash', '/usr/bin/bash')) {
+        $startupSources = @($resolvedEntries).Where({
+            [string]::Equals([string]$_.Target, $captureAccountHome + '/.bashrc', [StringComparison]::Ordinal)
+        })
+        if ($startupSources.Count -ne 1 -or
+            -not [string]::Equals([string]$startupSources[0].Entry.kind, 'file', [StringComparison]::OrdinalIgnoreCase) -or
+            -not [string]::Equals([string]$startupSources[0].Entry.owner, 'root', [StringComparison]::Ordinal) -or
+            -not [string]::Equals([string]$startupSources[0].Entry.group, 'root', [StringComparison]::Ordinal) -or
+            ([string]$startupSources[0].Entry.mode) -notin @('644', '0644')) {
+            throw 'Inbound bash recovery requires one managed root-owned mode-644 .bashrc file.'
+        }
+        foreach ($startupLine in (Get-Content -LiteralPath $startupSources[0].Path)) {
+            if ($startupLine -notmatch '^[ \t]*(?:#.*)?$') {
+                throw 'The inbound recovery .bashrc source must contain only comments and blank lines.'
+            }
+        }
+    }
     $captureAccountKeyDirectory = $captureAccountHome + '/.ssh'
     $authorizedKeysTarget = $captureAccountKeyDirectory + '/authorized_keys'
     $rootControlledCaptureDirectories = @(@($Manifest.paths) | Where-Object {

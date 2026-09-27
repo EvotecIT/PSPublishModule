@@ -103,6 +103,7 @@ internal static partial class WebCliCommandHandlers
             [$"{deployRoot}/powerforge-{options.SiteId}-backup.sudoers"] = BuildScaffoldBackupSudoers(options, manifest),
             [$"{deployRoot}/powerforge-{options.SiteId}-authorized_keys.example"] = $"restrict ssh-ed25519 REPLACE_WITH_DEPLOYMENT_PUBLIC_KEY powerforge-{options.SiteId}-deploy\n",
             [$"{deployRoot}/powerforge-{options.SiteId}-backup-authorized_keys.example"] = $"restrict ssh-ed25519 REPLACE_WITH_BACKUP_PUBLIC_KEY powerforge-{options.SiteId}-backup\n",
+            [$"{deployRoot}/powerforge-{options.SiteId}-backup.bashrc"] = "# Root-controlled recovery account startup. No executable shell hooks.\n",
             [$"{deployRoot}/ONBOARDING.md"] = BuildScaffoldOnboarding(options),
             [BuildScaffoldWebsitePath(options, "deploy/apache.conf")] = BuildScaffoldApacheHttp(options),
             [BuildScaffoldWebsitePath(options, "deploy/apache-ssl.conf")] = BuildScaffoldApacheHttps(options)

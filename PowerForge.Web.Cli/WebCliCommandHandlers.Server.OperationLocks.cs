@@ -46,8 +46,8 @@ internal static partial class WebCliCommandHandlers
 
         var command = BuildRemoteOperationLockCommand(locks, waitSecondsPerLock);
         var process = CreateProcess(
-            local ? "sh" : sshCommand,
-            local ? ["-lc", command] : BuildSshArguments(target, command));
+            local ? "/usr/bin/env" : sshCommand,
+            local ? BuildCaptureShellArguments(command) : BuildSshArguments(target, BuildCaptureShellCommand(command)));
         process.StartInfo.RedirectStandardInput = true;
         process.StartInfo.RedirectStandardOutput = true;
         process.StartInfo.RedirectStandardError = true;

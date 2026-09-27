@@ -37,7 +37,12 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
         bool includeOptionalEncryptedCapture = false,
         bool allEncryptedCaptureOptional = false,
         bool usePublisherEngine = false,
-        bool publisherAtDifferentRef = false)
+        bool publisherAtDifferentRef = false,
+        string captureShell = "/bin/sh",
+        bool includeCaptureStartup = false,
+        string captureStartupOwner = "root",
+        string captureStartupMode = "644",
+        string captureStartupContent = "# No executable recovery startup hooks.\n")
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-recovery-source-security-" + Guid.NewGuid().ToString("N"));
         var workspace = Path.Combine(root, "caller");
@@ -63,6 +68,7 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
             File.WriteAllText(
                 Path.Combine(workspace, "deploy", "linux", "backup-authorized_keys"),
                 authorizedKeyContent + "\n");
+            File.WriteAllText(Path.Combine(workspace, "deploy", "linux", "backup.bashrc"), captureStartupContent);
             if (additionalSudoers is not null)
                 File.WriteAllText(Path.Combine(workspace, "deploy", "linux", "extra.sudoers"), additionalSudoers);
             if (alternateManagedSudoersTarget is not null)
@@ -183,6 +189,17 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
                 });
             }
 
+            if (includeCaptureStartup)
+                managedPaths.Add(new
+                {
+                    path = $"/var/lib/{CaptureUser}/.bashrc",
+                    source = "/srv/caller/deploy/linux/backup.bashrc",
+                    kind = "file",
+                    owner = captureStartupOwner,
+                    group = captureStartupOwner,
+                    mode = captureStartupMode
+                });
+
             var encryptedFiles = allEncryptedCaptureOptional
                 ? new[] { new { target = "/var/lib/example/optional", required = false } }
                 : includeOptionalEncryptedCapture
@@ -221,7 +238,7 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
             var manifest = new
             {
                 accounts = includeCapture && includeCaptureAccount
-                    ? new[] { new { name = CaptureUser, home = $"/var/lib/{CaptureUser}" } }
+                    ? new[] { new { name = CaptureUser, home = $"/var/lib/{CaptureUser}", shell = captureShell } }
                     : null,
                 repositories,
                 paths = managedPaths,
