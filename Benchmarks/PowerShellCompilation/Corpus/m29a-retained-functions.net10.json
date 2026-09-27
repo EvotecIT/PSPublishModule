@@ -59,7 +59,12 @@
               "column": 29
             }
           ],
-          "relativePath": "Private/Get-LocalComputerSid.ps1"
+          "relativePath": "Private/Get-LocalComputerSid.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-local-sid-boundary.json",
+            "reason": "Windows AccountManagement local-SAM provider and active-host assembly boundary; real read and failure behavior match on both hosts. No compiled execution credit."
+          }
         },
         {
           "unitId": "a6e8a57a6342a4000f55ea16",
@@ -619,6 +624,7 @@
     "m29a-exit-boundaries.json",
     "m29a-certificate-policy-boundary.json",
     "m29a-disk-native-boundary.json",
-    "m29a-ad-data-boundary.json"
+    "m29a-ad-data-boundary.json",
+    "m29a-local-sid-boundary.json"
   ]
 }
