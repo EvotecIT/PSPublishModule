@@ -5,37 +5,16 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "7cb410fed77b5ae4a3b68347826b9a60ae25ed55",
+  "compilerBaselineCommit": "a5e8a5180ddbe1b498aff38de57af73f7dca9d62",
   "packets": [
     {
       "packet": "pssg",
       "functions": 282,
       "stableUnits": 286,
-      "emitted": 262,
-      "retained": 20,
-      "sourceExplanationSha256": "ca36311c25537c6b8b2bdb75152c1198cef0cc6a4f83e9c1041583df2ad9b306",
+      "emitted": 263,
+      "retained": 19,
+      "sourceExplanationSha256": "38bf0858539f9280f34716a62207c79314b8322a4cd3c119671f3c506d48f856",
       "functionsRetained": [
-        {
-          "unitId": "a1bb1dcefddec8c45377fd27",
-          "name": "Get-ObjectEnumValues",
-          "relativePath": "Private/Deprecated/Objects/Get-ObjectEnumValues.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [
-            "__PowerForgeRegion_a2ab09bf8daa2ad7bc654e26",
-            "__PowerForgeRegion_6c10f595d5d3150bd741dae1"
-          ],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.pipeline",
-              "message": "Expression 'PipelineAst' is not yet represented by the bound pipeline.",
-              "line": 25,
-              "column": 5
-            }
-          ]
-        },
         {
           "unitId": "bde03b869be356b032686101",
           "name": "Get-ComputerSMBInfo",
@@ -1622,7 +1601,7 @@
       "stableUnits": 41,
       "emitted": 27,
       "retained": 13,
-      "sourceExplanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea",
+      "sourceExplanationSha256": "f3a8acb7feecc018adfe9d5daf63170ea3af30eed2b718cb1426d9e2346c005f",
       "functionsRetained": [
         {
           "unitId": "62d3e169b4f7eb162da5636b",
@@ -1907,19 +1886,20 @@
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Declarations.cs": "bf75cfb5377e463fc4c5636ce948ffba779d9e258e7e6cbb19d1b8ff0cb723c8",
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.cs": "18c0f89fcace664b27b2327086d3195382d7cd648f10e27bbdd9b2e995f5a19b",
     "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellBoundOptimizer.cs": "e288f476ff4434ad0f8d6af0a1df46b42afe378103dcaf1dcd70dea2ef132b79",
-    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellStatementErrorCallPass.cs": "603df39b43621e314fa287b39adb5ca8ad8b876b3b4a050de4ab166ad399b92e",
+    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellStatementErrorCallPass.cs": "14a556345cb31501013a77983edf826124c7384fd0c50580335b0dcf52fc7336",
     "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.LoopTransfers.cs": "f9ee11e23f5f4df7a299bf3d873ae4ed99e71b9227d30b9a7a8ebb6535a5a8c3",
     "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.OutputCapture.cs": "7df1703fecafeb77afe28b9fe00b8d63ad0f97f35fdaea3aa913fe08b7837f54",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellControlFlowBindingPolicy.cs": "e0942912848695e188823e2921e57d7e1990939bd02b2d0c5285773be334e12b",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.OutputCapture.cs": "6ec5a58fd2eba8f92d648a1a017efe6b02b75f072791201de75dce538796974f",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs": "b7c0460f8dd9f8646bd27707b29e749d148d18dc48f7af76fda41cffdcecf853",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs": "4553e416ca876b8da169fbe31b742a71cda4c48a16c1f1399e0ac5adccd986f5",
     "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundOutputCaptureStatement.cs": "fe0fcebb5390383faef1d73a7f5cbc41df33370d4b938c72d47ef9cc13a7cbb4",
     "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundStatementRewriter.cs": "2b6846dabcb6a89a75649e72df90e77c90e084df8db63908b8f9408ffb3c1775",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredOutputCaptureStatement.cs": "89bda7c779d5313c595b59435091fcde6f977d116c266bad68c0703b5cae9897",
-    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.cs": "f52a1b42b13a62928850c58bb712beb08eaf540ef7a68c889ef82aaab5a5eaca"
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.cs": "f52a1b42b13a62928850c58bb712beb08eaf540ef7a68c889ef82aaab5a5eaca",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellCommandRegionSemanticBinder.cs": "15f3bb88806cd0529637cfbaf1a8aee585d9177bfab8f3f28a9b3551e6b3e0bb"
   },
-  "dispositionComparison": "m29a-captured-loops-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "7cb410fed77b5ae4a3b68347826b9a60ae25ed55",
-  "emitted": 505,
-  "retained": 60
+  "dispositionComparison": "m29a-method-pipelines-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "a5e8a5180ddbe1b498aff38de57af73f7dca9d62",
+  "emitted": 506,
+  "retained": 59
 }

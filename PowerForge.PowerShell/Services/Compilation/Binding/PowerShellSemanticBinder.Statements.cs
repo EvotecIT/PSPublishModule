@@ -31,8 +31,10 @@ internal sealed partial class PowerShellSemanticBinder
             : BindStatementCore(document, statement, symbols, functions, diagnostics, isTerminal,
             targetFramework, capabilities, allowNonTerminalSuccessOutput, nonTerminalSuccessOutputType);
         if (bound is null) return null;
-        // Native pipeline compilation owns the complete statement's error and status route.
-        if (bound is PowerShellBoundCommandRegionStatement { NativeSourcePath: not null }) return bound;
+        // Native pipeline compilation owns its error and status route, including
+        // direct returned records. Routing an escaping pipeline error again would
+        // append it twice to the native function's ErrorVariable.
+        if (PowerShellCommandRegionSemanticBinder.OwnsNativeStatementErrors(bound)) return bound;
         var nativeSuccessStatus = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)
             ? PowerShellNativeStatementStatusPolicy.OnCompletion(statement, bound,
                 _semanticProfile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51)

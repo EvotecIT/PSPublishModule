@@ -41,8 +41,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.NotNull(complete.RegionGraph);
         Assert.DoesNotContain(hybrid.Methods, static method => method.SourceName == "Read-SuppressedPipeline");
         Assert.DoesNotContain(hybrid.Methods, static method => method.SourceName == "Read-QualifiedSuppressedPipeline");
-        Assert.DoesNotContain(hybrid.Methods, static method => method.SourceName == "Read-ParenthesizedProducerPipeline");
-        Assert.Equal(2, hybrid.PromotedRegions.Count(static region => region.SourceName == "Read-ParenthesizedProducerPipeline"));
+        var producer = Assert.Single(hybrid.Methods, static method => method.SourceName == "Read-ParenthesizedProducerPipeline");
+        Assert.NotNull(producer.NativeFunctionBinding);
 
         var runtimeFree = transpiler.TranspileForBinaryModule(new[] { fixture.ScriptPath }, "Generated.CompletePipelineStrict", "Methods", "net10.0");
         Assert.Single(runtimeFree.Methods, static method => method.SourceName == "Read-TypedValue");
@@ -57,7 +57,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
-    public void CompletePipeline_PinnedEnumMapRetainsTypedContinuationOwnershipAndMutation(string framework, string host)
+    public void CompletePipeline_PinnedEnumMapUsesNativePipelineOwnershipAndMutation(string framework, string host)
     {
         var workflow = CompletePipelineWorkflows[0];
         var path = FindCompleteConversionWorkflow(workflow.Path);
@@ -68,10 +68,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries);
-        Assert.False(unit.EmittedClrMethod);
-        Assert.False(unit.UsesNativeFunctionBinding);
-        Assert.Equal(2, unit.PromotedTypedRegions);
-        Assert.True(unit.RetainedHostedSource);
+        Assert.True(unit.EmittedClrMethod);
+        Assert.True(unit.UsesNativeFunctionBinding);
+        Assert.False(unit.RetainedHostedSource);
         const string probe = """
             foreach($type in 'System.DayOfWeek','System.ConsoleColor') {
                 $map=Get-ObjectEnumValues -enum $type
@@ -146,13 +145,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.NotNull(result.Manifest);
-        Assert.Equal(4, result.Manifest.CompiledMethods);
+        Assert.Equal(5, result.Manifest.CompiledMethods);
         var units = result.Manifest.UnitDispositionLedger!.Entries;
         var enumUnit = Assert.Single(units, static unit => unit.Name == "Get-ObjectEnumValues");
-        Assert.False(enumUnit.EmittedClrMethod);
-        Assert.False(enumUnit.UsesNativeFunctionBinding);
-        Assert.Equal(2, enumUnit.PromotedTypedRegions);
-        Assert.True(enumUnit.RetainedHostedSource);
+        Assert.True(enumUnit.EmittedClrMethod);
+        Assert.True(enumUnit.UsesNativeFunctionBinding);
+        Assert.False(enumUnit.RetainedHostedSource);
         Assert.All(units.Where(static unit => unit.Name != "Get-ObjectEnumValues"), unit =>
         {
             Assert.True(unit.EmittedClrMethod, unit.Name);

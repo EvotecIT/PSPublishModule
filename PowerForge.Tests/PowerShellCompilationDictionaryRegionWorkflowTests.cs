@@ -30,27 +30,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             "PinnedEnumHashtableMethods",
             framework,
             PowerShellCompilationCapabilities.HybridModule);
-        var regions = typed.PromotedRegions.OrderBy(static region => region.StartOffset).ToArray();
-        Assert.True(regions.Length == 2,
-            "Promoted: " + regions.Length + Environment.NewLine +
-            string.Join(Environment.NewLine, typed.Diagnostics.Select(static item => item.Code + ": " + item.Message)) + Environment.NewLine +
-            string.Join(Environment.NewLine, typed.RegionCandidates.Select(static item =>
-                item.StartLine + "-" + item.EndLine + " inputs=" +
-                string.Join(",", item.InputLocals.Select(static local => local.Name + ":" + local.TypeName)) + " " +
-                item.DecisionCode + ": " + item.Reason)));
-        Assert.Equal(new[] { 24, 29 }, regions.Select(static region => region.StartLine));
-        Assert.True(regions[0].RequiresLocalOwnershipGuard);
-        Assert.Equal("System.Collections.Hashtable", regions[0].ReturnType);
-        var initialized = Assert.Single(regions[0].ContinuationLocals);
-        Assert.Equal("enumValues", initialized.Name, ignoreCase: true);
-        Assert.False(initialized.HasTypeConstraint);
-        Assert.False(regions[1].RequiresLocalOwnershipGuard);
-        Assert.Equal("System.Collections.Hashtable", regions[1].ReturnType);
-        var input = Assert.Single(regions[1].InputLocals);
-        Assert.Equal("enumValues", input.Name, ignoreCase: true);
-        Assert.Equal(initialized.TypeName, input.TypeName);
-        Assert.False(input.HasTypeConstraint);
-        Assert.Empty(regions[1].ContinuationLocals);
+        var complete = Assert.Single(typed.Methods);
+        Assert.NotNull(complete.NativeFunctionBinding);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -60,9 +41,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(2, result.Manifest!.PromotedTypedRegions);
-        Assert.Equal(2, Assert.Single(result.Manifest.UnitDispositionLedger!.Entries,
-            static entry => entry.Name == "Get-ObjectEnumValues").PromotedTypedRegions);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        var entry = Assert.Single(result.Manifest.UnitDispositionLedger!.Entries,
+            static entry => entry.Name == "Get-ObjectEnumValues");
+        Assert.True(entry.EmittedClrMethod);
+        Assert.True(entry.UsesNativeFunctionBinding);
+        Assert.False(entry.RetainedHostedSource);
 
         const string probe = """
             $ErrorActionPreference = 'Continue'

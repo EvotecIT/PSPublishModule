@@ -51,7 +51,7 @@ internal sealed class PowerShellStatementErrorCallPass : IPowerShellSemanticPass
                 if (rewritten is PowerShellBoundIfStatement lifecycle &&
                     lifecycle.Clauses.All(static clause => clause.Condition is PowerShellBoundNativeLifecycleExpression))
                     return rewritten;
-                if (alreadyProtected) return rewritten;
+                if (alreadyProtected || PowerShellCommandRegionSemanticBinder.OwnsNativeStatementErrors(rewritten)) return rewritten;
                 var callsErrorHost = PowerShellSemanticAnalyzer.EnumerateDirectExpressions(rewritten)
                     .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
                     .OfType<PowerShellBoundInvocationExpression>().Any(call => selected.Contains(call.Target.StableKey));

@@ -4,6 +4,13 @@ namespace PowerForge;
 
 internal static class PowerShellCommandRegionSemanticBinder
 {
+    /// <summary>Identifies statements whose native pipeline already owns error routing.</summary>
+    internal static bool OwnsNativeStatementErrors(PowerShellBoundStatement statement)
+        => statement is PowerShellBoundCommandRegionStatement { NativeSourcePath: not null } or
+            PowerShellBoundReturnStatement { Expression: PowerShellBoundNativeCommandExpression { PreserveReturnRecords: true } } or
+            PowerShellBoundStreamWriteStatement { Kind: PowerShellStreamCommandKind.Success, UsesNativeInvocation: true,
+                Message: PowerShellBoundNativeCommandExpression { PreserveReturnRecords: true } };
+
     internal static bool IsBackground(PipelineAst pipeline)
         => pipeline.GetType().GetProperty("Background")?.GetValue(pipeline) is true;
 
@@ -45,32 +52,7 @@ internal static class PowerShellCommandRegionSemanticBinder
     internal static bool RequiresNativePipelineBinding(PipelineAst pipeline)
         => pipeline.PipelineElements.Count > 1 &&
            pipeline.PipelineElements.Any(static element => element is CommandAst) &&
-           !BeginsWithTypedInvocationCandidate(pipeline) &&
            !TerminatesInExplicitSuccessStreamSink(pipeline);
-
-    /// <summary>
-    /// Preserves the established typed-continuation candidate when an invocation supplies a downstream
-    /// hosted pipeline. Transparent parentheses do not change that ownership decision. The semantic binder
-    /// still decides whether the invocation is actually compilable; otherwise the path remains fail-closed.
-    /// </summary>
-    private static bool BeginsWithTypedInvocationCandidate(PipelineAst pipeline)
-    {
-        Ast syntax = pipeline.PipelineElements[0];
-        while (true)
-        {
-            switch (syntax)
-            {
-                case CommandExpressionAst command:
-                    syntax = command.Expression;
-                    continue;
-                case ParenExpressionAst { Pipeline: PipelineAst { PipelineElements.Count: 1 } innerPipeline }:
-                    syntax = innerPipeline.PipelineElements[0];
-                    continue;
-                default:
-                    return syntax is InvokeMemberExpressionAst;
-            }
-        }
-    }
 
     /// <summary>
     /// Keeps explicit success-stream suppression under its existing fail-closed contract instead of
