@@ -81,6 +81,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("Get-ChildItem", "win-x64")]
     [InlineData("& 'Write-Output' 'x'", "win-x64")]
     [InlineData("Write-Output 'x' > output.txt", "win-x64")]
+    [InlineData("Write-Host 'x' 6>&1", "win-x64")]
+    [InlineData("Write-Warning 'x'", "win-x64")]
     [InlineData("param([int]$Count = 3) $Count + 1", "linux-x64")]
     public void Explain_HybridNativeScriptRootRetainsUnqualifiedOwners(string source, string runtimeIdentifier)
     {
@@ -141,5 +143,84 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             (generated.ExitCode, generated.StandardOutput, generated.StandardError));
         var lines = generated.StandardOutput.Split('\n', System.StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(21, lines.Length);
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Build_HybridNativeScriptRootRunsUnchangedOfflineQuineWithHostedWriteHost()
+    {
+        var statementFixtureRoot = System.IO.Path.GetDirectoryName(FindStatementErrorFixtureProject())!;
+        var sourcePath = System.IO.Path.GetFullPath(System.IO.Path.Combine(statementFixtureRoot,
+            "..", "PowerShellCompilationExternalQuine", "Quine.ps1"));
+        using var fixture = ArtifactFixture.Create(System.IO.File.ReadAllText(sourcePath));
+        Assert.Equal(System.IO.File.ReadAllBytes(sourcePath), System.IO.File.ReadAllBytes(fixture.ScriptPath));
+        var spec = new PowerShellCompilationBuildSpec(fixture.ScriptPath, fixture.OutputPath,
+            "PowerForge.Quine", PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid)
+        {
+            EmitSource = true, SingleFile = false, SelfContained = false,
+            TargetContract = PowerShellCompilationTargetContractService.Create(
+                PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid,
+                "net10.0", "win-x64", false, false, PowerShellCompilationExecutableOptimization.None, true)
+        };
+        spec.ExpectedDependencyLock = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(spec);
+        var input = new PowerShellCompilationInputResolver().Resolve(fixture.ScriptPath,
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
+        var plan = new PowerShellCompilationAnalyzer().Analyze(input, PowerShellCompilationMode.Hybrid,
+            "net10.0", PowerShellCompilationResourceMode.Declared, null, null, fixture.OutputPath, spec.TargetContract);
+        Assert.True(Assert.Single(Assert.Single(PowerShellCompilationExplainShaper
+            .CreateFinalExplanation(input, plan, "net10.0").Files).Units).Emitted);
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+        Assert.True(result.Succeeded, result.Error + System.Environment.NewLine + result.BuildOutput);
+        var root = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries);
+        Assert.True(root.Emitted);
+        Assert.False(root.RetainedHostedSource);
+        Assert.True(root.RuntimeRouted);
+        Assert.Equal(System.IO.File.ReadAllText(sourcePath), System.IO.File.ReadAllText(
+            System.IO.Path.Combine(result.GeneratedSourcePath!, "Source.ps1")));
+        Assert.Contains("CompiledNativeScriptEntry", System.IO.File.ReadAllText(
+            System.IO.Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShellEntry.cs")));
+        Assert.Contains("CompiledNativeScriptEntry]::Create", System.IO.File.ReadAllText(
+            System.IO.Path.Combine(result.GeneratedSourcePath!, "Program.cs")));
+        var original = RunProcess("pwsh", "-NoProfile", "-NonInteractive", "-File", sourcePath);
+        var generated = RunProcess(result.ArtifactPath!);
+        Assert.Equal(0, original.ExitCode);
+        Assert.Equal((original.ExitCode, original.StandardOutput, original.StandardError),
+            (generated.ExitCode, generated.StandardOutput, generated.StandardError));
+        Assert.Equal(2, generated.StandardOutput.Split('\n', System.StringSplitOptions.RemoveEmptyEntries).Length);
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Build_HybridNativeScriptRootPreservesInterleavedHostAndSuccessOutput()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            for ($i = 0; $i -lt 3; $i++) {
+                Write-Host "host:$i"
+                Write-Output "output:$i"
+            }
+            """);
+        var spec = new PowerShellCompilationBuildSpec(fixture.ScriptPath, fixture.OutputPath,
+            "PowerForge.InterleavedRoot", PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid)
+        {
+            EmitSource = true,
+            TargetContract = PowerShellCompilationTargetContractService.Create(
+                PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid,
+                "net10.0", "win-x64", false, false, PowerShellCompilationExecutableOptimization.None, true)
+        };
+        spec.ExpectedDependencyLock = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(spec);
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+        Assert.True(result.Succeeded, result.Error + System.Environment.NewLine + result.BuildOutput);
+        var root = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries);
+        Assert.True(root.Emitted);
+        Assert.True(root.RuntimeRouted);
+        Assert.Contains("for (", System.IO.File.ReadAllText(System.IO.Path.Combine(
+            result.GeneratedSourcePath!, "CompiledPowerShellEntry.cs")));
+        var original = RunProcess("pwsh", "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath);
+        var generated = RunProcess(result.ArtifactPath!);
+        Assert.Equal((original.ExitCode, original.StandardOutput, original.StandardError),
+            (generated.ExitCode, generated.StandardOutput, generated.StandardError));
+        Assert.Equal(new[] { "host:0", "output:0", "host:1", "output:1", "host:2", "output:2" },
+            generated.StandardOutput.Split('\n', System.StringSplitOptions.RemoveEmptyEntries)
+                .Select(static line => line.TrimEnd('\r')).ToArray());
     }
 }
