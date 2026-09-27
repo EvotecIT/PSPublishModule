@@ -149,15 +149,22 @@ if ($IncludeExamples) {
 }
 
 $version = $null
+# The website catalog shows this text on project cards and hub pages, so use the module's own description
+# instead of a placeholder about website artifacts.
+$description = 'Build, sign, version, and publish PowerShell modules to the PowerShell Gallery.'
 if (Test-Path -LiteralPath $psd1Path -PathType Leaf) {
-    $version = (Import-PowerShellDataFile -Path $psd1Path).ModuleVersion.ToString()
+    $moduleData = Import-PowerShellDataFile -Path $psd1Path
+    $version = $moduleData.ModuleVersion.ToString()
+    if (-not [string]::IsNullOrWhiteSpace([string] $moduleData.Description)) {
+        $description = ([string] $moduleData.Description).Trim()
+    }
 }
 
 $commit = (& git -C $repoRoot rev-parse HEAD).Trim()
 $manifest = [ordered]@{
     slug = $slug
     name = $moduleName
-    description = 'PSPublishModule website artifacts for the Evotec multi-project hub.'
+    description = $description
     mode = 'hub-full'
     contentMode = 'hybrid'
     status = 'active'
