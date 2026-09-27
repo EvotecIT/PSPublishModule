@@ -1,0 +1,673 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Evidence-backed hosted boundary for caller-scoped break and script/host exit",
+  "compilerCommit": "3f3a8cc39acb1be95fe2d699e843a3e06cf786de",
+  "compilerSourceChanged": false,
+  "portfolio": {
+    "functions": 565,
+    "emitted": 519,
+    "retained": 46,
+    "newCompleteFunctions": 0,
+    "newExecutedCompiledWorkloadFunctions": 0,
+    "retainedInventory": "m29a-retained-functions.net10.json",
+    "retainedInventorySha256": "ae251aa89dcc020d2d08abe75566c5a7f67e5e0a53e85807dfac26a0bc2bf6f2"
+  },
+  "functions": [
+    {
+      "packet": "pssg",
+      "unitId": "23f772789cacbab249c153b5",
+      "name": "Format-Stream",
+      "relativePath": "Public/Objects/Format-Stream.ps1",
+      "status": "qualified-hosted-rejection-path",
+      "reason": "Caller-scoped loop transfer or host/script exit is outside the generated local control-flow ABI.",
+      "causes": [
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.unsupported",
+          "message": "break must be inside a supported loop or scalar switch.",
+          "line": 125,
+          "column": 41
+        }
+      ]
+    },
+    {
+      "packet": "pssg",
+      "unitId": "c4dc1ae9c4c4b22e84d4c0a1",
+      "name": "Test-ModuleAvailability",
+      "relativePath": "Public/TestFunctionality/Test-ModuleAvailability.ps1",
+      "status": "qualified-hosted-rejection-path",
+      "reason": "Caller-scoped loop transfer or host/script exit is outside the generated local control-flow ABI.",
+      "causes": [
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.exitstatement",
+          "message": "Statement 'ExitStatementAst' is not yet represented by the bound pipeline.",
+          "line": 22,
+          "column": 9
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "unitId": "78cf08da8e4e3bfb47233a33",
+      "name": "Invoke-ADComputerInventoryChildProcess",
+      "relativePath": "Private/Invoke-ADComputerInventoryChildProcess.ps1",
+      "status": "qualified-hosted-rejection-path",
+      "reason": "Caller-scoped loop transfer or host/script exit is outside the generated local control-flow ABI.",
+      "causes": [
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.exitstatement",
+          "message": "Statement 'ExitStatementAst' is not yet represented by the bound pipeline.",
+          "line": 74,
+          "column": 9
+        }
+      ]
+    },
+    {
+      "packet": "pst",
+      "unitId": "e2de8ba6ca35935ce36593b7",
+      "name": "ConvertTo-WPFGrid",
+      "relativePath": "functions/ConvertTo-WPFGrid.ps1",
+      "status": "source-inspected-hosted-boundary",
+      "reason": "Caller-scoped loop transfer or host/script exit is outside the generated local control-flow ABI.",
+      "causes": [
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.unsupported",
+          "message": "break must be inside a supported loop or scalar switch.",
+          "line": 70,
+          "column": 17
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.unsupported",
+          "message": "CLR type 'System.Windows.SystemParameters' is not available in the generated project reference set for the requested target.",
+          "line": 127,
+          "column": 22
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.unsupported",
+          "message": "CLR type 'System.Windows.SizeToContent' is not available in the generated project reference set for the requested target.",
+          "line": 134,
+          "column": 39
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.unsupported",
+          "message": "CLR type 'System.Windows.SystemParameters' is not available in the generated project reference set for the requested target.",
+          "line": 154,
+          "column": 30
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.unsupported",
+          "message": "CLR type 'System.Windows.Input.Mouse' is not available in the generated project reference set for the requested target.",
+          "line": 184,
+          "column": 25
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.unsupported",
+          "message": "CLR type 'System.Windows.Input.Mouse' is not available in the generated project reference set for the requested target.",
+          "line": 216,
+          "column": 25
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.unsupported",
+          "message": "CLR type 'System.Windows.Controls.ScrollBarVisibility' is not available in the generated project reference set for the requested target.",
+          "line": 245,
+          "column": 57
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.unsupported",
+          "message": "CLR type 'System.Windows.Controls.ScrollBarVisibility' is not available in the generated project reference set for the requested target.",
+          "line": 246,
+          "column": 59
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.unsupported",
+          "message": "CLR type 'System.Windows.Input.Mouse' is not available in the generated project reference set for the requested target.",
+          "line": 324,
+          "column": 37
+        }
+      ]
+    },
+    {
+      "packet": "pst",
+      "unitId": "8c5dbe10dcc7e3a2f13e92ce",
+      "name": "New-PSDriveHere",
+      "relativePath": "functions/New-PSDriveHere.ps1",
+      "status": "qualified-hosted-rejection-path",
+      "reason": "Caller-scoped loop transfer or host/script exit is outside the generated local control-flow ABI.",
+      "causes": [
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.unsupported",
+          "message": "break must be inside a supported loop or scalar switch.",
+          "line": 55,
+          "column": 13
+        }
+      ]
+    },
+    {
+      "packet": "pst",
+      "unitId": "8b0f1352c5b4b677ba198384",
+      "name": "Out-More",
+      "relativePath": "functions/Utilities.ps1",
+      "status": "source-inspected-hosted-boundary",
+      "reason": "Caller-scoped loop transfer or host/script exit is outside the generated local control-flow ABI.",
+      "causes": [
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.unsupported",
+          "message": "break must be inside a supported loop or scalar switch.",
+          "line": 78,
+          "column": 13
+        }
+      ]
+    }
+  ],
+  "sourceProvenance": [
+    {
+      "name": "Format-Stream",
+      "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+      "license": "MIT",
+      "sourceSha256": "68161424368aee826c0bcb13a1de2526fdd9592d373dccff0a95c174a59fdc61"
+    },
+    {
+      "name": "Test-ModuleAvailability",
+      "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+      "license": "MIT",
+      "sourceSha256": "176d4b89d8ac442c23783cfe4321e1bfb5f87cecd942d2aaeac6448bfe13711d"
+    },
+    {
+      "name": "New-PSDriveHere",
+      "revision": "549fa3e3d769532320054fc0b3c8f42df0452361",
+      "license": "MIT",
+      "sourceSha256": "c64257986c8ff469fcb279eaee322767e2fd71bc1eaf7c1b7a5bda7f4b714212"
+    },
+    {
+      "name": "Invoke-ADComputerInventoryChildProcess",
+      "revision": "f215b32ca86b38d9150629c08f6c0c232bfafb27",
+      "license": "No standalone license in pinned snapshot; source was already tracked, no new redistribution.",
+      "sourceSha256": "8ba232f42b924b81480f8f8c9da928535cce7603b1d7a344f2742d7960708112"
+    }
+  ],
+  "probe": {
+    "path": "PowerForge.Tests/Fixtures/PowerShellCompilationTransferBoundaries/Observe.ps1",
+    "sha256": "cada91084a70f28a0fe373a888070a26c70f962f1759ba17d015a1b1cbb99b8f",
+    "childTimeoutSeconds": 15,
+    "providerBoundaries": [
+      "Search-Command returns false without AD discovery",
+      "Import-Clixml throws before ActiveDirectory import",
+      "New-PSDriveHere uses an owned --- directory that rejects before drive creation"
+    ],
+    "actualAdNetworkUiOrDriveMutations": 0
+  },
+  "observations": [
+    {
+      "host": "pwsh",
+      "framework": "net10.0",
+      "view": "original",
+      "case": "format-loop",
+      "exitCode": 0,
+      "trace": [
+        "before:0",
+        "tail"
+      ],
+      "failure": null,
+      "observationSha256": "833214207373521001adbd03529b52965add9e3c2a0b836423ccbfaf83002efc"
+    },
+    {
+      "host": "pwsh",
+      "framework": "net10.0",
+      "view": "original",
+      "case": "format-outside",
+      "exitCode": 0,
+      "trace": [
+        "before"
+      ],
+      "failure": null,
+      "observationSha256": "a6d450f6460f208c5fd12016471dc6e975357dc4ddba11ca1d3a72b3634d6fc0"
+    },
+    {
+      "host": "pwsh",
+      "framework": "net10.0",
+      "view": "original",
+      "case": "exit-loop",
+      "exitCode": 0,
+      "trace": [
+        "before:0"
+      ],
+      "failure": null,
+      "observationSha256": "22f145832a63e8332cb17086e0299dcbdb490c8eb0933a786abb50fd17bbc9b9"
+    },
+    {
+      "host": "pwsh",
+      "framework": "net10.0",
+      "view": "original",
+      "case": "drive-loop",
+      "exitCode": 0,
+      "trace": [
+        "before:0",
+        "tail"
+      ],
+      "failure": null,
+      "observationSha256": "5496f17955e8857a28086c00b1454f7e6c43c2bcd6a3ff6464511c700552598a"
+    },
+    {
+      "host": "pwsh",
+      "framework": "net10.0",
+      "view": "original",
+      "case": "child-exit",
+      "exitCode": 1,
+      "trace": [
+        "before"
+      ],
+      "failure": null,
+      "observationSha256": "68169cc9f3874a5c37677ecb82f47ee268662ef7ca0d03920f03dd6915056223"
+    },
+    {
+      "host": "pwsh",
+      "framework": "net10.0",
+      "view": "original",
+      "case": "synthetic-break-loop",
+      "exitCode": 0,
+      "trace": [
+        "before:0",
+        "function-before",
+        "function-finally",
+        "tail"
+      ],
+      "failure": null,
+      "observationSha256": "f49d73a6ad1fbb9fe127c59bd92593316bfa28ea1536f3acfc0b5ebc08155165"
+    },
+    {
+      "host": "pwsh",
+      "framework": "net10.0",
+      "view": "original",
+      "case": "synthetic-exit-finally",
+      "exitCode": 7,
+      "trace": [
+        "function-before",
+        "function-finally",
+        "outer-finally"
+      ],
+      "failure": null,
+      "observationSha256": "22cf932113d530b62d5198a7aacddaa715c312e5732b160f2b1bc662f8ff2579"
+    },
+    {
+      "host": "pwsh",
+      "framework": "net10.0",
+      "view": "generated",
+      "case": "format-loop",
+      "exitCode": 0,
+      "trace": [
+        "before:0",
+        "tail"
+      ],
+      "failure": null,
+      "observationSha256": "833214207373521001adbd03529b52965add9e3c2a0b836423ccbfaf83002efc"
+    },
+    {
+      "host": "pwsh",
+      "framework": "net10.0",
+      "view": "generated",
+      "case": "format-outside",
+      "exitCode": 0,
+      "trace": [
+        "before"
+      ],
+      "failure": null,
+      "observationSha256": "a6d450f6460f208c5fd12016471dc6e975357dc4ddba11ca1d3a72b3634d6fc0"
+    },
+    {
+      "host": "pwsh",
+      "framework": "net10.0",
+      "view": "generated",
+      "case": "exit-loop",
+      "exitCode": 0,
+      "trace": [
+        "before:0"
+      ],
+      "failure": null,
+      "observationSha256": "22f145832a63e8332cb17086e0299dcbdb490c8eb0933a786abb50fd17bbc9b9"
+    },
+    {
+      "host": "pwsh",
+      "framework": "net10.0",
+      "view": "generated",
+      "case": "drive-loop",
+      "exitCode": 0,
+      "trace": [
+        "before:0",
+        "tail"
+      ],
+      "failure": null,
+      "observationSha256": "5496f17955e8857a28086c00b1454f7e6c43c2bcd6a3ff6464511c700552598a"
+    },
+    {
+      "host": "pwsh",
+      "framework": "net10.0",
+      "view": "generated",
+      "case": "child-exit",
+      "exitCode": 1,
+      "trace": [
+        "before"
+      ],
+      "failure": null,
+      "observationSha256": "68169cc9f3874a5c37677ecb82f47ee268662ef7ca0d03920f03dd6915056223"
+    },
+    {
+      "host": "pwsh",
+      "framework": "net10.0",
+      "view": "generated",
+      "case": "synthetic-break-loop",
+      "exitCode": 0,
+      "trace": [
+        "before:0",
+        "function-before",
+        "function-finally",
+        "tail"
+      ],
+      "failure": null,
+      "observationSha256": "f49d73a6ad1fbb9fe127c59bd92593316bfa28ea1536f3acfc0b5ebc08155165"
+    },
+    {
+      "host": "pwsh",
+      "framework": "net10.0",
+      "view": "generated",
+      "case": "synthetic-exit-finally",
+      "exitCode": 7,
+      "trace": [
+        "function-before",
+        "function-finally",
+        "outer-finally"
+      ],
+      "failure": null,
+      "observationSha256": "22cf932113d530b62d5198a7aacddaa715c312e5732b160f2b1bc662f8ff2579"
+    },
+    {
+      "host": "powershell",
+      "framework": "net472",
+      "view": "original",
+      "case": "format-loop",
+      "exitCode": 0,
+      "trace": [
+        "before:0",
+        "tail"
+      ],
+      "failure": null,
+      "observationSha256": "833214207373521001adbd03529b52965add9e3c2a0b836423ccbfaf83002efc"
+    },
+    {
+      "host": "powershell",
+      "framework": "net472",
+      "view": "original",
+      "case": "format-outside",
+      "exitCode": 0,
+      "trace": [
+        "before"
+      ],
+      "failure": null,
+      "observationSha256": "a6d450f6460f208c5fd12016471dc6e975357dc4ddba11ca1d3a72b3634d6fc0"
+    },
+    {
+      "host": "powershell",
+      "framework": "net472",
+      "view": "original",
+      "case": "exit-loop",
+      "exitCode": 0,
+      "trace": [
+        "before:0"
+      ],
+      "failure": null,
+      "observationSha256": "22f145832a63e8332cb17086e0299dcbdb490c8eb0933a786abb50fd17bbc9b9"
+    },
+    {
+      "host": "powershell",
+      "framework": "net472",
+      "view": "original",
+      "case": "drive-loop",
+      "exitCode": 0,
+      "trace": [
+        "before:0",
+        "tail"
+      ],
+      "failure": null,
+      "observationSha256": "5496f17955e8857a28086c00b1454f7e6c43c2bcd6a3ff6464511c700552598a"
+    },
+    {
+      "host": "powershell",
+      "framework": "net472",
+      "view": "original",
+      "case": "child-exit",
+      "exitCode": 1,
+      "trace": [
+        "before"
+      ],
+      "failure": null,
+      "observationSha256": "68169cc9f3874a5c37677ecb82f47ee268662ef7ca0d03920f03dd6915056223"
+    },
+    {
+      "host": "powershell",
+      "framework": "net472",
+      "view": "original",
+      "case": "synthetic-break-loop",
+      "exitCode": 0,
+      "trace": [
+        "before:0",
+        "function-before",
+        "function-finally",
+        "tail"
+      ],
+      "failure": null,
+      "observationSha256": "f49d73a6ad1fbb9fe127c59bd92593316bfa28ea1536f3acfc0b5ebc08155165"
+    },
+    {
+      "host": "powershell",
+      "framework": "net472",
+      "view": "original",
+      "case": "synthetic-exit-finally",
+      "exitCode": 7,
+      "trace": [
+        "function-before",
+        "function-finally",
+        "outer-finally"
+      ],
+      "failure": null,
+      "observationSha256": "22cf932113d530b62d5198a7aacddaa715c312e5732b160f2b1bc662f8ff2579"
+    },
+    {
+      "host": "powershell",
+      "framework": "net472",
+      "view": "generated",
+      "case": "format-loop",
+      "exitCode": 0,
+      "trace": [
+        "before:0",
+        "tail"
+      ],
+      "failure": null,
+      "observationSha256": "833214207373521001adbd03529b52965add9e3c2a0b836423ccbfaf83002efc"
+    },
+    {
+      "host": "powershell",
+      "framework": "net472",
+      "view": "generated",
+      "case": "format-outside",
+      "exitCode": 0,
+      "trace": [
+        "before"
+      ],
+      "failure": null,
+      "observationSha256": "a6d450f6460f208c5fd12016471dc6e975357dc4ddba11ca1d3a72b3634d6fc0"
+    },
+    {
+      "host": "powershell",
+      "framework": "net472",
+      "view": "generated",
+      "case": "exit-loop",
+      "exitCode": 0,
+      "trace": [
+        "before:0"
+      ],
+      "failure": null,
+      "observationSha256": "22f145832a63e8332cb17086e0299dcbdb490c8eb0933a786abb50fd17bbc9b9"
+    },
+    {
+      "host": "powershell",
+      "framework": "net472",
+      "view": "generated",
+      "case": "drive-loop",
+      "exitCode": 0,
+      "trace": [
+        "before:0",
+        "tail"
+      ],
+      "failure": null,
+      "observationSha256": "5496f17955e8857a28086c00b1454f7e6c43c2bcd6a3ff6464511c700552598a"
+    },
+    {
+      "host": "powershell",
+      "framework": "net472",
+      "view": "generated",
+      "case": "child-exit",
+      "exitCode": 1,
+      "trace": [
+        "before"
+      ],
+      "failure": null,
+      "observationSha256": "68169cc9f3874a5c37677ecb82f47ee268662ef7ca0d03920f03dd6915056223"
+    },
+    {
+      "host": "powershell",
+      "framework": "net472",
+      "view": "generated",
+      "case": "synthetic-break-loop",
+      "exitCode": 0,
+      "trace": [
+        "before:0",
+        "function-before",
+        "function-finally",
+        "tail"
+      ],
+      "failure": null,
+      "observationSha256": "f49d73a6ad1fbb9fe127c59bd92593316bfa28ea1536f3acfc0b5ebc08155165"
+    },
+    {
+      "host": "powershell",
+      "framework": "net472",
+      "view": "generated",
+      "case": "synthetic-exit-finally",
+      "exitCode": 7,
+      "trace": [
+        "function-before",
+        "function-finally",
+        "outer-finally"
+      ],
+      "failure": null,
+      "observationSha256": "22cf932113d530b62d5198a7aacddaa715c312e5732b160f2b1bc662f8ff2579"
+    }
+  ],
+  "builds": [
+    {
+      "framework": "net10.0",
+      "succeeded": true,
+      "compiledMarkerMethods": 1,
+      "retainedWorkloadFunctions": 4,
+      "buildEvidenceSha256": "e4930bbd0274f80b02874ab98380e91b04783aaaecd13202e7ebf04629c54e3e",
+      "workloadDispositions": [
+        {
+          "name": "Format-Stream",
+          "retainedHostedSource": true,
+          "emittedClrMethod": false
+        },
+        {
+          "name": "Test-ModuleAvailability",
+          "retainedHostedSource": true,
+          "emittedClrMethod": false
+        },
+        {
+          "name": "New-PSDriveHere",
+          "retainedHostedSource": true,
+          "emittedClrMethod": false
+        },
+        {
+          "name": "Invoke-ADComputerInventoryChildProcess",
+          "retainedHostedSource": true,
+          "emittedClrMethod": false
+        }
+      ]
+    },
+    {
+      "framework": "net472",
+      "succeeded": true,
+      "compiledMarkerMethods": 1,
+      "retainedWorkloadFunctions": 4,
+      "buildEvidenceSha256": "a37c72497e27d5cfd760ef680377fe94d62482fa43009ed7152e56dace12f132",
+      "workloadDispositions": [
+        {
+          "name": "Format-Stream",
+          "retainedHostedSource": true,
+          "emittedClrMethod": false
+        },
+        {
+          "name": "Test-ModuleAvailability",
+          "retainedHostedSource": true,
+          "emittedClrMethod": false
+        },
+        {
+          "name": "New-PSDriveHere",
+          "retainedHostedSource": true,
+          "emittedClrMethod": false
+        },
+        {
+          "name": "Invoke-ADComputerInventoryChildProcess",
+          "retainedHostedSource": true,
+          "emittedClrMethod": false
+        }
+      ]
+    }
+  ],
+  "strict": [
+    {
+      "framework": "net10.0",
+      "canProceed": false,
+      "rejectedUnits": 5,
+      "evidenceSha256": "f874feaa99e16188e9f6d4c40ef6cfefc1d453ef72ce966b6b1c44e69d0572af"
+    },
+    {
+      "framework": "net472",
+      "canProceed": false,
+      "rejectedUnits": 5,
+      "evidenceSha256": "7e5fc8f1d3912c55d5caf40cc1d87344ad7358087e7e7424a40457f40186fe4f"
+    }
+  ],
+  "decision": {
+    "ownership": "Retain authored source under PowerShell for cross-caller break and exit; do not map them to C# return or an ordinary catchable exception.",
+    "invariants": [
+      "break may target the caller loop and must preserve outer continuation",
+      "break without a caller target may terminate the script",
+      "exit skips catch and preserves finally while selecting script/host exit status",
+      "generated Hybrid delivery must preserve the same retained source behavior"
+    ],
+    "reopeningRequirements": [
+      "A reusable caller/control-flow ABI identifies scope boundaries and dynamic caller targets",
+      "A non-error transfer propagates through native invocation without entering ordinary catch handlers",
+      "finally, nested invocation, downstream stop and host-specific script/process exit behavior have real artifact proof",
+      "Script packaging and module delivery use the same exit owner without unsafe exception rewriting"
+    ]
+  },
+  "limits": [
+    "Four complete authored sources execute only safe rejection paths; no normal formatting/drive/AD workflow claim.",
+    "ConvertTo-WPFGrid and Out-More are source-inspected only; no GUI or interactive paging executes.",
+    "The generated artifact contains one synthetic compiled marker to exercise mixed delivery; it is not counted as module/compiler workload coverage.",
+    "These justified hosted boundaries do not implement general nonlocal transfer semantics or close all remaining support gaps."
+  ]
+}
