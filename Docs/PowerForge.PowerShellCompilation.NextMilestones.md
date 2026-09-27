@@ -269,6 +269,13 @@ Try-valued dictionary and note-property entries are now qualified for the two pi
 - [x] Prove complete generated artifacts on PowerShell 7/net10.0 and Windows PowerShell 5.1/net472; preserve Strict, transfer/type boundaries and five-packet coverage. Fix the reviewed nested-discard helper propagation and confirm the remediation independently.
 - [ ] Qualify remaining statement-value control transfers and conversion contexts only from a reachable workload. Explicit return/trap, escaping loop transfers and unavailable authored catch types remain hosted. Direct void conversion in a literal try is still outside the conversion policy; nested array discard has execution proof.
 
+The next selected conversion family is the two Management-owned enum casts in unchanged PSSharedGoods Get-ComputerSystem and Get-ComputerOperatingSystem. Both host types resolve after importing Microsoft.PowerShell.Management on the claimed Windows hosts, but compiler-side resolution currently retains both functions. The original-only [baseline](../Benchmarks/PowerShellCompilation/Corpus/m29a-host-enum-design-baseline.json) pins the two projection files, their pure conversion helpers and 36 offline observations per host.
+
+- [x] Establish the loaded host type identities and unchanged-source original numeric/named/null/invalid conversion behavior, empty/multiple output, provider errors, property order and All bypass with a module-owned CIM stand-in.
+- [ ] Qualify these observed host enum names through the canonical type/conversion policy. Reuse the active invocation's lazy type resolver and conversion binder; keep object-valued IR where no generated CLR reference exists. Do not broadly admit unknown authored types or add an artifact-local dependency shim.
+- [ ] Prove type-before-operand evaluation, positioned errors, loaded/missing dependency behavior, callbacks and repeated invocation. Preserve Strict rejection and still-hosted unknown type boundaries.
+- [ ] Build the unchanged projection/helper closure and compare generated artifacts with the probe on both Windows hosts. Refresh the five-packet no-loss inventory and independently review consequential resolution/conversion changes before delivery.
+
 - [ ] Keep `New-ADComputersStatistics` at its explicit AD boundary until an isolated data-boundary or safe lab proof is designed. Other retained pipeline and lifecycle shapes remain open.
 
 1. Fix accepted-code defects first; reproduce the original/generated failure and inspect sibling paths.
