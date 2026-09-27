@@ -74,7 +74,8 @@ internal static class PowerShellNativeFunctionBindingPolicy
 
     private static bool RequiresNativeBinding(FunctionDefinitionAst function, string? targetFramework,
         PowerShellCompilationCapability capabilities)
-        => function.Body.BeginBlock is not null || function.Body.ProcessBlock is not null ||
+        => RequiresNativeBasicCommandHost(function, capabilities) ||
+           function.Body.BeginBlock is not null || function.Body.ProcessBlock is not null ||
            PowerShellHostedEnumDeclarationPolicy.RequiresNativeParameterBinding(function) ||
            PowerShellHostedLocalEnumPolicy.FindDeclarations(function).Length != 0 ||
            PowerShellHostedValueClassPolicy.RequiresNativeConstruction(function) ||
@@ -170,6 +171,13 @@ internal static class PowerShellNativeFunctionBindingPolicy
                 parameter.StaticType == typeof(string) && attribute.TypeName.Name.Equals("Parameter", StringComparison.OrdinalIgnoreCase) &&
                 attribute.NamedArguments.Any(argument => argument.ArgumentName.Equals("ValueFromPipeline", StringComparison.OrdinalIgnoreCase) ||
                     argument.ArgumentName.Equals("ValueFromPipelineByPropertyName", StringComparison.OrdinalIgnoreCase))));
+
+    /// <summary>Preserves basic-function binding while an ordinary named command runs in the native invocation.</summary>
+    private static bool RequiresNativeBasicCommandHost(FunctionDefinitionAst function, PowerShellCompilationCapability capabilities)
+        => !PowerShellAdvancedFunctionPolicy.IsAdvanced(function) &&
+           function.Body.Find(node => node is PipelineAst pipeline &&
+               PowerShellCommandRegionSemanticBinder.IsNativeLiteralCommandValue(pipeline, capabilities),
+               searchNestedScriptBlocks: false) is not null;
 
     /// <summary>Selects invocation-owned cardinality only when an if is itself consumed as a literal or collection value.</summary>
     private static bool RequiresNativeTypeTest(FunctionDefinitionAst function, string? targetFramework, PowerShellCompilationCapability capabilities)

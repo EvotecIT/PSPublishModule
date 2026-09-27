@@ -265,9 +265,9 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     {
         if (targetFramework == "net472" && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
         using var fixture = ArtifactFixture.Create(
-            "function Test-CommandAvailability { param([string] $Name) return [bool](Microsoft.PowerShell.Core\\Get-Command $Name -ErrorAction SilentlyContinue) }; " +
-            "function Test-IgnoreCommandAvailability { param([string] $Name) return [bool](Microsoft.PowerShell.Core\\Get-Command $Name -ErrorAction Ignore) }; " +
-            "function Test-LiteralCommandAvailability { if (Microsoft.PowerShell.Core\\Get-Command -Name Get-Command -EA Ignore) { return $true }; return $false }",
+            "function Test-CommandAvailability { [CmdletBinding()] param([string] $Name) return [bool](Microsoft.PowerShell.Core\\Get-Command $Name -ErrorAction SilentlyContinue) }; " +
+            "function Test-IgnoreCommandAvailability { [CmdletBinding()] param([string] $Name) return [bool](Microsoft.PowerShell.Core\\Get-Command $Name -ErrorAction Ignore) }; " +
+            "function Test-LiteralCommandAvailability { [CmdletBinding()] param() if (Microsoft.PowerShell.Core\\Get-Command -Name Get-Command -EA Ignore) { return $true }; return $false }",
             ".psm1");
         var discoveryModuleRoot = Path.Combine(fixture.RootPath, "modules");
         var discoveryModulePath = Path.Combine(discoveryModuleRoot, "PowerForgeCommandDiscoveryFixture");

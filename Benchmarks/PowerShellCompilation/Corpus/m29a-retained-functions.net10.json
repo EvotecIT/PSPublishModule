@@ -5,15 +5,15 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "a92bb59862dd74fd2c820ba0bab144c69369a17e",
+  "compilerBaselineCommit": "b42897e64d15cae9aefc47630247d112ef6cf286",
   "packets": [
     {
       "packet": "pssg",
       "functions": 282,
       "stableUnits": 286,
-      "emitted": 271,
-      "retained": 11,
-      "sourceExplanationSha256": "222a918ac156fc38984b2c56fceac060abf099287e67cc2b110acbb7d582db11",
+      "emitted": 272,
+      "retained": 10,
+      "sourceExplanationSha256": "fddade31bb670e30e96f49b56754298aa71adf37ab8a7476d734b3476e3f2bf1",
       "functionsRetained": [
         {
           "unitId": "bde03b869be356b032686101",
@@ -234,24 +234,6 @@
               "column": 9
             }
           ]
-        },
-        {
-          "unitId": "ffa371291987cbceaee616a8",
-          "name": "Set-TimeSynchronization",
-          "relativePath": "Public/Time/Set-TimeSynchronization.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": true,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "binary-module.cmdlet-shape",
-              "message": "Basic function 'Set-TimeSynchronization' uses PowerShell stream or command-host behavior that cannot preserve loose handling of generated binary-cmdlet common-parameter names.",
-              "line": 1,
-              "column": 1
-            }
-          ]
         }
       ]
     },
@@ -375,7 +357,7 @@
       "stableUnits": 121,
       "emitted": 95,
       "retained": 14,
-      "sourceExplanationSha256": "c13a86c8f0d83ac6249cd4e7c3b8e3d003dc4e349a3ec8f51c1e1dbba85af8ae",
+      "sourceExplanationSha256": "5f8a1cccb2860d79aebdd18eb387533cb0c9a5bf402d8a8bfed2655c4054e5f6",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -1542,7 +1524,7 @@
     "PowerForge.PowerShell/Services/Compilation/PowerShellNativeFunctionSourceGenerator.cs": "f4ac566f8827acd658564fe1f391bbd4c82308abf919c3da82e64eaf7676ffe8",
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.OwnedDeclaration.cs": "75af26461066cb24e9bb0b8f3f14e038ccfa54f300ef0982f86a06266232ff8c",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.cs": "bef359d76dbee21656c429002090b501f050d100adc41961d6c7fe888d2c0ecd",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "c720cb919eb70bbdbff658a58f3944b7f75b6593ee27d9b9aa2c7013bce12ee2",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "f0fcb559dab6d70d9a3b96c59a50fba283d771c1842bd7529ebd516e04e623a1",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedEnumDeclarationPolicy.cs": "13c19ff47ae23ae9d641c6d76ea6fe605e3187ccf13ecd607e53b68e2909c4c9",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedValueClassPolicy.cs": "e161dce7abde611d1ec26825f59d2a8218ebbabe239a3e199fdb8e509956cc73",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "b89b9674e8efff29dc493563974504e415b98fd67a08a73bd860185227e800e3",
@@ -1604,10 +1586,13 @@
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Switch.cs": "de56802f0a646208c0f190642234e6d2186903963148f741a3c598fc94ea13f3",
     "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundControlFlow.cs": "3c5bc5a765a429f03feee5a5fe03304ed0016511a5bb8ecbadc45db91ad5cefb",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredControlFlow.cs": "ec7e5db974cf1608706348bbcab65683e534948e48ef062ba842bfe8a1fddf07",
-    "PowerForge.Tests/PowerShellCompilationCollectorArgumentTests.cs": "2182c56f6e78219409dac5bb31c8254d83919eb3e761d732555b0d726a46e2dc"
+    "PowerForge.Tests/PowerShellCompilationCollectorArgumentTests.cs": "2182c56f6e78219409dac5bb31c8254d83919eb3e761d732555b0d726a46e2dc",
+    "PowerForge.Tests/PowerShellCompilationBasicCommandHostTests.cs": "5f9f903666a33bd6514492e6aeb54b3f4e824abdf51dd686569f9c22f57ca6eb",
+    "PowerForge.Tests/PowerShellCompilationReviewerClosureRegressionTests.cs": "3402f69ef46c1b45fbc14526451ccbf93c39c6fa1fa19cda156f4671b2804943",
+    "PowerForge.Tests/PowerShellCompilationRuntimeStateTests.cs": "0e93884f931e093a49be4bbb840361963c72d75098cbf7871ae938c381688f32"
   },
-  "dispositionComparison": "m29a-collector-argument-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "a92bb59862dd74fd2c820ba0bab144c69369a17e",
-  "emitted": 522,
-  "retained": 43
+  "dispositionComparison": "m29a-basic-command-host-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "b42897e64d15cae9aefc47630247d112ef6cf286",
+  "emitted": 523,
+  "retained": 42
 }
