@@ -39,6 +39,19 @@ public sealed partial class DotNetPublishReleaseArtifactVerifier
             .ToArray();
     }
 
+    internal static string[] FindChecksumPathsBySuffix(string path, string suffix)
+    {
+        StringComparer comparer = FrameworkCompatibility.GetPathStringComparisonForPath(path) == StringComparison.Ordinal
+            ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+        return File.ReadLines(path)
+            .Select(line => TryParseChecksumLine(line, out _, out string listedPath) ? listedPath.Replace('\\', '/') : null)
+            .Where(listedPath => listedPath is not null && listedPath.EndsWith(suffix,
+                comparer == StringComparer.Ordinal ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase))
+            .Select(listedPath => listedPath!)
+            .Distinct(comparer)
+            .ToArray();
+    }
+
     private static bool TryParseChecksumLine(string line, out string digest, out string relativePath)
     {
         digest = string.Empty;

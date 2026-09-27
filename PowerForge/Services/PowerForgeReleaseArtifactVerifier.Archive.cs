@@ -36,7 +36,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string archivePath,
         string? expectedThumbprint,
         string? expectedSubject,
-        bool allowSubjectMatchedCertificateRotation)
+        bool allowSubjectMatchedCertificateRotation,
+        bool requireDetachedEvidence)
     {
         using var archiveInput = new ArchiveMetadataReadStream(File.OpenRead(archivePath));
         using ZipArchive archive = new ZipArchive(archiveInput, ZipArchiveMode.Read);
@@ -65,6 +66,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         }
         else
         {
+            if (requireDetachedEvidence)
+                throw Invalid("Portable archive manifest requires detached release evidence beside the archive.");
             // Retain verification of already published archives with embedded evidence.
             if (!entries.TryGetValue(PowerForgePortablePayloadInventory.InventoryFileName, out ZipArchiveEntry? inventoryEntry) ||
                 !entries.TryGetValue(PowerForgePortablePayloadInventory.SignatureFileName, out ZipArchiveEntry? signatureEntry))
