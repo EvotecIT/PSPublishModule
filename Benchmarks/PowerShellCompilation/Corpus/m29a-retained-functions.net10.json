@@ -263,7 +263,14 @@
               "line": 19,
               "column": 5
             }
-          ]
+          ],
+          "qualificationBoundary": {
+            "status": "JustifiedHosted",
+            "family": "caller-stack loop transfer",
+            "evidence": "m29a-external-transfer-boundaries.json",
+            "reason": "Authored unresolved continue label or break without a local loop changes caller control flow. Function-local CLR return or loop-depth reinterpretation would change behavior.",
+            "scope": "Both Windows hosts, isolated unchanged source, offline providers; no compiled-method gain."
+          }
         },
         {
           "unitId": "78cf08da8e4e3bfb47233a33",
@@ -724,7 +731,14 @@
               "line": 55,
               "column": 13
             }
-          ]
+          ],
+          "qualificationBoundary": {
+            "status": "JustifiedHosted",
+            "family": "caller-stack loop transfer",
+            "evidence": "m29a-external-transfer-boundaries.json",
+            "reason": "Authored unresolved continue label or break without a local loop changes caller control flow. Function-local CLR return or loop-depth reinterpretation would change behavior.",
+            "scope": "Both Windows hosts, isolated unchanged source, offline providers; no compiled-method gain."
+          }
         },
         {
           "unitId": "0f49b0d93bead94178065edb",
