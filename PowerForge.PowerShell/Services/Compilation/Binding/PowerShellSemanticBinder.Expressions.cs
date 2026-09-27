@@ -104,6 +104,9 @@ internal sealed partial class PowerShellSemanticBinder
             case ConstantExpressionAst constant:
                 return new PowerShellBoundLiteralExpression(span, constant.Value, LiteralType(constant.Value?.GetType() ?? typeof(object), "Literal syntax determines the CLR representation."), constant.Value is null ? PowerShellValueState.Null : PowerShellValueState.Known);
             case TypeExpressionAst typeExpression:
+                if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                    PowerShellHostedValueClassPolicy.IsQualifiedConstructorReceiver(document, typeExpression, targetFramework, capabilities))
+                    return new PowerShellBoundNativeTypeExpression(span, typeExpression.TypeName.FullName);
                 var typeValue = typeExpression.TypeName.GetReflectionType();
                 if (typeValue is null ||
                     !PowerShellCompilationParameterTypePolicy.CanUseInMethod(typeValue, targetFramework, capabilities))

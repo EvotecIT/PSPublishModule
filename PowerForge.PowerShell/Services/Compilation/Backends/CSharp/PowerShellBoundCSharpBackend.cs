@@ -453,6 +453,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 : "global::PowerForge.Generated.Runtime.PowerShellRegionControlFlowEnvelope.Return((object?)(" + EmitExpression(controlFlow.Value!) + "))",
             PowerShellLoweredBinaryExpression binary => EmitBinary(binary),
             PowerShellLoweredUnaryExpression unary => EmitUnary(unary),
+            PowerShellLoweredNativeTypeExpression nativeType => "__nativeFunction.ResolveTypeName(" + PowerShellCSharpLiteral.QuoteString(nativeType.Name) + ", " + EmitSourceExtentArguments(nativeType.Span) + ")",
             PowerShellLoweredNativeTypeTestExpression nativeTest => "__nativeFunction.EvaluateTypeTest(" + EmitExpression(nativeTest.Operand) + ", " +
                 (nativeTest.Target is null ? "__nativeFunction.ResolveTypeName(" + PowerShellCSharpLiteral.QuoteString(nativeTest.AuthoredTypeName!) + ", " + EmitSourceExtentArguments(nativeTest.TargetSpan) + ")" : EmitExpression(nativeTest.Target)) +
                 ", " + (nativeTest.Negate ? "true" : "false") + ")",

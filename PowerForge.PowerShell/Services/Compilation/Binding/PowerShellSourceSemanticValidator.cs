@@ -34,7 +34,8 @@ internal static class PowerShellSourceSemanticValidator
         var typeDefinition = document.TypeClosure.Declarations.FirstOrDefault();
         if (typeDefinition is not null &&
             !PowerShellHostedAttributeDeclarationPolicy.IsQualified(document, targetFramework, capabilities) &&
-            !PowerShellHostedEnumDeclarationPolicy.IsQualified(document, targetFramework, capabilities))
+            !PowerShellHostedEnumDeclarationPolicy.IsQualified(document, targetFramework, capabilities) &&
+            !PowerShellHostedValueClassPolicy.IsQualified(document, targetFramework, capabilities))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 PowerShellCompilationFeatureIds.TypeDefinition,

@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "c0c27662121fb412659930a947bb3144c7867ac5",
+  "compilerBaselineCommit": "068a505c7a108de1798d0e7ebfa363fe6dd03bca",
   "packets": [
     {
       "packet": "pssg",
@@ -13,7 +13,7 @@
       "stableUnits": 286,
       "emitted": 259,
       "retained": 23,
-      "sourceExplanationSha256": "7703c55d82630bce181342922eaf8c5d5500ea293e390fd7032ccf0b369b2b1a",
+      "sourceExplanationSha256": "ec83e7c4dcc792ce267fd6efa08f1b054bc79518e951e6b3d7c8bbf7d6b39299",
       "functionsRetained": [
         {
           "unitId": "a1bb1dcefddec8c45377fd27",
@@ -505,7 +505,7 @@
       "stableUnits": 69,
       "emitted": 63,
       "retained": 5,
-      "sourceExplanationSha256": "51277db657806711a57853e04fa18848f05040d5c4343f18f3aad8e7627472d3",
+      "sourceExplanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1",
       "functionsRetained": [
         {
           "unitId": "2be0f84457750dd64ee0c5d1",
@@ -609,7 +609,7 @@
       "stableUnits": 67,
       "emitted": 61,
       "retained": 5,
-      "sourceExplanationSha256": "1e440e07730e829f4ca57f443a1f0b4f4c8b62c92311475d8fb13e2ee716d409",
+      "sourceExplanationSha256": "73172aaac03d1c74782e361a0716d2c2d0c14b80abae98e870ef80c8253a8ee2",
       "functionsRetained": [
         {
           "unitId": "fc33881d5a7752031137ea07",
@@ -756,9 +756,9 @@
       "packet": "pst",
       "functions": 109,
       "stableUnits": 121,
-      "emitted": 88,
-      "retained": 21,
-      "sourceExplanationSha256": "391f654b08642a6101b5312081b449f91d66c95eff3d0b7e048132e82c2dcecd",
+      "emitted": 89,
+      "retained": 20,
+      "sourceExplanationSha256": "7f24946fcdbb2e8d0158e02ed4f8458b2935089d307dda66a7ea4a70fc2bb2e6",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -1155,38 +1155,6 @@
               "message": "Parameter '$Session' has CLR type 'System.Management.Automation.Runspaces.PSSession' that requires a target capability unavailable to this compilation.",
               "line": 27,
               "column": 9
-            }
-          ]
-        },
-        {
-          "unitId": "88b51d45ea293800c40f480a",
-          "name": "Get-DirectoryInfo",
-          "relativePath": "functions/Get-DirectoryInfo.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "source.type-definition",
-              "message": "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
-              "line": 1,
-              "column": 1
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "psb2961",
-              "message": "The nested declaration requires a completely compiled native body and qualified declaration metadata; workflows and unsupported child bodies remain hosted.",
-              "line": 33,
-              "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "psb2611",
-              "message": "CLR type 'DirectoryStat' is not available in the generated project reference set for the requested target.",
-              "line": 46,
-              "column": 23
             }
           ]
         },
@@ -1804,7 +1772,7 @@
       "stableUnits": 41,
       "emitted": 27,
       "retained": 13,
-      "sourceExplanationSha256": "ffcef4ea501818413c6d7d2372b853388024b79b2361a537dd01889dbfcc6ab7",
+      "sourceExplanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea",
       "functionsRetained": [
         {
           "unitId": "62d3e169b4f7eb162da5636b",
@@ -2066,17 +2034,24 @@
   ],
   "compilerSourceHashes": {
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedAttributeDeclarationPolicy.cs": "ed1395b785f1b0c45b4821f3f301c8a7480c044882b35b8daa5c2588d361b78d",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSourceSemanticValidator.cs": "ee5a3b1f84e2641e06f11916461787aa55c4a71f2805909f7ee1052f28266597",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSourceSemanticValidator.cs": "3ce3549b7055933fae786599104270055a5f209154fdd37af40c03e49cab8ecd",
     "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationAnalyzer.Semantics.cs": "d9def0321bcef3ae3f038bf9dcc11e27261e5049e8d503bf773412bb643f86c9",
     "PowerForge.PowerShell/Services/Compilation/PowerShellCommandHostRuntimeSource.cs": "ddd0c725442f5cdf52d6a187528dab44e4d49931a6f92244fe5e3d3a3ba69e58",
     "PowerForge.PowerShell/Services/Compilation/PowerShellNativeFunctionSourceGenerator.cs": "2f7b9e8d9c134953991cf98f9d5a6d4ad2e1f941b897a9f1a0cd3f68f3c37752",
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.OwnedDeclaration.cs": "96048604389dbda2546cafb9a43e189c4620eeb05c744deb1a69b6cc3025e106",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.cs": "bef359d76dbee21656c429002090b501f050d100adc41961d6c7fe888d2c0ecd",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "26b8ebb4e184926095fd6af0ce253f55948a3ac0d7d983e112e3f1efb713fbc1",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedEnumDeclarationPolicy.cs": "3c73fa914308606aa8ec7dd41f99aa97d4a29a32fac1a5134574129719bcb9fb"
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "7e9e1c94253017527b71499ee1c9411cb7a4f2f22d986325ef9fdd7b8d2d431d",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedEnumDeclarationPolicy.cs": "3c73fa914308606aa8ec7dd41f99aa97d4a29a32fac1a5134574129719bcb9fb",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedValueClassPolicy.cs": "e161dce7abde611d1ec26825f59d2a8218ebbabe239a3e199fdb8e509956cc73",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "c19955c21d54278d4d6201a8c48cc4afa588879d919bbb33cc1e875d272b8dcf",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "0f1fb1ff0990278b487444865098c4d6e4b4e2bd97280bfc5732e73a047c356e",
+    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeTypeExpression.cs": "33eed468f79993efecac2de58ea1241e077a6eccfc65924b46ef3954abf2c8de",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeTypeExpression.cs": "a0b77e29eb83c01bd67f4ae3cc8f0a3670cedb13d93822a49b2103ea61872227",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs": "9b635cf2c2c8cc64dc2adf2770eace52f06ccc07ccf193d055e2111a32f9b88f",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.cs": "f9655ac2bcf2b0972aa01e2c01ebe045f5cf20127850d05025710aa77f894095"
   },
-  "dispositionComparison": "m29a-hosted-enum-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "c0c27662121fb412659930a947bb3144c7867ac5",
-  "emitted": 498,
-  "retained": 67
+  "dispositionComparison": "m29a-hosted-value-class-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "068a505c7a108de1798d0e7ebfa363fe6dd03bca",
+  "emitted": 499,
+  "retained": 66
 }

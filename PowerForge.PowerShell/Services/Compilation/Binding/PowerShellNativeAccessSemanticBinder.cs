@@ -59,7 +59,13 @@ internal static class PowerShellNativeAccessSemanticBinder
         }
         Type? literalTargetType = null;
         PowerShellBoundExpression? receiver = null;
-        if (syntax.Expression is TypeExpressionAst typeSyntax)
+        if (syntax.Expression is TypeExpressionAst authoredType &&
+            PowerShellHostedValueClassPolicy.IsQualifiedConstructorReceiver(document, authoredType, targetFramework, capabilities))
+        {
+            receiver = bindExpression(authoredType, null);
+            if (receiver is null) return null;
+        }
+        else if (syntax.Expression is TypeExpressionAst typeSyntax)
         {
             literalTargetType = typeSyntax.TypeName.GetReflectionType();
             if (literalTargetType is null || !PowerShellCompilationParameterTypePolicy.CanUseInMethod(literalTargetType, targetFramework, capabilities))
