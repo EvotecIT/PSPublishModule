@@ -44,6 +44,8 @@ internal static class PowerShellCompilationParameterTypePolicy
         typeof(ErrorCategory),
         typeof(PSMemberTypes),
         typeof(CommandInfo),
+        // Caller-owned variable cells require the native invocation and host binding.
+        typeof(PSReference),
         typeof(Parser),
         typeof(HashtableAst)
     };
@@ -117,7 +119,16 @@ internal static class PowerShellCompilationParameterTypePolicy
         var classified = Classify(type, targetFramework);
         if (!classified.HasFlag(PowerShellCompilationParameterTypeCapability.ClrMethod))
             return false;
+        if (ContainsReferenceCell(type) &&
+            !capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+            return false;
         return !classified.HasFlag(PowerShellCompilationParameterTypeCapability.PowerShellHost) ||
                capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes);
     }
+
+    // Reference identity must survive binding, including existing supported containers.
+    private static bool ContainsReferenceCell(Type type)
+        => type == typeof(PSReference) ||
+           type.IsArray && ContainsReferenceCell(type.GetElementType()!) ||
+           type.IsConstructedGenericType && type.GetGenericArguments().Any(ContainsReferenceCell);
 }

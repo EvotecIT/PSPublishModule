@@ -30,6 +30,27 @@ internal static class PowerShellConversionSemanticBinder
                 customObjectOperand, useNativeConversion: true, useNativeCustomObjectConversion: true);
         }
         var targetType = syntax.Type.TypeName.GetReflectionType();
+        if (targetType == typeof(System.Management.Automation.PSReference) &&
+            !PowerShellCompilationParameterTypePolicy.CanUseInMethod(targetType, targetFramework, capabilities))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2201",
+                "Reference-valued conversions require host-type support and native function binding.", span));
+            return null;
+        }
+        if (targetType == typeof(System.Management.Automation.PSReference) &&
+            capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+            syntax.Child is VariableExpressionAst referenceVariable)
+        {
+            // A variable reference denotes its cell, not a conversion of its current value.
+            // Reuse the same native cell operation as CLR reference arguments.
+            if (PowerShellNativeVariableAnalysis.IsDirectLocal(referenceVariable) ||
+                PowerShellNativeVariableAnalysis.IsUnoptimizedLocal(referenceVariable))
+                return new PowerShellBoundNativeReferenceExpression(span, referenceVariable.VariablePath.UserPath,
+                    PowerShellNativeVariableAnalysis.IsDirectLocal(referenceVariable));
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2633",
+                "Native reference values require an ordinary direct local variable; other storage remains hosted.", span));
+            return null;
+        }
         if (targetType is null)
         {
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&

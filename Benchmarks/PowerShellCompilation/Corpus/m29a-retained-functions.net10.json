@@ -5,15 +5,15 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "558e669a2b75a33f475fa87ab7d7877ab7c345a2",
+  "compilerBaselineCommit": "367a3d15d94fbeeaf801c99f6aef5bb17626f0c2",
   "packets": [
     {
       "packet": "pssg",
       "functions": 282,
       "stableUnits": 286,
-      "emitted": 264,
-      "retained": 18,
-      "sourceExplanationSha256": "b400314a0a58e6a1f13435bc8c9d361cffdde9d165d7e26a5fcb8ef61b00991c",
+      "emitted": 265,
+      "retained": 17,
+      "sourceExplanationSha256": "c300a698846ad8fb7598f53497f3d8aef4171302788ea3a59c435838dd889efb",
       "functionsRetained": [
         {
           "unitId": "bde03b869be356b032686101",
@@ -57,24 +57,6 @@
               "message": "CLR type 'System.DirectoryServices.AccountManagement.PrincipalContext' is not available in the generated project reference set for the requested target.",
               "line": 19,
               "column": 29
-            }
-          ]
-        },
-        {
-          "unitId": "9191ed8710d7173dc2ac36bb",
-          "name": "Remove-ChildItems",
-          "relativePath": "Private/Remove-ChildItems.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$AllSucceededRef' has CLR type 'System.Management.Automation.PSReference' that requires a target capability unavailable to this compilation.",
-              "line": 68,
-              "column": 9
             }
           ]
         },
@@ -1840,15 +1822,17 @@
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredOutputCaptureStatement.cs": "89bda7c779d5313c595b59435091fcde6f977d116c266bad68c0703b5cae9897",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.cs": "f52a1b42b13a62928850c58bb712beb08eaf540ef7a68c889ef82aaab5a5eaca",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellCommandRegionSemanticBinder.cs": "15f3bb88806cd0529637cfbaf1a8aee585d9177bfab8f3f28a9b3551e6b3e0bb",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "2c5abb9700d66b1d2f57c98b05833e84ce3a240fe6375a3edba37327dd4af9d2",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "7ef04e5849dc474314f43e36130df2bc7c77337c0425e43c52fa4f5245626014",
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Conversions.cs": "1c8b2d0cdb168bbf4f52c83cfed1aeb819955aab78c21a181256313a13871631",
     "PowerForge.Tests/PowerShellCompilationHostSessionConstructionTests.cs": "c3c7753b75e9bcc67034c042a92ab290c1d722ed7dc3b4f5c00664a564e5850b",
     "Benchmarks/PowerShellCompilation/Corpus/m29a-web-session-probe.ps1": "e78e2269126126c7df0bdf0710a25cc95734806587f516a0c78e3b13c59c638a",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeTypeArgumentPolicy.cs": "ff940d7098ed93beefa02e16c65a99e7edab09bc2baf6de0fbb1c8805c493c2e",
-    "PowerForge.Tests/PowerShellCompilationTypeFactoryArgumentTests.cs": "b992c4cf7ee2445c11933d679c4ccd66593081fcc621b1be37205c7e6abb7315"
+    "PowerForge.Tests/PowerShellCompilationTypeFactoryArgumentTests.cs": "b992c4cf7ee2445c11933d679c4ccd66593081fcc621b1be37205c7e6abb7315",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellConversionSemanticBinder.cs": "47af6f40ed25b941e60eec76f6aa45e9af823360a9a7848309b712465b6bda62",
+    "PowerForge.Tests/PowerShellCompilationReferenceParameterTests.cs": "c1dab2a79ad981884b2f11c50bfa1e78c01649dc67badf5d2b43d98c5ff05621"
   },
-  "dispositionComparison": "m29a-type-factory-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "558e669a2b75a33f475fa87ab7d7877ab7c345a2",
-  "emitted": 508,
-  "retained": 57
+  "dispositionComparison": "m29a-reference-parameter-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "367a3d15d94fbeeaf801c99f6aef5bb17626f0c2",
+  "emitted": 509,
+  "retained": 56
 }
