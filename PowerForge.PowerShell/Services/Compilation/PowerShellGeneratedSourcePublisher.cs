@@ -99,7 +99,7 @@ internal static class PowerShellGeneratedSourcePublisher
             .ToArray();
         var mappedMethods = (methods ?? Array.Empty<PowerShellCompiledMethod>()).Select(method =>
         {
-            var generated = FindGeneratedLocation(sourceDirectory, method);
+            var generated = FindGeneratedLocation(sourceDirectory, spec, method);
             return new
             {
                 powershellName = method.SourceName,
@@ -158,31 +158,41 @@ internal static class PowerShellGeneratedSourcePublisher
     private static string ToPortableRelativePath(string root, string path)
         => FrameworkCompatibility.GetRelativePath(root, Path.GetFullPath(path)).Replace('\\', '/');
 
-    private static GeneratedMethodLocation FindGeneratedMethod(string sourceDirectory, string generatedName)
+    private static GeneratedMethodLocation FindGeneratedMethod(string sourceDirectory, string generatedFile, string generatedName)
     {
         var pattern = @"^\s*(?:public|private|internal)\s+(?:static\s+)?.*\s" +
                       System.Text.RegularExpressions.Regex.Escape(generatedName) + @"\s*\(";
         GeneratedMethodLocation? match = null;
-        foreach (var path in Directory.EnumerateFiles(sourceDirectory, "*.cs", SearchOption.TopDirectoryOnly)
-                     .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
+        var path = Path.Combine(sourceDirectory, generatedFile);
+        if (!File.Exists(path))
+            throw new InvalidOperationException($"Generated method source '{generatedFile}' was not found while publishing source maps.");
+        var lines = File.ReadAllLines(path);
+        for (var index = 0; index < lines.Length; index++)
         {
-            var lines = File.ReadAllLines(path);
-            for (var index = 0; index < lines.Length; index++)
-            {
-                if (!System.Text.RegularExpressions.Regex.IsMatch(lines[index], pattern, System.Text.RegularExpressions.RegexOptions.CultureInvariant))
-                    continue;
-                if (match is not null)
-                    throw new InvalidOperationException($"Generated method '{generatedName}' was found more than once while publishing source maps.");
-                match = new GeneratedMethodLocation(Path.GetFileName(path), index + 1);
-            }
+            if (!System.Text.RegularExpressions.Regex.IsMatch(lines[index], pattern, System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+                continue;
+            if (match is not null)
+                throw new InvalidOperationException($"Generated method '{generatedName}' was found more than once while publishing source maps.");
+            match = new GeneratedMethodLocation(generatedFile, index + 1);
         }
         return match ?? throw new InvalidOperationException($"Generated method '{generatedName}' was not found while publishing source maps.");
     }
 
-    private static GeneratedMethodLocation FindGeneratedLocation(string sourceDirectory, PowerShellCompiledMethod method)
+    private static GeneratedMethodLocation FindGeneratedLocation(string sourceDirectory, PowerShellCompilationBuildSpec spec, PowerShellCompiledMethod method)
     {
         if (method.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline)
-            return FindGeneratedMethod(sourceDirectory, method.GeneratedName);
+        {
+            // Authored methods belong to the compiler's method source, not its host helpers.
+            // Hybrid executable roots have a separate private owner; Strict roots share
+            // CompiledPowerShellScript.cs with their reachable local methods.
+            var generatedFile = spec.Kind == PowerShellCompilationArtifactKind.Executable &&
+                                spec.Mode == PowerShellCompilationMode.Strict
+                ? "CompiledPowerShellScript.cs"
+                : spec.Kind == PowerShellCompilationArtifactKind.Executable && method.SourceName == "<script>"
+                    ? "CompiledPowerShellEntry.cs"
+                    : "CompiledPowerShell.cs";
+            return FindGeneratedMethod(sourceDirectory, generatedFile, method.GeneratedName);
+        }
         var separator = method.SourceName.IndexOf('-');
         if (separator < 1 || separator == method.SourceName.Length - 1)
             throw new InvalidOperationException($"Hosted lifecycle command '{method.SourceName}' does not have a Verb-Noun identity for source-map publication.");

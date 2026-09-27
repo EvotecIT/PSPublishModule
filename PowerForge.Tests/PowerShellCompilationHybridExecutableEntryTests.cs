@@ -7,6 +7,36 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Fact]
+    public void Build_HybridEntryPreservesAuthoredBridgeNameAlias()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "param([string] $When = $(Set-Alias -Name Invoke-PowerForgeCompiledEntry -Value Write-Output -Scope Global; '2024-04-05'))\nGet-Date -Date $When -Format yyyy");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "PowerForge.HybridEntryAlias",
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid)
+        {
+            EmitSource = true
+        };
+        spec.ExpectedDependencyLock = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(spec);
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+        Assert.True(result.Succeeded, result.Error + System.Environment.NewLine + result.BuildOutput);
+        Assert.True(Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries).Emitted);
+        Assert.True(result.Manifest.DependencyLockReviewed);
+        Assert.Equal(spec.ExpectedDependencyLock.LockSha256, result.Manifest.DependencyGraph!.LockSha256);
+        using var sourceMap = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(
+            System.IO.Path.Combine(result.GeneratedSourcePath!, "source-map.json")));
+        var mapped = Assert.Single(sourceMap.RootElement.GetProperty("methods").EnumerateArray());
+        Assert.Equal("CompiledPowerShellEntry.cs", mapped.GetProperty("generatedFile").GetString());
+        Assert.Equal("<script>", mapped.GetProperty("powershellName").GetString());
+        var original = RunProcess("pwsh", "-NoProfile", "-File", fixture.ScriptPath);
+        var generated = RunProcess(result.ArtifactPath!);
+        Assert.Equal((0, "2024", string.Empty),
+            (original.ExitCode, original.StandardOutput.Trim(), original.StandardError.Trim()));
+        Assert.Equal((original.ExitCode, original.StandardOutput.Trim(), original.StandardError.Trim()),
+            (generated.ExitCode, generated.StandardOutput.Trim(), generated.StandardError.Trim()));
+    }
+
+    [Fact]
     public void Build_HybridSequentialEntryRetainsLaterParameterRead()
     {
         using var fixture = ArtifactFixture.Create(

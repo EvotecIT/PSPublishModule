@@ -32,8 +32,13 @@ internal static class PowerShellTypedExecutableCompiler
             .Units.SingleOrDefault(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
         if (rootUnit?.IsCompilable != true)
             throw new InvalidOperationException("A prebound executable entry requires an eligible authored script root.");
+        // The authored script has already bound its parameters. Its private entry consumes
+        // that frame directly; ordinary native-function binding would create a different
+        // invocation ABI and variable owner. Retain the other Hybrid host capabilities.
+        var entryCapabilities = PowerShellCompilationCapabilities.HybridExecutable &
+                                ~PowerShellCompilationCapability.NativeFunctionBinding;
         return CompileCore(entryPointPath, sourcePaths, plan, targetFramework, semanticProfileId,
-            commandProviders, PowerShellCompilationCapabilities.HybridExecutable, parametersAlreadyBound: true);
+            commandProviders, entryCapabilities, parametersAlreadyBound: true);
     }
 
     private static PowerShellTypedExecutableCompilation CompileCore(

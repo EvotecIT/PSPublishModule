@@ -82,7 +82,11 @@ internal static class PowerShellHybridExecutableEntryEmitter
         var selected = packagedStatements.Skip(matches[0]).Take(authoredStatements.Count)
             .Select(static statement => statement.Extent).ToArray();
         var values = compiled.EntryPoint.Parameters.Select(parameter => "$" + parameter.Contract.Name);
-        var invocation = "Invoke-PowerForgeCompiledEntry -Values ([object[]] @(" + string.Join(", ", values) + "))";
+        // This is compiler wiring, not an authored command lookup. A parameter default
+        // may define an alias/function with this name before the entry body runs.
+        var invocation = "& ([System.Management.Automation.CmdletInfo]::new('Invoke-PowerForgeCompiledEntry', " +
+                         "[PowerForge.Compiled.PowerForgeCompiledEntryCommand])) -Values ([object[]] @(" +
+                         string.Join(", ", values) + "))";
         var source = new StringBuilder(packagedSource);
         for (var index = selected.Length - 1; index > 0; index--)
             source.Remove(selected[index].StartOffset, selected[index].EndOffset - selected[index].StartOffset);
