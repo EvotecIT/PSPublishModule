@@ -194,7 +194,12 @@
               "column": 28
             }
           ],
-          "relativePath": "Public/Connectivity/Set-PasswordRemotely.ps1"
+          "relativePath": "Public/Connectivity/Set-PasswordRemotely.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-password-native-boundary.json",
+            "scope": "Owned native-call substitution and actual authored initialization/refusal; live password operation, discovery and erasure remain unqualified."
+          }
         },
         {
           "unitId": "975739889f75e147e751ffd4",
@@ -667,6 +672,7 @@
     "m29a-ad-data-boundary.json",
     "m29a-local-sid-boundary.json",
     "m29a-forest-details-boundary.json",
-    "m29a-smb-native-boundary.json"
+    "m29a-smb-native-boundary.json",
+    "m29a-password-native-boundary.json"
   ]
 }
