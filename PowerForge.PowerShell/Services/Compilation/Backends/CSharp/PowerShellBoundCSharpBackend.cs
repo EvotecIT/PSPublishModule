@@ -431,7 +431,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private string EmitExpression(PowerShellLoweredExpression expression)
         => expression switch
         {
-            PowerShellLoweredNativeReferenceExpression reference => "__nativeFunction.GetVariableReference(" + PowerShellCSharpLiteral.QuoteString(reference.Name) + ")",
+            PowerShellLoweredNativeReferenceExpression reference => "__nativeFunction.GetVariableReference(" + PowerShellCSharpLiteral.QuoteString(reference.Name) + ", " + (reference.DirectLocal ? "true" : "false") + ")",
             PowerShellLoweredLiteralExpression literal => EmitLiteral(literal),
             PowerShellLoweredNativeVariableExpression variable => EmitNativeVariableRead(variable),
             PowerShellLoweredNativeScriptBlockExpression block => EmitNativeBlockValue(block),

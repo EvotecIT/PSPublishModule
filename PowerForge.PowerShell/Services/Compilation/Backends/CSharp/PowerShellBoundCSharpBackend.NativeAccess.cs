@@ -21,8 +21,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         var arguments = "new object[] { " + string.Join(", ", invocation.Arguments.Select(EmitExpression)) + " }";
         var hasReferences = invocation.References.Count > 0;
-        if (hasReferences && invocation.References.All(reference =>
-                invocation.Arguments[reference.Index] is PowerShellLoweredNativeReferenceExpression))
+        if (hasReferences)
         {
             var operands = _getTemporaryIdentifier("nativeReferenceOperands");
             var receiver = invocation.Receiver is null ? EmitNativeTypeConstraint(invocation.LiteralTargetType) : EmitExpression(invocation.Receiver);
@@ -34,18 +33,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 EmitNativeTypeConstraint(invocation.TargetConstraint) + ", new global::System.Type[] { " +
                 string.Join(", ", invocation.ArgumentConstraints.Select(EmitNativeTypeConstraint)) + " }))";
         }
-        var argumentTemporary = hasReferences ? _getTemporaryIdentifier("nativeArguments") : null;
-        var call = "__nativeFunction." + (hasReferences ? "InvokeMemberWithReferenceWriteback(" : "InvokeMember(") +
+        return "__nativeFunction.InvokeMember(" +
            (invocation.Receiver is null ? EmitNativeTypeConstraint(invocation.LiteralTargetType) : EmitExpression(invocation.Receiver)) +
            ", " + PowerShellCSharpLiteral.QuoteString(invocation.Name) + ", " + (invocation.IsStatic ? "true" : "false") +
-           ", " + (hasReferences ? argumentTemporary : arguments) + ", " +
+           ", " + arguments + ", " +
            EmitNativeTypeConstraint(invocation.TargetConstraint) + ", new global::System.Type[] { " +
-           string.Join(", ", invocation.ArgumentConstraints.Select(EmitNativeTypeConstraint)) + " }" +
-           (!hasReferences ? ")" : ", new int[] { " +
-            string.Join(", ", invocation.References.Select(static reference => reference.Index)) + " }, new string[] { " +
-            string.Join(", ", invocation.References.Select(static reference => PowerShellCSharpLiteral.QuoteString(reference.VariableName))) + " })");
-        return hasReferences
-            ? "__statementErrors.EvaluateNativeInvocation(() => " + arguments + ", " + argumentTemporary + " => " + call + ")"
-            : call;
+           string.Join(", ", invocation.ArgumentConstraints.Select(EmitNativeTypeConstraint)) + " })";
     }
 }

@@ -53,17 +53,15 @@ namespace PowerForge.Generated.Runtime
             }
         }
 
-        /// <summary>Separates operand failures from invocation errors at the enclosing native sequence point.</summary>
+        /// <summary>Separates operand failures from invocation errors while retaining authored argument sequence points.</summary>
         internal TResult EvaluateNativeInvocation<TOperands, TResult>(Func<TOperands> operands, Func<TOperands, TResult> invocation)
         {
             ThrowIfDisposed();
+            var evaluated = operands();
+            // Actual variable-cell acquisition does not advance native position.
+            // Authored argument statements do, and their latest point owns call failures.
             var position = _nativeExpressionPosition;
             var hasSequencePoint = _hasNativeSequencePoint;
-            // Reference casts may advance position or throw. Their failures retain
-            // their own position; only binding/calling/writeback uses the entry point.
-            var evaluated = operands();
-            _nativeExpressionPosition = position;
-            _hasNativeSequencePoint = hasSequencePoint;
             try { return invocation(evaluated); }
             catch (Exception error)
             {

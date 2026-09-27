@@ -5,15 +5,15 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "89123bdb221330cfb5c01da0a39627c798383ba6",
+  "compilerBaselineCommit": "c5bcee252bf6a9e79e6a2a7ac1a79f784fc7be79",
   "packets": [
     {
       "packet": "pssg",
       "functions": 282,
       "stableUnits": 286,
-      "emitted": 259,
-      "retained": 23,
-      "sourceExplanationSha256": "e5634e4fa23e43a8b562130c4e33241bb2d73c83a816357a65b886f3dd4a6557",
+      "emitted": 261,
+      "retained": 21,
+      "sourceExplanationSha256": "e03ac4ef89f5a6a08cdac4ea612107947218e05a36916aa80647ec7e0bb75146",
       "functionsRetained": [
         {
           "unitId": "a1bb1dcefddec8c45377fd27",
@@ -318,24 +318,6 @@
           ]
         },
         {
-          "unitId": "ffe888fa05d905b08ee67e27",
-          "name": "Initialize-ModulePortable",
-          "relativePath": "Public/Programs/Initialize-ModulePortable.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Native reference arguments require distinct trailing locals in one storage family and a qualified static invocation.",
-              "line": 214,
-              "column": 17
-            }
-          ]
-        },
-        {
           "unitId": "523c7f446c83fea454b06443",
           "name": "Invoke-CommandCustom",
           "relativePath": "Public/Programs/Invoke-CommandCustom.ps1",
@@ -413,24 +395,6 @@
               "message": "Parameter '$RunspacePool' has CLR type 'System.Management.Automation.Runspaces.RunspacePool' that requires a target capability unavailable to this compilation.",
               "line": 30,
               "column": 9
-            }
-          ]
-        },
-        {
-          "unitId": "7b30d755a00abec0255a9d6e",
-          "name": "Test-ComputerPort",
-          "relativePath": "Public/TestFunctionality/Test-ComputerPort.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Native reference arguments require distinct trailing locals in one storage family and a qualified static invocation.",
-              "line": 100,
-              "column": 30
             }
           ]
         },
@@ -609,7 +573,7 @@
       "stableUnits": 67,
       "emitted": 63,
       "retained": 3,
-      "sourceExplanationSha256": "8ce5d2b37dcb39c8dd6eb00cb62715db8a5a0d7791d9b2cb3eee7d3701b00f10",
+      "sourceExplanationSha256": "5e9f5116623536238dd8564152297efd986b979ff6a2ba03d9eff38e38da2264",
       "functionsRetained": [
         {
           "unitId": "fc33881d5a7752031137ea07",
@@ -687,7 +651,7 @@
       "stableUnits": 121,
       "emitted": 90,
       "retained": 19,
-      "sourceExplanationSha256": "55d805d1f78cc0733d49bd7ffec0e4f73035047f773621167947ac9597507099",
+      "sourceExplanationSha256": "58f9421a20c0f866af3b63740ecfd6679f2f92004ba59f7f267e50533d715e70",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -1647,13 +1611,6 @@
               "message": "Parameter '$CimSession' has CLR type 'Microsoft.Management.Infrastructure.CimSession' that requires a target capability unavailable to this compilation.",
               "line": 17,
               "column": 9
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Native reference arguments require distinct trailing locals in one storage family and a qualified static invocation.",
-              "line": 46,
-              "column": 13
             }
           ]
         },
@@ -1954,15 +1911,20 @@
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "f931a5e34f28ddc8d07436f9c4ee095081a8ae8eea9730a24a6a8c5cda34291d",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedEnumDeclarationPolicy.cs": "13c19ff47ae23ae9d641c6d76ea6fe605e3187ccf13ecd607e53b68e2909c4c9",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedValueClassPolicy.cs": "e161dce7abde611d1ec26825f59d2a8218ebbabe239a3e199fdb8e509956cc73",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "f012289c2573414971f31933bb383248bec2c9d65fe5693168389265c8a903a0",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "8bc996305b041e08e92abb2435e391a78ad50022100d8b12f94a58249000d312",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "d2dd876d1f617fa524a4c392c602bc3cac7d33ab91f0efc58b401e8620659b22",
     "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeTypeExpression.cs": "33eed468f79993efecac2de58ea1241e077a6eccfc65924b46ef3954abf2c8de",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeTypeExpression.cs": "a0b77e29eb83c01bd67f4ae3cc8f0a3670cedb13d93822a49b2103ea61872227",
-    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs": "34bddf5376724d49596463cedc37716ddfb59e17e8ed95cd7968eb6b3bc7d4ae",
-    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.cs": "56196341891394b52ea2354f5d46c38cfb60d56fa5fb6182cf5c424160fa583e"
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs": "3e6566d1d16a5b258eacf00ad95b28e6e171d31ab5f8995e27f8ca98124b4f66",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.cs": "0a488bf77768ba49a3e68daf02ac93ba93032a14e0a1bd347d6e5e172b0e0d70",
+    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeReferenceExpression.cs": "4c9ab798686f3e67b8ea3aa8cd6205b43d4fc9f2998269dad95c1ef0b84e8007",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeReferenceExpression.cs": "5d88678ead768a64b3c8de95a11ad231fb1bafde03b92e67a97196e3b9816ff7",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.NativeAccess.cs": "68b03245e389021acc7796cda99b775e8003572b7fe847ea82d90ad735b28755",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Invocations.cs": "9dfff29122b5dd0701ab9c9ca08ddda8f71983b7fa99d2c737d50e4403f71852",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.NativeFunction.cs": "456d4cb9623abb02a77681a495c7fae9133581b9f172e0efdcd1aa0e569ebfc7"
   },
-  "dispositionComparison": "m29a-native-throw-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "89123bdb221330cfb5c01da0a39627c798383ba6",
-  "emitted": 502,
-  "retained": 63
+  "dispositionComparison": "m29a-instance-reference-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "c5bcee252bf6a9e79e6a2a7ac1a79f784fc7be79",
+  "emitted": 504,
+  "retained": 61
 }

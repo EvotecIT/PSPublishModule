@@ -5,6 +5,70 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
+    public void NativeReferenceCells_PreserveInstanceCallsAndOptimizedOrMixedStorage(string framework, string host)
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Read-InstanceReferences {
+                [CmdletBinding()]param([object]$Target,[object]$Alternate,[string]$Mode='ok')
+                [int]$number=7;[string]$text='before';$owner=$Target
+                try {
+                    $success=$Target.Update($($Target=$Alternate;$Mode),[ref]$number,[ref]$text)
+                    if($Mode -eq 'retained'){$owner.SavedNumber.Value=64;$owner.SavedText.Value='later'}
+                    [pscustomobject]@{success=$success;number=$number;text=$text}
+                } catch {
+                    [pscustomobject]@{error=$_.FullyQualifiedErrorId;exception=$_.Exception.GetType().FullName;message=$_.Exception.Message;number=$number;text=$text;line=$_.InvocationInfo.ScriptLineNumber;column=$_.InvocationInfo.OffsetInLine}
+                }
+            }
+            function Read-MixedReferences {
+                [CmdletBinding()]param([object]$Target,[string]$Mode='ok')
+                [int]$number=7;$text=1
+                if($Mode -eq 'typed'){[datetime]$text=[datetime]::MinValue}
+                try {$success=$Target.Update($Mode,[ref]$number,[ref]$text);[pscustomobject]@{success=$success;number=$number;text=$text}}
+                catch {[pscustomobject]@{error=$_.FullyQualifiedErrorId;exception=$_.Exception.GetType().FullName;message=$_.Exception.Message;number=$number;text=$text;line=$_.InvocationInfo.ScriptLineNumber;column=$_.InvocationInfo.OffsetInLine}}
+            }
+            """, ".psm1");
+        var built = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.NativeInstanceReferences", PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(built.Succeeded, built.Error + Environment.NewLine + built.BuildOutput);
+        Assert.Equal(2, built.Manifest!.CompiledMethods);
+        const string probe = """
+            Add-Type 'public sealed class OwnedInstanceReferenceProbe { private readonly int seed; public OwnedInstanceReferenceProbe(int seed) {this.seed=seed;} public bool Update(string mode,out int number,out string text) {number=seed;text="updated";if(mode=="throw")throw new System.InvalidOperationException("owned failure");return true;} }'
+            $target=[OwnedInstanceReferenceProbe]::new(42);$alternate=[OwnedInstanceReferenceProbe]::new(99)
+            foreach($mode in 'ok','throw','typed') {
+                foreach($action in 'Continue','Stop') {
+                    Read-InstanceReferences -Target $target -Alternate $alternate -Mode $mode -ErrorAction $action | ConvertTo-Json -Depth 8 -Compress
+                    Read-MixedReferences -Target $target -Mode $mode -ErrorAction $action | ConvertTo-Json -Depth 8 -Compress
+                }
+            }
+            Read-InstanceReferences -Target $null -Alternate $alternate | ConvertTo-Json -Depth 8 -Compress
+            $scriptTarget=[pscustomobject]@{}
+            $scriptTarget|Add-Member ScriptMethod Update {param($mode,$number,$text);$this|Add-Member NoteProperty SavedNumber $number -Force;$this|Add-Member NoteProperty SavedText $text -Force;$number.Value=23;$text.Value='script';$true}
+            Read-InstanceReferences -Target $scriptTarget -Alternate $alternate | ConvertTo-Json -Depth 8 -Compress
+            Read-InstanceReferences -Target $scriptTarget -Alternate $alternate -Mode retained | ConvertTo-Json -Depth 8 -Compress
+            $scriptTarget.SavedNumber.Value=65
+            [pscustomobject]@{retainedAfterReturn=$scriptTarget.SavedNumber.Value;text=$scriptTarget.SavedText.Value}|ConvertTo-Json -Depth 8 -Compress
+            $module=(Get-Command Read-InstanceReferences).Module
+            & $module {New-Variable -Name number -Scope Script -Value 13 -Option AllScope}
+            try {
+                Read-InstanceReferences -Target $target -Alternate $alternate | ConvertTo-Json -Depth 8 -Compress
+                [pscustomobject]@{allScopeNumber=(& $module {$script:number})}|ConvertTo-Json -Depth 8 -Compress
+            } finally {& $module {Remove-Variable -Name number -Scope Script -Force}}
+            """;
+        var original = RunModuleProof(fixture.ScriptPath, probe, host);
+        var generated = RunModuleProof(built.ArtifactPath!, probe, host);
+        Assert.True(original == generated, "Original:" + original + Environment.NewLine + "Generated:" + generated);
+        Assert.Contains("\"number\":42", generated);
+        Assert.Contains("\"number\":23", generated);
+        Assert.Contains("\"number\":64", generated);
+        Assert.Contains("\"retainedAfterReturn\":65", generated);
+        Assert.Contains("\"allScopeNumber\":42", generated);
+        Assert.Contains("owned failure", generated);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
     public void NativeReferenceCells_PreserveUnoptimizedStorageAndRuntimeStaticTargets(string framework, string host)
     {
         using var fixture = ArtifactFixture.Create("""

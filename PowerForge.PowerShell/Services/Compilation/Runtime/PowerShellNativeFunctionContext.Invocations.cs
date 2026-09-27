@@ -2,25 +2,46 @@ namespace PowerForge.Generated.Runtime
 {
     using System;
     using System.Collections.Concurrent;
+    using System.Collections.Generic;
     using System.Dynamic;
     using System.Linq;
     using System.Linq.Expressions;
     using System.Management.Automation;
+    using System.Management.Automation.Language;
     using System.Reflection;
     using System.Runtime.CompilerServices;
 
     public sealed partial class PowerShellNativeFunctionContext
     {
         private static readonly ConcurrentDictionary<InvocationSiteKey, Func<object?, object?[], object?>> InvocationSites = new();
+        private readonly Dictionary<string, NativeAstOperation> _localReferences = new(StringComparer.OrdinalIgnoreCase);
         private static readonly Lazy<MethodInfo> VariableReferenceOperation = new(() => typeof(PSObject).Assembly
             .GetType("System.Management.Automation.VariableOps", true)!
             .GetMethod("GetVariableAsRef", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
             ?? throw new NotSupportedException("PowerShell's native variable-reference operation is unavailable."));
 
         /// <summary>Acquires the existing variable cell, preserving native lookup, constraints and missing-variable errors.</summary>
-        public PSReference GetVariableReference(string name)
+        public PSReference GetVariableReference(string name, bool directLocal = false)
         {
             EnsureActive();
+            if (directLocal)
+            {
+                if (!_localReferences.TryGetValue(name, out var operation))
+                {
+                    // Compile only the reference operation against this invocation's real tuple.
+                    // The native compiler supplies the slot's static type for overload resolution.
+                    var extent = PowerShellSourceExtent.Create(string.Empty, 1, 1, 1, name.Length + 7, "[ref]$" + name);
+                    var variable = new VariableExpressionAst(extent, name, splatted: false);
+                    var reference = new ConvertExpressionAst(extent, new TypeConstraintAst(extent, typeof(PSReference)), variable);
+                    var statement = new CommandExpressionAst(extent, reference, null);
+                    var ast = new ScriptBlockAst(extent, null, new StatementBlockAst(extent, new[] { statement }, null), isFilter: false);
+                    var native = new NativeAstCompiler(this, ast, assignmentVariables: true);
+                    native.Expressions.Add(Expression.Convert((Expression)native.Invoke("VisitConvertExpression", reference)!, typeof(object)));
+                    operation = native.Compile();
+                    _localReferences.Add(name, operation);
+                }
+                return (PSReference)operation.Invoke(FunctionContext)!;
+            }
             return (PSReference)PowerShellNativeFunctionHost.Invoke(VariableReferenceOperation.Value, null,
                 new object[] { new VariablePath(name), _executionContext, null! })!;
         }
@@ -32,16 +53,6 @@ namespace PowerForge.Generated.Runtime
             EnsureActive();
             return InvocationSites.GetOrAdd(new InvocationSiteKey(name, isStatic, targetConstraint, argumentConstraints),
                 CreateInvocationSite)(receiver, arguments);
-        }
-
-        /// <summary>Copies distinct trailing references back in authored argument order after successful invocation.</summary>
-        public object? InvokeMemberWithReferenceWriteback(object? receiver, string name, bool isStatic, object?[] arguments,
-            Type? targetConstraint, Type?[] argumentConstraints, int[] referenceArgumentIndices, string[] referenceVariableNames)
-        {
-            var result = InvokeMember(receiver, name, isStatic, arguments, targetConstraint, argumentConstraints);
-            for (var index = 0; index < referenceArgumentIndices.Length; index++)
-                SetVariable(referenceVariableNames[index], ((PSReference)arguments[referenceArgumentIndices[index]]!).Value);
-            return result;
         }
 
         private static Func<object?, object?[], object?> CreateInvocationSite(InvocationSiteKey key)
