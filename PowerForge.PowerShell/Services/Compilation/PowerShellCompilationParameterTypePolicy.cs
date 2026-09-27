@@ -48,6 +48,7 @@ internal static class PowerShellCompilationParameterTypePolicy
         typeof(PSReference),
         // Execution objects remain caller-owned and use the active native binder.
         typeof(PowerShell),
+        typeof(System.Management.Automation.Runspaces.Runspace),
         typeof(System.Management.Automation.Runspaces.RunspacePool),
         typeof(System.Management.Automation.Runspaces.RunspaceFactory),
         typeof(Parser),
@@ -133,6 +134,7 @@ internal static class PowerShellCompilationParameterTypePolicy
     // Reference and execution-object identity must survive native binding, including containers.
     private static bool RequiresNativeFunctionBinding(Type type)
         => type == typeof(PSReference) || type == typeof(PowerShell) ||
+           type == typeof(System.Management.Automation.Runspaces.Runspace) ||
            type == typeof(System.Management.Automation.Runspaces.RunspacePool) ||
            type == typeof(System.Management.Automation.Runspaces.RunspaceFactory) ||
            type.IsArray && RequiresNativeFunctionBinding(type.GetElementType()!) ||

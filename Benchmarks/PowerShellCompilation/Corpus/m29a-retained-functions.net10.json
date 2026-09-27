@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "cabe8002c53be2f2f792289d50850a71c406fd4c",
+  "compilerBaselineCommit": "933a40b539da1b1b26e4f3f0ef0695644f3f315b",
   "packets": [
     {
       "packet": "pssg",
@@ -13,7 +13,7 @@
       "stableUnits": 286,
       "emitted": 269,
       "retained": 13,
-      "sourceExplanationSha256": "2114bf330c9a5c1cc8f2dd1397dda9443780c6c7cd8d04050ee70c123ad42450",
+      "sourceExplanationSha256": "9df714ed3ddcd04ed204441a14942343db9fe7d40a73199385df45d7d7ab0933",
       "functionsRetained": [
         {
           "unitId": "bde03b869be356b032686101",
@@ -306,7 +306,7 @@
       "stableUnits": 69,
       "emitted": 63,
       "retained": 5,
-      "sourceExplanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1",
+      "sourceExplanationSha256": "51277db657806711a57853e04fa18848f05040d5c4343f18f3aad8e7627472d3",
       "functionsRetained": [
         {
           "unitId": "2be0f84457750dd64ee0c5d1",
@@ -410,7 +410,7 @@
       "stableUnits": 67,
       "emitted": 65,
       "retained": 1,
-      "sourceExplanationSha256": "35f6919cdd439a762a9284cc3a90d32d6f984621307cafd753e71f40c9bc3d53",
+      "sourceExplanationSha256": "0be6c42dae3f50456d294f128e9377a5d9ce3f3b0dc00f3f4fad31a8b9c71c47",
       "functionsRetained": [
         {
           "unitId": "fc33881d5a7752031137ea07",
@@ -436,9 +436,9 @@
       "packet": "pst",
       "functions": 109,
       "stableUnits": 121,
-      "emitted": 93,
-      "retained": 16,
-      "sourceExplanationSha256": "11b2e7c516caf93500e24a3471612edc585d8b32a98966a6a3a5ce291b0f9f1a",
+      "emitted": 94,
+      "retained": 15,
+      "sourceExplanationSha256": "a89dcee275cac8031619aea7c5316f9390273ba09e5bc5f8ad3691059fff13ba",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -1346,24 +1346,6 @@
               "column": 9
             }
           ]
-        },
-        {
-          "unitId": "09a30ea6dc3cca424ff570fc",
-          "name": "Remove-Runspace",
-          "relativePath": "functions/remove-runspace.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$Runspace' has CLR type 'System.Management.Automation.Runspaces.Runspace' that requires a target capability unavailable to this compilation.",
-              "line": 14,
-              "column": 9
-            }
-          ]
         }
       ]
     },
@@ -1373,7 +1355,7 @@
       "stableUnits": 41,
       "emitted": 27,
       "retained": 13,
-      "sourceExplanationSha256": "f3a8acb7feecc018adfe9d5daf63170ea3af30eed2b718cb1426d9e2346c005f",
+      "sourceExplanationSha256": "c1693d9d13ef6349b1f21099dbcd22b8c2899388fe8e8f5df928c5867bea2144",
       "functionsRetained": [
         {
           "unitId": "62d3e169b4f7eb162da5636b",

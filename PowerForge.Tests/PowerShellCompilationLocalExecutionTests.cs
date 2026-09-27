@@ -95,10 +95,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             function Read-PoolList {param([Collections.Generic.List[System.Management.Automation.Runspaces.RunspacePool]]$Value);$Value}
             function New-Pipeline {param();[PowerShell]::Create()}
             function Read-Runspace {param([System.Management.Automation.Runspaces.Runspace]$Value);$Value}
+            function Read-RunspaceArray {param([System.Management.Automation.Runspaces.Runspace[]]$Value);$Value}
+            function Read-RunspaceList {param([Collections.Generic.List[System.Management.Automation.Runspaces.Runspace]]$Value);$Value}
             function Read-Session {param([System.Management.Automation.Runspaces.PSSession]$Value);$Value}
             """,Path.Combine(Path.GetTempPath(),"local-execution-boundaries.ps1"));
         var hybrid=new PowerShellSemanticCompilationPipeline().Compile(new[]{source},framework,PowerShellCompilationCapabilities.HybridModule);
-        Assert.Equal(5,hybrid.Emitted.Methods.Length);
+        Assert.Equal(8,hybrid.Emitted.Methods.Length);
         foreach(var capabilities in new[]{PowerShellCompilationCapabilities.TypedLibrary,
             PowerShellCompilationCapabilities.HybridModule & ~PowerShellCompilationCapability.NativeFunctionBinding,
             PowerShellCompilationCapabilities.HybridModule & ~PowerShellCompilationCapability.PowerShellHostTypes})
