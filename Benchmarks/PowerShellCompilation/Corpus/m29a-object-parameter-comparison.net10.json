@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Qualify direct object-parameter literal comparisons/interpolation through existing invocation-owned value semantics; emission is separate from execution.",
+  "baselineCompilerCommit": "777fe430f899b1144f432f01ab948bec20d16314",
+  "baselineComparison": "m29a-literal-pipeline-comparison.net10.json",
+  "baselineComparisonSha256": "b21b838185ba0f920f6668e5174342ba7082b3d53d8a8e2336efa41d82d3ccfb",
+  "baselineRetainedInventorySha256": "92873ab08aded70decc8bdd3fdc425682a4125df3fcd9621facd8d1197743e19",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 490,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "baselineEmitted": 255,
+      "candidateEmitted": 257,
+      "candidateExplanationSha256": "de43d2109214ab4d6e20cb06b83d5942bc742262c3412f726dc5ea0de67aee5b",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": [
+        {
+          "unitId": "95f382fdcf8a9abd42534793",
+          "name": "Set-EmailBodyPreparedTable",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "e35ebc8a4978cf35ea0edd8f",
+          "name": "Add-ToHashTable",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "baselineEmitted": 63,
+      "candidateEmitted": 63,
+      "candidateExplanationSha256": "0fe9323878dbf15bc173231b8ad447afc5ddf1d9833e9b2cd631e66cc998bee3",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "baselineEmitted": 61,
+      "candidateEmitted": 61,
+      "candidateExplanationSha256": "73172aaac03d1c74782e361a0716d2c2d0c14b80abae98e870ef80c8253a8ee2",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "baselineEmitted": 84,
+      "candidateEmitted": 84,
+      "candidateExplanationSha256": "bb7f462c3e2d95e8a13d75c4b0bef1d70fe6098c9821d5e99f709c70769ac6c3",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "baselineEmitted": 27,
+      "candidateEmitted": 27,
+      "candidateExplanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    }
+  ],
+  "candidateEmitted": 492,
+  "candidateRetained": 73,
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "84d3f63a14cec31e00fd2c121c72a2196f9e25d78e796225da34783fc494b9dc",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeLanguageOperations.cs": "8865ef3db2a829712a3f3fb1b748319c07faecaa2aed18f0e39edbfbe79b2c76",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.cs": "2424898c41453e8195e6d731b78f4a48b8cd227e0245e093725c8d660304778f",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.Strings.cs": "6a761cd0c38660d41d98e0b27b635e300a517a5f34d18f1e54f439449dbb6b9b"
+  },
+  "qualification": {
+    "hosts": [
+      "Windows net10.0 / PowerShell 7",
+      "Windows net472 / PowerShell 5.1"
+    ],
+    "artifactMode": "Hybrid binary module",
+    "newExecutedFunctions": [
+      "Add-ToHashTable",
+      "Set-EmailBodyPreparedTable"
+    ],
+    "observationsPerHost": 70,
+    "realHelperObservationsPerHost": 56,
+    "focusedTests": {
+      "passed": 17,
+      "total": 17,
+      "durationSeconds": 47,
+      "trxSha256": "35ce969576cb669082b7b903b4e2ca7912bb0ee7a785327865cff93c5257a297"
+    },
+    "net472OwnerBuild": {
+      "warnings": 0,
+      "errors": 0,
+      "seconds": 4.27
+    },
+    "independentReview": {
+      "task": "interpolation_binder_review",
+      "findings": 0,
+      "scope": "New interpolation binder/backend/lifetime/packaging owner; selector reviewed separately by object_parameter_value_review, stale test resolved."
+    },
+    "limits": [
+      "Five-packet census is net10.0 only; focused artifacts cover both claimed Windows hosts.",
+      "No email, AD, network or administrative operations.",
+      "No general nested-expression, cross-runspace concurrency, performance or release claim."
+    ],
+    "fixtureProvenance": [
+      {
+        "function": "Add-ToHashTable",
+        "sourceSha256": "604f9b6314cb2bdc3b6f1da3850a974a1538a5aed5dd245894f5750fca08057f"
+      },
+      {
+        "function": "Set-EmailBodyPreparedTable",
+        "sourceSha256": "75362aa7e974ee591deeeede53eaec2a48979cea2625472e60992d408d73489c7"
+      }
+    ],
+    "testSourceHashes": {
+      "PowerForge.Tests/PowerShellCompilationObjectParameterValueTests.cs": "40961eaed65cf78b85aec367a2b90694a0f7e81317a5fba3fd258a95e47f76fc",
+      "PowerForge.Tests/PowerShellCompilationInterpolationObserverTests.cs": "3d4efde829c65b2bc6f5c351fb6e9809e53b28d16f4189608c1b40c606a075ef",
+      "PowerForge.Tests/PowerShellCompilationInterpolationValueTests.cs": "13cae2a6abacb17a79135a59bcf0c0ab743fcbe323adf504dd247abf153a6555"
+    }
+  }
+}

@@ -14,6 +14,22 @@ namespace PowerForge.Generated.Runtime
         private static readonly ConcurrentDictionary<bool, Func<object, object?, object?, bool>> MembershipOperations = new();
         private static readonly Lazy<Func<object?, object?, bool>> TypeTest = new(() => CreateTypeTest());
 
+        private static readonly Lazy<Func<object?, object, string>> InterpolationString = new(CreateInterpolationString);
+
+        // Interpolation uses PSToStringBinder, whose scalar fast paths differ from ToStringParser.
+        // Cache the operation only; the active invocation supplies its execution context on every call.
+        internal static string InterpolateValue(object? value, object context) => InterpolationString.Value(value, context);
+
+        private static Func<object?, object, string> CreateInterpolationString()
+        {
+            var contextType = typeof(PSObject).Assembly.GetType("System.Management.Automation.ExecutionContext", true)!;
+            var value = Expression.Parameter(typeof(object), "value");
+            var context = Expression.Parameter(typeof(object), "context");
+            return Expression.Lambda<Func<object?, object, string>>(
+                Expression.Dynamic(GetSingletonBinder("PSToStringBinder"), typeof(string),
+                    value, Expression.Convert(context, contextType)), value, context).Compile();
+        }
+
         internal static bool IsInstance(object? value, object? type) => TypeTest.Value(value, type);
 
         private static Func<object?, object?, bool> CreateTypeTest()

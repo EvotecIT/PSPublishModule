@@ -4,60 +4,17 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "dispositionContract": "Every function identity matches the complete per-function baseline; no method or still-retained region from the accepted parser-reference checkpoint is lost.",
-  "compilerBaselineCommit": "f563842db082a50e82811eaaf6867218e35f2914",
+  "dispositionContract": "Every function identity matches the complete per-function baseline; no method or still-retained region from the accepted literal-pipeline checkpoint is lost.",
+  "compilerBaselineCommit": "777fe430f899b1144f432f01ab948bec20d16314",
   "packets": [
     {
       "packet": "pssg",
       "stableUnits": 286,
       "functions": 282,
-      "emitted": 255,
-      "retained": 27,
-      "sourceExplanationSha256": "f784d4955c37b9934f83fc94f0513a997e14c9dad6a1f2da3682e19d46c13da5",
+      "emitted": 257,
+      "retained": 25,
+      "sourceExplanationSha256": "de43d2109214ab4d6e20cb06b83d5942bc742262c3412f726dc5ea0de67aee5b",
       "functionsRetained": [
-        {
-          "unitId": "95f382fdcf8a9abd42534793",
-          "name": "Set-EmailBodyPreparedTable",
-          "relativePath": "Private/Deprecated/Email/Set-EmailBodyPreparedTable.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Expandable-string values require a closed scalar representation. Opaque stringification can invoke callbacks that observe or mutate caller locals and remains on the PowerShell runtime path.",
-              "line": 23,
-              "column": 23
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Compound assignment 'PlusEquals' is not defined for CLR types 'System.String' and 'System.Object' on the conservative compilation path.",
-              "line": 24,
-              "column": 5
-            }
-          ]
-        },
-        {
-          "unitId": "e35ebc8a4978cf35ea0edd8f",
-          "name": "Add-ToHashTable",
-          "relativePath": "Private/Deprecated/Objects/Add-ToHashTable.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "Comparison operands must have the same static CLR type on the conservative compilation path.",
-              "line": 28,
-              "column": 31
-            }
-          ]
-        },
         {
           "unitId": "a1bb1dcefddec8c45377fd27",
           "name": "Get-ObjectEnumValues",
@@ -2227,10 +2184,13 @@
     }
   ],
   "compilerSourceHashes": {
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellCommandRegionSemanticBinder.cs": "5b7321fbf446d7270dd8d39a57f95dc809de067fdabc938d8af2c5fd64d672d9"
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "84d3f63a14cec31e00fd2c121c72a2196f9e25d78e796225da34783fc494b9dc",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeLanguageOperations.cs": "8865ef3db2a829712a3f3fb1b748319c07faecaa2aed18f0e39edbfbe79b2c76",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.cs": "2424898c41453e8195e6d731b78f4a48b8cd227e0245e093725c8d660304778f",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.Strings.cs": "6a761cd0c38660d41d98e0b27b635e300a517a5f34d18f1e54f439449dbb6b9b"
   },
-  "dispositionComparison": "m29a-literal-pipeline-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "f563842db082a50e82811eaaf6867218e35f2914",
-  "emitted": 490,
-  "retained": 75
+  "dispositionComparison": "m29a-object-parameter-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "777fe430f899b1144f432f01ab948bec20d16314",
+  "emitted": 492,
+  "retained": 73
 }

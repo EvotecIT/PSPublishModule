@@ -127,6 +127,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
            RequiresNativeModuleStateStringConversion(function) ||
            RequiresNativeStaticNumericArgumentConversion(function) ||
            RequiresNativeStaticStringArgumentConversion(function) ||
+           RequiresNativeObjectParameterValueOperation(function) ||
            PowerShellAutomaticVariableObservationPolicy.ObservesCatchState(function) ||
            function.Body.Find(static node => node is ConvertExpressionAst conversion &&
                PowerShellObjectConstructionPolicy.HasTypeNameMetadata(conversion),
@@ -310,6 +311,25 @@ internal static class PowerShellNativeFunctionBindingPolicy
            (variable.VariablePath.IsUnqualified || variable.VariablePath.IsLocal) &&
            names.Contains(variable.VariablePath.UserPath.StartsWith("local:", StringComparison.OrdinalIgnoreCase)
                ? variable.VariablePath.UserPath.Substring(6) : variable.VariablePath.UserPath);
+
+    // Literal comparisons and direct interpolation of object parameters need
+    // invocation-owned conversion, collection behavior and callback scope.
+    private static bool RequiresNativeObjectParameterValueOperation(FunctionDefinitionAst function)
+    {
+        var parameters = PowerShellParameterSyntax.GetParameters(function.Body)
+            .Where(static parameter => parameter.StaticType == typeof(object))
+            .Select(static parameter => parameter.Name.VariablePath.UserPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (parameters.Count == 0) return false;
+        static bool IsLiteral(Ast value) => value is ConstantExpressionAst or StringConstantExpressionAst ||
+            value is VariableExpressionAst variable && variable.VariablePath.UserPath.Equals("null", StringComparison.OrdinalIgnoreCase);
+        return function.Body.Find(node =>
+            node is ExpandableStringExpressionAst text && text.NestedExpressions.Any(value => IsDirectObjectParameterRead(value, parameters)) ||
+            node is BinaryExpressionAst { Operator: TokenKind.Ieq or TokenKind.Ceq or TokenKind.Ine or TokenKind.Cne } comparison &&
+            (IsDirectObjectParameterRead(comparison.Left, parameters) && IsLiteral(comparison.Right) ||
+             IsLiteral(comparison.Left) && IsDirectObjectParameterRead(comparison.Right, parameters)),
+            searchNestedScriptBlocks: false) is not null;
+    }
 
     private static bool HasSingleStringOverload(Type type, string methodName, int argumentCount)
     {

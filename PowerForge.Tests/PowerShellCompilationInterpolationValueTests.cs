@@ -33,7 +33,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
-    public void Interpolation_RetainsOpenValuesSeparatorsAndFailureContinuation(string framework, string host)
+    public void Interpolation_PreservesOpenValuesSeparatorsAndFailureContinuation(string framework, string host)
     {
         const string source = """
             function Expand-Value { [CmdletBinding()] param([object]$Value) return "value=$Value" }
@@ -76,7 +76,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 }
             }
             """;
-        CompareInterpolationArtifact(framework, host, source, probe, 0, "open-interpolation", hybrid: true);
+        CompareInterpolationArtifact(framework, host, source, probe, 2, "open-interpolation", hybrid: true);
     }
 
     [Theory]
@@ -154,7 +154,15 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             hybrid ? PowerShellCompilationMode.Hybrid : PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(methods, result.Manifest!.CompiledMethods);
-        if (hybrid) Assert.True(result.Manifest.RuntimeFallbackUnits > 0);
+        if (hybrid)
+        {
+            Assert.True(result.Manifest.RuntimeFallbackUnits > 0);
+            foreach (var unit in result.Manifest.UnitDispositionLedger!.Entries.Where(unit => unit.EmittedClrMethod))
+            {
+                Assert.True(unit.UsesNativeFunctionBinding, unit.Name);
+                Assert.False(unit.RetainedHostedSource, unit.Name);
+            }
+        }
         else Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
         if (library)
         {

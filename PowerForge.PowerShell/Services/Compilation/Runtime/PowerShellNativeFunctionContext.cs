@@ -135,6 +135,13 @@ namespace PowerForge.Generated.Runtime
             return (string)PowerShellNativeFunctionHost.Invoke(_contract.Stringify, null, new object[] { _executionContext, value! })!;
         }
 
+        /// <summary>Formats an interpolated value using the host binder and this invocation's variables.</summary>
+        public string InterpolateValue(object? value)
+        {
+            EnsureActive();
+            return PowerShellNativeLanguageOperations.InterpolateValue(value, _executionContext);
+        }
+
         /// <summary>Prevents a captured context from accessing a later invocation.</summary>
         public void Dispose() => _disposed = true;
 

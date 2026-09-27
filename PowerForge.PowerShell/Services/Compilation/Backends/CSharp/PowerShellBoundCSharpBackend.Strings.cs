@@ -7,7 +7,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var parts = interpolated.Parts.Select(part => part.Expression is null
             ? PowerShellCSharpLiteral.QuoteString(part.Text ?? string.Empty)
             : interpolated.UsesNativeInvocation
-                ? $"__nativeFunction.Stringify({EmitExpression(part.Expression)})"
+                ? $"__nativeFunction.InterpolateValue({EmitExpression(part.Expression)})"
             : part.Expression.ClrType == typeof(string)
                 ? $"({EmitExpression(part.Expression)} ?? string.Empty)"
                 : part.NumericTemporary.Length != 0

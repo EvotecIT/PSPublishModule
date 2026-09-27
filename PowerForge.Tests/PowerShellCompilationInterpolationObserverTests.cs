@@ -11,7 +11,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(InterpolationObserverHosts))]
-    public void Interpolation_RetainsScriptMethodCallerObservations(string framework, string host, string expression)
+    public void Interpolation_PreservesScriptMethodCallerObservations(string framework, string host, string expression)
     {
         const string template = """
             function Expand-Observer {
@@ -54,6 +54,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Empty(original.StandardError);
         Assert.Empty(compiled.StandardError);
         Assert.Equal(original.StandardOutput, compiled.StandardOutput);
-        Assert.Equal(expression.StartsWith("Expand-Leaf", StringComparison.Ordinal) ? 2 : 1, result.Manifest.CompiledMethods);
+        var nativeInterpolation = expression == "\"value=$Value\"";
+        Assert.Equal(nativeInterpolation || expression.StartsWith("Expand-Leaf", StringComparison.Ordinal) ? 2 : 1, result.Manifest.CompiledMethods);
+        if (nativeInterpolation)
+        {
+            var observer = Assert.Single(result.Manifest.UnitDispositionLedger!.Entries, unit => unit.Name == "Expand-Observer");
+            Assert.True(observer.EmittedClrMethod);
+            Assert.True(observer.UsesNativeFunctionBinding);
+            Assert.False(observer.RetainedHostedSource);
+        }
     }
 }
