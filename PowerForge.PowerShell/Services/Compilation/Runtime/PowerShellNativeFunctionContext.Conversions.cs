@@ -13,11 +13,6 @@ namespace PowerForge.Generated.Runtime
         private static readonly ConcurrentDictionary<Type, Func<object?, object?>> ConversionSites = new();
         private static readonly Lazy<Func<object?, Type, object?>> AsOperation = new(CreateAsOperation);
         private static readonly Lazy<Func<object?, object?>> CustomObjectConversionSite = new(CreateCustomObjectConversionSite);
-        private static readonly Lazy<ConstructorInfo> RuntimeTypeNameConstructor = new(() => typeof(PSObject).Assembly
-            .GetType("System.Management.Automation.Language.TypeName", true)!
-            .GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null,
-                new[] { typeof(System.Management.Automation.Language.IScriptExtent), typeof(string) }, null)
-            ?? throw new NotSupportedException("PowerShell's authored type-name representation is unavailable."));
         private static readonly Lazy<MethodInfo> ResolveRuntimeTypeName = new(() => typeof(PSObject).Assembly
             .GetType("System.Management.Automation.TypeOps", true)!
             .GetMethod("ResolveTypeName", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
@@ -87,18 +82,17 @@ namespace PowerForge.Generated.Runtime
         {
             EnsureActive();
             var extent = PowerShellSourceExtent.Create(file, line, column, endLine, endColumn, sourceText);
-            var authored = CreateRuntimeTypeName(typeName, extent);
+            var authored = CreateRuntimeTypeName(typeName);
             return (Type)PowerShellNativeFunctionHost.Invoke(ResolveRuntimeTypeName.Value, null,
                 new[] { authored, extent })!;
         }
 
-        // Generic and array names need their parser-owned ITypeName shape.
+        // All names need the parser's type-resolution preparation, including simple
+        // host types whose assembly is not yet available to a freshly constructed TypeName.
         // Resolve each fresh name in the active host; a cached resolved Type
         // would bypass later session type resolution. Parsing never executes source.
-        private static object CreateRuntimeTypeName(string typeName, IScriptExtent extent)
+        private static object CreateRuntimeTypeName(string typeName)
         {
-            if (typeName.IndexOf('[') < 0)
-                return RuntimeTypeNameConstructor.Value.Invoke(new object[] { extent, typeName });
             var syntax = Parser.ParseInput("[" + typeName + "]", out _, out var errors);
             if (errors.Length != 0 || syntax.EndBlock?.Statements.Count != 1 ||
                 syntax.EndBlock.Statements[0] is not PipelineAst { PipelineElements.Count: 1 } pipeline ||

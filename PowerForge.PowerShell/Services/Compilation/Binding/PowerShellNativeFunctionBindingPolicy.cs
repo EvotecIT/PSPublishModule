@@ -76,6 +76,9 @@ internal static class PowerShellNativeFunctionBindingPolicy
         => function.Body.BeginBlock is not null || function.Body.ProcessBlock is not null ||
            PowerShellHostedEnumDeclarationPolicy.RequiresNativeParameterBinding(function) ||
            PowerShellHostedValueClassPolicy.RequiresNativeConstruction(function) ||
+           function.Body.Find(node => node is TypeExpressionAst hostConstructor &&
+               PowerShellCompilationParameterTypePolicy.IsHostProvidedConstructorReceiver(hostConstructor, capabilities),
+               searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(static node => node is ThrowStatementAst { Pipeline: null } thrown &&
                !PowerShellControlFlowBindingPolicy.HasAncestor<CatchClauseAst>(thrown), searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(static node => node is ThrowStatementAst { Pipeline: not null } thrown &&

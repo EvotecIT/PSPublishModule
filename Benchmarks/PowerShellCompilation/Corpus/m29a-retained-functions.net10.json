@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "a5e8a5180ddbe1b498aff38de57af73f7dca9d62",
+  "compilerBaselineCommit": "fd897d59cb3e500914577bd0f60c6da6dfd38d1d",
   "packets": [
     {
       "packet": "pssg",
@@ -532,9 +532,9 @@
       "packet": "pinf",
       "functions": 66,
       "stableUnits": 67,
-      "emitted": 63,
-      "retained": 3,
-      "sourceExplanationSha256": "5e9f5116623536238dd8564152297efd986b979ff6a2ba03d9eff38e38da2264",
+      "emitted": 64,
+      "retained": 2,
+      "sourceExplanationSha256": "1521c841ec8d6c7ae8c02240d6a945f904170d88ae8dfd7283f4dc94996bc137",
       "functionsRetained": [
         {
           "unitId": "fc33881d5a7752031137ea07",
@@ -555,31 +555,6 @@
           ]
         },
         {
-          "unitId": "084d5bcb5bdf97dc7fca3816",
-          "name": "New-WebSession",
-          "relativePath": "Private/New-WebSession.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "CLR type 'Microsoft.PowerShell.Commands.WebRequestSession' is not available in the generated project reference set for the requested target.",
-              "line": 8,
-              "column": 19
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.foreachstatement",
-              "message": "foreach variable '$entry' has no function-scope semantic symbol.",
-              "line": 10,
-              "column": 14
-            }
-          ]
-        },
-        {
           "unitId": "db4045ac87a8a7f41b9d4fe7",
           "name": "Connect-Infoblox",
           "relativePath": "Public/Connect-Infoblox.ps1",
@@ -594,13 +569,6 @@
               "message": "Member assignment value is not assignable to 'System.Net.SecurityProtocolType'.",
               "line": 74,
               "column": 55
-            },
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.unsupported",
-              "message": "CLR type 'Microsoft.PowerShell.Commands.WebRequestSession' is not available in the generated project reference set for the requested target.",
-              "line": 96,
-              "column": 68
             }
           ]
         }
@@ -1601,7 +1569,7 @@
       "stableUnits": 41,
       "emitted": 27,
       "retained": 13,
-      "sourceExplanationSha256": "f3a8acb7feecc018adfe9d5daf63170ea3af30eed2b718cb1426d9e2346c005f",
+      "sourceExplanationSha256": "555b6d9af7614be190ead08633e11bce2256cae0db86a6eeaf9ff2c3f586e374",
       "functionsRetained": [
         {
           "unitId": "62d3e169b4f7eb162da5636b",
@@ -1869,11 +1837,11 @@
     "PowerForge.PowerShell/Services/Compilation/PowerShellNativeFunctionSourceGenerator.cs": "2f7b9e8d9c134953991cf98f9d5a6d4ad2e1f941b897a9f1a0cd3f68f3c37752",
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.OwnedDeclaration.cs": "96048604389dbda2546cafb9a43e189c4620eeb05c744deb1a69b6cc3025e106",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.cs": "bef359d76dbee21656c429002090b501f050d100adc41961d6c7fe888d2c0ecd",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "f931a5e34f28ddc8d07436f9c4ee095081a8ae8eea9730a24a6a8c5cda34291d",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "4a07bbd5068bd7c3d53c1b08362092b4815f3c6a9e5411df7a23c8eab06c618e",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedEnumDeclarationPolicy.cs": "13c19ff47ae23ae9d641c6d76ea6fe605e3187ccf13ecd607e53b68e2909c4c9",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedValueClassPolicy.cs": "e161dce7abde611d1ec26825f59d2a8218ebbabe239a3e199fdb8e509956cc73",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "8bc996305b041e08e92abb2435e391a78ad50022100d8b12f94a58249000d312",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "d2dd876d1f617fa524a4c392c602bc3cac7d33ab91f0efc58b401e8620659b22",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "b89b9674e8efff29dc493563974504e415b98fd67a08a73bd860185227e800e3",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "d5e07808bb49ed4f6f23928210fafa73fdf678a0cf7681cd0ad39de1b6c16760",
     "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeTypeExpression.cs": "33eed468f79993efecac2de58ea1241e077a6eccfc65924b46ef3954abf2c8de",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeTypeExpression.cs": "a0b77e29eb83c01bd67f4ae3cc8f0a3670cedb13d93822a49b2103ea61872227",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs": "3e6566d1d16a5b258eacf00ad95b28e6e171d31ab5f8995e27f8ca98124b4f66",
@@ -1896,10 +1864,14 @@
     "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundStatementRewriter.cs": "2b6846dabcb6a89a75649e72df90e77c90e084df8db63908b8f9408ffb3c1775",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredOutputCaptureStatement.cs": "89bda7c779d5313c595b59435091fcde6f977d116c266bad68c0703b5cae9897",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.cs": "f52a1b42b13a62928850c58bb712beb08eaf540ef7a68c889ef82aaab5a5eaca",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellCommandRegionSemanticBinder.cs": "15f3bb88806cd0529637cfbaf1a8aee585d9177bfab8f3f28a9b3551e6b3e0bb"
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellCommandRegionSemanticBinder.cs": "15f3bb88806cd0529637cfbaf1a8aee585d9177bfab8f3f28a9b3551e6b3e0bb",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "2c5abb9700d66b1d2f57c98b05833e84ce3a240fe6375a3edba37327dd4af9d2",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Conversions.cs": "1c8b2d0cdb168bbf4f52c83cfed1aeb819955aab78c21a181256313a13871631",
+    "PowerForge.Tests/PowerShellCompilationHostSessionConstructionTests.cs": "c3c7753b75e9bcc67034c042a92ab290c1d722ed7dc3b4f5c00664a564e5850b",
+    "Benchmarks/PowerShellCompilation/Corpus/m29a-web-session-probe.ps1": "e78e2269126126c7df0bdf0710a25cc95734806587f516a0c78e3b13c59c638a"
   },
-  "dispositionComparison": "m29a-method-pipelines-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "a5e8a5180ddbe1b498aff38de57af73f7dca9d62",
-  "emitted": 506,
-  "retained": 59
+  "dispositionComparison": "m29a-web-session-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "fd897d59cb3e500914577bd0f60c6da6dfd38d1d",
+  "emitted": 507,
+  "retained": 58
 }

@@ -15,6 +15,15 @@ internal static class PowerShellCompilationParameterTypePolicy
         // supported PowerShell hosts even when the compiler process has not loaded it.
         => name.Equals("Microsoft.PowerShell.Commands.WebRequestSession", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Qualifies construction of host-provided data without adding a generated assembly reference.</summary>
+    internal static bool IsHostProvidedConstructorReceiver(TypeExpressionAst expression,
+        PowerShellCompilationCapability capabilities)
+        => capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&
+           IsHostProvidedParameterType(expression.TypeName.FullName) &&
+           expression.Parent is InvokeMemberExpressionAst { Static: true, Member: StringConstantExpressionAst member } invocation &&
+           ReferenceEquals(invocation.Expression, expression) &&
+           member.Value.Equals("new", StringComparison.OrdinalIgnoreCase);
+
     private static readonly HashSet<string> PowerShellHostTypeNames = new(StringComparer.Ordinal)
     {
         typeof(PSCredential).FullName!,
