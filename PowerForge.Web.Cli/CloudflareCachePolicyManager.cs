@@ -73,7 +73,11 @@ internal static class CloudflareCachePolicyManager
                 dryRun,
                 $"cache policy for {hostname}",
                 httpClient,
-                rule => CloudflareManagedRuleOwnership.IsLegacyRuleForSite(rule, policyName, hostname, basePath));
+                rule => CloudflareManagedRuleOwnership.IsLegacyRuleForSite(rule, policyName, hostname, basePath),
+                existingRules => originRespectingDynamic
+                    ? CloudflareDynamicOriginCachePolicyBuilder.ValidateExistingRules(existingRules, hostname, policyName, basePath)
+                    : CloudflareDynamicOriginCachePolicyBuilder.ValidateStaticReplacement(existingRules, hostname, basePath),
+                managedRulesFirst: originRespectingDynamic);
             if (reconciled.Success)
                 logger?.Info(reconciled.Message);
             return new CloudflareCachePolicyApplyResult

@@ -164,6 +164,18 @@ set anti-forgery cookies, personalized pages, API credentials, or private
 feeds. Static `--html-path` and `Cloudflare.Cache` override settings cannot be
 combined with this mode.
 
+The dynamic apply also preflights the current Cache Rules phase. It refuses an
+enabled, unowned cache-enabling rule, even if its expression appears to target
+another hostname: an arbitrary rule could override the anonymous route policy
+later in Cloudflare's rule order. Explicit operator bypass rules are preserved.
+Conversely, a later static `cache-policy apply` or `site-policy apply` refuses
+to replace an installed dynamic policy implicitly. Review the zone's other
+cache mechanisms (including Page Rules and Workers) before activation and
+after changing them; this command governs its managed Cache Rule, not those
+other products.
+When migrating from a static policy, the new allow rule is placed before all
+preserved operator bypass rules so those bypasses keep precedence.
+
 ## GitHub Actions
 
 The complete policy action rejects pull-request events before reading protected

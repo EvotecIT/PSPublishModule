@@ -9,6 +9,7 @@ namespace PowerForge.Web.Cli;
 internal static class CloudflareDynamicOriginCachePolicyBuilder
 {
     private const int MaxPublicPaths = 32;
+    private const string DynamicRuleKey = "anonymous public routes";
 
     internal static JsonArray BuildManagedRules(
         string hostname,
@@ -36,7 +37,7 @@ internal static class CloudflareDynamicOriginCachePolicyBuilder
                          $"({pathExpression}))";
         CloudflareCachePolicyBuilder.ValidateExpressionLength("dynamic public routes", expression);
 
-        var description = $"{CloudflareManagedRuleOwnership.BuildDescriptionPrefix(policyName, hostname, basePath)} anonymous public routes";
+        var description = $"{CloudflareManagedRuleOwnership.BuildDescriptionPrefix(policyName, hostname, basePath)} {DynamicRuleKey}";
         return new JsonArray
         {
             new JsonObject
@@ -56,6 +57,45 @@ internal static class CloudflareDynamicOriginCachePolicyBuilder
                 ["enabled"] = true
             }
         };
+    }
+
+    /// <summary>Refuses ambiguous inherited cache-enabling rules that could override the safe dynamic policy.</summary>
+    internal static string? ValidateExistingRules(JsonArray existingRules, string hostname, string policyName, string? basePath)
+    {
+        var ownedPrefix = CloudflareManagedRuleOwnership.BuildOwnershipPrefix(hostname, basePath);
+        foreach (var rule in existingRules.OfType<JsonObject>())
+        {
+            if (rule["enabled"]?.GetValue<bool>() == false ||
+                rule["action"]?.GetValue<string>() != "set_cache_settings")
+                continue;
+
+            var description = rule["description"]?.GetValue<string>() ?? string.Empty;
+            if (description.StartsWith(ownedPrefix, StringComparison.Ordinal) ||
+                CloudflareManagedRuleOwnership.IsLegacyRuleForSite(rule, policyName, hostname, basePath))
+                continue;
+
+            // Only an explicit bypass is safe to preserve without understanding an
+            // arbitrary operator expression and its order. This also catches rules
+            // with Edge TTL overrides but no explicit cache flag.
+            if (rule["action_parameters"] is not JsonObject parameters ||
+                parameters["cache"]?.GetValue<bool>() != false)
+            {
+                return $"An enabled unowned cache rule ('{description}') could override the dynamic origin policy. Review or remove that rule before applying this policy.";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Prevents a later static-site apply from silently replacing the dynamic safety policy.</summary>
+    internal static string? ValidateStaticReplacement(JsonArray existingRules, string hostname, string? basePath)
+    {
+        var ownedPrefix = CloudflareManagedRuleOwnership.BuildOwnershipPrefix(hostname, basePath);
+        return existingRules.OfType<JsonObject>().Any(rule =>
+            rule["description"]?.GetValue<string>()?.StartsWith(ownedPrefix, StringComparison.Ordinal) == true &&
+            rule["description"]?.GetValue<string>()?.EndsWith($": {DynamicRuleKey}", StringComparison.Ordinal) == true)
+            ? "A dynamic origin cache policy is installed for this host. Static cache-policy and site-policy apply cannot replace it implicitly."
+            : null;
     }
 
     private static string NormalizePublicPath(string? path, string basePath)
