@@ -4,16 +4,16 @@
   "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
   "stableUnits": 584,
   "functions": 565,
-  "dispositionContract": "Every function identity matches the complete per-function baseline; no method or still-retained region from the accepted SDK metadata checkpoint is lost.",
-  "compilerBaselineCommit": "aab0ee8107bca67efffc23de00abdbf4f5ff7038",
+  "dispositionContract": "Every function identity matches the complete per-function baseline; no method or still-retained region from the accepted parser-reference checkpoint is lost.",
+  "compilerBaselineCommit": "5fc55056e09d3d41833b194c5f4d9ff5faaf43a1",
   "packets": [
     {
       "packet": "pssg",
       "stableUnits": 286,
       "functions": 282,
-      "emitted": 253,
-      "retained": 29,
-      "sourceExplanationSha256": "e8b983ff921c9bf38734f931f1319a7e413fb1896ffab90855a4c74995fdb1bb",
+      "emitted": 254,
+      "retained": 28,
+      "sourceExplanationSha256": "54af0d402988af686f275b3b5d1e5287921d6d0f1bfab82b2a7e55e7b55c19b6",
       "functionsRetained": [
         {
           "unitId": "005401f052dbe8e7f319d556",
@@ -422,27 +422,6 @@
           ]
         },
         {
-          "unitId": "311f07ae1e97efe66a5d9ee2",
-          "name": "Copy-DictionaryManual",
-          "relativePath": "Public/Objects/Copy-DictionaryManual.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [
-            "__PowerForgeRegion_6925ab718a387b8767d2bb6c",
-            "__PowerForgeRegion_ce72041b06f9b4a10c01e549"
-          ],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.switchstatement",
-              "message": "Expression 'SwitchStatementAst' is not yet represented by the bound pipeline.",
-              "line": 33,
-              "column": 24
-            }
-          ]
-        },
-        {
           "unitId": "23f772789cacbab249c153b5",
           "name": "Format-Stream",
           "relativePath": "Public/Objects/Format-Stream.ps1",
@@ -750,9 +729,9 @@
       "packet": "pinf",
       "stableUnits": 67,
       "functions": 66,
-      "emitted": 60,
-      "retained": 6,
-      "sourceExplanationSha256": "dff885fe4d0660da2265dd9e9bb43bf7ebe41b9f0c96ea10399850007c2f74d8",
+      "emitted": 61,
+      "retained": 5,
+      "sourceExplanationSha256": "73172aaac03d1c74782e361a0716d2c2d0c14b80abae98e870ef80c8253a8ee2",
       "functionsRetained": [
         {
           "unitId": "fc33881d5a7752031137ea07",
@@ -858,26 +837,6 @@
               "message": "Opaque string conversion can invoke callbacks that observe or mutate caller locals. Collection stringification also observes the native OFS value. These operations remain on the PowerShell runtime path.",
               "line": 43,
               "column": 26
-            }
-          ]
-        },
-        {
-          "unitId": "89c71c2ce0be7d5be018cc80",
-          "name": "Get-InfobloxDNSRecord",
-          "relativePath": "Public/Get-InfobloxDNSRecord.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [
-            "__PowerForgeRegion_bca1ecf2e885b76af3a9155e"
-          ],
-          "causes": [
-            {
-              "code": "UnsupportedSyntax",
-              "featureId": "syntax.switchstatement",
-              "message": "Expression 'SwitchStatementAst' is not yet represented by the bound pipeline.",
-              "line": 134,
-              "column": 24
             }
           ]
         },
@@ -2325,19 +2284,11 @@
     }
   ],
   "compilerSourceHashes": {
-    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellBoundOptimizer.cs": "f4dcd25281b2d394e1e6bf58862323ab98facb46fb0c965faba2ca7eb58a80f0",
-    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.NativeAccess.cs": "40097761aeb820382216e87fc865b94d00bb898c35f22bed65af0245cf026254",
-    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "ebdc212ac64f5368f8a1ad8601fd7f519734e190773e92afe24df3b259ef2d69",
-    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeInvocationExpression.cs": "194017574cb8fc88c4529cb7c1527aea68da8ed19367a03c78db47f5e2a04d89",
-    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeInvocationExpression.cs": "1ac8b26f325aead71b3d906217cf264495e901305acb9efd8559ba4392871384",
-    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs": "7e23b9d58a7a78c0b1c23a1fb5227ab86d051391f9491e047b7eac69ab73c90e",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "0954b00bd1f3e375b0fe1921e72090868f1943199191059dfacc329e808e8552",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Invocations.cs": "cd24120310ce6652bd9daef67e417a716c789d287519587ae07140e89c1d68da",
-    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.NativeFunction.cs": "150958289f5c344e663bb5dd10c1d0dc44a557aeac386e06153910f4706b1e4b",
-    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellNativeReferenceArgument.cs": "28e476029734e37f0ab6610600cc2939de3edda6951c14c38f1d7916cdeaf8fa"
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "c93f56b2667b5b40f519db5ff5b3956ffb6ae9e96e988e85c792ed9fdda12812",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs": "2d8efb3f9c5faf182beca983156561f0aa09a06fcbb8778f1e5817f8cc28cca7"
   },
-  "dispositionComparison": "m29a-parser-references-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "aab0ee8107bca67efffc23de00abdbf4f5ff7038",
-  "emitted": 486,
-  "retained": 79
+  "dispositionComparison": "m29a-assigned-switch-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "5fc55056e09d3d41833b194c5f4d9ff5faaf43a1",
+  "emitted": 488,
+  "retained": 77
 }

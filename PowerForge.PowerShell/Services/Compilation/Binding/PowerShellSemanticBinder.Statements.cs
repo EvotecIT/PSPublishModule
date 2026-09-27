@@ -86,6 +86,8 @@ internal sealed partial class PowerShellSemanticBinder
                     capabilities, collectedArray);
             if (assignment.Right is IfStatementAst or ForStatementAst or ForEachStatementAst or WhileStatementAst or DoWhileStatementAst or DoUntilStatementAst)
                 return BindOutputCapture(document, assignment, symbols, functions, diagnostics, targetFramework, capabilities);
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && assignment.Right is SwitchStatementAst)
+                return BindOutputCapture(document, assignment, symbols, functions, diagnostics, targetFramework, capabilities);
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
                 NativeStaticAssignmentReceiver(assignment.Left) is { } staticReceiver)
                 return BindNativeStaticAssignment(document, assignment, staticReceiver, symbols, functions,

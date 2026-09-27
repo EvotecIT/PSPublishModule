@@ -132,6 +132,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
                array.SubExpression.Statements.Any(static statement => statement is AssignmentStatementAst),
                searchNestedScriptBlocks: false) is not null ||
            RequiresNativeStatementArrayCapture(function) ||
+           RequiresNativeSwitchOutputCapture(function) ||
            RequiresNativeDirectForEachCapture(function) ||
            function.Body.Find(node => node is ConvertExpressionAst conversion &&
                conversion.Type.TypeName.GetReflectionType() is { } targetType &&
@@ -361,6 +362,12 @@ internal static class PowerShellNativeFunctionBindingPolicy
             collection.SubExpression.FindAll(static nested => nested is ForEachStatementAst or TryStatementAst,
                 searchNestedScriptBlocks: false).Any(),
             searchNestedScriptBlocks: false) is not null;
+
+    // Switch matching/state stays with its existing native owner. Assignment
+    // collects success records instead of treating the statement as an expression.
+    private static bool RequiresNativeSwitchOutputCapture(FunctionDefinitionAst function)
+        => function.Body.Find(static node => node is AssignmentStatementAst
+            { Operator: TokenKind.Equals, Right: SwitchStatementAst }, searchNestedScriptBlocks: false) is not null;
 
     // A direct foreach assigned to [Array] is statement-output capture, not
     // a CLR array expression. Select native binding so the existing collector
