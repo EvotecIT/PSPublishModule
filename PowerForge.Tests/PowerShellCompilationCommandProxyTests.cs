@@ -74,7 +74,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             function Read-MetadataArray {param([Management.Automation.CommandMetadata[]]$Value);$Value}
             function Read-MetadataList {param([Collections.Generic.List[Management.Automation.CommandMetadata]]$Value);$Value}
             function Get-ProxyParameters {param($Value);[Management.Automation.ProxyCommand]::GetParamBlock($Value)}
-            function Read-Coordinates {param([Management.Automation.Host.Coordinates]$Value);$Value}
+            function Read-RawUI {param([Management.Automation.Host.PSHostRawUserInterface]$Value);$Value}
             """, Path.Combine(Path.GetTempPath(), "command-proxy-boundaries.ps1"));
         Assert.Equal(4, new PowerShellSemanticCompilationPipeline().Compile(new[] { source }, framework,
             PowerShellCompilationCapabilities.HybridModule).Emitted.Methods.Length);

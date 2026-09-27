@@ -56,6 +56,8 @@ internal static class PowerShellCompilationParameterTypePolicy
         typeof(System.Management.Automation.Runspaces.RunspaceFactory),
         // Sessions preserve the caller-owned remote runspace through native parameter binding.
         typeof(System.Management.Automation.Runspaces.PSSession),
+        // Mutable coordinate values retain SDK binding and value-copy semantics.
+        typeof(System.Management.Automation.Host.Coordinates),
         typeof(Parser),
         typeof(HashtableAst)
     };
@@ -136,7 +138,7 @@ internal static class PowerShellCompilationParameterTypePolicy
                capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes);
     }
 
-    // Reference and execution-object identity must survive native binding, including containers.
+    // Qualified SDK identity and value-copy rules require native binding, including containers.
     private static bool RequiresNativeFunctionBinding(Type type)
         => type == typeof(PSReference) || type == typeof(PowerShell) ||
            type == typeof(CommandMetadata) || type == typeof(ProxyCommand) ||
@@ -144,6 +146,7 @@ internal static class PowerShellCompilationParameterTypePolicy
            type == typeof(System.Management.Automation.Runspaces.RunspacePool) ||
            type == typeof(System.Management.Automation.Runspaces.RunspaceFactory) ||
            type == typeof(System.Management.Automation.Runspaces.PSSession) ||
+           type == typeof(System.Management.Automation.Host.Coordinates) ||
            type.IsArray && RequiresNativeFunctionBinding(type.GetElementType()!) ||
            type.IsConstructedGenericType && type.GetGenericArguments().Any(RequiresNativeFunctionBinding);
 }

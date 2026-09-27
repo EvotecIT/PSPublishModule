@@ -5,7 +5,7 @@
   "stableUnits": 584,
   "functions": 565,
   "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
-  "compilerBaselineCommit": "99b231fe0fbd2fbf04afb7e123fd5838baaa0d91",
+  "compilerBaselineCommit": "307182f01b518890372819caaa7ffcdab535df5b",
   "packets": [
     {
       "packet": "pssg",
@@ -317,9 +317,9 @@
       "packet": "pst",
       "functions": 109,
       "stableUnits": 121,
-      "emitted": 96,
-      "retained": 13,
-      "sourceExplanationSha256": "73330ace01cace5a4c474be9b563c444da790254e50892408a59f02bb53eabe6",
+      "emitted": 97,
+      "retained": 12,
+      "sourceExplanationSha256": "f80adf044d1c7a6404debebf29d9ef8d096fbffba64a867df5be6fe4b03e6d50",
       "functionsRetained": [
         {
           "unitId": "bebfe9a628f7f75ab8d88688",
@@ -1157,24 +1157,6 @@
           ]
         },
         {
-          "unitId": "d2b54171b62bfc7e5b534f4d",
-          "name": "Write-ANSIProgress",
-          "relativePath": "functions/Write-AnsiProgress.ps1",
-          "retainedHostedSource": true,
-          "semanticEligible": false,
-          "usesNativeFunctionBinding": false,
-          "generatedRegionMemberNames": [],
-          "causes": [
-            {
-              "code": "UnsupportedParameterType",
-              "featureId": "parameter.type",
-              "message": "Parameter '$Position' has CLR type 'System.Management.Automation.Host.Coordinates' that requires a target capability unavailable to this compilation.",
-              "line": 23,
-              "column": 9
-            }
-          ]
-        },
-        {
           "unitId": "10ca22e8b6215064da37d706",
           "name": "Find-CimClass",
           "relativePath": "functions/find-cimclass.ps1",
@@ -1406,7 +1388,7 @@
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredOutputCaptureStatement.cs": "89bda7c779d5313c595b59435091fcde6f977d116c266bad68c0703b5cae9897",
     "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.cs": "6539ad53759779357d9616dd55ecd28e4064260d4361d5d5a5218d6c07733837",
     "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellCommandRegionSemanticBinder.cs": "15f3bb88806cd0529637cfbaf1a8aee585d9177bfab8f3f28a9b3551e6b3e0bb",
-    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "65952504de9193ecdc1621396df91a0406e35e68dd71cefe60e92e35aa0b9657",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "9b72f1b9a66fd23530c72d025f7a51fc9a193680b62fa1d34e2e40f46df35a4d",
     "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Conversions.cs": "1c8b2d0cdb168bbf4f52c83cfed1aeb819955aab78c21a181256313a13871631",
     "PowerForge.Tests/PowerShellCompilationHostSessionConstructionTests.cs": "c3c7753b75e9bcc67034c042a92ab290c1d722ed7dc3b4f5c00664a564e5850b",
     "Benchmarks/PowerShellCompilation/Corpus/m29a-web-session-probe.ps1": "e78e2269126126c7df0bdf0710a25cc95734806587f516a0c78e3b13c59c638a",
@@ -1418,8 +1400,8 @@
     "PowerForge.Tests/PowerShellCompilationStaticEnumAssignmentTests.cs": "4ca25ed159c6d93316285d93439fc2fe63dcd65f56c2915d92846fd909e5ece3",
     "Benchmarks/PowerShellCompilation/Corpus/m29a-infoblox-connection-probe.ps1": "9fc3eac1c1ddbbead415cb30f947fd9d37d271349316d8cda577a7f30d739d04",
     "Benchmarks/PowerShellCompilation/Corpus/m29a-infoblox-connection-boundaries.ps1": "62cab9226a47197b53b28639b3e33509f1cc0a7e1b6bcb26e81b432daabfe7a6",
-    "PowerForge.Tests/PowerShellCompilationLocalExecutionTests.cs": "6c3089e4d6385a123eaaf75261d08150b1139d0f9faa8267d587f0328c53e831",
-    "PowerForge.Tests/PowerShellCompilationCommandProxyTests.cs": "eb502a0f9747c74304cea20a9ad02c69a91b0ec433eb84e77febfcc6c47ec2e8",
+    "PowerForge.Tests/PowerShellCompilationLocalExecutionTests.cs": "70cbf7a628910362faeb0c6e9f86d071e380606582d5eb5204f466e3dc89d9af",
+    "PowerForge.Tests/PowerShellCompilationCommandProxyTests.cs": "a87996056f38dc0b300e74ec6207ce70b873dccc98f288575c0571f76e207858",
     "PowerForge.Tests/PowerShellCompilationNativeValueArgumentTests.cs": "069e599a367f43d1044468f1cf2542888d488e65a4eb8c5abfc449eb358764aa",
     "PowerForge.Tests/PowerShellCompilationArgumentPositionTests.cs": "8c737e610664b3c175f9991760b83ee2be7415a389ac86a8feaf0909fb5c43c8",
     "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.HostedCommands.cs": "9891fd59b770ded495f00994474274c576b8d9bb833ed735efce0c8fd0fe13d8",
@@ -1448,17 +1430,22 @@
     "PowerForge.PowerShell/Services/Compilation/PowerShellRuntimeStateIntrinsicPolicy.cs": "b8049084ea18d688c1168d2e47c4f63889eb122db0af83a05a195333cef39946",
     "PowerForge.Tests/PowerShellCompilationFinallyCommandValueTests.cs": "7f0cd9ca60b17279e4515602e78fd1b78a8d57aa34e5568a5db7d594df304b00",
     "PowerForge.Tests/PowerShellCompilationFinallyReportWorkflowTests.cs": "af7ebd1798db331c47f2844a921e377104c1ca8209f8d022c91302e476f94bb4",
-    ".gitattributes": "5591dfa62c95c9da17ab192637d921ec64dd3efa0d34dc4b04f0220d52577464",
+    ".gitattributes": "23ecb20265d04faf196b3afd651d93681313c8e33bde0ba37c04fd8eb2a31f7c",
     "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/SessionCopy/Copy-PSFunction.ps1": "3b527d3e31221935e8c7c7f40ad3ffd0eb12eb194e02f4aeed8d65b9ecdbbdda",
     "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/SessionCopy/Observe.ps1": "92d6f7b15549faedb874427df8f504afe72555695af26a89fa695139601a4e9a",
     "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/SessionCopy/README.md": "6f914396f1c5111a07ee9b893a91135225d7196d10d9b9ad2f92fdfd2b0c3f12",
     "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/SessionCopy/license.txt": "fb7d4eb5de8741978ce3dc1338771a53756e87d1134dc19b0199b2ee43beef95",
     "PowerForge.Tests/PowerShellCompilationPSSessionDataTests.cs": "007dc50e3949b401e8e83089d3b0ab8a076950fa967919596e1624959b95b73f",
     "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/platyPS/SessionData/Observe.ps1": "aa180ced4b395aeba632b7d7f592b7fdf8671d3251a5a05de52c0cc98ab23e7c",
-    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/platyPS/SessionData/README.md": "a0364554c8be513701c54613d4c53b7cf1b97a873042ef1fb7855cc9a08d5619"
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/platyPS/SessionData/README.md": "a0364554c8be513701c54613d4c53b7cf1b97a873042ef1fb7855cc9a08d5619",
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Coordinates/Observe.ps1": "a652b87678831e721e179cc776d1c2d328e853df80c82a3aaf9b7383fb6b7283",
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Coordinates/README.md": "961d32328ddf48444575379c172e70cb411f6d64863c44bc19a145abc686112c",
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Coordinates/Write-AnsiProgress.ps1": "2768f1fda6b2ecf58b0227b5a29b2f96c5c9ed2c93c58afec7dde764bfc7a493",
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Coordinates/license.txt": "fb7d4eb5de8741978ce3dc1338771a53756e87d1134dc19b0199b2ee43beef95",
+    "PowerForge.Tests/PowerShellCompilationCoordinateDataTests.cs": "56b26d4793b00f22f3afb018b688e1e1ce0132afd347272f2a43851559675ab7"
   },
-  "dispositionComparison": "m29a-session-data-comparison.net10.json",
-  "baselineRetainedInventoryCommit": "99b231fe0fbd2fbf04afb7e123fd5838baaa0d91",
-  "emitted": 531,
-  "retained": 34
+  "dispositionComparison": "m29a-coordinate-data-comparison.net10.json",
+  "baselineRetainedInventoryCommit": "307182f01b518890372819caaa7ffcdab535df5b",
+  "emitted": 532,
+  "retained": 33
 }
