@@ -53,8 +53,7 @@ internal sealed class IndexNowSitemapCheckpoint
 
         var sitemapFullPath = Path.GetFullPath(sitemapPath);
         var stateFullPath = Path.GetFullPath(statePath);
-        var pathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        if (string.Equals(sitemapFullPath, stateFullPath, pathComparison))
+        if (IndexNowFilePathIdentity.MayReferToSameFile(sitemapFullPath, stateFullPath))
             throw new InvalidOperationException("indexnow: sitemap and sitemapStatePath must be different files.");
 
         var current = ReadSitemap(sitemapFullPath, site);

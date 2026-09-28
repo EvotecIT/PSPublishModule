@@ -142,6 +142,34 @@ internal static partial class WebPipelineRunner
         };
         var steps = BuildStepDefinitions(stepsElement);
         var totalSteps = steps.Count;
+        var enabledIndexNowSteps = steps
+            .Where(definition => definition.Task.Equals("indexnow", StringComparison.OrdinalIgnoreCase) &&
+                                 GetSkipReason(definition.Task, definition.Element, effectiveMode, onlyTaskSet, skipTaskSet) is null)
+            .Select(static definition => definition.Element)
+            .ToArray();
+        if (enabledIndexNowSteps.Length > 0)
+        {
+            try
+            {
+                ValidateIndexNowOutputPaths(enabledIndexNowSteps, baseDir, pipelineSourcePaths,
+                    profileEnabled || profileWriteOnFail ? profilePath : null,
+                    cacheEnabled ? cachePath : null);
+            }
+            catch (Exception error)
+            {
+                result.Success = false;
+                result.StepCount = 1;
+                result.DurationMs = (long)Math.Round(runStopwatch.Elapsed.TotalMilliseconds);
+                result.Steps.Add(new WebPipelineStepResult
+                {
+                    Task = "indexnow",
+                    Success = false,
+                    Message = FormatFailureMessage(error)
+                });
+                logger?.Error($"indexnow preflight: {FormatFailureMessage(error)}");
+                return result;
+            }
+        }
         var stepResultsByIndex = new Dictionary<int, WebPipelineStepResult>();
         var cacheOutputs = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
 
@@ -233,19 +261,8 @@ internal static partial class WebPipelineRunner
                 }
             }
 
-            var indexNowPreflightPassed = !task.Equals("indexnow", StringComparison.OrdinalIgnoreCase);
             try
             {
-                if (!indexNowPreflightPassed)
-                {
-                    ValidateIndexNowOutputPaths(
-                        step,
-                        baseDir,
-                        pipelineSourcePaths,
-                        profileEnabled || profileWriteOnFail ? profilePath : null,
-                        cacheEnabled ? cachePath : null);
-                    indexNowPreflightPassed = true;
-                }
                 ExecuteTask(task, step, label, baseDir, fast, effectiveMode, logger, ref lastBuildOutPath, ref lastBuildUpdatedFiles, stepResult);
             }
             catch (Exception ex)
@@ -266,7 +283,7 @@ internal static partial class WebPipelineRunner
                 // - Success: write profile only when profile is enabled (to avoid noise/overhead).
                 // - Failure: write profile when profile is enabled OR profileOnFail is true (default),
                 //   so CI failures still produce actionable artifacts.
-                if (indexNowPreflightPassed && !string.IsNullOrWhiteSpace(profilePath) && (profileEnabled || profileWriteOnFail))
+                if (!string.IsNullOrWhiteSpace(profilePath) && (profileEnabled || profileWriteOnFail))
                 {
                     WritePipelineProfile(profilePath, result, logger);
                     result.ProfilePath = profilePath;

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
@@ -122,13 +123,12 @@ internal static partial class WebPipelineRunner
             var noUrlsMessage = "indexnow: no URLs to submit.";
             if (failOnEmpty)
                 throw new InvalidOperationException(noUrlsMessage);
-            WriteIndexNowReports(step, baseDir, new IndexNowSubmissionResult
+            var emptyResult = new IndexNowSubmissionResult
             {
                 Success = true,
                 DryRun = GetBool(step, "dryRun") ?? GetBool(step, "dry-run") ?? false
-            });
-            if (sitemapCheckpoint is not null && !(GetBool(step, "dryRun") ?? GetBool(step, "dry-run") ?? false))
-                sitemapCheckpoint.Save();
+            };
+            PersistIndexNowOutcome(step, baseDir, emptyResult, sitemapCheckpoint, !emptyResult.DryRun);
             stepResult.Success = true;
             stepResult.Message = noUrlsMessage;
             return;
@@ -201,18 +201,19 @@ internal static partial class WebPipelineRunner
             TimeoutSeconds = GetInt(step, "timeoutSeconds") ?? GetInt(step, "timeout-seconds") ?? 20
         }, logger: null);
 
-        WriteIndexNowReports(step, baseDir, submissionResult);
-
         var checkpointRetained = false;
+        var advanceCheckpoint = false;
         if (sitemapCheckpoint is not null && !submissionResult.DryRun)
         {
-            if (submissionResult.Errors.Length == 0 && submissionResult.FailedRequestCount == 0 &&
+            if (submissionResult.Success && submissionResult.Errors.Length == 0 && submissionResult.FailedRequestCount == 0 &&
                 submissionResult.UrlCount == normalizedUrls.Count &&
                 submissionResult.Requests.Sum(static request => request.UrlCount) >= normalizedUrls.Count)
-                sitemapCheckpoint.Save();
+                advanceCheckpoint = true;
             else
                 checkpointRetained = true;
         }
+
+        PersistIndexNowOutcome(step, baseDir, submissionResult, sitemapCheckpoint, advanceCheckpoint);
 
         stepResult.Success = submissionResult.Success;
         stepResult.Message = BuildIndexNowSummary(submissionResult);
@@ -225,69 +226,131 @@ internal static partial class WebPipelineRunner
     }
 
     private static void ValidateIndexNowOutputPaths(
-        JsonElement step, string baseDir, IReadOnlyCollection<string> pipelineSourcePaths, string? profilePath, string? cachePath)
+        IReadOnlyList<JsonElement> steps, string baseDir, IReadOnlyCollection<string> pipelineSourcePaths,
+        string? profilePath, string? cachePath)
     {
-        var statePath = ResolvePath(baseDir,
-            GetString(step, "sitemapStatePath") ?? GetString(step, "sitemap-state-path"));
-        var sitemapPath = ResolvePath(baseDir,
-            GetString(step, "sitemap") ?? GetString(step, "sitemapPath") ?? GetString(step, "sitemap-path"));
-        var urlFilePath = ResolvePath(baseDir, GetString(step, "urlFile") ?? GetString(step, "url-file"));
-        var keyPath = ResolvePath(baseDir, GetString(step, "keyPath") ?? GetString(step, "key-path"));
-        var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
-        var keyLocation = GetString(step, "keyLocation") ?? GetString(step, "key-location");
-        var occupied = new HashSet<string>(OperatingSystem.IsWindows()
-            ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-        foreach (var input in pipelineSourcePaths.Cast<string?>()
-                     .Concat(new[] { sitemapPath, urlFilePath, keyPath })
-                     .Concat(EnumerateIndexNowKeyCandidates(baseDir, siteRoot, keyLocation)
-                         .Select(static candidate => candidate.Path)))
+        var inputs = new List<string>(pipelineSourcePaths);
+        var outputs = new List<string>();
+        foreach (var step in steps)
         {
-            if (!string.IsNullOrWhiteSpace(input))
-                occupied.Add(Path.GetFullPath(input));
+            var sitemapPath = ResolvePath(baseDir,
+                GetString(step, "sitemap") ?? GetString(step, "sitemapPath") ?? GetString(step, "sitemap-path"));
+            var urlFilePath = ResolvePath(baseDir, GetString(step, "urlFile") ?? GetString(step, "url-file"));
+            var keyPath = ResolvePath(baseDir, GetString(step, "keyPath") ?? GetString(step, "key-path"));
+            var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
+            var keyLocation = GetString(step, "keyLocation") ?? GetString(step, "key-location");
+            foreach (var input in new[] { sitemapPath, urlFilePath, keyPath }
+                         .Concat(EnumerateIndexNowKeyCandidates(baseDir, siteRoot, keyLocation)
+                             .Select(static candidate => candidate.Path)))
+            {
+                if (!string.IsNullOrWhiteSpace(input))
+                    inputs.Add(Path.GetFullPath(input));
+            }
+
+            AddOutput(ResolvePath(baseDir,
+                GetString(step, "sitemapStatePath") ?? GetString(step, "sitemap-state-path")));
+            var reportPath = GetString(step, "reportPath") ?? GetString(step, "report-path");
+            var summaryPath = GetString(step, "summaryPath") ?? GetString(step, "summary-path");
+            AddOutput(string.IsNullOrWhiteSpace(reportPath) ? null : ResolvePathWithinRoot(baseDir, reportPath, reportPath));
+            AddOutput(string.IsNullOrWhiteSpace(summaryPath) ? null : ResolvePathWithinRoot(baseDir, summaryPath, summaryPath));
         }
-        var reportPath = GetString(step, "reportPath") ?? GetString(step, "report-path");
-        var summaryPath = GetString(step, "summaryPath") ?? GetString(step, "summary-path");
-        foreach (var output in new[]
-                 {
-                     statePath,
-                     string.IsNullOrWhiteSpace(reportPath) ? null : ResolvePathWithinRoot(baseDir, reportPath, reportPath),
-                     string.IsNullOrWhiteSpace(summaryPath) ? null : ResolvePathWithinRoot(baseDir, summaryPath, summaryPath),
-                     profilePath,
-                     cachePath
-                 })
+
+        AddOutput(profilePath);
+        AddOutput(cachePath);
+        for (var index = 0; index < outputs.Count; index++)
         {
-            if (string.IsNullOrWhiteSpace(output)) continue;
-            if (!occupied.Add(Path.GetFullPath(output)))
+            var output = outputs[index];
+            if (inputs.Any(input => IndexNowFilePathIdentity.MayReferToSameFile(output, input)) ||
+                outputs.Take(index).Any(previous => IndexNowFilePathIdentity.MayReferToSameFile(output, previous)))
                 throw new InvalidOperationException("indexnow: state, report, summary, pipeline outputs, and input files must use distinct paths.");
+        }
+
+        void AddOutput(string? path)
+        {
+            if (!string.IsNullOrWhiteSpace(path))
+                outputs.Add(Path.GetFullPath(path));
         }
     }
 
     private static void WriteIndexNowReports(JsonElement step, string baseDir, IndexNowSubmissionResult submissionResult)
     {
+        var failures = new List<Exception>();
         var reportPath = GetString(step, "reportPath") ?? GetString(step, "report-path");
         if (!string.IsNullOrWhiteSpace(reportPath))
         {
-            var resolvedReportPath = ResolvePathWithinRoot(baseDir, reportPath, reportPath);
-            var reportDirectory = Path.GetDirectoryName(resolvedReportPath);
-            if (!string.IsNullOrWhiteSpace(reportDirectory))
-                Directory.CreateDirectory(reportDirectory);
-            File.WriteAllText(resolvedReportPath, JsonSerializer.Serialize(submissionResult, new JsonSerializerOptions
+            try
             {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                WriteIndented = true
-            }));
+                var resolvedReportPath = ResolvePathWithinRoot(baseDir, reportPath, reportPath);
+                var reportDirectory = Path.GetDirectoryName(resolvedReportPath);
+                if (!string.IsNullOrWhiteSpace(reportDirectory))
+                    Directory.CreateDirectory(reportDirectory);
+                WritePipelineTextAtomically(resolvedReportPath, JsonSerializer.Serialize(submissionResult, new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    WriteIndented = true
+                }));
+            }
+            catch (Exception error)
+            {
+                failures.Add(error);
+            }
         }
 
         var summaryPath = GetString(step, "summaryPath") ?? GetString(step, "summary-path");
         if (!string.IsNullOrWhiteSpace(summaryPath))
         {
-            var resolvedSummaryPath = ResolvePathWithinRoot(baseDir, summaryPath, summaryPath);
-            var summaryDirectory = Path.GetDirectoryName(resolvedSummaryPath);
-            if (!string.IsNullOrWhiteSpace(summaryDirectory))
-                Directory.CreateDirectory(summaryDirectory);
-            File.WriteAllText(resolvedSummaryPath, BuildIndexNowMarkdownSummary(submissionResult));
+            try
+            {
+                var resolvedSummaryPath = ResolvePathWithinRoot(baseDir, summaryPath, summaryPath);
+                var summaryDirectory = Path.GetDirectoryName(resolvedSummaryPath);
+                if (!string.IsNullOrWhiteSpace(summaryDirectory))
+                    Directory.CreateDirectory(summaryDirectory);
+                WritePipelineTextAtomically(resolvedSummaryPath, BuildIndexNowMarkdownSummary(submissionResult));
+            }
+            catch (Exception error)
+            {
+                failures.Add(error);
+            }
         }
 
+        ThrowIndexNowPersistenceFailures(failures);
+    }
+
+    private static void PersistIndexNowOutcome(
+        JsonElement step, string baseDir, IndexNowSubmissionResult result,
+        IndexNowSitemapCheckpoint? checkpoint, bool advanceCheckpoint)
+    {
+        var failures = new List<Exception>();
+        try
+        {
+            WriteIndexNowReports(step, baseDir, result);
+        }
+        catch (Exception error)
+        {
+            failures.Add(error);
+        }
+
+        if (advanceCheckpoint && checkpoint is not null)
+        {
+            try
+            {
+                checkpoint.Save();
+            }
+            catch (Exception error)
+            {
+                failures.Add(error);
+            }
+        }
+
+        ThrowIndexNowPersistenceFailures(failures);
+    }
+
+    private static void ThrowIndexNowPersistenceFailures(IReadOnlyList<Exception> failures)
+    {
+        if (failures.Count == 1)
+            ExceptionDispatchInfo.Capture(failures[0]).Throw();
+        if (failures.Count > 1)
+            throw new AggregateException("indexnow: result persistence failed.", failures);
     }
 
     private sealed class IndexNowKeyCandidate
@@ -326,8 +389,7 @@ internal static partial class WebPipelineRunner
 
     private static IEnumerable<IndexNowKeyCandidate> EnumerateIndexNowKeyCandidates(string baseDir, string? siteRoot, string? keyLocation)
     {
-        var seen = new HashSet<string>(OperatingSystem.IsWindows()
-            ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         var keyLocationRelativePaths = EnumerateIndexNowKeyRelativePaths(keyLocation).ToArray();
         if (keyLocationRelativePaths.Length == 0 && !string.IsNullOrWhiteSpace(keyLocation))
             yield break;

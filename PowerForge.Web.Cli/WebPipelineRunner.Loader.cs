@@ -13,8 +13,7 @@ internal static partial class WebPipelineRunner
         if (string.IsNullOrWhiteSpace(pipelinePath))
             throw new ArgumentException("Pipeline path is required.", nameof(pipelinePath));
 
-        sourcePaths = new HashSet<string>(OperatingSystem.IsWindows()
-            ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        sourcePaths = new HashSet<string>(StringComparer.Ordinal);
         var merged = LoadPipelineJsonWithExtends(pipelinePath, new HashSet<string>(StringComparer.OrdinalIgnoreCase), sourcePaths);
         var json = merged.ToJsonString(new JsonSerializerOptions
         {
