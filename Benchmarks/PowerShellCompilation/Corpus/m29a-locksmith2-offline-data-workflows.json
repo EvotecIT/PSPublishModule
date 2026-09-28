@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "recordedOn": "2026-09-28",
+  "source": {
+    "workload": "locksmith2",
+    "repository": "https://github.com/jakehildreth/locksmith2",
+    "revision": "f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639",
+    "license": "Commons Clause License Condition v1.0",
+    "archiveSha256": "d4f511b16ed95d15bfa37ba06ddfc92709f0412e8669004cb70e3407ae9fc8b9",
+    "sourceFingerprint": "b1e65521a013471cfc80589f0edd062a714f4b498a347685a06d7dce97b1b4ef",
+    "unchangedSourceHashes": {
+      "Classes/LS2Principal.ps1": "5b8542654843f25be0218a346780cdd40ec6f236bc73004e228eb960cb49fca1",
+      "Classes/LS2AdcsObject.ps1": "abb27b68cdfe94c111013009ab453aa96a7f67748e2b33abd1e703640a9c93a5",
+      "Classes/LS2Issue.ps1": "736d4440eace31299822b2d8e20863b1c26a7cb9186da235c478910226202e38",
+      "Public/Get-LS2Stores.ps1": "e39499b6a4399bab87dd614e716fec524b8b7f7367056fe924e916880e8d616f",
+      "Private/Get/Get-FlattenedIssues.ps1": "3002b20ecd637d83cbcce2841f844dc6d8624aa8dfc207746e0c0e3aa24e6c32",
+      "Private/Utility/Get-IssueTextOverride.ps1": "1fa6d629302de7d1061556018a1ce88dac1aa3ae6c05c9ab203c088dfb6139f4",
+      "Private/Set/Set-IsCATemplate.ps1": "f72dda110a96a6f450134c3132b8eca53eb03b0949cb8008be918606ed8a4945",
+      "Private/Test/Test-IssueExists.ps1": "88242f6cc6d52632a167da36fc4daecc4fd4a7e6f0ea8d96a137245f452f0e64",
+      "Private/Set/Set-AnyPurposeEKUExist.ps1": "ffafacb1c43e7b50daf8a49a9074fd49e1b7f85e0fc39d5a34b8f1dee73b7d46",
+      "Private/Set/Set-AuthenticationEKUExist.ps1": "c2e0e57bb180c4a25ead19d3d676e3493fae8aaaaab06f0706bc494083127f42",
+      "Private/Set/Set-SANAllowed.ps1": "46c2c0e198d88b388970181ddf4f295b98400db06f79b5c82a0e0945e8793187",
+      "Private/Set/Set-ManagerApprovalNotRequired.ps1": "c1eb628df0bde5f8be6b405b75ce2c6677f2066bdbf1dcb4f35c37b4564286ab"
+    },
+    "functionTextsIncludedUnchanged": 9,
+    "classCopiesHashIdentical": 3
+  },
+  "fixture": {
+    "moduleManifestSha256": "0d4f6516468e318ea267fe2593290a116cb427c543cd654ec036fb4905966aa8",
+    "moduleSourceSha256": "ab4d2bad2da374477265794fbbf544d696295f1055a1aaa0217bc18cb4d659c4",
+    "observerSha256": {
+      "data": "dc7b5c6d4cd7d17cba1666ac7b6ce44633bb7b0e9b2b4281dad4071bc1b4808e",
+      "branches": "913110ee101510f1de252c21815bf0d50e97675b00554d2d5c4e5e3c43c85b06",
+      "setters": "9f5177e874bff7e6efba7180e8cecdd461d04c03cc209fb587f7468e52c6b155",
+      "reimport": "ba377ba5a8158e748b25c30eaccfc1effd246564fdce31638a4240021b07f4cd"
+    }
+  },
+  "generated": {
+    "mode": "Hybrid",
+    "net10ManifestSha256": "c1971221a603e643db32cdd8c2318e94ed92730f7a90a6709fcb6e6bfe6acebb",
+    "net472ManifestSha256": "a54e8c5e41a75eeadf76af6fa54c17d9784b23335622e2dad41edd8fb02713e5",
+    "compiledMethodsPerTarget": 9,
+    "installedCompiledCallbackStubs": 9,
+    "strict": {
+      "targets": ["net10.0", "net472"],
+      "canProceed": false,
+      "typedUnits": 0,
+      "rejectedUnits": 9
+    }
+  },
+  "execution": {
+    "hosts": [
+      "PowerShell 7/net10.0 Windows x64",
+      "Windows PowerShell 5.1/net472 Windows x64"
+    ],
+    "originalGeneratedEqual": true,
+    "childExitCodesZero": true,
+    "data": {
+      "issueType": "LS2Issue",
+      "objectType": "LS2AdcsObject",
+      "flatCount": 2,
+      "flatNames": [
+        "one",
+        "two"
+      ],
+      "flatTypes": [
+        "LS2Issue",
+        "LS2Issue"
+      ],
+      "match": true,
+      "miss": false,
+      "before": "base",
+      "setCount": 1,
+      "sameObject": true,
+      "isCATemplate": true,
+      "after": "CA"
+    },
+    "branches": {
+      "emptyCount": 0,
+      "warningCount": 1,
+      "warningText": "IssueStore is empty or not initialized. Run Invoke-Locksmith2 first.",
+      "nonCaCount": 1,
+      "nonCaSame": true,
+      "nonCaValue": false,
+      "filteredCount": 0,
+      "filteredValue": false
+    },
+    "setters": {
+      "type": "LS2AdcsObject",
+      "counts": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "any": [
+        true,
+        true,
+        null
+      ],
+      "auth": [
+        true,
+        false,
+        null
+      ],
+      "san": [
+        true,
+        false,
+        null
+      ],
+      "approval": [
+        true,
+        false,
+        null
+      ],
+      "same": [
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    "forcedImportRounds": 2,
+    "newlyEmittedMethodsExecuted": [
+      "Test-IssueExists",
+      "Get-FlattenedIssues",
+      "Get-IssueTextOverride",
+      "Set-IsCATemplate",
+      "Set-AnyPurposeEKUExist",
+      "Set-AuthenticationEKUExist",
+      "Set-SANAllowed",
+      "Set-ManagerApprovalNotRequired"
+    ],
+    "previouslyEmittedHelperExecuted": "Get-LS2Stores"
+  },
+  "disposition": {
+    "locksmith2EmittedFunctions": 75,
+    "locksmith2TotalFunctions": 100,
+    "gainedSincePriorBaseline": 37,
+    "gainedExecutedOffline": 8,
+    "gainedAnalysisOnly": 29,
+    "regressions": 0,
+    "assessmentEvidenceSha256": "e2cbffeaf74027dfb429d0853c79eb8c49c66f301f8b22440cf87c5c6599ed50"
+  },
+  "limits": [
+    "Class instances were allocated without the AD-backed constructor and populated in memory",
+    "No DirectoryEntry binding, AD query, network request, installer, remediation or full Locksmith2 import",
+    "No complete AD object-acquisition or class-constructor parity claim",
+    "No new compiler source change or fresh seven-workload assessment",
+    "Hybrid uses PowerShell-hosted native callbacks, not runtime-free C# translation",
+    "Unreviewed dependency resolution was used for the mini-module artifacts",
+    "Windows hosts only; no PR, merge, release or performance claim"
+  ]
+}
