@@ -128,7 +128,14 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 ]
             };
             string[] outputs = DotNetPublishPipelineRunner.ResolvePlannedPublishGeneratedPaths(plan);
-            Assert.Equal(6, outputs.Length);
+            Assert.Equal(12, outputs.Length);
+            string[] archives = outputs.Where(path => path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)).ToArray();
+            Assert.Equal(3, archives.Length);
+            foreach (string archive in archives)
+            {
+                Assert.Contains(archive + PowerForgePortablePayloadInventory.DirectInventorySuffix, outputs);
+                Assert.Contains(archive + PowerForgePortablePayloadInventory.DirectSignatureSuffix, outputs);
+            }
             Assert.Contains(outputs, path => path.EndsWith(
                 "App-net8.0-win-x64-FrameworkDependent.zip",
                 StringComparison.OrdinalIgnoreCase));
@@ -147,7 +154,9 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             foreach (string output in outputs)
             {
-                if (output.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                if (output.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                    output.EndsWith(PowerForgePortablePayloadInventory.DirectInventorySuffix, StringComparison.OrdinalIgnoreCase) ||
+                    output.EndsWith(PowerForgePortablePayloadInventory.DirectSignatureSuffix, StringComparison.OrdinalIgnoreCase))
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(output)!);
                     File.WriteAllText(output, "archive");

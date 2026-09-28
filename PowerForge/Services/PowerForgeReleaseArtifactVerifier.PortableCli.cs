@@ -58,6 +58,10 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
 
         string manifestArchive = ReadString(entry, "ZipPath");
         string manifestExecutable = ReadString(entry, "ExePath");
+        bool requiresDetachedArchiveEvidence =
+            !string.IsNullOrWhiteSpace(manifestArchive) && DeclaresDetachedArchiveEvidence(entry);
+        bool declaresDetachedDirectEvidence =
+            string.IsNullOrWhiteSpace(manifestArchive) && DeclaresDetachedArchiveEvidence(entry);
         string artifactSelection;
         if (string.IsNullOrWhiteSpace(request.ArtifactPath))
         {
@@ -69,7 +73,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 checksumsPath,
                 selectedManifestPath,
                 expected.AllowOutsideProjectRoot,
-                string.IsNullOrWhiteSpace(manifestArchive) ? entry : null);
+                string.IsNullOrWhiteSpace(manifestArchive) ? entry : null,
+                requiresDetachedArchiveEvidence || declaresDetachedDirectEvidence ? entry : null);
         }
         else
         {
@@ -87,10 +92,11 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         }
         if (artifactIsArchive)
         {
-            if (!string.Equals(Path.GetFileName(manifestArchive), Path.GetFileName(artifactPath), StringComparison.OrdinalIgnoreCase))
+            if (!requiresDetachedArchiveEvidence &&
+                !string.Equals(Path.GetFileName(manifestArchive), Path.GetFileName(artifactPath), StringComparison.OrdinalIgnoreCase))
                 throw Invalid("Requested portable archive does not match the selected manifest entry.");
         }
-        else if (!DirectArtifactNameMatchesManifestEntry(
+        else if (!declaresDetachedDirectEvidence && !DirectArtifactNameMatchesManifestEntry(
                      entry,
                      manifestExecutable,
                      artifactPath,
@@ -108,10 +114,14 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         if (artifactIsArchive)
         {
             PortableArchiveVerification archive = VerifyPortableArchiveInventory(
+                projectRoot,
+                checksumsPath,
                 artifactPath,
                 expected.SignerThumbprint,
                 expected.SignerSubjectName,
-                expected.Sign.Provider == DotNetPublishSigningProvider.AzureArtifactSigning);
+                expected.Sign.Provider == DotNetPublishSigningProvider.AzureArtifactSigning,
+                requiresDetachedArchiveEvidence);
+            directInventoryEvidence = archive.Evidence;
             if (!string.Equals(archive.Inventory.ArtifactId, artifactId, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(archive.Inventory.Target, target, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(archive.Inventory.BundleId, bundleId, StringComparison.OrdinalIgnoreCase) ||
@@ -298,12 +308,16 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         string checksumsPath,
         string manifestValue,
         bool allowOutsideProjectRoot,
-        JsonElement? directEntry = null)
+        JsonElement? directEntry = null,
+        JsonElement? detachedArchiveEntry = null)
     {
         string normalized = DotNetPublishReleaseArtifactVerifier.RequireText(
                 manifestValue,
                 "manifest artifact path")
             .Replace('/', Path.DirectorySeparatorChar);
+        if (detachedArchiveEntry.HasValue)
+            return ResolveDetachedPortableAlias(projectRoot, checksumsPath, detachedArchiveEntry.Value,
+                Path.GetExtension(manifestValue), allowOutsideProjectRoot);
         if (!Path.IsPathRooted(normalized))
         {
             string currentPath = ResolveManifestPath(projectRoot, normalized, allowOutsideProjectRoot);

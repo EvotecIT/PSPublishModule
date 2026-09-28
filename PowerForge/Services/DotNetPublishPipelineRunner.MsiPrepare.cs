@@ -87,6 +87,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         Directory.CreateDirectory(Path.GetDirectoryName(stagingPath)!);
         DirectoryCopy(sourceOutputDir, stagingPath);
+        RemoveCopiedPortableEvidence(plan, sourceArtefact, stagingPath);
 
         string? resolvedHarvestPath = null;
         string? resolvedHarvestDirectoryRefId = null;

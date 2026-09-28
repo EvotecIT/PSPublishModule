@@ -31,20 +31,50 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
     }
 
     private PortableArchiveVerification VerifyPortableArchiveInventory(
+        string projectRoot,
+        string checksumsPath,
         string archivePath,
         string? expectedThumbprint,
         string? expectedSubject,
-        bool allowSubjectMatchedCertificateRotation)
+        bool allowSubjectMatchedCertificateRotation,
+        bool requireDetachedEvidence)
     {
         using var archiveInput = new ArchiveMetadataReadStream(File.OpenRead(archivePath));
         using ZipArchive archive = new ZipArchive(archiveInput, ZipArchiveMode.Read);
         Dictionary<string, ZipArchiveEntry> entries = ValidateArchiveEntries(archive);
         archiveInput.CompleteMetadataInspection();
-        if (!entries.TryGetValue(PowerForgePortablePayloadInventory.InventoryFileName, out ZipArchiveEntry? inventoryEntry) ||
-            !entries.TryGetValue(PowerForgePortablePayloadInventory.SignatureFileName, out ZipArchiveEntry? signatureEntry))
-            throw Invalid("Portable archive is missing its publisher-signed payload inventory.");
-        byte[] inventoryBytes = ReadBoundedEntryBytes(inventoryEntry, "Portable payload inventory");
-        byte[] signatureBytes = ReadBoundedEntryBytes(signatureEntry, "Portable payload inventory signature");
+        string inventoryPath = archivePath + PowerForgePortablePayloadInventory.DirectInventorySuffix;
+        string signaturePath = archivePath + PowerForgePortablePayloadInventory.DirectSignatureSuffix;
+        byte[] inventoryBytes;
+        byte[] signatureBytes;
+        PowerForgeReleaseEvidenceFile[] evidence = Array.Empty<PowerForgeReleaseEvidenceFile>();
+        if (File.Exists(inventoryPath) || File.Exists(signaturePath) ||
+            Directory.Exists(inventoryPath) || Directory.Exists(signaturePath))
+        {
+            if (entries.ContainsKey(PowerForgePortablePayloadInventory.InventoryFileName) ||
+                entries.ContainsKey(PowerForgePortablePayloadInventory.SignatureFileName))
+                throw Invalid("Portable archive mixes detached and embedded release evidence.");
+            string inventoryDigest = VerifyChecksummedFile(projectRoot, checksumsPath, inventoryPath, "portable inventory");
+            string signatureDigest = VerifyChecksummedFile(projectRoot, checksumsPath, signaturePath, "portable inventory signature");
+            inventoryBytes = ReadBoundedFileBytes(inventoryPath, "Portable payload inventory");
+            signatureBytes = ReadBoundedFileBytes(signaturePath, "Portable payload inventory signature");
+            evidence = new[]
+            {
+                new PowerForgeReleaseEvidenceFile { Role = "portable-inventory", Path = inventoryPath, Sha256 = inventoryDigest },
+                new PowerForgeReleaseEvidenceFile { Role = "portable-inventory-signature", Path = signaturePath, Sha256 = signatureDigest }
+            };
+        }
+        else
+        {
+            if (requireDetachedEvidence)
+                throw Invalid("Portable archive manifest requires detached release evidence beside the archive.");
+            // Retain verification of already published archives with embedded evidence.
+            if (!entries.TryGetValue(PowerForgePortablePayloadInventory.InventoryFileName, out ZipArchiveEntry? inventoryEntry) ||
+                !entries.TryGetValue(PowerForgePortablePayloadInventory.SignatureFileName, out ZipArchiveEntry? signatureEntry))
+                throw Invalid("Portable archive is missing its publisher-signed payload inventory.");
+            inventoryBytes = ReadBoundedEntryBytes(inventoryEntry, "Portable payload inventory");
+            signatureBytes = ReadBoundedEntryBytes(signatureEntry, "Portable payload inventory signature");
+        }
         PowerForgePayloadInventorySignature inventorySignature;
         try
         {
@@ -170,7 +200,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             inventorySignature,
             signatures.ToArray(),
             signedVersion ?? throw Invalid("Portable payload inventory executable version is missing."),
-            executableIdentity ?? throw Invalid("Portable payload inventory executable identity is missing."));
+            executableIdentity ?? throw Invalid("Portable payload inventory executable identity is missing."),
+            evidence);
     }
 
     private PortableDirectVerification VerifyPortableDirectInventory(
@@ -319,13 +350,15 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             PowerForgePayloadInventorySignature inventorySignature,
             VerifiedSignature[] signatures,
             string signedProductVersion,
-            string executableIdentity)
+            string executableIdentity,
+            PowerForgeReleaseEvidenceFile[] evidence)
         {
             Inventory = inventory;
             InventorySignature = inventorySignature;
             Signatures = signatures;
             SignedProductVersion = signedProductVersion;
             ExecutableIdentity = executableIdentity;
+            Evidence = evidence;
         }
 
         internal PowerForgePortablePayloadInventory Inventory { get; }
@@ -333,6 +366,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         internal VerifiedSignature[] Signatures { get; }
         internal string SignedProductVersion { get; }
         internal string ExecutableIdentity { get; }
+        internal PowerForgeReleaseEvidenceFile[] Evidence { get; }
     }
 
     internal static Dictionary<string, ZipArchiveEntry> ValidateArchiveEntries(

@@ -546,6 +546,11 @@ public sealed partial class DotNetPublishPipelineRunner
             yield return step.HarvestPath ?? string.Empty;
             yield return step.BundleOutputPath ?? string.Empty;
             yield return step.BundleZipPath ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(step.BundleZipPath))
+            {
+                yield return step.BundleZipPath + PowerForgePortablePayloadInventory.DirectInventorySuffix;
+                yield return step.BundleZipPath + PowerForgePortablePayloadInventory.DirectSignatureSuffix;
+            }
             yield return step.StorePackageOutputPath ?? string.Empty;
         }
 
@@ -554,6 +559,8 @@ public sealed partial class DotNetPublishPipelineRunner
             yield return artefact.PublishDir;
             yield return artefact.OutputDir;
             yield return artefact.ZipPath ?? string.Empty;
+            foreach (string evidencePath in artefact.EvidencePaths)
+                yield return evidencePath;
             foreach (var outputFile in artefact.OutputFiles ?? Array.Empty<string>())
                 yield return outputFile;
         }

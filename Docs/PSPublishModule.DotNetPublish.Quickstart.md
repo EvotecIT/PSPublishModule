@@ -19,6 +19,8 @@ This keeps responsibilities clear and avoids command mix-ups.
 
 For final package and runtime checks after building, see [Validate release artifacts](PSPublishModule.ReleaseValidation.md).
 
+Signed portable ZIPs contain application files only. PowerForge writes their publisher-signed inventory beside the ZIP as `<archive>.release-inventory.json` and `<archive>.release-inventory.p7s`, records both in the manifest and checksum catalog, and stages them as release metadata. Keep these files with the ZIP when verifying a downloaded release. MSI and native installer staging excludes publisher-owned evidence from the installed application. The verifier also accepts embedded inventory in previously published ZIPs.
+
 1. Scaffold config:
 
 ```powershell
