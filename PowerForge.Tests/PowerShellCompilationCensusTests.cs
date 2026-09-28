@@ -64,7 +64,7 @@ public sealed partial class PowerShellCompilationCensusTests
     }
 
     [Fact]
-    public void Run_ReservesFunctionGraphFeatureForActualRecursiveGraphConstraint()
+    public void Run_CountsHybridNativeBoundSelfRecursionAsEmittedAndRuntimeRouted()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Recursive Graph", Guid.NewGuid().ToString("N"));
         var source = Path.Combine(root, "Module.psm1");
@@ -74,8 +74,12 @@ public sealed partial class PowerShellCompilationCensusTests
         {
             var result = new PowerShellCompilationCensusRunner().Run(new[] { source }, "net10.0");
 
-            var graph = Assert.Single(result.FunctionFrontier, impact => impact.FeatureId == PowerShellCompilationFeatureIds.FunctionGraph);
-            Assert.Equal(1, graph.VisibleSoleBlockerUnits);
+            var product = Assert.Single(result.Products);
+            Assert.Equal(1, product.Coverage.EmittedFunctions);
+            var recursive = Assert.Single(product.FunctionDispositions);
+            Assert.True(recursive.Emitted);
+            Assert.True(recursive.RuntimeRouted);
+            Assert.DoesNotContain(result.FunctionFrontier, impact => impact.FeatureId == PowerShellCompilationFeatureIds.FunctionGraph);
         }
         finally
         {
@@ -99,10 +103,13 @@ public sealed partial class PowerShellCompilationCensusTests
 
             var variable = Assert.Single(result.FunctionFrontier, impact =>
                 impact.FeatureId == PowerShellCompilationFeatureIds.ForSyntax("VariableExpressionAst"));
-            var graph = Assert.Single(result.FunctionFrontier, impact =>
-                impact.FeatureId == PowerShellCompilationFeatureIds.FunctionGraph);
             Assert.Equal(1, variable.AffectedUnits);
-            Assert.Equal(1, graph.AffectedUnits);
+            var dispositions = Assert.Single(result.Products).FunctionDispositions;
+            Assert.Equal(2, dispositions.Length);
+            Assert.Contains(dispositions, disposition => disposition.Name == "Get-Map" && !disposition.Emitted);
+            Assert.Contains(dispositions, disposition => disposition.Name == "Get-Repeated" && disposition.Emitted && disposition.RuntimeRouted);
+            Assert.DoesNotContain(result.FunctionFrontier, impact =>
+                impact.FeatureId == PowerShellCompilationFeatureIds.FunctionGraph);
         }
         finally
         {
