@@ -66,6 +66,8 @@ internal static class PowerShellCompilationParameterTypePolicy
         typeof(System.Management.Automation.Host.Coordinates),
         // Borrowed event records keep the Windows host's binding and caller-owned handles.
         typeof(System.Diagnostics.Eventing.Reader.EventLogRecord),
+        // Borrowed AD access rules retain native pipeline binding and the active Windows host's identity.
+        typeof(System.DirectoryServices.ActiveDirectoryAccessRule),
         typeof(Parser),
         typeof(HashtableAst)
     };
@@ -160,6 +162,7 @@ internal static class PowerShellCompilationParameterTypePolicy
            type == typeof(System.Management.Automation.Runspaces.PSSession) ||
            type == typeof(System.Management.Automation.Host.Coordinates) ||
            type == typeof(System.Diagnostics.Eventing.Reader.EventLogRecord) ||
+           type == typeof(System.DirectoryServices.ActiveDirectoryAccessRule) ||
            type.IsArray && RequiresNativeFunctionBinding(type.GetElementType()!) ||
            type.IsConstructedGenericType && type.GetGenericArguments().Any(RequiresNativeFunctionBinding);
 }

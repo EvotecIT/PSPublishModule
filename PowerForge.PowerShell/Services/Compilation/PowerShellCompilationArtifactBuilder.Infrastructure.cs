@@ -129,7 +129,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     private static string GetPowerShellReference(string targetFramework)
         => targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase)
             ? "<PackageReference Include=\"Microsoft.PowerShell.5.ReferenceAssemblies\" Version=\"1.1.0\" PrivateAssets=\"all\" GeneratePathProperty=\"true\" />" + Environment.NewLine +
-              "    <Reference Include=\"Microsoft.Management.Infrastructure\"><HintPath>$(PkgMicrosoft_PowerShell_5_ReferenceAssemblies)/lib/net4/Microsoft.Management.Infrastructure.dll</HintPath><Private>false</Private></Reference>"
+              "    <Reference Include=\"Microsoft.Management.Infrastructure\"><HintPath>$(PkgMicrosoft_PowerShell_5_ReferenceAssemblies)/lib/net4/Microsoft.Management.Infrastructure.dll</HintPath><Private>false</Private></Reference>" + Environment.NewLine +
+              "    <Reference Include=\"System.DirectoryServices\" />"
             : $"<PackageReference Include=\"Microsoft.PowerShell.SDK\" Version=\"{GetPowerShellSdkVersion(targetFramework)}\" PrivateAssets=\"all\" ExcludeAssets=\"runtime\" />{Environment.NewLine}    " +
               $"<PackageReference Include=\"System.Security.Cryptography.Xml\" Version=\"{GetSecurityXmlVersion(targetFramework)}\" PrivateAssets=\"all\" ExcludeAssets=\"runtime\" />";
 
