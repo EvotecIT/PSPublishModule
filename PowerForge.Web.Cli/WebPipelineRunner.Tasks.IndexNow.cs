@@ -104,7 +104,9 @@ internal static partial class WebPipelineRunner
             .ToList();
         if (sitemapCheckpoint is not null && urls
             .Where(static value => !string.IsNullOrWhiteSpace(value))
-            .Select(static value => value.Trim())
+            .Select(static value => Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)
+                ? uri.AbsoluteUri
+                : value.Trim())
             .GroupBy(static value => value, StringComparer.OrdinalIgnoreCase)
             .Any(static group => group.Distinct(StringComparer.Ordinal).Skip(1).Any()))
             throw new InvalidOperationException("indexnow: stateful URL sources contain case-distinct aliases that submission would collapse.");

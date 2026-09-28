@@ -159,6 +159,17 @@ public sealed class WebPipelineRunnerIndexNowSitemapStateTests
                 """);
             Assert.False(WebPipelineRunner.RunPipeline(pipeline, logger: null).Success);
             Assert.False(File.Exists(state));
+
+            File.WriteAllText(pipeline, """
+                { "steps": [{
+                    "task": "indexnow", "baseUrl": "https://example.com/",
+                    "urls": "https://EXAMPLE.com/case",
+                    "sitemap": "./sitemap.xml", "sitemapStatePath": "./state.json",
+                    "key": "examplekey", "dryRun": true
+                }] }
+                """);
+            Assert.True(WebPipelineRunner.RunPipeline(pipeline, logger: null).Success);
+            Assert.False(File.Exists(state));
         }
         finally
         {
