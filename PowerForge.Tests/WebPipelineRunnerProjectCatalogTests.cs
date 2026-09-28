@@ -1,10 +1,73 @@
 using System;
 using System.IO;
+using System.Text.Json;
 using PowerForge.Web.Cli;
 using Xunit;
 
 public class WebPipelineRunnerProjectCatalogTests
 {
+    [Fact]
+    public void RunPipeline_ProjectCatalog_DisabledReleaseSurfaceClearsStaleRepositoryRelease()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-release-surface-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "data", "projects"));
+
+        try
+        {
+            var catalogPath = Path.Combine(root, "data", "projects", "catalog.json");
+            File.WriteAllText(catalogPath,
+                """
+                {
+                  "projects": [
+                    {
+                      "slug": "shared",
+                      "name": "Shared",
+                      "githubRepo": "EvotecIT/Shared",
+                      "version": "4.0.0",
+                      "links": { "source": "https://github.com/EvotecIT/Shared", "releases": "https://github.com/EvotecIT/Shared/releases" },
+                      "surfaces": { "releases": true },
+                      "metrics": { "release": { "latestTag": "OtherProduct-v2.0.0", "latestUrl": "https://github.com/EvotecIT/Shared/releases/tag/OtherProduct-v2.0.0" } }
+                    }
+                  ]
+                }
+                """);
+            File.WriteAllText(Path.Combine(root, "data", "projects", "curation.csv"),
+                "slug,surfaces.releases\nshared,false\n");
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {
+                  "steps": [
+                    {
+                      "task": "project-catalog",
+                      "catalog": "./data/projects/catalog.json",
+                      "curationCsv": "./data/projects/curation.csv",
+                      "importManifests": false,
+                      "mergeTelemetry": false,
+                      "mergeReleaseTelemetry": false,
+                      "generatePages": false,
+                      "generateSections": false,
+                      "validate": true,
+                      "failOnWarnings": true
+                    }
+                  ]
+                }
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(result.Success);
+            using var document = JsonDocument.Parse(File.ReadAllText(catalogPath));
+            var project = document.RootElement.GetProperty("projects")[0];
+            Assert.False(project.GetProperty("surfaces").GetProperty("releases").GetBoolean());
+            Assert.False(project.GetProperty("links").TryGetProperty("releases", out _));
+            Assert.Equal(JsonValueKind.Null, project.GetProperty("metrics").GetProperty("release").ValueKind);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     [Fact]
     public void SplitCsvLine_ParsesQuotedEmptyCells()
     {

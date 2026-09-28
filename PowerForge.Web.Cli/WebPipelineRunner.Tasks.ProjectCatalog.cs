@@ -1118,6 +1118,12 @@ internal static partial class WebPipelineRunner
                 surfaces["apiDotNet"] = true;
             if (!surfaces.ContainsKey("releases") && (!string.IsNullOrWhiteSpace(githubRepo) || project.Metrics?.Release is not null))
                 surfaces["releases"] = true;
+            if (surfaces.TryGetValue("releases", out var releasesEnabled) && !releasesEnabled)
+            {
+                links.Remove("releases");
+                if (project.Metrics is not null)
+                    project.Metrics.Release = null;
+            }
 
             var changelogLink = TryGetDictionaryValue(links, "changelog");
             if (IsDefaultGitHubChangelogLink(changelogLink, githubRepo))
@@ -1148,7 +1154,8 @@ internal static partial class WebPipelineRunner
                     links["source"] = sourceUrl.Trim();
             }
 
-            if (string.IsNullOrWhiteSpace(TryGetDictionaryValue(links, "releases")))
+            if (surfaces.TryGetValue("releases", out releasesEnabled) && releasesEnabled &&
+                string.IsNullOrWhiteSpace(TryGetDictionaryValue(links, "releases")))
             {
                 var releasesUrl = project.Metrics?.Release?.LatestUrl;
                 if (string.IsNullOrWhiteSpace(releasesUrl) && !string.IsNullOrWhiteSpace(githubRepo))
@@ -2536,6 +2543,9 @@ internal static partial class WebPipelineRunner
         foreach (var project in projects)
         {
             if (string.IsNullOrWhiteSpace(project.GitHubRepo))
+                continue;
+            if (project.Surfaces is not null &&
+                project.Surfaces.TryGetValue("releases", out var releasesEnabled) && !releasesEnabled)
                 continue;
 
             var repository = project.GitHubRepo.Trim();
