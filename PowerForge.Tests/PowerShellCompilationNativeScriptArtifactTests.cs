@@ -635,6 +635,51 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Fact]
     [Trait("Category", "PowerShellCompilerGate")]
+    public void Build_HybridNativeScriptRootStopsEffectfulFilterAtFirstSelectedRecord()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            param([int]$Count = 8)
+            $seen = @()
+            $selected = 1..$Count | Where-Object { $seen += $_; $_ % 2 -eq 0 } | Select-Object -First 1
+            Write-Output "selected:$selected"
+            Write-Output "seen:$($seen -join ',')"
+            """);
+        var spec = new PowerShellCompilationBuildSpec(fixture.ScriptPath, fixture.OutputPath,
+            "PowerForge.StoppingFilterRoot", PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid)
+        {
+            EmitSource = true,
+            TargetContract = PowerShellCompilationTargetContractService.Create(
+                PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid,
+                "net10.0", "win-x64", false, false, PowerShellCompilationExecutableOptimization.None, true)
+        };
+        spec.ExpectedDependencyLock = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(spec);
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+        Assert.True(result.Succeeded, result.Error + System.Environment.NewLine + result.BuildOutput);
+        var root = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries);
+        Assert.True(root.Emitted);
+        Assert.True(root.RuntimeRouted);
+        var source = System.IO.File.ReadAllText(System.IO.Path.Combine(
+            result.GeneratedSourcePath!, "CompiledPowerShellEntry.cs"));
+        Assert.Contains("InvokeCommandRegion", source);
+        foreach (var (arguments, expected) in new (string[] Arguments, string[] Expected)[]
+                 {
+                     (new[] { "-Count", "1" }, new[] { "selected:", "seen:1" }),
+                     (System.Array.Empty<string>(), new[] { "selected:2", "seen:1,2" })
+                 })
+        {
+            var original = RunProcess("pwsh", new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }
+                .Concat(arguments).ToArray());
+            var generated = RunProcess(result.ArtifactPath!, arguments);
+            Assert.Equal((original.ExitCode, original.StandardOutput, original.StandardError),
+                (generated.ExitCode, generated.StandardOutput, generated.StandardError));
+            Assert.Equal(0, generated.ExitCode);
+            Assert.Equal(expected, generated.StandardOutput.Split('\n', System.StringSplitOptions.RemoveEmptyEntries)
+                .Select(static line => line.TrimEnd('\r')).ToArray());
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootPreservesOwnedFunctionDeclarations()
     {
         using var fixture = ArtifactFixture.Create("""
