@@ -580,7 +580,12 @@
               "column": 40
             }
           ],
-          "relativePath": "functions/Test-Expression.ps1"
+          "relativePath": "functions/Test-Expression.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-wpf-expression-form-visual.json",
+            "scope": "Static-interval Run/Quit on both Windows hosts has original/generated visual and result proof with an in-memory Test-Expression provider. Submitted code is never invoked; real evaluator, random and error paths remain unqualified. No complete form-method credit."
+          }
         },
         {
           "unitId": "6bf3b6db5fadf06390328270",
@@ -696,6 +701,7 @@
     "m29a-password-native-boundary.json",
     "m29a-wpf-dialogs-visual.json",
     "m29a-wpf-grid-visual.json",
-    "m29a-wpf-dynamic-form-visual.json"
+    "m29a-wpf-dynamic-form-visual.json",
+    "m29a-wpf-expression-form-visual.json"
   ]
 }
