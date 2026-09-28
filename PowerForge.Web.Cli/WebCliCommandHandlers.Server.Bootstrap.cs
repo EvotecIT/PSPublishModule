@@ -27,15 +27,36 @@ internal static partial class WebCliCommandHandlers
         if (loaded.Manifest is null)
             return loaded.ExitCode;
         // Freeze the validated manifest; deployment may update its source repository.
-        var script = BuildExecutableBootstrapScript(loaded.Manifest);
+        var locks = loaded.Manifest.OperationLocks ?? Array.Empty<string>();
+        var commandOwnedDeployment = string.Equals(loaded.Manifest.Deploy?.OperationLockOwner,
+            "command", StringComparison.Ordinal);
+        var holdLocksThroughVerification = locks.Length > 0 && !commandOwnedDeployment;
+        var script = BuildExecutableBootstrapScript(loaded.Manifest, holdLocksThroughVerification);
+        if (holdLocksThroughVerification)
+        {
+            var preparation = RunLocalServerScript("set -Eeuo pipefail\n" +
+                string.Join('\n', locks.Select(BuildOperationLockInstallCommand)));
+            if (!preparation.Success)
+                return Fail("Bootstrap could not prepare its declared operation locks.", outputJson, logger, "web.server.bootstrap");
+        }
+
+        // The lock session outlives the bootstrap shell. Verification can run arbitrary
+        // commands and must not race another deployment before the final unit check.
+        using var operationLock = holdLocksThroughVerification
+            ? AcquireCaptureOperationLocks(string.Empty, string.Empty, locks, local: true)
+            : null;
+        operationLock?.EnsureHeld("before bootstrap");
         var execution = RunLocalServerScript(script);
+        operationLock?.EnsureHeld("after bootstrap");
         if (!execution.Success)
             return Fail($"Bootstrap stopped with exit {execution.ExitCode}; inspect the host before retrying. No automatic whole-host rollback is implied.",
                 outputJson, logger, "web.server.bootstrap");
 
-        return RunServerVerification(loaded.Manifest, fullPath,
+        var result = RunServerVerification(loaded.Manifest, fullPath,
             ["--local", "--fail-on-failure", "--url-timeout-seconds", TryGetOptionValue(subArgs, "--url-timeout-seconds") ?? "30"],
-            outputJson, logger, outputSchemaVersion, "web.server.bootstrap", reconcileDisabledUnits: true);
+            outputJson, logger, outputSchemaVersion, "web.server.bootstrap", reconcileDisabledUnits: true,
+            operationLock: operationLock);
+        return result;
     }
 
     internal static string BuildBootstrapManifestGuard(string manifestPath)
@@ -44,7 +65,7 @@ internal static partial class WebCliCommandHandlers
             $"test -f {ShellQuote(manifestPath)} && test ! -L {ShellQuote(manifestPath)}",
             $"powerforge_assert_root_controlled_path {ShellQuote(manifestPath)}");
 
-    internal static string BuildExecutableBootstrapScript(PowerForgeServerRecoveryManifest manifest)
+    internal static string BuildExecutableBootstrapScript(PowerForgeServerRecoveryManifest manifest, bool operationLocksHeldByCaller = false)
     {
         var steps = BuildBootstrapPlanSteps(manifest, [], includeOperatorVerification: false);
         var unresolved = steps.Where(static step => step.Manual || step.Sensitive ||
@@ -62,7 +83,7 @@ internal static partial class WebCliCommandHandlers
             address.Scheme is not ("http" or "https") || address.UserInfo.Length > 0 ||
             url.ExpectedStatus is < 100 or > 599) == true)
             throw new InvalidOperationException("Bootstrap verification requires valid HTTP(S) URLs without credentials and valid expected status codes.");
-        return RenderBootstrapPlanScript(steps, manifest);
+        return RenderBootstrapPlanScript(steps, manifest, operationLocksHeldByCaller);
     }
 
     // Stdin avoids predictable/replaceable temporary scripts. Bootstrap does not expose shell output.

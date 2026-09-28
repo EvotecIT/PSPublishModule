@@ -13,7 +13,8 @@ internal static partial class WebCliCommandHandlers
 
     internal static string RenderBootstrapPlanScript(
         IReadOnlyList<PowerForgeServerBootstrapPlanStep> steps,
-        PowerForgeServerRecoveryManifest? manifest = null)
+        PowerForgeServerRecoveryManifest? manifest = null,
+        bool operationLocksHeldByCaller = false)
     {
         var builder = new StringBuilder();
         builder.AppendLine("#!/usr/bin/env bash");
@@ -26,21 +27,26 @@ internal static partial class WebCliCommandHandlers
 
         var exitTrap = BuildBootstrapDisabledUnitExitTrap(manifest?.Systemd);
         var locks = manifest?.OperationLocks ?? Array.Empty<string>();
+        if (operationLocksHeldByCaller && locks.Length == 0)
+            throw new InvalidOperationException("Caller-held bootstrap locking requires declared operation locks.");
         var acquireIndex = -1;
         if (exitTrap.Length > 0 && locks.Length > 0)
         {
             EnsureDisabledUnitBootstrapLockOwnership(manifest!);
-            var acquire = BuildBootstrapOperationLockAcquireCommand(locks);
-            for (var index = 0; index < steps.Count; index++)
+            if (!operationLocksHeldByCaller)
             {
-                if (string.Equals(steps[index].Command, acquire, StringComparison.Ordinal))
+                var acquire = BuildBootstrapOperationLockAcquireCommand(locks);
+                for (var index = 0; index < steps.Count; index++)
                 {
-                    acquireIndex = index;
-                    break;
+                    if (string.Equals(steps[index].Command, acquire, StringComparison.Ordinal))
+                    {
+                        acquireIndex = index;
+                        break;
+                    }
                 }
+                if (acquireIndex < 0)
+                    throw new InvalidOperationException("Disabled-unit bootstrap is missing its declared operation-lock acquisition step.");
             }
-            if (acquireIndex < 0)
-                throw new InvalidOperationException("Disabled-unit bootstrap is missing its declared operation-lock acquisition step.");
         }
 
         // Lock setup uses its own EXIT trap; execute it before installing the
@@ -59,7 +65,19 @@ internal static partial class WebCliCommandHandlers
         }
 
         for (var index = acquireIndex + 1; index < steps.Count; index++)
+        {
+            if (operationLocksHeldByCaller && steps[index].Category == "locking")
+            {
+                var isPreparation = locks.Any(path => string.Equals(steps[index].Command,
+                    BuildOperationLockInstallCommand(path), StringComparison.Ordinal));
+                var isAcquire = string.Equals(steps[index].Command,
+                    BuildBootstrapOperationLockAcquireCommand(locks), StringComparison.Ordinal);
+                if (isPreparation || isAcquire)
+                    continue;
+                throw new InvalidOperationException("Caller-held bootstrap locks cannot include a release or reacquisition step.");
+            }
             AppendBootstrapPlanStep(builder, steps[index]);
+        }
 
         if (exitTrap.Length > 0)
             builder.AppendLine(")");

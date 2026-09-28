@@ -16,7 +16,7 @@ internal static partial class WebCliCommandHandlers
     private static int RunServerVerification(
         PowerForgeServerRecoveryManifest manifest, string manifestPath, string[] subArgs,
         bool outputJson, WebConsoleLogger logger, int outputSchemaVersion, string commandName = "web.server.verify",
-        bool reconcileDisabledUnits = false)
+        bool reconcileDisabledUnits = false, RemoteOperationLock? operationLock = null)
     {
         var local = HasOption(subArgs, "--local");
         if (local && HasOption(subArgs, "--ssh"))
@@ -29,52 +29,74 @@ internal static partial class WebCliCommandHandlers
         var urlResults = new List<PowerForgeServerVerifyUrlResult>();
         var warnings = new List<string>();
 
-        foreach (var command in manifest.Verify?.Commands ?? Array.Empty<PowerForgeServerNamedCommand>())
+        try
         {
-            if (command.Sensitive)
+            foreach (var command in manifest.Verify?.Commands ?? Array.Empty<PowerForgeServerNamedCommand>())
             {
-                warnings.Add($"Skipping sensitive verify command '{command.Id}'.");
-                continue;
-            }
+                if (command.Sensitive)
+                {
+                    warnings.Add($"Skipping sensitive verify command '{command.Id}'.");
+                    continue;
+                }
 
-            var result = local
-                ? RunLocalServerScript(BuildScopedServerCommand(command))
-                : ExecuteRemote(sshCommand, target, command.Command ?? string.Empty);
-            commandResults.Add(new PowerForgeServerVerifyCommandResult
-            {
-                Id = command.Id,
-                Command = command.Command,
-                Required = command.Required,
-                ExitCode = result.ExitCode,
-                Success = result.Success,
-                OutputPreview = Preview(result.Stdout),
-                ErrorPreview = Preview(result.Stderr)
-            });
-        }
-
-        foreach (var url in manifest.Verify?.Urls ?? Array.Empty<PowerForgeServerVerifyUrl>())
-            urlResults.Add(VerifyUrl(url, urlTimeoutSeconds));
-
-        // Verification commands and URL probes can activate a unit after the bootstrap script.
-        // Run this even when an earlier check failed, so bootstrap never reports success with
-        // an enforced-disabled unit left active. Ordinary `server verify` remains read-only.
-        if (reconcileDisabledUnits)
-        {
-            var units = (manifest.Systemd?.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
-                .Concat(manifest.Systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>());
-            foreach (var unit in units.Where(static unit => unit.EnforceDisabled && !string.IsNullOrWhiteSpace(unit.Name)))
-            {
-                var result = RunLocalServerScript(BuildStopAndDisableUnitCommand(unit.Name!));
+                var result = local
+                    ? RunLocalServerScript(BuildScopedServerCommand(command))
+                    : ExecuteRemote(sshCommand, target, command.Command ?? string.Empty);
                 commandResults.Add(new PowerForgeServerVerifyCommandResult
                 {
-                    Id = $"enforceDisabled:{unit.Name}",
-                    Required = true,
+                    Id = command.Id,
+                    Command = command.Command,
+                    Required = command.Required,
                     ExitCode = result.ExitCode,
                     Success = result.Success,
-                    ErrorPreview = result.Success ? null : "Could not confirm the unit is stopped and disabled."
+                    OutputPreview = Preview(result.Stdout),
+                    ErrorPreview = Preview(result.Stderr)
                 });
             }
+
+            foreach (var url in manifest.Verify?.Urls ?? Array.Empty<PowerForgeServerVerifyUrl>())
+                urlResults.Add(VerifyUrl(url, urlTimeoutSeconds));
         }
+        finally
+        {
+            // Verification can activate a unit even when it throws. Keep the caller's
+            // operation lock until every enforced-disabled unit has been rechecked.
+            if (reconcileDisabledUnits)
+            {
+                var units = (manifest.Systemd?.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
+                    .Concat(manifest.Systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>());
+                foreach (var unit in units.Where(static unit => unit.EnforceDisabled && !string.IsNullOrWhiteSpace(unit.Name)))
+                {
+                    try
+                    {
+                        var result = RunLocalServerScript(BuildStopAndDisableUnitCommand(unit.Name!));
+                        commandResults.Add(new PowerForgeServerVerifyCommandResult
+                        {
+                            Id = $"enforceDisabled:{unit.Name}",
+                            Required = true,
+                            ExitCode = result.ExitCode,
+                            Success = result.Success,
+                            ErrorPreview = result.Success ? null : "Could not confirm the unit is stopped and disabled."
+                        });
+                    }
+                    catch (Exception exception)
+                    {
+                        commandResults.Add(new PowerForgeServerVerifyCommandResult
+                        {
+                            Id = $"enforceDisabled:{unit.Name}",
+                            Required = true,
+                            ExitCode = 1,
+                            Success = false,
+                            ErrorPreview = Preview(exception.Message)
+                        });
+                    }
+                }
+            }
+        }
+
+        // Do not emit a successful verification result after the shared operation
+        // lock has been lost during a command, URL check, or final reconciliation.
+        operationLock?.EnsureHeld("after verification and disabled-unit reconciliation");
 
         var failedCommands = commandResults
             .Where(static result => result.Required && !result.Success)

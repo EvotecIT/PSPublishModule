@@ -310,8 +310,11 @@ before reporting success; a failed check also triggers that final attempt.
 The generated bootstrap script attempts the same reconciliation when any step
 exits early, while retaining the original failure status. If reconciliation
 itself fails, inspect the host and stop the unit before retrying.
-When operation locks are declared, bootstrap retains the engine-owned lock
-through that final reconciliation. Combining `enforceDisabled` with
+When operation locks are declared, `bootstrap --apply` retains the engine-owned
+lock through the bootstrap shell, verification commands and URLs, and final
+reconciliation. The reviewable standalone plan script holds its lock through
+its own EXIT reconciliation; run `--apply` for the additional verification
+window. Combining `enforceDisabled` with
 `deploy.operationLockOwner: command` is unsupported and fails plan validation.
 Standalone `server verify` does not change unit state. This is not an activation
 barrier during a package or verification command. Do not install a
