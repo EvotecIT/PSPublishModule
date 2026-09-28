@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "recordedOn": "2026-09-28",
+  "source": {
+    "workload": "locksmith2",
+    "revision": "f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639",
+    "archiveSha256": "d4f511b16ed95d15bfa37ba06ddfc92709f0412e8669004cb70e3407ae9fc8b9",
+    "sourceFingerprint": "b1e65521a013471cfc80589f0edd062a714f4b498a347685a06d7dce97b1b4ef",
+    "license": "Commons Clause License Condition v1.0",
+    "unchangedFunctionSha256": {
+      "Private/Set/Set-DangerousCAAdministrator.ps1": "e6194e01148da7de2a930337513063f6dc4ce2d599682029ec131bca1f994926",
+      "Private/Set/Set-DangerousCACertificateManager.ps1": "6376d4e0919c9c7d47e6f58b0b2a84e3d9afd9d3c9d8cc832d4915b504908ee2",
+      "Private/Set/Set-LowPrivilegeCAAdministrator.ps1": "0b07835823001d6b519b7c5e36ca7a9fea038e38dc39c80ebaac6a5629268b0b",
+      "Private/Set/Set-LowPrivilegeCACertificateManager.ps1": "15351f8f22049a05519f23c4258dc928e6b92fa319476f39c0f7e41171f09e75",
+      "Private/Convert/Convert-IdentityReferenceToSid.ps1": "0a301e6bb1b026b50aa975aa1471896d7ab94c581f2c98f8d2e9fd4b23305a24",
+      "Private/Convert/Resolve-Principal.ps1": "1e8e86352252687cd8c96a9009235e69cb2bf8d5e55a79daaa15dbf5ff2b754f",
+      "Private/Test/Test-IsDangerousPrincipal.ps1": "3894d7be6f350fbc962627e655b938d44a06dcc302380bea593fa66814ee2e12",
+      "Private/Test/Test-IsLowPrivilegePrincipal.ps1": "173efd6b5a5e5bcf6eb574531d5005156bcc08378f8e8f3d9e24b646ce99cb43",
+      "Private/Convert/Expand-GroupMembership.ps1": "a0cc1f4b31aa481ebe25861727a829dafa89f65779b59bab8028dd9676013722"
+    },
+    "principalDefinitionsSha256": "d91e0ea54f81c56c79026f45d615ffcfa94a012f68cf41afc8a62e8a667d9986",
+    "unchangedManifestClassSha256": {
+      "Classes/LS2Principal.ps1": "5b8542654843f25be0218a346780cdd40ec6f236bc73004e228eb960cb49fca1",
+      "Classes/LS2AdcsObject.ps1": "abb27b68cdfe94c111013009ab453aa96a7f67748e2b33abd1e703640a9c93a5",
+      "Classes/LS2Issue.ps1": "736d4440eace31299822b2d8e20863b1c26a7cb9186da235c478910226202e38"
+    }
+  },
+  "fixture": {
+    "moduleSourceSha256": "4c5ecb6f0a428a366633fcea7f610a2117f9d737185860144a67bbcb2a168315",
+    "moduleManifestSha256": "f0255380074f0958b56d087ffa848e9b57f9d401c91059c4a172f0ea75de2ab8",
+    "observerSha256": "2e3525a809ebd54dca8587dcbe20777d884bc2449cfd971af5a115b766ec9cda",
+    "unchangedFunctionTextsVerbatimInMiniModule": 9,
+    "principalDefinitionsTextVerbatimInMiniModule": true,
+    "classCopiesHashIdentical": 3,
+    "offlineBoundary": "The observer fills one LS2AdcsObject without its AD-backed constructor. The mini module uses the pinned principal definitions, an in-memory PrincipalStore and ExpandedGroupCache. Throwing directory-entry, GC and LDAP sentinels require zero directory calls. The four role setters and five decision/conversion/expansion helpers are unchanged authored functions."
+  },
+  "generated": {
+    "mode": "Hybrid",
+    "net10ManifestSha256": "47d0f24faf745607bc0bf69f50087097dd9a197e1a058c88bcca97c796be2826",
+    "net472ManifestSha256": "46d2e5a5a8f90145262fa9e0a202a73406c4da7bc049685219df09c7c532ee9c",
+    "compiledMethodsPerTarget": 8,
+    "newlyQualifiedRoleMethodsNativeBoundPerTarget": 4,
+    "roleMethodHostedCommandRegionsEach": 3,
+    "strict": {
+      "targets": ["net10.0", "net472"],
+      "canProceed": false,
+      "typedUnits": 0,
+      "rejectedUnits": 10,
+      "net10ExplainSha256": "d9c3b6dc02986a2cb65bae13b786664ad838b52c784f36b0e2ebc636214dfd86",
+      "net472ExplainSha256": "4c04c3a5bd6372657f055858178c11cc5c0dc36bc5ec12e20b0c48d4d33d84b5"
+    }
+  },
+  "execution": {
+    "hosts": ["PowerShell 7/net10.0 Windows x64", "Windows PowerShell 5.1/net472 Windows x64"],
+    "originalGeneratedAndCrossHostRawJsonEqual": true,
+    "allClaimedChildExitCodesZero": true,
+    "allClaimedStderrEmpty": true,
+    "rawOutputSha256EachClaimedRun": "72f0fbf0cc7d508287c755ebabe4dbfb9d14abc0d0721b03ecca42fd55533651",
+    "newlyExecutedMethods": ["Set-DangerousCAAdministrator", "Set-DangerousCACertificateManager", "Set-LowPrivilegeCAAdministrator", "Set-LowPrivilegeCACertificateManager"],
+    "result": {
+      "inputType": "LS2AdcsObject",
+      "outputCountEachMethod": 1,
+      "sameInputObjectReferenceEachMethod": true,
+      "dangerousPrincipalSidInBothRoles": ["S-1-1-0"],
+      "safeAdminsSidExcluded": "S-1-5-21-1-2-3-512",
+      "lowPrivilegePrincipalSidsInBothRoles": ["S-1-5-21-1-2-3-1002", "S-1-5-21-1-2-3-2001"],
+      "cachedGroupMemberIncluded": true,
+      "directoryCalls": 0
+    }
+  },
+  "sameInputAssessment": {
+    "evidenceSha256": "e17a79bb85e01ee4b11802061997221754b75bed6af0f95d8e39ce3055b9e8bc",
+    "completeEmittedFunctions": "75/100",
+    "regressions": 0,
+    "newlyEmittedMethodsWithDirectOfflineProof": "28/37"
+  },
+  "limits": [
+    "The in-memory principal store and cache avoid live NTAccount translation, LDAP/GC lookup and CA operations; cache misses and directory error paths remain unqualified.",
+    "The AD-backed LS2AdcsObject constructor, forest-specific principal initialization, full Locksmith2 import, real CA security and remediation remain unqualified.",
+    "The emitted Hybrid lifecycle methods still use PowerShell-hosted command regions; this is not runtime-free translation or a Strict acceptance claim.",
+    "The net10 artifact is PowerShell 7-only. A Windows PowerShell 5.1 import of it correctly fails its minimum-version check; the net472 artifact is the claimed Windows PowerShell target.",
+    "The Commons Clause source and executable observer remain external/task-local; only hashes and summarized evidence are tracked."
+  ]
+}
