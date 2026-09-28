@@ -30,12 +30,16 @@ internal static class PowerShellHybridNativeEntryPlanner
         var ast = Parser.ParseFile(path, out _, out var errors);
         var declarations = ast.EndBlock?.Statements.OfType<FunctionDefinitionAst>().ToArray()
             ?? Array.Empty<FunctionDefinitionAst>();
-        // A function declared in a conditional can shadow a later pipeline command in the
-        // same script frame. Keep command admission based on top-level declarations only.
-        var shadowsForEachObject = ast.FindAll(static node => node is FunctionDefinitionAst, true)
-            .OfType<FunctionDefinitionAst>().Any(static declaration =>
-                declaration.Name.Equals("ForEach-Object", StringComparison.OrdinalIgnoreCase) ||
-                declaration.Name.EndsWith(":ForEach-Object", StringComparison.OrdinalIgnoreCase));
+        // A conditional declaration can shadow a later pipeline stage in the same script frame.
+        // Keep command admission based on top-level declarations only.
+        var authoredFunctionNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var declaration in ast.FindAll(static node => node is FunctionDefinitionAst, true)
+                     .OfType<FunctionDefinitionAst>())
+        {
+            var name = declaration.Name;
+            var separator = name.LastIndexOf(':');
+            authoredFunctionNames.Add(separator < 0 ? name : name.Substring(separator + 1));
+        }
         var admittedCommands = new HashSet<string>(QualifiedHostedRootCommands, StringComparer.OrdinalIgnoreCase);
         admittedCommands.UnionWith(declarations.Select(static declaration => declaration.Name));
         // Caller-frame observations need their own launcher contract. This first route
@@ -54,7 +58,7 @@ internal static class PowerShellHybridNativeEntryPlanner
             .OfType<CommandAst>().ToArray() ?? Array.Empty<CommandAst>();
         if (hostedCommands.Any(command => command.InvocationOperator != TokenKind.Unknown ||
                 command.Redirections.Count != 0 ||
-                !IsQualifiedHostedRootCommand(command, admittedCommands, shadowsForEachObject)))
+                !IsQualifiedHostedRootCommand(command, admittedCommands, authoredFunctionNames)))
             return null;
         try
         {
@@ -73,22 +77,30 @@ internal static class PowerShellHybridNativeEntryPlanner
     }
 
     private static bool IsQualifiedHostedRootCommand(CommandAst command, ISet<string> admittedCommands,
-        bool shadowsForEachObject)
+        ISet<string> authoredFunctionNames)
     {
         if (command.GetCommandName() is not string name) return false;
-        if (!name.Equals("ForEach-Object", StringComparison.OrdinalIgnoreCase))
+        var isForEach = name.Equals("ForEach-Object", StringComparison.OrdinalIgnoreCase);
+        var isWhere = name.Equals("Where-Object", StringComparison.OrdinalIgnoreCase);
+        if (!isForEach && !isWhere)
             return admittedCommands.Contains(name);
-        // The whole pipeline remains PowerShell-owned. Admit only a terminal ordinary process
-        // script block; other parameter sets and nonlocal transfers need separate entry proof.
-        if (shadowsForEachObject ||
+        // The whole pipeline remains PowerShell-owned. Admit only ordinary direct script blocks;
+        // other parameter sets and nonlocal transfers need separate entry proof.
+        if (authoredFunctionNames.Contains(name) ||
             command.Parent is not PipelineAst pipeline ||
             pipeline.PipelineElements.Count < 2 ||
-            !ReferenceEquals(pipeline.PipelineElements[pipeline.PipelineElements.Count - 1], command) ||
             command.CommandElements.Count != 2 ||
             command.CommandElements[1] is not ScriptBlockExpressionAst process ||
             process.ScriptBlock is not { DynamicParamBlock: null, BeginBlock: null, ProcessBlock: null,
                 ParamBlock: null, EndBlock: { Unnamed: true } } block ||
             block.GetType().GetProperty("CleanBlock")?.GetValue(block) is not null)
+            return false;
+        var terminal = pipeline.PipelineElements[pipeline.PipelineElements.Count - 1];
+        if (!ReferenceEquals(terminal, command) &&
+            !(isWhere && pipeline.PipelineElements.Count >= 3 &&
+              ReferenceEquals(pipeline.PipelineElements[pipeline.PipelineElements.Count - 2], command) &&
+              terminal is CommandAst following &&
+              following.GetCommandName()?.Equals("ForEach-Object", StringComparison.OrdinalIgnoreCase) == true))
             return false;
         return !block.FindAll(static node => node is ReturnStatementAst or BreakStatementAst or
             ContinueStatementAst or ExitStatementAst or ThrowStatementAst or TrapStatementAst,

@@ -93,6 +93,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("function script:ForEach-Object { param($Action) 'shadow' }; 1..3 | ForEach-Object { $_ }", "win-x64")]
     [InlineData("if ($true) { function ForEach-Object { param($Action) 'shadow' } }; 1..3 | ForEach-Object { $_ }", "win-x64")]
     [InlineData("if ($true) { function script:ForEach-Object { param($Action) 'shadow' } }; 1..3 | ForEach-Object { $_ }", "win-x64")]
+    [InlineData("1..3 | Where-Object -Property IsEven | ForEach-Object { $_ }", "win-x64")]
+    [InlineData("1..3 | Where-Object { return $_ } | ForEach-Object { $_ }", "win-x64")]
+    [InlineData("1..3 | Where-Object { $_ } | ForEach-Object { break }", "win-x64")]
+    [InlineData("1..3 | ForEach-Object { $_ } | Where-Object { $_ }", "win-x64")]
+    [InlineData("function script:Where-Object { param($Filter) 'shadow' }; 1..3 | Where-Object { $_ } | ForEach-Object { $_ }", "win-x64")]
+    [InlineData("if ($true) { function Where-Object { param($Filter) 'shadow' } }; 1..3 | Where-Object { $_ } | ForEach-Object { $_ }", "win-x64")]
     [InlineData("param([int]$Count = 3) $Count + 1", "linux-x64")]
     public void Explain_HybridNativeScriptRootRetainsUnqualifiedOwners(string source, string runtimeIdentifier)
     {
@@ -500,6 +506,55 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                      (new[] { "-End", "0" }, new[] { "sum:0" }),
                      (new[] { "-End", "1" }, new[] { "2", "sum:1" }),
                      (System.Array.Empty<string>(), new[] { "2", "4", "6", "sum:6" })
+                 })
+        {
+            var original = RunProcess("pwsh", new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }
+                .Concat(arguments).ToArray());
+            var generated = RunProcess(result.ArtifactPath!, arguments);
+            Assert.Equal((original.ExitCode, original.StandardOutput, original.StandardError),
+                (generated.ExitCode, generated.StandardOutput, generated.StandardError));
+            Assert.Equal(0, generated.ExitCode);
+            Assert.Equal(expectedOutput, generated.StandardOutput.Split('\n', System.StringSplitOptions.RemoveEmptyEntries)
+                .Select(static line => line.TrimEnd('\r')).ToArray());
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Build_HybridNativeScriptRootPreservesWhereForEachPipelineState()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            param([int]$End = 4)
+            $last = 0
+            if ($End -gt 0) {
+                1..$End | Where-Object { $_ % 2 -eq 0 } | ForEach-Object { $last = $_; "even:$_" }
+                1..$End | Where-Object { $_ -gt 2 }
+            }
+            Write-Output "last:$last"
+            """);
+        var spec = new PowerShellCompilationBuildSpec(fixture.ScriptPath, fixture.OutputPath,
+            "PowerForge.WhereForEachRoot", PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid)
+        {
+            EmitSource = true,
+            TargetContract = PowerShellCompilationTargetContractService.Create(
+                PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid,
+                "net10.0", "win-x64", false, false, PowerShellCompilationExecutableOptimization.None, true)
+        };
+        spec.ExpectedDependencyLock = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(spec);
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+        Assert.True(result.Succeeded, result.Error + System.Environment.NewLine + result.BuildOutput);
+        var root = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries);
+        Assert.True(root.Emitted);
+        Assert.True(root.RuntimeRouted);
+        var generatedSource = System.IO.File.ReadAllText(System.IO.Path.Combine(
+            result.GeneratedSourcePath!, "CompiledPowerShellEntry.cs"));
+        Assert.Contains("InvokeCommandRegion", generatedSource);
+        Assert.Contains("Where-Object", generatedSource);
+        foreach (var (arguments, expectedOutput) in new (string[] Arguments, string[] ExpectedOutput)[]
+                 {
+                     (new[] { "-End", "0" }, new[] { "last:0" }),
+                     (new[] { "-End", "1" }, new[] { "last:0" }),
+                     (System.Array.Empty<string>(), new[] { "even:2", "even:4", "3", "4", "last:4" })
                  })
         {
             var original = RunProcess("pwsh", new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }
