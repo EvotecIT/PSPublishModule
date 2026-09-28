@@ -15,7 +15,7 @@ namespace PowerForge.Web.Cli;
 /// </summary>
 internal sealed class IndexNowSitemapCheckpoint
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 2;
     private const long MaxSitemapBytes = 50L * 1024 * 1024;
     private const long MaxCheckpointBytes = 32L * 1024 * 1024;
 
@@ -23,24 +23,29 @@ internal sealed class IndexNowSitemapCheckpoint
     {
         public int Version { get; set; }
         public Dictionary<string, string?> Urls { get; set; } = new(StringComparer.Ordinal);
+        public string[] Endpoints { get; set; } = Array.Empty<string>();
     }
 
     private readonly string _path;
     private readonly Dictionary<string, string?> _current;
     private readonly Dictionary<string, string?> _previous;
+    private readonly string _serializedState;
 
     private IndexNowSitemapCheckpoint(
         string path,
         Dictionary<string, string?> current,
-        Dictionary<string, string?> previous)
+        Dictionary<string, string?> previous,
+        string serializedState)
     {
         _path = path;
         _current = current;
         _previous = previous;
+        _serializedState = serializedState;
     }
 
     /// <summary>Loads the current sitemap and the previous successful submission state.</summary>
-    internal static IndexNowSitemapCheckpoint Load(string sitemapPath, string statePath, string baseUrl)
+    internal static IndexNowSitemapCheckpoint Load(
+        string sitemapPath, string statePath, string baseUrl, IReadOnlyList<string> endpoints)
     {
         if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var site) || site.Scheme != Uri.UriSchemeHttps ||
             !string.IsNullOrEmpty(site.UserInfo) || !string.IsNullOrEmpty(site.Query) || !string.IsNullOrEmpty(site.Fragment))
@@ -48,14 +53,26 @@ internal sealed class IndexNowSitemapCheckpoint
 
         var sitemapFullPath = Path.GetFullPath(sitemapPath);
         var stateFullPath = Path.GetFullPath(statePath);
-        if (string.Equals(sitemapFullPath, stateFullPath, StringComparison.OrdinalIgnoreCase))
+        var pathComparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+            ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (string.Equals(sitemapFullPath, stateFullPath, pathComparison))
             throw new InvalidOperationException("indexnow: sitemap and sitemapStatePath must be different files.");
 
         var current = ReadSitemap(sitemapFullPath, site);
-        var previous = ReadState(stateFullPath);
-        if (current.Count == 0 && previous.Count > 0)
+        var stored = ReadState(stateFullPath);
+        if (current.Count == 0 && stored is not null && stored.Urls.Count > 0)
             throw new InvalidOperationException("indexnow: sitemap is empty; preserving the previous successful checkpoint.");
-        return new IndexNowSitemapCheckpoint(stateFullPath, current, previous);
+        string[] effectiveEndpoints = IndexNowSubmitter.EffectiveEndpointUrls(endpoints);
+        var previous = stored?.Endpoints is not null && stored.Endpoints.SequenceEqual(effectiveEndpoints, StringComparer.Ordinal)
+            ? stored.Urls : new Dictionary<string, string?>(StringComparer.Ordinal);
+        string serializedState = JsonSerializer.Serialize(new StoredState {
+            Version = SchemaVersion,
+            Urls = current,
+            Endpoints = effectiveEndpoints
+        });
+        if (Encoding.UTF8.GetByteCount(serializedState) > MaxCheckpointBytes)
+            throw new InvalidOperationException("indexnow: sitemap checkpoint exceeds 32 MiB.");
+        return new IndexNowSitemapCheckpoint(stateFullPath, current, previous, serializedState);
     }
 
     /// <summary>Returns only new URLs or URLs whose sitemap lastmod value changed.</summary>
@@ -75,14 +92,7 @@ internal sealed class IndexNowSitemapCheckpoint
         var temporaryPath = Path.Combine(directory, "." + Path.GetFileName(_path) + "." + Guid.NewGuid().ToString("N") + ".tmp");
         try
         {
-            var contents = JsonSerializer.Serialize(new StoredState
-            {
-                Version = SchemaVersion,
-                Urls = _current
-            });
-            if (Encoding.UTF8.GetByteCount(contents) > MaxCheckpointBytes)
-                throw new InvalidOperationException("indexnow: sitemap checkpoint exceeds 32 MiB.");
-            File.WriteAllText(temporaryPath, contents);
+            File.WriteAllText(temporaryPath, _serializedState);
             File.Move(temporaryPath, _path, overwrite: true);
         }
         finally
@@ -129,17 +139,18 @@ internal sealed class IndexNowSitemapCheckpoint
         return urls;
     }
 
-    private static Dictionary<string, string?> ReadState(string path)
+    private static StoredState? ReadState(string path)
     {
         if (!File.Exists(path))
-            return new Dictionary<string, string?>(StringComparer.Ordinal);
+            return null;
         if (new FileInfo(path).Length > MaxCheckpointBytes)
             throw new InvalidOperationException("indexnow: sitemap checkpoint exceeds 32 MiB.");
 
         var state = JsonSerializer.Deserialize<StoredState>(File.ReadAllText(path))
             ?? throw new InvalidOperationException("indexnow: sitemap checkpoint is empty.");
-        if (state.Version != SchemaVersion || state.Urls is null)
+        if (state.Version is not (1 or SchemaVersion) || state.Urls is null)
             throw new InvalidOperationException("indexnow: sitemap checkpoint has an unsupported schema.");
-        return new Dictionary<string, string?>(state.Urls, StringComparer.Ordinal);
+        state.Urls = new Dictionary<string, string?>(state.Urls, StringComparer.Ordinal);
+        return state;
     }
 }

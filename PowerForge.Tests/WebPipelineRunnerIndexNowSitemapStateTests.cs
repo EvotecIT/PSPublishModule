@@ -107,7 +107,7 @@ public sealed class WebPipelineRunnerIndexNowSitemapStateTests
             var sitemap = Path.Combine(root, "sitemap.xml");
             var state = Path.Combine(root, "state.json");
             File.WriteAllText(sitemap, Sitemap(("/one", "2026-09-01")));
-            var checkpoint = IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/");
+            var checkpoint = IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/", []);
             Assert.Equal(["https://example.com/one"], checkpoint.ChangedUrls);
 
             var pipeline = Path.Combine(root, "pipeline.json");
@@ -134,10 +134,10 @@ public sealed class WebPipelineRunnerIndexNowSitemapStateTests
 
             checkpoint.Save();
             File.WriteAllText(sitemap, Sitemap());
-            Assert.Throws<InvalidOperationException>(() => IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/"));
+            Assert.Throws<InvalidOperationException>(() => IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/", []));
             File.WriteAllText(state, "not-json");
             File.WriteAllText(sitemap, Sitemap(("/one", "2026-09-01")));
-            Assert.Throws<JsonException>(() => IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/"));
+            Assert.Throws<JsonException>(() => IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/", []));
             File.Delete(state);
 
             File.WriteAllText(sitemap, Sitemap(("https://other.example/two", "2026-09-01")));
@@ -146,7 +146,7 @@ public sealed class WebPipelineRunnerIndexNowSitemapStateTests
             Assert.False(File.Exists(state));
 
             File.WriteAllText(sitemap, Sitemap(("/Case", "2026-09-01"), ("/case", "2026-09-01")));
-            Assert.Throws<InvalidOperationException>(() => IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/"));
+            Assert.Throws<InvalidOperationException>(() => IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/", []));
 
             File.WriteAllText(sitemap, Sitemap(("/case", "2026-09-01")));
             File.WriteAllText(pipeline, """
@@ -218,6 +218,102 @@ public sealed class WebPipelineRunnerIndexNowSitemapStateTests
         finally
         {
             listener.Stop();
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void StatefulSitemap_EndpointChangeResubmitsWithoutChangingLastmod()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-indexnow-endpoints-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var sitemap = Path.Combine(root, "sitemap.xml");
+            var state = Path.Combine(root, "state.json");
+            File.WriteAllText(sitemap, Sitemap(("/one", "2026-09-01")));
+            var first = IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/", ["https://api.example.net/one"]);
+            Assert.Single(first.ChangedUrls);
+            first.Save();
+
+            Assert.Empty(IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/", ["https://api.example.net/one"]).ChangedUrls);
+            Assert.Equal(["https://example.com/one"],
+                IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/", ["https://api.example.net/two"]).ChangedUrls);
+            Assert.Equal(["https://example.com/one"],
+                IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/", ["https://api.example.net/one", "https://api.example.net/two"]).ChangedUrls);
+
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, """
+                { "steps": [{
+                    "task": "indexnow", "baseUrl": "https://example.com/",
+                    "sitemap": "./sitemap.xml", "sitemapStatePath": "./state.json",
+                    "endpoint": "https://api.example.net/two", "key": "examplekey",
+                    "dryRun": true, "reportPath": "./report.json"
+                }] }
+                """);
+            Assert.True(WebPipelineRunner.RunPipeline(pipeline, logger: null).Success);
+            using var report = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "report.json")));
+            Assert.Equal(1, report.RootElement.GetProperty("urlCount").GetInt32());
+            Assert.Empty(IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/", ["https://api.example.net/one"]).ChangedUrls);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void StatefulSitemap_FragmentVariantsHaveOneSubmissionIdentity()
+    {
+        Assert.Equal(["https://example.com/one"], IndexNowSubmitter.NormalizeCheckpointUrls([
+            "https://example.com/one#first", "https://example.com/one#second"]));
+        Assert.Throws<InvalidOperationException>(() => IndexNowSubmitter.NormalizeCheckpointUrls([
+            "https://example.com/One", "https://example.com/one"]));
+    }
+
+    [Fact]
+    public void StatefulSitemap_PathCaseUsesOperatingSystemSemantics()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-indexnow-pathcase-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var sitemap = Path.Combine(root, "Sitemap.xml");
+            var state = Path.Combine(root, "sitemap.xml");
+            File.WriteAllText(sitemap, Sitemap(("/one", "2026-09-01")));
+            if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
+                Assert.Throws<InvalidOperationException>(() => IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/", []));
+            else
+                Assert.Single(IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/", []).ChangedUrls);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void StatefulSitemap_OversizedCheckpointFailsBeforeSubmission()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-indexnow-checkpoint-size-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var sitemap = Path.Combine(root, "sitemap.xml");
+            var state = Path.Combine(root, "state.json");
+            var builder = new StringBuilder("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">");
+            var suffix = new string('a', 32_000);
+            for (var index = 0; index < 1_100; index++)
+                builder.Append("<url><loc>https://example.com/").Append(index).Append(suffix).Append("</loc></url>");
+            File.WriteAllText(sitemap, builder.Append("</urlset>").ToString());
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/", []));
+            Assert.Contains("checkpoint exceeds 32 MiB", error.Message);
+            Assert.False(File.Exists(state));
+        }
+        finally
+        {
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         }
     }

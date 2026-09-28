@@ -27,6 +27,10 @@ internal static partial class WebPipelineRunner
 
         var urls = new List<string>();
         urls.AddRange(ReadIndexNowStringList(step, "urls", "url"));
+        var endpointValues = new List<string>();
+        endpointValues.AddRange(ReadIndexNowStringList(step, "endpoint", "apiEndpoint", "engine"));
+        endpointValues.AddRange(GetArrayOfStrings(step, "endpoints") ?? Array.Empty<string>());
+        endpointValues.AddRange(GetArrayOfStrings(step, "engines") ?? Array.Empty<string>());
 
         var paths = ReadIndexNowStringList(step, "paths", "path").ToArray();
         if (paths.Length > 0)
@@ -78,7 +82,7 @@ internal static partial class WebPipelineRunner
                 throw new FileNotFoundException($"indexnow: sitemap file not found: {sitemapPath}");
             if (!string.IsNullOrWhiteSpace(sitemapStatePath))
             {
-                sitemapCheckpoint = IndexNowSitemapCheckpoint.Load(sitemapPath, sitemapStatePath, baseUrl ?? string.Empty);
+                sitemapCheckpoint = IndexNowSitemapCheckpoint.Load(sitemapPath, sitemapStatePath, baseUrl ?? string.Empty, endpointValues);
                 urls.AddRange(sitemapCheckpoint.ChangedUrls);
             }
             else
@@ -97,19 +101,10 @@ internal static partial class WebPipelineRunner
             urls.AddRange(BuildIndexNowUrlsFromUpdatedFiles(baseUrl, siteRoot, lastBuildUpdatedFiles));
         }
 
-        var normalizedUrls = urls
-            .Where(static value => !string.IsNullOrWhiteSpace(value))
-            .Select(static value => value.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        if (sitemapCheckpoint is not null && urls
-            .Where(static value => !string.IsNullOrWhiteSpace(value))
-            .Select(static value => Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)
-                ? uri.AbsoluteUri
-                : value.Trim())
-            .GroupBy(static value => value, StringComparer.OrdinalIgnoreCase)
-            .Any(static group => group.Distinct(StringComparer.Ordinal).Skip(1).Any()))
-            throw new InvalidOperationException("indexnow: stateful URL sources contain case-distinct aliases that submission would collapse.");
+        var normalizedUrls = sitemapCheckpoint is null
+            ? urls.Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Select(static value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+            : IndexNowSubmitter.NormalizeCheckpointUrls(urls).ToList();
 
         var maxUrls = GetInt(step, "maxUrls") ?? GetInt(step, "max-urls") ?? 10_000;
         var truncateToMaxUrls = GetBool(step, "truncateToMaxUrls") ?? GetBool(step, "truncate-to-max-urls") ?? true;
@@ -190,11 +185,6 @@ internal static partial class WebPipelineRunner
             }
             throw new InvalidOperationException($"indexnow: missing key (set env '{keyEnv}', provide key/keyPath, or publish indexnow.txt).");
         }
-
-        var endpointValues = new List<string>();
-        endpointValues.AddRange(ReadIndexNowStringList(step, "endpoint", "apiEndpoint", "engine"));
-        endpointValues.AddRange(GetArrayOfStrings(step, "endpoints") ?? Array.Empty<string>());
-        endpointValues.AddRange(GetArrayOfStrings(step, "engines") ?? Array.Empty<string>());
 
         var submissionResult = IndexNowSubmitter.Submit(new IndexNowSubmissionOptions
         {
