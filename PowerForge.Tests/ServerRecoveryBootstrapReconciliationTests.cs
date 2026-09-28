@@ -88,6 +88,158 @@ public sealed class ServerRecoveryBootstrapReconciliationTests
         Assert.Contains("--property=UnitFileState", stop.Command, StringComparison.Ordinal);
         Assert.Contains("--property=ActiveState", stop.Command, StringComparison.Ordinal);
         Assert.DoesNotContain(steps, item => item.Title == "Enable private.timer");
+        Assert.DoesNotContain(steps, item => item.Title.Contains("after packages", StringComparison.Ordinal));
+        var finalTimer = Assert.Single(steps, item => item.Title == "Reassert stopped and disabled before verification private.timer");
+        Assert.True(clone.Order < finalTimer.Order);
+    }
+
+    [Fact]
+    public void PackageInstallation_ReassertsDisabledTimersAndServicesBeforeRepositoryMutation()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Packages = new PowerForge.Web.Cli.PowerForgeServerPackages
+            {
+                Apt = ["git"],
+                DotnetSdks = ["10.0"],
+                Powershell = true
+            },
+            Systemd = new PowerForge.Web.Cli.PowerForgeServerSystemd
+            {
+                Timers = [new PowerForge.Web.Cli.PowerForgeServerSystemdUnit
+                {
+                    Name = "private.timer", EnforceDisabled = true
+                }],
+                Services = [new PowerForge.Web.Cli.PowerForgeServerSystemdUnit
+                {
+                    Name = "private.service", EnforceDisabled = true
+                }]
+            },
+            Repositories = [new PowerForge.Web.Cli.PowerForgeServerRepository
+            {
+                Role = "application",
+                Url = "https://example.test/application.git",
+                Path = "/srv/application"
+            }],
+            Deploy = new PowerForge.Web.Cli.PowerForgeServerDeploy
+            {
+                Commands = [new PowerForge.Web.Cli.PowerForgeServerNamedCommand
+                {
+                    Id = "deploy", Command = "true"
+                }]
+            }
+        };
+
+        var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
+        var firstTimer = Assert.Single(steps, item => item.Title == "Stop and disable private.timer");
+        var firstService = Assert.Single(steps, item => item.Title == "Stop and disable private.service");
+        var lastPackage = Assert.Single(steps, item => item.Title == "Install PowerShell prerequisite");
+        var secondTimer = Assert.Single(steps, item => item.Title == "Reassert stopped and disabled after packages private.timer");
+        var secondService = Assert.Single(steps, item => item.Title == "Reassert stopped and disabled after packages private.service");
+        var repository = Assert.Single(steps, item => item.Title == "Clone or update application repository");
+        var deploy = Assert.Single(steps, item => item.Title == "deploy");
+        var finalTimer = Assert.Single(steps, item => item.Title == "Reassert stopped and disabled before verification private.timer");
+        var finalService = Assert.Single(steps, item => item.Title == "Reassert stopped and disabled before verification private.service");
+
+        Assert.True(firstTimer.Order < firstService.Order);
+        Assert.True(firstService.Order < lastPackage.Order);
+        Assert.True(lastPackage.Order < secondTimer.Order);
+        Assert.True(secondTimer.Order < secondService.Order);
+        Assert.True(secondService.Order < repository.Order);
+        Assert.True(repository.Order < deploy.Order);
+        Assert.True(deploy.Order < finalTimer.Order);
+        Assert.True(finalTimer.Order < finalService.Order);
+        Assert.Equal(firstTimer.Command, secondTimer.Command);
+        Assert.Equal(firstService.Command, secondService.Command);
+        Assert.Equal(firstTimer.Command, finalTimer.Command);
+        Assert.Contains("not-found) ;; loaded|masked)", firstTimer.Command, StringComparison.Ordinal);
+        var apt = Assert.Single(steps, item => item.Title == "Install apt prerequisites");
+        Assert.Contains("bash -Eeuo pipefail -c", apt.Command, StringComparison.Ordinal);
+        Assert.Contains("powerforge_package_status=$?", apt.Command, StringComparison.Ordinal);
+        Assert.Contains("systemctl disable --now -- 'private.timer'", apt.Command, StringComparison.Ordinal);
+        Assert.Contains("systemctl disable --now -- 'private.service'", apt.Command, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FailedPackageInstallation_StopsAUnitStartedBeforeThePackageFailure()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+
+        var statePath = Path.Combine(Path.GetTempPath(), "powerforge-package-state-" + Guid.NewGuid().ToString("N"));
+        File.WriteAllText(statePath, "inactive");
+        try
+        {
+            var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+            {
+                Packages = new PowerForge.Web.Cli.PowerForgeServerPackages { Apt = ["example-package"] },
+                Systemd = new PowerForge.Web.Cli.PowerForgeServerSystemd
+                {
+                    Services = [new PowerForge.Web.Cli.PowerForgeServerSystemdUnit
+                    {
+                        Name = "private.service", EnforceDisabled = true
+                    }]
+                }
+            };
+            var step = Assert.Single(PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []),
+                item => item.Title == "Install apt prerequisites");
+            var script = "set -Eeuo pipefail\n" +
+                         "export POWERFORGE_TEST_STATE='" + statePath + "'\n" +
+                         "apt-get() { if [ \"$1\" = update ]; then return 0; fi; " +
+                         "printf active > \"$POWERFORGE_TEST_STATE\"; return 7; }\n" +
+                         "export -f apt-get\n" +
+                         "systemctl() { if [ \"$1\" = show ]; then case \"$2\" in " +
+                         "--property=LoadState) printf '%s\\n' loaded;; " +
+                         "--property=UnitFileState) printf '%s\\n' disabled;; " +
+                         "--property=ActiveState) cat \"$POWERFORGE_TEST_STATE\";; esac; " +
+                         "else printf inactive > \"$POWERFORGE_TEST_STATE\"; fi; }\n" +
+                         step.Command;
+
+            Assert.Equal(7, RunProcess("/bin/bash", Path.GetTempPath(), "-c", script));
+            Assert.Equal("inactive", File.ReadAllText(statePath));
+        }
+        finally
+        {
+            File.Delete(statePath);
+        }
+    }
+
+    [Fact]
+    public void PackageReconciliation_AttemptsOtherUnitsWhenOneQueryFails()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+
+        var logPath = Path.Combine(Path.GetTempPath(), "powerforge-reconcile-log-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+            {
+                Packages = new PowerForge.Web.Cli.PowerForgeServerPackages { Apt = ["example-package"] },
+                Systemd = new PowerForge.Web.Cli.PowerForgeServerSystemd
+                {
+                    Timers = [new PowerForge.Web.Cli.PowerForgeServerSystemdUnit { Name = "private.timer", EnforceDisabled = true }],
+                    Services = [new PowerForge.Web.Cli.PowerForgeServerSystemdUnit { Name = "private.service", EnforceDisabled = true }]
+                }
+            };
+            var step = Assert.Single(PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []),
+                item => item.Title == "Install apt prerequisites");
+            var script = "set -Eeuo pipefail\n" +
+                         "export POWERFORGE_TEST_LOG='" + logPath + "'\n" +
+                         "apt-get() { return 0; }\nexport -f apt-get\n" +
+                         "systemctl() { case \"$*\" in *private.timer*) return 3;; esac; " +
+                         "if [ \"$1\" = show ]; then case \"$2\" in " +
+                         "--property=LoadState) printf '%s\\n' loaded;; " +
+                         "--property=UnitFileState) printf '%s\\n' disabled;; " +
+                         "--property=ActiveState) printf '%s\\n' inactive;; esac; " +
+                         "else printf 'service\\n' >> \"$POWERFORGE_TEST_LOG\"; fi; }\n" +
+                         step.Command;
+
+            Assert.Equal(3, RunProcess("/bin/bash", Path.GetTempPath(), "-c", script));
+            Assert.Equal(2, File.ReadAllLines(logPath).Length);
+        }
+        finally
+        {
+            if (File.Exists(logPath)) File.Delete(logPath);
+        }
     }
 
     [Fact]

@@ -35,7 +35,7 @@ internal static partial class WebCliCommandHandlers
 
         return RunServerVerification(loaded.Manifest, fullPath,
             ["--local", "--fail-on-failure", "--url-timeout-seconds", TryGetOptionValue(subArgs, "--url-timeout-seconds") ?? "30"],
-            outputJson, logger, outputSchemaVersion, "web.server.bootstrap");
+            outputJson, logger, outputSchemaVersion, "web.server.bootstrap", reconcileDisabledUnits: true);
     }
 
     internal static string BuildBootstrapManifestGuard(string manifestPath)

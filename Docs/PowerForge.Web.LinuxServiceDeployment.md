@@ -298,7 +298,15 @@ incoming tracked paths that collide with existing ignored files, including
 secrets. Set `enforceDisabled: true` on an intentionally inactive systemd unit
 when recovery must stop and disable an existing installation before other work
 begins. Disabled timers are handled before services; both persistent and
-runtime enablement are cleared and the stopped state is checked.
+runtime enablement are cleared. Each declared package command repeats the
+stop/disable check after it runs, including when the package command fails;
+bootstrap repeats the check before repository changes and before verification.
+After verification commands and URLs, bootstrap reasserts the disabled state
+before reporting success; a failed check also triggers that final attempt.
+Standalone `server verify` does not change unit state. This is not an activation
+barrier during a package or verification command. Do not install a
+package that deliberately starts an `enforceDisabled` unit as part of this
+profile. Inspect the host after a failed bootstrap before retrying.
 
 ```bash
 powerforge-web server verify --manifest ./server-recovery.json --local --fail-on-failure --output json

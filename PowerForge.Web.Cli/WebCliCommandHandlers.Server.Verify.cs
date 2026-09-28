@@ -15,7 +15,8 @@ internal static partial class WebCliCommandHandlers
 
     private static int RunServerVerification(
         PowerForgeServerRecoveryManifest manifest, string manifestPath, string[] subArgs,
-        bool outputJson, WebConsoleLogger logger, int outputSchemaVersion, string commandName = "web.server.verify")
+        bool outputJson, WebConsoleLogger logger, int outputSchemaVersion, string commandName = "web.server.verify",
+        bool reconcileDisabledUnits = false)
     {
         var local = HasOption(subArgs, "--local");
         if (local && HasOption(subArgs, "--ssh"))
@@ -53,6 +54,27 @@ internal static partial class WebCliCommandHandlers
 
         foreach (var url in manifest.Verify?.Urls ?? Array.Empty<PowerForgeServerVerifyUrl>())
             urlResults.Add(VerifyUrl(url, urlTimeoutSeconds));
+
+        // Verification commands and URL probes can activate a unit after the bootstrap script.
+        // Run this even when an earlier check failed, so bootstrap never reports success with
+        // an enforced-disabled unit left active. Ordinary `server verify` remains read-only.
+        if (reconcileDisabledUnits)
+        {
+            var units = (manifest.Systemd?.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
+                .Concat(manifest.Systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>());
+            foreach (var unit in units.Where(static unit => unit.EnforceDisabled && !string.IsNullOrWhiteSpace(unit.Name)))
+            {
+                var result = RunLocalServerScript(BuildStopAndDisableUnitCommand(unit.Name!));
+                commandResults.Add(new PowerForgeServerVerifyCommandResult
+                {
+                    Id = $"enforceDisabled:{unit.Name}",
+                    Required = true,
+                    ExitCode = result.ExitCode,
+                    Success = result.Success,
+                    ErrorPreview = result.Success ? null : "Could not confirm the unit is stopped and disabled."
+                });
+            }
+        }
 
         var failedCommands = commandResults
             .Where(static result => result.Required && !result.Success)

@@ -10,13 +10,26 @@ internal static partial class WebCliCommandHandlers
         PowerForgeServerSystemd? systemd,
         ISet<string> plannedCommands)
     {
+        AddDisabledSystemdSteps(steps, ref order, systemd, plannedCommands, "Stop and disable", repeat: false);
+    }
+
+    private static void AddDisabledSystemdSteps(
+        ICollection<PowerForgeServerBootstrapPlanStep> steps,
+        ref int order,
+        PowerForgeServerSystemd? systemd,
+        ISet<string> plannedCommands,
+        string titlePrefix,
+        bool repeat)
+    {
         // Timers must stop before their services, otherwise a timer may restart a stopped service.
         var units = (systemd?.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
             .Concat(systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>());
         foreach (var unit in units.Where(static unit => unit.EnforceDisabled && !string.IsNullOrWhiteSpace(unit.Name)))
         {
-            AddStep(steps, ref order, "systemd", $"Stop and disable {unit.Name}",
-                BuildStopAndDisableUnitCommand(unit.Name!), plannedCommands: plannedCommands);
+            AddStep(steps, ref order, "systemd", $"{titlePrefix} {unit.Name}",
+                BuildStopAndDisableUnitCommand(unit.Name!),
+                // Repeated safety passes must not be removed by command de-duplication.
+                plannedCommands: repeat ? null : plannedCommands);
         }
     }
 
@@ -28,7 +41,7 @@ internal static partial class WebCliCommandHandlers
         return $"powerforge_unit_load_state=$(systemctl show --property=LoadState --value -- {name}) || " +
                $"{{ echo {queryFailure} >&2; exit 3; }}; " +
                "case \"$powerforge_unit_load_state\" in " +
-               $"not-found) ;; loaded|masked) " +
+               "not-found) ;; loaded|masked) " +
                $"systemctl disable --runtime --now -- {name} && systemctl disable --now -- {name} && " +
                $"powerforge_unit_file_state=$(systemctl show --property=UnitFileState --value -- {name}) && " +
                $"powerforge_unit_active_state=$(systemctl show --property=ActiveState --value -- {name}) && " +

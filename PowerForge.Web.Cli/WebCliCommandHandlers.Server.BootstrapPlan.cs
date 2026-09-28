@@ -112,29 +112,7 @@ internal static partial class WebCliCommandHandlers
 
         AddEarlyDisabledSystemdSteps(steps, ref order, manifest.Systemd, plannedCommands);
 
-        if (manifest.Packages?.Apt?.Length > 0)
-        {
-            AddStep(steps, ref order, "packages", "Install apt prerequisites",
-                "apt-get update && apt-get install -y " + string.Join(' ', manifest.Packages.Apt.Select(ShellQuote)),
-                plannedCommands: plannedCommands);
-        }
-
-        var dotnetPackages = GetDeclaredDotnetSdkPackageNames(manifest.Packages?.DotnetSdks);
-        if (dotnetPackages.Length > 0)
-        {
-            AddStep(steps, ref order, "runtimes", "Install .NET SDK prerequisites",
-                "apt-get update && apt-get install -y " + string.Join(' ', dotnetPackages.Select(ShellQuote)),
-                plannedCommands: plannedCommands);
-        }
-
-        if (manifest.Packages?.Powershell == true)
-        {
-            AddStep(steps, ref order, "runtimes", "Configure Microsoft package repository",
-                BuildMicrosoftPackageRepositoryInstallCommand(),
-                plannedCommands: plannedCommands);
-            AddStep(steps, ref order, "runtimes", "Install PowerShell prerequisite",
-                BuildPowerShellInstallCommand(), plannedCommands: plannedCommands);
-        }
+        AddBootstrapPackageSteps(steps, ref order, manifest, plannedCommands);
 
         foreach (var account in manifest.Accounts ?? Array.Empty<PowerForgeServerAccount>())
         {
@@ -400,6 +378,9 @@ internal static partial class WebCliCommandHandlers
             systemdUnits,
             PowerForgeServerSystemdActivation.AfterDeploy,
             plannedCommands);
+
+        AddDisabledSystemdSteps(steps, ref order, manifest.Systemd, plannedCommands,
+            "Reassert stopped and disabled before verification", repeat: true);
 
         if (includeOperatorVerification)
             AddStep(steps, ref order, "verify", "Run PowerForge server verify", "# Run from an operator workstation: powerforge-web server verify --manifest <manifest> --fail-on-failure", manual: true, plannedCommands: plannedCommands);
