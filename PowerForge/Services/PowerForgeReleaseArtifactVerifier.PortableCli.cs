@@ -315,6 +315,9 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
                 manifestValue,
                 "manifest artifact path")
             .Replace('/', Path.DirectorySeparatorChar);
+        if (detachedArchiveEntry.HasValue)
+            return ResolveDetachedPortableAlias(projectRoot, checksumsPath, detachedArchiveEntry.Value,
+                Path.GetExtension(manifestValue), allowOutsideProjectRoot);
         if (!Path.IsPathRooted(normalized))
         {
             string currentPath = ResolveManifestPath(projectRoot, normalized, allowOutsideProjectRoot);
@@ -373,9 +376,6 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
             .ToArray();
         if (candidates.Length != 1)
         {
-            if (detachedArchiveEntry.HasValue)
-                return ResolveDetachedPortableAlias(projectRoot, checksumsPath, detachedArchiveEntry.Value,
-                    Path.GetExtension(manifestValue), allowOutsideProjectRoot);
             string identityRequirement = string.IsNullOrWhiteSpace(requiredRecoverySuffix)
                 ? string.Empty
                 : " that preserves the selected runtime, framework, and style path identity";

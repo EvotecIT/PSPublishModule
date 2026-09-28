@@ -50,6 +50,26 @@ internal sealed partial class PowerForgeReleaseService
         if (existingPaths.Length == 0)
             yield break;
 
+        string[] evidencePaths = artifact.EvidencePaths ?? Array.Empty<string>();
+        if (artifact.Category != DotNetPublishArtefactCategory.Installer && artifact.SignedFiles > 0)
+        {
+            string artifactPath = existingPaths[0];
+            string[] requiredEvidencePaths =
+            [
+                artifactPath + PowerForgePortablePayloadInventory.DirectInventorySuffix,
+                artifactPath + PowerForgePortablePayloadInventory.DirectSignatureSuffix
+            ];
+            if (evidencePaths.Length != requiredEvidencePaths.Length ||
+                requiredEvidencePaths.Any(required =>
+                    !evidencePaths.Any(declared => !string.IsNullOrWhiteSpace(declared) &&
+                        PathComparer.Equals(Path.GetFullPath(declared), Path.GetFullPath(required))) ||
+                    !File.Exists(required)))
+            {
+                throw new InvalidOperationException(
+                    $"Signed release artifact '{Path.GetFileName(artifactPath)}' requires its complete detached inventory and signature evidence pair.");
+            }
+        }
+
         var version = ResolveDotNetArtefactVersion(artifact, dotNetPlan, sharedReleaseVersion);
 
         foreach (string artifactPath in existingPaths)
@@ -74,7 +94,7 @@ internal sealed partial class PowerForgeReleaseService
             };
         }
 
-        foreach (string evidencePath in (artifact.EvidencePaths ?? Array.Empty<string>())
+        foreach (string evidencePath in evidencePaths
             .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path)))
         {
             yield return new PowerForgeReleaseAssetEntry

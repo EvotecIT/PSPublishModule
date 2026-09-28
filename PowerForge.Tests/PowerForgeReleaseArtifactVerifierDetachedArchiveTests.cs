@@ -13,6 +13,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         using var fixture = new PortableFixture();
         fixture.ConvertArchiveToDetachedEvidence();
         string alias = fixture.RenameDetachedArchive("Sample.CLI-1.2.3-win-x64-portable.zip");
+        Assert.True(File.Exists(fixture.ArchivePath));
         PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
         request.ArtifactPath = explicitArtifact ? alias : string.Empty;
         request.SignaturePaths = Array.Empty<string>();
@@ -60,6 +61,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
         using var fixture = new PortableFixture();
         fixture.ConfigureDirectPackaging();
         string alias = fixture.RenameDetachedDirectArtifact("Sample.CLI-1.2.3-win-x64.exe");
+        Assert.True(File.Exists(fixture.ExecutablePath));
         PowerForgeReleaseArtifactVerificationRequest request = fixture.CreateRequest();
         request.ArtifactPath = explicitArtifact ? alias : string.Empty;
         request.SignaturePaths = Array.Empty<string>();
@@ -104,7 +106,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             foreach (string suffix in new[] { "", PowerForgePortablePayloadInventory.DirectInventorySuffix,
                          PowerForgePortablePayloadInventory.DirectSignatureSuffix })
             {
-                File.Move(ArchivePath + suffix, alias + suffix);
+                File.Copy(ArchivePath + suffix, alias + suffix);
             }
             WriteDetachedChecksums(alias);
             return alias;
@@ -120,7 +122,7 @@ public sealed partial class PowerForgeReleaseArtifactVerifierTests
             Directory.CreateDirectory(Path.GetDirectoryName(alias)!);
             foreach (string suffix in new[] { "", PowerForgePortablePayloadInventory.DirectInventorySuffix,
                          PowerForgePortablePayloadInventory.DirectSignatureSuffix })
-                File.Move(ExecutablePath + suffix, alias + suffix);
+                File.Copy(ExecutablePath + suffix, alias + suffix);
             base.WriteChecksums(ManifestPath, ConfigurationPath, alias,
                 alias + PowerForgePortablePayloadInventory.DirectInventorySuffix,
                 alias + PowerForgePortablePayloadInventory.DirectSignatureSuffix);
