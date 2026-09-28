@@ -109,7 +109,7 @@ internal static partial class WebPipelineRunner
         string[]? onlyTasks = null,
         string[]? skipTasks = null)
     {
-        using var doc = LoadPipelineDocumentWithExtends(pipelinePath);
+        using var doc = LoadPipelineDocumentWithExtends(pipelinePath, out var pipelineSourcePaths);
 
         var root = doc.RootElement;
         if (!root.TryGetProperty("steps", out var stepsElement) || stepsElement.ValueKind != JsonValueKind.Array)
@@ -142,6 +142,34 @@ internal static partial class WebPipelineRunner
         };
         var steps = BuildStepDefinitions(stepsElement);
         var totalSteps = steps.Count;
+        var enabledIndexNowSteps = steps
+            .Where(definition => definition.Task.Equals("indexnow", StringComparison.OrdinalIgnoreCase) &&
+                                 GetSkipReason(definition.Task, definition.Element, effectiveMode, onlyTaskSet, skipTaskSet) is null)
+            .Select(static definition => definition.Element)
+            .ToArray();
+        if (enabledIndexNowSteps.Length > 0)
+        {
+            try
+            {
+                ValidateIndexNowOutputPaths(enabledIndexNowSteps, baseDir, pipelineSourcePaths,
+                    profileEnabled || profileWriteOnFail ? profilePath : null,
+                    cacheEnabled ? cachePath : null);
+            }
+            catch (Exception error)
+            {
+                result.Success = false;
+                result.StepCount = 1;
+                result.DurationMs = (long)Math.Round(runStopwatch.Elapsed.TotalMilliseconds);
+                result.Steps.Add(new WebPipelineStepResult
+                {
+                    Task = "indexnow",
+                    Success = false,
+                    Message = FormatFailureMessage(error)
+                });
+                logger?.Error($"indexnow preflight: {FormatFailureMessage(error)}");
+                return result;
+            }
+        }
         var stepResultsByIndex = new Dictionary<int, WebPipelineStepResult>();
         var cacheOutputs = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
 

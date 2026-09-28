@@ -76,9 +76,7 @@ internal static class IndexNowSubmitter
         var warnings = new List<string>();
         var requests = new List<IndexNowRequestResult>();
 
-        var endpoints = NormalizeEndpoints(options.Endpoints, warnings);
-        if (endpoints.Count == 0)
-            endpoints.Add(new Uri(DefaultEndpoint, UriKind.Absolute));
+        var endpoints = EffectiveEndpoints(options.Endpoints, warnings);
 
         var urls = NormalizeUrls(options.Urls, warnings);
         var normalizedKey = (options.Key ?? string.Empty).Trim();
@@ -195,7 +193,41 @@ internal static class IndexNowSubmitter
             .ToList();
     }
 
-    private static List<Uri> NormalizeUrls(IReadOnlyList<string> values, List<string> warnings)
+    private static List<Uri> EffectiveEndpoints(IReadOnlyList<string> values, List<string> warnings)
+    {
+        var endpoints = NormalizeEndpoints(values, warnings);
+        if (endpoints.Count == 0)
+            endpoints.Add(new Uri(DefaultEndpoint, UriKind.Absolute));
+        return endpoints;
+    }
+
+    /// <summary>Stable effective endpoint identity used by the durable sitemap checkpoint.</summary>
+    internal static string[] EffectiveEndpointUrls(IReadOnlyList<string> values) =>
+        EffectiveEndpoints(values, new List<string>())
+            .Select(static endpoint => endpoint.AbsoluteUri)
+            .OrderBy(static endpoint => endpoint, StringComparer.Ordinal)
+            .ToArray();
+
+    /// <summary>Uses submission's URI normalization before a stateful run counts URL coverage.</summary>
+    internal static string[] NormalizeCheckpointUrls(IReadOnlyList<string> values)
+    {
+        var warnings = new List<string>();
+        List<Uri> candidates = NormalizeUrlCandidates(values, warnings);
+        if (warnings.Count > 0)
+            throw new InvalidOperationException("indexnow: stateful URL sources contain an invalid or non-public URL.");
+        if (candidates.Any(static url => !string.IsNullOrEmpty(url.UserInfo)))
+            throw new InvalidOperationException("indexnow: stateful URL sources cannot contain URL credentials.");
+        string[] canonical = candidates.Select(static url => url.ToString()).ToArray();
+        if (canonical.GroupBy(static url => url, StringComparer.OrdinalIgnoreCase)
+            .Any(static group => group.Distinct(StringComparer.Ordinal).Skip(1).Any()))
+            throw new InvalidOperationException("indexnow: stateful URL sources contain case-distinct aliases that submission would collapse.");
+        return candidates.Distinct().Select(static url => url.ToString()).ToArray();
+    }
+
+    private static List<Uri> NormalizeUrls(IReadOnlyList<string> values, List<string> warnings) =>
+        NormalizeUrlCandidates(values, warnings).Distinct().ToList();
+
+    private static List<Uri> NormalizeUrlCandidates(IReadOnlyList<string> values, List<string> warnings)
     {
         var urls = new List<Uri>();
         foreach (var value in values ?? Array.Empty<string>())
@@ -226,9 +258,7 @@ internal static class IndexNowSubmitter
             urls.Add(normalized);
         }
 
-        return urls
-            .Distinct()
-            .ToList();
+        return urls;
     }
 
     private static List<HostGroup> GroupByHost(IReadOnlyList<Uri> urls, string? overrideHost, List<string> warnings)

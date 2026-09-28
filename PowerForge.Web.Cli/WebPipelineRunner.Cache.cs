@@ -139,7 +139,7 @@ internal static partial class WebPipelineRunner
             {
                 WriteIndented = true
             });
-            File.WriteAllText(cachePath, json);
+            WritePipelineTextAtomically(cachePath, json);
         }
         catch (Exception ex)
         {
@@ -155,11 +155,30 @@ internal static partial class WebPipelineRunner
             if (!string.IsNullOrWhiteSpace(directory))
                 Directory.CreateDirectory(directory);
             var json = JsonSerializer.Serialize(result, WebCliJson.Context.WebPipelineResult);
-            File.WriteAllText(profilePath, json);
+            WritePipelineTextAtomically(profilePath, json);
         }
         catch (Exception ex)
         {
             logger?.Warn($"Pipeline profile write failed: {ex.Message}");
+        }
+    }
+
+    private static void WritePipelineTextAtomically(string path, string content)
+    {
+        var directory = Path.GetDirectoryName(path);
+        if (string.IsNullOrWhiteSpace(directory))
+            throw new InvalidOperationException("Pipeline output path has no parent directory.");
+        Directory.CreateDirectory(directory);
+        var temporaryPath = Path.Combine(directory, "." + Path.GetFileName(path) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            File.WriteAllText(temporaryPath, content);
+            File.Move(temporaryPath, path, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+                File.Delete(temporaryPath);
         }
     }
 

@@ -1846,6 +1846,22 @@ Explicit URL/path mode:
 }
 ```
 
+For a site that generates its sitemap at runtime, save a copy of that sitemap before the pipeline runs and keep the checkpoint outside disposable release directories:
+
+```json
+{
+  "task": "indexnow",
+  "baseUrl": "https://docs.example.com/",
+  "sitemap": "./sitemap.xml",
+  "sitemapStatePath": "/var/lib/example/indexnow-sitemap.json",
+  "keyPath": "/etc/example/indexnow.key",
+  "keyLocation": "https://docs.example.com/indexnow.txt",
+  "maxUrls": 10000
+}
+```
+
+The first successful run submits every sitemap URL. Later runs submit new URLs and URLs whose `<lastmod>` value changed; entries without `<lastmod>` are submitted when first seen, not on every run. Changing the configured endpoint set submits the current URLs to that set even when their `<lastmod>` values are unchanged. The checkpoint is replaced only after every selected request succeeds. A failed request, dry run, malformed or empty sitemap, checkpoint over 32 MiB, or URL count over `maxUrls` leaves the previous checkpoint intact; checkpoint size is checked before any network submission. With `continueOnError`, the step and its reports retain their existing behavior, but the checkpoint stays put for a later retry. A no-change run updates configured reports with zero submitted URLs. Removed sitemap entries are not submitted as deletion notices. Use a durable, single-writer state path and publish the matching key file at `keyLocation`. Before any pipeline step executes, the pipeline checks every enabled IndexNow step together and rejects state or report paths that overlap the pipeline configuration (including inherited files), sitemap, URL file, explicit or discovered verification key, another IndexNow output, or enabled pipeline profile/cache output. Case-only aliases use the case rules of the directory where the spelling differs; existing symbolic links are resolved. Output files are replaced atomically so a hard-linked output cannot overwrite its input. After a successful submission, report and checkpoint writes are attempted independently: a failed report still fails the step, but a successfully saved checkpoint prevents duplicate submission on the next run; a failed checkpoint retains the submission report for diagnosis and retries later. This option requires an HTTPS `baseUrl` and a URL sitemap for that same host; it does not fetch the sitemap or key file for you.
+
 Notes:
 - URL sources can be combined:
   - `urls` / `url` (absolute URLs)

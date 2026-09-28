@@ -671,6 +671,8 @@
         "sitemap": { "type": "string", "description": "Optional sitemap.xml path; <loc> entries are submitted." },
         "sitemapPath": { "type": "string", "description": "Alias for sitemap." },
         "sitemap-path": { "type": "string", "description": "Alias for sitemap." },
+        "sitemapStatePath": { "type": "string", "description": "Durable checkpoint path. With sitemap and HTTPS baseUrl, submit only new URLs or URLs whose lastmod changed; advance only after every request succeeds." },
+        "sitemap-state-path": { "type": "string", "description": "Alias for sitemapStatePath." },
         "maxUrls": { "type": "integer", "minimum": 0, "description": "Maximum URLs submitted in this step (0 disables limit)." },
         "max-urls": { "type": "integer", "minimum": 0, "description": "Alias for maxUrls." },
         "truncateToMaxUrls": { "type": "boolean", "description": "When true, trim URL list to maxUrls instead of failing." },
