@@ -281,7 +281,7 @@ public sealed class WebPipelineRunnerIndexNowSitemapStateTests
             var sitemap = Path.Combine(root, "Sitemap.xml");
             var state = Path.Combine(root, "sitemap.xml");
             File.WriteAllText(sitemap, Sitemap(("/one", "2026-09-01")));
-            if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
+            if (OperatingSystem.IsWindows())
                 Assert.Throws<InvalidOperationException>(() => IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/", []));
             else
                 Assert.Single(IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/", []).ChangedUrls);
