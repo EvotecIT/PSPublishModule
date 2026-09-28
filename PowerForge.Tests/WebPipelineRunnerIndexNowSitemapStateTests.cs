@@ -1,0 +1,171 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Text.Json;
+using PowerForge.Web.Cli;
+
+namespace PowerForge.Tests;
+
+public sealed class WebPipelineRunnerIndexNowSitemapStateTests
+{
+    [Fact]
+    public async Task RunPipeline_StatefulSitemap_SubmitsOnlyChangedUrlsAndRetriesFailedBatch()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-indexnow-state-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        using var listener = new HttpListener();
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        try
+        {
+            var port = FreePort();
+            listener.Prefixes.Add($"http://127.0.0.1:{port}/indexnow/");
+            listener.Start();
+            var requested = new List<string[]>();
+            var responses = new Queue<int>([200, 200, 500, 200]);
+            var server = Task.Run(async () =>
+            {
+                while (!cancellation.IsCancellationRequested)
+                {
+                    HttpListenerContext context;
+                    try { context = await listener.GetContextAsync(); }
+                    catch when (cancellation.IsCancellationRequested || !listener.IsListening) { break; }
+                    using var reader = new StreamReader(context.Request.InputStream, context.Request.ContentEncoding);
+                    using var body = JsonDocument.Parse(await reader.ReadToEndAsync());
+                    requested.Add(body.RootElement.GetProperty("urlList").EnumerateArray()
+                        .Select(static item => item.GetString()!).ToArray());
+                    context.Response.StatusCode = responses.Dequeue();
+                    context.Response.OutputStream.Write(Encoding.UTF8.GetBytes("{}"));
+                    context.Response.Close();
+                }
+            }, cancellation.Token);
+
+            var sitemap = Path.Combine(root, "sitemap.xml");
+            var state = Path.Combine(root, "indexnow-state.json");
+            File.WriteAllText(sitemap, Sitemap(("/one", "2026-09-01"), ("/two", "2026-09-01")));
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, $$"""
+                { "steps": [{
+                    "task": "indexnow",
+                    "baseUrl": "https://example.com/",
+                    "sitemap": "./sitemap.xml",
+                    "sitemapStatePath": "./indexnow-state.json",
+                    "endpoint": "http://127.0.0.1:{{port}}/indexnow/",
+                    "key": "examplekey",
+                    "retryCount": 0
+                }] }
+                """);
+
+            var first = WebPipelineRunner.RunPipeline(pipeline, logger: null);
+            Assert.True(first.Success, first.Steps[0].Message);
+            Assert.True(File.Exists(state));
+            Assert.Equal(2, Assert.Single(requested).Length);
+
+            var warm = WebPipelineRunner.RunPipeline(pipeline, logger: null);
+            Assert.True(warm.Success, warm.Steps[0].Message);
+            Assert.Single(requested);
+
+            File.WriteAllText(sitemap, Sitemap(("/one", "2026-09-02"), ("/two", "2026-09-01")));
+            var changed = WebPipelineRunner.RunPipeline(pipeline, logger: null);
+            Assert.True(changed.Success, changed.Steps[0].Message);
+            Assert.Equal(["https://example.com/one"], requested[1]);
+
+            var goodState = File.ReadAllText(state);
+            File.WriteAllText(sitemap, Sitemap(("/one", "2026-09-03"), ("/two", "2026-09-01")));
+            var failed = WebPipelineRunner.RunPipeline(pipeline, logger: null);
+            Assert.False(failed.Success);
+            Assert.Equal(goodState, File.ReadAllText(state));
+            Assert.Equal(["https://example.com/one"], requested[2]);
+
+            var retry = WebPipelineRunner.RunPipeline(pipeline, logger: null);
+            Assert.True(retry.Success, retry.Steps[0].Message);
+            Assert.Equal(["https://example.com/one"], requested[3]);
+            Assert.NotEqual(goodState, File.ReadAllText(state));
+
+            cancellation.Cancel();
+            listener.Stop();
+            await server.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            cancellation.Cancel();
+            listener.Stop();
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void StatefulSitemap_DryRunAndUnsafeInputDoNotAdvanceCheckpoint()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-indexnow-state-safety-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var sitemap = Path.Combine(root, "sitemap.xml");
+            var state = Path.Combine(root, "state.json");
+            File.WriteAllText(sitemap, Sitemap(("/one", "2026-09-01")));
+            var checkpoint = IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/");
+            Assert.Equal(["https://example.com/one"], checkpoint.ChangedUrls);
+
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, """
+                { "steps": [{
+                    "task": "indexnow", "baseUrl": "https://example.com/",
+                    "sitemap": "./sitemap.xml", "sitemapStatePath": "./state.json",
+                    "key": "examplekey", "dryRun": true
+                }] }
+                """);
+            Assert.True(WebPipelineRunner.RunPipeline(pipeline, logger: null).Success);
+            Assert.False(File.Exists(state));
+
+            File.WriteAllText(sitemap, Sitemap(("/one", "2026-09-01"), ("/two", "2026-09-01")));
+            File.WriteAllText(pipeline, """
+                { "steps": [{
+                    "task": "indexnow", "baseUrl": "https://example.com/",
+                    "sitemap": "./sitemap.xml", "sitemapStatePath": "./state.json",
+                    "key": "examplekey", "dryRun": true, "maxUrls": 1
+                }] }
+                """);
+            Assert.False(WebPipelineRunner.RunPipeline(pipeline, logger: null).Success);
+            Assert.False(File.Exists(state));
+
+            checkpoint.Save();
+            File.WriteAllText(sitemap, Sitemap());
+            Assert.Throws<InvalidOperationException>(() => IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/"));
+            File.WriteAllText(state, "not-json");
+            File.WriteAllText(sitemap, Sitemap(("/one", "2026-09-01")));
+            Assert.Throws<JsonException>(() => IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/"));
+            File.Delete(state);
+
+            File.WriteAllText(sitemap, Sitemap(("https://other.example/two", "2026-09-01")));
+            var rejected = WebPipelineRunner.RunPipeline(pipeline, logger: null);
+            Assert.False(rejected.Success);
+            Assert.False(File.Exists(state));
+
+            File.WriteAllText(sitemap, Sitemap(("/Case", "2026-09-01"), ("/case", "2026-09-01")));
+            Assert.Throws<InvalidOperationException>(() => IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/"));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static string Sitemap(params (string Url, string Lastmod)[] entries)
+    {
+        var builder = new StringBuilder("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">");
+        foreach (var (url, lastmod) in entries)
+        {
+            var absolute = url.StartsWith('/') ? "https://example.com" + url : url;
+            builder.Append("<url><loc>").Append(absolute).Append("</loc><lastmod>")
+                .Append(lastmod).Append("</lastmod></url>");
+        }
+        return builder.Append("</urlset>").ToString();
+    }
+
+    private static int FreePort()
+    {
+        using var socket = new TcpListener(IPAddress.Loopback, 0);
+        socket.Start();
+        return ((IPEndPoint)socket.LocalEndpoint).Port;
+    }
+}

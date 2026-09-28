@@ -1846,6 +1846,22 @@ Explicit URL/path mode:
 }
 ```
 
+For a site that generates its sitemap at runtime, save a copy of that sitemap before the pipeline runs and keep the checkpoint outside disposable release directories:
+
+```json
+{
+  "task": "indexnow",
+  "baseUrl": "https://docs.example.com/",
+  "sitemap": "./sitemap.xml",
+  "sitemapStatePath": "/var/lib/example/indexnow-sitemap.json",
+  "keyPath": "/etc/example/indexnow.key",
+  "keyLocation": "https://docs.example.com/indexnow.txt",
+  "maxUrls": 10000
+}
+```
+
+The first successful run submits every sitemap URL. Later runs submit new URLs and URLs whose `<lastmod>` value changed; entries without `<lastmod>` are submitted when first seen, not on every run. The checkpoint is replaced only after every selected request succeeds. A failed request, dry run, malformed or empty sitemap, or URL count over `maxUrls` leaves the previous checkpoint intact. Removed sitemap entries are not submitted as deletion notices. Use a durable, single-writer state path and publish the matching key file at `keyLocation`. This option requires an HTTPS `baseUrl` and a URL sitemap for that same host; it does not fetch the sitemap or key file for you.
+
 Notes:
 - URL sources can be combined:
   - `urls` / `url` (absolute URLs)

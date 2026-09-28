@@ -67,11 +67,24 @@ internal static partial class WebPipelineRunner
             GetString(step, "sitemap") ??
             GetString(step, "sitemapPath") ??
             GetString(step, "sitemap-path"));
+        var sitemapStatePath = ResolvePath(baseDir,
+            GetString(step, "sitemapStatePath") ?? GetString(step, "sitemap-state-path"));
+        IndexNowSitemapCheckpoint? sitemapCheckpoint = null;
+        if (!string.IsNullOrWhiteSpace(sitemapStatePath) && string.IsNullOrWhiteSpace(sitemapPath))
+            throw new InvalidOperationException("indexnow: sitemapStatePath requires a sitemap file.");
         if (!string.IsNullOrWhiteSpace(sitemapPath))
         {
             if (!File.Exists(sitemapPath))
                 throw new FileNotFoundException($"indexnow: sitemap file not found: {sitemapPath}");
-            urls.AddRange(ReadSitemapLocUrls(sitemapPath));
+            if (!string.IsNullOrWhiteSpace(sitemapStatePath))
+            {
+                sitemapCheckpoint = IndexNowSitemapCheckpoint.Load(sitemapPath, sitemapStatePath, baseUrl ?? string.Empty);
+                urls.AddRange(sitemapCheckpoint.ChangedUrls);
+            }
+            else
+            {
+                urls.AddRange(ReadSitemapLocUrls(sitemapPath));
+            }
         }
 
         var scopeFromBuildUpdated = GetBool(step, "scopeFromBuildUpdated") ?? GetBool(step, "scope-from-build-updated");
@@ -92,9 +105,11 @@ internal static partial class WebPipelineRunner
 
         var maxUrls = GetInt(step, "maxUrls") ?? GetInt(step, "max-urls") ?? 10_000;
         var truncateToMaxUrls = GetBool(step, "truncateToMaxUrls") ?? GetBool(step, "truncate-to-max-urls") ?? true;
+        if (sitemapCheckpoint is not null && maxUrls <= 0)
+            throw new InvalidOperationException("indexnow: sitemapStatePath requires a positive maxUrls bound.");
         if (maxUrls > 0 && normalizedUrls.Count > maxUrls)
         {
-            if (!truncateToMaxUrls)
+            if (sitemapCheckpoint is not null || !truncateToMaxUrls)
                 throw new InvalidOperationException($"indexnow: URL count {normalizedUrls.Count} exceeds maxUrls {maxUrls}.");
             normalizedUrls = normalizedUrls.Take(maxUrls).ToList();
         }
@@ -104,6 +119,8 @@ internal static partial class WebPipelineRunner
             var noUrlsMessage = "indexnow: no URLs to submit.";
             if (failOnEmpty)
                 throw new InvalidOperationException(noUrlsMessage);
+            if (sitemapCheckpoint is not null && !(GetBool(step, "dryRun") ?? GetBool(step, "dry-run") ?? false))
+                sitemapCheckpoint.Save();
             stepResult.Success = true;
             stepResult.Message = noUrlsMessage;
             return;
@@ -180,6 +197,16 @@ internal static partial class WebPipelineRunner
             RetryDelayMs = GetInt(step, "retryDelayMs") ?? GetInt(step, "retry-delay-ms") ?? GetInt(step, "retryDelay") ?? GetInt(step, "retry-delay") ?? 500,
             TimeoutSeconds = GetInt(step, "timeoutSeconds") ?? GetInt(step, "timeout-seconds") ?? 20
         }, logger: null);
+
+        if (sitemapCheckpoint is not null && !submissionResult.DryRun)
+        {
+            if (submissionResult.Errors.Length == 0 && submissionResult.FailedRequestCount == 0 &&
+                submissionResult.UrlCount == normalizedUrls.Count &&
+                submissionResult.Requests.Sum(static request => request.UrlCount) >= normalizedUrls.Count)
+                sitemapCheckpoint.Save();
+            else
+                throw new InvalidOperationException("indexnow: sitemap checkpoint was not advanced because not every URL was submitted successfully.");
+        }
 
         var reportPath = GetString(step, "reportPath") ?? GetString(step, "report-path");
         if (!string.IsNullOrWhiteSpace(reportPath))
