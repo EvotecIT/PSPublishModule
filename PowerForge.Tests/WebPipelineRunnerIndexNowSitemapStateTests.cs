@@ -269,6 +269,195 @@ public sealed class WebPipelineRunnerIndexNowSitemapStateTests
             "https://example.com/one#first", "https://example.com/one#second"]));
         Assert.Throws<InvalidOperationException>(() => IndexNowSubmitter.NormalizeCheckpointUrls([
             "https://example.com/One", "https://example.com/one"]));
+        Assert.Throws<InvalidOperationException>(() => IndexNowSubmitter.NormalizeCheckpointUrls([
+            "https://example.com/one", "https://user@example.com/one"]));
+    }
+
+    [Theory]
+    [InlineData("reportPath", "./state.json")]
+    [InlineData("summaryPath", "./state.json")]
+    [InlineData("reportPath", "./sitemap.xml")]
+    public void StatefulSitemap_RejectsOutputCollisionBeforeSubmitting(string outputProperty, string outputPath)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-indexnow-output-collision-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"), Sitemap(("/one", "2026-09-01")));
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, $$"""
+                { "steps": [{
+                    "task": "indexnow", "baseUrl": "https://example.com/",
+                    "sitemap": "./sitemap.xml", "sitemapStatePath": "./state.json",
+                    "{{outputProperty}}": "{{outputPath}}", "key": "examplekey", "dryRun": true
+                }] }
+                """);
+            var result = WebPipelineRunner.RunPipeline(pipeline, logger: null);
+            Assert.False(result.Success);
+            Assert.False(File.Exists(Path.Combine(root, "state.json")));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void StatefulSitemap_RejectsSharedReportAndSummaryPath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-indexnow-shared-report-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"), Sitemap(("/one", "2026-09-01")));
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, """
+                { "steps": [{
+                    "task": "indexnow", "baseUrl": "https://example.com/",
+                    "sitemap": "./sitemap.xml", "sitemapStatePath": "./state.json",
+                    "reportPath": "./report.txt", "summaryPath": "./report.txt",
+                    "key": "examplekey", "dryRun": true
+                }] }
+                """);
+            Assert.False(WebPipelineRunner.RunPipeline(pipeline, logger: null).Success);
+            Assert.False(File.Exists(Path.Combine(root, "report.txt")));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("./sitemap.xml", "./summary.md")]
+    [InlineData("./report.json", "./report.json")]
+    [InlineData("./pipeline.json", "./summary.md")]
+    [InlineData("./indexnow.txt", "./summary.md")]
+    public void StatelessSubmission_RejectsInputAndOutputCollisions(string reportPath, string summaryPath)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-indexnow-stateless-collision-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"), Sitemap(("/one", "2026-09-01")));
+            File.WriteAllText(Path.Combine(root, "indexnow.txt"), "examplekey");
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, $$"""
+                { "steps": [{
+                    "task": "indexnow", "baseUrl": "https://example.com/", "sitemap": "./sitemap.xml",
+                    "reportPath": "{{reportPath}}", "summaryPath": "{{summaryPath}}", "dryRun": true
+                }] }
+                """);
+            Assert.False(WebPipelineRunner.RunPipeline(pipeline, logger: null).Success);
+            Assert.Equal("examplekey", File.ReadAllText(Path.Combine(root, "indexnow.txt")));
+            Assert.Equal(Sitemap(("/one", "2026-09-01")), File.ReadAllText(Path.Combine(root, "sitemap.xml")));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("profilePath", false, "./state.json")]
+    [InlineData("cachePath", true, "./state.json")]
+    [InlineData("profilePath", false, "./report.json")]
+    public void StatefulSitemap_RejectsPipelineOutputCollisions(string rootProperty, bool cacheEnabled, string outputPath)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-indexnow-pipeline-collision-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"), Sitemap(("/one", "2026-09-01")));
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, $$"""
+                { "cache": {{cacheEnabled.ToString().ToLowerInvariant()}}, "{{rootProperty}}": "{{outputPath}}",
+                  "steps": [{
+                    "task": "indexnow", "baseUrl": "https://example.com/",
+                    "sitemap": "./sitemap.xml", "sitemapStatePath": "./state.json",
+                    "reportPath": "./report.json", "key": "examplekey", "dryRun": true
+                }] }
+                """);
+            Assert.False(WebPipelineRunner.RunPipeline(pipeline, logger: null).Success);
+            Assert.False(File.Exists(Path.Combine(root, "state.json")));
+            Assert.False(File.Exists(Path.Combine(root, "report.json")));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void StatefulSitemap_RejectsReportOverInheritedPipelineConfig()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-indexnow-inherited-collision-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var inherited = Path.Combine(root, "base.json");
+            const string inheritedContent = "{ \"steps\": [] }";
+            File.WriteAllText(inherited, inheritedContent);
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"), Sitemap(("/one", "2026-09-01")));
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, """
+                { "extends": "./base.json", "steps": [{
+                    "task": "indexnow", "baseUrl": "https://example.com/",
+                    "sitemap": "./sitemap.xml", "sitemapStatePath": "./state.json",
+                    "reportPath": "./base.json", "key": "examplekey", "dryRun": true
+                }] }
+                """);
+            Assert.False(WebPipelineRunner.RunPipeline(pipeline, logger: null).Success);
+            Assert.Equal(inheritedContent, File.ReadAllText(inherited));
+            Assert.False(File.Exists(Path.Combine(root, "state.json")));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task StatefulSitemap_PersistsSubmissionReportBeforeCheckpointFailure()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-indexnow-save-failure-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        using var listener = new HttpListener();
+        try
+        {
+            var port = FreePort();
+            listener.Prefixes.Add($"http://127.0.0.1:{port}/indexnow/");
+            listener.Start();
+            var response = Task.Run(async () =>
+            {
+                var context = await listener.GetContextAsync();
+                context.Response.StatusCode = 200;
+                context.Response.Close();
+            });
+            Directory.CreateDirectory(Path.Combine(root, "state.json"));
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"), Sitemap(("/one", "2026-09-01")));
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, $$"""
+                { "steps": [{
+                    "task": "indexnow", "baseUrl": "https://example.com/",
+                    "sitemap": "./sitemap.xml", "sitemapStatePath": "./state.json",
+                    "endpoint": "http://127.0.0.1:{{port}}/indexnow/", "key": "examplekey",
+                    "retryCount": 0, "reportPath": "./report.json", "summaryPath": "./summary.md"
+                }] }
+                """);
+            var result = WebPipelineRunner.RunPipeline(pipeline, logger: null);
+            await response.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.False(result.Success);
+            using var report = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "report.json")));
+            Assert.Equal(1, report.RootElement.GetProperty("urlCount").GetInt32());
+            Assert.Equal(1, report.RootElement.GetProperty("requestCount").GetInt32());
+            Assert.Contains("URLs: 1", File.ReadAllText(Path.Combine(root, "summary.md")));
+        }
+        finally
+        {
+            listener.Stop();
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]

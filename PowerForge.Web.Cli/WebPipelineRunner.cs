@@ -109,7 +109,7 @@ internal static partial class WebPipelineRunner
         string[]? onlyTasks = null,
         string[]? skipTasks = null)
     {
-        using var doc = LoadPipelineDocumentWithExtends(pipelinePath);
+        using var doc = LoadPipelineDocumentWithExtends(pipelinePath, out var pipelineSourcePaths);
 
         var root = doc.RootElement;
         if (!root.TryGetProperty("steps", out var stepsElement) || stepsElement.ValueKind != JsonValueKind.Array)
@@ -233,8 +233,19 @@ internal static partial class WebPipelineRunner
                 }
             }
 
+            var indexNowPreflightPassed = !task.Equals("indexnow", StringComparison.OrdinalIgnoreCase);
             try
             {
+                if (!indexNowPreflightPassed)
+                {
+                    ValidateIndexNowOutputPaths(
+                        step,
+                        baseDir,
+                        pipelineSourcePaths,
+                        profileEnabled || profileWriteOnFail ? profilePath : null,
+                        cacheEnabled ? cachePath : null);
+                    indexNowPreflightPassed = true;
+                }
                 ExecuteTask(task, step, label, baseDir, fast, effectiveMode, logger, ref lastBuildOutPath, ref lastBuildUpdatedFiles, stepResult);
             }
             catch (Exception ex)
@@ -255,7 +266,7 @@ internal static partial class WebPipelineRunner
                 // - Success: write profile only when profile is enabled (to avoid noise/overhead).
                 // - Failure: write profile when profile is enabled OR profileOnFail is true (default),
                 //   so CI failures still produce actionable artifacts.
-                if (!string.IsNullOrWhiteSpace(profilePath) && (profileEnabled || profileWriteOnFail))
+                if (indexNowPreflightPassed && !string.IsNullOrWhiteSpace(profilePath) && (profileEnabled || profileWriteOnFail))
                 {
                     WritePipelineProfile(profilePath, result, logger);
                     result.ProfilePath = profilePath;

@@ -215,11 +215,13 @@ internal static class IndexNowSubmitter
         List<Uri> candidates = NormalizeUrlCandidates(values, warnings);
         if (warnings.Count > 0)
             throw new InvalidOperationException("indexnow: stateful URL sources contain an invalid or non-public URL.");
+        if (candidates.Any(static url => !string.IsNullOrEmpty(url.UserInfo)))
+            throw new InvalidOperationException("indexnow: stateful URL sources cannot contain URL credentials.");
         string[] canonical = candidates.Select(static url => url.ToString()).ToArray();
         if (canonical.GroupBy(static url => url, StringComparer.OrdinalIgnoreCase)
             .Any(static group => group.Distinct(StringComparer.Ordinal).Skip(1).Any()))
             throw new InvalidOperationException("indexnow: stateful URL sources contain case-distinct aliases that submission would collapse.");
-        return canonical.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        return candidates.Distinct().Select(static url => url.ToString()).ToArray();
     }
 
     private static List<Uri> NormalizeUrls(IReadOnlyList<string> values, List<string> warnings) =>

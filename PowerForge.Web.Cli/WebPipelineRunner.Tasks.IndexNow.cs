@@ -122,13 +122,13 @@ internal static partial class WebPipelineRunner
             var noUrlsMessage = "indexnow: no URLs to submit.";
             if (failOnEmpty)
                 throw new InvalidOperationException(noUrlsMessage);
-            if (sitemapCheckpoint is not null && !(GetBool(step, "dryRun") ?? GetBool(step, "dry-run") ?? false))
-                sitemapCheckpoint.Save();
             WriteIndexNowReports(step, baseDir, new IndexNowSubmissionResult
             {
                 Success = true,
                 DryRun = GetBool(step, "dryRun") ?? GetBool(step, "dry-run") ?? false
             });
+            if (sitemapCheckpoint is not null && !(GetBool(step, "dryRun") ?? GetBool(step, "dry-run") ?? false))
+                sitemapCheckpoint.Save();
             stepResult.Success = true;
             stepResult.Message = noUrlsMessage;
             return;
@@ -201,6 +201,8 @@ internal static partial class WebPipelineRunner
             TimeoutSeconds = GetInt(step, "timeoutSeconds") ?? GetInt(step, "timeout-seconds") ?? 20
         }, logger: null);
 
+        WriteIndexNowReports(step, baseDir, submissionResult);
+
         var checkpointRetained = false;
         if (sitemapCheckpoint is not null && !submissionResult.DryRun)
         {
@@ -212,8 +214,6 @@ internal static partial class WebPipelineRunner
                 checkpointRetained = true;
         }
 
-        WriteIndexNowReports(step, baseDir, submissionResult);
-
         stepResult.Success = submissionResult.Success;
         stepResult.Message = BuildIndexNowSummary(submissionResult);
         if (checkpointRetained)
@@ -222,6 +222,44 @@ internal static partial class WebPipelineRunner
             stepResult.Message += $", key={keySource}";
         if (!submissionResult.Success)
             throw new InvalidOperationException(stepResult.Message);
+    }
+
+    private static void ValidateIndexNowOutputPaths(
+        JsonElement step, string baseDir, IReadOnlyCollection<string> pipelineSourcePaths, string? profilePath, string? cachePath)
+    {
+        var statePath = ResolvePath(baseDir,
+            GetString(step, "sitemapStatePath") ?? GetString(step, "sitemap-state-path"));
+        var sitemapPath = ResolvePath(baseDir,
+            GetString(step, "sitemap") ?? GetString(step, "sitemapPath") ?? GetString(step, "sitemap-path"));
+        var urlFilePath = ResolvePath(baseDir, GetString(step, "urlFile") ?? GetString(step, "url-file"));
+        var keyPath = ResolvePath(baseDir, GetString(step, "keyPath") ?? GetString(step, "key-path"));
+        var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
+        var keyLocation = GetString(step, "keyLocation") ?? GetString(step, "key-location");
+        var occupied = new HashSet<string>(OperatingSystem.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        foreach (var input in pipelineSourcePaths.Cast<string?>()
+                     .Concat(new[] { sitemapPath, urlFilePath, keyPath })
+                     .Concat(EnumerateIndexNowKeyCandidates(baseDir, siteRoot, keyLocation)
+                         .Select(static candidate => candidate.Path)))
+        {
+            if (!string.IsNullOrWhiteSpace(input))
+                occupied.Add(Path.GetFullPath(input));
+        }
+        var reportPath = GetString(step, "reportPath") ?? GetString(step, "report-path");
+        var summaryPath = GetString(step, "summaryPath") ?? GetString(step, "summary-path");
+        foreach (var output in new[]
+                 {
+                     statePath,
+                     string.IsNullOrWhiteSpace(reportPath) ? null : ResolvePathWithinRoot(baseDir, reportPath, reportPath),
+                     string.IsNullOrWhiteSpace(summaryPath) ? null : ResolvePathWithinRoot(baseDir, summaryPath, summaryPath),
+                     profilePath,
+                     cachePath
+                 })
+        {
+            if (string.IsNullOrWhiteSpace(output)) continue;
+            if (!occupied.Add(Path.GetFullPath(output)))
+                throw new InvalidOperationException("indexnow: state, report, summary, pipeline outputs, and input files must use distinct paths.");
+        }
     }
 
     private static void WriteIndexNowReports(JsonElement step, string baseDir, IndexNowSubmissionResult submissionResult)
@@ -288,7 +326,8 @@ internal static partial class WebPipelineRunner
 
     private static IEnumerable<IndexNowKeyCandidate> EnumerateIndexNowKeyCandidates(string baseDir, string? siteRoot, string? keyLocation)
     {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(OperatingSystem.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
         var keyLocationRelativePaths = EnumerateIndexNowKeyRelativePaths(keyLocation).ToArray();
         if (keyLocationRelativePaths.Length == 0 && !string.IsNullOrWhiteSpace(keyLocation))
             yield break;
