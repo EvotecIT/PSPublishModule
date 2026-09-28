@@ -153,17 +153,61 @@ public sealed class PowerShellCompilationNativeDependencyTypeTests
             PowerShellNativeDependencyTypes.Create(null, dependencies, graph));
     }
 
+    [Theory]
+    [InlineData("net10.0")]
+    [InlineData("net472")]
+    public void ManifestAuthoredClass_UsesOnlyLockedNativeBinding(string framework)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.ManifestAuthoredClass", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var manifest = Path.Combine(root, "Fixture.psd1");
+            var source = Path.Combine(root, "Fixture.psm1");
+            var hook = Path.Combine(root, "Classes", "Class.ps1");
+            Directory.CreateDirectory(Path.GetDirectoryName(hook)!);
+            File.WriteAllText(hook, "class FixtureItem { [string]$Name }");
+            File.WriteAllText(source, "function Echo-Item { [CmdletBinding()] [OutputType([FixtureItem[]])] param([Parameter(Mandatory,ValueFromPipeline)][FixtureItem[]]$Item) process { $Item } }; Export-ModuleMember -Function Echo-Item");
+            File.WriteAllText(manifest, "@{RootModule='Fixture.psm1';ModuleVersion='1.0.0';ScriptsToProcess=@('Classes/Class.ps1');FunctionsToExport=@('Echo-Item')}");
+            var input = new PowerShellCompilationInputResolver().Resolve(manifest,
+                PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
+            var planner = new PowerShellCompilationDependencyPlanner();
+            var dependencies = planner.Analyze(input);
+            var graph = planner.AnalyzeGraph(input, targetFramework: framework);
+            var catalog = PowerShellNativeDependencyTypes.Create(manifest, dependencies, graph, input.ModuleRoot);
+            var document = PowerShellSourceParser.Parse(File.ReadAllText(source), source);
+            var constraint = document.SyntaxRoot.FindAll(static node => node is TypeConstraintAst, true)
+                .OfType<TypeConstraintAst>().Single(node => node.TypeName.FullName == "FixtureItem[]" && node.Parent is ParameterAst);
+            Assert.True(catalog.Qualifies(constraint.TypeName, PowerShellCompilationCapabilities.HybridModule));
+            Assert.False(catalog.Qualifies(constraint.TypeName, PowerShellCompilationCapabilities.BinaryModule));
+            var typed = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, framework,
+                PowerShellCompilationCapabilities.HybridModule, catalog);
+            Assert.Single(typed.Emitted.Methods);
+            Assert.Empty(new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, framework,
+                PowerShellCompilationCapabilities.BinaryModule, catalog).Emitted.Methods);
+            var plan = new PowerShellCompilationAnalyzer().Analyze(input, PowerShellCompilationMode.Hybrid, framework);
+            Assert.Single(PowerShellCompilationExplainShaper.Shape(input, plan, framework)!.Methods);
+            File.AppendAllText(hook, "# changed");
+            Assert.Throws<InvalidOperationException>(() => PowerShellNativeDependencyTypes.Create(manifest, dependencies, graph, input.ModuleRoot));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private sealed class DependencyFixture : IDisposable
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), "PowerForge.NativeDependencyTypes", Guid.NewGuid().ToString("N"));
         internal string Manifest => Path.Combine(_root, "Fixture.psd1");
         internal string Source => Path.Combine(_root, "Fixture.psm1");
-        internal string Assembly => Path.Combine(_root, "Dependency.dll");
+        internal string Assembly => Path.Combine(_root, "Lib", "Dependency.dll");
         internal DependencyFixture()
         {
             Directory.CreateDirectory(_root);
+            Directory.CreateDirectory(Path.GetDirectoryName(Assembly)!);
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Generic.External.Binary.Dependency.dll"), Assembly);
-            File.WriteAllText(Manifest, "@{RootModule='Fixture.psm1';ModuleVersion='1.0.0';RequiredAssemblies=@('Dependency.dll');FunctionsToExport=@('Get-DependencyValue')}");
+            File.WriteAllText(Manifest, "@{RootModule='Fixture.psm1';ModuleVersion='1.0.0';RequiredAssemblies=@('Lib/Dependency.dll');FunctionsToExport=@('Get-DependencyValue')}");
             File.WriteAllText(Source, "function Get-DependencyValue {param([int]$Value) [Generic.External.Binary.Dependency.GenericValueSource]::Resolve($Value)}");
         }
         public void Dispose() => Directory.Delete(_root, recursive: true);

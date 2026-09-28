@@ -3,13 +3,14 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
+using System.Text;
 using TypeName = System.Management.Automation.Language.TypeName;
 using TypeAttributes = System.Reflection.TypeAttributes;
 using MethodAttributes = System.Reflection.MethodAttributes;
 
 namespace PowerForge;
 
-/// <summary>Metadata-only identities from contained, delivered root RequiredAssemblies. Never loads dependency code.</summary>
+/// <summary>Metadata-only identities from locked root manifest dependencies. Never loads dependency code.</summary>
 internal sealed class PowerShellNativeDependencyTypes
 {
     internal static readonly PowerShellNativeDependencyTypes Empty = new(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
@@ -57,7 +58,7 @@ internal sealed class PowerShellNativeDependencyTypes
         => function.Body.Find(node => node is TypeExpressionAst expression && Qualifies(expression.TypeName, capabilities) ||
             node is TypeConstraintAst constraint && Qualifies(constraint.TypeName, capabilities), searchNestedScriptBlocks: false) is not null;
 
-    /// <summary>Reads public nongeneric types only after the ordinary dependency graph has locked their bytes.</summary>
+    /// <summary>Reads delivered assembly types and manifest-loaded classes only after their bytes are locked.</summary>
     internal static PowerShellNativeDependencyTypes Create(string? manifestPath,
         IEnumerable<PowerShellCompilationDependency> dependencies, PowerShellCompilationDependencyGraph graph,
         string? moduleRoot = null)
@@ -83,7 +84,7 @@ internal sealed class PowerShellNativeDependencyTypes
             PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(path, "Native type dependency must not traverse links.");
             var nodes = graph.Nodes.Where(node => node.Exists &&
                 node.Disposition != PowerShellCompilationDependencyGraphDisposition.Rejected &&
-                PowerShellCompilationPathSafety.PathEquals(Path.Combine(graphRoot, node.Identity.Source), path)).ToArray();
+                PowerShellCompilationPathSafety.PathEquals(Path.GetFullPath(Path.Combine(graphRoot, node.Identity.Source)), path)).ToArray();
             if (nodes.Length != 1 || string.IsNullOrWhiteSpace(nodes[0].Identity.Sha256)) continue;
             using var stream = File.OpenRead(path);
             using var sha = SHA256.Create();
@@ -105,6 +106,37 @@ internal sealed class PowerShellNativeDependencyTypes
                 var name = (typeNamespace.Length == 0 ? string.Empty : typeNamespace + ".") + reader.GetString(type.Name);
                 if (!names.Add(name)) ambiguous.Add(name);
             }
+        }
+        var declaredScripts = (ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(manifestPath!, "ScriptsToProcess") ?? Array.Empty<string>())
+            .Where(static value => !Path.IsPathRooted(value) && value.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase))
+            .Select(value => Path.GetFullPath(Path.Combine(root, PowerShellCompiledModuleManifest.NormalizeManifestRelativePath(value))))
+            .ToArray();
+        foreach (var path in declaredScripts)
+        {
+            PowerShellCompilationPathSafety.EnsureContained(root, path, "Authored class declaration must stay inside the root module.");
+            PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(path, "Authored class declaration must not traverse links.");
+            var delivered = dependencies.Where(dependency => dependency.Discovery == PowerShellCompilationDependencyDiscovery.ScriptsToProcess &&
+                dependency.Kind == PowerShellCompilationDependencyKind.PowerShellSource && dependency.Exists &&
+                dependency.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent &&
+                dependency.SourcePath is not null && PowerShellCompilationPathSafety.PathEquals(dependency.SourcePath, path)).ToArray();
+            if (delivered.Length != 1) continue;
+            var nodes = graph.Nodes.Where(node => node.Exists &&
+                node.Disposition != PowerShellCompilationDependencyGraphDisposition.Rejected &&
+                PowerShellCompilationPathSafety.PathEquals(Path.GetFullPath(Path.Combine(graphRoot, node.Identity.Source)), path)).ToArray();
+            if (nodes.Length != 1 || string.IsNullOrWhiteSpace(nodes[0].Identity.Sha256)) continue;
+            var lockedBytes = File.ReadAllBytes(path);
+            using var sha = SHA256.Create();
+            var hash = BitConverter.ToString(sha.ComputeHash(lockedBytes)).Replace("-", string.Empty).ToLowerInvariant();
+            if (!hash.Equals(nodes[0].Identity.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Authored class declaration changed after dependency locking.");
+            using var source = new StreamReader(new MemoryStream(lockedBytes, writable: false), Encoding.UTF8,
+                detectEncodingFromByteOrderMarks: true);
+            var syntax = Parser.ParseInput(source.ReadToEnd(), out _, out var errors);
+            if (errors.Length != 0) continue;
+            foreach (var definition in syntax.FindAll(static node => node is TypeDefinitionAst { IsClass: true },
+                         searchNestedScriptBlocks: false).OfType<TypeDefinitionAst>()
+                         .Where(definition => ReferenceEquals(definition.Parent, syntax.EndBlock)))
+                if (!names.Add(definition.Name)) ambiguous.Add(definition.Name);
         }
         names.ExceptWith(ambiguous);
         return new PowerShellNativeDependencyTypes(names);

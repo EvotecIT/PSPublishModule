@@ -29,7 +29,8 @@ internal static class PowerShellParameterSemanticValidator
             var name = parameter.Name.VariablePath.UserPath;
             var span = PowerShellSourceParser.GetSpan(document, parameter.Extent);
             var hasAuthoredType = parameter.Attributes.OfType<TypeConstraintAst>().Any();
-            if (PowerShellCompilationParameterTypePolicy.FindUnresolvedAuthoredType(parameter) is { } unresolvedType)
+            if (PowerShellCompilationParameterTypePolicy.FindUnresolvedAuthoredType(parameter) is { } unresolvedType &&
+                !document.NativeDependencyTypes.Qualifies(unresolvedType.TypeName, capabilities))
             {
                 Add(diagnostics, PowerShellCompilationFeatureIds.ParameterType,
                     $"Parameter '${name}' uses authored type '{unresolvedType.TypeName.FullName}', which cannot be resolved in the selected compilation environment.",
@@ -93,14 +94,15 @@ internal static class PowerShellParameterSemanticValidator
         string? targetFramework,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
-        if (IsSupportedMetadata(attribute, capabilities, targetFramework)) return true;
+        if (IsSupportedMetadata(document, attribute, capabilities, targetFramework)) return true;
         Add(diagnostics, PowerShellCompilationFeatureIds.ParameterMetadata,
             $"Parameter metadata syntax node 'AttributeAst' for '[{attribute.TypeName.Name}]' is not supported by this typed target.",
             PowerShellSourceParser.GetSpan(document, attribute.Extent));
         return false;
     }
 
-    private static bool IsSupportedMetadata(AttributeAst attribute, PowerShellCompilationCapability capabilities, string? targetFramework)
+    private static bool IsSupportedMetadata(ParsedSourceDocument document, AttributeAst attribute,
+        PowerShellCompilationCapability capabilities, string? targetFramework)
     {
         if (PowerShellCompileTimeMetadataSemanticPolicy.IsSupported(attribute))
             return true;
@@ -118,7 +120,8 @@ internal static class PowerShellParameterSemanticValidator
                 capabilities,
                 out _,
                 out _,
-                out _);
+                out _,
+                document.NativeDependencyTypes);
         if (PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowNull") ||
             PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowEmptyString") ||
             PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowEmptyCollection") ||

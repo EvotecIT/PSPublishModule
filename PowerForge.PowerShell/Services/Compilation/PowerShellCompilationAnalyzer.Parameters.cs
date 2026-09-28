@@ -161,8 +161,10 @@ public sealed partial class PowerShellCompilationAnalyzer
             var hasExplicitType = parameter.Attributes.OfType<TypeConstraintAst>().Any();
             if (PowerShellCompilationParameterTypePolicy.FindUnresolvedAuthoredType(parameter) is { } unresolvedType &&
                 !(unitRoot.Parent is FunctionDefinitionAst function &&
-                  PowerShellCompilationParameterTypePolicy.IsHostProvidedParameterType(unresolvedType.TypeName.FullName) &&
-                  PowerShellNativeFunctionBindingPolicy.Select(function, capabilities, targetFramework) is not null))
+                  (PowerShellCompilationParameterTypePolicy.IsHostProvidedParameterType(unresolvedType.TypeName.FullName) ||
+                   _nativeDependencyTypes.Qualifies(unresolvedType.TypeName, capabilities)) &&
+                  PowerShellNativeFunctionBindingPolicy.Select(function, capabilities, targetFramework,
+                      dependencyTypes: _nativeDependencyTypes) is not null))
             {
                 diagnostics.Add(CreateDiagnostic(
                     PowerShellCompilationDiagnosticCode.UnsupportedParameterType,
