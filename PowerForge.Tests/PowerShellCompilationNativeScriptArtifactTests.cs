@@ -399,6 +399,62 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Fact]
     [Trait("Category", "PowerShellCompilerGate")]
+    public void Build_HybridNativeScriptRootPreservesReturnThroughFinally()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            param([int]$StopAt = 2, [switch]$EmitValue)
+            try {
+                for ($i = 0; $i -lt 4; $i++) {
+                    if ($i -eq $StopAt) {
+                        Write-Output "stop:$i"
+                        if ($EmitValue) { return "value:$i" }
+                        return
+                    }
+                    Write-Output "step:$i"
+                }
+            } finally { Write-Output 'finally' }
+            Write-Output 'after'
+            """);
+        var spec = new PowerShellCompilationBuildSpec(fixture.ScriptPath, fixture.OutputPath,
+            "PowerForge.ReturnRoot", PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid)
+        {
+            EmitSource = true,
+            TargetContract = PowerShellCompilationTargetContractService.Create(
+                PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid,
+                "net10.0", "win-x64", false, false, PowerShellCompilationExecutableOptimization.None, true)
+        };
+        spec.ExpectedDependencyLock = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(spec);
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+        Assert.True(result.Succeeded, result.Error + System.Environment.NewLine + result.BuildOutput);
+        var root = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries);
+        Assert.True(root.Emitted);
+        Assert.True(root.RuntimeRouted);
+        var generatedSource = System.IO.File.ReadAllText(System.IO.Path.Combine(
+            result.GeneratedSourcePath!, "CompiledPowerShellEntry.cs"));
+        Assert.Contains("for (", generatedSource);
+        Assert.Contains("finally", generatedSource);
+        var cases = new (string[] Arguments, string[] ExpectedOutput)[]
+        {
+            (System.Array.Empty<string>(), new[] { "step:0", "step:1", "stop:2", "finally" }),
+            (new[] { "-StopAt", "0" }, new[] { "stop:0", "finally" }),
+            (new[] { "-StopAt", "9" }, new[] { "step:0", "step:1", "step:2", "step:3", "finally", "after" }),
+            (new[] { "-EmitValue" }, new[] { "step:0", "step:1", "stop:2", "value:2", "finally" })
+        };
+        foreach (var (arguments, expectedOutput) in cases)
+        {
+            var original = RunProcess("pwsh", new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }
+                .Concat(arguments).ToArray());
+            var generated = RunProcess(result.ArtifactPath!, arguments);
+            Assert.Equal((original.ExitCode, original.StandardOutput, original.StandardError),
+                (generated.ExitCode, generated.StandardOutput, generated.StandardError));
+            Assert.Equal(0, generated.ExitCode);
+            Assert.Equal(expectedOutput, generated.StandardOutput.Split('\n', System.StringSplitOptions.RemoveEmptyEntries)
+                .Select(static line => line.TrimEnd('\r')).ToArray());
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootPreservesOwnedFunctionDeclarations()
     {
         using var fixture = ArtifactFixture.Create("""
