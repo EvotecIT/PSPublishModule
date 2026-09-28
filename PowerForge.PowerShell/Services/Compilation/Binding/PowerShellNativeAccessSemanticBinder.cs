@@ -26,7 +26,8 @@ internal static class PowerShellNativeAccessSemanticBinder
         PowerShellBoundExpression? receiver = null;
         if (syntax.Expression is TypeExpressionAst authoredEnum &&
             (PowerShellHostedEnumDeclarationPolicy.IsQualifiedMemberReceiver(document, authoredEnum, targetFramework, capabilities) ||
-             document.NativeDependencyTypes.Qualifies(authoredEnum.TypeName, capabilities)))
+             document.NativeDependencyTypes.Qualifies(authoredEnum.TypeName, capabilities) ||
+             PowerShellHostedGuardedAddTypePolicy.IsQualified(authoredEnum, capabilities)))
         {
             receiver = bindExpression(authoredEnum, null);
             if (receiver is null) return null;
@@ -69,7 +70,8 @@ internal static class PowerShellNativeAccessSemanticBinder
         if (syntax.Expression is TypeExpressionAst authoredType &&
             (PowerShellCompilationParameterTypePolicy.IsHostProvidedConstructorReceiver(authoredType, capabilities) ||
              PowerShellHostedValueClassPolicy.IsQualifiedConstructorReceiver(document, authoredType, targetFramework, capabilities) ||
-             document.NativeDependencyTypes.Qualifies(authoredType.TypeName, capabilities)))
+             document.NativeDependencyTypes.Qualifies(authoredType.TypeName, capabilities) ||
+             PowerShellHostedGuardedAddTypePolicy.IsQualified(authoredType, capabilities)))
         {
             receiver = bindExpression(authoredType, null);
             if (receiver is null) return null;

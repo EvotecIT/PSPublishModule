@@ -62,7 +62,9 @@ internal sealed partial class PowerShellSemanticBinder
              hostDataType.TypeName.GetReflectionType() is { } hostDataClrType &&
              PowerShellCompilationParameterTypePolicy.IsQualifiedHostDataType(hostDataClrType, targetFramework) ||
              nativeMember.Expression is TypeExpressionAst dependencyReceiver &&
-             document.NativeDependencyTypes.Qualifies(dependencyReceiver.TypeName, capabilities)))
+             document.NativeDependencyTypes.Qualifies(dependencyReceiver.TypeName, capabilities) ||
+             nativeMember.Expression is TypeExpressionAst guardedReceiver &&
+             PowerShellHostedGuardedAddTypePolicy.IsQualified(guardedReceiver, capabilities)))
             return PowerShellNativeAccessSemanticBinder.BindMember(document, nativeMember,
                 (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
                 targetFramework, capabilities, diagnostics);
@@ -118,7 +120,8 @@ internal sealed partial class PowerShellSemanticBinder
                      PowerShellHostedValueClassPolicy.IsQualifiedConstructorReceiver(document, typeExpression, targetFramework, capabilities) ||
                      PowerShellHostedEnumDeclarationPolicy.IsQualifiedMemberReceiver(document, typeExpression, targetFramework, capabilities) ||
                      PowerShellHostedLocalEnumPolicy.IsQualifiedDestination(document, typeExpression, targetFramework, capabilities) ||
-                     document.NativeDependencyTypes.Qualifies(typeExpression.TypeName, capabilities)))
+                     document.NativeDependencyTypes.Qualifies(typeExpression.TypeName, capabilities) ||
+                     PowerShellHostedGuardedAddTypePolicy.IsQualified(typeExpression, capabilities)))
                     return new PowerShellBoundNativeTypeExpression(span, typeExpression.TypeName.FullName);
                 var typeValue = typeExpression.TypeName.GetReflectionType();
                 if (typeValue is null ||
