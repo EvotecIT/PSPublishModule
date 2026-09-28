@@ -490,7 +490,12 @@
               "column": 15
             }
           ],
-          "relativePath": "functions/New-DynamicParamCode.ps1"
+          "relativePath": "functions/New-DynamicParamCode.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-wpf-dynamic-form-visual.json",
+            "scope": "Simple Create/Close on both Windows hosts has original/generated visual and code-output proof with an in-memory module-local Set-Clipboard provider and global escape tripwire. Real clipboard and other form options remain unqualified. No complete form-method credit."
+          }
         },
         {
           "unitId": "8c5dbe10dcc7e3a2f13e92ce",
@@ -690,6 +695,7 @@
     "m29a-smb-native-boundary.json",
     "m29a-password-native-boundary.json",
     "m29a-wpf-dialogs-visual.json",
-    "m29a-wpf-grid-visual.json"
+    "m29a-wpf-grid-visual.json",
+    "m29a-wpf-dynamic-form-visual.json"
   ]
 }
