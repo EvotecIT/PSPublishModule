@@ -44,6 +44,8 @@ internal static class PowerShellCompilationParameterTypePolicy
         typeof(ErrorCategory),
         typeof(PSMemberTypes),
         typeof(CommandInfo),
+        // Invocation metadata is borrowed from the caller's active PowerShell frame.
+        typeof(InvocationInfo),
         // Command descriptions and proxy source generation retain active-host SDK semantics.
         typeof(CommandMetadata),
         typeof(ProxyCommand),
@@ -148,6 +150,7 @@ internal static class PowerShellCompilationParameterTypePolicy
     private static bool RequiresNativeFunctionBinding(Type type)
         => type == typeof(PSReference) || type == typeof(PowerShell) ||
            type == typeof(CommandMetadata) || type == typeof(ProxyCommand) ||
+           type == typeof(InvocationInfo) ||
            type == typeof(Cmdlet) ||
            type == typeof(Microsoft.Management.Infrastructure.CimSession) ||
            type == typeof(Microsoft.Management.Infrastructure.CimClass) ||

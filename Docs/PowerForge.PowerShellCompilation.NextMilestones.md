@@ -197,6 +197,8 @@ The [observed support-gap inventory](PowerForge.PowerShellCompilation.SupportGap
 
 - [x] Prove stopping for the admitted `Where-Object { ... } | Select-Object -First 1` executable shape with a mutating filter. An emitted Windows x64/net10 root and ordinary `pwsh -File` leave the same script-local mutation trace after first-record selection. The full pipeline remains PowerShell-owned. Arbitrary producers, cleanup/error paths, other hosts and runtime-free projection remain open; see the assessment's effectful-filter stopping section.
 
+- [x] Qualify borrowed `InvocationInfo` as exact SDK host data with native function binding. The unchanged MIT-licensed PowerShellForGitHub `Write-InvocationLog` gained an emitted method, raising its affected helper packet 9/10 → 10/10 without regression. Original/generated offline logging, redaction, caller metadata, default scope lookup, invalid binding and parameter type match on PowerShell 7/net10 and Windows PowerShell 5.1/net472; Strict and missing native/host capabilities reject it. Package identity was aligned for the authored default's module-name output. The full GitHub client and network paths remain unqualified; the five-module 544/565 count is unchanged. See the assessment and invocation-metadata comparison.
+
 ## Milestone 30 — Qualify distribution, providers, and platforms
 
 **Status: Partial; public release and target qualification remain separate from local implementation.**
