@@ -526,7 +526,12 @@
               "column": 39
             }
           ],
-          "relativePath": "functions/New-WPFMessageBox.ps1"
+          "relativePath": "functions/New-WPFMessageBox.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-wpf-dialogs-visual.json",
+            "scope": "Default OK message path has both-host original/generated visual and callback proof; alternate/custom buttons, icons and backgrounds remain unqualified. No compiled method credit."
+          }
         },
         {
           "unitId": "bbc6f74ca8facf49fb1bb749",
@@ -638,7 +643,12 @@
               "column": 39
             }
           ],
-          "relativePath": "functions/Utilities.ps1"
+          "relativePath": "functions/Utilities.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-wpf-dialogs-visual.json",
+            "scope": "Plain input OK path has both-host original/generated visual and callback proof; cancellation and secure input remain unqualified. No compiled method credit."
+          }
         }
       ]
     },
@@ -673,6 +683,7 @@
     "m29a-local-sid-boundary.json",
     "m29a-forest-details-boundary.json",
     "m29a-smb-native-boundary.json",
-    "m29a-password-native-boundary.json"
+    "m29a-password-native-boundary.json",
+    "m29a-wpf-dialogs-visual.json"
   ]
 }
