@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace PowerForge.Tests;
 
 public sealed class ServerRecoveryBootstrapReconciliationTests
@@ -27,8 +29,10 @@ public sealed class ServerRecoveryBootstrapReconciliationTests
         Assert.Contains("symbolic-ref --quiet --short HEAD", command, StringComparison.Ordinal);
         Assert.Contains("merge-base --is-ancestor HEAD 'refs/remotes/origin/main'", command, StringComparison.Ordinal);
         Assert.Contains("merge --ff-only 'refs/remotes/origin/main'", command, StringComparison.Ordinal);
+        Assert.Contains("fetch --no-tags origin 'refs/heads/main:refs/remotes/origin/main'", command, StringComparison.Ordinal);
+        Assert.Contains("ls-files -z --others --ignored --exclude-standard", command, StringComparison.Ordinal);
         Assert.True(command.IndexOf("status --porcelain", StringComparison.Ordinal) <
-                    command.IndexOf("fetch --all", StringComparison.Ordinal));
+                    command.IndexOf("fetch --no-tags origin", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -40,6 +44,14 @@ public sealed class ServerRecoveryBootstrapReconciliationTests
             Target = new PowerForge.Web.Cli.PowerForgeServerTarget { SshAlias = "example" },
             Systemd = new PowerForge.Web.Cli.PowerForgeServerSystemd
             {
+                Services =
+                [
+                    new PowerForge.Web.Cli.PowerForgeServerSystemdUnit
+                    {
+                        Name = "private.service",
+                        EnforceDisabled = true
+                    }
+                ],
                 Timers =
                 [
                     new PowerForge.Web.Cli.PowerForgeServerSystemdUnit
@@ -64,12 +76,17 @@ public sealed class ServerRecoveryBootstrapReconciliationTests
         Assert.Empty(PowerForge.Web.Cli.WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest));
         var steps = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []);
         var stop = Assert.Single(steps, item => item.Title == "Stop and disable private.timer");
+        var stopService = Assert.Single(steps, item => item.Title == "Stop and disable private.service");
         var clone = Assert.Single(steps, item => item.Title == "Clone or update application repository");
+        Assert.True(stop.Order < stopService.Order);
         Assert.True(stop.Order < clone.Order);
         Assert.Contains("systemctl show --property=LoadState --value -- 'private.timer'", stop.Command, StringComparison.Ordinal);
         Assert.Contains("Cannot inspect systemd unit before bootstrap", stop.Command, StringComparison.Ordinal);
         Assert.Contains("not-found) ;; loaded|masked)", stop.Command, StringComparison.Ordinal);
+        Assert.Contains("systemctl disable --runtime --now -- 'private.timer'", stop.Command, StringComparison.Ordinal);
         Assert.Contains("systemctl disable --now -- 'private.timer'", stop.Command, StringComparison.Ordinal);
+        Assert.Contains("--property=UnitFileState", stop.Command, StringComparison.Ordinal);
+        Assert.Contains("--property=ActiveState", stop.Command, StringComparison.Ordinal);
         Assert.DoesNotContain(steps, item => item.Title == "Enable private.timer");
     }
 
@@ -96,6 +113,32 @@ public sealed class ServerRecoveryBootstrapReconciliationTests
 
         Assert.Contains(PowerForge.Web.Cli.WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest),
             error => error.Contains("cannot be enabled and enforceDisabled", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void DuplicateUnit_CannotReactivateAnEnforcedDisabledService()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Systemd = new PowerForge.Web.Cli.PowerForgeServerSystemd
+            {
+                Services =
+                [
+                    new PowerForge.Web.Cli.PowerForgeServerSystemdUnit
+                    {
+                        Name = "private.service", EnforceDisabled = true
+                    },
+                    new PowerForge.Web.Cli.PowerForgeServerSystemdUnit
+                    {
+                        Name = "private.service", Enabled = true,
+                        Activation = PowerForge.Web.Cli.PowerForgeServerSystemdActivation.AfterDeploy
+                    }
+                ]
+            }
+        };
+
+        Assert.Contains(PowerForge.Web.Cli.WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest),
+            error => error.Contains("duplicates systemd unit 'private.service'", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -125,7 +168,10 @@ public sealed class ServerRecoveryBootstrapReconciliationTests
             item => item.Title == "Stop and disable private.timer");
         var script = "set -Eeuo pipefail\n" +
                      "systemctl() { if [ \"$1\" = show ]; then " +
-                     (queryFails ? "return 5; " : $"printf '%s\\n' '{loadState}'; ") +
+                     (queryFails ? "return 5; " :
+                         "case \"$2\" in --property=LoadState) printf '%s\\n' '" + loadState +
+                         "';; --property=UnitFileState) printf '%s\\n' disabled;; " +
+                         "--property=ActiveState) printf '%s\\n' inactive;; esac; ") +
                      "else printf '%s\\n' DISABLED; fi; }\n" + step.Command;
         using var process = new System.Diagnostics.Process();
         process.StartInfo.FileName = "/bin/bash";
@@ -140,7 +186,119 @@ public sealed class ServerRecoveryBootstrapReconciliationTests
 
         Assert.Equal(expectedExitCode, process.ExitCode);
         Assert.Equal(expectedDisable, output.Contains("DISABLED", StringComparison.Ordinal));
+        if (expectedDisable)
+            Assert.Equal(2, output.Split("DISABLED", StringSplitOptions.None).Length - 1);
         if (queryFails)
             Assert.Contains("Cannot inspect systemd unit before bootstrap", error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("enabled-runtime", "inactive")]
+    [InlineData("disabled", "activating")]
+    [InlineData("static", "inactive")]
+    public void DisabledUnit_RejectsResidualEnablementOrActivity(string fileState, string activeState)
+    {
+        if (!OperatingSystem.IsLinux()) return;
+
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            Systemd = new PowerForge.Web.Cli.PowerForgeServerSystemd
+            {
+                Timers = [new PowerForge.Web.Cli.PowerForgeServerSystemdUnit
+                {
+                    Name = "private.timer", EnforceDisabled = true
+                }]
+            }
+        };
+        var step = Assert.Single(PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []),
+            item => item.Title == "Stop and disable private.timer");
+        var script = "set -Eeuo pipefail\n" +
+                     "systemctl() { if [ \"$1\" = show ]; then case \"$2\" in " +
+                     "--property=LoadState) printf '%s\\n' loaded;; " +
+                     "--property=UnitFileState) printf '%s\\n' '" + fileState + "';; " +
+                     "--property=ActiveState) printf '%s\\n' '" + activeState + "';; esac; " +
+                     "else :; fi; }\n" + step.Command;
+        Assert.Equal(3, RunProcess("/bin/bash", Path.GetTempPath(), "-c", script));
+    }
+
+    [Fact]
+    public void ExistingRepository_FetchesDeclaredBranchAndPreservesIgnoredSecretOnIncomingCollision()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-reconcile-" + Guid.NewGuid().ToString("N"));
+        var origin = Path.Combine(root, "origin.git");
+        var checkout = Path.Combine(root, "checkout");
+        var writer = Path.Combine(root, "writer");
+        Directory.CreateDirectory(root);
+        try
+        {
+            Assert.Equal(0, RunProcess("git", root, "init", "--bare", "--initial-branch=main", origin));
+            Assert.Equal(0, RunProcess("git", root, "clone", origin, checkout));
+            Assert.Equal(0, RunProcess("git", checkout, "config", "user.name", "Bootstrap Test"));
+            Assert.Equal(0, RunProcess("git", checkout, "config", "user.email", "bootstrap@example.test"));
+            File.WriteAllText(Path.Combine(checkout, ".gitignore"), "secret.env\n");
+            File.WriteAllText(Path.Combine(checkout, "public.txt"), "initial\n");
+            Directory.CreateDirectory(Path.Combine(checkout, "config"));
+            File.WriteAllText(Path.Combine(checkout, "config", "appsettings.json"), "{}\n");
+            Assert.Equal(0, RunProcess("git", checkout, "add", ".gitignore", "public.txt", "config/appsettings.json"));
+            Assert.Equal(0, RunProcess("git", checkout, "commit", "-m", "initial"));
+            Assert.Equal(0, RunProcess("git", checkout, "push", "-u", "origin", "main"));
+            Assert.Equal(0, RunProcess("git", root, "clone", origin, writer));
+            Assert.Equal(0, RunProcess("git", writer, "config", "user.name", "Bootstrap Test"));
+            Assert.Equal(0, RunProcess("git", writer, "config", "user.email", "bootstrap@example.test"));
+
+            File.WriteAllText(Path.Combine(writer, "public.txt"), "updated\n");
+            Assert.Equal(0, RunProcess("git", writer, "commit", "-am", "public update"));
+            Assert.Equal(0, RunProcess("git", writer, "push", "origin", "main"));
+            Assert.Equal(0, RunProcess("git", checkout, "config", "remote.origin.skipDefaultUpdate", "true"));
+            var nestedSecretPath = Path.Combine(checkout, "config", "secret.env");
+            File.WriteAllText(nestedSecretPath, "nested-local-secret\n");
+
+            var repository = new PowerForge.Web.Cli.PowerForgeServerRepository
+            {
+                Role = "application", Url = origin, Path = checkout, Branch = "main"
+            };
+            var step = Assert.Single(PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(
+                new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest { Repositories = [repository] }, []),
+                item => item.Title == "Clone or update application repository");
+            var script = "set -Eeuo pipefail\npowerforge_assert_root_controlled_path() { :; }\n" + step.Command;
+            Assert.Equal(0, RunProcess("/bin/bash", root, "-c", script));
+            Assert.Equal("updated\n", File.ReadAllText(Path.Combine(checkout, "public.txt")));
+            Assert.Equal("nested-local-secret\n", File.ReadAllText(nestedSecretPath));
+
+            var secretPath = Path.Combine(checkout, "secret.env");
+            File.WriteAllText(secretPath, "local-secret-must-survive\n");
+            File.WriteAllText(Path.Combine(writer, "secret.env"), "remote-content\n");
+            Assert.Equal(0, RunProcess("git", writer, "add", "-f", "secret.env"));
+            Assert.Equal(0, RunProcess("git", writer, "commit", "-m", "new tracked path"));
+            Assert.Equal(0, RunProcess("git", writer, "push", "origin", "main"));
+
+            Assert.Equal(3, RunProcess("/bin/bash", root, "-c", script));
+            Assert.Equal("local-secret-must-survive\n", File.ReadAllText(secretPath));
+            Assert.Equal("updated\n", File.ReadAllText(Path.Combine(checkout, "public.txt")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static int RunProcess(string fileName, string workingDirectory, params string[] arguments)
+    {
+        using var process = new Process();
+        process.StartInfo.FileName = fileName;
+        process.StartInfo.WorkingDirectory = workingDirectory;
+        foreach (var argument in arguments)
+            process.StartInfo.ArgumentList.Add(argument);
+        process.StartInfo.RedirectStandardError = true;
+        process.StartInfo.RedirectStandardOutput = true;
+        process.Start();
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0 || fileName == "/bin/bash",
+            $"{fileName} {string.Join(' ', arguments.Take(3))} failed: {stdout} {stderr}");
+        return process.ExitCode;
     }
 }

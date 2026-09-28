@@ -293,9 +293,12 @@ file under root-owned, non-writable, non-symlink paths. Bootstrap checks those
 paths before Git reads them. On rerun, a repository declared with `branch`
 must be clean, on that branch, and not ahead of or divergent from its remote;
 bootstrap fast-forwards it before installing managed files. A repository
-declared with `ref` is checked out at that revision instead. Set
-`enforceDisabled: true` on an intentionally inactive systemd unit when recovery
-must stop and disable an existing installation before other work begins.
+declared with `ref` is checked out at that revision instead. Updates reject
+incoming tracked paths that collide with existing ignored files, including
+secrets. Set `enforceDisabled: true` on an intentionally inactive systemd unit
+when recovery must stop and disable an existing installation before other work
+begins. Disabled timers are handled before services; both persistent and
+runtime enablement are cleared and the stopped state is checked.
 
 ```bash
 powerforge-web server verify --manifest ./server-recovery.json --local --fail-on-failure --output json

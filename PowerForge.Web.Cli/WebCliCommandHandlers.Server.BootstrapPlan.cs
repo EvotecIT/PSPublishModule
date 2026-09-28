@@ -110,12 +110,7 @@ internal static partial class WebCliCommandHandlers
                 BuildBootstrapOperationLockAcquireCommand(operationLocks), plannedCommands: plannedCommands);
         }
 
-        foreach (var unit in systemdUnits.Where(static unit => unit.EnforceDisabled && !string.IsNullOrWhiteSpace(unit.Name)))
-        {
-            AddStep(steps, ref order, "systemd", $"Stop and disable {unit.Name}",
-                BuildStopAndDisableUnitCommand(unit.Name!),
-                plannedCommands: plannedCommands);
-        }
+        AddEarlyDisabledSystemdSteps(steps, ref order, manifest.Systemd, plannedCommands);
 
         if (manifest.Packages?.Apt?.Length > 0)
         {

@@ -4,6 +4,22 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebCliCommandHandlers
 {
+    private static void AddEarlyDisabledSystemdSteps(
+        ICollection<PowerForgeServerBootstrapPlanStep> steps,
+        ref int order,
+        PowerForgeServerSystemd? systemd,
+        ISet<string> plannedCommands)
+    {
+        // Timers must stop before their services, otherwise a timer may restart a stopped service.
+        var units = (systemd?.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
+            .Concat(systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>());
+        foreach (var unit in units.Where(static unit => unit.EnforceDisabled && !string.IsNullOrWhiteSpace(unit.Name)))
+        {
+            AddStep(steps, ref order, "systemd", $"Stop and disable {unit.Name}",
+                BuildStopAndDisableUnitCommand(unit.Name!), plannedCommands: plannedCommands);
+        }
+    }
+
     private static string BuildStopAndDisableUnitCommand(string unitName)
     {
         var name = ShellQuote(unitName);
@@ -12,7 +28,12 @@ internal static partial class WebCliCommandHandlers
         return $"powerforge_unit_load_state=$(systemctl show --property=LoadState --value -- {name}) || " +
                $"{{ echo {queryFailure} >&2; exit 3; }}; " +
                "case \"$powerforge_unit_load_state\" in " +
-               $"not-found) ;; loaded|masked) systemctl disable --now -- {name} ;; " +
+               $"not-found) ;; loaded|masked) " +
+               $"systemctl disable --runtime --now -- {name} && systemctl disable --now -- {name} && " +
+               $"powerforge_unit_file_state=$(systemctl show --property=UnitFileState --value -- {name}) && " +
+               $"powerforge_unit_active_state=$(systemctl show --property=ActiveState --value -- {name}) && " +
+               "case \"$powerforge_unit_file_state\" in disabled|masked|masked-runtime) ;; *) exit 3 ;; esac && " +
+               "case \"$powerforge_unit_active_state\" in inactive|failed) ;; *) exit 3 ;; esac ;; " +
                $"*) echo {unknownState} >&2; exit 3 ;; esac";
     }
 
