@@ -617,7 +617,12 @@
               "column": 37
             }
           ],
-          "relativePath": "functions/Trace.ps1"
+          "relativePath": "functions/Trace.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-trace-window-visual.json",
+            "scope": "Both Windows hosts match real owned WPF Init, one message and Quit with fixed offline clock/CIM providers and caller-owned runspace cleanup. The authored post-Quit PropertyNotFound is preserved; Save, real CIM and other paths remain unqualified. No complete Trace method credit."
+          }
         },
         {
           "unitId": "8b0f1352c5b4b677ba198384",
@@ -702,6 +707,7 @@
     "m29a-wpf-dialogs-visual.json",
     "m29a-wpf-grid-visual.json",
     "m29a-wpf-dynamic-form-visual.json",
-    "m29a-wpf-expression-form-visual.json"
+    "m29a-wpf-expression-form-visual.json",
+    "m29a-trace-window-visual.json"
   ]
 }

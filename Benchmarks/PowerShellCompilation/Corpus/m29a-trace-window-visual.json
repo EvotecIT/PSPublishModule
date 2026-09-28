@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "status": "BoundedHostedQualificationWithAuthoredError",
+  "purpose": "Unchanged PSScriptTools Trace-Message Init, one message and Quit with a real owned WPF window and STA runspace, fixed offline clock/CIM providers, and explicit authored post-Quit error on both Windows PowerShell hosts. No CLR Trace method gain.",
+  "compilerBaselineCommit": "09347d243a0855acf6cb213a6dd7002dea31a393",
+  "sourceRevision": "549fa3e3d769532320054fc0b3c8f42df0452361",
+  "sourceSha256": {
+    "functions/Trace.ps1": "90073b0a58a6ca86bc3bbb569f77f3561f98496ade65bc49d47bfb3035bce110"
+  },
+  "fixtureScriptsSha256": {
+    "Prepare.ps1": "8c7a132df93fbdf06f7e71465737e955fbd36e98802a8d34fc58fa47f2c4cae9",
+    "Observe.ps1": "72371456595d9d8e3e5714a96f68c169b5fcb72c2eb8226fa1b48b2e85d64620",
+    "OperateVisual.ps1": "18ce531c4b6f1c5ac1929cbe000bfb0cc72df3aaab68a13b8ca3ce891b27ea1c"
+  },
+  "hosts": [
+    {
+      "targetFramework": "net10.0",
+      "hostVersion": "7.6.6",
+      "wpfAssembly": "PresentationFramework, Version=10.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+      "dependencyLockFileSha256": "3125774c1f0f38230b6a30054b556a1001704b2963602e0fe153c49a11a3cf98",
+      "artifactManifestSha256": "0b4ec1b02cf725e9b07fd9f8e5652780381423bd020c0aca57c18f74a9d651a5",
+      "artifactSha256": "bac5ffae5f46f9aef186790d3d106e4588ea9645b50bb22ec0a292e4ac058e53",
+      "strictExplanationSha256": "3957b8e7900488dc9be670a85cbd67eb9f49ccf6914afbe17020f88d678d8f87",
+      "originalAndGenerated": {
+        "contentSha256": "de689574459dd49cc78477d9d752947397c35864010a5133ee79e163ae6bff0d",
+        "screenshotSha256": "af6e6b5ce72b362fb5539ab3b7e76e6cdb4f48ba2f058a77f1b99bf7a6de2d0d",
+        "contentControlsSha256": "d206ec926c4cc8b25c6bdf8f21229f89399b7cfdd7ac1fb25e620b5d107d8a71",
+        "resultSha256": "597f3f8b903ecf822acbeb2f3fd641a09d3dabd2b01f29662b5326d81eba664f",
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "exitCode": 0
+      }
+    },
+    {
+      "targetFramework": "net472",
+      "hostVersion": "5.1.26100.9444",
+      "wpfAssembly": "PresentationFramework, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+      "dependencyLockFileSha256": "b8ed7e5a1041a3285e57dc4bcf49895b7b635c206d93c5f1abafe7657125d0d8",
+      "artifactManifestSha256": "cdf036c5ffe50484f2ec698dfc3a02f8f2437620e9cb068c509237505bfbb0e6",
+      "artifactSha256": "aa5695d745eacf3f9557bcc11d73f621e309a15e9846e3cf84bacdaa5a94af45",
+      "strictExplanationSha256": "0cae654544cb8170f3767a47463139c02a7be2869f271241424cf68bb3b53d37",
+      "originalAndGenerated": {
+        "contentSha256": "5fa8f7fc2ff7bee91693fb907a3c822cdd507a9afc7b74566e7aca2b35331131",
+        "screenshotSha256": "0382c6185d24001b7ae4abc6a27330b2fca66c2a5ef7d9cd8e8132f2ae74ac60",
+        "contentControlsSha256": "d050f7adbde0755585b411601d98273ca50bb7729fb87bbc50f811e703e68cfd",
+        "resultSha256": "1d7a8551d53ce86fcdfd91a456d03744cc768796248619728c94074075914e0d",
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "exitCode": 0
+      }
+    }
+  ],
+  "observedContract": [
+    "Original and generated owned STA children on each host displayed the same fixed metadata and compiler-note in a real WPF textbox. Window PNG, content controls, text hash and result JSON match byte-for-byte within each host; representative screenshots on both hosts were visually inspected.",
+    "The authored new runspace and PowerShell invocation were captured, ended and disposed by the caller after Quit. Each child exits zero with empty stdout/stderr. The background PowerShell error stream contains exactly one PropertyNotFound record at the unchanged `$traceSynchHash.Error = $Error` line after the Quit callback removes that variable.",
+    "Both reviewed-lock Hybrid artifacts retain Trace-Message as hosted source. The three emitted methods belong to fixture providers and do not affect the five-packet portfolio. Strict cannot proceed and rejects six fixture units on each target."
+  ],
+  "limits": [
+    "The captured source error is an authored Quit-path defect, not a compiler failure or a clean-run claim. No source repair is silently applied to the pinned corpus.",
+    "Fixed in-memory CIM/clock providers avoid machine-query variability. The real CIM query, natural clock, Save dialog/file export, repeated messages, window failure/timeout, default hardware rendering, other desktops/versions and runtime-free WPF translation remain unqualified.",
+    "Raw screenshots and text include local account/computer labels and are not tracked; only their hashes are recorded."
+  ],
+  "portfolio": {
+    "emitted": 544,
+    "retained": 21,
+    "sourceFunctions": 565,
+    "justifiedHosted": 21,
+    "unresolved": 0,
+    "censusRepeated": false,
+    "reason": "Compiler and pinned portfolio inputs are unchanged; one retained function gains bounded both-host visible Init/message/Quit proof with its authored error explicit."
+  }
+}
