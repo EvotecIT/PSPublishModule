@@ -292,8 +292,9 @@ For a private repository, pre-provision the SSH identity and pinned host-key
 file under root-owned, non-writable, non-symlink paths. Bootstrap checks those
 paths before Git reads them. On rerun, a repository declared with `branch`
 must be clean, on that branch, and not ahead of or divergent from its remote;
-bootstrap fast-forwards it before installing managed files. A repository
-declared with `ref` is checked out at that revision instead. Updates reject
+bootstrap fast-forwards it before installing managed files. It compares the
+declared URL with Git's stored origin URL, before `insteadOf` transport rewrites.
+A repository declared with `ref` is checked out at that revision instead. Updates reject
 incoming tracked paths that collide with existing ignored files, including
 secrets. Set `enforceDisabled: true` on an intentionally inactive systemd unit
 when recovery must stop and disable an existing installation before other work
@@ -301,8 +302,17 @@ begins. Disabled timers are handled before services; both persistent and
 runtime enablement are cleared. Each declared package command repeats the
 stop/disable check after it runs, including when the package command fails;
 bootstrap repeats the check before repository changes and before verification.
+An absent unit with an enablement symlink in systemd's unit search paths fails
+closed; remove the stale link before retrying rather than silently accepting a
+future auto-start.
 After verification commands and URLs, bootstrap reasserts the disabled state
 before reporting success; a failed check also triggers that final attempt.
+The generated bootstrap script attempts the same reconciliation when any step
+exits early, while retaining the original failure status. If reconciliation
+itself fails, inspect the host and stop the unit before retrying.
+When operation locks are declared, bootstrap retains the engine-owned lock
+through that final reconciliation. Combining `enforceDisabled` with
+`deploy.operationLockOwner: command` is unsupported and fails plan validation.
 Standalone `server verify` does not change unit state. This is not an activation
 barrier during a package or verification command. Do not install a
 package that deliberately starts an `enforceDisabled` unit as part of this

@@ -28,7 +28,9 @@ internal static partial class WebCliCommandHandlers
         var cleanCheck = $"powerforge_repository_status=$(git --no-optional-locks -C {path} status --porcelain --untracked-files=normal); " +
                          $"test -z \"$powerforge_repository_status\" || {{ echo {cleanMessage} >&2; exit 3; }}";
         var remoteMessage = ShellQuote($"Repository origin differs from the declared URL: {repository.Path}");
-        var checkRemote = $"test \"$(git -C {path} remote get-url origin)\" = {ShellQuote(repository.Url!)} || {{ echo {remoteMessage} >&2; exit 3; }}";
+        // `remote get-url` expands url.<base>.insteadOf; compare the declared, stored value.
+        // Require exactly one stored origin; --get may select one value while fetch uses another.
+        var checkRemote = $"test \"$(git -C {path} config --get-all remote.origin.url)\" = {ShellQuote(repository.Url!)} || {{ echo {remoteMessage} >&2; exit 3; }}";
         var existing = $"powerforge_assert_root_controlled_path {path}; {cleanCheck}; {checkRemote}; " +
                        $"{gitPrefix}git -C {path} fetch --all --tags --prune";
         if (string.IsNullOrWhiteSpace(repository.Ref) && !string.IsNullOrWhiteSpace(repository.Branch))

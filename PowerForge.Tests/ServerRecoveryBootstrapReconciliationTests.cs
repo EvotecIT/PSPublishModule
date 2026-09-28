@@ -25,7 +25,7 @@ public sealed class ServerRecoveryBootstrapReconciliationTests
             item => item.Title == "Clone or update application repository");
         var command = Assert.IsType<string>(step.Command);
 
-        Assert.Contains("remote get-url origin", command, StringComparison.Ordinal);
+        Assert.Contains("config --get-all remote.origin.url", command, StringComparison.Ordinal);
         Assert.Contains("symbolic-ref --quiet --short HEAD", command, StringComparison.Ordinal);
         Assert.Contains("merge-base --is-ancestor HEAD 'refs/remotes/origin/main'", command, StringComparison.Ordinal);
         Assert.Contains("merge --ff-only 'refs/remotes/origin/main'", command, StringComparison.Ordinal);
@@ -33,6 +33,47 @@ public sealed class ServerRecoveryBootstrapReconciliationTests
         Assert.Contains("ls-files -z --others --ignored --exclude-standard", command, StringComparison.Ordinal);
         Assert.True(command.IndexOf("status --porcelain", StringComparison.Ordinal) <
                     command.IndexOf("fetch --no-tags origin", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ExistingRepository_AcceptsTheDeclaredUrlBeforeGitInsteadOfExpansion()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-rewrite-" + Guid.NewGuid().ToString("N"));
+        var origin = Path.Combine(root, "origin.git");
+        var checkout = Path.Combine(root, "checkout");
+        Directory.CreateDirectory(root);
+        try
+        {
+            Assert.Equal(0, RunProcess("git", root, "init", "--bare", "--initial-branch=main", origin));
+            Assert.Equal(0, RunProcess("git", root, "clone", origin, checkout));
+            Assert.Equal(0, RunProcess("git", checkout, "config", "user.name", "Bootstrap Test"));
+            Assert.Equal(0, RunProcess("git", checkout, "config", "user.email", "bootstrap@example.test"));
+            File.WriteAllText(Path.Combine(checkout, "file.txt"), "initial\n");
+            Assert.Equal(0, RunProcess("git", checkout, "add", "file.txt"));
+            Assert.Equal(0, RunProcess("git", checkout, "commit", "-m", "initial"));
+            Assert.Equal(0, RunProcess("git", checkout, "push", "-u", "origin", "main"));
+            Assert.Equal(0, RunProcess("git", checkout, "remote", "set-url", "origin", "bootstrap-alias:origin.git"));
+            Assert.Equal(0, RunProcess("git", checkout, "config", "url." + root + "/.insteadOf", "bootstrap-alias:"));
+
+            var repository = new PowerForge.Web.Cli.PowerForgeServerRepository
+            {
+                Role = "application", Url = "bootstrap-alias:origin.git", Path = checkout, Branch = "main"
+            };
+            var step = Assert.Single(PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(
+                new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest { Repositories = [repository] }, []),
+                item => item.Title == "Clone or update application repository");
+            var script = "set -Eeuo pipefail\npowerforge_assert_root_controlled_path() { :; }\n" + step.Command;
+
+            Assert.Equal(0, RunProcess("/bin/bash", root, "-c", script));
+            Assert.Equal(0, RunProcess("git", checkout, "remote", "set-url", "--add", "origin", "another-alias:origin.git"));
+            Assert.Equal(3, RunProcess("/bin/bash", root, "-c", script));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]
@@ -82,7 +123,7 @@ public sealed class ServerRecoveryBootstrapReconciliationTests
         Assert.True(stop.Order < clone.Order);
         Assert.Contains("systemctl show --property=LoadState --value -- 'private.timer'", stop.Command, StringComparison.Ordinal);
         Assert.Contains("Cannot inspect systemd unit before bootstrap", stop.Command, StringComparison.Ordinal);
-        Assert.Contains("not-found) ;; loaded|masked)", stop.Command, StringComparison.Ordinal);
+        Assert.Contains("not-found) powerforge_unit_roots=$(systemd-analyze unit-paths)", stop.Command, StringComparison.Ordinal);
         Assert.Contains("systemctl disable --runtime --now -- 'private.timer'", stop.Command, StringComparison.Ordinal);
         Assert.Contains("systemctl disable --now -- 'private.timer'", stop.Command, StringComparison.Ordinal);
         Assert.Contains("--property=UnitFileState", stop.Command, StringComparison.Ordinal);
@@ -152,7 +193,7 @@ public sealed class ServerRecoveryBootstrapReconciliationTests
         Assert.Equal(firstTimer.Command, secondTimer.Command);
         Assert.Equal(firstService.Command, secondService.Command);
         Assert.Equal(firstTimer.Command, finalTimer.Command);
-        Assert.Contains("not-found) ;; loaded|masked)", firstTimer.Command, StringComparison.Ordinal);
+        Assert.Contains("not-found) powerforge_unit_roots=$(systemd-analyze unit-paths)", firstTimer.Command, StringComparison.Ordinal);
         var apt = Assert.Single(steps, item => item.Title == "Install apt prerequisites");
         Assert.Contains("bash -Eeuo pipefail -c", apt.Command, StringComparison.Ordinal);
         Assert.Contains("powerforge_package_status=$?", apt.Command, StringComparison.Ordinal);
@@ -240,6 +281,121 @@ public sealed class ServerRecoveryBootstrapReconciliationTests
         {
             if (File.Exists(logPath)) File.Delete(logPath);
         }
+    }
+
+    [Fact]
+    public void FailedBootstrapStep_ReconcilesDisabledUnitAndPreservesOriginalExitCode()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+
+        var statePath = Path.Combine(Path.GetTempPath(), "powerforge-bootstrap-exit-" + Guid.NewGuid().ToString("N"));
+        File.WriteAllText(statePath, "inactive");
+        try
+        {
+            var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+            {
+                Systemd = new PowerForge.Web.Cli.PowerForgeServerSystemd
+                {
+                    Services = [new PowerForge.Web.Cli.PowerForgeServerSystemdUnit
+                    {
+                        Name = "private.service", EnforceDisabled = true
+                    }]
+                }
+            };
+            var mockSystemctl = "export POWERFORGE_TEST_STATE='" + statePath + "'\n" +
+                                "systemctl() { if [ \"$1\" = show ]; then case \"$2\" in " +
+                                "--property=LoadState) printf '%s\\n' loaded;; " +
+                                "--property=UnitFileState) printf '%s\\n' disabled;; " +
+                                "--property=ActiveState) cat \"$POWERFORGE_TEST_STATE\";; esac; " +
+                                "else printf inactive > \"$POWERFORGE_TEST_STATE\"; fi; }";
+            // The real systemctl binary is visible to both the outer cleanup shell and
+            // the inner step shell. Define the test double in the outer shell likewise.
+            var script = mockSystemctl + "\n" + PowerForge.Web.Cli.WebCliCommandHandlers.RenderBootstrapPlanScript([
+                new() { Order = 1, Command = ":" },
+                // Operation-lock, sudoers, and Apache steps use their own EXIT traps.
+                new() { Order = 2, Command = "trap ':' EXIT; trap - EXIT" },
+                new() { Order = 3, Command = "printf active > \"$POWERFORGE_TEST_STATE\"; exit 7" }
+            ], manifest);
+
+            Assert.Contains("trap powerforge_reconcile_disabled_on_exit EXIT", script, StringComparison.Ordinal);
+            Assert.Contains("trap - EXIT", PowerForge.Web.Cli.WebCliCommandHandlers.BuildOperationLockInstallCommand(
+                "/var/lock/powerforge-test.lock"), StringComparison.Ordinal);
+            Assert.Equal(7, RunProcess("/bin/bash", Path.GetTempPath(), "-c", script));
+            Assert.Equal("inactive", File.ReadAllText(statePath));
+        }
+        finally
+        {
+            File.Delete(statePath);
+        }
+    }
+
+    [Fact]
+    public void FailedBootstrapStep_HoldsOperationLockUntilDisabledUnitReconciliationCompletes()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-bootstrap-lock-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var lockPath = Path.Combine(root, "operation.lock");
+        var probePath = Path.Combine(root, "probe.txt");
+        File.WriteAllText(lockPath, string.Empty);
+        try
+        {
+            var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+            {
+                OperationLocks = [lockPath],
+                Systemd = new PowerForge.Web.Cli.PowerForgeServerSystemd
+                {
+                    Services = [new PowerForge.Web.Cli.PowerForgeServerSystemdUnit
+                    {
+                        Name = "private.service", EnforceDisabled = true
+                    }]
+                }
+            };
+            var acquire = PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapOperationLockAcquireCommand([lockPath]);
+            var script = "stat() { printf '%s\\n' 'root:root 644'; }\n" +
+                         "export POWERFORGE_TEST_LOCK='" + lockPath + "'\n" +
+                         "export POWERFORGE_TEST_PROBE='" + probePath + "'\n" +
+                         "systemctl() { if [ \"$1\" = show ]; then case \"$2\" in " +
+                         "--property=LoadState) printf '%s\\n' loaded;; " +
+                         "--property=UnitFileState) printf '%s\\n' disabled;; " +
+                         "--property=ActiveState) printf '%s\\n' inactive;; esac; " +
+                         "else if flock -n \"$POWERFORGE_TEST_LOCK\" -c true; then " +
+                         "printf unlocked > \"$POWERFORGE_TEST_PROBE\"; else " +
+                         "printf locked > \"$POWERFORGE_TEST_PROBE\"; fi; fi; }\n" +
+                         PowerForge.Web.Cli.WebCliCommandHandlers.RenderBootstrapPlanScript([
+                             new() { Order = 1, Command = acquire },
+                             new() { Order = 2, Command = "trap ':' EXIT; trap - EXIT; exit 7" }
+                         ], manifest);
+
+            Assert.Equal(7, RunProcess("/bin/bash", root, "-c", script));
+            Assert.Equal("locked", File.ReadAllText(probePath));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DisabledUnitBootstrap_RejectsCommandOwnedDeployLocks()
+    {
+        var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+        {
+            OperationLocks = ["/var/lock/powerforge-example.lock"],
+            Deploy = new PowerForge.Web.Cli.PowerForgeServerDeploy { OperationLockOwner = "command" },
+            Systemd = new PowerForge.Web.Cli.PowerForgeServerSystemd
+            {
+                Services = [new PowerForge.Web.Cli.PowerForgeServerSystemdUnit
+                {
+                    Name = "private.service", EnforceDisabled = true
+                }]
+            }
+        };
+
+        var failure = Assert.Throws<InvalidOperationException>(() =>
+            PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []));
+        Assert.Contains("engine-owned locks", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -342,6 +498,45 @@ public sealed class ServerRecoveryBootstrapReconciliationTests
             Assert.Equal(2, output.Split("DISABLED", StringSplitOptions.None).Length - 1);
         if (queryFails)
             Assert.Contains("Cannot inspect systemd unit before bootstrap", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AbsentUnit_RejectsDanglingEnablementBeforeLaterInstallation()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-dangling-unit-" + Guid.NewGuid().ToString("N"));
+        var wants = Path.Combine(root, "multi-user.target.wants");
+        Directory.CreateDirectory(wants);
+        try
+        {
+            var manifest = new PowerForge.Web.Cli.PowerForgeServerRecoveryManifest
+            {
+                Systemd = new PowerForge.Web.Cli.PowerForgeServerSystemd
+                {
+                    Services = [new PowerForge.Web.Cli.PowerForgeServerSystemdUnit
+                    {
+                        Name = "private.service", EnforceDisabled = true
+                    }]
+                }
+            };
+            var step = Assert.Single(PowerForge.Web.Cli.WebCliCommandHandlers.BuildBootstrapPlanSteps(manifest, []),
+                item => item.Title == "Stop and disable private.service");
+            var script = "set -Eeuo pipefail\n" +
+                         "export POWERFORGE_TEST_UNIT_ROOT='" + root + "'\n" +
+                         "systemd-analyze() { printf '%s\\n' \"$POWERFORGE_TEST_UNIT_ROOT\"; }\n" +
+                         "systemctl() { printf '%s\\n' not-found; }\n" + step.Command;
+            var link = Path.Combine(wants, "private.service");
+            File.CreateSymbolicLink(link, "../private.service");
+
+            Assert.Equal(3, RunProcess("/bin/bash", root, "-c", script));
+            File.Delete(link);
+            Assert.Equal(0, RunProcess("/bin/bash", root, "-c", script));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [Theory]

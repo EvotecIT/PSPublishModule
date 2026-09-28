@@ -62,7 +62,7 @@ internal static partial class WebCliCommandHandlers
             address.Scheme is not ("http" or "https") || address.UserInfo.Length > 0 ||
             url.ExpectedStatus is < 100 or > 599) == true)
             throw new InvalidOperationException("Bootstrap verification requires valid HTTP(S) URLs without credentials and valid expected status codes.");
-        return RenderBootstrapPlanScript(steps);
+        return RenderBootstrapPlanScript(steps, manifest);
     }
 
     // Stdin avoids predictable/replaceable temporary scripts. Bootstrap does not expose shell output.
