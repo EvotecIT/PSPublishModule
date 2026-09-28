@@ -82,6 +82,17 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("& 'Write-Output' 'x'", "win-x64")]
     [InlineData("Write-Output 'x' > output.txt", "win-x64")]
     [InlineData("Write-Host 'x' 6>&1", "win-x64")]
+    [InlineData("1..3 | ForEach-Object -Parallel { $_ }", "win-x64")]
+    [InlineData("1..3 | ForEach-Object -Begin { 'before' } -Process { $_ }", "win-x64")]
+    [InlineData("1..3 | ForEach-Object { return $_ }", "win-x64")]
+    [InlineData("1..3 | ForEach-Object { break }", "win-x64")]
+    [InlineData("1..3 | ForEach-Object { throw 'stopped' }", "win-x64")]
+    [InlineData("1..3 | ForEach-Object { $_ } | Write-Output", "win-x64")]
+    [InlineData("1..3 | ForEach-Object -MemberName ToString", "win-x64")]
+    [InlineData("function ForEach-Object { param($Action) 'shadow' }; 1..3 | ForEach-Object { $_ }", "win-x64")]
+    [InlineData("function script:ForEach-Object { param($Action) 'shadow' }; 1..3 | ForEach-Object { $_ }", "win-x64")]
+    [InlineData("if ($true) { function ForEach-Object { param($Action) 'shadow' } }; 1..3 | ForEach-Object { $_ }", "win-x64")]
+    [InlineData("if ($true) { function script:ForEach-Object { param($Action) 'shadow' } }; 1..3 | ForEach-Object { $_ }", "win-x64")]
     [InlineData("param([int]$Count = 3) $Count + 1", "linux-x64")]
     public void Explain_HybridNativeScriptRootRetainsUnqualifiedOwners(string source, string runtimeIdentifier)
     {
@@ -94,7 +105,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var plan = new PowerShellCompilationAnalyzer().Analyze(input, PowerShellCompilationMode.Hybrid,
             "net10.0", PowerShellCompilationResourceMode.Declared, null, null, fixture.OutputPath, target);
         var root = Assert.Single(Assert.Single(PowerShellCompilationExplainShaper
-            .CreateFinalExplanation(input, plan, "net10.0").Files).Units);
+            .CreateFinalExplanation(input, plan, "net10.0").Files).Units,
+            static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
         Assert.False(root.Emitted);
         Assert.True(root.RetainedHostedSource);
     }
@@ -441,6 +453,54 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             (new[] { "-EmitValue" }, new[] { "step:0", "step:1", "stop:2", "value:2", "finally" })
         };
         foreach (var (arguments, expectedOutput) in cases)
+        {
+            var original = RunProcess("pwsh", new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }
+                .Concat(arguments).ToArray());
+            var generated = RunProcess(result.ArtifactPath!, arguments);
+            Assert.Equal((original.ExitCode, original.StandardOutput, original.StandardError),
+                (generated.ExitCode, generated.StandardOutput, generated.StandardError));
+            Assert.Equal(0, generated.ExitCode);
+            Assert.Equal(expectedOutput, generated.StandardOutput.Split('\n', System.StringSplitOptions.RemoveEmptyEntries)
+                .Select(static line => line.TrimEnd('\r')).ToArray());
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Build_HybridNativeScriptRootPreservesTerminalForEachObjectPipelineState()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            param([int]$End = 3)
+            $sum = 0
+            if ($End -gt 0) {
+                1..$End | ForEach-Object { $sum += $_; $_ * 2 }
+            }
+            Write-Output "sum:$sum"
+            """);
+        var spec = new PowerShellCompilationBuildSpec(fixture.ScriptPath, fixture.OutputPath,
+            "PowerForge.ForEachRoot", PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid)
+        {
+            EmitSource = true,
+            TargetContract = PowerShellCompilationTargetContractService.Create(
+                PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid,
+                "net10.0", "win-x64", false, false, PowerShellCompilationExecutableOptimization.None, true)
+        };
+        spec.ExpectedDependencyLock = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(spec);
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+        Assert.True(result.Succeeded, result.Error + System.Environment.NewLine + result.BuildOutput);
+        var root = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries);
+        Assert.True(root.Emitted);
+        Assert.True(root.RuntimeRouted);
+        var generatedSource = System.IO.File.ReadAllText(System.IO.Path.Combine(
+            result.GeneratedSourcePath!, "CompiledPowerShellEntry.cs"));
+        Assert.Contains("AssignTarget", generatedSource);
+        Assert.Contains("InvokeCommandRegion", generatedSource);
+        foreach (var (arguments, expectedOutput) in new (string[] Arguments, string[] ExpectedOutput)[]
+                 {
+                     (new[] { "-End", "0" }, new[] { "sum:0" }),
+                     (new[] { "-End", "1" }, new[] { "2", "sum:1" }),
+                     (System.Array.Empty<string>(), new[] { "2", "4", "6", "sum:6" })
+                 })
         {
             var original = RunProcess("pwsh", new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }
                 .Concat(arguments).ToArray());

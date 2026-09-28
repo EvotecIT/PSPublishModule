@@ -30,6 +30,12 @@ internal static class PowerShellHybridNativeEntryPlanner
         var ast = Parser.ParseFile(path, out _, out var errors);
         var declarations = ast.EndBlock?.Statements.OfType<FunctionDefinitionAst>().ToArray()
             ?? Array.Empty<FunctionDefinitionAst>();
+        // A function declared in a conditional can shadow a later pipeline command in the
+        // same script frame. Keep command admission based on top-level declarations only.
+        var shadowsForEachObject = ast.FindAll(static node => node is FunctionDefinitionAst, true)
+            .OfType<FunctionDefinitionAst>().Any(static declaration =>
+                declaration.Name.Equals("ForEach-Object", StringComparison.OrdinalIgnoreCase) ||
+                declaration.Name.EndsWith(":ForEach-Object", StringComparison.OrdinalIgnoreCase));
         var admittedCommands = new HashSet<string>(QualifiedHostedRootCommands, StringComparer.OrdinalIgnoreCase);
         admittedCommands.UnionWith(declarations.Select(static declaration => declaration.Name));
         // Caller-frame observations need their own launcher contract. This first route
@@ -47,8 +53,8 @@ internal static class PowerShellHybridNativeEntryPlanner
         var hostedCommands = ast.EndBlock?.FindAll(static node => node is CommandAst, true)
             .OfType<CommandAst>().ToArray() ?? Array.Empty<CommandAst>();
         if (hostedCommands.Any(command => command.InvocationOperator != TokenKind.Unknown ||
-                command.Redirections.Count != 0 || command.GetCommandName() is not string name ||
-                !admittedCommands.Contains(name)))
+                command.Redirections.Count != 0 ||
+                !IsQualifiedHostedRootCommand(command, admittedCommands, shadowsForEachObject)))
             return null;
         try
         {
@@ -64,5 +70,28 @@ internal static class PowerShellHybridNativeEntryPlanner
                 ? compiled : null;
         }
         catch (InvalidOperationException) { return null; }
+    }
+
+    private static bool IsQualifiedHostedRootCommand(CommandAst command, ISet<string> admittedCommands,
+        bool shadowsForEachObject)
+    {
+        if (command.GetCommandName() is not string name) return false;
+        if (!name.Equals("ForEach-Object", StringComparison.OrdinalIgnoreCase))
+            return admittedCommands.Contains(name);
+        // The whole pipeline remains PowerShell-owned. Admit only a terminal ordinary process
+        // script block; other parameter sets and nonlocal transfers need separate entry proof.
+        if (shadowsForEachObject ||
+            command.Parent is not PipelineAst pipeline ||
+            pipeline.PipelineElements.Count < 2 ||
+            !ReferenceEquals(pipeline.PipelineElements[pipeline.PipelineElements.Count - 1], command) ||
+            command.CommandElements.Count != 2 ||
+            command.CommandElements[1] is not ScriptBlockExpressionAst process ||
+            process.ScriptBlock is not { DynamicParamBlock: null, BeginBlock: null, ProcessBlock: null,
+                ParamBlock: null, EndBlock: { Unnamed: true } } block ||
+            block.GetType().GetProperty("CleanBlock")?.GetValue(block) is not null)
+            return false;
+        return !block.FindAll(static node => node is ReturnStatementAst or BreakStatementAst or
+            ContinueStatementAst or ExitStatementAst or ThrowStatementAst or TrapStatementAst,
+            searchNestedScriptBlocks: true).Any();
     }
 }
