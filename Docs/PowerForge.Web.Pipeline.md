@@ -1860,7 +1860,7 @@ For a site that generates its sitemap at runtime, save a copy of that sitemap be
 }
 ```
 
-The first successful run submits every sitemap URL. Later runs submit new URLs and URLs whose `<lastmod>` value changed; entries without `<lastmod>` are submitted when first seen, not on every run. The checkpoint is replaced only after every selected request succeeds. A failed request, dry run, malformed or empty sitemap, or URL count over `maxUrls` leaves the previous checkpoint intact. Removed sitemap entries are not submitted as deletion notices. Use a durable, single-writer state path and publish the matching key file at `keyLocation`. This option requires an HTTPS `baseUrl` and a URL sitemap for that same host; it does not fetch the sitemap or key file for you.
+The first successful run submits every sitemap URL. Later runs submit new URLs and URLs whose `<lastmod>` value changed; entries without `<lastmod>` are submitted when first seen, not on every run. The checkpoint is replaced only after every selected request succeeds. A failed request, dry run, malformed or empty sitemap, or URL count over `maxUrls` leaves the previous checkpoint intact. With `continueOnError`, the step and its reports retain their existing behavior, but the checkpoint stays put for a later retry. A no-change run updates configured reports with zero submitted URLs. Removed sitemap entries are not submitted as deletion notices. Use a durable, single-writer state path and publish the matching key file at `keyLocation`. This option requires an HTTPS `baseUrl` and a URL sitemap for that same host; it does not fetch the sitemap or key file for you.
 
 Notes:
 - URL sources can be combined:

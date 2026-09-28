@@ -50,6 +50,7 @@ public sealed class WebPipelineRunnerIndexNowSitemapStateTests
                     "sitemap": "./sitemap.xml",
                     "sitemapStatePath": "./indexnow-state.json",
                     "endpoint": "http://127.0.0.1:{{port}}/indexnow/",
+                    "reportPath": "./report.json", "summaryPath": "./summary.md",
                     "key": "examplekey",
                     "retryCount": 0
                 }] }
@@ -63,6 +64,9 @@ public sealed class WebPipelineRunnerIndexNowSitemapStateTests
             var warm = WebPipelineRunner.RunPipeline(pipeline, logger: null);
             Assert.True(warm.Success, warm.Steps[0].Message);
             Assert.Single(requested);
+            using (var report = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "report.json"))))
+                Assert.Equal(0, report.RootElement.GetProperty("urlCount").GetInt32());
+            Assert.Contains("URLs: 0", File.ReadAllText(Path.Combine(root, "summary.md")));
 
             File.WriteAllText(sitemap, Sitemap(("/one", "2026-09-02"), ("/two", "2026-09-01")));
             var changed = WebPipelineRunner.RunPipeline(pipeline, logger: null);
@@ -143,9 +147,66 @@ public sealed class WebPipelineRunnerIndexNowSitemapStateTests
 
             File.WriteAllText(sitemap, Sitemap(("/Case", "2026-09-01"), ("/case", "2026-09-01")));
             Assert.Throws<InvalidOperationException>(() => IndexNowSitemapCheckpoint.Load(sitemap, state, "https://example.com/"));
+
+            File.WriteAllText(sitemap, Sitemap(("/case", "2026-09-01")));
+            File.WriteAllText(pipeline, """
+                { "steps": [{
+                    "task": "indexnow", "baseUrl": "https://example.com/",
+                    "urls": "https://example.com/Case",
+                    "sitemap": "./sitemap.xml", "sitemapStatePath": "./state.json",
+                    "key": "examplekey", "dryRun": true
+                }] }
+                """);
+            Assert.False(WebPipelineRunner.RunPipeline(pipeline, logger: null).Success);
+            Assert.False(File.Exists(state));
         }
         finally
         {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RunPipeline_ContinueOnError_ReportsFailureWithoutAdvancingCheckpoint()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-indexnow-continue-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        using var listener = new HttpListener();
+        try
+        {
+            var port = FreePort();
+            listener.Prefixes.Add($"http://127.0.0.1:{port}/indexnow/");
+            listener.Start();
+            var response = Task.Run(async () =>
+            {
+                var context = await listener.GetContextAsync();
+                context.Response.StatusCode = 500;
+                context.Response.Close();
+            });
+
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"), Sitemap(("/one", "2026-09-01")));
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, $$"""
+                { "steps": [{
+                    "task": "indexnow", "baseUrl": "https://example.com/",
+                    "sitemap": "./sitemap.xml", "sitemapStatePath": "./state.json",
+                    "endpoint": "http://127.0.0.1:{{port}}/indexnow/", "key": "examplekey",
+                    "retryCount": 0, "continueOnError": true,
+                    "reportPath": "./report.json", "summaryPath": "./summary.md"
+                }] }
+                """);
+            var result = WebPipelineRunner.RunPipeline(pipeline, logger: null);
+            await response.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(result.Success, result.Steps[0].Message);
+            Assert.Contains("checkpoint retained", result.Steps[0].Message);
+            Assert.False(File.Exists(Path.Combine(root, "state.json")));
+            using var report = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "report.json")));
+            Assert.Equal(1, report.RootElement.GetProperty("failedRequestCount").GetInt32());
+            Assert.Contains("Failed requests: 1", File.ReadAllText(Path.Combine(root, "summary.md")));
+        }
+        finally
+        {
+            listener.Stop();
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         }
     }

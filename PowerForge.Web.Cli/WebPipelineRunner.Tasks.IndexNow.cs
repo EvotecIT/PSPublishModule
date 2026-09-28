@@ -102,6 +102,12 @@ internal static partial class WebPipelineRunner
             .Select(static value => value.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+        if (sitemapCheckpoint is not null && urls
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => value.Trim())
+            .GroupBy(static value => value, StringComparer.OrdinalIgnoreCase)
+            .Any(static group => group.Distinct(StringComparer.Ordinal).Skip(1).Any()))
+            throw new InvalidOperationException("indexnow: stateful URL sources contain case-distinct aliases that submission would collapse.");
 
         var maxUrls = GetInt(step, "maxUrls") ?? GetInt(step, "max-urls") ?? 10_000;
         var truncateToMaxUrls = GetBool(step, "truncateToMaxUrls") ?? GetBool(step, "truncate-to-max-urls") ?? true;
@@ -121,6 +127,11 @@ internal static partial class WebPipelineRunner
                 throw new InvalidOperationException(noUrlsMessage);
             if (sitemapCheckpoint is not null && !(GetBool(step, "dryRun") ?? GetBool(step, "dry-run") ?? false))
                 sitemapCheckpoint.Save();
+            WriteIndexNowReports(step, baseDir, new IndexNowSubmissionResult
+            {
+                Success = true,
+                DryRun = GetBool(step, "dryRun") ?? GetBool(step, "dry-run") ?? false
+            });
             stepResult.Success = true;
             stepResult.Message = noUrlsMessage;
             return;
@@ -198,6 +209,7 @@ internal static partial class WebPipelineRunner
             TimeoutSeconds = GetInt(step, "timeoutSeconds") ?? GetInt(step, "timeout-seconds") ?? 20
         }, logger: null);
 
+        var checkpointRetained = false;
         if (sitemapCheckpoint is not null && !submissionResult.DryRun)
         {
             if (submissionResult.Errors.Length == 0 && submissionResult.FailedRequestCount == 0 &&
@@ -205,9 +217,23 @@ internal static partial class WebPipelineRunner
                 submissionResult.Requests.Sum(static request => request.UrlCount) >= normalizedUrls.Count)
                 sitemapCheckpoint.Save();
             else
-                throw new InvalidOperationException("indexnow: sitemap checkpoint was not advanced because not every URL was submitted successfully.");
+                checkpointRetained = true;
         }
 
+        WriteIndexNowReports(step, baseDir, submissionResult);
+
+        stepResult.Success = submissionResult.Success;
+        stepResult.Message = BuildIndexNowSummary(submissionResult);
+        if (checkpointRetained)
+            stepResult.Message += ", checkpoint retained for retry";
+        if (!string.IsNullOrWhiteSpace(keySource))
+            stepResult.Message += $", key={keySource}";
+        if (!submissionResult.Success)
+            throw new InvalidOperationException(stepResult.Message);
+    }
+
+    private static void WriteIndexNowReports(JsonElement step, string baseDir, IndexNowSubmissionResult submissionResult)
+    {
         var reportPath = GetString(step, "reportPath") ?? GetString(step, "report-path");
         if (!string.IsNullOrWhiteSpace(reportPath))
         {
@@ -232,12 +258,6 @@ internal static partial class WebPipelineRunner
             File.WriteAllText(resolvedSummaryPath, BuildIndexNowMarkdownSummary(submissionResult));
         }
 
-        stepResult.Success = submissionResult.Success;
-        stepResult.Message = BuildIndexNowSummary(submissionResult);
-        if (!string.IsNullOrWhiteSpace(keySource))
-            stepResult.Message += $", key={keySource}";
-        if (!submissionResult.Success)
-            throw new InvalidOperationException(stepResult.Message);
     }
 
     private sealed class IndexNowKeyCandidate
