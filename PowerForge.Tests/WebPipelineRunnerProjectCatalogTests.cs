@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Net;
+using System.Net.Sockets;
 using System.Text.Json;
 using PowerForge.Web.Cli;
 using Xunit;
@@ -11,6 +13,8 @@ public class WebPipelineRunnerProjectCatalogTests
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-release-surface-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "data", "projects"));
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
 
         try
         {
@@ -25,7 +29,7 @@ public class WebPipelineRunnerProjectCatalogTests
                       "githubRepo": "EvotecIT/Shared",
                       "version": "4.0.0",
                       "links": { "source": "https://github.com/EvotecIT/Shared", "releases": "https://github.com/EvotecIT/Shared/releases" },
-                      "surfaces": { "releases": true },
+                      "surfaces": { "Releases": false },
                       "metrics": { "release": { "latestTag": "OtherProduct-v2.0.0", "latestUrl": "https://github.com/EvotecIT/Shared/releases/tag/OtherProduct-v2.0.0" } }
                     }
                   ]
@@ -44,7 +48,9 @@ public class WebPipelineRunnerProjectCatalogTests
                       "curationCsv": "./data/projects/curation.csv",
                       "importManifests": false,
                       "mergeTelemetry": false,
-                      "mergeReleaseTelemetry": false,
+                      "mergeReleaseTelemetry": true,
+                      "githubApiBaseUrl": "__API_BASE__",
+                      "releaseTimeoutSeconds": 1,
                       "generatePages": false,
                       "generateSections": false,
                       "validate": true,
@@ -52,18 +58,24 @@ public class WebPipelineRunnerProjectCatalogTests
                     }
                   ]
                 }
-                """);
+                """.Replace("__API_BASE__", $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}", StringComparison.Ordinal));
 
             var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
             Assert.True(result.Success);
+            Assert.False(listener.Pending());
             using var document = JsonDocument.Parse(File.ReadAllText(catalogPath));
             var project = document.RootElement.GetProperty("projects")[0];
-            Assert.False(project.GetProperty("surfaces").GetProperty("releases").GetBoolean());
+            Assert.All(project.GetProperty("surfaces").EnumerateObject(), surface =>
+            {
+                if (surface.Name.Equals("releases", StringComparison.OrdinalIgnoreCase))
+                    Assert.False(surface.Value.GetBoolean());
+            });
             Assert.False(project.GetProperty("links").TryGetProperty("releases", out _));
             Assert.Equal(JsonValueKind.Null, project.GetProperty("metrics").GetProperty("release").ValueKind);
         }
         finally
         {
+            listener.Stop();
             TryDeleteDirectory(root);
         }
     }

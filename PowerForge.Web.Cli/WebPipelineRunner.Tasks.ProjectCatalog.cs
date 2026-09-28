@@ -2544,8 +2544,7 @@ internal static partial class WebPipelineRunner
         {
             if (string.IsNullOrWhiteSpace(project.GitHubRepo))
                 continue;
-            if (project.Surfaces is not null &&
-                project.Surfaces.TryGetValue("releases", out var releasesEnabled) && !releasesEnabled)
+            if (TryGetProjectSurfaceValue(project.Surfaces, "releases") is false)
                 continue;
 
             var repository = project.GitHubRepo.Trim();
