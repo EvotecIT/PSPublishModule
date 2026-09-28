@@ -423,6 +423,8 @@ The Management-owned enum cast family is qualified for unchanged PSSharedGoods G
   Six of the 22 retained functions have justified hosted proof; 16 remain open.
   Whole API execution and runtime-free dependency types are not implied.
 
+- [x] Execute two formerly emission-only platyPS help methods in a real offline workflow. The exact pinned package's one- and two-document `New-ExternalHelp` inputs generate byte-identical XML from original and compiled Hybrid modules on PowerShell 7/net10 and Windows PowerShell 5.1/net472; `Get-HelpPreview` returns the same two help objects on both hosts. Twelve fresh child runs exit cleanly, Strict rejects the module, and the same-input 40/40 emitted count does not change. The [workflow record](../Benchmarks/PowerShellCompilation/Corpus/m29a-platyps-external-help-workflow.json) pins source, output and artifact hashes. Local builds used unreviewed dependency resolution, so this is execution qualification rather than a deployment or package-closure claim.
+
 
 - [x] Qualify exact SDK CimSession/CimClass data and Cmdlet metadata through the
   existing native host-type policy, including canonical net472 compile-only SDK
