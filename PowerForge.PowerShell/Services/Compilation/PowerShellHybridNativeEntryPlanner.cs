@@ -11,6 +11,10 @@ internal static class PowerShellHybridNativeEntryPlanner
             "Write-Output", "Write-Host", "Write-Warning", "Write-Verbose", "Write-Debug", "Write-Information",
             "Write-Error"
         };
+    private static readonly HashSet<string> QualifiedPipelineUtilityCommands =
+        new(StringComparer.OrdinalIgnoreCase) { "Group-Object", "Sort-Object", "Select-Object" };
+    private static readonly HashSet<string> QualifiedWhereComparisons =
+        new(StringComparer.OrdinalIgnoreCase) { "EQ", "NE", "GT", "GE", "LT", "LE" };
 
     internal static PowerShellTypedExecutableCompilation? TryPlan(string sourcePath,
         IReadOnlyCollection<string> sourcePaths, PowerShellCompilationPlan plan,
@@ -82,6 +86,8 @@ internal static class PowerShellHybridNativeEntryPlanner
         if (command.GetCommandName() is not string name) return false;
         var isForEach = name.Equals("ForEach-Object", StringComparison.OrdinalIgnoreCase);
         var isWhere = name.Equals("Where-Object", StringComparison.OrdinalIgnoreCase);
+        if (QualifiedPipelineUtilityCommands.Contains(name))
+            return IsQualifiedPipelineUtility(command, name, authoredFunctionNames);
         if (!isForEach && !isWhere)
             return admittedCommands.Contains(name);
         // The whole pipeline remains PowerShell-owned. Admit only ordinary direct script blocks;
@@ -89,21 +95,97 @@ internal static class PowerShellHybridNativeEntryPlanner
         if (authoredFunctionNames.Contains(name) ||
             command.Parent is not PipelineAst pipeline ||
             pipeline.PipelineElements.Count < 2 ||
-            command.CommandElements.Count != 2 ||
-            command.CommandElements[1] is not ScriptBlockExpressionAst process ||
-            process.ScriptBlock is not { DynamicParamBlock: null, BeginBlock: null, ProcessBlock: null,
-                ParamBlock: null, EndBlock: { Unnamed: true } } block ||
-            block.GetType().GetProperty("CleanBlock")?.GetValue(block) is not null)
+            PowerShellCommandRegionSemanticBinder.HasPipelineOperators(pipeline))
             return false;
         var terminal = pipeline.PipelineElements[pipeline.PipelineElements.Count - 1];
         if (!ReferenceEquals(terminal, command) &&
             !(isWhere && pipeline.PipelineElements.Count >= 3 &&
               ReferenceEquals(pipeline.PipelineElements[pipeline.PipelineElements.Count - 2], command) &&
               terminal is CommandAst following &&
-              following.GetCommandName()?.Equals("ForEach-Object", StringComparison.OrdinalIgnoreCase) == true))
+              (following.GetCommandName()?.Equals("ForEach-Object", StringComparison.OrdinalIgnoreCase) == true ||
+               following.GetCommandName()?.Equals("Select-Object", StringComparison.OrdinalIgnoreCase) == true)))
             return false;
-        return !block.FindAll(static node => node is ReturnStatementAst or BreakStatementAst or
+        if (isWhere && IsQualifiedWherePropertyComparison(command)) return true;
+        if (command.CommandElements.Count != 2 ||
+            command.CommandElements[1] is not ScriptBlockExpressionAst process ||
+            process.ScriptBlock is not { DynamicParamBlock: null, BeginBlock: null, ProcessBlock: null,
+                ParamBlock: null, EndBlock: { Unnamed: true } } block ||
+            block.GetType().GetProperty("CleanBlock")?.GetValue(block) is not null)
+            return false;
+        return !HasNonlocalTransfer(block);
+    }
+
+    private static bool IsQualifiedWherePropertyComparison(CommandAst command)
+    {
+        var arguments = command.CommandElements.Skip(1).ToArray();
+        var offset = arguments.Length == 4 && arguments[0] is CommandParameterAst propertyParameter &&
+                     propertyParameter.Argument is null &&
+                     propertyParameter.ParameterName.Equals("Property", StringComparison.OrdinalIgnoreCase)
+            ? 1 : 0;
+        return arguments.Length == offset + 3 &&
+               arguments[offset] is StringConstantExpressionAst { Value.Length: > 0 } &&
+               arguments[offset + 1] is CommandParameterAst comparison && comparison.Argument is null &&
+               QualifiedWhereComparisons.Contains(comparison.ParameterName) &&
+               (arguments[offset + 2] is StringConstantExpressionAst or ConstantExpressionAst ||
+                arguments[offset + 2] is VariableExpressionAst value && !value.Splatted &&
+                (value.VariablePath.IsUnqualified || value.VariablePath.IsLocal));
+    }
+
+    private static bool IsQualifiedPipelineUtility(CommandAst command, string name,
+        ISet<string> authoredFunctionNames)
+    {
+        if (authoredFunctionNames.Contains(name) || command.Parent is not PipelineAst pipeline ||
+            pipeline.PipelineElements.Count < 2 ||
+            PowerShellCommandRegionSemanticBinder.HasPipelineOperators(pipeline))
+            return false;
+        if (command.CommandElements.Skip(1).OfType<CommandParameterAst>().Any(parameter =>
+                !IsQualifiedUtilityParameter(name, parameter.ParameterName)) ||
+            command.FindAll(static node => node is CommandAst or AssignmentStatementAst or
+                FunctionDefinitionAst or InvokeMemberExpressionAst or
+                VariableExpressionAst { Splatted: true } or
+                UnaryExpressionAst { TokenKind: TokenKind.PlusPlus or TokenKind.MinusMinus or
+                    TokenKind.PostfixPlusPlus or TokenKind.PostfixMinusMinus }, true).Any(node =>
+                !ReferenceEquals(node, command)))
+            return false;
+        var index = pipeline.PipelineElements.IndexOf(command);
+        if (index < 1 || pipeline.PipelineElements.Skip(index + 1).Any(element =>
+                element is not CommandAst following ||
+                following.GetCommandName() is not { } followingName ||
+                !QualifiedPipelineUtilityCommands.Contains(followingName)))
+            return false;
+        return command.FindAll(static node => node is ScriptBlockExpressionAst, true)
+            .OfType<ScriptBlockExpressionAst>()
+            .All(static expression => IsBoundedUtilityExpression(expression.ScriptBlock));
+    }
+
+    private static bool IsQualifiedUtilityParameter(string commandName, string parameterName)
+        => commandName.ToLowerInvariant() switch
+        {
+            "group-object" => parameterName.Equals("Property", StringComparison.OrdinalIgnoreCase),
+            "sort-object" => parameterName.Equals("Property", StringComparison.OrdinalIgnoreCase) ||
+                             parameterName.Equals("Descending", StringComparison.OrdinalIgnoreCase),
+            "select-object" => parameterName.Equals("Property", StringComparison.OrdinalIgnoreCase) ||
+                               parameterName.Equals("First", StringComparison.OrdinalIgnoreCase),
+            _ => false
+        };
+
+    private static bool IsBoundedUtilityExpression(ScriptBlockAst block)
+        => block is { DynamicParamBlock: null, BeginBlock: null, ProcessBlock: null, ParamBlock: null,
+               EndBlock: { Unnamed: true, Statements.Count: 1 } } &&
+           block.GetType().GetProperty("CleanBlock")?.GetValue(block) is null &&
+           block.EndBlock.Statements[0] is PipelineAst { PipelineElements.Count: 1 } pipeline &&
+           pipeline.PipelineElements[0] is CommandExpressionAst &&
+           !PowerShellCommandRegionSemanticBinder.HasPipelineOperators(pipeline) &&
+           !block.FindAll(static node => node is CommandAst or AssignmentStatementAst or FunctionDefinitionAst,
+               searchNestedScriptBlocks: true).Any() &&
+           block.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true)
+               .OfType<VariableExpressionAst>().All(static variable =>
+                   variable.VariablePath.UserPath.Equals("_", StringComparison.OrdinalIgnoreCase) ||
+                   variable.VariablePath.UserPath.Equals("PSItem", StringComparison.OrdinalIgnoreCase)) &&
+           !HasNonlocalTransfer(block);
+
+    private static bool HasNonlocalTransfer(Ast ast)
+        => ast.FindAll(static node => node is ReturnStatementAst or BreakStatementAst or
             ContinueStatementAst or ExitStatementAst or ThrowStatementAst or TrapStatementAst,
             searchNestedScriptBlocks: true).Any();
-    }
 }
