@@ -467,7 +467,12 @@
               "column": 37
             }
           ],
-          "relativePath": "functions/ConvertTo-WPFGrid.ps1"
+          "relativePath": "functions/ConvertTo-WPFGrid.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-wpf-grid-visual.json",
+            "scope": "PowerShell 7.6.6 Windows STA SoftwareOnly in-memory grid and Close callback have original/generated visual, data and runspace-cleanup proof. PowerShell 5.1 lacks Start-ThreadJob here; refresh, profile, alternate rendering and other paths remain unqualified. No complete grid-method credit."
+          }
         },
         {
           "unitId": "b669a68616829b343dc91676",
@@ -684,6 +689,7 @@
     "m29a-forest-details-boundary.json",
     "m29a-smb-native-boundary.json",
     "m29a-password-native-boundary.json",
-    "m29a-wpf-dialogs-visual.json"
+    "m29a-wpf-dialogs-visual.json",
+    "m29a-wpf-grid-visual.json"
   ]
 }
