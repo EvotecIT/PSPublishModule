@@ -110,6 +110,13 @@ internal static partial class WebCliCommandHandlers
                 BuildBootstrapOperationLockAcquireCommand(operationLocks), plannedCommands: plannedCommands);
         }
 
+        foreach (var unit in systemdUnits.Where(static unit => unit.EnforceDisabled && !string.IsNullOrWhiteSpace(unit.Name)))
+        {
+            AddStep(steps, ref order, "systemd", $"Stop and disable {unit.Name}",
+                BuildStopAndDisableUnitCommand(unit.Name!),
+                plannedCommands: plannedCommands);
+        }
+
         if (manifest.Packages?.Apt?.Length > 0)
         {
             AddStep(steps, ref order, "packages", "Install apt prerequisites",
@@ -187,6 +194,12 @@ internal static partial class WebCliCommandHandlers
                     $"{checks} || {{ echo {message} >&2; exit 3; }}",
                     plannedCommands: plannedCommands);
             }
+            if (!string.IsNullOrWhiteSpace(repository.SshIdentityFile) &&
+                !string.IsNullOrWhiteSpace(repository.SshKnownHostsFile))
+            {
+                AddStep(steps, ref order, "repositories", $"Verify {repository.Role} SSH trust files",
+                    BuildRepositorySshTrustGuard(repository), plannedCommands: plannedCommands);
+            }
             var refCaptureCommandIds = GetRepositoryRefCaptureCommandIds(repository);
             if (refCaptureCommandIds.Length > 0 && string.IsNullOrWhiteSpace(repository.Ref))
             {
@@ -202,18 +215,8 @@ internal static partial class WebCliCommandHandlers
             }
             else
             {
-                var branchArg = string.IsNullOrWhiteSpace(repository.Branch) ? string.Empty : $" --branch {ShellQuote(repository.Branch)}";
-                var gitDirectory = repository.Path.TrimEnd('/') + "/.git";
-                var gitPrefix = BuildRepositoryGitPrefix(repository);
-                var prepareCloneTarget = BuildRepositoryCloneTargetSafetyCommand(repository.Path);
-                var pinRef = string.IsNullOrWhiteSpace(repository.Ref)
-                    ? string.Empty
-                    : $"; git -C {ShellQuote(repository.Path)} checkout --detach {ShellQuote(repository.Ref)}";
-                var cleanCheck =
-                    $"; powerforge_repository_status=$(git --no-optional-locks -C {ShellQuote(repository.Path)} status --porcelain --untracked-files=normal); " +
-                    $"test -z \"$powerforge_repository_status\" || {{ echo {ShellQuote($"Repository must be clean before installing managed files: {repository.Path}")} >&2; exit 3; }}";
                 AddStep(steps, ref order, "repositories", $"Clone or update {repository.Role} repository",
-                    $"if [ -d {ShellQuote(gitDirectory)} ]; then powerforge_assert_root_controlled_path {ShellQuote(repository.Path)}; {gitPrefix}git -C {ShellQuote(repository.Path)} fetch --all --tags --prune; else {prepareCloneTarget}; {gitPrefix}git clone{branchArg} {ShellQuote(repository.Url)} {ShellQuote(repository.Path)}; fi; powerforge_assert_root_controlled_path {ShellQuote(repository.Path)}{pinRef}{cleanCheck}",
+                    BuildRepositoryBootstrapCommand(repository),
                     plannedCommands: plannedCommands);
             }
         }

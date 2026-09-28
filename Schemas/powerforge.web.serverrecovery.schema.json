@@ -396,6 +396,10 @@
           ]
         },
         "enabled": { "type": "boolean" },
+        "enforceDisabled": {
+          "type": "boolean",
+          "description": "When true, stop and disable an existing unit before package or repository work. Omit to preserve legacy disabled-unit behavior."
+        },
         "activation": {
           "type": "string",
           "enum": ["beforeDeploy", "afterDeploy"],
@@ -420,6 +424,10 @@
         {
           "if": { "required": ["expectedState"] },
           "then": { "required": ["activation"] }
+        },
+        {
+          "if": { "properties": { "enforceDisabled": { "const": true } }, "required": ["enforceDisabled"] },
+          "then": { "properties": { "enabled": { "const": false } } }
         }
       ]
     },

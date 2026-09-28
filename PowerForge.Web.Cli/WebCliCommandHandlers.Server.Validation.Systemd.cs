@@ -25,6 +25,9 @@ internal static partial class WebCliCommandHandlers
             if (!IsValidSystemdUnitName(unit.Name, requiredSuffix))
                 errors.Add($"{path}[{index}].name must be a safe {requiredSuffix} unit name.");
 
+            if (unit.EnforceDisabled && unit.Enabled)
+                errors.Add($"Systemd unit '{unit.Name}' cannot be enabled and enforceDisabled at the same time.");
+
             if (unit.Activation is not null)
             {
                 if (unit.Activation is not (PowerForgeServerSystemdActivation.BeforeDeploy or PowerForgeServerSystemdActivation.AfterDeploy))
