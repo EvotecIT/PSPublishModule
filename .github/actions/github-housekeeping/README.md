@@ -92,6 +92,7 @@ jobs:
 - Set `apply: "false"` to preview without deleting anything.
 - Prefer letting the workflow decide apply vs dry-run; omit `DryRun` from checked-in repo config unless you have a non-workflow caller that truly needs a local default.
 - A dry-run can still report large cache or artifact totals with `0 eligible` deletes when current keep/latest and age rules retain everything; the Markdown summary explains that breakdown.
+- Set `Artifacts.ExactIncludeNames` to exact, case-sensitive artifact names when GitHub's repository-wide artifact listing fails or the cleanup should inventory only specific artifact families. PowerForge queries and fully paginates each name before attempting any deletion. This setting cannot be combined with `Artifacts.IncludeNames`; it does not inventory artifacts with other names.
 - Hosted-runner repos should usually keep `Runner.Enabled` set to `false` in config.
 - Runner cleanup keeps the active `GITHUB_WORKSPACE` checkout and known internal `_work` folders, then removes old top-level repository workspaces by `Runner.WorkspacesRetentionDays`.
 - Repository workspace cleanup is opt-in for direct API and CLI callers; enable `Runner.CleanWorkspaces` in checked-in housekeeping configs or pass `--clean-workspaces` to the direct runner cleanup command.
