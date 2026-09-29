@@ -40,6 +40,10 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "ExactIncludeNames": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "ExcludeNames": {
           "type": "array",
           "items": { "type": "string" }

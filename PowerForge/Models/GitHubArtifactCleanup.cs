@@ -29,6 +29,13 @@ public sealed class GitHubArtifactCleanupSpec
     public string[] IncludeNames { get; set; } = Array.Empty<string>();
 
     /// <summary>
+    /// Exact, case-sensitive artifact names to request through GitHub's name filter.
+    /// Use this instead of <see cref="IncludeNames"/> when repository-wide listing is unavailable.
+    /// Only these names are inventoried; wildcards and regular expressions are not supported.
+    /// </summary>
+    public string[] ExactIncludeNames { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// Artifact name patterns to exclude (wildcards and <c>re:</c> regex supported).
     /// </summary>
     public string[] ExcludeNames { get; set; } = Array.Empty<string>();

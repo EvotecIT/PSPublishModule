@@ -64,6 +64,12 @@ public sealed class GitHubHousekeepingArtifactSpec
     public string[] IncludeNames { get; set; } = Array.Empty<string>();
 
     /// <summary>
+    /// Exact, case-sensitive artifact names to query instead of listing every repository artifact.
+    /// Cannot be combined with <see cref="IncludeNames"/>.
+    /// </summary>
+    public string[] ExactIncludeNames { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// Artifact name patterns to exclude.
     /// </summary>
     public string[] ExcludeNames { get; set; } = Array.Empty<string>();
