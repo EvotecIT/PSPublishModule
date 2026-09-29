@@ -20,10 +20,16 @@ internal static partial class WebCliCommandHandlers
         ICollection<string> errors)
     {
         var index = 0;
+        var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var unit in units ?? Array.Empty<PowerForgeServerSystemdUnit>())
         {
             if (!IsValidSystemdUnitName(unit.Name, requiredSuffix))
                 errors.Add($"{path}[{index}].name must be a safe {requiredSuffix} unit name.");
+            else if (!names.Add(unit.Name!))
+                errors.Add($"{path}[{index}].name duplicates systemd unit '{unit.Name}'.");
+
+            if (unit.EnforceDisabled && unit.Enabled)
+                errors.Add($"Systemd unit '{unit.Name}' cannot be enabled and enforceDisabled at the same time.");
 
             if (unit.Activation is not null)
             {

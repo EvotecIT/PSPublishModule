@@ -122,6 +122,7 @@ internal sealed class PowerForgeServerSystemdUnit
     public string? Source { get; set; }
     public string? Target { get; set; }
     public bool Enabled { get; set; }
+    public bool EnforceDisabled { get; set; }
     public string? Activation { get; set; }
     public string? ExpectedState { get; set; }
     public bool Required { get; set; }
