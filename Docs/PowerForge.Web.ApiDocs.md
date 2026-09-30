@@ -15,6 +15,8 @@ Use `packageId` in an `apidocs` pipeline step, or `--package-id` in the CLI, whe
 the NuGet package name differs from the assembly name.
 Long signature anchors have compact deterministic aliases for search and copy-link
 actions. Their original HTML IDs remain valid for existing links.
+When generic and nongeneric types would share a page slug, the nongeneric route
+is retained and the generic route includes its arity. Noncolliding routes stay stable.
 
 Set `Search.ApiRoots` to output-relative API directories in the site configuration.
 The site builder imports both catalogs and links results to existing HTML pages

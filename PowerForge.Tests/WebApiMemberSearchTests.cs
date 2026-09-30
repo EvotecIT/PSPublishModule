@@ -16,6 +16,7 @@ namespace PowerForge.Tests
                 File.WriteAllText(xml, """
                     <doc><assembly><name>PowerForge.Tests</name></assembly><members>
                     <member name="T:PowerForge.Tests.ApiSearchFixture.Document"><summary>Document model.</summary></member>
+                    <member name="T:PowerForge.Tests.ApiSearchFixture.Document`1"><summary>Typed document model.</summary></member>
                     <member name="T:PowerForge.Tests.ApiSearchFixture.Converter"><summary>Conversion extensions.</summary></member>
                     </members></doc>
                     """);
@@ -26,6 +27,10 @@ namespace PowerForge.Tests
                 };
                 options.IncludeNamespacePrefixes.Add("PowerForge.Tests.ApiSearchFixture");
                 WebApiDocsGenerator.Generate(options);
+                using var typeIndex = JsonDocument.Parse(File.ReadAllText(Path.Combine(options.OutputPath, "index.json")));
+                var types = typeIndex.RootElement.GetProperty("types").EnumerateArray().ToArray();
+                Assert.Equal(types.Length, types.Select(type => type.GetProperty("slug").GetString()).Distinct().Count());
+                Assert.Equal("powerforge-tests-apisearchfixture-document", types.Single(type => type.GetProperty("fullName").GetString() == "PowerForge.Tests.ApiSearchFixture.Document").GetProperty("slug").GetString());
                 using var catalog = JsonDocument.Parse(File.ReadAllText(Path.Combine(options.OutputPath, "members.json")));
                 var entries = catalog.RootElement.EnumerateArray().ToArray();
                 var saves = entries.Where(entry => entry.GetProperty("title").GetString() == "Converter.SaveAsPdf").ToArray();
@@ -62,6 +67,10 @@ namespace PowerForge.Tests.ApiSearchFixture
     public sealed class Document
     {
         public string Title { get; set; } = string.Empty;
+    }
+    public sealed class Document<T>
+    {
+        public T? Value { get; set; }
     }
     public static class Converter
     {

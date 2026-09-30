@@ -474,6 +474,7 @@ public static partial class WebApiDocsGenerator
             .Where(t => ShouldIncludeType(t, options))
             .OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        EnsureUniqueTypeSlugs(types);
         RemoveStaleApiTypeArtifacts(outputPath, previousTypeSlugs, types);
         var typeDisplayNames = BuildTypeDisplayNameMap(types, options, warnings);
         var typeAliasMap = BuildTypeAliasMap(types, typeDisplayNames);
