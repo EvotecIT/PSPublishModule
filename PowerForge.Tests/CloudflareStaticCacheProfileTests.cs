@@ -13,7 +13,7 @@ public sealed class CloudflareStaticCacheProfileTests
     private const string ZoneId = "0123456789abcdef0123456789abcdef";
 
     [Fact]
-    public void BuildManagedRules_StaticProfile_ShouldOverrideEverySuccessfulResponseForSevenDays()
+    public void BuildManagedRules_StaticProfile_ShouldCacheSuccessfulResponsesAndBypassNegotiatedMarkdown()
     {
         var rules = CloudflareCachePolicyBuilder.BuildManagedRules(
             "officeimo.com",
@@ -24,11 +24,12 @@ public sealed class CloudflareStaticCacheProfileTests
                 EdgeTtlSeconds = 604800
             });
 
-        Assert.Equal(3, rules.Count);
-        foreach (var rule in rules)
+        Assert.Equal(4, rules.Count);
+        foreach (var rule in rules.Take(3))
         {
             Assert.Contains("http.request.method eq \"GET\" or http.request.method eq \"PURGE\"", rule!["expression"]!.GetValue<string>(), StringComparison.Ordinal);
             var parameters = rule!["action_parameters"]!;
+            Assert.True(parameters["cache"]!.GetValue<bool>());
             Assert.Equal("override_origin", parameters["edge_ttl"]!["mode"]!.GetValue<string>());
             Assert.Equal(604800, parameters["edge_ttl"]!["default"]!.GetValue<int>());
             Assert.Equal("respect_origin", parameters["browser_ttl"]!["mode"]!.GetValue<string>());
@@ -45,6 +46,12 @@ public sealed class CloudflareStaticCacheProfileTests
         Assert.Equal(
             "(http.host eq \"officeimo.com\" and (http.request.method eq \"GET\" or http.request.method eq \"PURGE\"))",
             fallback["expression"]!.GetValue<string>());
+        var markdownBypass = rules[3]!;
+        Assert.True(markdownBypass["enabled"]!.GetValue<bool>());
+        Assert.False(markdownBypass["action_parameters"]!["cache"]!.GetValue<bool>());
+        Assert.Null(markdownBypass["action_parameters"]!["edge_ttl"]);
+        Assert.Contains("any(http.request.headers[\"accept\"][*] wildcard \"*text/markdown*\")", markdownBypass["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.DoesNotContain("http.request.method", markdownBypass["expression"]!.GetValue<string>(), StringComparison.Ordinal);
     }
 
     [Fact]

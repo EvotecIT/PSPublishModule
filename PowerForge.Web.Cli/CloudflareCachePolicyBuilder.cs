@@ -39,9 +39,10 @@ internal static class CloudflareCachePolicyBuilder
         basePath = NormalizeBasePath(basePath);
         const string cacheableMethodFilter = "(http.request.method eq \"GET\" or http.request.method eq \"PURGE\")";
         var hostFilter = $"http.host eq \"{hostname}\" and {cacheableMethodFilter} and ";
-        var allGetExpression = basePath == "/"
-            ? $"(http.host eq \"{hostname}\" and {cacheableMethodFilter})"
-            : $"({hostFilter}({BuildPathClause("eq", basePath.TrimEnd('/'))} or {BuildPathClause("wildcard", basePath + "*")}))";
+        var siteScope = basePath == "/"
+            ? $"http.host eq \"{hostname}\""
+            : $"http.host eq \"{hostname}\" and ({BuildPathClause("eq", basePath.TrimEnd('/'))} or {BuildPathClause("wildcard", basePath + "*")})";
+        var allGetExpression = $"({siteScope} and {cacheableMethodFilter})";
 
         var staticExpression = $"({hostFilter}(" + string.Join(" or ", new[]
         {
@@ -128,7 +129,18 @@ internal static class CloudflareCachePolicyBuilder
                 htmlEdgeTtlSeconds,
                 cache is null ? LegacyHtmlBrowserTtlSeconds : null),
             dataRule,
-            staticRule
+            staticRule,
+            // Cloudflare does not automatically key page caches by Vary: Accept.
+            // Keep this after every cache-enabling rule, including static-profile overrides.
+            // Do not restrict methods: a cold HEAD can fetch a GET and populate the page cache.
+            new JsonObject
+            {
+                ["action"] = "set_cache_settings",
+                ["action_parameters"] = new JsonObject { ["cache"] = false },
+                ["description"] = $"{descriptionPrefix} negotiated Markdown bypass",
+                ["enabled"] = true,
+                ["expression"] = $"({siteScope} and any(http.request.headers[\"accept\"][*] wildcard \"*text/markdown*\"))"
+            }
         };
     }
 

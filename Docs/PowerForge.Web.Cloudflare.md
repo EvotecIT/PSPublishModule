@@ -42,7 +42,7 @@ name to the CLI.
 The command manages two Cloudflare ruleset phases and, when configured, the
 zone's Smart Tiered Cache setting:
 
-- `http_request_cache_settings`: three cache rules
+- `http_request_cache_settings`: three cache rules followed by a negotiated Markdown bypass
 - `http_response_headers_transform`: zero to five response-header rules (site-wide security, homepage discovery links, API Catalog media type/CORS, JSON discovery media type/CORS, and Markdown artifact media type/CORS, as configured)
 
 Rules outside the site's `PowerForge <Name>:` description prefix retain their
@@ -92,6 +92,7 @@ Sites without a `Cloudflare.Cache` block retain the compatibility policy:
 | HTML, docs, and API | 2 hours | 5 minutes | Includes directory routes plus `.html` and `.htm`; does not cache 3xx/4xx/5xx responses. |
 | Data and discovery | Origin-controlled | Origin-controlled | Covers JSON, XML, text, sitemap, and LLM discovery files. |
 | Static assets | Origin-controlled | Origin-controlled | Covers CSS, JavaScript, images, fonts, audio/video media, maps, PDFs, archives, and Blazor binaries. |
+| Negotiated Markdown | Bypass | Origin-controlled | Requests whose `Accept` header includes `text/markdown` bypass the page cache. |
 
 For a generated static site, opt in to a longer edge TTL and incremental purge:
 
@@ -107,7 +108,7 @@ For a generated static site, opt in to a longer edge TTL and incremental purge:
 }
 ```
 
-This applies the configured edge TTL to every successful GET response for the
+This applies the configured edge TTL to successful GET responses for the
 opted-in static site, including HTML, data/discovery, static assets, and
 precompressed Blazor resources. Responses below 200 and at or above 500 are not
 cached;
@@ -115,6 +116,16 @@ cached;
 when the `Cache` block is present. Browser caching remains origin-controlled
 because a Cloudflare purge cannot remove an object already stored in a visitor's
 browser.
+
+Requests that accept `text/markdown` bypass caching after the cache-enabling
+rules run. This also applies to the static cache profile: Cloudflare does not
+automatically separate HTML and Markdown using the origin's `Vary: Accept`
+header. The bypass keeps a negotiated Markdown response from replacing the
+HTML cached at the same URL. Direct Markdown artifact URLs remain separate
+resources; requests without this `Accept` header follow the normal policy. Purge affected page URLs after adding
+the safeguard to a zone that already contains mixed representations.
+The bypass also covers `HEAD`: Cloudflare can fetch a full `GET` response to
+populate a cold cache when it receives a cacheable `HEAD` request.
 
 Query strings remain part of the normal cache key. This avoids serving the wrong
 representation when an application uses query parameters for behavior rather
