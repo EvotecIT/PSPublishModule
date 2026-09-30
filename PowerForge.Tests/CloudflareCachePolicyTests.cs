@@ -34,7 +34,7 @@ public sealed class CloudflareCachePolicyTests
             "Tactra",
             ["/privacy/", "/support/", "/sitemap.xml"]);
 
-        Assert.Equal(3, rules.Count);
+        Assert.Equal(4, rules.Count);
         var htmlRule = Assert.IsType<JsonObject>(rules[0]);
         var staticRule = Assert.IsType<JsonObject>(rules[2]);
         Assert.Equal("PowerForge [tactra.dev/]: Tactra: static assets", staticRule["description"]!.GetValue<string>());
@@ -62,6 +62,14 @@ public sealed class CloudflareCachePolicyTests
         Assert.DoesNotContain("/support/*", htmlExpression, StringComparison.Ordinal);
         Assert.Contains("ends_with(http.request.uri.path, \"/\")", htmlExpression, StringComparison.Ordinal);
         Assert.DoesNotContain("sitemap.xml", htmlExpression, StringComparison.Ordinal);
+        var markdownRule = rules[3]!;
+        Assert.Equal("set_cache_settings", markdownRule["action"]!.GetValue<string>());
+        Assert.False(markdownRule["action_parameters"]!["cache"]!.GetValue<bool>());
+        Assert.Equal("respect_origin", markdownRule["action_parameters"]!["browser_ttl"]!["mode"]!.GetValue<string>());
+        Assert.Contains("http.request.headers.truncated or any(", markdownRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("http.host eq \"tactra.dev\"", markdownRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.Contains("any(http.request.headers[\"accept\"][*] wildcard \"*text/markdown*\")", markdownRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.DoesNotContain("http.request.method", markdownRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -84,6 +92,9 @@ public sealed class CloudflareCachePolicyTests
         Assert.Contains("starts_with(http.request.uri.path, \"/project/\")", htmlExpression, StringComparison.Ordinal);
         Assert.Contains("ends_with(http.request.uri.path, \".htm\")", htmlExpression, StringComparison.Ordinal);
         Assert.DoesNotContain("uri.path eq \"/docs/\"", htmlExpression, StringComparison.Ordinal);
+        var markdownExpression = rules[3]!["expression"]!.GetValue<string>();
+        Assert.Contains("http.request.uri.path eq \"/project\"", markdownExpression, StringComparison.Ordinal);
+        Assert.Contains("http.request.uri.path wildcard \"/project/*\"", markdownExpression, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -146,7 +157,7 @@ public sealed class CloudflareCachePolicyTests
 
         Assert.True(result.Success, result.Message);
         Assert.True(result.Changed);
-        Assert.Equal(3, result.ManagedRuleCount);
+        Assert.Equal(4, result.ManagedRuleCount);
         Assert.Equal(1, result.PreservedRuleCount);
         Assert.Equal(2, handler.Requests.Count);
         Assert.Equal(HttpMethod.Put, handler.Requests[1].Method);
@@ -155,17 +166,22 @@ public sealed class CloudflareCachePolicyTests
 
         var payload = JsonNode.Parse(handler.Requests[1].Body)!.AsObject();
         var rules = payload["rules"]!.AsArray();
-        Assert.Equal(4, rules.Count);
+        Assert.Equal(5, rules.Count);
         Assert.Equal("managed-html-id", rules[0]!["id"]!.GetValue<string>());
         Assert.Contains("ends_with(http.request.uri.path, \"/\")", rules[0]!["expression"]!.GetValue<string>(), StringComparison.Ordinal);
+        Assert.False(rules[4]!["action_parameters"]!["cache"]!.GetValue<bool>());
         Assert.Equal("Operator custom bypass", rules[3]!["description"]!.GetValue<string>());
         Assert.Equal("custom-id", rules[3]!["id"]!.GetValue<string>());
         Assert.Null(rules[3]!["version"]);
         Assert.Null(rules[3]!["last_updated"]);
     }
 
-    [Fact]
-    public void Apply_ShouldPreserveUnmanagedRulePositions()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Apply_ShouldKeepMarkdownBypassAfterOperatorRules(bool staticProfile, bool existingBypass)
     {
         var existingRules = new JsonArray
         {
@@ -175,8 +191,11 @@ public sealed class CloudflareCachePolicyTests
             ExistingRule("managed-data-id", "PowerForge Example [example.com]: data files", "old-data"),
             ExistingRule("managed-static-id", "PowerForge Example [example.com]: static assets", "old-static"),
             ExistingRule("managed-immutable-id", "PowerForge Example [example.com]: immutable framework assets", "old-immutable"),
-            ExistingRule("custom-after", "Operator after", "after")
+            ExistingRule("custom-after", "Operator after", "(http.host eq \"example.com\")")
         };
+        if (existingBypass)
+            existingRules.Insert(existingRules.Count - 1,
+                ExistingRule("managed-markdown-id", "PowerForge [example.com/]: Example: negotiated Markdown bypass", "old-markdown"));
         var handler = new SequenceHandler(
             JsonResponse(HttpStatusCode.OK, ExistingEnvelope(existingRules)),
             JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
@@ -190,13 +209,18 @@ public sealed class CloudflareCachePolicyTests
             htmlPaths: null,
             dryRun: false,
             logger: null,
-            client);
+            client,
+            cache: staticProfile ? new PowerForge.Web.CloudflareCacheSpec() : null);
 
         Assert.True(result.Success, result.Message);
         var rules = JsonNode.Parse(handler.Requests[1].Body)!["rules"]!.AsArray();
         Assert.Equal(
-            ["Operator before", "PowerForge [example.com/]: Example: HTML docs and API", "Operator between", "PowerForge [example.com/]: Example: data files", "PowerForge [example.com/]: Example: static assets", "Operator after"],
+            ["Operator before", "PowerForge [example.com/]: Example: HTML docs and API", "Operator between", "PowerForge [example.com/]: Example: data files", "PowerForge [example.com/]: Example: static assets", "Operator after", "PowerForge [example.com/]: Example: negotiated Markdown bypass"],
             rules.Select(rule => rule!["description"]!.GetValue<string>()).ToArray());
+        Assert.True(rules[^2]!["action_parameters"]!["cache"]!.GetValue<bool>());
+        Assert.False(rules[^1]!["action_parameters"]!["cache"]!.GetValue<bool>());
+        if (existingBypass)
+            Assert.Equal("managed-markdown-id", rules[^1]!["id"]!.GetValue<string>());
     }
 
     [Fact]
@@ -256,7 +280,7 @@ public sealed class CloudflareCachePolicyTests
         var payload = JsonNode.Parse(handler.Requests[1].Body)!.AsObject();
         Assert.Equal("zone", payload["kind"]!.GetValue<string>());
         Assert.Equal("http_request_cache_settings", payload["phase"]!.GetValue<string>());
-        Assert.Equal(3, payload["rules"]!.AsArray().Count);
+        Assert.Equal(4, payload["rules"]!.AsArray().Count);
     }
 
     [Fact]
@@ -486,7 +510,7 @@ public sealed class CloudflareCachePolicyTests
             currentRules[i]!["version"] = "7";
             currentRules[i]!["last_updated"] = "2026-07-16T00:00:00Z";
         }
-        currentRules.Add(ExistingRule("custom-id", "Operator custom rule", "custom"));
+        currentRules.Insert(currentRules.Count - 1, ExistingRule("custom-id", "Operator custom rule", "custom"));
 
         var handler = new SequenceHandler(JsonResponse(HttpStatusCode.OK, ExistingEnvelope(currentRules)));
         using var client = NewClient(handler);
