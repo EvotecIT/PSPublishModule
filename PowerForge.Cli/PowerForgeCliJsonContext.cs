@@ -10,6 +10,8 @@ namespace PowerForge.Cli;
     WriteIndented = false,
     UseStringEnumConverter = true)]
 [JsonSerializable(typeof(JsonElement))]
+[JsonSerializable(typeof(string))]
+[JsonSerializable(typeof(AgentPluginPackageResult))]
 [JsonSerializable(typeof(ModulePipelineSpec))]
 [JsonSerializable(typeof(ModuleBuildSpec))]
 [JsonSerializable(typeof(ModuleInstallSpec))]
