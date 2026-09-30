@@ -21,7 +21,8 @@ public static partial class WebSiteBuilder
             if (!Directory.Exists(directory)) continue;
 
             var options = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint };
-            foreach (var catalogPath in Directory.EnumerateFiles(directory, "search.json", options).Order(StringComparer.Ordinal))
+            foreach (var catalogPath in Directory.EnumerateFiles(directory, "*.json", options)
+                         .Where(path => Path.GetFileName(path) is "search.json" or "members.json").Order(StringComparer.Ordinal))
             {
                 using var catalog = JsonDocument.Parse(File.ReadAllText(catalogPath));
                 if (catalog.RootElement.ValueKind != JsonValueKind.Array)
@@ -36,11 +37,17 @@ public static partial class WebSiteBuilder
                     var route = File.Exists(Path.Combine(catalogDirectory, slug, "index.html"))
                         ? catalogRoute + slug + "/"
                         : File.Exists(Path.Combine(catalogDirectory, slug + ".html")) ? catalogRoute + slug + ".html" : null;
-                    if (route is null || !seen.Add(route)) continue;
+                    var anchor = ApiSearchString(item, "anchor");
+                    if (anchor.Length > 0 && !Regex.IsMatch(anchor, "^[A-Za-z0-9_-]+$")) continue;
+                    if (route is null) continue;
+                    if (anchor.Length > 0) route += "#" + anchor;
+                    if (!seen.Add(route)) continue;
                     var title = ApiSearchString(item, "title");
                     if (string.IsNullOrWhiteSpace(title)) continue;
                     var summary = WebApiDocsGenerator.StripCrefTokens(ApiSearchString(item, "summary"));
                     var kind = ApiSearchString(item, "kind");
+                    var package = ApiSearchString(item, "packageId");
+                    if (package.Length == 0) package = ApiSearchString(item, "assembly");
                     var aliasNames = item.TryGetProperty("aliases", out var aliases) && aliases.ValueKind == JsonValueKind.Array
                         ? aliases.EnumerateArray().Where(value => value.ValueKind == JsonValueKind.String).Select(value => value.GetString()!).ToArray()
                         : Array.Empty<string>();
@@ -52,9 +59,17 @@ public static partial class WebSiteBuilder
                         Description = summary.Length > 400 ? summary[..400] : summary,
                         Collection = kind.Equals("Cmdlet", StringComparison.OrdinalIgnoreCase) ? "powershell" : "api",
                         Kind = kind.ToLowerInvariant(),
+                        Project = package,
+                        Meta = new Dictionary<string, object?>
+                        {
+                            ["namespace"] = ApiSearchString(item, "namespace"),
+                            ["signature"] = ApiSearchString(item, "signature"),
+                            ["declaringType"] = ApiSearchString(item, "declaringType"),
+                            ["receiverType"] = ApiSearchString(item, "receiverType")
+                        },
                         Weight = 1,
                         Language = NormalizeLanguageToken(spec.Localization?.DefaultLanguage ?? "en"),
-                        SearchText = string.Join(' ', title, string.Join(' ', aliasNames), summary, ApiSearchString(item, "namespace")),
+                        SearchText = string.Join(' ', title, string.Join(' ', aliasNames), summary, ApiSearchString(item, "namespace"), ApiSearchString(item, "signature"), package),
                         Tags = new[] { ApiSearchString(item, "namespace") }.Where(value => value.Length > 0).ToArray()
                     });
                 }

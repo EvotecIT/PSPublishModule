@@ -6,7 +6,7 @@ namespace PowerForge.Tests;
 public sealed class WebApiDocsGeneratorSidebarSizeTests
 {
     [Fact]
-    public void GenerateDocsHtml_LargeCatalogKeepsFullIndexAndLimitsTypeSidebarToNearbyTypes()
+    public void GenerateDocsHtml_LargeNamespaceKeepsCompleteIndexAndLoadsTypeCatalogOnDemand()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-sidebar-size-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -44,8 +44,10 @@ public sealed class WebApiDocsGeneratorSidebarSizeTests
             Assert.Contains("href=\"/api/beta-a001/\"", indexSidebar, StringComparison.Ordinal);
             Assert.Contains("href=\"/api/alpha-a002/\"", alphaSidebar, StringComparison.Ordinal);
             Assert.Contains("href=\"/api/alpha-a001/\" class=\"type-item active\"", alphaSidebar, StringComparison.Ordinal);
+            Assert.DoesNotContain("href=\"/api/alpha-a100/\"", alphaSidebar, StringComparison.Ordinal);
             Assert.DoesNotContain("href=\"/api/beta-a001/\"", alphaSidebar, StringComparison.Ordinal);
             Assert.Contains("href=\"/api/\">Browse all 203 types</a>", File.ReadAllText(alphaPage), StringComparison.Ordinal);
+            Assert.Contains("data-type-catalog=\"/api/index.json\"", File.ReadAllText(alphaPage), StringComparison.Ordinal);
 
             var betaSidebar = ReadSidebarNavigation(Path.Combine(outputPath, "beta-a000", "index.html"));
             Assert.Contains("href=\"/api/beta-a000/\" class=\"type-item active\"", betaSidebar, StringComparison.Ordinal);

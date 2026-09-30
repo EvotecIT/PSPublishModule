@@ -317,6 +317,7 @@ internal static partial class WebPipelineRunner
 
             var options = new WebApiDocsOptions
             {
+                PackageId = GetString(step, "packageId"),
                 Type = apiType,
                 XmlPath = xml ?? string.Empty,
                 XmlPaths = xmls,

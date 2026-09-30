@@ -228,12 +228,12 @@ public partial class WebAgentReadinessTests
 
         Assert.Contains("var DEFAULT_RESULT_LIMIT = 3;", runtime, StringComparison.Ordinal);
         Assert.Contains("var MAX_RESULT_LIMIT = 5;", runtime, StringComparison.Ordinal);
-        Assert.Contains("var MAX_RESULT_URL_CHARACTERS = 400;", runtime, StringComparison.Ordinal);
+        Assert.Contains("var MAX_RESULT_URL_CHARACTERS = 1024;", runtime, StringComparison.Ordinal);
         Assert.Contains("if (!url || url.length > MAX_RESULT_URL_CHARACTERS) return null;", runtime, StringComparison.Ordinal);
         Assert.Contains("url: url,", runtime, StringComparison.Ordinal);
-        Assert.Contains("outputTruncated: source.length > selected.length || shaped.length !== selected.length", runtime, StringComparison.Ordinal);
+        Assert.Contains("outputTruncated: source.length > request.limit || shaped.length !== source.length", runtime, StringComparison.Ordinal);
         Assert.Contains("result.totalMatches >= source.length", runtime, StringComparison.Ordinal);
-        Assert.Contains("source.length > selected.length", runtime, StringComparison.Ordinal);
+        Assert.Contains("source.length > request.limit", runtime, StringComparison.Ordinal);
         Assert.Contains("lengthHeader == null ? NaN : Number(lengthHeader)", runtime, StringComparison.Ordinal);
         Assert.Contains("if (!contentEncoding && Number.isFinite(advertisedLength)", runtime, StringComparison.Ordinal);
         Assert.DoesNotContain("url: boundedText", runtime, StringComparison.Ordinal);
@@ -265,10 +265,10 @@ public partial class WebAgentReadinessTests
         Assert.Contains("var visibleResponse = JSON.parse(JSON.stringify(response));", runtime, StringComparison.Ordinal);
         Assert.Contains("throwIfAborted(request.signal);", runtime, StringComparison.Ordinal);
         Assert.Contains("return renderVisibleResults(visibleResponse, { signal: request.signal });", runtime, StringComparison.Ordinal);
-        Assert.Contains("var entries = await awaitWithSignal(loadIndex(), request.signal);", runtime, StringComparison.Ordinal);
+        Assert.Contains("var entries = await awaitWithSignal(loadQueryEntries(request), request.signal);", runtime, StringComparison.Ordinal);
         Assert.Contains("if (entries.length > MAX_INDEX_ENTRIES)", runtime, StringComparison.Ordinal);
         Assert.Contains("if (total > MAX_INDEX_BYTES)", runtime, StringComparison.Ordinal);
-        Assert.Contains("var selected = source.slice(0, request.limit);", runtime, StringComparison.Ordinal);
+        Assert.Contains("if (response.returned >= request.limit) return;", runtime, StringComparison.Ordinal);
         Assert.Contains("if (JSON.stringify(response).length > MAX_OUTPUT_CHARACTERS)", runtime, StringComparison.Ordinal);
     }
 
