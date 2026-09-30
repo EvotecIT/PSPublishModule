@@ -183,7 +183,8 @@ public sealed partial class AgentPluginPackageService
             if (segment.TrimEnd('.', ' ') != segment || segment.IndexOfAny(new[] { ':', '\\', '<', '>', '"', '|', '?', '*' }) >= 0 || segment.Any(char.IsControl)
                 || Regex.IsMatch(segment, @"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)", RegexOptions.IgnoreCase))
                 throw new InvalidDataException("Non-portable package path: " + relative);
-            if (!entries.Add(relative)) throw new InvalidDataException("Case-colliding package paths: " + relative);
+            if (!entries.Add(relative.Normalize(NormalizationForm.FormC)))
+                throw new InvalidDataException("Case- or Unicode-normalization-colliding package paths: " + relative);
             if (segment == ".git" || segment == ".env" || segment.StartsWith(".env.", StringComparison.Ordinal))
                 throw new InvalidDataException("Repository or environment file in package: " + relative);
             if (Directory.Exists(path)) Walk(root, path, files, entries);

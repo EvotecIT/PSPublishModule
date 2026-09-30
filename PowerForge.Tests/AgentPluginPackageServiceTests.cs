@@ -105,6 +105,10 @@ public sealed class AgentPluginPackageServiceTests : IDisposable
     [Theory]
     [InlineData("{\"type\":\"stdio\",\"command\":\"dotnet --some-switch\"}")]
     [InlineData("{\"type\":\"stdio\",\"command\":\"dotnet\",\"env\":{\"PLUGIN_ROOT\":\"/external\"}}")]
+    [InlineData("{\"type\":\"stdio\",\"command\":\"dotnet\",\"env\":{\"PATH\":\"a\",\"Path\":\"b\"}}")]
+    [InlineData("{\"type\":\"stdio\",\"command\":\"dotnet\",\"env\":{\"plugin_root\":\"/external\"}}")]
+    [InlineData("{\"type\":\"stdio\",\"command\":\"dotnet\",\"env\":{\"A=B\":\"value\"}}")]
+    [InlineData("{\"type\":\"stdio\",\"command\":\"dotnet\",\"env\":{\"CONFIG\":\"a\\u0000b\"}}")]
     [InlineData("{\"type\":\"stdio\",\"command\":\"dotnet\",\"args\":[\"${PLUGIN_DATA}/state\"]}")]
     [InlineData("{\"type\":\"stdio\",\"command\":\"dotnet\",\"cwd\":\"./\"}")]
     [InlineData("{\"type\":\"streamable-http\",\"url\":\"https://user:password@example.org/mcp\"}")]
@@ -128,6 +132,58 @@ public sealed class AgentPluginPackageServiceTests : IDisposable
     {
         File.WriteAllText(Path.Combine(Source, "mcp.json"), "{\"$schema\":\"https://agent-plugins.org/schemas/1.0.0/mcp.schema.json\",\"mcpServers\":{\"server\":{\"type\":\"streamable-http\",\"url\":\"" + url + "\"}}}");
         new AgentPluginPackageService().Validate(Source);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("server\n")]
+    public void InvalidServerIdentifierCannotProduceClientConfiguration(string name)
+    {
+        File.WriteAllText(Path.Combine(Source, "mcp.json"), "{\"$schema\":\"https://agent-plugins.org/schemas/1.0.0/mcp.schema.json\",\"mcpServers\":{" + JsonSerializer.Serialize(name) + ":{\"type\":\"stdio\",\"command\":\"dotnet\"}}}");
+        Assert.Throws<InvalidDataException>(() => new AgentPluginPackageService().SyncCompatibility(Source));
+        Assert.False(Directory.Exists(Path.Combine(Source, ".codex-plugin")));
+    }
+
+    [Fact]
+    public void WindowsRelativeCommandCannotProduceAUnixIncompatibleLauncher()
+    {
+        Directory.CreateDirectory(Path.Combine(Source, "scripts"));
+        File.WriteAllText(Path.Combine(Source, "scripts", "server.exe"), "server");
+        File.WriteAllText(Path.Combine(Source, "mcp.json"), """
+{"$schema":"https://agent-plugins.org/schemas/1.0.0/mcp.schema.json","mcpServers":{"server":{"type":"stdio","command":"./scripts\\server.exe"}}}
+""");
+        Assert.Throws<InvalidDataException>(() => new AgentPluginPackageService().Validate(Source));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void UnicodeEquivalentResourcePathsCannotOverwriteOnAnotherFilesystem(bool directories)
+    {
+        var assets = Path.Combine(Source, "assets");
+        Directory.CreateDirectory(assets);
+        var composed = Path.Combine(assets, "caf\u00e9");
+        var decomposed = Path.Combine(assets, "cafe\u0301");
+        if (directories) Directory.CreateDirectory(composed);
+        else File.WriteAllText(composed, "first");
+        if (File.Exists(decomposed) || Directory.Exists(decomposed)) return; // Normalization-insensitive filesystem already aliases the names.
+        if (directories) Directory.CreateDirectory(decomposed);
+        else File.WriteAllText(decomposed, "second");
+        Assert.Throws<InvalidDataException>(() => new AgentPluginPackageService().Pack(Source, Path.Combine(_sandbox, "out")));
+        Assert.False(Directory.Exists(Path.Combine(_sandbox, "out")));
+    }
+
+    [Fact]
+    public void UniqueUnicodeResourcesRetainTheirArchivedNames()
+    {
+        Directory.CreateDirectory(Path.Combine(Source, "assets"));
+        File.WriteAllText(Path.Combine(Source, "assets", "caf\u00e9.json"), "resource");
+        var sourceName = Path.GetFileName(Directory.GetFiles(Path.Combine(Source, "assets")).Single());
+        var result = new AgentPluginPackageService().Pack(Source, Path.Combine(_sandbox, "out"));
+        using var archive = ZipFile.OpenRead(result.ArchivePath!);
+        using var reader = new StreamReader(archive.GetEntry("assets/" + sourceName)!.Open());
+        Assert.Equal("resource", reader.ReadToEnd());
     }
 
     [Fact]

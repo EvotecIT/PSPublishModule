@@ -14,6 +14,8 @@ public sealed partial class AgentPluginPackageService
         RequireObject(servers, "mcpServers");
         foreach (var server in servers.EnumerateObject())
         {
+            if (string.IsNullOrWhiteSpace(server.Name) || server.Name.Any(char.IsControl))
+                throw new InvalidDataException("MCP server identifiers must be non-empty and contain no control characters.");
             var value = server.Value;
             RequireObject(value, server.Name);
             var type = RequiredString(value, "type");
@@ -21,6 +23,8 @@ public sealed partial class AgentPluginPackageService
             {
                 RequireFields(value, new[] { "type", "command", "args", "env", "cwd" });
                 var command = RequiredString(value, "command");
+                if (command.Contains('\\'))
+                    throw new InvalidDataException("Portable MCP commands must use forward slashes.");
                 if (command.StartsWith("./", StringComparison.Ordinal))
                 {
                     var executable = Path.GetFullPath(Path.Combine(root, command.Substring(2)));
@@ -63,9 +67,12 @@ public sealed partial class AgentPluginPackageService
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in map.EnumerateObject())
         {
-            if (property.Value.ValueKind != JsonValueKind.String || (reserved && (property.Name == "PLUGIN_ROOT" || property.Name == "PLUGIN_DATA")))
+            if (property.Value.ValueKind != JsonValueKind.String || !names.Add(property.Name)
+                || (reserved && (string.IsNullOrEmpty(property.Name) || property.Name.Contains('=') || property.Name.Any(char.IsControl)
+                    || property.Value.GetString()!.Contains('\0')
+                    || property.Name.Equals("PLUGIN_ROOT", StringComparison.OrdinalIgnoreCase) || property.Name.Equals("PLUGIN_DATA", StringComparison.OrdinalIgnoreCase))))
                 throw new InvalidDataException("Invalid MCP " + field + " entry: " + property.Name);
-            if (field == "headers" && (!names.Add(property.Name) || !Regex.IsMatch(property.Name, "^[!#$%&'*+.^_`|~0-9A-Za-z-]+\\z")
+            if (field == "headers" && (!Regex.IsMatch(property.Name, "^[!#$%&'*+.^_`|~0-9A-Za-z-]+\\z")
                 || property.Value.GetString()!.Any(c => c != '\t' && (c < 0x20 || c > 0xFF || c == 0x7F))))
                 throw new InvalidDataException("Invalid or case-duplicated MCP header: " + property.Name);
         }
