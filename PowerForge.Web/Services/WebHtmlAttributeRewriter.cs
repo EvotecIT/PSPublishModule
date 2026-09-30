@@ -3,7 +3,7 @@ using HtmlTinkerX;
 
 namespace PowerForge.Web;
 
-/// <summary>Rewrites parsed, quoted attribute values without reserializing page content.</summary>
+/// <summary>Rewrites parsed attribute values without reserializing page content.</summary>
 internal static class WebHtmlAttributeRewriter
 {
     internal static string Rewrite(string html, Func<string, string, string> rewrite)
@@ -17,13 +17,20 @@ internal static class WebHtmlAttributeRewriter
             {
                 var start = attribute.ValueStartIndex;
                 var length = attribute.ValueLength;
-                if (start < 1 || start + length >= html.Length) continue;
+                if (start < 1 || length == 0 || start + length > html.Length) continue;
                 var quote = html[start - 1];
-                if ((quote != '\'' && quote != '"') || html[start + length] != quote) continue;
+                var quoted = quote is '\'' or '"';
+                if (quoted && (start + length == html.Length || html[start + length] != quote)) continue;
                 var value = html.Substring(start, length);
                 var changed = rewrite(attribute.Name, value);
                 if (!string.Equals(value, changed, StringComparison.Ordinal))
+                {
+                    // Minification can remove quotes. Quote the replacement so a rewritten
+                    // value containing spaces or delimiters remains a single attribute.
+                    if (!quoted)
+                        changed = "\"" + changed.Replace("\"", "&quot;", StringComparison.Ordinal) + "\"";
                     replacements.Add((start, length, changed));
+                }
             }
         }
         if (replacements.Count == 0) return html;
