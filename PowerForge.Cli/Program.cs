@@ -94,6 +94,8 @@ internal static partial class Program
         case "plugin":
         case "plugins":
             return CommandPlugin(filteredArgs, cli, logger);
+        case "agent-plugin":
+            return CommandAgentPlugin(filteredArgs, cli, logger);
         case "project":
             return CommandProject(filteredArgs, cli, logger);
         case "release":
