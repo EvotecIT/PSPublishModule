@@ -484,6 +484,7 @@
 
   function syncApiLinksWithState(hash) {
     document.querySelectorAll('a[href]').forEach(function(anchor) {
+      if (anchor.classList.contains('sidebar-browse-all')) return;
       if (!isApiDocLink(anchor)) return;
 
       var url = new URL(anchor.getAttribute('href'), window.location.href);
@@ -1036,9 +1037,16 @@
   if (kindButtons.length) {
     kindButtons.forEach(function(b) { b.classList.remove('active'); });
     var activeBtn = kindButtons.find(function(b) { return (b.dataset.kind || '') === activeKind; });
+    if (!activeBtn) activeKind = '';
     (activeBtn || kindButtons[0]).classList.add('active');
   }
-  if (namespaceSelect) namespaceSelect.value = activeNamespace || '';
+  if (namespaceSelect) {
+    var hasNamespace = Array.prototype.some.call(namespaceSelect.options, function(option) {
+      return option.value === activeNamespace;
+    });
+    if (!hasNamespace) activeNamespace = '';
+    namespaceSelect.value = activeNamespace;
+  }
   syncNamespaceCombobox();
   if (memberKindButtons.length) {
     memberKindButtons.forEach(function(b) { b.classList.remove('active'); });

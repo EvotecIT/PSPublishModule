@@ -68,6 +68,7 @@ body.pf-api-docs .pf-combobox-option{display:block;width:100%;padding:7px 8px;bo
 body.pf-api-docs .pf-combobox-option:hover,body.pf-api-docs .pf-combobox-option:focus-visible{background:rgba(167,139,250,.18);color:#f5f3ff;outline:none}
 body.pf-api-docs .pf-combobox-option.active{background:rgba(167,139,250,.24);color:#f5f3ff}
 .sidebar-count{font-size:.75rem;color:#94a3b8;margin:8px 0 12px}
+.sidebar-browse-all{display:block;margin:-4px 0 12px;font-size:.75rem;color:var(--pf-accent,#a78bfa)!important;text-decoration:underline!important;text-underline-offset:2px}
 .sidebar-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .sidebar-tools button{background:#0f172a;border:1px solid rgba(148,163,184,.2);color:#cbd5f5;border-radius:999px;padding:4px 10px;font-size:.7rem;cursor:pointer}
 .sidebar-tools button:hover{border-color:#a78bfa;color:#e6e9f3}
