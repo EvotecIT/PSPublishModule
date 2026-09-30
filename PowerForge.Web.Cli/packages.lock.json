@@ -263,8 +263,8 @@
       },
       "Scriban": {
         "type": "Transitive",
-        "resolved": "7.4.0",
-        "contentHash": "h5QYOAKw7F4ajVNxeScBsq0c7en6YWyKDSC4ZnZIlrkeJrl0ekHk1PlpqP5C4peqkt6NoXl9dlwK3pI4oDC5oA=="
+        "resolved": "7.5.0",
+        "contentHash": "5Dk6VXG6dimWQFRtCs202cYYkdE1GeOqpUgCwNSp4C4NhpjeMaVNssxe6Ifb1Z3HCfabvrbk9XLbvQXeZXG91w=="
       },
       "SQLite": {
         "type": "Transitive",
@@ -369,7 +369,7 @@
           "Magick.NET-Q8-AnyCPU": "[14.17.1, )",
           "OfficeIMO.Markdown": "[3.4.3, )",
           "PowerForge": "[3.0.153, )",
-          "Scriban": "[7.4.0, )",
+          "Scriban": "[7.5.0, )",
           "YamlDotNet": "[18.1.0, )"
         }
       }
