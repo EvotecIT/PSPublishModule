@@ -90,6 +90,11 @@ public sealed class AgentPluginPackageServiceTests : IDisposable
     [InlineData("{\"$schema\":\"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json\",\"name\":\"sample\",\"version\":\"1.2.3.4\"}")]
     [InlineData("{\"$schema\":\"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json\",\"name\":\"sample\",\"name\":\"duplicate\",\"version\":\"1.2.3\"}")]
     [InlineData("{\"$schema\":\"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json\",\"name\":\"sample\",\"version\":\"1.2.3\",\"skills\":\"../external\"}")]
+    [InlineData("{\"$schema\":\"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json\",\"name\":\"sample\",\"version\":\"1.2.3\",\"author\":{\"email\":\"team@example.org\"}}")]
+    [InlineData("{\"$schema\":\"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json\",\"name\":\"sample\",\"version\":\"1.2.3\",\"homepage\":\"documentation\"}")]
+    [InlineData("{\"$schema\":\"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json\",\"name\":\"sample\\n\",\"version\":\"1.2.3\"}")]
+    [InlineData("{\"$schema\":\"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json\",\"name\":\"sample\",\"version\":\"1.2.3\\n\"}")]
+    [InlineData("{\"$schema\":\"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json\",\"name\":\"sample\",\"version\":\"1.2.3\",\"description\":\"A\",\"extensions\":{\"com.openai\":{\"description\":\"B\"}}}")]
     public void InvalidIdentityCannotProduceAnArtifact(string manifest)
     {
         File.WriteAllText(Path.Combine(Source, "plugin.json"), manifest);
@@ -104,9 +109,37 @@ public sealed class AgentPluginPackageServiceTests : IDisposable
     [InlineData("{\"type\":\"stdio\",\"command\":\"dotnet\",\"cwd\":\"./\"}")]
     [InlineData("{\"type\":\"streamable-http\",\"url\":\"https://user:password@example.org/mcp\"}")]
     [InlineData("{\"type\":\"stdio\",\"command\":\"dotnet\",\"url\":\"https://example.org/mcp\"}")]
+    [InlineData("{\"type\":\"streamable-http\",\"url\":\"http://example.org/mcp\"}")]
+    [InlineData("{\"type\":\"sse\",\"url\":\"https://example.org/mcp#fragment\"}")]
+    [InlineData("{\"type\":\"streamable-http\",\"url\":\"https://example.org/mcp\",\"headers\":{\"X-Tenant\":\"a\",\"x-tenant\":\"b\"}}")]
+    [InlineData("{\"type\":\"streamable-http\",\"url\":\"https://example.org/mcp\",\"headers\":{\"X-Tenant\":\"a\\r\\nb\"}}")]
+    [InlineData("{\"type\":\"streamable-http\",\"url\":\"https://example.org/mcp\",\"headers\":{\"X-Tenant\\n\":\"a\"}}")]
     public void UnsupportedMcpProfileIsRejectedRatherThanSilentlyDowngraded(string server)
     {
         File.WriteAllText(Path.Combine(Source, "mcp.json"), "{\"$schema\":\"https://agent-plugins.org/schemas/1.0.0/mcp.schema.json\",\"mcpServers\":{\"server\":" + server + "}}");
+        Assert.Throws<InvalidDataException>(() => new AgentPluginPackageService().Validate(Source));
+    }
+
+    [Theory]
+    [InlineData("http://localhost:8080/mcp")]
+    [InlineData("http://127.0.0.2:8080/mcp")]
+    [InlineData("http://[::1]:8080/mcp")]
+    public void LoopbackDevelopmentEndpointsRemainUsable(string url)
+    {
+        File.WriteAllText(Path.Combine(Source, "mcp.json"), "{\"$schema\":\"https://agent-plugins.org/schemas/1.0.0/mcp.schema.json\",\"mcpServers\":{\"server\":{\"type\":\"streamable-http\",\"url\":\"" + url + "\"}}}");
+        new AgentPluginPackageService().Validate(Source);
+    }
+
+    [Fact]
+    public void CaseVariantSiblingCannotSupplyAnExecutableOnCaseSensitiveFilesystems()
+    {
+        var sibling = Path.Combine(_sandbox, "SOURCE");
+        if (Directory.Exists(sibling)) return; // A case-insensitive filesystem aliases the permitted root.
+        Directory.CreateDirectory(sibling);
+        File.WriteAllText(Path.Combine(sibling, "external"), "external executable");
+        File.WriteAllText(Path.Combine(Source, "mcp.json"), """
+{"$schema":"https://agent-plugins.org/schemas/1.0.0/mcp.schema.json","mcpServers":{"external":{"type":"stdio","command":"./../SOURCE/external"}}}
+""");
         Assert.Throws<InvalidDataException>(() => new AgentPluginPackageService().Validate(Source));
     }
 

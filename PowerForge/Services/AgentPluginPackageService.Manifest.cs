@@ -43,11 +43,14 @@ public sealed partial class AgentPluginPackageService
         if (!VersionPattern.IsMatch(version) || (prereleaseIndex >= 0 && withoutMetadata.Substring(prereleaseIndex + 1).Split('.').Any(p => p.All(char.IsDigit) && p.Length > 1 && p[0] == '0')))
             throw new InvalidDataException("Packing requires a three-part semantic version.");
         foreach (var field in new[] { "description", "homepage", "repository", "license" }) OptionalString(manifest, field);
+        foreach (var field in new[] { "homepage", "repository" }) OptionalWebUrl(manifest, field);
         OptionalStringArray(manifest, "keywords");
         if (manifest.TryGetProperty("author", out var author))
         {
             RequireFields(author, new[] { "name", "email", "url" });
+            RequiredString(author, "name");
             foreach (var field in new[] { "name", "email", "url" }) OptionalString(author, field);
+            OptionalWebUrl(author, "url");
         }
         if (manifest.TryGetProperty("extensions", out var extensions))
         {
@@ -57,7 +60,7 @@ public sealed partial class AgentPluginPackageService
             {
                 // This profile uses portable fixed component locations. Conflicting legacy overrides
                 // would make installation depend on which manifest a client selects.
-                foreach (var field in new[] { "name", "version", "skills", "mcpServers" })
+                foreach (var field in CommonFields.Concat(new[] { "skills", "mcpServers", "$schema", "extensions" }))
                     if (openai.TryGetProperty(field, out _)) throw new InvalidDataException("Portable profile cannot override " + field + " in com.openai.");
             }
         }
@@ -113,6 +116,13 @@ public sealed partial class AgentPluginPackageService
     {
         if (element.TryGetProperty(field, out var value) && value.ValueKind != JsonValueKind.String)
             throw new InvalidDataException("Expected string: " + field);
+    }
+
+    private static void OptionalWebUrl(JsonElement element, string field)
+    {
+        if (element.TryGetProperty(field, out var value) &&
+            (!Uri.TryCreate(value.GetString(), UriKind.Absolute, out var uri) || !(uri.Scheme == "https" || uri.Scheme == "http") || !string.IsNullOrEmpty(uri.UserInfo)))
+            throw new InvalidDataException("Compatibility metadata requires an absolute HTTP(S) URL: " + field);
     }
 
     private static void OptionalStringArray(JsonElement element, string field)

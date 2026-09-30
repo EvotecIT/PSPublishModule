@@ -13,8 +13,8 @@ namespace PowerForge;
 public sealed partial class AgentPluginPackageService
 {
     private static readonly string[] CompatibilityFiles = { ".mcp.json", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json", ".codex-plugin/mcp.json" };
-    private static readonly Regex NamePattern = new("^(?!.*(?:--|\\.\\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$", RegexOptions.CultureInvariant);
-    private static readonly Regex VersionPattern = new("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$", RegexOptions.CultureInvariant);
+    private static readonly Regex NamePattern = new("^(?!.*(?:--|\\.\\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\\z", RegexOptions.CultureInvariant);
+    private static readonly Regex VersionPattern = new("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?\\z", RegexOptions.CultureInvariant);
 
     /// <summary>Validates package structure and any existing generated compatibility files without writing.</summary>
     /// <param name="sourcePath">Dedicated portable plugin root.</param>
@@ -203,8 +203,13 @@ public sealed partial class AgentPluginPackageService
                 throw new InvalidDataException("Linked package/output path is not supported: " + current);
     }
 
-    private static bool IsWithin(string path, string root) => path.Equals(root, StringComparison.OrdinalIgnoreCase)
-        || path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    private static bool IsWithin(string path, string root)
+    {
+        if (path.Equals(root, StringComparison.Ordinal) || path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal)) return true;
+        if (!(path.Equals(root, StringComparison.OrdinalIgnoreCase) || path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))) return false;
+        // Admit a case-variant prefix only when the OS proves it is the same directory.
+        return FileSystemPathSafety.ExistingPathComparer.Equals(path.Substring(0, root.Length), root);
+    }
 
     private sealed class Package
     {

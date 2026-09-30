@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Net;
+using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
@@ -40,8 +42,9 @@ public sealed partial class AgentPluginPackageService
             {
                 RequireFields(value, new[] { "type", "url", "headers" });
                 var url = RequiredString(value, "url");
-                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || !(uri.Scheme == "https" || uri.Scheme == "http") || !string.IsNullOrEmpty(uri.UserInfo))
-                    throw new InvalidDataException("MCP URL must be an absolute HTTP(S) endpoint without embedded credentials.");
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || !(uri.Scheme == "https" || uri.Scheme == "http") || !string.IsNullOrEmpty(uri.UserInfo) || url.Contains("#")
+                    || (uri.Scheme == "http" && !IsLoopback(uri.Host)))
+                    throw new InvalidDataException("MCP URL requires HTTPS outside loopback and must not contain credentials or fragments.");
                 ValidateStringMap(value, "headers", reserved: false);
             }
             else throw new InvalidDataException("Unsupported MCP transport: " + type);
@@ -57,11 +60,23 @@ public sealed partial class AgentPluginPackageService
     {
         if (!element.TryGetProperty(field, out var map)) return;
         RequireObject(map, field);
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in map.EnumerateObject())
         {
             if (property.Value.ValueKind != JsonValueKind.String || (reserved && (property.Name == "PLUGIN_ROOT" || property.Name == "PLUGIN_DATA")))
                 throw new InvalidDataException("Invalid MCP " + field + " entry: " + property.Name);
+            if (field == "headers" && (!names.Add(property.Name) || !Regex.IsMatch(property.Name, "^[!#$%&'*+.^_`|~0-9A-Za-z-]+\\z")
+                || property.Value.GetString()!.Any(c => c != '\t' && (c < 0x20 || c > 0xFF || c == 0x7F))))
+                throw new InvalidDataException("Invalid or case-duplicated MCP header: " + property.Name);
         }
+    }
+
+    private static bool IsLoopback(string host)
+    {
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase)) return true;
+        if (!IPAddress.TryParse(host.Trim('[', ']'), out var address)) return false;
+        if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
+        return IPAddress.IsLoopback(address);
     }
 
     private static byte[] GenerateLegacyMcp(JsonElement mcp, string rootVariable) => WriteJson(writer =>
