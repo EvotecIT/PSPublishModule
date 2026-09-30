@@ -49,6 +49,8 @@ public sealed class CloudflareStaticCacheProfileTests
         var markdownBypass = rules[3]!;
         Assert.True(markdownBypass["enabled"]!.GetValue<bool>());
         Assert.False(markdownBypass["action_parameters"]!["cache"]!.GetValue<bool>());
+        Assert.Equal("respect_origin", markdownBypass["action_parameters"]!["browser_ttl"]!["mode"]!.GetValue<string>());
+        Assert.Contains("http.request.headers.truncated or any(", markdownBypass["expression"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Null(markdownBypass["action_parameters"]!["edge_ttl"]);
         Assert.Contains("any(http.request.headers[\"accept\"][*] wildcard \"*text/markdown*\")", markdownBypass["expression"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.DoesNotContain("http.request.method", markdownBypass["expression"]!.GetValue<string>(), StringComparison.Ordinal);

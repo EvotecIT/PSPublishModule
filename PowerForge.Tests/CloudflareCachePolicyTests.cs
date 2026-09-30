@@ -65,6 +65,8 @@ public sealed class CloudflareCachePolicyTests
         var markdownRule = rules[3]!;
         Assert.Equal("set_cache_settings", markdownRule["action"]!.GetValue<string>());
         Assert.False(markdownRule["action_parameters"]!["cache"]!.GetValue<bool>());
+        Assert.Equal("respect_origin", markdownRule["action_parameters"]!["browser_ttl"]!["mode"]!.GetValue<string>());
+        Assert.Contains("http.request.headers.truncated or any(", markdownRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Contains("http.host eq \"tactra.dev\"", markdownRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.Contains("any(http.request.headers[\"accept\"][*] wildcard \"*text/markdown*\")", markdownRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
         Assert.DoesNotContain("http.request.method", markdownRule["expression"]!.GetValue<string>(), StringComparison.Ordinal);
@@ -167,15 +169,19 @@ public sealed class CloudflareCachePolicyTests
         Assert.Equal(5, rules.Count);
         Assert.Equal("managed-html-id", rules[0]!["id"]!.GetValue<string>());
         Assert.Contains("ends_with(http.request.uri.path, \"/\")", rules[0]!["expression"]!.GetValue<string>(), StringComparison.Ordinal);
-        Assert.False(rules[3]!["action_parameters"]!["cache"]!.GetValue<bool>());
-        Assert.Equal("Operator custom bypass", rules[4]!["description"]!.GetValue<string>());
-        Assert.Equal("custom-id", rules[4]!["id"]!.GetValue<string>());
-        Assert.Null(rules[4]!["version"]);
-        Assert.Null(rules[4]!["last_updated"]);
+        Assert.False(rules[4]!["action_parameters"]!["cache"]!.GetValue<bool>());
+        Assert.Equal("Operator custom bypass", rules[3]!["description"]!.GetValue<string>());
+        Assert.Equal("custom-id", rules[3]!["id"]!.GetValue<string>());
+        Assert.Null(rules[3]!["version"]);
+        Assert.Null(rules[3]!["last_updated"]);
     }
 
-    [Fact]
-    public void Apply_ShouldPreserveUnmanagedRulePositions()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Apply_ShouldKeepMarkdownBypassAfterOperatorRules(bool staticProfile, bool existingBypass)
     {
         var existingRules = new JsonArray
         {
@@ -185,8 +191,11 @@ public sealed class CloudflareCachePolicyTests
             ExistingRule("managed-data-id", "PowerForge Example [example.com]: data files", "old-data"),
             ExistingRule("managed-static-id", "PowerForge Example [example.com]: static assets", "old-static"),
             ExistingRule("managed-immutable-id", "PowerForge Example [example.com]: immutable framework assets", "old-immutable"),
-            ExistingRule("custom-after", "Operator after", "after")
+            ExistingRule("custom-after", "Operator after", "(http.host eq \"example.com\")")
         };
+        if (existingBypass)
+            existingRules.Insert(existingRules.Count - 1,
+                ExistingRule("managed-markdown-id", "PowerForge [example.com/]: Example: negotiated Markdown bypass", "old-markdown"));
         var handler = new SequenceHandler(
             JsonResponse(HttpStatusCode.OK, ExistingEnvelope(existingRules)),
             JsonResponse(HttpStatusCode.OK, SuccessEnvelope()));
@@ -200,13 +209,18 @@ public sealed class CloudflareCachePolicyTests
             htmlPaths: null,
             dryRun: false,
             logger: null,
-            client);
+            client,
+            cache: staticProfile ? new PowerForge.Web.CloudflareCacheSpec() : null);
 
         Assert.True(result.Success, result.Message);
         var rules = JsonNode.Parse(handler.Requests[1].Body)!["rules"]!.AsArray();
         Assert.Equal(
-            ["Operator before", "PowerForge [example.com/]: Example: HTML docs and API", "Operator between", "PowerForge [example.com/]: Example: data files", "PowerForge [example.com/]: Example: static assets", "PowerForge [example.com/]: Example: negotiated Markdown bypass", "Operator after"],
+            ["Operator before", "PowerForge [example.com/]: Example: HTML docs and API", "Operator between", "PowerForge [example.com/]: Example: data files", "PowerForge [example.com/]: Example: static assets", "Operator after", "PowerForge [example.com/]: Example: negotiated Markdown bypass"],
             rules.Select(rule => rule!["description"]!.GetValue<string>()).ToArray());
+        Assert.True(rules[^2]!["action_parameters"]!["cache"]!.GetValue<bool>());
+        Assert.False(rules[^1]!["action_parameters"]!["cache"]!.GetValue<bool>());
+        if (existingBypass)
+            Assert.Equal("managed-markdown-id", rules[^1]!["id"]!.GetValue<string>());
     }
 
     [Fact]
@@ -496,7 +510,7 @@ public sealed class CloudflareCachePolicyTests
             currentRules[i]!["version"] = "7";
             currentRules[i]!["last_updated"] = "2026-07-16T00:00:00Z";
         }
-        currentRules.Add(ExistingRule("custom-id", "Operator custom rule", "custom"));
+        currentRules.Insert(currentRules.Count - 1, ExistingRule("custom-id", "Operator custom rule", "custom"));
 
         var handler = new SequenceHandler(JsonResponse(HttpStatusCode.OK, ExistingEnvelope(currentRules)));
         using var client = NewClient(handler);

@@ -136,10 +136,14 @@ internal static class CloudflareCachePolicyBuilder
             new JsonObject
             {
                 ["action"] = "set_cache_settings",
-                ["action_parameters"] = new JsonObject { ["cache"] = false },
+                ["action_parameters"] = new JsonObject
+                {
+                    ["cache"] = false,
+                    ["browser_ttl"] = new JsonObject { ["mode"] = "respect_origin" }
+                },
                 ["description"] = $"{descriptionPrefix} negotiated Markdown bypass",
                 ["enabled"] = true,
-                ["expression"] = $"({siteScope} and any(http.request.headers[\"accept\"][*] wildcard \"*text/markdown*\"))"
+                ["expression"] = $"({siteScope} and (http.request.headers.truncated or any(http.request.headers[\"accept\"][*] wildcard \"*text/markdown*\")))"
             }
         };
     }

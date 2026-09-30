@@ -77,7 +77,8 @@ internal static class CloudflareCachePolicyManager
                 existingRules => originRespectingDynamic
                     ? CloudflareDynamicOriginCachePolicyBuilder.ValidateExistingRules(existingRules, hostname, policyName, basePath)
                     : CloudflareDynamicOriginCachePolicyBuilder.ValidateStaticReplacement(existingRules, hostname, basePath),
-                managedRulesFirst: originRespectingDynamic);
+                managedRulesFirst: originRespectingDynamic,
+                terminalManagedRuleCount: originRespectingDynamic ? 0 : 1);
             if (reconciled.Success)
                 logger?.Info(reconciled.Message);
             return new CloudflareCachePolicyApplyResult

@@ -50,7 +50,8 @@ internal static class CloudflareManagedRulesetManager
         HttpClient httpClient,
         Func<JsonObject, bool>? isLegacyManagedRule = null,
         Func<JsonArray, string?>? validateExistingRules = null,
-        bool managedRulesFirst = false)
+        bool managedRulesFirst = false,
+        int terminalManagedRuleCount = 0)
     {
         try
         {
@@ -87,7 +88,12 @@ internal static class CloudflareManagedRulesetManager
                 .ToArray();
             CopyManagedRuleIdentity(existingManaged, managedRules);
 
-            var desiredRules = BuildDesiredRuleSequence(existingRules, managedRules, managedPrefix, isLegacyManagedRule, managedRulesFirst, out var preservedCount);
+            // Safety overrides must follow preserved operator rules as well as managed rules.
+            var ordinaryRules = new JsonArray(managedRules.Take(managedRules.Count - terminalManagedRuleCount)
+                .Select(rule => rule!.DeepClone()).ToArray());
+            var desiredRules = BuildDesiredRuleSequence(existingRules, ordinaryRules, managedPrefix, isLegacyManagedRule, managedRulesFirst, out var preservedCount);
+            foreach (var terminalRule in managedRules.Skip(managedRules.Count - terminalManagedRuleCount))
+                desiredRules.Add(terminalRule!.DeepClone());
             var changesRequired = !JsonNode.DeepEquals(
                 NormalizeRulesForComparison(existingRules),
                 NormalizeRulesForComparison(desiredRules));
