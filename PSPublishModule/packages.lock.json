@@ -4,23 +4,23 @@
     ".NETFramework,Version=v4.7.2": {
       "HtmlForgeX": {
         "type": "Direct",
-        "requested": "[0.56.0, )",
-        "resolved": "0.56.0",
-        "contentHash": "bKqH8vz5IQnLzoNttlVgqCsyX4vbCJ3zL8O+4B5L8tNGZpZlf++gQ1SU7bfvGsusvSyfK4tsh4WiCwSEIFtwnA==",
+        "requested": "[1.0.0, )",
+        "resolved": "1.0.0",
+        "contentHash": "ZJC5TWk5MOmfFkteW8GmSmQMgES4ehPAKLB2YWv0FsuJHINCN0bwKODb8XPZNjVpz/IpsIDhSGtZX+fRLAHz0A==",
         "dependencies": {
           "System.ComponentModel.Annotations": "5.0.0",
-          "System.Text.Json": "10.0.11"
+          "System.Text.Json": "10.0.12"
         }
       },
       "HtmlForgeX.Markdown": {
         "type": "Direct",
-        "requested": "[0.56.0, )",
-        "resolved": "0.56.0",
-        "contentHash": "nCw3OzgRcnGaRWkVXrD6badPVolTCR1CI8iZHHi5Hzhg0MvHOvFEtg54EFbyICcK4VyEaVjH5r+HtwptpETLeg==",
+        "requested": "[1.0.0, )",
+        "resolved": "1.0.0",
+        "contentHash": "9vOzaF5Yg3C1rWD8j1qQjfd1FMVL7P0j0UPgPhO6gWeA7G4wLAs9/9KOyXTGyiDsV4a4iqGC2GqFiwfEYBnUHQ==",
         "dependencies": {
-          "HtmlForgeX": "0.56.0",
-          "OfficeIMO.Markdown": "3.2.4",
-          "System.Text.Json": "10.0.11"
+          "HtmlForgeX": "1.0.0",
+          "OfficeIMO.Markdown": "3.4.3",
+          "System.Text.Json": "10.0.12"
         }
       },
       "Microsoft.NETFramework.ReferenceAssemblies": {
@@ -319,7 +319,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.5.ReferenceAssemblies": "[1.1.0, )",
-          "PowerForge": "[3.0.151, )",
+          "PowerForge": "[3.0.153, )",
           "System.Security.Cryptography.Xml": "[10.0.12, )",
           "System.Text.Json": "[10.0.12, )"
         }
@@ -328,18 +328,18 @@
     "net10.0": {
       "HtmlForgeX": {
         "type": "Direct",
-        "requested": "[0.56.0, )",
-        "resolved": "0.56.0",
-        "contentHash": "bKqH8vz5IQnLzoNttlVgqCsyX4vbCJ3zL8O+4B5L8tNGZpZlf++gQ1SU7bfvGsusvSyfK4tsh4WiCwSEIFtwnA=="
+        "requested": "[1.0.0, )",
+        "resolved": "1.0.0",
+        "contentHash": "ZJC5TWk5MOmfFkteW8GmSmQMgES4ehPAKLB2YWv0FsuJHINCN0bwKODb8XPZNjVpz/IpsIDhSGtZX+fRLAHz0A=="
       },
       "HtmlForgeX.Markdown": {
         "type": "Direct",
-        "requested": "[0.56.0, )",
-        "resolved": "0.56.0",
-        "contentHash": "nCw3OzgRcnGaRWkVXrD6badPVolTCR1CI8iZHHi5Hzhg0MvHOvFEtg54EFbyICcK4VyEaVjH5r+HtwptpETLeg==",
+        "requested": "[1.0.0, )",
+        "resolved": "1.0.0",
+        "contentHash": "9vOzaF5Yg3C1rWD8j1qQjfd1FMVL7P0j0UPgPhO6gWeA7G4wLAs9/9KOyXTGyiDsV4a4iqGC2GqFiwfEYBnUHQ==",
         "dependencies": {
-          "HtmlForgeX": "0.56.0",
-          "OfficeIMO.Markdown": "3.2.4"
+          "HtmlForgeX": "1.0.0",
+          "OfficeIMO.Markdown": "3.4.3"
         }
       },
       "OfficeIMO.Markdown": {
@@ -1128,7 +1128,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.6.6, )",
-          "PowerForge": "[3.0.151, )",
+          "PowerForge": "[3.0.153, )",
           "System.Security.Cryptography.Xml": "[10.0.12, )"
         }
       }
@@ -1136,18 +1136,18 @@
     "net8.0": {
       "HtmlForgeX": {
         "type": "Direct",
-        "requested": "[0.56.0, )",
-        "resolved": "0.56.0",
-        "contentHash": "bKqH8vz5IQnLzoNttlVgqCsyX4vbCJ3zL8O+4B5L8tNGZpZlf++gQ1SU7bfvGsusvSyfK4tsh4WiCwSEIFtwnA=="
+        "requested": "[1.0.0, )",
+        "resolved": "1.0.0",
+        "contentHash": "ZJC5TWk5MOmfFkteW8GmSmQMgES4ehPAKLB2YWv0FsuJHINCN0bwKODb8XPZNjVpz/IpsIDhSGtZX+fRLAHz0A=="
       },
       "HtmlForgeX.Markdown": {
         "type": "Direct",
-        "requested": "[0.56.0, )",
-        "resolved": "0.56.0",
-        "contentHash": "nCw3OzgRcnGaRWkVXrD6badPVolTCR1CI8iZHHi5Hzhg0MvHOvFEtg54EFbyICcK4VyEaVjH5r+HtwptpETLeg==",
+        "requested": "[1.0.0, )",
+        "resolved": "1.0.0",
+        "contentHash": "9vOzaF5Yg3C1rWD8j1qQjfd1FMVL7P0j0UPgPhO6gWeA7G4wLAs9/9KOyXTGyiDsV4a4iqGC2GqFiwfEYBnUHQ==",
         "dependencies": {
-          "HtmlForgeX": "0.56.0",
-          "OfficeIMO.Markdown": "3.2.4"
+          "HtmlForgeX": "1.0.0",
+          "OfficeIMO.Markdown": "3.4.3"
         }
       },
       "OfficeIMO.Markdown": {
@@ -1896,7 +1896,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.4.20, )",
-          "PowerForge": "[3.0.151, )",
+          "PowerForge": "[3.0.153, )",
           "System.Security.Cryptography.Xml": "[10.0.12, )"
         }
       }
