@@ -52,7 +52,7 @@ public sealed partial class AppStoreConnectClient
 
         var prices = spec.Prices.Select((price, index) => new
         {
-            Id = $"price-{index + 1}",
+            Id = $"${{price-{index + 1}}}",
             Spec = price
         }).ToArray();
         var body = new
