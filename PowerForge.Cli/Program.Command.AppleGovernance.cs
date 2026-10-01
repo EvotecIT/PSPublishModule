@@ -5,7 +5,7 @@ using PowerForge.Cli;
 internal static partial class Program
 {
     private const string AppleGovernanceUsage =
-        "Usage: powerforge apple-governance <snapshot|validate|plan|apply> [--config <governance.json>] " +
+        "Usage: powerforge apple-governance <territories|snapshot|validate|plan|apply> [--config <governance.json>] " +
         "[--app-id <id> --out <governance.json> [--force]] " +
         "[--release-config <release.json>] [--key-path <AuthKey.p8> --key-id <id> --issuer-id <id>] " +
         "[--receipt <path>] [--reviewed-plan <path>] [--confirm] [--max-changes <N>] [--fail-on-drift] [--summary] [--output json]";
@@ -26,6 +26,17 @@ internal static partial class Program
         try
         {
             ValidateAppleGovernanceArguments(argv.Skip(1).ToArray());
+            if (operation == "territories")
+            {
+                var territoryCredential = ResolveAppleGovernanceCredential(argv, Path.Combine(Directory.GetCurrentDirectory(), "governance.json"));
+                using var territoryClient = new AppStoreConnectClient(territoryCredential);
+                var ids = territoryClient.GetTerritoryIdsAsync().GetAwaiter().GetResult();
+                if (outputJson)
+                    WriteAppleGovernanceJson(operation, true, 0, JsonSerializer.SerializeToElement(new { territoryIds = ids, count = ids.Length }), null);
+                else
+                    foreach (var id in ids) logger.Info(id);
+                return 0;
+            }
             if (operation == "snapshot")
             {
                 var appId = TryGetOptionValue(argv, "--app-id") ?? throw new ArgumentException("snapshot requires --app-id.");
