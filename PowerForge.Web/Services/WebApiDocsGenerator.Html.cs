@@ -133,8 +133,6 @@ public static partial class WebApiDocsGenerator
         var typeDisplayNames = BuildTypeDisplayNameMap(types, options, warnings);
         var sidebarHtml = BuildDocsSidebar(options, types, baseUrl, string.Empty, docsHomeUrl, typeDisplayNames, suite);
         var mainSidebarTypes = GetMainTypes(types, options);
-        var mainSidebarSlugs = new HashSet<string>(mainSidebarTypes.Select(static type => type.Slug), StringComparer.OrdinalIgnoreCase);
-        var compactTypeSidebars = types.Count > 200;
         var sidebarClass = BuildSidebarClass(options.SidebarPosition);
         var overviewHtml = BuildDocsOverview(options, types, baseUrl, typeDisplayNames, suite);
         var slugMap = BuildTypeSlugMap(types);
@@ -163,11 +161,7 @@ public static partial class WebApiDocsGenerator
 
         foreach (var type in types)
         {
-            var sidebarTypes = compactTypeSidebars
-                ? types.Where(candidate => string.Equals(candidate.Namespace, type.Namespace, StringComparison.OrdinalIgnoreCase) ||
-                                           mainSidebarSlugs.Contains(candidate.Slug)).ToArray()
-                : types;
-            var sidebar = BuildDocsSidebar(options, sidebarTypes, baseUrl, type.Slug, docsHomeUrl, typeDisplayNames, suite,
+            var sidebar = BuildDocsSidebar(options, types, baseUrl, type.Slug, docsHomeUrl, typeDisplayNames, suite,
                 mainSidebarTypes, types.Count);
             var sidebarClassForType = BuildSidebarClass(options.SidebarPosition);
             var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
@@ -1066,7 +1060,9 @@ body.pf-api-docs .api-suite-search-filter{
         var mainTypes = mainTypesOverride ?? GetMainTypes(types, options);
         var mainTypeSlugs = new HashSet<string>(mainTypes.Select(static t => t.Slug), StringComparer.OrdinalIgnoreCase);
 
-        html.Line("<div class=\"ev-docs-menu api-sidebar-shell\">");
+        var lazyCatalog = types.Count > 200 && !string.IsNullOrWhiteSpace(activeSlug);
+        var catalogAttribute = lazyCatalog ? $" data-type-catalog=\"{System.Web.HttpUtility.HtmlEncode(indexUrl + "index.json")}\"" : string.Empty;
+        html.Line($"<div class=\"ev-docs-menu api-sidebar-shell\"{catalogAttribute}>");
         using (html.Indent())
         {
             html.Line("<div class=\"sidebar-project-indicator ev-docs-project-indicator\">");
@@ -1176,8 +1172,8 @@ body.pf-api-docs .api-suite-search-filter{
                 html.Line("</div>");
             }
             html.Line($"<div class=\"sidebar-count\" data-total=\"{totalTypes}\">Showing {totalTypes} of {totalTypes} {primaryKindPluralLabel}</div>");
-            if (catalogTypeCount > totalTypes)
-                html.Line($"<a class=\"sidebar-browse-all\" href=\"{indexUrl}\">Browse all {catalogTypeCount.Value} types</a>");
+            if (lazyCatalog)
+                html.Line($"<a class=\"sidebar-browse-all\" href=\"{indexUrl}\">Browse all {totalTypes} types</a>");
             html.Line("<div class=\"sidebar-tools\">");
             using (html.Indent())
             {
@@ -1218,7 +1214,11 @@ body.pf-api-docs .api-suite-search-filter{
                     }
                     html.Line("</div>");
                 }
-                var grouped = types
+                var navigationTypes = lazyCatalog
+                    ? types.Where(type => string.Equals(type.Slug, activeSlug, StringComparison.OrdinalIgnoreCase))
+                        .Concat(types.Where(type => !mainTypeSlugs.Contains(type.Slug)).Take(20)).Distinct().ToArray()
+                    : types;
+                var grouped = navigationTypes
                     .Where(t => !mainTypeSlugs.Contains(t.Slug))
                     .GroupBy(t => string.IsNullOrWhiteSpace(t.Namespace) ? "(global)" : t.Namespace)
                     .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase);

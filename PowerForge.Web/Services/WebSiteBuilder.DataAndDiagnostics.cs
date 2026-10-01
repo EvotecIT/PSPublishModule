@@ -748,6 +748,7 @@ public static partial class WebSiteBuilder
             : webMcpSearchTools
                 .Select(static tool => WebAgentReadiness.NormalizeWebMcpRoute(tool.Route))
                 .ToArray();
+        var queryShards = WriteSearchQueryShards(outputRoot, entries);
         var manifest = new Dictionary<string, object?>
         {
             ["entryCount"] = aggregateArtifact.Count,
@@ -758,11 +759,13 @@ public static partial class WebSiteBuilder
             ["searchIndexSha256"] = aggregateArtifact.Sha256,
             ["languageShards"] = languageShards,
             ["collectionShards"] = collectionShards,
+            ["queryShards"] = queryShards,
             ["searchPagePath"] = searchPagePaths[0],
             ["searchPagePaths"] = searchPagePaths
         };
         var manifestPath = Path.Combine(searchDir, "manifest.json");
         WriteAllTextIfChanged(manifestPath, JsonSerializer.Serialize(manifest, WebJson.Options));
+        RetireSearchQueryShards(outputRoot, queryShards);
 
         if (webMcpSearchTools.Length > 0)
             EnsureWebMcpSiteSearchAsset(outputRoot);

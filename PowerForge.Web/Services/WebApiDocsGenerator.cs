@@ -14,6 +14,8 @@ namespace PowerForge.Web;
 /// <summary>Options for API documentation generation.</summary>
 public sealed class WebApiDocsOptions
 {
+    /// <summary>Owning package identifier displayed in API search. Defaults to the assembly name.</summary>
+    public string? PackageId { get; set; }
     /// <summary>Documentation source type.</summary>
     public ApiDocsType Type { get; set; } = ApiDocsType.CSharp;
     /// <summary>Path to the XML documentation file.</summary>
@@ -472,6 +474,7 @@ public static partial class WebApiDocsGenerator
             .Where(t => ShouldIncludeType(t, options))
             .OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        EnsureUniqueTypeSlugs(types);
         RemoveStaleApiTypeArtifacts(outputPath, previousTypeSlugs, types);
         var typeDisplayNames = BuildTypeDisplayNameMap(types, options, warnings);
         var typeAliasMap = BuildTypeAliasMap(types, typeDisplayNames);
@@ -521,6 +524,7 @@ public static partial class WebApiDocsGenerator
 
         var indexPath = Path.Combine(outputPath, "index.json");
         WriteJson(indexPath, index);
+        WriteMemberSearchCatalog(outputPath, options, types);
 
         var search = types.Select(t =>
         {
@@ -534,6 +538,8 @@ public static partial class WebApiDocsGenerator
                 ["aliases"] = aliases,
                 ["summary"] = t.Summary ?? string.Empty,
                 ["kind"] = t.Kind,
+                ["assembly"] = t.Assembly ?? assemblyName ?? string.Empty,
+                ["packageId"] = options.PackageId ?? t.Assembly ?? assemblyName ?? string.Empty,
                 ["namespace"] = t.Namespace,
                 ["freshness"] = BuildFreshnessJson(t.Freshness, options),
                 ["slug"] = t.Slug,

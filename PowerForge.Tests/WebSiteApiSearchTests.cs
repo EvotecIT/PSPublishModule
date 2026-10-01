@@ -65,6 +65,43 @@ public sealed class WebSiteApiSearchTests : IDisposable
     }
 
     [Fact]
+    public void Build_KeepsMemberFragmentsAndAllEntriesInBoundedQueryShards()
+    {
+        WriteCatalog("word", """[{"title":"WordDocument","slug":"worddocument","kind":"Class"}]""", "worddocument");
+        var members = Enumerable.Range(0, 5100).Select(number => new
+        {
+            title = "WordDocument.SaveAsPdf", slug = "worddocument", anchor = "method-save-" + number,
+            kind = "method", assembly = "Word.Pdf", signature = "SaveAsPdf(string path)",
+            aliases = new[] { "SaveAsPdf" }, summary = "Export Word to PDF."
+        });
+        File.WriteAllText(Path.Combine(Output, "api", "word", "members.json"), JsonSerializer.Serialize(members));
+        Build();
+        using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(Output, "search", "manifest.json")));
+        var shards = manifest.RootElement.GetProperty("queryShards").EnumerateArray().ToArray();
+        var all = shards.SelectMany(shard => JsonSerializer.Deserialize<SearchIndexEntry[]>(
+            File.ReadAllText(Path.Combine(Output, shard.GetProperty("path").GetString()!.TrimStart('/'))),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!).ToArray();
+        Assert.Equal(5102, all.Length);
+        Assert.Equal(all.Length, all.Select(entry => entry.Url).Distinct().Count());
+        Assert.All(shards, shard => Assert.False(shard.GetProperty("truncated").GetBoolean()));
+        Assert.All(all.Where(entry => entry.Kind == "method"), entry =>
+        {
+            Assert.StartsWith("/api/word/worddocument/#method-save-", entry.Url);
+            Assert.Equal("Word.Pdf", entry.Project);
+            Assert.NotNull(entry.Meta);
+        });
+        var before = shards.Select(shard => shard.GetProperty("path").GetString()!).ToArray();
+        var unrelated = Path.Combine(Output, "search", "query", "custom.json");
+        File.WriteAllText(unrelated, "{}");
+        File.WriteAllText(Path.Combine(Output, "api", "word", "members.json"), "[]");
+        Build();
+        using var refreshed = JsonDocument.Parse(File.ReadAllText(Path.Combine(Output, "search", "manifest.json")));
+        var retained = refreshed.RootElement.GetProperty("queryShards").EnumerateArray().Select(shard => shard.GetProperty("path").GetString()!).ToHashSet();
+        Assert.All(before.Except(retained), path => Assert.False(File.Exists(Path.Combine(Output, path.TrimStart('/')))));
+        Assert.True(File.Exists(unrelated));
+    }
+
+    [Fact]
     public void Build_RejectsApiRootsOutsideTheOutput()
     {
         _spec.Search!.ApiRoots = ["../outside"];

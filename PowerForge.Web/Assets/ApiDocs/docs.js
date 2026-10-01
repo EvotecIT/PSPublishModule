@@ -699,6 +699,11 @@
   function saveState() {
     var hash = buildStateHash();
     if (!hash) {
+      // Opening a member result must retain its anchor during initial filter setup.
+      if (window.location.hash && !isStateHash(window.location.hash)) {
+        syncApiLinksWithState('');
+        return;
+      }
       history.replaceState(null, '', window.location.pathname + window.location.search);
       syncApiLinksWithState('');
       return;
@@ -708,6 +713,7 @@
   }
 
   function applyFilter(query) {
+    loadTypeCatalog();
     var q = normalize(query);
     var items = Array.prototype.slice.call(document.querySelectorAll('.type-item'));
     var chips = Array.prototype.slice.call(document.querySelectorAll('.type-chip'));
@@ -754,7 +760,49 @@
     saveState();
   }
 
+  var typeCatalogPromise = null;
+  function loadTypeCatalog() {
+    var shell = document.querySelector('[data-type-catalog]');
+    if (!shell || typeCatalogPromise) return;
+    // Initial page paint keeps a small useful menu; load the full catalog on interaction.
+    if (!activeKind && !activeNamespace && !(filterInput && filterInput.value) && !shell.dataset.catalogRequested) return;
+    typeCatalogPromise = fetch(shell.dataset.typeCatalog).then(function (response) {
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      return response.json();
+    }).then(function (catalog) {
+      if (!Array.isArray(catalog.types)) throw new Error('Invalid type catalog.');
+      var nav = shell.querySelector('.sidebar-nav');
+      var section = document.createElement('div');
+      section.className = 'nav-section';
+      var content = document.createElement('div');
+      content.className = 'nav-section-content';
+      catalog.types.forEach(function (type) {
+        if (!/^[A-Za-z0-9_-]+$/.test(type.slug || '')) return;
+        var link = document.createElement('a');
+        link.className = 'type-item';
+        link.href = new URL(type.slug + '/', new URL(shell.dataset.typeCatalog, window.location.href)).pathname;
+        link.textContent = type.displayName || type.name || type.fullName;
+        link.dataset.search = [type.fullName, type.displayName, (type.aliases || []).join(' '), type.summary].join(' ');
+        link.dataset.kind = String(type.kind || '').toLowerCase();
+        link.dataset.namespace = type.namespace || '(global)';
+        link.classList.toggle('active', link.pathname === window.location.pathname);
+        content.appendChild(link);
+      });
+      section.appendChild(content);
+      nav.replaceChildren(section);
+      delete shell.dataset.typeCatalog;
+      applyFilter(filterInput ? filterInput.value : '');
+    }).catch(function () {
+      typeCatalogPromise = null;
+      if (emptyLabel) { emptyLabel.hidden = false; emptyLabel.textContent = 'Catalog unavailable. Use Browse all types to continue.'; }
+    });
+  }
+
   if (filterInput) {
+    filterInput.addEventListener('focus', function () {
+      var shell = document.querySelector('[data-type-catalog]');
+      if (shell) { shell.dataset.catalogRequested = 'true'; loadTypeCatalog(); }
+    });
     filterInput.addEventListener('input', function() {
       applyFilter(filterInput.value);
       if (clearButton) {

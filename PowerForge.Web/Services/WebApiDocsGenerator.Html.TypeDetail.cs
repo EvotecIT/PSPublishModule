@@ -755,11 +755,14 @@ public static partial class WebApiDocsGenerator
         html.Line($"<div class=\"member-card\" id=\"{memberId}\" data-kind=\"{memberKind}\" data-inherited=\"{inherited}\" data-search=\"{searchAttr}\">");
         using (html.Indent())
         {
+            var searchAnchor = GetMemberSearchAnchor(memberId);
+            if (searchAnchor != memberId)
+                html.Line($"<span class=\"member-search-target\" id=\"{searchAnchor}\" aria-hidden=\"true\"></span>");
             html.Line("<div class=\"member-header\">");
             using (html.Indent())
             {
                 html.Line(BuildMemberSignatureHtml(signature, sectionLabel, codeLanguage));
-                html.Line($"<a class=\"member-anchor\" href=\"#{memberId}\" aria-label=\"Link to {System.Web.HttpUtility.HtmlEncode(member.Name)}\">#</a>");
+                html.Line($"<a class=\"member-anchor\" href=\"#{searchAnchor}\" aria-label=\"Link to {System.Web.HttpUtility.HtmlEncode(member.Name)}\">#</a>");
             }
             html.Line("</div>");
 

@@ -160,6 +160,7 @@ internal static partial class WebCliCommandHandlers
             PowerShellModuleManifestPath = powerShellManifestPath,
             PowerShellCommandMetadataPath = powerShellCommandMetadataPath,
             AssemblyPath = assemblyPath,
+            PackageId = TryGetOptionValue(subArgs, "--package-id"),
             OutputPath = outPath,
             Title = string.IsNullOrWhiteSpace(title) ? "API Reference" : title,
             BaseUrl = baseUrl,
