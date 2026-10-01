@@ -233,6 +233,9 @@ public sealed partial class PowerShellBenchmarkRunner
         var durationMs = 0d;
         var stage = "Setup";
         Stopwatch? operationStopwatch = null;
+        OperationMemorySnapshot memoryBefore = default;
+        long? allocatedBytes = null;
+        long? workingSetDeltaBytes = null;
 
         try
         {
@@ -245,20 +248,26 @@ public sealed partial class PowerShellBenchmarkRunner
             stage = "Memory cleanup";
             ApplyMemoryCleanup(suite);
             stage = iteration < 0 ? "Warmup operation" : "Operation";
+            memoryBefore = CaptureOperationMemory();
             operationStopwatch = Stopwatch.StartNew();
             InvokeStrict(item.Handler, caseObject, runObject);
             operationStopwatch.Stop();
             durationMs = operationStopwatch.Elapsed.TotalMilliseconds;
+            CaptureOperationMemoryDifference(memoryBefore, out allocatedBytes, out workingSetDeltaBytes);
             SetProperty(runObject, "DurationMs", durationMs);
+            SetProperty(runObject, "AllocatedBytes", allocatedBytes);
+            SetProperty(runObject, "WorkingSetDeltaBytes", workingSetDeltaBytes);
 
             if (!recordSample)
-                return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Succeeded, durationMs, string.Empty, null);
+                return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Succeeded, durationMs, string.Empty, null,
+                    allocatedBytes, workingSetDeltaBytes);
 
             stage = "Validation";
             InvokeOptional(suite.Validate, caseObject, runObject);
             stage = "Metrics";
             var metrics = CaptureMetrics(suite, caseObject, runObject);
-            return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Succeeded, durationMs, string.Empty, metrics);
+            return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Succeeded, durationMs, string.Empty, metrics,
+                allocatedBytes, workingSetDeltaBytes);
         }
         catch (Exception ex) when (!IsPowerShellStopRequest(ex))
         {
@@ -266,10 +275,12 @@ public sealed partial class PowerShellBenchmarkRunner
             {
                 operationStopwatch.Stop();
                 durationMs = operationStopwatch.Elapsed.TotalMilliseconds;
+                CaptureOperationMemoryDifference(memoryBefore, out allocatedBytes, out workingSetDeltaBytes);
                 SetProperty(runObject, "DurationMs", durationMs);
             }
 
-            return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Failed, durationMs, FormatFailureReason(stage, ex), null);
+            return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Failed, durationMs, FormatFailureReason(stage, ex), null,
+                allocatedBytes, workingSetDeltaBytes);
         }
     }
 
@@ -281,7 +292,9 @@ public sealed partial class PowerShellBenchmarkRunner
         BenchmarkSampleStatus status,
         double durationMs,
         string reason,
-        Dictionary<string, double>? metrics)
+        Dictionary<string, double>? metrics,
+        long? allocatedBytes = null,
+        long? workingSetDeltaBytes = null)
         => new()
         {
             RunId = runId,
@@ -295,6 +308,8 @@ public sealed partial class PowerShellBenchmarkRunner
             Iteration = iteration,
             Status = status,
             DurationMs = durationMs,
+            AllocatedBytes = allocatedBytes,
+            WorkingSetDeltaBytes = workingSetDeltaBytes,
             Reason = reason,
             Variables = ToVariables(item.Values),
             Metrics = metrics ?? new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)

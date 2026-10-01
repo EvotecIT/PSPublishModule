@@ -118,9 +118,11 @@ internal static class PowerShellBenchmarkArtifactWriter
     {
         var rows = samples.ToArray();
         var variableHeaders = GetVariableHeaders(rows.Select(row => row.Variables));
-        var metricHeaders = GetMetricHeaders(rows.Select(row => row.Metrics));
+        var metricHeaders = GetMetricHeaders(rows.Select(row => row.Metrics))
+            .Where(header => !header.Equals("AllocatedBytes", StringComparison.OrdinalIgnoreCase)
+                && !header.Equals("WorkingSetDeltaBytes", StringComparison.OrdinalIgnoreCase)).ToArray();
         var builder = new StringBuilder();
-        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS", "RunMode" }.Concat(variableHeaders).Concat(new[] { "Iteration", "Status", "DurationMs", "Reason" }).Concat(metricHeaders).Select(Cell)));
+        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS", "RunMode" }.Concat(variableHeaders).Concat(new[] { "Iteration", "Status", "DurationMs", "AllocatedBytes", "WorkingSetDeltaBytes", "Reason" }).Concat(metricHeaders).Select(Cell)));
         foreach (var sample in rows)
         {
             var cells = new List<string>
@@ -137,6 +139,8 @@ internal static class PowerShellBenchmarkArtifactWriter
             cells.Add(sample.Iteration.ToString(CultureInfo.InvariantCulture));
             cells.Add(sample.Status.ToString());
             cells.Add(Number(sample.DurationMs));
+            cells.Add(sample.AllocatedBytes?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
+            cells.Add(sample.WorkingSetDeltaBytes?.ToString(CultureInfo.InvariantCulture) ?? string.Empty);
             cells.Add(Cell(sample.Reason));
             cells.AddRange(metricHeaders.Select(header => sample.Metrics.TryGetValue(header, out var value) ? Number(value) : string.Empty));
             builder.AppendLine(string.Join(",", cells));
