@@ -578,11 +578,11 @@ New-BenchmarkSuite 'stale-native-exit' {
 
         var samplesCsv = File.ReadAllText(result.Artifacts["samples.csv"]);
         var summaryCsv = File.ReadAllText(result.Artifacts["summary.csv"]);
-        Assert.Contains("Suite,Scenario,Operation,Engine,Host,OS,RunMode,Rows,Iteration,Status,DurationMs,Reason,TinyMetric", samplesCsv);
+        Assert.Contains("Suite,Scenario,Operation,Engine,Host,OS,RunMode,Rows,Iteration,Status,DurationMs,AllocatedBytes,WorkingSetDeltaBytes,Reason,TinyMetric", samplesCsv);
         Assert.Contains($",Managed,{result.Samples[0].Host},{result.Samples[0].Os},{result.Samples[0].RunMode},10,0,Succeeded", samplesCsv);
         Assert.Contains(result.Samples[0].DurationMs.ToString("G17", System.Globalization.CultureInfo.InvariantCulture), samplesCsv);
         Assert.Contains(",0.00042", samplesCsv);
-        Assert.Contains("Suite,Scenario,Operation,Engine,Host,OS,RunMode,Rows,SampleCount,FailureCount,OutlierCount,Status,MedianMs,MeanMs,MinMs,MaxMs,P95Ms,P99Ms,StdDevMs,StdErrMs,FailureReasons,TinyMetric", summaryCsv);
+        Assert.Contains("Suite,Scenario,Operation,Engine,Host,OS,RunMode,Rows,SampleCount,FailureCount,OutlierCount,Status,MedianMs,MeanMs,MinMs,MaxMs,P95Ms,P99Ms,StdDevMs,StdErrMs,FailureReasons,AllocatedBytes,TinyMetric,WorkingSetDeltaBytes", summaryCsv);
         Assert.Contains(",0.00042", summaryCsv);
     }
 

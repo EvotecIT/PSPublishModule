@@ -392,6 +392,29 @@ Update-BenchmarkDocument `
 
 The updater fails when the target document or marker block is missing.
 
+## Operation memory measurements
+
+The PowerShell runner records `AllocatedBytes` around the operation handler on
+modern .NET using the process-wide managed allocation counter. Setup, data
+preparation, configured memory cleanup, validation and metric callbacks are outside
+this interval. Host invocation and allocations on other managed threads in the
+same process are included. Run evidence on an idle host; the counter measures
+allocated bytes, not live objects or retained memory. .NET Framework reports a
+missing allocation observation because it has no equivalent counter.
+
+`WorkingSetDeltaBytes` is the signed difference between process working-set
+observations around the operation. It can be negative, includes native and managed
+resident pages, and is neither peak memory nor retained-memory evidence. Unavailable
+process observations remain missing rather than being reported as zero.
+
+Failed operations retain observations captured before failure; validation failures
+retain the completed operation's measurements. Setup failures have no operation
+measurement. Summary metrics contain the arithmetic mean of successful observations
+only when every successful sample has that counter. `Test-BenchmarkGate -Metric
+AllocatedBytes` can compare allocation summaries with a declared baseline; its
+absolute tolerance is expressed in the selected metric's units. Keep these
+machine-dependent gates in opt-in evidence runs.
+
 ## Gates
 
 `Test-BenchmarkGate` verifies normalized summary rows against a JSON baseline.
