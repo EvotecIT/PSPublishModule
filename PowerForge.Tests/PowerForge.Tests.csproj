@@ -33,6 +33,7 @@
     <ProjectReference Include="Fixtures\PowerShellCompilationExternalBinaryModuleFixture\PowerShellCompilationExternalBinaryModuleFixture.csproj" />
     <ProjectReference Include="Fixtures\PowerShellCompilationForgedCancellationProviderFixture\PowerShellCompilationForgedCancellationProviderFixture.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="Fixtures\PowerShellCompilationForgedCancellationReferenceProviderFixture\PowerShellCompilationForgedCancellationReferenceProviderFixture.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="Fixtures\ProcessOutputPressureFixture\ProcessOutputPressureFixture.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>
@@ -46,4 +47,10 @@
     <None Include="Fixtures\**\*" Exclude="Fixtures\**\bin\**;Fixtures\**\obj\**" />
   </ItemGroup>
 
+  <Target Name="CopyProcessOutputPressureFixture" AfterTargets="Build">
+    <ItemGroup>
+      <ProcessOutputFixture Include="$(MSBuildProjectDirectory)/Fixtures/ProcessOutputPressureFixture/bin/$(Configuration)/net10.0/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ProcessOutputFixture)" DestinationFiles="@(ProcessOutputFixture->'$(TargetDir)ProcessOutputPressureFixture/%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
 </Project>

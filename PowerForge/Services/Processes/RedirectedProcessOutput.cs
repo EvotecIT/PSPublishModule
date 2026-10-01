@@ -38,7 +38,7 @@ internal sealed partial class RedirectedProcessOutput
 
     /// <summary>Stops pipe intake, then joins decoding and callbacks before a final snapshot is taken.
     /// Diagnostic callbacks already running must return before shutdown can finish.</summary>
-    internal async Task StopAsync()
+    internal Task StopAsync()
     {
         if (!Completion.IsCompleted)
         {
@@ -47,7 +47,10 @@ internal sealed partial class RedirectedProcessOutput
             try { _reader?.Dispose(); }
             catch (IOException) { }
         }
-        await Completion.ConfigureAwait(false);
+        // Completion is signalled by the reader after callbacks and decoding finish.
+        // Returning it directly keeps synchronous process shutdown independent of a
+        // queued worker-pool continuation.
+        return Completion;
     }
 
     private async Task ReadAsync(
@@ -66,16 +69,31 @@ internal sealed partial class RedirectedProcessOutput
         Exception? failure = null;
         try
         {
+            using var unixReader = UnixPipeReader.TryCreate(stream);
+            if (unixReader is not null)
+            {
+                // The native polling reader stays on this dedicated thread. Signal
+                // startup before its first bounded wait so process deadlines can start.
+                armed = true;
+                readerArmed();
+            }
             int read;
             while (true)
             {
-                var pendingRead = ReadChunkAsync(stream, bytes, _readCancellation.Token);
-                if (!armed)
+                if (unixReader is not null)
                 {
-                    armed = true;
-                    readerArmed();
+                    read = unixReader.Read(bytes, _readCancellation.Token);
                 }
-                read = await pendingRead.ConfigureAwait(false);
+                else
+                {
+                    var pendingRead = ReadChunkAsync(stream, bytes, _readCancellation.Token);
+                    if (!armed)
+                    {
+                        armed = true;
+                        readerArmed();
+                    }
+                    read = await pendingRead.ConfigureAwait(false);
+                }
                 if (read <= 0) break;
                 var count = decoder.Decode(bytes, read, chars, flush: false);
                 Append(chars, count, line, lineReceived, ref previousCarriageReturn);

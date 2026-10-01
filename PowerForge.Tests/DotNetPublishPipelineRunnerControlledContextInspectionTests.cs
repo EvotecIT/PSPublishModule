@@ -120,7 +120,7 @@ public sealed class DotNetPublishPipelineRunnerControlledContextInspectionTests
             if (supplied) arguments.Add("-p:ContextMode=");
             var result = DotNetPublishPipelineRunner.RunControlledMsBuildEvaluationProcess(root, arguments,
                 new Dictionary<string, string?>(), TimeSpan.FromMinutes(1), root);
-            Assert.Equal(accepted, result.ExitCode == 0);
+            Assert.True(accepted == (result.ExitCode == 0), $"Expected accepted={accepted}; exit={result.ExitCode}; error={result.StdErr}");
             Assert.Equal(accepted, File.Exists(Path.Combine(root, "execution.txt")));
             if (!accepted) Assert.Contains("does not preserve global-property presence", result.StdErr);
         }
