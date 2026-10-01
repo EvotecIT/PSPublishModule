@@ -22,7 +22,7 @@ internal static partial class Program
             if (string.IsNullOrWhiteSpace(source)) throw new ArgumentException("Missing --source plugin directory.");
             var service = new AgentPluginPackageService();
             var project = TryGetOptionValue(argv, "--project");
-            if (argv.Contains("--project") && string.IsNullOrWhiteSpace(project))
+            if (argv.Contains("--project", StringComparer.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(project))
                 throw new ArgumentException("Missing --project owning csproj path.");
             if (!string.IsNullOrWhiteSpace(project))
             {
