@@ -21,6 +21,17 @@ public sealed partial class AgentPluginPackageService
     /// <returns>Validated identity and generated file count.</returns>
     public AgentPluginPackageResult Validate(string sourcePath) => Read(sourcePath, checkCompatibility: true).Result;
 
+    /// <summary>Validates the package and requires its version to match the owning release version.</summary>
+    /// <param name="sourcePath">Dedicated portable plugin root.</param>
+    /// <param name="expectedVersion">Exact three-part release version, including any prerelease suffix.</param>
+    /// <returns>Validated package identity.</returns>
+    public AgentPluginPackageResult Validate(string sourcePath, string expectedVersion)
+    {
+        var result = Validate(sourcePath);
+        RequireReleaseVersion(result, expectedVersion);
+        return result;
+    }
+
     /// <summary>Regenerates the compatibility files from portable metadata and MCP configuration.</summary>
     /// <param name="sourcePath">Dedicated portable plugin root. Only compatibility files are replaced.</param>
     /// <returns>Validated identity and generated file count.</returns>
@@ -122,7 +133,8 @@ public sealed partial class AgentPluginPackageService
         }
     }
 
-    private static Package Read(string sourcePath, bool checkCompatibility)
+    private static Package Read(string sourcePath, bool checkCompatibility,
+        IReadOnlyDictionary<string, string>? plannedContents = null)
     {
         var root = FileSystemPathSafety.ResolveParentDirectoryAliases(sourcePath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         RejectLinkedAncestors(root);
@@ -131,12 +143,12 @@ public sealed partial class AgentPluginPackageService
         var allFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         Walk(root, root, allFiles, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         if (!allFiles.ContainsKey("plugin.json")) throw new InvalidDataException("Missing root plugin.json.");
-        using var manifest = ParseJson(allFiles["plugin.json"]);
+        using var manifest = ParsePackageJson(allFiles["plugin.json"], plannedContents);
         ValidateManifest(manifest.RootElement);
         var name = RequiredString(manifest.RootElement, "name");
         var version = RequiredString(manifest.RootElement, "version");
         var generated = new Dictionary<string, byte[]>(StringComparer.Ordinal);
-        using var mcp = allFiles.TryGetValue("mcp.json", out var mcpPath) ? ParseJson(mcpPath) : null;
+        using var mcp = allFiles.TryGetValue("mcp.json", out var mcpPath) ? ParsePackageJson(mcpPath, plannedContents) : null;
         if (mcp is not null) ValidateMcp(mcp.RootElement, root);
         GenerateCompatibility(manifest.RootElement, mcp?.RootElement, generated);
         foreach (var pair in allFiles)
