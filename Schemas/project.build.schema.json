@@ -366,6 +366,11 @@
           "minLength": 1,
           "default": "{Version}",
           "description": "Replacement text containing the {Version} token."
+        },
+        "SyncAgentPluginCompatibility": {
+          "type": "boolean",
+          "default": false,
+          "description": "For canonical agent-plugin plugin.json bindings, regenerate existing Codex and Claude compatibility files in the release transaction."
         }
       }
     },

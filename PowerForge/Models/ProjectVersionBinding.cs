@@ -16,4 +16,11 @@ public sealed class ProjectVersionBinding
 
     /// <summary>Replacement text containing the <c>{Version}</c> token.</summary>
     public string Replacement { get; set; } = "{Version}";
+
+    /// <summary>
+    /// Regenerates existing Codex and Claude compatibility files when this binding targets
+    /// a canonical agent-plugin <c>plugin.json</c>. Generated updates join the release transaction.
+    /// Run <c>agent-plugin sync</c> once before enabling this setting for a new plugin.
+    /// </summary>
+    public bool SyncAgentPluginCompatibility { get; set; }
 }

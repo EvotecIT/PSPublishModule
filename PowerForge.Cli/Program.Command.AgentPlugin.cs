@@ -3,7 +3,7 @@ using PowerForge.Cli;
 
 internal static partial class Program
 {
-    private const string AgentPluginUsage = "Usage: powerforge agent-plugin <validate|sync|pack> --source <plugin-directory> [--out <archive-directory>] [--output json]";
+    private const string AgentPluginUsage = "Usage: powerforge agent-plugin <validate|sync|pack> --source <plugin-directory> [--project <owning-csproj>] [--out <archive-directory>] [--output json]";
 
     private static int CommandAgentPlugin(string[] filteredArgs, CliOptions cli, ILogger logger)
     {
@@ -21,6 +21,13 @@ internal static partial class Program
             var source = TryGetOptionValue(argv, "--source");
             if (string.IsNullOrWhiteSpace(source)) throw new ArgumentException("Missing --source plugin directory.");
             var service = new AgentPluginPackageService();
+            var project = TryGetOptionValue(argv, "--project");
+            if (!string.IsNullOrWhiteSpace(project))
+            {
+                if (!CsprojVersionEditor.TryGetVersion(project!, out var expectedVersion))
+                    throw new ArgumentException("Owning project must declare an explicit package version: " + project);
+                AgentPluginPackageService.ValidateReleaseVersion(source!, expectedVersion, checkCompatibility: argv[0] != "sync");
+            }
             AgentPluginPackageResult result;
             switch (argv[0])
             {

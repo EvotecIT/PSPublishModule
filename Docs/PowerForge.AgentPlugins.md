@@ -4,7 +4,7 @@ PowerForge packages Agent Plugins 1.0.0 from a dedicated source directory. These
 
 ```text
 powerforge agent-plugin sync --source plugins/document-tools
-powerforge agent-plugin validate --source plugins/document-tools --output json
+powerforge agent-plugin validate --source plugins/document-tools --project Example.Tool/Example.Tool.csproj --output json
 powerforge agent-plugin pack --source plugins/document-tools --out Artefacts/AgentPlugins --output json
 ```
 
@@ -49,3 +49,22 @@ var package = packager.Pack("plugins/document-tools", "Artefacts/AgentPlugins");
 Console.WriteLine(package.ArchivePath);
 Console.WriteLine(package.Sha256);
 ```
+
+## Match a NuGet release version
+
+Use `--project` with `validate`, `sync`, or `pack` to require the plugin version to match the owning project's explicit package version. The shared project-version reader supports a declared `PackageVersion`, `Version`, or `VersionPrefix` with `VersionSuffix`; inherited or computed versions require a release binding instead of this source check. `sync` can repair stale compatibility files after checking the canonical version.
+
+In `project.build.json`, bind the canonical manifest to the owning project and enable compatibility synchronization:
+
+```json
+{
+  "Path": "plugins/document-tools/plugin.json",
+  "Project": "Example.Tool",
+  "Pattern": "(?m)(?<=^  \"version\": \")\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?",
+  "SyncAgentPluginCompatibility": true
+}
+```
+
+Bind `mcp.json` tool pins separately when required. PowerForge generates client files from the planned canonical metadata and MCP configuration, then applies project, binding, and client-manifest changes in one rollback-backed transaction. Plan mode writes nothing. Generate and check in compatibility files with `agent-plugin sync` before enabling this setting; release synchronization requires those files to exist and use the generator's BOM-free UTF-8 encoding. It rejects conflicting explicit bindings to generated content.
+
+Each published bundle change needs a new product release version, including skills-only changes. Keep schema/protocol versions and the packer's own version independent. Published ZIPs and checksums are immutable.
