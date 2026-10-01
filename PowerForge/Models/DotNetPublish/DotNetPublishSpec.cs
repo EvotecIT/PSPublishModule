@@ -307,6 +307,25 @@ public sealed class DotNetPublishMacAppOptions
     /// </summary>
     public string CodesignIdentity { get; set; } = string.Empty;
 
+    /// <summary>Produce a sandboxed Mac App Store installer instead of a local ZIP.</summary>
+    public bool AppStore { get; set; }
+
+    /// <summary>Expected Apple signing team for App Store application and installer signatures.</summary>
+    public string? TeamId { get; set; }
+
+    /// <summary>Mac Installer Distribution signing identity used by productbuild.</summary>
+    public string? InstallerSigningIdentity { get; set; }
+
+    /// <summary>Optional provisioning profile for restricted capabilities, resolved from the project root.</summary>
+    public string? ProvisioningProfilePath { get; set; }
+
+    /// <summary>Reviewed license manifest, resolved from the project root.</summary>
+    public string? ThirdPartyNoticesManifestPath { get; set; }
+
+    /// <summary>Generated .deps.json for the exact build used by a single-file publish, resolved from the project root.</summary>
+    public string? DependenciesPath { get; set; }
+
+
     /// <summary>
     /// Enable hardened runtime when signing with an Apple identity. Defaults to true. PowerForge omits
     /// hardened runtime for local ad-hoc signing because nested libraries cannot share an Apple Team ID.

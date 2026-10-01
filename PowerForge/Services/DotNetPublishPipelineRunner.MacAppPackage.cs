@@ -74,6 +74,8 @@ public sealed partial class DotNetPublishPipelineRunner
             Directory.CreateDirectory(macOsPath);
             Directory.CreateDirectory(resourcesPath);
             DirectoryCopy(sourceRoot, macOsPath, stagingRoot);
+            if (options.AppStore)
+                PrepareMacStorePayload(options, macOsPath, resourcesPath, plan.ProjectRoot);
             RemoveCopiedPortableEvidence(plan, source, macOsPath);
 
             string executablePath = Path.GetFullPath(Path.Combine(macOsPath, options.Executable.Replace('/', Path.DirectorySeparatorChar)));
@@ -86,7 +88,10 @@ public sealed partial class DotNetPublishPipelineRunner
             string plistPath = Path.Combine(contentsPath, "Info.plist");
             File.WriteAllText(plistPath, BuildMacInfoPlist(options, Path.GetFileName(options.Executable), iconFileName), new UTF8Encoding(false));
 
-            var signArguments = new List<string> { "--force", "--deep", "--sign", options.CodesignIdentity };
+            if (options.AppStore)
+                SignMacStoreNestedCode(options, macOsPath, stagingRoot);
+            var signArguments = new List<string> { "--force", "--sign", options.CodesignIdentity };
+            if (!options.AppStore) signArguments.Add("--deep");
             if (ShouldEnableMacHardenedRuntime(options))
             {
                 signArguments.Add("--options");
@@ -113,21 +118,28 @@ public sealed partial class DotNetPublishPipelineRunner
             RunRequiredMacTool("/usr/bin/codesign", stagingRoot, signArguments);
             RunRequiredMacTool("/usr/bin/codesign", stagingRoot, new[] { "--verify", "--deep", "--strict", "--verbose=2", stagedAppPath });
 
-            RunRequiredMacTool(
-                "/usr/bin/ditto",
-                stagingRoot,
-                new[] { "-c", "-k", "--sequesterRsrc", "--keepParent", stagedAppPath, stagedZipPath });
-            if (!File.Exists(stagedZipPath) || new FileInfo(stagedZipPath).Length == 0)
-                throw new InvalidOperationException($"ditto did not produce the expected package: {stagedZipPath}");
+            if (options.AppStore)
+            {
+                BuildAndValidateMacStoreInstaller(options, stagedAppPath, stagedZipPath, stagingRoot);
+            }
+            else
+            {
+                RunRequiredMacTool(
+                    "/usr/bin/ditto",
+                    stagingRoot,
+                    new[] { "-c", "-k", "--sequesterRsrc", "--keepParent", stagedAppPath, stagedZipPath });
+                if (!File.Exists(stagedZipPath) || new FileInfo(stagedZipPath).Length == 0)
+                    throw new InvalidOperationException($"ditto did not produce the expected package: {stagedZipPath}");
 
-            Directory.CreateDirectory(validationRoot);
-            RunRequiredMacTool("/usr/bin/ditto", stagingRoot, new[] { "-x", "-k", stagedZipPath, validationRoot });
-            string validatedAppPath = Path.Combine(validationRoot, appFileName);
-            RunRequiredMacTool(
-                "/usr/bin/codesign",
-                stagingRoot,
-                new[] { "--verify", "--deep", "--strict", "--verbose=2", validatedAppPath });
+                Directory.CreateDirectory(validationRoot);
+                RunRequiredMacTool("/usr/bin/ditto", stagingRoot, new[] { "-x", "-k", stagedZipPath, validationRoot });
+                string validatedAppPath = Path.Combine(validationRoot, appFileName);
+                RunRequiredMacTool(
+                    "/usr/bin/codesign",
+                    stagingRoot,
+                    new[] { "--verify", "--deep", "--strict", "--verbose=2", validatedAppPath });
 
+            }
             string stagedArchiveHash = ComputeSha256(stagedZipPath);
             if (Directory.Exists(appPath))
                 Directory.Delete(appPath, recursive: true);
@@ -142,7 +154,7 @@ public sealed partial class DotNetPublishPipelineRunner
             long totalBytes = Directory.EnumerateFiles(appPath, "*", SearchOption.AllDirectories)
                 .Sum(path => new FileInfo(path).Length);
             _logger.Info($"macOS app -> {appPath}");
-            _logger.Info($"macOS app zip -> {zipPath}");
+            _logger.Info($"macOS app package -> {zipPath}");
             return new DotNetPublishArtefactResult
             {
                 Category = DotNetPublishArtefactCategory.Installer,
@@ -184,6 +196,15 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         string codesignIdentity = (options.CodesignIdentity ?? string.Empty).Trim();
+        if (options.AppStore)
+        {
+            if (codesignIdentity.Length == 0 || codesignIdentity == "-" ||
+                string.IsNullOrWhiteSpace(options.TeamId) ||
+                string.IsNullOrWhiteSpace(options.InstallerSigningIdentity) ||
+                string.IsNullOrWhiteSpace(options.EntitlementsPath))
+                throw new ArgumentException($"MacApp installer '{installerId}' requires distribution identities, TeamId, and sandbox entitlements for AppStore.");
+            return;
+        }
         if (!string.Equals(codesignIdentity, "-", StringComparison.Ordinal))
         {
             throw new ArgumentException(

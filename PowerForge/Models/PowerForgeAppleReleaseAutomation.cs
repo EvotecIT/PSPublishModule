@@ -275,6 +275,9 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
 
     public string? ProjectPath { get; set; }
 
+    /// <summary>Selected native .NET MacApp installer, when this target uses the .NET archive backend.</summary>
+    public string? DotNetPublishInstallerId { get; set; }
+
     public bool IsWorkspace { get; set; }
 
     public string? Scheme { get; set; }

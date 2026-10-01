@@ -37,6 +37,9 @@ public sealed partial class AppleAppArchiveService
         if (string.IsNullOrWhiteSpace(request.Scheme))
             throw new ArgumentException("Scheme is required.", nameof(request));
 
+        if (!string.IsNullOrWhiteSpace(request.DotNetPublishInstallerId))
+            return await CreateDotNetMacArchiveAsync(request, cancellationToken).ConfigureAwait(false);
+
         var projectPath = Path.GetFullPath(request.ProjectPath);
         if (!File.Exists(projectPath) && !Directory.Exists(projectPath))
             throw new FileNotFoundException("Xcode project or workspace was not found.", projectPath);

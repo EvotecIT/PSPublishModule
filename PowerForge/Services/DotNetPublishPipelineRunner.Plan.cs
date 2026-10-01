@@ -89,6 +89,9 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
+        if (msbuildProps.TryGetValue("ArtifactsPath", out var artifactsPath) && !string.IsNullOrWhiteSpace(artifactsPath))
+            msbuildProps["ArtifactsPath"] = ResolvePath(projectRoot, artifactsPath);
+
         var targets = new List<DotNetPublishTargetPlan>();
         foreach (var t in spec.Targets)
         {
@@ -1111,6 +1114,12 @@ public sealed partial class DotNetPublishPipelineRunner
             Copyright = options.Copyright,
             DocumentExtensions = NormalizeStrings(options.DocumentExtensions),
             CodesignIdentity = options.CodesignIdentity,
+            AppStore = options.AppStore,
+            TeamId = options.TeamId,
+            InstallerSigningIdentity = options.InstallerSigningIdentity,
+            ProvisioningProfilePath = options.ProvisioningProfilePath,
+            ThirdPartyNoticesManifestPath = options.ThirdPartyNoticesManifestPath,
+            DependenciesPath = options.DependenciesPath,
             HardenedRuntime = options.HardenedRuntime,
             Timestamp = options.Timestamp,
             EntitlementsPath = options.EntitlementsPath
@@ -3497,11 +3506,13 @@ public sealed partial class DotNetPublishPipelineRunner
             ? Path.Combine("Artifacts", "DotNetPublish", "Installers", "{installer}", "{rid}")
             : installer.OutputPath!;
         string outputNameTemplate = string.IsNullOrWhiteSpace(installer.OutputName)
-            ? "{bundle}-{version}-{rid}.zip"
+            ? "{bundle}-{version}-{rid}" + (macApp.AppStore ? ".pkg" : ".zip")
             : installer.OutputName!;
         string outputDirectory = ResolvePath(projectRoot, ApplyTemplate(outputDirectoryTemplate, tokens));
         string outputName = ApplyTemplate(outputNameTemplate, tokens);
-        if (!outputName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        if (macApp.AppStore && !outputName.EndsWith(".pkg", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"Mac App Store installer '{installer.Id}' OutputName must end in .pkg.");
+        if (!macApp.AppStore && !outputName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             outputName += ".zip";
         if (!string.Equals(Path.GetFileName(outputName), outputName, StringComparison.Ordinal))
             throw new ArgumentException($"MacApp installer '{installer.Id}' OutputName must be a file name, not a path.");
