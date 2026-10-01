@@ -723,6 +723,8 @@ internal sealed class PowerForgeAppleReleasePlan
 
 internal sealed class PowerForgeAppleAppReleaseTargetPlan
 {
+    public string? DotNetPublishInstallerId { get; set; }
+
     public string Name { get; set; } = string.Empty;
 
     public string? BundleId { get; set; }

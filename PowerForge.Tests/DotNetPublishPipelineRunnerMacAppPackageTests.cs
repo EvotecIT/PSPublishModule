@@ -56,6 +56,72 @@ public sealed class DotNetPublishPipelineRunnerMacAppPackageTests
     }
 
     [Fact]
+    public void Plan_StoreInstallerUsesPkgAndRequiresDistributionSigning()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            var spec = CreateSpec(root, "osx-arm64");
+            var installer = Assert.Single(spec.Installers);
+            var mac = installer.MacApp!;
+            mac.AppStore = true;
+            Assert.Throws<ArgumentException>(() => new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+            mac.CodesignIdentity = "Apple Distribution: Example (ABCDE12345)";
+            mac.TeamId = "ABCDE12345";
+            mac.InstallerSigningIdentity = "3rd Party Mac Developer Installer: Example (ABCDE12345)";
+            mac.EntitlementsPath = "AppStore.entitlements";
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            Assert.EndsWith(".pkg", Assert.Single(plan.Steps, step => step.Kind == DotNetPublishStepKind.MacAppPackage).InstallerOutputPath);
+            installer.OutputName = "explicit.pkg";
+            plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            Assert.EndsWith("explicit.pkg", Assert.Single(plan.Steps, step => step.Kind == DotNetPublishStepKind.MacAppPackage).InstallerOutputPath);
+            installer.OutputName = "wrong.zip";
+            Assert.Throws<ArgumentException>(() => new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+        }
+        finally { TryDelete(root); }
+    }
+
+    [Fact]
+    public void StorePayloadRequiresSandboxAndSingleFileAndPreservesResourceNotices()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string code = Directory.CreateDirectory(Path.Combine(root, "Contents", "MacOS")).FullName;
+            string resources = Directory.CreateDirectory(Path.Combine(root, "Contents", "Resources")).FullName;
+            File.WriteAllBytes(Path.Combine(code, "OfficeIMO.Studio"), new byte[] { 0xcf, 0xfa, 0xed, 0xfe });
+            Directory.CreateDirectory(Path.Combine(code, "Licenses"));
+            File.WriteAllText(Path.Combine(code, "Licenses", "NOTICE.txt"), "Copyright notice");
+            var mac = CreateMacOptions();
+            mac.EntitlementsPath = "AppStore.entitlements";
+            File.WriteAllText(Path.Combine(root, mac.EntitlementsPath), "<plist><dict><key>com.apple.security.app-sandbox</key><false/></dict></plist>");
+            Assert.Throws<InvalidOperationException>(() => DotNetPublishPipelineRunner.PrepareMacStorePayload(mac, code, resources, root));
+            File.WriteAllText(Path.Combine(root, mac.EntitlementsPath), "<plist><dict><key>com.apple.security.app-sandbox</key><true/></dict></plist>");
+            File.WriteAllText(Path.Combine(code, "managed.dll"), "managed assembly");
+            Assert.Throws<InvalidOperationException>(() => DotNetPublishPipelineRunner.PrepareMacStorePayload(mac, code, resources, root));
+            File.Delete(Path.Combine(code, "managed.dll"));
+            DotNetPublishPipelineRunner.PrepareMacStorePayload(mac, code, resources, root);
+            Assert.True(File.Exists(Path.Combine(code, "OfficeIMO.Studio")));
+            Assert.Equal("Copyright notice", File.ReadAllText(Path.Combine(resources, "Licenses", "NOTICE.txt")));
+        }
+        finally { TryDelete(root); }
+    }
+
+    [Theory]
+    [InlineData("ABCDE12345", "2099-01-01T00:00:00Z", false, true)]
+    [InlineData("OTHER12345", "2099-01-01T00:00:00Z", false, false)]
+    [InlineData("ABCDE12345", "2000-01-01T00:00:00Z", false, false)]
+    [InlineData("ABCDE12345", "2099-01-01T00:00:00Z", true, false)]
+    public void StoreProfileRejectsWrongTeamExpiredAndDevelopmentProfiles(string team, string expiry, bool development, bool valid)
+    {
+        var mac = CreateMacOptions();
+        mac.TeamId = "ABCDE12345";
+        var profile = System.Xml.Linq.XDocument.Parse($"<plist><dict><key>TeamIdentifier</key><array><string>{team}</string></array><key>ExpirationDate</key><date>{expiry}</date><key>Entitlements</key><dict><key>com.apple.application-identifier</key><string>{team}.{mac.BundleIdentifier}</string><key>get-task-allow</key><{(development ? "true" : "false")}/></dict></dict></plist>");
+        if (valid) DotNetPublishPipelineRunner.ValidateMacStoreProvisioningProfile(mac, profile);
+        else Assert.Throws<InvalidOperationException>(() => DotNetPublishPipelineRunner.ValidateMacStoreProvisioningProfile(mac, profile));
+    }
+
+    [Fact]
     public void Plan_RejectsMacAppForNonMacRuntime()
     {
         string root = CreateTempRoot();

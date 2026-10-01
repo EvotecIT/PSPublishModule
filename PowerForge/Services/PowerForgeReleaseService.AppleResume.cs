@@ -299,6 +299,7 @@ internal sealed partial class PowerForgeReleaseService
                 candidate.ProjectPath,
                 FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/'),
                 plan.ProjectRoot) &&
+            string.Equals(candidate.DotNetPublishInstallerId, app.DotNetPublishInstallerId, StringComparison.Ordinal) &&
             candidate.IsWorkspace == app.IsWorkspace &&
             string.Equals(candidate.Scheme, app.Scheme, StringComparison.Ordinal) &&
             candidate.ArchiveVariant == app.ArchiveVariant &&
@@ -350,6 +351,7 @@ internal sealed partial class PowerForgeReleaseService
             candidate.Platform == target.Platform &&
             string.Equals(candidate.Configuration, target.Configuration, StringComparison.OrdinalIgnoreCase) &&
             AppleReleasePathsEqual(candidate.ProjectPath, target.ProjectPath, comparisonPath) &&
+            string.Equals(candidate.DotNetPublishInstallerId, target.DotNetPublishInstallerId, StringComparison.Ordinal) &&
             candidate.IsWorkspace == target.IsWorkspace &&
             string.Equals(candidate.Scheme, target.Scheme, StringComparison.Ordinal) &&
             candidate.ArchiveVariant == target.ArchiveVariant &&

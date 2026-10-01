@@ -12,6 +12,34 @@ The helpers live in shared `PowerForge` services first and are exposed through t
 PowerShell cmdlets, so the same release logic can be reused by scripts, tests, CLI,
 and future project release pipelines.
 
+## Native .NET Mac App Store archives
+
+An Apple target can set `DotNetPublishInstallerId` and point `ProjectPath` at a
+PowerForge dotnet-publish JSON config, or its unified release wrapper. This selects
+one `MacApp` installer with `AppStore=true`, one target, runtime and framework.
+The bundle, team, marketing version and build must match the Apple target.
+
+The shared packager requires a self-contained single-file payload with native
+libraries left outside the executable, sandbox entitlements, an Apple distribution
+application identity, and a Mac installer distribution identity. It signs nested
+Mach-O code before the app, creates a `.pkg` with `productbuild`, and verifies the
+expanded installer payload. Non-code content moves to `Contents/Resources`;
+applications must resolve bundle resources there. Optional provisioning profiles
+must match the team/bundle, remain unexpired, and permit Store distribution.
+
+`apple-release Archive --config powerforge.release.json --plan` previews the lane;
+omit `--plan` to package and create the local `.xcarchive`. Local .NET archives do
+not need Xcode provisioning updates. Export/upload still use the Apple export
+service and require distribution-signed qualification. This backend uses explicit
+versions, not Xcode project generation, automatic version mutation, or the Swift
+exact-package snapshot mode.
+
+`ThirdPartyNoticesManifestPath` and `DependenciesPath` optionally generate notices
+from the published `.deps.json`. The reviewed manifest declares exact package
+versions and hashed license texts. Unknown versions or changed texts fail
+packaging. The output includes full notices and a runtime package inventory in
+`Contents/Resources/Licenses`.
+
 ## Local Deployment
 
 Use the config-driven CLI for the everyday developer loop. It reads the same targets,

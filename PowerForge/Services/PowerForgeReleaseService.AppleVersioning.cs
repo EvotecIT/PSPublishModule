@@ -76,6 +76,7 @@ internal sealed partial class PowerForgeReleaseService
             !string.IsNullOrWhiteSpace(plan.VersionSourcePath))
             paths.Add(plan.VersionSourcePath!);
 
+        paths.AddRange(EnumerateDotNetAppleInputs(plan));
         var pathComparer = Path.DirectorySeparatorChar == '\\'
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
@@ -219,6 +220,7 @@ internal sealed partial class PowerForgeReleaseService
             Platform = app.Platform,
             Configuration = app.Configuration,
             ProjectPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ProjectPath).Replace('\\', '/'),
+            DotNetPublishInstallerId = app.DotNetPublishInstallerId,
             IsWorkspace = app.IsWorkspace,
             Scheme = app.Scheme,
             ArchiveVariant = app.ArchiveVariant,
@@ -413,6 +415,7 @@ internal sealed partial class PowerForgeReleaseService
         if ((plan.Action == PowerForgeAppleReleaseAction.Version || plan.Action == PowerForgeAppleReleaseAction.Ship) &&
             !string.IsNullOrWhiteSpace(plan.VersionSourcePath))
             configuredInputs.Add(plan.VersionSourcePath!);
+        configuredInputs.AddRange(EnumerateDotNetAppleInputs(plan));
         var effectiveInputs = configuredInputs
             .Distinct(Path.DirectorySeparatorChar == '\\'
                 ? StringComparer.OrdinalIgnoreCase
@@ -674,7 +677,7 @@ internal sealed partial class PowerForgeReleaseService
                 Success = true,
                 SkippedSteps = new[] { "archive", "upload", "distribution", "review", "release" }
             };
-            if (generatedProjects.Add(app.ProjectPath))
+            if (string.IsNullOrWhiteSpace(app.DotNetPublishInstallerId) && generatedProjects.Add(app.ProjectPath))
             {
                 var generationPlan = new PowerForgeAppleAppReleaseTargetPlan
                 {

@@ -13,6 +13,10 @@ public sealed class AppleAppArchiveRequest
     /// <summary>Path to the Xcode project or workspace.</summary>
     public string ProjectPath { get; set; } = string.Empty;
 
+    /// <summary>For native .NET macOS apps, ProjectPath is a dotnet-publish JSON config and this selects its MacApp installer.</summary>
+    public string? DotNetPublishInstallerId { get; set; }
+
+
     /// <summary>When true, ProjectPath points to a workspace instead of a project.</summary>
     public bool IsWorkspace { get; set; }
 
