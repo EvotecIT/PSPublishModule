@@ -534,6 +534,7 @@ Validate locally, read Apple and write a drift receipt, then apply only after re
 
 ```text
 powerforge apple-governance snapshot --app-id 1234567890 --out build/appstore-governance.json --release-config powerforge.release.json
+powerforge apple-governance territories --release-config powerforge.release.json --output json
 powerforge apple-governance validate --config build/appstore-governance.json
 powerforge apple-governance plan --config build/appstore-governance.json --release-config powerforge.release.json --receipt build/governance-plan.json --fail-on-drift --summary --output json
 powerforge apple-governance apply --config build/appstore-governance.json --release-config powerforge.release.json --reviewed-plan build/governance-plan.json --confirm --summary --output json
@@ -549,6 +550,11 @@ Apply converges one dependency-aware change at a time, replans after every Apple
 and writes a compact receipt by default under `.powerforge/apple/`. It creates and
 updates declared resources but never performs implicit deletions. A safety limit
 prevents an unexpectedly large change set from running indefinitely.
+
+`territories` reads Apple's current territory catalog, following all response
+pages. Its JSON result contains `territoryIds` and `count`. Use those observed IDs
+when preparing an explicitly approved worldwide availability declaration;
+listing territories does not change an app's availability.
 
 Use `--summary` for automation and agent-facing output. It reports counts, grouped
 resource types, at most ten representative changes or findings, and the full receipt
