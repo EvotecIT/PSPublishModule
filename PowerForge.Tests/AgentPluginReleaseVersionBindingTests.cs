@@ -127,6 +127,21 @@ public sealed class AgentPluginReleaseVersionBindingTests : IDisposable
         AssertSnapshot(before);
     }
 
+    [Theory]
+    [InlineData("<AssemblyVersion>1.2.3</AssemblyVersion>", null)]
+    [InlineData("<FileVersion>1.2.3</FileVersion>", null)]
+    [InlineData("<InformationalVersion>1.2.3</InformationalVersion>", null)]
+    [InlineData("<VersionPrefix>1.2.3</VersionPrefix><VersionSuffix>rc.1</VersionSuffix>", "1.2.3-rc.1")]
+    [InlineData("<Version>1.2.3</Version><InformationalVersion>9.0.0</InformationalVersion>", "1.2.3")]
+    [InlineData("<Version>1.2.3</Version><PackageVersion>2.0.0</PackageVersion>", "2.0.0")]
+    public void Owning_package_version_uses_package_declarations_only(string declarations, string? expected)
+    {
+        var project = Path.Combine(_root, "Tool.csproj");
+        File.WriteAllText(project, "<Project><PropertyGroup>" + declarations + "</PropertyGroup></Project>");
+        Assert.Equal(expected is not null, CsprojVersionEditor.TryGetPackageVersion(project, out var version));
+        Assert.Equal(expected ?? string.Empty, version);
+    }
+
     [Fact]
     public void Package_validation_rejects_a_different_owning_release_version()
         => Assert.Throws<InvalidDataException>(() => new AgentPluginPackageService().Validate(Source, "1.2.4"));

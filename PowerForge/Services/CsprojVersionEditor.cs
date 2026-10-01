@@ -44,6 +44,13 @@ internal static class CsprojVersionEditor
     };
 
     internal static bool TryGetVersion(string csprojPath, out string version)
+        => TryReadDeclaredVersion(csprojPath, ReadVersionTags, out version);
+
+    // Source checks for package identity must not fall back to assembly metadata.
+    internal static bool TryGetPackageVersion(string csprojPath, out string version)
+        => TryReadDeclaredVersion(csprojPath, new[] { "PackageVersion", "Version", "VersionPrefix" }, out version);
+
+    private static bool TryReadDeclaredVersion(string csprojPath, string[] tags, out string version)
     {
         version = string.Empty;
         if (string.IsNullOrWhiteSpace(csprojPath) || !File.Exists(csprojPath))
@@ -52,7 +59,7 @@ internal static class CsprojVersionEditor
         try
         {
             var content = File.ReadAllText(csprojPath);
-            foreach (var tag in ReadVersionTags)
+            foreach (var tag in tags)
             {
                 if (TryMatchVersionTag(content, tag, out var v))
                 {
