@@ -11,7 +11,7 @@ Sets benchmark run policy defaults.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Set-BenchmarkPolicy [-Warmup <Int32>] [-Iteration <Int32>] [-RunMode <string>] [-Order <PowerShellBenchmarkRunOrder>] [-MemoryCleanup <PowerShellBenchmarkMemoryCleanupMode>] [-CooldownMilliseconds <Int32>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [<CommonParameters>]
+Set-BenchmarkPolicy [-Warmup <Int32>] [-Iteration <Int32>] [-RunMode <string>] [-Order <PowerShellBenchmarkRunOrder>] [-MemoryCleanup <PowerShellBenchmarkMemoryCleanupMode>] [-CooldownMilliseconds <Int32>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [-ProcessorAffinityMask <UInt64>] [-ProcessPriority <ProcessPriorityClass>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -99,6 +99,38 @@ Type: PowerShellBenchmarkOutlierMode
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: None, ExcludeMinMax
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ProcessorAffinityMask
+Optional Windows processor mask, restricted to the process's current mask and one processor group.
+
+```yaml
+Type: UInt64
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ProcessPriority
+Optional Windows process priority, restored after execution.
+
+```yaml
+Type: ProcessPriorityClass
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: Normal, Idle, High, RealTime, BelowNormal, AboveNormal
 
 Required: False
 Position: named

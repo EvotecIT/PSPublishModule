@@ -43,6 +43,12 @@ public sealed class PowerShellBenchmarkHostRunRequest
     /// <summary>Outlier mode after caller-side overrides.</summary>
     public PowerShellBenchmarkOutlierMode OutlierMode { get; set; } = PowerShellBenchmarkOutlierMode.None;
 
+    /// <summary>Optional Windows processor mask, restricted to the process's current mask and one processor group.</summary>
+    public ulong? ProcessorAffinityMask { get; set; }
+
+    /// <summary>Optional Windows process priority, restored after execution.</summary>
+    public System.Diagnostics.ProcessPriorityClass? ProcessPriority { get; set; }
+
     /// <summary>Suite name after caller-side overrides.</summary>
     public string SuiteName { get; set; } = string.Empty;
 
@@ -207,6 +213,8 @@ public sealed class PowerShellBenchmarkHostExecutor
             MemoryCleanup = request.MemoryCleanup.ToString(),
             CooldownMilliseconds = request.CooldownMilliseconds,
             OutlierMode = request.OutlierMode.ToString(),
+            ProcessorAffinityMask = request.ProcessorAffinityMask?.ToString("X", CultureInfo.InvariantCulture),
+            ProcessPriority = request.ProcessPriority?.ToString(),
             SuiteName = request.SuiteName ?? string.Empty,
             PlanningProfile = PowerShellBenchmarkProfileKind.Current.ToString(),
             BenchmarkVariables = request.BenchmarkVariables,

@@ -30,6 +30,12 @@ internal static class PowerShellBenchmarkResultMerger
             Environment = MergeEnvironment(childResults)
         };
 
+        foreach (var child in childResults)
+        {
+            foreach (var key in new[] { "processAffinityMask", "processPriority", "originalProcessAffinityMask", "originalProcessPriority" })
+                if (child.Metadata.TryGetValue(key, out var value))
+                    result.Metadata["host." + HostLabel(child) + "." + key] = value;
+        }
         return result;
     }
 

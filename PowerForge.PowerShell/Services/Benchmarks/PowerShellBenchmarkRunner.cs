@@ -142,6 +142,7 @@ public sealed partial class PowerShellBenchmarkRunner
     {
         if (suite is null) throw new ArgumentNullException(nameof(suite));
         ValidateCurrentRunspaceProfile(suite);
+        using var placement = PowerShellBenchmarkProcessPlacement.Enter(suite);
         ValidateComparisons(suite);
         PowerShellBenchmarkArtifactWriter.ValidateReadmeBlocks(suite);
         PowerShellBenchmarkEnvironmentMetadata.SourceProvenance sourceProvenance =
@@ -188,6 +189,7 @@ public sealed partial class PowerShellBenchmarkRunner
             Environment = PowerShellBenchmarkEnvironmentMetadata.BuildEnvironment()
         };
 
+        placement?.RecordMetadata(result.Metadata);
         try
         {
             result.Comparison = PowerShellBenchmarkComparisonEvaluator.Build(suite, summary);

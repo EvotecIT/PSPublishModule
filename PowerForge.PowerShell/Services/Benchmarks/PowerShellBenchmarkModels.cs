@@ -102,6 +102,12 @@ public sealed class PowerShellBenchmarkSuite
     /// <summary>Outlier policy used by the summary service.</summary>
     public PowerShellBenchmarkOutlierMode OutlierMode { get; set; } = PowerShellBenchmarkOutlierMode.None;
 
+    /// <summary>Optional Windows processor mask, restricted to the process's current mask and one processor group.</summary>
+    public ulong? ProcessorAffinityMask { get; set; }
+
+    /// <summary>Optional Windows process priority, restored after execution.</summary>
+    public System.Diagnostics.ProcessPriorityClass? ProcessPriority { get; set; }
+
     /// <summary>PowerShell profile isolation mode.</summary>
     public PowerShellBenchmarkProfileKind Profile { get; set; } = PowerShellBenchmarkProfileKind.Current;
 

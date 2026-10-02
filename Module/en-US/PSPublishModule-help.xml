@@ -19811,6 +19811,38 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProcessorAffinityMask</maml:name>
+          <maml:description>
+            <maml:para>Optional Windows processor mask, restricted to the process's current mask and one processor group.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">UInt64</command:parameterValue>
+          <dev:type>
+            <maml:name>UInt64</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProcessPriority</maml:name>
+          <maml:description>
+            <maml:para>Optional Windows process priority, restored after execution.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ProcessPriorityClass</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Normal</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Idle</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">High</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">RealTime</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BelowNormal</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AboveNormal</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ProcessPriorityClass</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Profile</maml:name>
           <maml:description>
             <maml:para>Optional profile override.</maml:para>
@@ -20048,6 +20080,38 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProcessorAffinityMask</maml:name>
+          <maml:description>
+            <maml:para>Optional Windows processor mask, restricted to the process's current mask and one processor group.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">UInt64</command:parameterValue>
+          <dev:type>
+            <maml:name>UInt64</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProcessPriority</maml:name>
+          <maml:description>
+            <maml:para>Optional Windows process priority, restored after execution.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ProcessPriorityClass</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Normal</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Idle</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">High</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">RealTime</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BelowNormal</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AboveNormal</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ProcessPriorityClass</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -20314,6 +20378,38 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ProcessorAffinityMask</maml:name>
+        <maml:description>
+          <maml:para>Optional Windows processor mask, restricted to the process's current mask and one processor group.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">UInt64</command:parameterValue>
+        <dev:type>
+          <maml:name>UInt64</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ProcessPriority</maml:name>
+        <maml:description>
+          <maml:para>Optional Windows process priority, restored after execution.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ProcessPriorityClass</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Normal</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Idle</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">High</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">RealTime</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BelowNormal</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AboveNormal</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ProcessPriorityClass</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -70118,6 +70214,38 @@ The default is false so normal publishing cannot mutate an older release.</maml:
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProcessorAffinityMask</maml:name>
+          <maml:description>
+            <maml:para>Optional Windows processor mask, restricted to the process's current mask and one processor group.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">UInt64</command:parameterValue>
+          <dev:type>
+            <maml:name>UInt64</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ProcessPriority</maml:name>
+          <maml:description>
+            <maml:para>Optional Windows process priority, restored after execution.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ProcessPriorityClass</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Normal</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Idle</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">High</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">RealTime</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">BelowNormal</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">AboveNormal</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ProcessPriorityClass</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>RunMode</maml:name>
           <maml:description>
             <maml:para>Run mode label.</maml:para>
@@ -70214,6 +70342,38 @@ The default is false so normal publishing cannot mutate an older release.</maml:
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>PowerShellBenchmarkOutlierMode</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ProcessorAffinityMask</maml:name>
+        <maml:description>
+          <maml:para>Optional Windows processor mask, restricted to the process's current mask and one processor group.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">UInt64</command:parameterValue>
+        <dev:type>
+          <maml:name>UInt64</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ProcessPriority</maml:name>
+        <maml:description>
+          <maml:para>Optional Windows process priority, restored after execution.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ProcessPriorityClass</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Normal</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Idle</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">High</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">RealTime</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">BelowNormal</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">AboveNormal</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ProcessPriorityClass</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
