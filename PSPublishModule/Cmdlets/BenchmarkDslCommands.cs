@@ -259,6 +259,14 @@ public sealed class SetBenchmarkPolicyCommand : BenchmarkDslCommand
     [Parameter]
     public PowerShellBenchmarkOutlierMode? OutlierMode { get; set; }
 
+    /// <summary>Optional Windows processor mask, restricted to the process's current mask and one processor group.</summary>
+    [Parameter]
+    public ulong? ProcessorAffinityMask { get; set; }
+
+    /// <summary>Optional Windows process priority, restored after execution.</summary>
+    [Parameter]
+    public System.Diagnostics.ProcessPriorityClass? ProcessPriority { get; set; }
+
     /// <inheritdoc />
     protected override void ProcessRecord()
         => PowerShellBenchmarkDslRuntime.Policy(
@@ -268,7 +276,9 @@ public sealed class SetBenchmarkPolicyCommand : BenchmarkDslCommand
             Order?.ToString(),
             MemoryCleanup?.ToString(),
             CooldownMilliseconds,
-            OutlierMode?.ToString());
+            OutlierMode?.ToString(),
+            ProcessorAffinityMask,
+            ProcessPriority?.ToString());
 }
 
 /// <summary>

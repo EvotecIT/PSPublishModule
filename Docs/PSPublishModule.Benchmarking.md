@@ -22,6 +22,22 @@ metadata with any table that is committed or shared.
 
 ## Benchmark Specs
 
+For Windows measurements that need fixed processor placement, declare
+`Set-BenchmarkPolicy -ProcessorAffinityMask 0xFFFF -ProcessPriority Normal`
+inside the suite, or pass the same parameters to `Invoke-BenchmarkSuite` to
+override its policy. Choose a nonzero mask within the host process's current
+affinity mask. These optional controls require a single Windows processor
+group; execution rejects them on other platforms. `-Plan` can still expand
+the suite on any platform.
+
+Placement covers setup, warmup, measured operations and validation. The runner
+restores the original affinity and priority when it exits, including failed
+runs, and records requested, applied and original values in report metadata.
+Child PowerShell hosts apply the same settings and the combined report retains
+their host-specific values. Run placement-controlled benchmarks in a dedicated
+host process: affinity and priority affect every thread in that process, and
+the runner rejects overlapping placement controllers.
+
 PowerShell benchmark suites are authored in `.benchmark.ps1` files. A suite
 declares cases, matrix axes, engines, operations, optional validation, custom
 metrics, comparison rules, README blocks, and artifact choices.

@@ -30,6 +30,19 @@ internal static class PowerShellBenchmarkResultMerger
             Environment = MergeEnvironment(childResults)
         };
 
+        foreach (var child in childResults)
+        {
+            var identity = child.Metadata.TryGetValue("hostExecutablePath", out var executablePath)
+                ? executablePath : HostLabel(child);
+            foreach (var key in new[] { "processAffinityMask", "processPriority", "originalProcessAffinityMask", "originalProcessPriority" })
+                if (child.Metadata.TryGetValue(key, out var value))
+                {
+                    var metadataKey = "host." + identity + "." + key;
+                    if (result.Metadata.ContainsKey(metadataKey))
+                        throw new InvalidOperationException("Benchmark host placement evidence has an ambiguous execution identity: " + identity);
+                    result.Metadata.Add(metadataKey, value);
+                }
+        }
         return result;
     }
 

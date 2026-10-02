@@ -4,6 +4,7 @@ using PowerForge;
 
 namespace PowerForge.Tests;
 
+[Collection(ProcessEnvironmentCollection.Name)]
 public sealed partial class BenchmarkServicesTests
 {
     private static readonly Lazy<Runspace> BenchmarkDslRunspace = new(CreateBenchmarkDslRunspace);
