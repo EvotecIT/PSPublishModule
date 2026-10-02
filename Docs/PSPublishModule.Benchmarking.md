@@ -415,6 +415,23 @@ AllocatedBytes` can compare allocation summaries with a declared baseline; its
 absolute tolerance is expressed in the selected metric's units. Keep these
 machine-dependent gates in opt-in evidence runs.
 
+### Collected managed-heap observations
+
+`PowerForge.BenchmarkManagedMemoryProbe` supports explicit retained-memory evidence.
+Construct it in setup after releasing previous results; call `Capture()` after
+validation and after releasing the current results. Both boundaries force garbage
+collection and wait for pending finalizers, outside the timed operation. The result
+contains `BaselineBytes`, `CollectedBytes` and a signed `DeltaBytes`. Repeated calls
+compare against the same original baseline; a negative delta is meaningful and is
+not clamped away.
+
+Record these values as custom benchmark metrics. They measure the whole process's
+live managed heap, including host state, caches and concurrent managed activity.
+They do not measure native allocations, peak memory or prove a leak in one operation.
+Warm up the workload, keep runs isolated, and compare equivalent repeated runs before
+choosing a budget. Full collection can disturb other work in the process; do not use
+this probe in normal application or correctness timing paths.
+
 ## Gates
 
 `Test-BenchmarkGate` verifies normalized summary rows against a JSON baseline.
