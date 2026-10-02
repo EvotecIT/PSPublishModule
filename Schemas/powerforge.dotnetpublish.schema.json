@@ -936,6 +936,7 @@
         },
         "CodesignIdentity": { "type": "string", "minLength": 1 },
         "AppStore": { "type": "boolean" },
+        "DevelopmentOnly": { "type": "boolean" },
         "TeamId": { "type": ["string", "null"] },
         "InstallerSigningIdentity": { "type": ["string", "null"] },
         "ProvisioningProfilePath": { "type": ["string", "null"] },
