@@ -118,6 +118,8 @@ internal static partial class WebPipelineRunner
                 Title = title,
                 GitHubOrganization = githubOrganization,
                 GitHubToken = githubToken,
+                FallbackGitHubInventory = !strict && preserveOnWarnings && existingOutputContent is not null
+                    ? TryReadEcosystemStatsDocument(existingOutputContent)?.GitHub : null,
                 NuGetOwner = nugetOwner,
                 PowerShellGalleryOwner = powerShellGalleryOwner,
                 PowerShellGalleryAuthor = powerShellGalleryAuthor,
@@ -172,9 +174,9 @@ internal static partial class WebPipelineRunner
         var publicationDocument = File.Exists(outputPath)
             ? TryReadEcosystemStatsDocument(File.ReadAllText(outputPath))
             : null;
-        if (publicationDocument is not null &&
-            WebEcosystemStatsGenerator.NormalizePublicProjectLinks(publicationDocument) > 0)
+        if (publicationDocument is not null)
         {
+            WebEcosystemStatsGenerator.NormalizePublicProjectLinks(publicationDocument, githubOrganization);
             File.WriteAllText(outputPath, JsonSerializer.Serialize(publicationDocument,
                 new JsonSerializerOptions(WebCliJson.Options) { WriteIndented = true }));
         }

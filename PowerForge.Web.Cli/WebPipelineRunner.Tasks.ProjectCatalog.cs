@@ -2179,7 +2179,6 @@ internal static partial class WebPipelineRunner
             return 0;
 
         var githubByFullName = new Dictionary<string, WebEcosystemGitHubRepository>(StringComparer.OrdinalIgnoreCase);
-        WebEcosystemStatsGenerator.NormalizePublicProjectLinks(stats);
         var githubByRepoName = new Dictionary<string, WebEcosystemGitHubRepository>(StringComparer.OrdinalIgnoreCase);
         var ambiguousGitHubRepoNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (stats.GitHub?.Repositories is { Count: > 0 })
@@ -2299,6 +2298,7 @@ internal static partial class WebPipelineRunner
             }
         }
 
+        WebEcosystemStatsGenerator.NormalizePublicProjectLinks(stats);
         var merged = 0;
         foreach (var project in projects)
         {
@@ -2391,6 +2391,17 @@ internal static partial class WebPipelineRunner
                 {
                     if (!nugetPackages.Any(existing => string.Equals(existing.Id, package.Id, StringComparison.OrdinalIgnoreCase)))
                         nugetPackages.Add(package);
+                }
+            }
+
+            // Withheld repository URLs retain their public package association for totals.
+            foreach (var package in nugetPackages.ToArray())
+            {
+                foreach (var relatedId in package.RelatedPackageIds ?? Array.Empty<string>())
+                {
+                    if (nugetById.TryGetValue(relatedId, out var relatedPackage) &&
+                        !nugetPackages.Any(existing => string.Equals(existing.Id, relatedPackage.Id, StringComparison.OrdinalIgnoreCase)))
+                        nugetPackages.Add(relatedPackage);
                 }
             }
 

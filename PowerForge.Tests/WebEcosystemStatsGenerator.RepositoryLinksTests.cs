@@ -85,21 +85,50 @@ public sealed partial class WebEcosystemStatsGeneratorTests
             }, handler);
             using var document = JsonDocument.Parse(File.ReadAllText(output));
             var packages = document.RootElement.GetProperty("nuget").GetProperty("packages");
-            Assert.False(packages[0].TryGetProperty("projectUrl", out _));
-            Assert.Equal(123, packages[0].GetProperty("totalDownloads").GetInt64());
+            var package = packages.EnumerateArray().Single(item => item.GetProperty("id").GetString() == "ExamplePackage");
+            Assert.False(package.TryGetProperty("projectUrl", out _));
+            Assert.Equal(123, package.GetProperty("totalDownloads").GetInt64());
+            Assert.Equal(new[] { "ExamplePackage", "ExamplePackage.Core" },
+                package.GetProperty("relatedPackageIds").EnumerateArray().Select(item => item.GetString()));
             Assert.DoesNotContain("ExampleOrg/PrivateRepo", File.ReadAllText(output));
+        }
+        finally { TryDeleteDirectory(root); }
+    }
+
+    [Fact]
+    public void Generate_FailedGitHubUsesApplicableRetainedInventoryBeforePublishingFreshPackages()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-retained-project-links-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var output = Path.Combine(root, "stats.json");
+            using var handler = new ProjectLinksHandler(failGitHub: true);
+            WebEcosystemStatsGenerator.Generate(new()
+            {
+                OutputPath = output, GitHubOrganization = "ExampleOrg", NuGetOwner = "ExampleOwner",
+                FallbackGitHubInventory = new() { Organization = "ExampleOrg", Repositories = new() { new() { FullName = "ExampleOrg/PublicRepo" } } }
+            }, handler);
+            using var document = JsonDocument.Parse(File.ReadAllText(output));
+            var packages = document.RootElement.GetProperty("nuget").GetProperty("packages");
+            Assert.Equal("https://github.com/ExampleOrg/PublicRepo", packages.EnumerateArray().Single(item => item.GetProperty("id").GetString() == "PublicPackage").GetProperty("projectUrl").GetString());
+            Assert.False(packages.EnumerateArray().Single(item => item.GetProperty("id").GetString() == "ExamplePackage").TryGetProperty("projectUrl", out _));
+            Assert.Contains(document.RootElement.GetProperty("warnings").EnumerateArray(), item => item.GetString()!.StartsWith("GitHub", StringComparison.Ordinal));
         }
         finally { TryDeleteDirectory(root); }
     }
 
     private sealed class ProjectLinksHandler : HttpMessageHandler
     {
+        private readonly bool _failGitHub;
+        public ProjectLinksHandler(bool failGitHub = false) => _failGitHub = failGitHub;
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            if (_failGitHub && request.RequestUri!.AbsolutePath.Contains("/orgs/"))
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
             var json = request.RequestUri!.AbsolutePath.Contains("/orgs/")
                     ? """[{"name":"PublicRepo","full_name":"ExampleOrg/PublicRepo","html_url":"https://github.com/ExampleOrg/PublicRepo"}]"""
                 : request.RequestUri.AbsolutePath.Contains("/search/issues") ? """{"total_count":0,"items":[]}"""
-                : """{"totalHits":1,"data":[{"id":"ExamplePackage","version":"1.0.0","totalDownloads":123,"projectUrl":"https://github.com/ExampleOrg/PrivateRepo"}]}""";
+                : """{"totalHits":3,"data":[{"id":"ExamplePackage","version":"1.0.0","totalDownloads":123,"projectUrl":"https://github.com/ExampleOrg/PrivateRepo"},{"id":"ExamplePackage.Core","version":"1.0.0","totalDownloads":200,"projectUrl":"https://github.com/ExampleOrg/PrivateRepo"},{"id":"PublicPackage","version":"1.0.0","totalDownloads":5,"projectUrl":"https://github.com/ExampleOrg/PublicRepo"}]}""";
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(json, Encoding.UTF8, "application/json")

@@ -15,6 +15,9 @@ public sealed class WebEcosystemStatsOptions
     public string? GitHubOrganization { get; set; }
     /// <summary>Optional GitHub token for authenticated requests.</summary>
     public string? GitHubToken { get; set; }
+    /// <summary>Retained public inventory used for link publication when the configured GitHub source fails.</summary>
+    [JsonIgnore]
+    public WebEcosystemGitHubStats? FallbackGitHubInventory { get; set; }
     /// <summary>NuGet owner profile to aggregate.</summary>
     public string? NuGetOwner { get; set; }
     /// <summary>PowerShell Gallery profile owner/handle.</summary>
@@ -154,6 +157,9 @@ public sealed class WebEcosystemNuGetPackage
     public string? PackageUrl { get; set; }
     /// <summary>Project URL.</summary>
     public string? ProjectUrl { get; set; }
+    /// <summary>Public package identifiers sharing this package's repository when its project URL is withheld.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string[]? RelatedPackageIds { get; set; }
     /// <summary>Short description.</summary>
     public string? Description { get; set; }
     /// <summary>Whether the package is verified.</summary>

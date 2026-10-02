@@ -80,7 +80,13 @@ public static partial class WebEcosystemStatsGenerator
             Warnings = warnings
         };
 
-        NormalizePublicProjectLinks(document);
+        var publicationInventory = github;
+        if (github is { Repositories.Count: 0 } &&
+            warnings.Any(warning => warning.StartsWith("GitHub", StringComparison.OrdinalIgnoreCase)) &&
+            options.FallbackGitHubInventory is { } retainedInventory &&
+            string.Equals(retainedInventory.Organization, options.GitHubOrganization?.Trim(), StringComparison.OrdinalIgnoreCase))
+            publicationInventory = retainedInventory;
+        NormalizePublicProjectLinks(document, publicationInventory: publicationInventory);
 
         var outputDir = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrWhiteSpace(outputDir))
