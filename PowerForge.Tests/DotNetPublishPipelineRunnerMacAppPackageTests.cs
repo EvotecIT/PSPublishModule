@@ -122,6 +122,26 @@ public sealed class DotNetPublishPipelineRunnerMacAppPackageTests
     }
 
     [Fact]
+    public void StoreProfileRejectsAnotherCertificateWithTheSameSubjectAndTeam()
+    {
+        using var key = System.Security.Cryptography.RSA.Create(2048);
+        var request = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+            "CN=Apple Distribution: Example, OU=ABCDE12345", key,
+            System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+        using var authorized = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+        using var replacement = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(2));
+        Assert.Equal(authorized.Subject, replacement.Subject);
+        var mac = CreateMacOptions();
+        mac.TeamId = "ABCDE12345";
+        var profile = System.Xml.Linq.XDocument.Parse($"<plist><dict><key>TeamIdentifier</key><array><string>{mac.TeamId}</string></array><key>ExpirationDate</key><date>2099-01-01T00:00:00Z</date><key>Entitlements</key><dict><key>com.apple.application-identifier</key><string>{mac.TeamId}.{mac.BundleIdentifier}</string></dict><key>DeveloperCertificates</key><array><data>{Convert.ToBase64String(authorized.RawData)}</data></array></dict></plist>");
+        DotNetPublishPipelineRunner.ValidateMacStoreProvisioningProfile(mac, profile);
+        DotNetPublishPipelineRunner.ValidateMacStoreProvisioningCertificate(profile, authorized.RawData);
+        Assert.Throws<InvalidOperationException>(() => DotNetPublishPipelineRunner.ValidateMacStoreProvisioningCertificate(profile, replacement.RawData));
+        profile.Root!.Element("dict")!.Elements("array").Last().RemoveNodes();
+        Assert.Throws<InvalidOperationException>(() => DotNetPublishPipelineRunner.ValidateMacStoreProvisioningCertificate(profile, authorized.RawData));
+    }
+
+    [Fact]
     public void Plan_RejectsMacAppForNonMacRuntime()
     {
         string root = CreateTempRoot();

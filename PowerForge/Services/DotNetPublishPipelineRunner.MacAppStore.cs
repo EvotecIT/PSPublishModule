@@ -54,6 +54,28 @@ public sealed partial class DotNetPublishPipelineRunner
             throw new InvalidOperationException("The provisioning profile must be an unexpired App Store profile for the configured team and bundle.");
     }
 
+    internal static void ValidateMacStoreProvisioningCertificate(XDocument profile, byte[] signingCertificate)
+    {
+        var certificates = profile.Root?.Element("dict")?.Elements("key")
+            .SingleOrDefault(element => element.Value == "DeveloperCertificates")?.ElementsAfterSelf().FirstOrDefault();
+        if (signingCertificate.Length == 0 || certificates?.Name != "array" ||
+            !certificates.Elements("data").Any(element => Convert.FromBase64String(element.Value).SequenceEqual(signingCertificate)))
+            throw new InvalidOperationException("The embedded provisioning profile does not authorize the app's signing certificate. Regenerate the profile for the selected distribution certificate.");
+    }
+
+    private static void ValidateMacStoreEmbeddedProfile(DotNetPublishMacAppOptions options, string appPath, string workingDirectory)
+    {
+        string profilePath = Path.Combine(appPath, "Contents", "embedded.provisionprofile");
+        if (!File.Exists(profilePath)) return;
+        var (exitCode, decoded, error) = RunProcess("/usr/bin/security", workingDirectory, new[] { "cms", "-D", "-i", profilePath });
+        if (exitCode != 0) throw new InvalidOperationException("Cannot decode the embedded provisioning profile: " + error);
+        var profile = XDocument.Parse(decoded);
+        ValidateMacStoreProvisioningProfile(options, profile);
+        string certificatePrefix = Path.Combine(workingDirectory, "profile-signer-");
+        RunRequiredMacTool("/usr/bin/codesign", workingDirectory, new[] { "--display", "--extract-certificates=" + certificatePrefix, appPath });
+        ValidateMacStoreProvisioningCertificate(profile, File.ReadAllBytes(certificatePrefix + "0"));
+    }
+
     private static void BuildAndValidateMacStoreInstaller(
         DotNetPublishMacAppOptions options, string appPath, string packagePath, string workingDirectory)
     {
@@ -65,6 +87,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!details.Split('\n').Any(line => line.Trim() == "TeamIdentifier=" + options.TeamId) ||
             !(details.Contains("Authority=Apple Distribution:") || details.Contains("Authority=3rd Party Mac Developer Application:")))
             throw new InvalidOperationException("The app must be signed with an App Store distribution certificate for the configured TeamId.");
+        ValidateMacStoreEmbeddedProfile(options, appPath, workingDirectory);
         RunRequiredMacTool("/usr/bin/productbuild", workingDirectory,
             new[] { "--sign", options.InstallerSigningIdentity!, "--component", appPath, "/Applications", packagePath });
         var (exitCode, packageOutput, packageError) = RunProcess("/usr/sbin/pkgutil", workingDirectory,
