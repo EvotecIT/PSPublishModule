@@ -157,9 +157,12 @@ public sealed class WebEcosystemNuGetPackage
     public string? PackageUrl { get; set; }
     /// <summary>Project URL.</summary>
     public string? ProjectUrl { get; set; }
-    /// <summary>Public package identifiers sharing this package's repository when its project URL is withheld.</summary>
+    /// <summary>Stable SHA-256 key for repository-based package grouping when its project URL is withheld.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string[]? RelatedPackageIds { get; set; }
+    public string? ProjectRepositoryKey { get; set; }
+    /// <summary>Stable SHA-256 key for repository-name aliases without publishing a repository name.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ProjectRepositoryNameKey { get; set; }
     /// <summary>Short description.</summary>
     public string? Description { get; set; }
     /// <summary>Whether the package is verified.</summary>

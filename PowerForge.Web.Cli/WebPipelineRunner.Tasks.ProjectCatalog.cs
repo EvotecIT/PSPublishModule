@@ -2237,33 +2237,39 @@ internal static partial class WebPipelineRunner
                     }
                 }
 
+                var repositoryKey = package.ProjectRepositoryKey;
+                var repositoryNameKey = package.ProjectRepositoryNameKey;
                 if (!string.IsNullOrWhiteSpace(package.ProjectUrl) &&
                     TryExtractGitHubRepo(package.ProjectUrl!, out var packageRepo))
                 {
-                    if (!nugetByGitHubProject.TryGetValue(packageRepo, out var projectPackages))
+                    repositoryKey = WebEcosystemStatsGenerator.GetPackageRepositoryKey(packageRepo);
+                    repositoryNameKey = WebEcosystemStatsGenerator.GetPackageRepositoryKey(ExtractRepositoryName(packageRepo));
+                }
+                if (!string.IsNullOrWhiteSpace(repositoryKey))
+                {
+                    if (!nugetByGitHubProject.TryGetValue(repositoryKey, out var projectPackages))
                     {
                         projectPackages = new List<WebEcosystemNuGetPackage>();
-                        nugetByGitHubProject[packageRepo] = projectPackages;
+                        nugetByGitHubProject[repositoryKey] = projectPackages;
                     }
 
                     projectPackages.Add(package);
-                    var packageRepoName = ExtractRepositoryName(packageRepo);
-                    if (!string.IsNullOrWhiteSpace(packageRepoName))
+                    if (!string.IsNullOrWhiteSpace(repositoryNameKey))
                     {
-                        if (nugetGitHubProjectByName.TryGetValue(packageRepoName, out var knownPackageRepo) &&
-                            !string.Equals(knownPackageRepo, packageRepo, StringComparison.OrdinalIgnoreCase))
+                        if (nugetGitHubProjectByName.TryGetValue(repositoryNameKey, out var knownPackageRepo) &&
+                            !string.Equals(knownPackageRepo, repositoryKey, StringComparison.OrdinalIgnoreCase))
                         {
-                            ambiguousNuGetGitHubProjectNames.Add(packageRepoName);
+                            ambiguousNuGetGitHubProjectNames.Add(repositoryNameKey);
                         }
                         else
                         {
-                            nugetGitHubProjectByName[packageRepoName] = packageRepo;
+                            nugetGitHubProjectByName[repositoryNameKey] = repositoryKey;
                         }
 
-                        if (!nugetByGitHubProjectName.TryGetValue(packageRepoName, out var projectNamePackages))
+                        if (!nugetByGitHubProjectName.TryGetValue(repositoryNameKey, out var projectNamePackages))
                         {
                             projectNamePackages = new List<WebEcosystemNuGetPackage>();
-                            nugetByGitHubProjectName[packageRepoName] = projectNamePackages;
+                            nugetByGitHubProjectName[repositoryNameKey] = projectNamePackages;
                         }
 
                         projectNamePackages.Add(package);
@@ -2367,7 +2373,7 @@ internal static partial class WebPipelineRunner
             if (nuget is not null)
                 nugetPackages.Add(nuget);
             if (!string.IsNullOrWhiteSpace(project.GitHubRepo) &&
-                nugetByGitHubProject.TryGetValue(project.GitHubRepo.Trim(), out var projectNuGetPackages))
+                nugetByGitHubProject.TryGetValue(WebEcosystemStatsGenerator.GetPackageRepositoryKey(project.GitHubRepo), out var projectNuGetPackages))
             {
                 foreach (var package in projectNuGetPackages)
                 {
@@ -2383,8 +2389,9 @@ internal static partial class WebPipelineRunner
                     nugetPackages.Add(aliasPackage);
                 }
 
-                if (ambiguousNuGetGitHubProjectNames.Contains(candidate) ||
-                    !nugetByGitHubProjectName.TryGetValue(candidate, out var aliasProjectPackages))
+                var aliasRepositoryKey = WebEcosystemStatsGenerator.GetPackageRepositoryKey(candidate);
+                if (ambiguousNuGetGitHubProjectNames.Contains(aliasRepositoryKey) ||
+                    !nugetByGitHubProjectName.TryGetValue(aliasRepositoryKey, out var aliasProjectPackages))
                     continue;
 
                 foreach (var package in aliasProjectPackages)
@@ -2394,16 +2401,11 @@ internal static partial class WebPipelineRunner
                 }
             }
 
-            // Withheld repository URLs retain their public package association for totals.
-            foreach (var package in nugetPackages.ToArray())
-            {
-                foreach (var relatedId in package.RelatedPackageIds ?? Array.Empty<string>())
-                {
-                    if (nugetById.TryGetValue(relatedId, out var relatedPackage) &&
-                        !nugetPackages.Any(existing => string.Equals(existing.Id, relatedPackage.Id, StringComparison.OrdinalIgnoreCase)))
-                        nugetPackages.Add(relatedPackage);
-                }
-            }
+            if (nuget is not null && !string.IsNullOrWhiteSpace(nuget.ProjectRepositoryKey) &&
+                nugetByGitHubProject.TryGetValue(nuget.ProjectRepositoryKey, out var relatedPackages))
+                foreach (var package in relatedPackages)
+                    if (!nugetPackages.Any(existing => string.Equals(existing.Id, package.Id, StringComparison.OrdinalIgnoreCase)))
+                        nugetPackages.Add(package);
 
             if (nugetPackages.Count > 0)
             {

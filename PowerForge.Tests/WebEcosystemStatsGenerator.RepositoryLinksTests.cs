@@ -88,8 +88,8 @@ public sealed partial class WebEcosystemStatsGeneratorTests
             var package = packages.EnumerateArray().Single(item => item.GetProperty("id").GetString() == "ExamplePackage");
             Assert.False(package.TryGetProperty("projectUrl", out _));
             Assert.Equal(123, package.GetProperty("totalDownloads").GetInt64());
-            Assert.Equal(new[] { "ExamplePackage", "ExamplePackage.Core" },
-                package.GetProperty("relatedPackageIds").EnumerateArray().Select(item => item.GetString()));
+            Assert.Equal(package.GetProperty("projectRepositoryKey").GetString(),
+                packages.EnumerateArray().Single(item => item.GetProperty("id").GetString() == "ExamplePackage.Core").GetProperty("projectRepositoryKey").GetString());
             Assert.DoesNotContain("ExampleOrg/PrivateRepo", File.ReadAllText(output));
         }
         finally { TryDeleteDirectory(root); }

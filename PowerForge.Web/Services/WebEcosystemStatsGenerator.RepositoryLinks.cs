@@ -19,8 +19,18 @@ public static partial class WebEcosystemStatsGenerator
         string? configuredOrganization = null, WebEcosystemGitHubStats? publicationInventory = null)
     {
         if (document is null) throw new ArgumentNullException(nameof(document));
-        if (document.GitHub is null && !string.IsNullOrWhiteSpace(configuredOrganization))
+        if (!string.IsNullOrWhiteSpace(configuredOrganization) &&
+            !string.Equals(document.GitHub?.Organization, configuredOrganization.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            var incompatibleInventory = !string.IsNullOrWhiteSpace(document.GitHub?.Organization);
             document.GitHub = new() { Organization = configuredOrganization.Trim() };
+            if (incompatibleInventory)
+            {
+                document.Summary.RepositoryCount = 0;
+                document.Summary.GitHubStars = 0;
+                document.Summary.GitHubForks = 0;
+            }
+        }
         var inventory = publicationInventory ?? document.GitHub;
         var configuredInventory = !string.IsNullOrWhiteSpace(configuredOrganization) &&
             !string.Equals(configuredOrganization.Trim(), inventory?.Organization, StringComparison.OrdinalIgnoreCase)
@@ -29,23 +39,17 @@ public static partial class WebEcosystemStatsGenerator
             (NormalizePublicProjectLink(url, inventory) is null ||
              NormalizePublicProjectLink(url, configuredInventory) is null);
 
-        // Keep only public package IDs as the association; no private repository identity is published.
+        // Preserve matching keys without publishing repository owner/name strings.
         var packages = document.NuGet?.Items ?? new List<WebEcosystemNuGetPackage>();
-        var relatedPackages = packages.Where(package => TryReadGitHubRepository(package.ProjectUrl, out _))
-            .GroupBy(package => { TryReadGitHubRepository(package.ProjectUrl, out var repository); return repository; }, StringComparer.OrdinalIgnoreCase);
-        foreach (var group in relatedPackages)
-        {
-            var ids = group.Select(package => package.Id).Where(id => !string.IsNullOrWhiteSpace(id))
-                .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(id => id, StringComparer.OrdinalIgnoreCase).ToArray();
-            if (ids.Length > 1)
-                foreach (var package in group.Where(package => Withhold(package.ProjectUrl)))
-                    package.RelatedPackageIds = ids;
-        }
-
         var removed = 0;
         foreach (var package in packages)
         {
             if (!Withhold(package.ProjectUrl)) continue;
+            if (TryReadGitHubRepository(package.ProjectUrl, out var repository))
+            {
+                package.ProjectRepositoryKey = GetPackageRepositoryKey(repository);
+                package.ProjectRepositoryNameKey = GetPackageRepositoryKey(repository[(repository.IndexOf('/') + 1)..]);
+            }
             package.ProjectUrl = null;
             removed++;
         }
@@ -56,6 +60,16 @@ public static partial class WebEcosystemStatsGenerator
             removed++;
         }
         return removed;
+    }
+
+    /// <summary>Builds a stable case-insensitive matching key for a repository identity or repository-name alias.</summary>
+    /// <param name="repositoryIdentifier">Owner/repository identity, or a short repository name.</param>
+    /// <returns>A SHA-256 key for matching metadata without emitting the input name as a URL or string.</returns>
+    public static string GetPackageRepositoryKey(string repositoryIdentifier)
+    {
+        if (repositoryIdentifier is null) throw new ArgumentNullException(nameof(repositoryIdentifier));
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(repositoryIdentifier.Trim().ToLowerInvariant())));
     }
 
     /// <summary>Retains a package project URL only when its organization repository appears in the public inventory.</summary>

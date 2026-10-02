@@ -17,8 +17,11 @@ Package-only stats without a GitHub organization preserve their project URLs.
 When GitHub fails, the pipeline uses an applicable retained public inventory
 before filtering fresh package links. A configured organization still applies
 when the retained snapshot has no GitHub inventory. Withheld NuGet project links
-retain `relatedPackageIds` containing public package identifiers, so package-family
-counts and download totals survive publication and later catalog refreshes.
+retain SHA-256 `projectRepositoryKey` and `projectRepositoryNameKey` matching keys,
+so repository and alias matching, package-family counts, and download totals
+survive publication and later catalog refreshes without emitting repository names.
+These deterministic keys support matching; they do not encrypt source identities.
+Retained GitHub data from another organization is not used for the current one.
 An empty or capped public inventory can omit otherwise public repository links;
 set `maxItems` high enough to include the organization's repository inventory.
 

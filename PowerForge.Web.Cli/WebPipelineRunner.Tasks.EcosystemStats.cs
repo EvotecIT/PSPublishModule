@@ -381,6 +381,7 @@ internal static partial class WebPipelineRunner
 
         if (hasGitHub &&
             HasSourceWarning(generated.Warnings, "GitHub") &&
+            string.Equals(existing.GitHub?.Organization, generated.GitHub?.Organization, StringComparison.OrdinalIgnoreCase) &&
             HasGitHubData(existing) &&
             !HasGitHubData(generated))
         {
