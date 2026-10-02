@@ -99,6 +99,7 @@ public static partial class WebApiDocsGenerator
     {
         public string Name { get; set; } = string.Empty;
         public string? Type { get; set; }
+        // Preserve documentation identity for anchors and xrefs before adding display annotations.
         internal string? AnchorType { get; set; }
         public string? Summary { get; set; }
         public List<string> Aliases { get; } = new();

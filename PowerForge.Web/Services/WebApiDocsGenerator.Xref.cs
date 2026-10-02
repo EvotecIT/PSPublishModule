@@ -486,7 +486,7 @@ public static partial class WebApiDocsGenerator
         return string.Join(
             ",",
             member.Parameters
-                .Select(static parameter => NormalizeCSharpMemberParameterType(parameter?.Type))
+                .Select(static parameter => NormalizeCSharpMemberParameterType(parameter?.AnchorType ?? parameter?.Type))
                 .Where(static value => !string.IsNullOrWhiteSpace(value)));
     }
 

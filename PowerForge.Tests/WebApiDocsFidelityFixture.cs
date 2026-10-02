@@ -7,6 +7,7 @@ public sealed class Fixture
     public Fixture(string? name = null) { Field = name; }
     public string? Create(string? text = null) => text;
     public Fixture? Open(Fixture? options = null) => options;
+    public void Inspect(int? count, string?[]? names, Dictionary<string, List<Fixture?[]?>?>? values) { }
     public string?[,]? Matrix { get; set; }
     public Dictionary<string, List<string?>?>? Values { get; set; }
     public string? Field;

@@ -16,6 +16,8 @@ public sealed class WebApiDocsGeneratorFidelityTests
                 <member name="T:PowerForge.Tests.DocsFidelity.Fixture"><summary>A document fixture.</summary></member>
                 <member name="M:PowerForge.Tests.DocsFidelity.Fixture.Create(System.String)"><summary>Create.</summary><param name="arg1">Provided input.</param></member>
                 <member name="M:PowerForge.Tests.DocsFidelity.Fixture.Open(PowerForge.Tests.DocsFidelity.Fixture)"><summary>Open.</summary></member>
+                <member name="M:PowerForge.Tests.DocsFidelity.Fixture.#ctor(System.String)"><summary>Create a fixture.</summary></member>
+                <member name="M:PowerForge.Tests.DocsFidelity.Fixture.Inspect(System.Nullable{System.Int32},System.String[],System.Collections.Generic.Dictionary{System.String,System.Collections.Generic.List{PowerForge.Tests.DocsFidelity.Fixture[]}})"><summary>Inspect.</summary></member>
                 </members></doc>
                 """);
             var options = new WebApiDocsOptions
@@ -30,7 +32,7 @@ public sealed class WebApiDocsGeneratorFidelityTests
                 BaseUrl = "/api",
                 IncludeUndocumentedTypes = false
             };
-            WebApiDocsGenerator.Generate(options);
+            var result = WebApiDocsGenerator.Generate(options);
             using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(options.OutputPath,
                 "types", "powerforge-tests-docsfidelity-fixture.json")));
             var type = json.RootElement;
@@ -41,8 +43,23 @@ public sealed class WebApiDocsGeneratorFidelityTests
             Assert.Contains("String? Create(String? text = null)", method.GetProperty("signature").GetString());
             Assert.Equal("System.String?", method.GetProperty("parameters")[0].GetProperty("type").GetString());
             Assert.Equal("text", method.GetProperty("parameters")[0].GetProperty("name").GetString());
+            var inspect = type.GetProperty("methods").EnumerateArray().Single(m => m.GetProperty("name").GetString() == "Inspect");
+            Assert.Contains("Int32? count", inspect.GetProperty("signature").GetString());
+            Assert.Contains("String?[]? names", inspect.GetProperty("signature").GetString());
+            Assert.Contains("Dictionary<String, List<Fixture?[]?>?>? values", inspect.GetProperty("signature").GetString());
             var html = File.ReadAllText(Path.Combine(options.OutputPath, "powerforge-tests-docsfidelity-fixture", "index.html"));
             Assert.Contains("id=\"method-open-powerforge-tests-docsfidelity-fixture\"", html);
+            using var xref = JsonDocument.Parse(File.ReadAllText(result.XrefPath!));
+            var references = xref.RootElement.GetProperty("references").EnumerateArray().ToArray();
+            var documentedIds = System.Xml.Linq.XDocument.Load(xml).Descendants("member")
+                .Select(member => member.Attribute("name")!.Value).Where(id => id.StartsWith("M:", StringComparison.Ordinal));
+            foreach (var id in documentedIds)
+            {
+                var reference = Assert.Single(references, item => item.GetProperty("uid").GetString() == id);
+                Assert.Contains(id[2..], reference.GetProperty("aliases").EnumerateArray().Select(alias => alias.GetString()));
+                var anchor = reference.GetProperty("href").GetString()!.Split('#')[1];
+                Assert.Contains($"id=\"{anchor}\"", html);
+            }
             var properties = type.GetProperty("properties").EnumerateArray().ToDictionary(p => p.GetProperty("name").GetString()!);
             Assert.Contains("String?[,]?", properties["Matrix"].GetProperty("signature").GetString());
             Assert.Contains("Dictionary<String, List<String?>?>?", properties["Values"].GetProperty("signature").GetString());
