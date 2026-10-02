@@ -167,6 +167,12 @@ public sealed class PowerShellBenchmarkHostExecutor
             var result = BenchmarkJson.Read<BenchmarkRunResult>(resultPath);
             if (processResult.ExitCode != 0)
                 throw new InvalidOperationException($"Benchmark host '{host}' failed with exit code {processResult.ExitCode}. STDOUT: {processResult.Stdout} STDERR: {processResult.Stderr} Scratch: {scratchRoot}");
+            // Executable paths are distinct host selections even when their runtime
+            // edition and version match (for example Desktop x86 and x64).
+            var executablePath = Path.GetFullPath(executable);
+            result.Metadata["hostExecutablePath"] = executablePath;
+            if (Path.IsPathRooted(host))
+                foreach (var sample in result.Samples) sample.Host = executablePath;
             deleteScratch = true;
             return result;
         }
@@ -219,7 +225,10 @@ public sealed class PowerShellBenchmarkHostExecutor
             PlanningProfile = PowerShellBenchmarkProfileKind.Current.ToString(),
             BenchmarkVariables = request.BenchmarkVariables,
             Selection = selection,
-            ModulePaths = PowerShellBenchmarkTemporaryUserExecutor.GetImportableCallerModulePaths(),
+            ModulePaths = PowerShellBenchmarkTemporaryUserExecutor.GetImportableCallerModulePaths()
+                .Select(path => string.Equals(Path.GetExtension(path), ".dll", StringComparison.OrdinalIgnoreCase)
+                    ? PowerShellBenchmarkHostRuntime.ResolveAssemblyForHost(path, executable) : path)
+                .Distinct(PathComparer).ToArray(),
             RunStartedUtc = started.ToString("O"),
             UpdateReadmeBlocks = false,
             ValidateComparisonGates = false

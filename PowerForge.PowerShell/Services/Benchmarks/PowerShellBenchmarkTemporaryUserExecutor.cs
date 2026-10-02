@@ -278,9 +278,11 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
     {
         try
         {
-            using var powerShell = PowerShell.Create();
-            if (Runspace.DefaultRunspace is not null)
-                powerShell.Runspace = Runspace.DefaultRunspace;
+            // The caller's pipeline is already running while Invoke-BenchmarkSuite
+            // discovers its modules. A nested pipeline can inspect that runspace;
+            // an ordinary pipeline bound to it fails and loses the module imports.
+            using var powerShell = Runspace.DefaultRunspace is not null
+                ? PowerShell.Create(RunspaceMode.CurrentRunspace) : PowerShell.Create();
             powerShell.AddCommand("Get-Module");
             return powerShell.Invoke<PSModuleInfo>()
                 .Select(module => module.Path)

@@ -103,4 +103,25 @@ New-BenchmarkSuite 'placement' -OutputRoot '{{root.Replace("'", "''")}}' {
             PowerShellBenchmarkEnvironmentMetadata.CaptureSourceProvenance(suite));
         Assert.Contains(merged.Metadata, pair => pair.Key.StartsWith("host.", StringComparison.Ordinal) && pair.Key.EndsWith(".processAffinityMask", StringComparison.Ordinal) && pair.Value == "0xFFFF");
     }
+
+    [Fact]
+    public void PlacementMerge_PreservesDistinctExecutablesWithTheSameRuntimeAndRejectsAmbiguity()
+    {
+        var suite = new PowerShellBenchmarkSuite { Name = "placement" };
+        var children = new[] { "x86", "x64" }.Select(architecture => new BenchmarkRunResult
+        {
+            Samples = new[] { new BenchmarkSample { Host = "Desktop-5.1" } },
+            Metadata = new Dictionary<string, string>
+            {
+                ["hostExecutablePath"] = "/hosts/" + architecture + "/powershell.exe",
+                ["originalProcessAffinityMask"] = architecture == "x86" ? "0xFFFFFFFF" : "0xFFFFFFFFFFFFFFFF"
+            }
+        }).ToArray();
+        var provenance = PowerShellBenchmarkEnvironmentMetadata.CaptureSourceProvenance(suite);
+        var result = PowerShellBenchmarkResultMerger.Merge(suite, children, DateTimeOffset.UtcNow, provenance);
+        Assert.Equal("0xFFFFFFFF", result.Metadata["host./hosts/x86/powershell.exe.originalProcessAffinityMask"]);
+        Assert.Equal("0xFFFFFFFFFFFFFFFF", result.Metadata["host./hosts/x64/powershell.exe.originalProcessAffinityMask"]);
+        foreach (var child in children) child.Metadata.Remove("hostExecutablePath");
+        Assert.Throws<InvalidOperationException>(() => PowerShellBenchmarkResultMerger.Merge(suite, children, DateTimeOffset.UtcNow, provenance));
+    }
 }
