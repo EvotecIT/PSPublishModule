@@ -209,6 +209,9 @@ public sealed partial class ModulePipelineRunner
                 }
                 catch (Exception ex)
                 {
+                    if (plan.GateMode == ConfigurationGateMode.Documentation)
+                        throw new InvalidOperationException($"Failed to update project documentation. {ex.Message}", ex);
+
                     _logger.Warn($"Failed to update project docs folder. Error: {ex.Message}");
                     if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
                 }

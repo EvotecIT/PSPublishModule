@@ -86,6 +86,24 @@ public sealed class WebsiteArtifactExportTests
     }
 
     [Fact]
+    public void Export_DoesNotPublishOlderHelpWhenDocumentationRefreshFails()
+    {
+        using var fixture = new ExportFixture("Example module");
+        File.WriteAllText(Path.Combine(fixture.Root, "Build", "Build-Project.ps1"),
+            "throw 'Failed to update project documentation.'");
+        var exportedHelp = Path.Combine(fixture.Artifacts, "apidocs", "powershell", "PSPublishModule-help.xml");
+        Directory.CreateDirectory(Path.GetDirectoryName(exportedHelp)!);
+        File.WriteAllText(exportedHelp, "Previously exported help");
+
+        var run = fixture.Export(skipBuild: false);
+
+        Assert.NotEqual(0, run.ExitCode);
+        Assert.Contains("Failed to update project documentation", run.StdErr);
+        Assert.Equal("Previously exported help", File.ReadAllText(exportedHelp));
+        Assert.False(File.Exists(Path.Combine(fixture.Artifacts, "project-manifest.json")));
+    }
+
+    [Fact]
     public void Export_ReadsCmdletKindsAndAliasesFromNestedCorePayload()
     {
         using var fixture = new ExportFixture("Example module");
