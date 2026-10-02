@@ -8,13 +8,19 @@ namespace PowerForge.Tests;
 public sealed class WebPipelineRunnerPublicProjectLinksTests
 {
     [Theory]
-    [InlineData(false, "package")]
-    [InlineData(true, "package")]
-    [InlineData(false, "repository")]
-    [InlineData(true, "repository")]
-    [InlineData(false, "alias")]
-    [InlineData(true, "alias")]
-    public void Pipeline_WithheldRepositoryLinksPreservePackageFamilyTotals(bool normalizedSnapshot, string match)
+    [InlineData(false, "package", "https://github.com/ExampleOrg/Suite")]
+    [InlineData(true, "package", "https://github.com/ExampleOrg/Suite")]
+    [InlineData(false, "repository", "https://github.com/ExampleOrg/Suite")]
+    [InlineData(true, "repository", "https://github.com/ExampleOrg/Suite")]
+    [InlineData(false, "alias", "https://github.com/ExampleOrg/Suite")]
+    [InlineData(true, "alias", "https://github.com/ExampleOrg/Suite")]
+    [InlineData(false, "repository", "https://api.github.com/repos/ExampleOrg/Suite")]
+    [InlineData(false, "alias", "https://api.github.com/repos/ExampleOrg/Suite")]
+    [InlineData(false, "repository", "https://raw.githubusercontent.com/ExampleOrg/Suite/main/README.md")]
+    [InlineData(false, "alias", "https://raw.githubusercontent.com/ExampleOrg/Suite/main/README.md")]
+    [InlineData(false, "repository", "https://github.com/ExampleOrg/%53uite")]
+    [InlineData(false, "alias", "https://github.com/ExampleOrg/%53uite")]
+    public void Pipeline_WithheldRepositoryLinksPreservePackageFamilyTotals(bool normalizedSnapshot, string match, string projectUrl)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-package-associations-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -25,8 +31,8 @@ public sealed class WebPipelineRunnerPublicProjectLinksTests
                 GitHub = new() { Organization = "ExampleOrg" },
                 NuGet = new() { Items = new()
                 {
-                    new() { Id = "Suite", TotalDownloads = 100, ProjectUrl = "https://github.com/ExampleOrg/Suite" },
-                    new() { Id = "Suite.Core", TotalDownloads = 200, ProjectUrl = "https://github.com/ExampleOrg/Suite" }
+                    new() { Id = "Suite", TotalDownloads = 100, ProjectUrl = projectUrl },
+                    new() { Id = "Suite.Core", TotalDownloads = 200, ProjectUrl = projectUrl }
                 } }
             };
             if (normalizedSnapshot) WebEcosystemStatsGenerator.NormalizePublicProjectLinks(stats);
@@ -51,8 +57,8 @@ public sealed class WebPipelineRunnerPublicProjectLinksTests
             Assert.True(result.Success, result.Steps[0].Message);
             using var catalog = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "public-catalog.json")));
             var metrics = catalog.RootElement.GetProperty("projects")[0].GetProperty("metrics").GetProperty("nuget");
-            Assert.Equal(300, metrics.GetProperty("totalDownloads").GetInt64());
-            Assert.Equal(2, metrics.GetProperty("packageCount").GetInt32());
+            Assert.Equal(match == "package" ? 100 : 300, metrics.GetProperty("totalDownloads").GetInt64());
+            Assert.Equal(match == "package" ? 1 : 2, metrics.GetProperty("packageCount").GetInt32());
             Assert.False(metrics.TryGetProperty("projectUrl", out var url) && url.ValueKind == JsonValueKind.String);
         }
         finally { Directory.Delete(root, recursive: true); }

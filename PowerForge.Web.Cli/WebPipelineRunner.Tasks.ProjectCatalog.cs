@@ -2178,6 +2178,7 @@ internal static partial class WebPipelineRunner
         if (stats is null)
             return 0;
 
+        WebEcosystemStatsGenerator.NormalizePublicProjectLinks(stats);
         var githubByFullName = new Dictionary<string, WebEcosystemGitHubRepository>(StringComparer.OrdinalIgnoreCase);
         var githubByRepoName = new Dictionary<string, WebEcosystemGitHubRepository>(StringComparer.OrdinalIgnoreCase);
         var ambiguousGitHubRepoNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -2304,7 +2305,6 @@ internal static partial class WebPipelineRunner
             }
         }
 
-        WebEcosystemStatsGenerator.NormalizePublicProjectLinks(stats);
         var merged = 0;
         foreach (var project in projects)
         {
@@ -2400,12 +2400,6 @@ internal static partial class WebPipelineRunner
                         nugetPackages.Add(package);
                 }
             }
-
-            if (nuget is not null && !string.IsNullOrWhiteSpace(nuget.ProjectRepositoryKey) &&
-                nugetByGitHubProject.TryGetValue(nuget.ProjectRepositoryKey, out var relatedPackages))
-                foreach (var package in relatedPackages)
-                    if (!nugetPackages.Any(existing => string.Equals(existing.Id, package.Id, StringComparison.OrdinalIgnoreCase)))
-                        nugetPackages.Add(package);
 
             if (nugetPackages.Count > 0)
             {
