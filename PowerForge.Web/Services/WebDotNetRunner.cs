@@ -8,6 +8,8 @@ public sealed class WebDotNetBuildOptions
 {
     /// <summary>Project or solution path.</summary>
     public string ProjectOrSolution { get; set; } = string.Empty;
+    /// <summary>Optional project set built together as one solution, sharing restore and dependency builds.</summary>
+    public string[] Projects { get; set; } = Array.Empty<string>();
     /// <summary>Build configuration.</summary>
     public string? Configuration { get; set; }
     /// <summary>Target framework.</summary>
@@ -55,7 +57,7 @@ public sealed class WebDotNetResult
 }
 
 /// <summary>Runs dotnet build and publish commands.</summary>
-public static class WebDotNetRunner
+public static partial class WebDotNetRunner
 {
     /// <summary>Executes dotnet build with provided options.</summary>
     /// <param name="options">Build options.</param>
@@ -63,6 +65,8 @@ public static class WebDotNetRunner
     public static WebDotNetResult Build(WebDotNetBuildOptions options)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
+        if (options.Projects.Length > 0)
+            return BuildProjectSet(options);
         if (string.IsNullOrWhiteSpace(options.ProjectOrSolution))
             throw new ArgumentException("ProjectOrSolution is required.", nameof(options));
 

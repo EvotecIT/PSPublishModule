@@ -322,6 +322,7 @@ internal static partial class WebPipelineRunner
     private static void ExecuteDotNetBuild(JsonElement step, string baseDir, WebPipelineStepResult stepResult)
     {
         var project = ResolvePath(baseDir, GetString(step, "project") ?? GetString(step, "solution") ?? GetString(step, "path"));
+        var projects = GetStringOrArrayOfStrings(step, "projects").Select(path => ResolvePath(baseDir, path)!).ToArray();
         var configuration = GetString(step, "configuration");
         var framework = GetString(step, "framework");
         var runtime = GetString(step, "runtime");
@@ -330,15 +331,26 @@ internal static partial class WebPipelineRunner
                                    GetBool(step, "skipIfMissingProject") ??
                                    GetBool(step, "skip-if-project-missing") ??
                                    false;
-        if (string.IsNullOrWhiteSpace(project))
-            throw new InvalidOperationException("dotnet-build requires project.");
+        if (string.IsNullOrWhiteSpace(project) && projects.Length == 0)
+            throw new InvalidOperationException("dotnet-build requires project or projects.");
 
-        if (TrySkipDotNetStepForMissingProject(project, skipIfProjectMissing, stepResult, "dotnet build"))
+        if (projects.Length == 0 && TrySkipDotNetStepForMissingProject(project ?? string.Empty, skipIfProjectMissing, stepResult, "dotnet build"))
             return;
+        if (skipIfProjectMissing)
+        {
+            projects = projects.Where(File.Exists).ToArray();
+            if (string.IsNullOrWhiteSpace(project) && projects.Length == 0)
+            {
+                stepResult.Success = true;
+                stepResult.Message = "dotnet build skipped (no existing projects in optional project set)";
+                return;
+            }
+        }
 
         var res = WebDotNetRunner.Build(new WebDotNetBuildOptions
         {
-            ProjectOrSolution = project,
+            ProjectOrSolution = project ?? string.Empty,
+            Projects = projects,
             Configuration = configuration,
             Framework = framework,
             Runtime = runtime,

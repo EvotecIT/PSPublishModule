@@ -79,12 +79,12 @@ public class WebApiDocsGeneratorCrefTests
               <assembly><name>Test</name></assembly>
               <members>
                 <member name="T:MyNamespace.Sample">
-                  <summary>Type with duplicate method doc entries.</summary>
+                  <summary>Type with distinct overloads whose normalized anchors collide.</summary>
                 </member>
-                <member name="M:MyNamespace.Sample.Run(System.Int32)">
+                <member name="M:MyNamespace.Sample.Run(MyNamespace.Widget)">
                   <summary>First overload entry.</summary>
                 </member>
-                <member name="M:MyNamespace.Sample.Run(System.Int32)">
+                <member name="M:MyNamespace.Sample.Run(MyNamespace.WIDGET)">
                   <summary>Second overload entry.</summary>
                 </member>
               </members>

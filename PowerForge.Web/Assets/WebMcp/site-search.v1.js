@@ -1,6 +1,28 @@
 (function (global, document) {
   'use strict';
 
+  var DEFAULT_RESULT_LIMIT = 3;
+  var MAX_RESULT_LIMIT = 5;
+  var MAX_RESULT_URL_CHARACTERS = 1024;
+  var MAX_OUTPUT_CHARACTERS = 1500;
+  var MAX_INDEX_BYTES = 8 * 1024 * 1024;
+  var MAX_INDEX_ENTRIES = 5000;
+  var MAX_QUERY_BYTES = 8 * 1024 * 1024;
+  var MAX_QUERY_REQUESTS = 64;
+
+  var searchFields = new WeakMap();
+  // The same native asset supplies pure parsing/ranking inside a worker.
+  if (!document) {
+    global.onmessage = function (event) {
+      try {
+        global.postMessage({ id: event.data.id, result: rankPayload(event.data.payload, event.data.request) });
+      } catch (error) {
+        global.postMessage({ id: event.data.id, error: { message: error.message, code: error.code } });
+      }
+    };
+    return;
+  }
+
   var surface = document.querySelector('[data-webmcp-site-search]');
   if (!surface) return;
 
@@ -9,12 +31,11 @@
   var indexPath = String(surface.getAttribute('data-webmcp-search-index') || surface.getAttribute('data-search-index') || '/search/index.json').trim();
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(toolName)) return;
 
-  var DEFAULT_RESULT_LIMIT = 3;
-  var MAX_RESULT_LIMIT = 5;
-  var MAX_RESULT_URL_CHARACTERS = 1024;
-  var MAX_OUTPUT_CHARACTERS = 1500;
-  var MAX_INDEX_BYTES = 8 * 1024 * 1024;
-  var MAX_INDEX_ENTRIES = 5000;
+  var runtimeUrl = document.currentScript && document.currentScript.src;
+  var rankingWorker = null;
+  var workerDisabled = false;
+  var rankingSequence = 0;
+  var rankingRequests = Object.create(null);
 
   var api = global.PowerForgeWebMcpSearch || {};
   var adapter = api.adapter || null;
@@ -24,9 +45,9 @@
   var registrationController = null;
   var indexPromise = null;
   var manifestPromise = null;
+  var facetsPromise = null;
   var shardPromises = Object.create(null);
   var cachedShardBytes = 0;
-  var searchFields = new WeakMap();
 
   function boundedInteger(value, fallback, minimum, maximum) {
     var parsed = Number(value);
@@ -260,11 +281,67 @@
   }
 
   async function genericSearch(request) {
-    var entries = await awaitWithSignal(loadQueryEntries(request), request.signal);
+    var payload = await awaitWithSignal(loadQueryEntries(request), request.signal);
+    throwIfAborted(request.signal);
+    return awaitWithSignal(rankWithWorker(payload, request), request.signal);
+  }
+
+  function rankPayload(payload, request) {
+    var entries = payload.entries || [];
+    (payload.chunks || []).forEach(function (json) {
+      var values = JSON.parse(json);
+      if (!Array.isArray(values) || values.length > MAX_INDEX_ENTRIES) throw new Error('Invalid search shard.');
+      if (entries.length + values.length > 200000) throw new Error('Too many search entries.');
+      Array.prototype.push.apply(entries, values);
+    });
     return searchEntries(entries, request.query, request.limit, request);
   }
 
+  function rankWithWorker(payload, request) {
+    if (!runtimeUrl || !global.Worker || workerDisabled) return Promise.resolve(rankPayload(payload, request));
+    if (!rankingWorker) {
+      try {
+        rankingWorker = new global.Worker(runtimeUrl, { name: 'powerforge-site-search' });
+        rankingWorker.onmessage = function (event) {
+          var pending = rankingRequests[event.data.id];
+          if (!pending) return;
+          delete rankingRequests[event.data.id];
+          if (event.data.error) {
+            var error = new Error(event.data.error.message);
+            error.code = event.data.error.code;
+            pending.reject(error);
+          } else pending.resolve(event.data.result);
+        };
+        rankingWorker.onerror = function (event) {
+          event.preventDefault();
+          rankingWorker.terminate();
+          rankingWorker = null;
+          workerDisabled = true;
+          Object.keys(rankingRequests).forEach(function (id) {
+            var pending = rankingRequests[id];
+            delete rankingRequests[id];
+            try { pending.resolve(rankPayload(pending.payload, pending.request)); }
+            catch (error) { pending.reject(error); }
+          });
+        };
+      } catch (_) {
+        workerDisabled = true;
+        return Promise.resolve(rankPayload(payload, request));
+      }
+    }
+    return new Promise(function (resolve, reject) {
+      var id = ++rankingSequence;
+      rankingRequests[id] = { resolve: resolve, reject: reject, payload: payload, request: request };
+      try {
+        rankingWorker.postMessage({ id: id, payload: payload, request: {
+          query: request.query, limit: request.limit, project: request.project, kind: request.kind
+        } });
+      } catch (error) { delete rankingRequests[id]; reject(error); }
+    });
+  }
+
   async function loadQueryEntries(request) {
+    throwIfAborted(request.signal);
     var indexUrl = new URL(indexPath, document.baseURI);
     if (indexUrl.origin !== global.location.origin) throw new Error('Search indexes must be same-origin.');
     var manifestUrl = new URL('manifest.json', indexUrl);
@@ -277,7 +354,8 @@
         }).catch(function (error) { manifestPromise = null; throw error; });
     }
     var manifest = await manifestPromise;
-    if (!manifest || !Array.isArray(manifest.queryShards)) return loadIndex();
+    throwIfAborted(request.signal);
+    if (!manifest || !Array.isArray(manifest.queryShards)) return { entries: await loadIndex() };
     if (manifest.queryShards.length > 4096) throw new Error('Too many search shards.');
     var tokens = normalizeText(request.query).split(' ').filter(Boolean);
     var candidates = manifest.queryShards.filter(function (shard) {
@@ -290,11 +368,16 @@
         });
     });
     var decodedBytes = candidates.reduce(function (total, shard) { return total + Number(shard.bytes || 0); }, 0);
-    if (!Number.isFinite(decodedBytes) || decodedBytes > 64 * 1024 * 1024) throw new Error('Search shard selection exceeds the safety limit. Refine the query.');
-    var entries = [];
+    if (!Number.isFinite(decodedBytes) || decodedBytes > MAX_QUERY_BYTES || candidates.length > MAX_QUERY_REQUESTS) {
+      var error = new Error('This query is too broad. Choose a package or enter a more specific API name or topic.');
+      error.code = 'SEARCH_QUERY_TOO_BROAD';
+      throw error;
+    }
+    var chunks = [];
     var actualBytes = 0;
     // Bound concurrent requests and reuse only the shards selected by a query.
     for (var offset = 0; offset < candidates.length; offset += 4) {
+      throwIfAborted(request.signal);
       var loaded = await Promise.all(candidates.slice(offset, offset + 4).map(function (shard) {
         var url = new URL(shard.path, manifestUrl);
         if (url.origin !== global.location.origin || url.pathname.indexOf(new URL('query/', manifestUrl).pathname) !== 0) throw new Error('Invalid search shard path.');
@@ -303,22 +386,25 @@
             if (!response.ok) throw new Error('Search shard request failed with HTTP ' + response.status + '.');
             var json = await readBoundedResponseText(response);
             var bytes = new TextEncoder().encode(json).byteLength;
-            var values = JSON.parse(json);
-            if (!Array.isArray(values) || values.length > MAX_INDEX_ENTRIES) throw new Error('Invalid search shard.');
-            if (cachedShardBytes + bytes > 64 * 1024 * 1024) { shardPromises = Object.create(null); cachedShardBytes = 0; }
+            if (cachedShardBytes + bytes > 16 * 1024 * 1024) { shardPromises = Object.create(null); cachedShardBytes = 0; }
             cachedShardBytes += bytes;
-            return { values: values, bytes: bytes };
+            return { json: json, bytes: bytes };
           }).catch(function (error) { delete shardPromises[url.href]; throw error; });
         }
         return shardPromises[url.href];
       }));
+      throwIfAborted(request.signal);
       loaded.forEach(function (shard) {
         actualBytes += shard.bytes;
-        if (actualBytes > 64 * 1024 * 1024 || entries.length + shard.values.length > 200000) throw new Error('Search results exceed the safety limit. Refine the query.');
-        entries = entries.concat(shard.values);
+        if (actualBytes > MAX_QUERY_BYTES) throw new Error('Search results exceed the safety limit. Refine the query.');
+        chunks.push(shard.json);
       });
     }
-    return entries;
+    return { chunks: chunks };
+  }
+
+  function throwIfAborted(signal) {
+    if (signal && signal.aborted) throw new DOMException('Search cancelled.', 'AbortError');
   }
 
   function shardHasPrefix(shard, prefix) {
@@ -411,6 +497,18 @@
   api.normalizeText = normalizeText;
   api.searchEntries = searchEntries;
   api.facets = async function () {
+    if (!facetsPromise) {
+      var url = new URL('facets.json', new URL(indexPath, document.baseURI));
+      facetsPromise = global.fetch(url.href, { credentials: 'same-origin', cache: 'no-cache' }).then(async function (response) {
+        if (response.status === 404) return null;
+        if (!response.ok) throw new Error('Search facets request failed.');
+        var facets = JSON.parse(await readBoundedResponseText(response));
+        if (!facets || !Array.isArray(facets.projects) || facets.projects.length > 4096) throw new Error('Invalid search facets.');
+        return { projects: facets.projects.filter(function (project) { return typeof project === 'string' && project.length <= 160; }) };
+      }).catch(function (error) { facetsPromise = null; throw error; });
+    }
+    var facets = await facetsPromise;
+    if (facets) return facets;
     await loadQueryEntries({ query: '', project: '__facets_only__' });
     var manifest = await manifestPromise;
     return { projects: manifest && Array.isArray(manifest.queryShards) ?
@@ -430,6 +528,13 @@
   api.dispose = function () {
     if (registrationController) registrationController.abort();
     registrationController = null;
+    if (rankingWorker) rankingWorker.terminate();
+    rankingWorker = null;
+    workerDisabled = true;
+    Object.keys(rankingRequests).forEach(function (id) {
+      rankingRequests[id].reject(new DOMException('Search disposed.', 'AbortError'));
+      delete rankingRequests[id];
+    });
     surface.setAttribute('data-webmcp-status', 'disposed');
   };
   global.PowerForgeWebMcpSearch = api;
@@ -489,4 +594,4 @@
         surface.setAttribute('data-webmcp-status', 'failed');
         return false;
       });
-})(window, document);
+})(typeof window === 'undefined' ? self : window, typeof document === 'undefined' ? null : document);

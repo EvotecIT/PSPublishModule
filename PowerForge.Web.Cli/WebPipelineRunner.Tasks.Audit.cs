@@ -242,6 +242,12 @@ internal static partial class WebPipelineRunner
             RenderedServePort = renderedPort,
             RenderedMaxPages = renderedMaxPages,
             RenderedTimeoutMs = renderedTimeoutMs,
+            RenderedCheckLayout = GetBool(step, "renderedCheckLayout") ?? false,
+            RenderedViewports = (step.TryGetProperty("renderedViewports", out var viewports) && viewports.ValueKind == JsonValueKind.Array ? viewports.EnumerateArray().ToArray() : Array.Empty<JsonElement>()).Select(viewport => new WebAuditViewport
+            {
+                Width = GetInt(viewport, "width") ?? 1280, Height = GetInt(viewport, "height") ?? 800
+            }).ToArray(),
+            RenderedLayoutSelectors = GetStringOrArrayOfStrings(step, "renderedLayoutSelectors") is { Length: > 0 } selectors ? selectors : new[] { "main" },
             RenderedCheckConsoleErrors = renderedCheckErrors,
             RenderedCheckConsoleWarnings = renderedCheckWarnings,
             RenderedCheckFailedRequests = renderedCheckFailures,

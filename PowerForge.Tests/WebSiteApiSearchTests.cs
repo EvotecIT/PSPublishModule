@@ -90,6 +90,8 @@ public sealed class WebSiteApiSearchTests : IDisposable
             Assert.Equal("Word.Pdf", entry.Project);
             Assert.NotNull(entry.Meta);
         });
+        using var facets = JsonDocument.Parse(File.ReadAllText(Path.Combine(Output, "search", "facets.json")));
+        Assert.Contains("Word.Pdf", facets.RootElement.GetProperty("projects").EnumerateArray().Select(p => p.GetString()));
         var before = shards.Select(shard => shard.GetProperty("path").GetString()!).ToArray();
         var unrelated = Path.Combine(Output, "search", "query", "custom.json");
         File.WriteAllText(unrelated, "{}");

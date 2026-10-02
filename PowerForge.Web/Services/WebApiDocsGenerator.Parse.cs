@@ -14,7 +14,7 @@ namespace PowerForge.Web;
 /// <summary>Generates API documentation artifacts from XML docs.</summary>
 public static partial class WebApiDocsGenerator
 {
-    private static ApiDocModel ParseXml(string xmlPath, Assembly? assembly, WebApiDocsOptions options)
+    private static ApiDocModel ParseXml(string xmlPath, Assembly? assembly, WebApiDocsOptions options, List<string> warnings)
     {
         var apiDoc = new ApiDocModel();
         if (!File.Exists(xmlPath))
@@ -49,11 +49,13 @@ public static partial class WebApiDocsGenerator
             var memberName = member.Attribute("name")?.Value;
             if (string.IsNullOrWhiteSpace(memberName))
                 continue;
-            if (!memberLookup.ContainsKey(memberName))
-                memberLookup[memberName] = member;
+            if (memberLookup.TryGetValue(memberName, out var existing))
+                MergeDocumentationMember(existing, member, memberName, xmlPath, warnings);
+            else
+                memberLookup[memberName] = new XElement(member);
         }
 
-        foreach (var member in members.Elements("member"))
+        foreach (var member in memberLookup.Values)
         {
             var name = member.Attribute("name")?.Value;
             if (string.IsNullOrWhiteSpace(name) || name.Length < 2) continue;

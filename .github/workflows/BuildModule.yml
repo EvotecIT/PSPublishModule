@@ -425,7 +425,13 @@ jobs:
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --nologo
-          --filter 'FullyQualifiedName~WebPipelineRunnerCloudflareTests|FullyQualifiedName~AgentPluginPackageServiceTests|FullyQualifiedName~AgentPluginReleaseVersionBindingTests|FullyQualifiedName~RedirectedProcessOutputTests|FullyQualifiedName~ProcessOutputShutdownTests'
+          --filter 'FullyQualifiedName~WebPipelineRunnerCloudflareTests|FullyQualifiedName~WebApiDocsGenerator|FullyQualifiedName~WebApiMemberSearchTests|FullyQualifiedName~WebApiSourceRevisionTests|FullyQualifiedName~WebPipelineProjectSetTests|FullyQualifiedName~WebSiteApiSearchTests|FullyQualifiedName~AgentPluginPackageServiceTests|FullyQualifiedName~AgentPluginReleaseVersionBindingTests|FullyQualifiedName~RedirectedProcessOutputTests|FullyQualifiedName~ProcessOutputShutdownTests'
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Test browser search contracts
+        run: node --test Build/Tests/*.test.cjs
 
       - name: Test Linux website deployment state machine
         shell: bash

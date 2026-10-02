@@ -98,6 +98,12 @@ public sealed class WebAuditOptions
     public string[] RenderedInclude { get; set; } = Array.Empty<string>();
     /// <summary>Optional exclude glob patterns for rendered checks.</summary>
     public string[] RenderedExclude { get; set; } = Array.Empty<string>();
+    /// <summary>Check selected element bounds at the configured viewports for horizontal clipping.</summary>
+    public bool RenderedCheckLayout { get; set; }
+    /// <summary>Viewport matrix for layout checks. Empty uses desktop and compact defaults.</summary>
+    public WebAuditViewport[] RenderedViewports { get; set; } = Array.Empty<WebAuditViewport>();
+    /// <summary>Selectors whose visible boxes must fit within the viewport.</summary>
+    public string[] RenderedLayoutSelectors { get; set; } = new[] { "main" };
     /// <summary>Browser engine name for rendered checks.</summary>
     public string RenderedEngine { get; set; } = "Chromium";
     /// <summary>When true, auto-install Playwright browsers before rendered checks.</summary>

@@ -99,6 +99,7 @@ public static partial class WebApiDocsGenerator
     {
         public string Name { get; set; } = string.Empty;
         public string? Type { get; set; }
+        internal string? AnchorType { get; set; }
         public string? Summary { get; set; }
         public List<string> Aliases { get; } = new();
         public List<string> PossibleValues { get; } = new();
@@ -155,6 +156,8 @@ public static partial class WebApiDocsGenerator
         public string Path { get; set; } = string.Empty;
         public int Line { get; set; }
         public string? Url { get; set; }
+        public string? Revision { get; set; }
+        public bool WorkingTreeChanged { get; set; }
     }
 
     private sealed class SourceLinkContext : IDisposable
@@ -162,27 +165,36 @@ public static partial class WebApiDocsGenerator
         private readonly MetadataReaderProvider _provider;
         private readonly Stream _stream;
         private readonly MetadataReader _reader;
+        private readonly Module _sourceModule;
         private readonly string? _sourceRoot;
         private readonly string? _sourcePathPrefix;
         private readonly string? _defaultPattern;
         private readonly IReadOnlyList<SourceUrlMappingRule> _sourceUrlMappings;
-        private static readonly string[] SupportedSourceUrlTokens = { "path", "line", "root", "pathNoRoot", "pathNoPrefix" };
+        private readonly string? _revision;
+        private readonly bool _workingTreeChanged;
+        private static readonly string[] SupportedSourceUrlTokens = { "path", "line", "root", "pathNoRoot", "pathNoPrefix", "revision" };
 
         private SourceLinkContext(
             MetadataReaderProvider provider,
             Stream stream,
+            Module sourceModule,
             string? sourceRoot,
             string? sourcePathPrefix,
             string? defaultPattern,
-            IReadOnlyList<SourceUrlMappingRule> sourceUrlMappings)
+            IReadOnlyList<SourceUrlMappingRule> sourceUrlMappings,
+            string? revision,
+            bool workingTreeChanged)
         {
             _provider = provider;
             _stream = stream;
             _reader = provider.GetMetadataReader();
+            _sourceModule = sourceModule;
             _sourceRoot = sourceRoot;
             _sourcePathPrefix = NormalizePathPrefix(sourcePathPrefix ?? string.Empty);
             _defaultPattern = defaultPattern;
             _sourceUrlMappings = sourceUrlMappings ?? Array.Empty<SourceUrlMappingRule>();
+            _revision = revision;
+            _workingTreeChanged = workingTreeChanged;
         }
 
         public static SourceLinkContext? Create(WebApiDocsOptions options, Assembly assembly, List<string> warnings)
@@ -235,7 +247,9 @@ public static partial class WebApiDocsGenerator
                 }
 
                 var mappings = BuildSourceUrlMappings(options.SourceUrlMappings, warnings);
-                return new SourceLinkContext(provider, stream, root, options.SourcePathPrefix, pattern, mappings);
+                var snapshot = ResolveSourceSnapshot(root, pattern, options.SourceUrlMappings, warnings);
+                return new SourceLinkContext(provider, stream, assembly.ManifestModule, root, options.SourcePathPrefix, pattern, mappings,
+                    snapshot.Revision, snapshot.WorkingTreeChanged);
             }
             catch (Exception ex)
             {
@@ -272,7 +286,9 @@ public static partial class WebApiDocsGenerator
 
         public ApiSourceLink? TryGetSource(MethodBase method)
         {
-            if (method is null || method.MetadataToken == 0) return null;
+            // Metadata tokens are scoped to a module; inherited dependency members
+            // must never be resolved against this assembly's PDB.
+            if (method is null || method.Module != _sourceModule || method.MetadataToken == 0) return null;
             try
             {
                 var handle = MetadataTokens.MethodDefinitionHandle(method.MetadataToken);
@@ -312,8 +328,12 @@ public static partial class WebApiDocsGenerator
         private ApiSourceLink? BuildSourceLink(string path, int line)
         {
             if (string.IsNullOrWhiteSpace(path)) return null;
-            var resolved = path;
-            if (!string.IsNullOrWhiteSpace(_sourceRoot))
+            // Roslyn's deterministic source root is virtual, not relative to the checkout.
+            // Relativizing it against SourceRootPath leaks ../_/ into repository URLs.
+            var portablePath = path.Replace('\\', '/');
+            var isMappedRoot = portablePath.StartsWith("/_/", StringComparison.Ordinal);
+            var resolved = isMappedRoot ? portablePath.Substring(3) : path;
+            if (!isMappedRoot && !string.IsNullOrWhiteSpace(_sourceRoot))
             {
                 try
                 {
@@ -326,8 +346,11 @@ public static partial class WebApiDocsGenerator
                 }
             }
             resolved = resolved.Replace('\\', '/');
+            if (resolved.Split('/').Any(segment => segment.Equals("obj", StringComparison.OrdinalIgnoreCase) ||
+                                                  segment.Equals("bin", StringComparison.OrdinalIgnoreCase)))
+                return null;
             var url = BuildSourceUrl(resolved, line);
-            return new ApiSourceLink { Path = resolved, Line = line, Url = url };
+            return new ApiSourceLink { Path = resolved, Line = line, Url = url, Revision = _revision, WorkingTreeChanged = _workingTreeChanged };
         }
 
         private string? BuildSourceUrl(string resolvedPath, int line)
@@ -352,10 +375,13 @@ public static partial class WebApiDocsGenerator
                 pattern = _defaultPattern;
             if (string.IsNullOrWhiteSpace(pattern))
                 return null;
+            if (pattern.Contains("{revision}", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(_revision))
+                return null;
 
             pattern = TryApplyGitHubRepoAutoFix(pattern, root, prefixedPath);
 
             return pattern
+                .Replace("{revision}", _revision ?? string.Empty, StringComparison.OrdinalIgnoreCase)
                 .Replace("{path}", effectivePath, StringComparison.OrdinalIgnoreCase)
                 .Replace("{line}", line.ToString(), StringComparison.OrdinalIgnoreCase)
                 .Replace("{root}", root, StringComparison.OrdinalIgnoreCase)
@@ -467,7 +493,7 @@ public static partial class WebApiDocsGenerator
                 return;
 
             var preview = string.Join(", ", unknown.Select(static token => $"{{{token}}}"));
-            warnings?.Add($"API docs source: {label} contains unsupported token(s): {preview}. Supported tokens: {{path}}, {{line}}, {{root}}, {{pathNoRoot}}, {{pathNoPrefix}}.");
+            warnings?.Add($"API docs source: {label} contains unsupported token(s): {preview}. Supported tokens: {{path}}, {{line}}, {{root}}, {{pathNoRoot}}, {{pathNoPrefix}}, {{revision}}.");
         }
 
         private static string[] ExtractSourceUrlTokens(string pattern)

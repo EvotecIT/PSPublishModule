@@ -749,6 +749,11 @@ public static partial class WebSiteBuilder
                 .Select(static tool => WebAgentReadiness.NormalizeWebMcpRoute(tool.Route))
                 .ToArray();
         var queryShards = WriteSearchQueryShards(outputRoot, entries);
+        WriteAllTextIfChanged(Path.Combine(searchDir, "facets.json"), JsonSerializer.Serialize(new
+        {
+            projects = entries.Select(entry => entry.Project).Where(project => !string.IsNullOrWhiteSpace(project))
+                .Distinct(StringComparer.Ordinal).OrderBy(project => project, StringComparer.Ordinal).ToArray()
+        }, WebJson.Options));
         var manifest = new Dictionary<string, object?>
         {
             ["entryCount"] = aggregateArtifact.Count,

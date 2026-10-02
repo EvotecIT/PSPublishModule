@@ -35,6 +35,11 @@ internal static partial class WebPipelineRunner
             return false;
         if (task.Equals("exec", StringComparison.OrdinalIgnoreCase))
             return false;
+        // MSBuild owns transitive source/resource freshness and output validation.
+        // A pipeline fingerprint of project paths cannot replace that graph.
+        if (task.Equals("dotnet-build", StringComparison.OrdinalIgnoreCase) ||
+            task.Equals("dotnet-publish", StringComparison.OrdinalIgnoreCase))
+            return false;
         if (task.Equals("visual-story", StringComparison.OrdinalIgnoreCase) ||
             task.Equals("visualstory", StringComparison.OrdinalIgnoreCase))
             return false;
@@ -73,6 +78,9 @@ internal static partial class WebPipelineRunner
     private static bool IsCacheableStep(string task, JsonElement step)
     {
         if (!IsCacheableTask(task))
+            return false;
+        if (task.Equals("apidocs", StringComparison.OrdinalIgnoreCase) &&
+            step.GetRawText().Contains("{revision}", StringComparison.OrdinalIgnoreCase))
             return false;
 
         if (task.Equals("release-hub", StringComparison.OrdinalIgnoreCase))
