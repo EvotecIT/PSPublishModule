@@ -40,7 +40,7 @@ function Test-PlaceholderContent {
     )
 
     foreach ($marker in $placeholderMarkers) {
-        $match = Select-String -Path $Path -Pattern ([regex]::Escape($marker)) -SimpleMatch -List -ErrorAction SilentlyContinue
+        $match = Select-String -LiteralPath $Path -Pattern $marker -SimpleMatch -List
         if ($match) {
             throw "Placeholder API content detected in '$Path' ($marker)."
         }
@@ -60,8 +60,11 @@ function Write-CommandMetadata {
     }
 
     $resolvedManifestPath = [System.IO.Path]::GetFullPath($ModuleManifestPath)
-    $moduleBinaryPath = Join-Path (Split-Path -Parent $resolvedManifestPath) "Lib\$moduleName.dll"
-    if (-not (Test-Path -LiteralPath $moduleBinaryPath -PathType Leaf)) {
+    $moduleLibraryRoot = Join-Path (Split-Path -Parent $resolvedManifestPath) 'Lib'
+    $moduleBinary = if (Test-Path -LiteralPath $moduleLibraryRoot -PathType Container) {
+        Get-ChildItem -LiteralPath $moduleLibraryRoot -Filter "$moduleName.dll" -File -Recurse | Select-Object -First 1
+    }
+    if (-not $moduleBinary) {
         if (Test-Path -LiteralPath $OutputPath -PathType Leaf) {
             Remove-Item -LiteralPath $OutputPath -Force
         }
@@ -110,11 +113,10 @@ function Write-CommandMetadata {
     }
 }
 
-$helpPath = Find-HelpFile
-if (-not $helpPath -and -not $SkipBuild) {
+if (-not $SkipBuild) {
     & (Join-Path $repoRoot 'Build\Build-Project.ps1') -ModuleOnly -RunMode Documentation
-    $helpPath = Find-HelpFile
 }
+$helpPath = Find-HelpFile
 
 if (-not $helpPath) {
     throw "Unable to find $moduleName external help. Run .\Build\Build-Project.ps1 -ModuleOnly -RunMode Documentation first."

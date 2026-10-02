@@ -5,7 +5,7 @@
     CompanyName            = 'Evotec'
     CompatiblePSEditions   = @('Desktop', 'Core')
     Copyright              = '(c) 2011 - 2026 Przemyslaw Klys @ Evotec. All rights reserved.'
-    Description            = 'Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery'
+    Description            = 'Build, test, version, sign, and publish PowerShell modules with reusable PowerForge pipelines.'
     DotNetFrameworkVersion = '4.5.2'
     FunctionsToExport      = @()
     GUID                   = 'eb76426a-1992-40a5-82cd-6480f883ef4d'

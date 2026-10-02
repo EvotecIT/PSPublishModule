@@ -7,7 +7,7 @@ Locale: en-US
 ---
 # PSPublishModule Module
 ## Description
-Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery
+Build, test, version, sign, and publish PowerShell modules with reusable PowerForge pipelines.
 
 ## PSPublishModule Cmdlets
 ### [Add-AppStoreConnectBetaTesterToGroup](Add-AppStoreConnectBetaTesterToGroup.md)
