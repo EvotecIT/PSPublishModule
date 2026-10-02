@@ -55,6 +55,7 @@ internal sealed partial class PowerForgeReleaseService
             target.Platform,
             target.Configuration,
             target.ProjectPath,
+            target.DotNetPublishInstallerId,
             target.IsWorkspace,
             target.Scheme,
             target.ArchiveVariant,

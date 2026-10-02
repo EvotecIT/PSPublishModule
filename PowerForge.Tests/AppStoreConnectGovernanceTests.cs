@@ -37,6 +37,12 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal("app-1", data.GetProperty("relationships").GetProperty("app").GetProperty("data").GetProperty("id").GetString());
         Assert.Equal("USA", data.GetProperty("relationships").GetProperty("baseTerritory").GetProperty("data").GetProperty("id").GetString());
         var included = Assert.Single(body.RootElement.GetProperty("included").EnumerateArray());
+        const string localPriceId = "${price-1}";
+        Assert.Equal(localPriceId, included.GetProperty("id").GetString());
+        Assert.Equal(
+            localPriceId,
+            Assert.Single(data.GetProperty("relationships").GetProperty("manualPrices")
+                .GetProperty("data").EnumerateArray()).GetProperty("id").GetString());
         Assert.Equal("price-point-1", included.GetProperty("relationships").GetProperty("appPricePoint").GetProperty("data").GetProperty("id").GetString());
     }
 

@@ -2115,7 +2115,9 @@ internal sealed partial class PowerForgeReleaseService
         {
             if (appStoreConnectApiConfiguredCount != 3)
                 throw new InvalidOperationException("AppleApps App Store Connect API-key authentication requires AppStoreConnectApiKeyPath, AppStoreConnectApiKeyId, and AppStoreConnectApiIssuerId.");
-            if ((options.Archive || options.Upload) &&
+            bool requiresXcodeProvisioning = options.Upload ||
+                (options.Archive && appStoreConnectApps.Any(app => string.IsNullOrWhiteSpace(app.DotNetPublishInstallerId)));
+            if (requiresXcodeProvisioning &&
                 appStoreConnectApps.Length > 0 &&
                 !options.AllowProvisioningUpdates)
                 throw new InvalidOperationException("AppleApps App Store Connect API-key authentication requires AllowProvisioningUpdates=true so xcodebuild can use the credentials.");
@@ -2277,7 +2279,10 @@ internal sealed partial class PowerForgeReleaseService
             throw new FileNotFoundException($"Apple app project or workspace was not found: {requestedProjectPath}", requestedProjectPath);
         if (app.ProjectGenerationTimeoutSeconds <= 0)
             throw new InvalidOperationException($"Apple app '{name}' ProjectGenerationTimeoutSeconds must be greater than zero.");
-        var projectPath = projectExists
+        bool dotNet = !string.IsNullOrWhiteSpace(app.DotNetPublishInstallerId);
+        if (dotNet)
+            ValidateDotNetAppleTarget(app, requestedProjectPath, options.TeamId);
+        var projectPath = dotNet ? requestedProjectPath : projectExists
             ? NormalizeAppleArchiveProjectPath(requestedProjectPath, name)
             : ValidateGeneratedAppleProjectPath(requestedProjectPath, name);
         if (!allowMissingProject &&
@@ -2304,12 +2309,12 @@ internal sealed partial class PowerForgeReleaseService
         if (workspaceVersionMutationRequested)
             throw new InvalidOperationException($"Apple app '{name}' uses a .xcworkspace ProjectPath. Use explicit MarketingVersion and BuildNumber as read-only release identities, or point version mutation at the owning .xcodeproj/project.pbxproj.");
         var versionUpdateRequested = !allowMissingProject &&
-                                     !isWorkspace &&
+                                     !dotNet && !isWorkspace &&
                                      (app.UseResolvedVersion ||
                                       !string.IsNullOrWhiteSpace(app.MarketingVersion) ||
                                       !string.IsNullOrWhiteSpace(app.BuildNumber) ||
                                       app.BuildNumberPolicy != AppleBuildNumberPolicy.KeepExisting);
-        var marketingVersion = isWorkspace
+        var marketingVersion = isWorkspace || dotNet
             ? app.MarketingVersion
             : versionUpdateRequested
                 ? app.UseResolvedVersion ? sharedReleaseVersion : app.MarketingVersion
@@ -2320,7 +2325,7 @@ internal sealed partial class PowerForgeReleaseService
         var buildNumberMustWaitForGeneration =
             app.BuildNumberPolicy == AppleBuildNumberPolicy.IncrementExisting &&
             (!projectExists || app.RegenerateProject);
-        var buildNumber = isWorkspace
+        var buildNumber = isWorkspace || dotNet
             ? string.IsNullOrWhiteSpace(app.BuildNumber) ? null : app.BuildNumber!.Trim()
             : versionUpdateRequested && !buildNumberMustWaitForGeneration
                 ? ResolveAppleBuildNumber(app, projectPath, new XcodeProjectVersionEditor())
@@ -2341,6 +2346,7 @@ internal sealed partial class PowerForgeReleaseService
             RequiredPrivacyUsageDescriptionKeys = NormalizeStrings(app.RequiredPrivacyUsageDescriptionKeys),
             AppStoreConnectAppId = string.IsNullOrWhiteSpace(app.AppStoreConnectAppId) ? null : app.AppStoreConnectAppId!.Trim(),
             ProjectPath = projectPath,
+            DotNetPublishInstallerId = app.DotNetPublishInstallerId,
             IsWorkspace = isWorkspace,
             Scheme = app.Scheme!.Trim(),
             Configuration = configuration,
@@ -2646,6 +2652,7 @@ internal sealed partial class PowerForgeReleaseService
                     var archive = _archiveAppleApp(new AppleAppArchiveRequest
                     {
                         ProjectPath = sourceSnapshot?.MapPath(app.ProjectPath) ?? app.ProjectPath,
+                        DotNetPublishInstallerId = app.DotNetPublishInstallerId,
                         IsWorkspace = app.IsWorkspace,
                         Scheme = app.Scheme,
                         Configuration = app.Configuration,

@@ -305,6 +305,7 @@
         "RequiredEmbeddedBundleIds": { "type": "array", "items": { "type": "string" } },
         "RequiredPrivacyUsageDescriptionKeys": { "type": "array", "items": { "type": "string", "pattern": "^NS[A-Za-z0-9]+UsageDescription$" } },
         "ProjectPath": { "type": "string", "minLength": 1 },
+        "DotNetPublishInstallerId": { "type": ["string", "null"] },
         "Scheme": { "type": ["string", "null"] },
         "ProductName": { "type": ["string", "null"] },
         "AppStoreConnectAppId": { "type": ["string", "null"] },

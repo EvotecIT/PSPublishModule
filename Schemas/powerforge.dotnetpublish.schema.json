@@ -935,6 +935,13 @@
           "uniqueItems": true
         },
         "CodesignIdentity": { "type": "string", "minLength": 1 },
+        "AppStore": { "type": "boolean" },
+        "DevelopmentOnly": { "type": "boolean" },
+        "TeamId": { "type": ["string", "null"] },
+        "InstallerSigningIdentity": { "type": ["string", "null"] },
+        "ProvisioningProfilePath": { "type": ["string", "null"] },
+        "ThirdPartyNoticesManifestPath": { "type": ["string", "null"] },
+        "DependenciesPath": { "type": ["string", "null"] },
         "HardenedRuntime": { "type": "boolean" },
         "Timestamp": { "type": "boolean" },
         "EntitlementsPath": { "type": ["string", "null"] }
