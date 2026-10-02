@@ -302,7 +302,8 @@ public sealed class DotNetPublishMacAppOptions
     public string[] DocumentExtensions { get; set; } = Array.Empty<string>();
 
     /// <summary>
-    /// codesign identity. Use '-' only for local ad-hoc proof; direct distribution requires a
+    /// codesign identity. Use Apple Development with DevelopmentOnly for routine local use.
+    /// Use '-' only for ad-hoc packaging proof; direct distribution requires a
     /// Developer ID Application identity and subsequent notarization through PowerForge's Apple release flow.
     /// </summary>
     public string CodesignIdentity { get; set; } = string.Empty;
@@ -310,7 +311,10 @@ public sealed class DotNetPublishMacAppOptions
     /// <summary>Produce a sandboxed Mac App Store installer instead of a local ZIP.</summary>
     public bool AppStore { get; set; }
 
-    /// <summary>Expected Apple signing team for App Store application and installer signatures.</summary>
+    /// <summary>Sign a local development bundle with an Apple Development identity; never a distribution artifact.</summary>
+    public bool DevelopmentOnly { get; set; }
+
+    /// <summary>Expected Apple signing team for development or App Store signatures.</summary>
     public string? TeamId { get; set; }
 
     /// <summary>Mac Installer Distribution signing identity used by productbuild.</summary>

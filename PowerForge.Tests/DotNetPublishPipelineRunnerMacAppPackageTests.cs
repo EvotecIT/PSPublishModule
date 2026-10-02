@@ -202,6 +202,32 @@ public sealed class DotNetPublishPipelineRunnerMacAppPackageTests
     }
 
     [Fact]
+    public void Plan_PreservesDevelopmentSigningAndRejectsAdHocOrStoreMixing()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            var spec = CreateSpec(root, "osx-arm64");
+            var mac = Assert.Single(spec.Installers).MacApp!;
+            mac.DevelopmentOnly = true;
+            mac.TeamId = "ABCDE12345";
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            Assert.Throws<ArgumentException>(() => runner.Plan(spec, null));
+            mac.CodesignIdentity = "Apple Development: Example (ABCDEFGHIJ)";
+            var planned = Assert.Single(runner.Plan(spec, null).Installers).MacApp!;
+            Assert.True(planned.DevelopmentOnly);
+            Assert.Equal(mac.CodesignIdentity, planned.CodesignIdentity);
+            Assert.Equal(mac.TeamId, planned.TeamId);
+            mac.TeamId = null;
+            Assert.Throws<ArgumentException>(() => runner.Plan(spec, null));
+            mac.TeamId = "ABCDE12345";
+            mac.AppStore = true;
+            Assert.Throws<ArgumentException>(() => runner.Plan(spec, null));
+        }
+        finally { TryDelete(root); }
+    }
+
+    [Fact]
     public void InfoPlist_ContainsStableIdentityAndDocumentContracts()
     {
         DotNetPublishMacAppOptions options = CreateMacOptions();

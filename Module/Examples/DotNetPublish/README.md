@@ -82,3 +82,16 @@ Invoke-DotNetPublish -ConfigPath '.\powerforge.dotnetpublish.json' -ExitCode
 - `Example.StoreDesktopSubmit.json` shows how to submit MSI/EXE metadata through the newer desktop Store submission API.
 - For command naming and fast overrides, see:
   - `Docs/PSPublishModule.DotNetPublish.Quickstart.md`
+
+For routine local macOS development, set `MacApp.DevelopmentOnly = true`, provide
+an Apple Development `CodesignIdentity` and the ten-character `TeamId`, and keep
+the bundle identifier unchanged across builds. PowerForge signs nested native
+code and verifies that the actual app certificate is an Apple Development
+certificate from that team. Missing identities and wrong certificate types fail;
+there is no ad-hoc fallback. This mode cannot be combined with `AppStore` and
+produces a local-use ZIP, not a notarized public download. For .NET apps, use
+`PortableCompat` with `IncludeNativeLibrariesForSelfExtract=false` and
+`IncludeAllContentForSelfExtract=false`: managed assemblies stay in the host,
+and native libraries remain available for individual signing. Stable certificate
+signing lets macOS recognize rebuilt apps for privacy authorization. An existing
+ad-hoc app may require a new approval when it changes to the signed identity.

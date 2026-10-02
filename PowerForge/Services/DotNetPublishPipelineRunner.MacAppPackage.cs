@@ -76,6 +76,8 @@ public sealed partial class DotNetPublishPipelineRunner
             DirectoryCopy(sourceRoot, macOsPath, stagingRoot);
             if (options.AppStore)
                 PrepareMacStorePayload(options, macOsPath, resourcesPath, plan.ProjectRoot);
+            else if (options.DevelopmentOnly)
+                PrepareMacSignedPayload(macOsPath, resourcesPath);
             RemoveCopiedPortableEvidence(plan, source, macOsPath);
 
             string executablePath = Path.GetFullPath(Path.Combine(macOsPath, options.Executable.Replace('/', Path.DirectorySeparatorChar)));
@@ -88,10 +90,10 @@ public sealed partial class DotNetPublishPipelineRunner
             string plistPath = Path.Combine(contentsPath, "Info.plist");
             File.WriteAllText(plistPath, BuildMacInfoPlist(options, Path.GetFileName(options.Executable), iconFileName), new UTF8Encoding(false));
 
-            if (options.AppStore)
-                SignMacStoreNestedCode(options, macOsPath, stagingRoot);
+            if (options.AppStore || options.DevelopmentOnly)
+                SignMacNestedCode(options, macOsPath, stagingRoot);
             var signArguments = new List<string> { "--force", "--sign", options.CodesignIdentity };
-            if (!options.AppStore) signArguments.Add("--deep");
+            if (!options.AppStore && !options.DevelopmentOnly) signArguments.Add("--deep");
             if (ShouldEnableMacHardenedRuntime(options))
             {
                 signArguments.Add("--options");
@@ -105,6 +107,8 @@ public sealed partial class DotNetPublishPipelineRunner
             }
             if (options.Timestamp && !string.Equals(options.CodesignIdentity, "-", StringComparison.Ordinal))
                 signArguments.Add("--timestamp");
+            else
+                signArguments.Add("--timestamp=none");
             if (!string.IsNullOrWhiteSpace(options.EntitlementsPath))
             {
                 string entitlementsPath = ResolvePath(plan.ProjectRoot, options.EntitlementsPath!);
@@ -117,6 +121,10 @@ public sealed partial class DotNetPublishPipelineRunner
             signArguments.Add(stagedAppPath);
             RunRequiredMacTool("/usr/bin/codesign", stagingRoot, signArguments);
             RunRequiredMacTool("/usr/bin/codesign", stagingRoot, new[] { "--verify", "--deep", "--strict", "--verbose=2", stagedAppPath });
+
+            if (options.DevelopmentOnly)
+                RunRequiredMacTool("/usr/bin/codesign", stagingRoot,
+                    new[] { "--verify", "--strict", "-R", "=" + MacDevelopmentRequirement(options.TeamId!), stagedAppPath });
 
             if (options.AppStore)
             {
@@ -196,6 +204,14 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         string codesignIdentity = (options.CodesignIdentity ?? string.Empty).Trim();
+        if (options.DevelopmentOnly)
+        {
+            if (options.AppStore || codesignIdentity.Length == 0 || codesignIdentity == "-" ||
+                options.TeamId is null || options.TeamId.Length != 10 ||
+                options.TeamId.Any(character => !(character is >= 'A' and <= 'Z' or >= '0' and <= '9')))
+                throw new ArgumentException($"MacApp installer '{installerId}' DevelopmentOnly requires a certificate identity and a ten-character TeamId, and cannot use AppStore.");
+            return;
+        }
         if (options.AppStore)
         {
             if (codesignIdentity.Length == 0 || codesignIdentity == "-" ||
@@ -211,6 +227,11 @@ public sealed partial class DotNetPublishPipelineRunner
                 $"MacApp installer '{installerId}' may use only ad-hoc signing until PowerForge owns notarization, stapling, and Gatekeeper validation.");
         }
     }
+
+    // Validate the actual certificate, not its user-supplied display name or fingerprint.
+    // This is a verification constraint, not a replacement for codesign's designated requirement.
+    private static string MacDevelopmentRequirement(string teamId)
+        => $"anchor apple generic and certificate leaf[field.1.2.840.113635.100.6.1.12] exists and certificate leaf[subject.OU] = \"{teamId}\"";
 
     internal static string BuildMacInfoPlist(
         DotNetPublishMacAppOptions options,

@@ -1115,6 +1115,7 @@ public sealed partial class DotNetPublishPipelineRunner
             DocumentExtensions = NormalizeStrings(options.DocumentExtensions),
             CodesignIdentity = options.CodesignIdentity,
             AppStore = options.AppStore,
+            DevelopmentOnly = options.DevelopmentOnly,
             TeamId = options.TeamId,
             InstallerSigningIdentity = options.InstallerSigningIdentity,
             ProvisioningProfilePath = options.ProvisioningProfilePath,
