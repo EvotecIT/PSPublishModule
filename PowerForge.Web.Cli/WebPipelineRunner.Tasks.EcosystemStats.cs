@@ -118,6 +118,8 @@ internal static partial class WebPipelineRunner
                 Title = title,
                 GitHubOrganization = githubOrganization,
                 GitHubToken = githubToken,
+                FallbackGitHubInventory = !strict && preserveOnWarnings && existingOutputContent is not null
+                    ? TryReadEcosystemStatsDocument(existingOutputContent)?.GitHub : null,
                 NuGetOwner = nugetOwner,
                 PowerShellGalleryOwner = powerShellGalleryOwner,
                 PowerShellGalleryAuthor = powerShellGalleryAuthor,
@@ -167,6 +169,16 @@ internal static partial class WebPipelineRunner
                 usedFallback = true;
                 fallbackReason = "existing-on-warning-empty";
             }
+        }
+
+        var publicationDocument = File.Exists(outputPath)
+            ? TryReadEcosystemStatsDocument(File.ReadAllText(outputPath))
+            : null;
+        if (publicationDocument is not null)
+        {
+            WebEcosystemStatsGenerator.NormalizePublicProjectLinks(publicationDocument, githubOrganization);
+            File.WriteAllText(outputPath, JsonSerializer.Serialize(publicationDocument,
+                new JsonSerializerOptions(WebCliJson.Options) { WriteIndented = true }));
         }
 
         if (!string.IsNullOrWhiteSpace(publishPath) && File.Exists(outputPath))
@@ -369,6 +381,7 @@ internal static partial class WebPipelineRunner
 
         if (hasGitHub &&
             HasSourceWarning(generated.Warnings, "GitHub") &&
+            string.Equals(existing.GitHub?.Organization, generated.GitHub?.Organization, StringComparison.OrdinalIgnoreCase) &&
             HasGitHubData(existing) &&
             !HasGitHubData(generated))
         {

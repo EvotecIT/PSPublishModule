@@ -379,6 +379,11 @@ public sealed class WebPipelineRunnerEcosystemStatsTests
                 }
                 """);
 
+            using var configuredPipeline = JsonDocument.Parse(File.ReadAllText(pipelinePath));
+            var organization = configuredPipeline.RootElement.GetProperty("steps")[0].GetProperty("githubOrg").GetString()!;
+            // Retained inventory must belong to the organization requested by this refresh.
+            foreach (var path in new[] { statsPath, catalogPath })
+                File.WriteAllText(path, File.ReadAllText(path).Replace("EvotecIT", organization, StringComparison.Ordinal));
             var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
 
             Assert.True(result.Success);

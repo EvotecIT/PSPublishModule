@@ -8,6 +8,23 @@ This guide documents the JSON formats used by `powerforge-web pipeline` and
 Pipeline specs execute a list of steps in order. Paths are resolved relative to
 the pipeline JSON file location.
 
+Ecosystem stats and project catalog telemetry keep package metadata links within
+the configured organization's public GitHub repository inventory. NuGet and
+PowerShell Gallery project URLs for repositories absent from that inventory are
+omitted, including links retained in fallback snapshots or earlier catalog
+metrics. External websites and other organizations' links remain unchanged.
+Package-only stats without a GitHub organization preserve their project URLs.
+When GitHub fails, the pipeline uses an applicable retained public inventory
+before filtering fresh package links. A configured organization still applies
+when the retained snapshot has no GitHub inventory. Withheld NuGet project links
+retain SHA-256 `projectRepositoryKey` and `projectRepositoryNameKey` matching keys,
+so repository and alias matching, package-family counts, and download totals
+survive publication and later catalog refreshes without emitting repository names.
+These deterministic keys support matching; they do not encrypt source identities.
+Retained GitHub data from another organization is not used for the current one.
+An empty or capped public inventory can omit otherwise public repository links;
+set `maxItems` high enough to include the organization's repository inventory.
+
 Schema:
 - `Schemas/powerforge.web.pipelinespec.schema.json`
 
