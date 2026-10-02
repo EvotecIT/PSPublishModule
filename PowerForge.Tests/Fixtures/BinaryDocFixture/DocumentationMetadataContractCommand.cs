@@ -5,7 +5,7 @@ namespace BinaryDocFixture;
 
 /// <summary>Returns metadata used to verify binary documentation normalization.</summary>
 [Cmdlet(VerbsCommon.Get, "BinaryDocMetadataContract")]
-public sealed class GetBinaryDocMetadataContractCommand : DocumentationMetadataContractCommandBase
+public sealed class GetBinaryDocMetadataContractCommand : GenericDocumentationMetadataContractCommandBase<string>
 {
     /// <summary>Optional nullable mode.</summary>
     [Parameter]
