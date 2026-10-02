@@ -169,6 +169,16 @@ internal static partial class WebPipelineRunner
             }
         }
 
+        var publicationDocument = File.Exists(outputPath)
+            ? TryReadEcosystemStatsDocument(File.ReadAllText(outputPath))
+            : null;
+        if (publicationDocument is not null &&
+            WebEcosystemStatsGenerator.NormalizePublicProjectLinks(publicationDocument) > 0)
+        {
+            File.WriteAllText(outputPath, JsonSerializer.Serialize(publicationDocument,
+                new JsonSerializerOptions(WebCliJson.Options) { WriteIndented = true }));
+        }
+
         if (!string.IsNullOrWhiteSpace(publishPath) && File.Exists(outputPath))
         {
             var publishDir = Path.GetDirectoryName(publishPath);

@@ -2179,6 +2179,7 @@ internal static partial class WebPipelineRunner
             return 0;
 
         var githubByFullName = new Dictionary<string, WebEcosystemGitHubRepository>(StringComparer.OrdinalIgnoreCase);
+        WebEcosystemStatsGenerator.NormalizePublicProjectLinks(stats);
         var githubByRepoName = new Dictionary<string, WebEcosystemGitHubRepository>(StringComparer.OrdinalIgnoreCase);
         var ambiguousGitHubRepoNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (stats.GitHub?.Repositories is { Count: > 0 })
@@ -2451,10 +2452,26 @@ internal static partial class WebPipelineRunner
             }
 
             var hasAnyMetrics = github is not null || nuget is not null || module is not null;
-            if (!hasAnyMetrics)
-                continue;
-
             var existingMetrics = project.Metrics;
+            var normalizedLinks = false;
+            if (existingMetrics?.NuGet?.ProjectUrl is { } nugetProjectUrl &&
+                WebEcosystemStatsGenerator.NormalizePublicProjectLink(nugetProjectUrl, stats.GitHub) is null)
+            {
+                existingMetrics.NuGet.ProjectUrl = null;
+                normalizedLinks = true;
+            }
+            if (existingMetrics?.PowerShellGallery?.ProjectUrl is { } moduleProjectUrl &&
+                WebEcosystemStatsGenerator.NormalizePublicProjectLink(moduleProjectUrl, stats.GitHub) is null)
+            {
+                existingMetrics.PowerShellGallery.ProjectUrl = null;
+                normalizedLinks = true;
+            }
+            if (!hasAnyMetrics)
+            {
+                if (normalizedLinks) merged++;
+                continue;
+            }
+
             var mergedGitHub = github is null
                 ? existingMetrics?.GitHub
                 : new ProjectCatalogGitHubMetrics

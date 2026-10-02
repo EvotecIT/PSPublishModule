@@ -80,6 +80,8 @@ public static partial class WebEcosystemStatsGenerator
             Warnings = warnings
         };
 
+        NormalizePublicProjectLinks(document);
+
         var outputDir = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrWhiteSpace(outputDir))
             Directory.CreateDirectory(outputDir);
