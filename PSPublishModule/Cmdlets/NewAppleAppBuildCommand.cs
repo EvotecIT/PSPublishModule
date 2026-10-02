@@ -34,6 +34,10 @@ public sealed class NewAppleAppBuildCommand : PSCmdlet
     [Parameter]
     public string Configuration { get; set; } = "Debug";
 
+    /// <summary>Optimize Swift while retaining the selected configuration and compilation conditions.</summary>
+    [Parameter]
+    public SwitchParameter OptimizeSwift { get; set; }
+
     /// <summary>Apple platform used to resolve the product directory.</summary>
     [Parameter]
     public ApplePlatform Platform { get; set; } = ApplePlatform.iOS;
@@ -120,6 +124,7 @@ public sealed class NewAppleAppBuildCommand : PSCmdlet
             Scheme = Scheme,
             ProductName = ProductName,
             Configuration = Configuration,
+            OptimizeSwift = OptimizeSwift.IsPresent,
             Platform = Platform,
             Destination = Destination,
             DeviceIdentifier = DeviceIdentifier,

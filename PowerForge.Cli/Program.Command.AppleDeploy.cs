@@ -39,6 +39,7 @@ internal static partial class Program
             return 0;
         }
 
+        var deploymentTimer = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             ValidateAppleDeployArguments(argv);
@@ -82,6 +83,8 @@ internal static partial class Program
                 throw new ArgumentException("Use either --device or --device-id, not both.");
             if (requestedPlatform == ApplePlatform.macOS && (!string.IsNullOrWhiteSpace(device) || !string.IsNullOrWhiteSpace(deviceIdentifier)))
                 throw new ArgumentException("--device and --device-id apply to device platforms, not macOS deployment.");
+            if (requestedPlatform != ApplePlatform.macOS && string.IsNullOrWhiteSpace(device) && string.IsNullOrWhiteSpace(deviceIdentifier))
+                throw new ArgumentException("Device deployment requires --device, --device-id, or LocalDeployment.DefaultDevice.");
 
             var launch = ResolveAppleDeployFlag(argv, "--launch", "--no-launch", local.Launch);
             var useBuildMirror = ResolveAppleDeployFlag(argv, "--build-mirror", "--no-build-mirror", local.UseBuildMirror);
@@ -179,6 +182,7 @@ internal static partial class Program
             else
                 cliResult.Success = true;
 
+            cliResult.TotalDurationSeconds = deploymentTimer.Elapsed.TotalSeconds;
             return WriteAppleDeployResult(cliResult, fullConfigPath, outputJson, logger);
         }
         catch (Exception exception)
@@ -248,6 +252,7 @@ internal static partial class Program
             cliResult.LaunchSucceeded = deployment.Launch?.Succeeded;
             cliResult.Success = deployment.Succeeded;
             cliResult.Warning = deployment.Install?.Warning;
+            cliResult.Stages = CollectAppleDeployStages(deployment.Build.ProcessResult, deployment.Install?.ProcessResult, deployment.Launch?.ProcessResult);
             cliResult.Diagnostic = ResolveAppleDeployDiagnostic(
                 CollectAppleDeployCredentialMetadata(apple, authentication, projectRoot),
                 deployment.Build.ProcessResult,
@@ -286,12 +291,14 @@ internal static partial class Program
         var deviceDeployment = new AppleDeviceDeploymentService().DeployAsync(deviceRequest).GetAwaiter().GetResult();
         cliResult.AppPath = deviceDeployment.Build.AppPath;
         cliResult.SourceRevision = deviceDeployment.Build.SourceRevision;
-        cliResult.DeviceIdentifier = deviceDeployment.Install?.DeviceIdentifier;
+        cliResult.DeviceIdentifier = deviceDeployment.Install?.DeviceIdentifier ??
+            AppleDeviceDeploymentService.TryParseDestinationDeviceIdentifier(deviceDeployment.Build.Destination);
         cliResult.BuildSucceeded = deviceDeployment.Build.Succeeded;
         cliResult.InstallSucceeded = deviceDeployment.Install?.Succeeded ?? false;
         cliResult.LaunchSucceeded = deviceDeployment.Launch?.Succeeded;
         cliResult.DeviceLocked = deviceDeployment.Launch?.DeviceLocked ?? false;
         cliResult.Success = deviceDeployment.RequestedStagesSucceeded;
+        cliResult.Stages = CollectAppleDeployStages(deviceDeployment.Build.ProcessResult, deviceDeployment.Install?.ProcessResult, deviceDeployment.Launch?.ProcessResult);
         cliResult.Diagnostic = ResolveAppleDeployDiagnostic(
             CollectAppleDeployCredentialMetadata(apple, authentication, projectRoot),
             deviceDeployment.Build.ProcessResult,
@@ -464,52 +471,6 @@ internal static partial class Program
         return Path.Combine(Path.GetTempPath(), "powerforge-apple-local", hash, platform.ToString(), safeScheme);
     }
 
-    private static int WriteAppleDeployResult(
-        AppleLocalDeploymentCliResult result,
-        string configPath,
-        bool outputJson,
-        ILogger logger)
-    {
-        var exitCode = result.Success ? 0 : 1;
-        if (outputJson)
-        {
-            WriteJson(new CliJsonEnvelope
-            {
-                SchemaVersion = OutputSchemaVersion,
-                Command = "apple-deploy",
-                Success = result.Success,
-                ExitCode = exitCode,
-                Config = "release",
-                ConfigPath = configPath,
-                Result = CliJson.SerializeToElement(result, CliJson.Context.AppleLocalDeploymentCliResult)
-            });
-            return exitCode;
-        }
-
-        logger.Info($"Target: {result.Target} ({result.Platform}, {result.Configuration})");
-        if (result.OptimizeSwift)
-            logger.Info("Swift optimization: -O (configuration retained)");
-        if (!string.IsNullOrWhiteSpace(result.Profile))
-            logger.Info($"Profile: {result.Profile}");
-        if (!string.IsNullOrWhiteSpace(result.SourceRevision))
-            logger.Info($"Source: {result.SourceRevision}");
-        if (result.Planned)
-        {
-            logger.Success("Apple local deployment plan is valid.");
-            return 0;
-        }
-        var appPath = result.InstalledAppPath ?? result.AppPath;
-        if (!string.IsNullOrWhiteSpace(appPath))
-            logger.Info($"App: {appPath}");
-        if (result.Success)
-            logger.Success(result.Launch ? "Apple app installed and launched." : "Apple app installed.");
-        else if (result.DeviceLocked && result.InstallSucceeded == true)
-            logger.Warn("Apple app installed, but launch was deferred because the device is locked.");
-        else
-            logger.Error("Apple local deployment failed.");
-        return exitCode;
-    }
-
     private static void ValidateAppleDeployArguments(string[] argv)
     {
         var flags = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -535,20 +496,6 @@ internal static partial class Program
 
     private static string FormatAppleDeployTargetSuffix(string? target)
         => string.IsNullOrWhiteSpace(target) ? string.Empty : $" and target '{target}'";
-
-    private static string? ResolveAppleDeployDiagnostic(
-        IEnumerable<string> sensitiveValues,
-        params ProcessRunResult?[] stages)
-    {
-        var failed = stages.FirstOrDefault(static stage => stage is not null && !stage.Succeeded);
-        if (failed is null)
-            return null;
-        var text = string.IsNullOrWhiteSpace(failed.StdErr) ? failed.StdOut : failed.StdErr;
-        if (string.IsNullOrWhiteSpace(text))
-            return $"{failed.Executable} exited with code {failed.ExitCode}.";
-        var compact = RedactReleaseCredentialText(text, sensitiveValues).Trim();
-        return compact.Length <= 2000 ? compact : compact[^2000..];
-    }
 
     private sealed record AppleDeployAuthentication(
         string? KeyPath,

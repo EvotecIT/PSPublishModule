@@ -44,8 +44,9 @@ packaging. The output includes full notices and a runtime package inventory in
 
 Use the config-driven CLI for the everyday developer loop. It reads the same targets,
 schemes, bundle identifiers, project paths, and Mac Catalyst variants as the release
-flow, defaults to Debug, and keeps stable DerivedData per repo/platform/scheme so
-repeated builds reuse Xcode's cache:
+flow and defaults to Debug. Each source-bound build uses fresh DerivedData;
+successful deployments retain the app under a stable per-repo/platform/scheme
+result root. This path does not reuse Xcode intermediate build products.
 
 ```text
 powerforge apple-deploy --platform iOS --profile Plus
@@ -72,6 +73,18 @@ Concurrent runs for the same build cache or install destination fail fast instea
 of corrupting DerivedData. If a locked device accepts installation but rejects
 launch, the receipt keeps `installSucceeded: true`, sets `deviceLocked: true`, and
 returns failure because the selected profile was not applied to a running app.
+Physical-device deployment requires `--device`, `--device-id`, or
+`LocalDeployment.DefaultDevice`, including when planning. A name or model selector
+is resolved once; build, installation, and launch keep the same device identifier.
+Standalone `New-AppleAppBuild` still accepts a generic platform destination.
+
+Console output includes installation warnings and the failed process's stdout
+and stderr excerpts, with credential redaction. JSON receipts include `stages`
+with each executed stage's duration in seconds, exit code, success, timeout, and
+startup-failure status. Stages that were not executed are omitted.
+`totalDurationSeconds` also includes source inspection, mirroring, package
+preparation, and product verification, so build time can be compared with the
+complete deployment time.
 
 Declare app-specific launch profiles once in `powerforge.release.json`:
 
@@ -155,6 +168,33 @@ Swift `-O` optimization while retaining the selected configuration, including
 Debug compilation conditions. The option defaults to `false` and is recorded in
 the deployment plan and result. It applies to Swift package targets as well as
 the app through an explicit Xcode build setting.
+The `New-AppleAppBuild` and `Publish-AppleAppToDevice` cmdlets expose the same
+behavior through `-OptimizeSwift`.
+
+### Development workflow roadmap
+
+The remaining development work belongs in the shared PowerForge engine:
+
+- [ ] Add an explicit working-tree build mode with a source fingerprint and
+  dirty-state receipt. Keep release and exact-source builds bound to a clean
+  revision. Ordinary ignored build output and unrelated operator evidence must
+  not prevent this development mode from compiling the declared project.
+- [ ] Reuse development DerivedData with an exclusive lease and invalidation
+  for project, scheme, configuration, destination, Xcode, and package-lock changes.
+  Measure a cold build, an unchanged build, and a one-file edit before selecting
+  a default. Preserve the fresh-tree contract for exact-source builds.
+- [ ] Acquire the pinned operator from canonical physical paths and reuse a
+  verified tool build keyed by commit, SDK, and runtime. Separate development
+  acquisition from release authentication, and validate warm-run startup cost.
+- [ ] Route .NET macOS local deployment through the declared publish installer
+  and the existing atomic Mac installation service. Keep signed development
+  MacApp packaging in the .NET publish engine.
+- [ ] Bound retained deployment products and provide full redacted build logs
+  or Xcode result bundles. Cleanup must operate only on owned output while no
+  build or installation is using it.
+- [ ] Compare the existing per-project and MSBuild library strategies on a
+  representative multi-project repository, including restore, build, pack,
+  signed artifacts, and unchanged rebuilds before changing consumer defaults.
 
 ## Binary Upload Flow
 

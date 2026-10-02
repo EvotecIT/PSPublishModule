@@ -8,6 +8,8 @@ internal sealed class AppleLocalDeploymentCliResult
 
     public bool Success { get; set; }
 
+    public double TotalDurationSeconds { get; set; }
+
     public string Target { get; set; } = string.Empty;
 
     public ApplePlatform Platform { get; set; }
@@ -55,4 +57,16 @@ internal sealed class AppleLocalDeploymentCliResult
     public string? Warning { get; set; }
 
     public string? Diagnostic { get; set; }
+
+    public AppleLocalDeploymentCliStage[] Stages { get; set; } = Array.Empty<AppleLocalDeploymentCliStage>();
+}
+
+internal sealed class AppleLocalDeploymentCliStage
+{
+    public string Name { get; set; } = string.Empty;
+    public double DurationSeconds { get; set; }
+    public int ExitCode { get; set; }
+    public bool Succeeded { get; set; }
+    public bool TimedOut { get; set; }
+    public bool StartFailed { get; set; }
 }
