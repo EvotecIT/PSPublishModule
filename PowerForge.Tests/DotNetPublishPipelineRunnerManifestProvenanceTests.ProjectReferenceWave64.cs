@@ -37,6 +37,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunDotNet(root, $"build \"{projectPath}\" -c Release --no-restore --nologo");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 NoBuildInPublish = true,

@@ -113,6 +113,7 @@ public sealed class GitHubHousekeepingService
                 Repository = repository,
                 Token = token,
                 IncludeNames = spec.Artifacts.IncludeNames ?? Array.Empty<string>(),
+                ExactIncludeNames = spec.Artifacts.ExactIncludeNames ?? Array.Empty<string>(),
                 ExcludeNames = spec.Artifacts.ExcludeNames ?? Array.Empty<string>(),
                 KeepLatestPerName = spec.Artifacts.KeepLatestPerName,
                 MaxAgeDays = spec.Artifacts.MaxAgeDays,

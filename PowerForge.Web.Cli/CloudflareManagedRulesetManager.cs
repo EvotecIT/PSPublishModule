@@ -48,7 +48,10 @@ internal static class CloudflareManagedRulesetManager
         bool dryRun,
         string policyLabel,
         HttpClient httpClient,
-        Func<JsonObject, bool>? isLegacyManagedRule = null)
+        Func<JsonObject, bool>? isLegacyManagedRule = null,
+        Func<JsonArray, string?>? validateExistingRules = null,
+        bool managedRulesFirst = false,
+        int terminalManagedRuleCount = 0)
     {
         try
         {
@@ -67,6 +70,10 @@ internal static class CloudflareManagedRulesetManager
             if (existingRules.Any(rule => rule is not JsonObject))
                 return Failure("Cloudflare entry-point response contained a malformed rule; refusing to replace the existing ruleset.");
 
+            var validationError = validateExistingRules?.Invoke(existingRules);
+            if (validationError is not null)
+                return Failure(validationError);
+
             var snapshot = new CloudflareManagedRulesetSnapshot
             {
                 ZoneId = zoneId.Trim(),
@@ -81,7 +88,12 @@ internal static class CloudflareManagedRulesetManager
                 .ToArray();
             CopyManagedRuleIdentity(existingManaged, managedRules);
 
-            var desiredRules = BuildDesiredRuleSequence(existingRules, managedRules, managedPrefix, isLegacyManagedRule, out var preservedCount);
+            // Safety overrides must follow preserved operator rules as well as managed rules.
+            var ordinaryRules = new JsonArray(managedRules.Take(managedRules.Count - terminalManagedRuleCount)
+                .Select(rule => rule!.DeepClone()).ToArray());
+            var desiredRules = BuildDesiredRuleSequence(existingRules, ordinaryRules, managedPrefix, isLegacyManagedRule, managedRulesFirst, out var preservedCount);
+            foreach (var terminalRule in managedRules.Skip(managedRules.Count - terminalManagedRuleCount))
+                desiredRules.Add(terminalRule!.DeepClone());
             var changesRequired = !JsonNode.DeepEquals(
                 NormalizeRulesForComparison(existingRules),
                 NormalizeRulesForComparison(desiredRules));
@@ -255,8 +267,25 @@ internal static class CloudflareManagedRulesetManager
         JsonArray managedRules,
         string managedPrefix,
         Func<JsonObject, bool>? isLegacyManagedRule,
+        bool managedRulesFirst,
         out int preservedCount)
     {
+        if (managedRulesFirst)
+        {
+            // An origin-respecting allow rule must never move after a preserved
+            // operator bypass when an older managed policy is replaced.
+            var firstRules = managedRules.DeepClone().AsArray();
+            preservedCount = 0;
+            foreach (var existing in existingRules.OfType<JsonObject>())
+            {
+                if (IsManagedRule(existing, managedPrefix, isLegacyManagedRule))
+                    continue;
+                firstRules.Add(PrepareRuleForUpdate(existing));
+                preservedCount++;
+            }
+            return firstRules;
+        }
+
         var desiredByRuleKey = managedRules
             .OfType<JsonObject>()
             .ToDictionary(GetRuleKey, rule => rule, StringComparer.Ordinal);

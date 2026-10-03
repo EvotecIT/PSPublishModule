@@ -10,7 +10,9 @@ public sealed partial class DotNetPublishPipelineRunner
     private void SignMsiPackage(
         DotNetPublishPlan plan,
         IList<DotNetPublishMsiBuildResult> msiBuilds,
-        DotNetPublishStep step)
+        DotNetPublishStep step,
+        IReadOnlyDictionary<string, string> cleanTrackedGeneratedProvenanceState,
+        string msiReservationOwner)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (msiBuilds is null) throw new ArgumentNullException(nameof(msiBuilds));
@@ -65,6 +67,12 @@ public sealed partial class DotNetPublishPipelineRunner
             build.SignedFiles = Array.Empty<string>();
             return;
         }
+
+        _ = ReadPortableInventorySourceProvenance(
+            plan,
+            additionalGeneratedPaths: outputs,
+            cleanTrackedGeneratedProvenanceState: cleanTrackedGeneratedProvenanceState,
+            msiReservationOwner: msiReservationOwner);
 
         var signed = TrySignFiles(
             files: outputs,

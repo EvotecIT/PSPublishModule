@@ -39,8 +39,8 @@ public sealed partial class ModulePipelineRunner
                 EnsureDocumentationGateConfigured(plan);
         }
 
-        var manifestRequiredModules = ResolveOutputRequiredModules(plan.RequiredModules, plan.MergeMissing, plan.ApprovedModules);
-        var packagingRequiredModules = ResolveOutputRequiredModules(plan.RequiredModulesForPackaging, plan.MergeMissing, plan.ApprovedModules);
+        var manifestRequiredModules = plan.RequiredModules ?? Array.Empty<RequiredModuleReference>();
+        var packagingRequiredModules = plan.RequiredModulesForPackaging ?? Array.Empty<RequiredModuleReference>();
         var manifestExternalModuleDependencies = plan.ExternalModuleDependencies ?? Array.Empty<string>();
 
         var session = ModulePipelineExecutionSession.Create(plan, progress);
@@ -54,6 +54,14 @@ public sealed partial class ModulePipelineRunner
             if (plan.RequireReleaseSourceUnchanged)
                 ValidateReleaseSourceUnchanged(plan, generatedOutputPaths: null, trackedGeneratedOutputPaths: null);
             ExecutePreparationAndBuildPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, pipeline, state);
+            manifestRequiredModules = ResolveOutputRequiredModules(
+                plan.RequiredModules,
+                plan.MergeMissing,
+                state.MergeExecution.FullyInlinedApprovedModules);
+            packagingRequiredModules = ResolveOutputRequiredModules(
+                plan.RequiredModulesForPackaging,
+                plan.MergeMissing,
+                state.MergeExecution.FullyInlinedApprovedModules);
             if (plan.GateMode == ConfigurationGateMode.Documentation)
             {
                 ApplyPowerShellModuleCompilation(

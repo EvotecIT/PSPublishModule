@@ -15,6 +15,28 @@ namespace PowerForge.Web;
 /// <summary>Generates API documentation artifacts from XML docs.</summary>
 public static partial class WebApiDocsGenerator
 {
+    private static void EnsureUniqueTypeSlugs(IReadOnlyList<ApiTypeModel> types)
+    {
+        var used = types.Select(type => type.Slug).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var group in types.GroupBy(type => type.Slug, StringComparer.OrdinalIgnoreCase).Where(group => group.Count() > 1))
+        {
+            // Keep the nongeneric route; encode arity only where names collide.
+            foreach (var type in group.OrderBy(type => type.FullName.Contains('`'))
+                         .ThenBy(type => type.FullName, StringComparer.Ordinal).Skip(1))
+            {
+                var candidate = Slugify(type.FullName.Replace('`', '-'));
+                if (!used.Add(candidate))
+                {
+                    var digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(type.FullName)))[..12].ToLowerInvariant();
+                    candidate = type.Slug + "-" + digest;
+                    var ordinal = 2;
+                    while (!used.Add(candidate)) candidate = type.Slug + "-" + digest + "-" + ordinal++;
+                }
+                type.Slug = candidate;
+            }
+        }
+    }
+
     private static IReadOnlyDictionary<string, string> BuildTypeSlugMap(IReadOnlyList<ApiTypeModel> types)
     {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

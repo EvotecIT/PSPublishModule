@@ -1534,6 +1534,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         public Action<PublishConfiguration, ModulePipelinePlan>? ModulePublishPreflightAction { get; set; }
         public Action<Action?>? ModulePublishRemoteSideEffectAction { get; set; }
         public Action<PublishConfiguration, ModulePipelinePlan>? ModulePublishAction { get; set; }
+        public Action<string>? BinaryDependencyValidation { get; set; }
+        public bool AllowModuleImportValidation { get; set; }
         public Func<ModulePipelineActionConfiguration, ModulePipelineActionContext, ModulePipelineActionResult>? ModuleAction { get; set; }
 
         public IReadOnlyList<ModuleDependencyInstallResult> EnsureDependenciesInstalled(
@@ -1561,7 +1563,11 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             => throw new InvalidOperationException("Validation is not used in this test.");
 
         public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget)
-            => throw new InvalidOperationException("Binary validation is not used in this test.");
+        {
+            if (BinaryDependencyValidation is null)
+                throw new InvalidOperationException("Binary validation is not used in this test.");
+            BinaryDependencyValidation(moduleRoot);
+        }
 
         public ModuleTestSuiteResult RunModuleTestSuite(ModuleTestSuiteSpec spec)
             => throw new InvalidOperationException("Tests are not used in this test.");
@@ -1619,7 +1625,10 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             bool importSelf,
             bool verbose,
             ModuleImportValidationTarget[] targets)
-            => throw new InvalidOperationException("Import validation is not used in this test.");
+        {
+            if (!AllowModuleImportValidation)
+                throw new InvalidOperationException("Import validation is not used in this test.");
+        }
 
     }
 }

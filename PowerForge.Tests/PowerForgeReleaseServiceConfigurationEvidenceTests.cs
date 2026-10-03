@@ -335,6 +335,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             string admittedSha256 = AppleNotarizationService.ComputeFileSha256(effectiveConfigPath);
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 GeneratedConfigurationInputPaths = new[] { effectiveConfigPath },
                 GeneratedConfigurationInputSha256 = new(StringComparer.OrdinalIgnoreCase)

@@ -125,31 +125,22 @@ public sealed partial class DotNetPublishPipelineRunner
                     artefact.BundleId,
                     sourceDirty: provenance.Dirty is not false,
                     includeCompleteOutput: false);
+            inventory.BuildInputMode = DescribeBuildInputMode(plan);
 
             byte[] inventoryBytes = PowerForgePortablePayloadInventoryCms.Serialize(inventory);
             byte[] signatureBytes = _signPortableInventory(inventoryBytes, inventorySign);
-            if (archivePayload)
-            {
-                PowerForgePortablePayloadInventoryCms.RewriteArchiveEvidence(
-                    artefact.ZipPath!,
-                    inventoryBytes,
-                    signatureBytes);
-                artefact.EvidencePaths = Array.Empty<string>();
-            }
-            else
-            {
-                (string inventoryPath, string signaturePath) =
-                    PowerForgePortablePayloadInventoryCms.ResolveEvidencePaths(
-                        outputDirectory,
-                        primaryExecutable,
-                        archivePayload: false);
-                PowerForgePortablePayloadInventoryCms.RewriteEvidenceFiles(
-                    inventoryPath,
-                    inventoryBytes,
-                    signaturePath,
-                    signatureBytes);
-                artefact.EvidencePaths = new[] { inventoryPath, signaturePath };
-            }
+            (string inventoryPath, string signaturePath) =
+                PowerForgePortablePayloadInventoryCms.ResolveEvidencePaths(
+                    outputDirectory,
+                    primaryExecutable,
+                    archivePayload,
+                    artefact.ZipPath);
+            PowerForgePortablePayloadInventoryCms.RewriteEvidenceFiles(
+                inventoryPath,
+                inventoryBytes,
+                signaturePath,
+                signatureBytes);
+            artefact.EvidencePaths = new[] { inventoryPath, signaturePath };
 
             var summary = SummarizeDirectory(outputDirectory, artefact.Runtime);
             artefact.Files = summary.Files;

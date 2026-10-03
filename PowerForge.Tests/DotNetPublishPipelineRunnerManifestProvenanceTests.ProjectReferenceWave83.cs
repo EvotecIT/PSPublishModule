@@ -44,6 +44,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 }));
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 Restore = false,

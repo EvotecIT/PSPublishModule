@@ -51,6 +51,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 NoBuildInPublish = true,
@@ -161,6 +162,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             RunGit(root, "commit -m \"approved source and dependency graph\"");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 Targets =
@@ -379,6 +381,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 }));
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 EnvironmentVariables = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)

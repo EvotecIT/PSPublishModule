@@ -25,6 +25,7 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
         string recipient = Recipient,
         string? recipientEnv = null,
         string captureCommand = "sudo -n apachectl -S",
+        bool captureCommandHydratesRef = false,
         string? visudoPathOverride = null,
         string callerRepository = CallerRepository,
         string engineRepository = EngineRepository,
@@ -34,7 +35,14 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
         string authorizedKeyMode = "644",
         string captureDirectoryOwner = "root",
         bool includeOptionalEncryptedCapture = false,
-        bool allEncryptedCaptureOptional = false)
+        bool allEncryptedCaptureOptional = false,
+        bool usePublisherEngine = false,
+        bool publisherAtDifferentRef = false,
+        string captureShell = "/bin/sh",
+        bool includeCaptureStartup = false,
+        string captureStartupOwner = "root",
+        string captureStartupMode = "644",
+        string captureStartupContent = "# No executable recovery startup hooks.\n")
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-recovery-source-security-" + Guid.NewGuid().ToString("N"));
         var workspace = Path.Combine(root, "caller");
@@ -48,7 +56,7 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
                 Path.Combine(engineRoot, "Deployment", "Linux", "powerforge-server-encrypted-capture.sh"),
                 "#!/usr/bin/env bash\nset -euo pipefail\n");
             var expectedEncryptedCommand = allEncryptedCaptureOptional
-                ? "/usr/local/sbin/powerforge-server-encrypted-capture --recipient age1example --ignore-failed-read -- /var/lib/example/optional"
+                ? "/usr/local/sbin/powerforge-server-encrypted-capture --recipient age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd --ignore-failed-read -- /var/lib/example/optional"
                 : includeOptionalEncryptedCapture
                     ? ExpectedCaptureCommand + " --optional /var/lib/example/optional"
                     : ExpectedCaptureCommand;
@@ -60,12 +68,15 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
             File.WriteAllText(
                 Path.Combine(workspace, "deploy", "linux", "backup-authorized_keys"),
                 authorizedKeyContent + "\n");
+            File.WriteAllText(Path.Combine(workspace, "deploy", "linux", "backup.bashrc"), captureStartupContent);
             if (additionalSudoers is not null)
                 File.WriteAllText(Path.Combine(workspace, "deploy", "linux", "extra.sudoers"), additionalSudoers);
             if (alternateManagedSudoersTarget is not null)
                 File.WriteAllText(Path.Combine(workspace, "deploy", "linux", "alternate.sudoers"), "# managed source fixture\n");
 
-            var helperSource = "/srv/engine/Deployment/Linux/powerforge-server-encrypted-capture.sh";
+            var helperSource = usePublisherEngine
+                ? "/srv/publisher/Deployment/Linux/powerforge-server-encrypted-capture.sh"
+                : "/srv/engine/Deployment/Linux/powerforge-server-encrypted-capture.sh";
             if (helperFromCaller)
             {
                 File.WriteAllText(Path.Combine(workspace, "deploy", "linux", "fake-helper.sh"), "#!/usr/bin/env bash\nexit 0\n");
@@ -96,9 +107,17 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
             var manifestPath = Path.Combine(root, "manifest.json");
             var repositories = new List<object>
             {
-                new { url = repositoryUrl, path = "/srv/caller", @ref = callerRef },
+                new { url = repositoryUrl, path = "/srv/caller", @ref = callerRef, refCaptureCommandId = captureCommandHydratesRef ? "apache-vhosts" : null },
                 new { url = "https://github.com/EvotecIT/PSPublishModule.git", path = "/srv/engine", @ref = EngineRef }
             };
+            if (usePublisherEngine)
+                repositories.Add(new
+                {
+                    role = "backup-publisher-engine",
+                    url = "https://github.com/EvotecIT/PSPublishModule.git",
+                    path = "/srv/publisher",
+                    @ref = publisherAtDifferentRef ? new string('b', 40) : EngineRef
+                });
             if (shadowEngineHelper)
                 repositories.Add(new { url = repositoryUrl, path = "/srv/engine/Deployment", @ref = callerRef });
             if (includeCloneOnlyRepository)
@@ -170,6 +189,17 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
                 });
             }
 
+            if (includeCaptureStartup)
+                managedPaths.Add(new
+                {
+                    path = $"/var/lib/{CaptureUser}/.bashrc",
+                    source = "/srv/caller/deploy/linux/backup.bashrc",
+                    kind = "file",
+                    owner = captureStartupOwner,
+                    group = captureStartupOwner,
+                    mode = captureStartupMode
+                });
+
             var encryptedFiles = allEncryptedCaptureOptional
                 ? new[] { new { target = "/var/lib/example/optional", required = false } }
                 : includeOptionalEncryptedCapture
@@ -208,7 +238,7 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
             var manifest = new
             {
                 accounts = includeCapture && includeCaptureAccount
-                    ? new[] { new { name = CaptureUser, home = $"/var/lib/{CaptureUser}" } }
+                    ? new[] { new { name = CaptureUser, home = $"/var/lib/{CaptureUser}", shell = captureShell } }
                     : null,
                 repositories,
                 paths = managedPaths,

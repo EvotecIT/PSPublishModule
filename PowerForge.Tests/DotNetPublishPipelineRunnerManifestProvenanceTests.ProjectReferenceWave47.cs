@@ -201,6 +201,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             File.WriteAllText(conditionalSource, "public static class ConditionalInput { public const int Value = 2; }");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Targets =
                 [

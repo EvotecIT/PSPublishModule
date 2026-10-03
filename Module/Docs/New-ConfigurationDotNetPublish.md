@@ -11,7 +11,7 @@ Creates DotNet publish configuration using DSL objects from a settings script bl
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDotNetPublish [-Settings <scriptblock>] [-IncludeSchema] [-SchemaVersion <int>] [-Profile <string>] [-ProjectRoot <string>] [-SolutionPath <string>] [-Configuration <string>] [-Runtimes <string[]>] [-Restore <bool>] [-Clean <bool>] [-Build <bool>] [-NoRestoreInPublish <bool>] [-NoBuildInPublish <bool>] [-ManifestJsonPath <string>] [-ManifestTextPath <string>] [-ChecksumsPath <string>] [-RunReportPath <string>] [-RunReportMarkdownPath <string>] [-Targets <DotNetPublishTarget[]>] [-Installers <DotNetPublishInstaller[]>] [<CommonParameters>]
+New-ConfigurationDotNetPublish [-Settings <scriptblock>] [-IncludeSchema] [-SchemaVersion <int>] [-Profile <string>] [-ProjectRoot <string>] [-SolutionPath <string>] [-Configuration <string>] [-Runtimes <string[]>] [-Restore <bool>] [-Clean <bool>] [-Build <bool>] [-NoRestoreInPublish <bool>] [-NoBuildInPublish <bool>] [-UseControlledSourceProvenance <bool>] [-ManifestJsonPath <string>] [-ManifestTextPath <string>] [-ChecksumsPath <string>] [-RunReportPath <string>] [-RunReportMarkdownPath <string>] [-Targets <DotNetPublishTarget[]>] [-Installers <DotNetPublishInstaller[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -160,7 +160,8 @@ Accept wildcard characters: False
 ```
 
 ### -NoBuildInPublish
-Uses --no-build during publish.
+Allows --no-build in controlled-source mode or when the invocation explicitly skips build.
+Normal publishing rebuilds even when this setting is true.
 
 ```yaml
 Type: Boolean
@@ -340,6 +341,22 @@ Additional targets to append.
 
 ```yaml
 Type: DotNetPublishTarget[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -UseControlledSourceProvenance
+Enables optional controlled-checkout verification of evaluated build inputs.
+
+```yaml
+Type: Boolean
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

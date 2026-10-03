@@ -7,7 +7,7 @@
     <LangVersion>latest</LangVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>CS1591</WarningsAsErrors>
-    <VersionPrefix>3.0.145</VersionPrefix>
+    <VersionPrefix>3.0.153</VersionPrefix>
     <PackageId>PowerForge.PowerShell</PackageId>
     <Description>PowerForge PowerShell-hosted module pipeline services.</Description>
     <AssemblyName>PowerForge.PowerShell</AssemblyName>
@@ -34,7 +34,7 @@
   </ItemGroup>
 
   <ItemGroup Condition=" '$(TargetFramework)' == 'net10.0' ">
-    <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.6.5" />
+    <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.6.6" />
     <!-- Explicit NU1903 override for the vulnerable transitive 8.0.0 path. -->
     <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.12" />
   </ItemGroup>

@@ -110,6 +110,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Configuration = "Release",
             Restore = true
         };
@@ -135,6 +136,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             SourceRevision = "0123456789abcdef0123456789abcdef01234567"
         };
         var target = new DotNetPublishTargetPlan
@@ -213,6 +215,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 "-p:UseSharedCompilation=false -nodeReuse:false");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 NoBuildInPublish = true,

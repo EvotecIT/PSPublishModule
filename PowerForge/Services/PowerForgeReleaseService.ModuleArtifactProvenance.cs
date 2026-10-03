@@ -24,11 +24,33 @@ internal sealed partial class PowerForgeReleaseService
         var prior = baseline ?? new Dictionary<string, ModuleArtifactSnapshot>(ModuleArtifactPathComparer);
         string[] produced = EnumerateModuleArtifactFiles(configuredPaths, plan)
             .Select(static path => (Path: path, Snapshot: CaptureModuleArtifactSnapshot(path)))
-            .Where(item => !prior.TryGetValue(item.Path, out var previous) || !previous.Equals(item.Snapshot))
+            .Where(item => IsChangedModuleArtifact(item.Path, item.Snapshot, prior))
             .Select(static item => item.Path)
             .OrderBy(static path => path, ModuleArtifactPathComparer)
             .ToArray();
         return ReplaceProducedScriptLayoutsWithArchives(produced, plan, scriptArchiveRoot);
+    }
+
+    private static bool IsChangedModuleArtifact(
+        string path,
+        ModuleArtifactSnapshot current,
+        IReadOnlyDictionary<string, ModuleArtifactSnapshot> baseline)
+    {
+        if (baseline.TryGetValue(path, out var previous) &&
+            previous.Length == current.Length &&
+            previous.CreationTimeUtc == current.CreationTimeUtc &&
+            previous.LastWriteTimeUtc == current.LastWriteTimeUtc &&
+            (previous.Sha256 is null || current.Sha256 is null || previous.Sha256 == current.Sha256))
+        {
+            // Unlocking an existing file is not evidence that this build produced it.
+            // Without both hashes, unchanged metadata must remain unproven output.
+            return false;
+        }
+
+        if (current.Sha256 is null)
+            throw new IOException($"Cannot verify new or changed module artifact '{path}' while it is locked.");
+
+        return true;
     }
 
     private static IEnumerable<string> EnumerateModuleArtifactFiles(
@@ -268,11 +290,23 @@ internal sealed partial class PowerForgeReleaseService
     private static ModuleArtifactSnapshot CaptureModuleArtifactSnapshot(string path)
     {
         var file = new FileInfo(path);
+        var length = file.Length;
+        string? sha256 = null;
+        try
+        {
+            sha256 = ComputeSha256(path);
+        }
+        catch (IOException exception) when (FrameworkCompatibility.IsWindows() &&
+            (exception.HResult & 0xffff) is 32 or 33)
+        {
+            // Preserve the baseline identity of locked files without treating them
+            // as new output when their contents become readable later.
+        }
         return new ModuleArtifactSnapshot(
-            file.Length,
+            length,
             file.CreationTimeUtc,
             file.LastWriteTimeUtc,
-            ComputeSha256(path));
+            sha256);
     }
 
     internal readonly struct ModuleArtifactSnapshot
@@ -281,7 +315,7 @@ internal sealed partial class PowerForgeReleaseService
             long length,
             DateTime creationTimeUtc,
             DateTime lastWriteTimeUtc,
-            string sha256)
+            string? sha256)
         {
             Length = length;
             CreationTimeUtc = creationTimeUtc;
@@ -295,6 +329,6 @@ internal sealed partial class PowerForgeReleaseService
 
         internal DateTime LastWriteTimeUtc { get; }
 
-        internal string Sha256 { get; }
+        internal string? Sha256 { get; }
     }
 }

@@ -1,8 +1,8 @@
 namespace PowerForge;
 
 /// <summary>
-/// Holds the per-root module install locks in a stable order so AutoRevision resolution,
-/// manifest finalization, and delivery form one cross-process operation.
+/// Holds per-root module install locks in a stable order so version resolution,
+/// Exact replacement, manifest finalization, and delivery form one cross-process operation.
 /// </summary>
 internal sealed class ModuleInstallOperationLock : IDisposable
 {

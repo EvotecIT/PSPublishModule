@@ -16,6 +16,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Configuration = "Release",
             Targets =
             [
@@ -74,6 +75,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         };
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             MsBuildProperties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["RuntimeIdentifiers"] = "linux-x64;win-x64;win-arm64"
@@ -539,10 +541,16 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string outputDirectory = Directory.CreateDirectory(Path.Combine(root, "publish")).FullName;
             File.WriteAllText(Path.Combine(outputDirectory, "App.dll"), "payload");
             string manifestPath = Path.Combine(root, "manifest.json");
+            string checksumsPath = Path.Combine(root, "SHA256SUMS.txt");
+            string inventoryPath = Path.Combine(root, "App.zip.release-inventory.json");
+            string signaturePath = Path.Combine(root, "App.zip.release-inventory.p7s");
+            File.WriteAllText(inventoryPath, "signed inventory");
+            File.WriteAllText(signaturePath, "detached signature");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
-                Outputs = new DotNetPublishOutputs { ManifestJsonPath = manifestPath }
+                Outputs = new DotNetPublishOutputs { ManifestJsonPath = manifestPath, ChecksumsPath = checksumsPath }
             };
             var artefacts = new List<DotNetPublishArtefactResult>
             {
@@ -556,7 +564,8 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                     PublishDir = outputDirectory,
                     OutputDir = outputDirectory,
                     Files = 1,
-                    TotalBytes = 7
+                    TotalBytes = 7,
+                    EvidencePaths = new[] { inventoryPath, signaturePath }
                 }
             };
             var confirmed = new DotNetPublishPipelineRunner.SourceProvenance(
@@ -574,6 +583,10 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             JsonElement entry = Assert.Single(manifest.RootElement.EnumerateArray());
             Assert.Equal("confirmed-revision", entry.GetProperty("SourceRevision").GetString());
             Assert.False(entry.GetProperty("SourceDirty").GetBoolean());
+            Assert.Equal(2, entry.GetProperty("EvidencePaths").GetArrayLength());
+            string checksums = File.ReadAllText(checksumsPath);
+            Assert.Contains(DotNetPublishReleaseArtifactVerifier.ComputeSha256(inventoryPath) + " *App.zip.release-inventory.json", checksums, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(DotNetPublishReleaseArtifactVerifier.ComputeSha256(signaturePath) + " *App.zip.release-inventory.p7s", checksums, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

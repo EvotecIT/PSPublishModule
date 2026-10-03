@@ -8,6 +8,109 @@ namespace PowerForge.Tests;
 
 public sealed class BinaryDependencyPreflightServiceTests
 {
+    [Theory]
+    [InlineData("RequiredAssemblies")]
+    [InlineData("NestedModules")]
+    [InlineData("RootModule")]
+    public void Analyze_ReportsManifestDeclaredDllMissingFromDeliveredRoot(string key)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var module = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            var manifest = Path.Combine(module.FullName, "TestModule.psd1");
+            var reference = key == "RootModule" ? "'Plugin.dll'" : "@('Plugin.dll')";
+            File.WriteAllText(manifest, $"@{{ ModuleVersion = '1.0.0'; {key} = {reference} }}");
+            var result = new BinaryDependencyPreflightService(new NullLogger()).Analyze(
+                module.FullName, "Core", manifest);
+
+            var issue = Assert.Single(result.Issues);
+            Assert.Equal("TestModule.psd1", issue.AssemblyFileName);
+            Assert.Equal("Plugin.dll", issue.MissingDependencyFileName);
+            Assert.Contains("Plugin.dll", BinaryDependencyPreflightService.BuildFailureMessage(result));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
+    [InlineData("RequiredAssemblies")]
+    [InlineData("NestedModules")]
+    public void Analyze_ResolvesBackslashManifestAssemblyPathOnEveryPlatform(string key)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var module = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            var core = Directory.CreateDirectory(Path.Combine(module.FullName, "Lib", "Core"));
+            var assembly = Path.Combine(core.FullName, "Dependency.dll");
+            File.WriteAllText(assembly, "assembly fixture");
+            var manifest = Path.Combine(module.FullName, "TestModule.psd1");
+            File.WriteAllText(manifest, $"@{{ ModuleVersion = '1.0.0'; {key} = @('.\\Lib\\Core\\Dependency.dll') }}");
+            var service = new BinaryDependencyPreflightService(new NullLogger());
+
+            Assert.False(service.Analyze(module.FullName, "Core", manifest).HasIssues);
+            File.Delete(assembly);
+            Assert.Contains(service.Analyze(module.FullName, "Core", manifest).Issues,
+                issue => issue.MissingDependencyFileName == "Dependency.dll");
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Analyze_CaseDistinctManifestPathsRemainDistinctOnCaseSensitiveVolume()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var module = Directory.CreateDirectory(Path.Combine(root.FullName, "Module"));
+            if (PowerShellCompilationPathSafety.GetPathComparison(module.FullName) != StringComparison.Ordinal)
+                return;
+
+            File.WriteAllText(Path.Combine(module.FullName, "Plugin.dll"), "assembly fixture");
+            var manifest = Path.Combine(module.FullName, "TestModule.psd1");
+            File.WriteAllText(manifest, "@{ ModuleVersion = '1.0.0'; RequiredAssemblies = @('Plugin.dll', 'plugin.dll') }");
+
+            var result = new BinaryDependencyPreflightService(new NullLogger()).Analyze(module.FullName, "Core", manifest);
+            Assert.Contains(result.Issues, issue => issue.MissingDependencyFileName == "plugin.dll");
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Analyze_ScriptLayoutUsesStagedManifestToExcludeUnloadedInternals()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var paths = CreateDependencyFixture(root.FullName);
+            BuildProject(paths.ConsumerProjectPath);
+            var staging = Directory.CreateDirectory(Path.Combine(root.FullName, "Staging"));
+            var stagedManifest = Path.Combine(staging.FullName, "TestModule.psd1");
+            File.WriteAllText(stagedManifest, "@{ ModuleVersion = '1.0.0'; RootModule = 'TestModule.psm1'; PrivateData = @{ PSData = @{ Delivery = @{ Enable = $true } } } }");
+            var scriptRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "ScriptLayout"));
+            File.WriteAllText(Path.Combine(scriptRoot.FullName, "TestModule.ps1"), "# script artifact");
+            var internals = Directory.CreateDirectory(Path.Combine(scriptRoot.FullName, "Internals"));
+            File.Copy(paths.ConsumerAssemblyPath, Path.Combine(internals.FullName, "Consumer.dll"));
+            var service = new BinaryDependencyPreflightService(new NullLogger());
+
+            Assert.True(service.Analyze(scriptRoot.FullName, "Core", manifestPath: null).HasIssues);
+            Assert.False(service.Analyze(scriptRoot.FullName, "Core", stagedManifest).HasIssues);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void Analyze_FindsMissingProjectDependency()
     {

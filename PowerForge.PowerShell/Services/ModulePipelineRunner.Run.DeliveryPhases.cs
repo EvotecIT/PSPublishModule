@@ -48,15 +48,16 @@ public sealed partial class ModulePipelineRunner
                                 state.SigningResult,
                                 buildResult.StagingPath,
                                 module.Path);
+                            ValidateDeliveredBinaryDependencies(plan, module.Path);
                             _ = PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
                                 module.Path,
                                 module.Name,
                                 deliveredSigningResult,
                                 plan.Signing);
+                            ValidateDeliveredBinaryDependencies(plan, module.Path);
                         }
                     }
                     state.ArtefactResults.Add(result);
-                    CaptureFinalizedPackedArtefactIntegrity(plan, state, result);
                     session.Done(step);
                 }
                 catch (Exception ex)
@@ -65,12 +66,19 @@ public sealed partial class ModulePipelineRunner
                     throw;
                 }
             }
+            // Later configured artefacts may populate a shared DoNotClear output root.
+            // Capture the completed set before user actions can change it.
+            RefreshFinalizedArtefactIntegrity(plan, state);
         }
         ExecuteActions(ModulePipelineActionStage.AfterArtefacts, plan, session, state);
         ValidateFinalizedModulePayloadIntegrity(state);
-        ValidateFinalizedPackedArtefactIntegrity(state);
+        ValidateDeliveredArtefactIntegrity(plan, state);
 
         ExecutePackageBuildsAfterModule(plan, session, state);
+        // Project builds can add sibling outputs under a loose artefact root. Preserve
+        // the bytes and inventory of artefact-owned paths before accepting those additions.
+        ValidateFinalizedOwnedArtefactIntegrity(state, plan.SignModule);
+        RefreshFinalizedArtefactIntegrity(plan, state);
         ValidateRequestedReleaseVersion(plan, state);
 
         var publishingEnabled = plan.GateMode is null or ConfigurationGateMode.Publish;
@@ -78,11 +86,16 @@ public sealed partial class ModulePipelineRunner
         {
             ExecuteActions(ModulePipelineActionStage.BeforePublish, plan, session, state);
             ValidateFinalizedModulePayloadIntegrity(state);
-            ValidateFinalizedPackedArtefactIntegrity(state);
+            ValidateDeliveredArtefactIntegrity(plan, state);
             ExecutePublishOperations(plan, session, buildResult, state);
+            // Package publication can rebuild sibling outputs beneath a DoNotClear
+            // artefact root. Keep the delivered paths fixed before accepting those
+            // trusted outputs; AfterPublish actions must still match this snapshot.
+            ValidateFinalizedOwnedArtefactIntegrity(state, plan.SignModule);
+            RefreshFinalizedArtefactIntegrity(plan, state);
             ExecuteActions(ModulePipelineActionStage.AfterPublish, plan, session, state);
             ValidateFinalizedModulePayloadIntegrity(state);
-            ValidateFinalizedPackedArtefactIntegrity(state);
+            ValidateDeliveredArtefactIntegrity(plan, state);
         }
         else
         {
@@ -94,9 +107,10 @@ public sealed partial class ModulePipelineRunner
 
         ExecuteActions(ModulePipelineActionStage.BeforeInstall, plan, session, state);
         ValidateFinalizedModulePayloadIntegrity(state);
-        ValidateFinalizedPackedArtefactIntegrity(state);
+        ValidateDeliveredArtefactIntegrity(plan, state);
         if (plan.InstallEnabled)
         {
+            ValidateInstallArtefactPathConflicts(plan, state);
             session.Start(session.InstallStep);
             string? installPackagePath = null;
             try
@@ -110,6 +124,7 @@ public sealed partial class ModulePipelineRunner
                     plan.Delivery,
                     includeScriptFolders: !state.PackageWithoutScriptFolders,
                     finalizedPayloadFiles: buildResult.FinalizedPayloadFiles);
+                ValidateDeliveredBinaryDependencies(plan, installPackagePath);
                 var expectedSignedInstallSourcePaths = CaptureExpectedSignedInstallSourcePaths(
                     state.SigningResult,
                     buildResult.StagingPath,
@@ -129,39 +144,63 @@ public sealed partial class ModulePipelineRunner
                 };
                 ModuleSigningResult? installPackageSigningResult = null;
                 ModuleSigningResult? deliveredInstallSigningResult = null;
-                var validateSignedInstallTransactionally =
-                    plan.SignModule && plan.InstallStrategy == InstallationStrategy.AutoRevision;
-                state.InstallResult = plan.SignModule
-                    ? pipeline.InstallFromStagingWithManifestFinalizer(
+                var validateInstalledTransactionally =
+                    plan.InstallStrategy == InstallationStrategy.AutoRevision &&
+                    (plan.SignModule || ShouldValidateBinaryDependencies(plan));
+                state.InstallResult = pipeline.InstallFromStagingWithManifestFinalizer(
                         installSpec,
-                        (manifestPath, _) => installPackageSigningResult = SignChangedInstallManifest(
-                            plan,
-                            manifestPath,
-                            buildResult.StagingPath,
-                            state.SigningResult),
-                        validateInstalledPaths: validateSignedInstallTransactionally
-                            ? installedPaths => deliveredInstallSigningResult = ValidateAndFinalizeSignedInstall(
+                        plan.SignModule
+                            ? (manifestPath, _) => installPackageSigningResult = SignChangedInstallManifest(
                                 plan,
+                                manifestPath,
                                 buildResult.StagingPath,
-                                installPackagePath,
-                                installedPaths,
-                                expectedSignedInstallSourcePaths,
-                                state.SigningResult,
-                                installPackageSigningResult)
+                                state.SigningResult)
                             : null,
-                        requireAllDestinationRoots: validateSignedInstallTransactionally)
-                    : pipeline.InstallFromStaging(installSpec);
-                if (!validateSignedInstallTransactionally)
-                {
-                    deliveredInstallSigningResult = ValidateAndFinalizeSignedInstall(
-                        plan,
-                        buildResult.StagingPath,
-                        installPackagePath,
-                        state.InstallResult.InstalledPaths,
-                        expectedSignedInstallSourcePaths,
-                        state.SigningResult,
-                        installPackageSigningResult);
-                }
+                        validateInstalledPaths: validateInstalledTransactionally
+                            ? installedPaths =>
+                            {
+                                foreach (var installedPath in installedPaths)
+                                    ValidateDeliveredBinaryDependencies(plan, installedPath);
+                                if (plan.SignModule)
+                                {
+                                    deliveredInstallSigningResult = ValidateAndFinalizeSignedInstall(
+                                        plan,
+                                        buildResult.StagingPath,
+                                        installPackagePath,
+                                        installedPaths,
+                                        expectedSignedInstallSourcePaths,
+                                        state.SigningResult,
+                                        installPackageSigningResult);
+                                }
+                                foreach (var installedPath in installedPaths)
+                                    ValidateDeliveredBinaryDependencies(plan, installedPath);
+                            }
+                            : null,
+                        requireAllDestinationRoots: validateInstalledTransactionally,
+                        validatePreparedDestination: path => ValidateDeliveredBinaryDependencies(plan, path),
+                        validateCommittedDestination: plan.InstallStrategy == InstallationStrategy.Exact
+                            ? installedPath =>
+                            {
+                                ValidateDeliveredBinaryDependencies(plan, installedPath);
+                                if (plan.SignModule)
+                                {
+                                    var signedResult = ValidateAndFinalizeSignedInstall(
+                                        plan,
+                                        buildResult.StagingPath,
+                                        installPackagePath,
+                                        new[] { installedPath },
+                                        expectedSignedInstallSourcePaths,
+                                        state.SigningResult,
+                                        installPackageSigningResult);
+                                    if (signedResult is not null)
+                                    {
+                                        deliveredInstallSigningResult = deliveredInstallSigningResult is null
+                                            ? signedResult
+                                            : AggregateSigningResults(deliveredInstallSigningResult, signedResult);
+                                    }
+                                }
+                            }
+                            : null);
                 if (deliveredInstallSigningResult is not null)
                     state.SigningResult = AggregateSigningResults(state.SigningResult, deliveredInstallSigningResult);
                 session.Done(session.InstallStep);
@@ -180,8 +219,21 @@ public sealed partial class ModulePipelineRunner
                 }
             }
         }
+        // An explicit install root can be a sibling beneath a DoNotClear
+        // artefact root. Preserve artefact-owned bytes before accepting the
+        // installed module, then guard the expanded root after actions.
+        if (state.InstallResult is not null)
+        {
+            ValidateFinalizedOwnedArtefactIntegrity(state, plan.SignModule);
+            RefreshFinalizedArtefactIntegrity(plan, state);
+        }
         ExecuteActions(ModulePipelineActionStage.AfterInstall, plan, session, state);
         ValidateFinalizedModulePayloadIntegrity(state);
-        ValidateFinalizedPackedArtefactIntegrity(state);
+        ValidateDeliveredArtefactIntegrity(plan, state);
+        if (state.InstallResult is not null)
+        {
+            foreach (string installedPath in state.InstallResult.InstalledPaths)
+                ValidateDeliveredBinaryDependencies(plan, installedPath);
+        }
     }
 }

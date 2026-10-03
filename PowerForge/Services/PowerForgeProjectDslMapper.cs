@@ -84,6 +84,7 @@ internal static class PowerForgeProjectDslMapper
             PublishToolGitHub = release.PublishToolGitHub,
             SkipRestore = release.SkipRestore,
             SkipBuild = release.SkipBuild,
+            SeparateBuildRequested = !release.BuildDuringPublish,
             SkipWorkspaceValidation = project.Workspace?.SkipValidation == true,
             WorkspaceConfigPath = ResolveOptionalPath(fullProjectRoot, project.Workspace?.ConfigPath),
             WorkspaceProfile = NormalizeNullable(project.Workspace?.Profile),

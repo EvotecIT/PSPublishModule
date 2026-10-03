@@ -4,6 +4,35 @@ This guide documents the CSS hooks used by the built-in API docs templates and
 the JavaScript behaviors they rely on. Use it when creating a custom theme or
 overriding templates via `templateRoot`.
 
+## Cross-package API search
+
+API generation emits `search.json` for types. The `docs` and `sidebar` templates
+also emit `members.json` for constructors, methods, properties, fields, events,
+and extension methods. The simple template emits an empty member catalog because
+it does not render member anchors. Member entries carry
+the rendered anchor, signature, namespace, declaring type, and extension receiver.
+Use `packageId` in an `apidocs` pipeline step, or `--package-id` in the CLI, when
+the NuGet package name differs from the assembly name.
+Long signature anchors have compact deterministic aliases for search and copy-link
+actions. Their original HTML IDs remain valid for existing links.
+When generic and nongeneric types would share a page slug, the nongeneric route
+is retained and the generic route includes its arity. Noncolliding routes stay stable.
+
+Set `Search.ApiRoots` to output-relative API directories in the site configuration.
+The site builder imports both catalogs and links results to existing HTML pages
+and member anchors. Its search manifest includes bounded query shards, grouped by
+package. Small chunks and compact Bloom hints narrow cold searches; the builder
+retires obsolete generated chunks after refreshing the manifest.
+The shared visible and WebMCP search runtime selects shards for the query,
+ranks exact names and aliases first, and supports `project` and `kind` filters in
+`PowerForgeWebMcpSearch.search`. `PowerForgeWebMcpSearch.facets` lists package names.
+The legacy bounded `search/index.json` remains available; use the manifest-aware
+runtime to search catalogs larger than that single artifact's entry limit.
+
+Type pages in catalogs larger than 200 types start with a small navigation menu.
+Filtering loads the full type catalog on demand. The package index remains a
+complete HTML navigation route when JavaScript or the catalog request is unavailable.
+
 ## Template variants
 
 Two template modes are available:

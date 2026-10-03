@@ -412,6 +412,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             };
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>(StringComparer.OrdinalIgnoreCase)
                 {
@@ -452,6 +453,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             File.WriteAllText(statePath, "{ malformed");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 MsiVersions = new Dictionary<string, DotNetPublishMsiVersionPlan>(StringComparer.OrdinalIgnoreCase)
@@ -1484,8 +1486,14 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         }
     }
 
-    [Fact]
-    public void BuildPublishMsBuildProperties_AppliesResolvedMsiVersion_WhenInstallerOptsIn()
+    [Theory]
+    [InlineData("none", false)]
+    [InlineData("release", false)]
+    [InlineData("file-conflict", true)]
+    [InlineData("assembly-conflict", true)]
+    [InlineData("source-conflict", true)]
+    [InlineData("version-conflict", true)]
+    public void BuildPublishMsBuildProperties_AppliesResolvedMsiVersion_WhenInstallerOptsIn(string scenario, bool conflict)
     {
         var root = CreateTempRoot();
         try
@@ -1515,6 +1523,22 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
             var target = Assert.Single(plan.Targets);
             var expectedVersion = $"26.6.{DaysSince20000101(new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc))}";
+            const string revision = "0123456789abcdef0123456789abcdef01234567";
+            plan.SourceRevision = revision;
+            if (scenario != "none")
+            {
+                plan.MsBuildProperties["Version"] = scenario == "version-conflict" ? "26.6.1" : expectedVersion;
+                plan.MsBuildProperties["FileVersion"] = scenario == "file-conflict" ? expectedVersion + ".1" : expectedVersion;
+                plan.MsBuildProperties["AssemblyVersion"] = scenario == "assembly-conflict" ? expectedVersion + ".1" : expectedVersion;
+                plan.MsBuildProperties["InformationalVersion"] = expectedVersion + "+" + (scenario == "source-conflict" ? new string('f', 40) : revision);
+            }
+
+            if (conflict)
+            {
+                Assert.Throws<InvalidOperationException>(() => DotNetPublishPipelineRunner.BuildPublishMsBuildProperties(
+                    plan, target, "net10.0", "win-x64", DotNetPublishStyle.PortableCompat));
+                return;
+            }
 
             var properties = DotNetPublishPipelineRunner.BuildPublishMsBuildProperties(
                 plan,
@@ -1527,7 +1551,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             Assert.Equal(expectedVersion, properties["PackageVersion"]);
             Assert.Equal($"{expectedVersion}.0", properties["FileVersion"]);
             Assert.Equal($"{expectedVersion}.0", properties["AssemblyVersion"]);
-            Assert.Equal(expectedVersion, properties["InformationalVersion"]);
+            Assert.Equal(scenario == "none" ? expectedVersion : expectedVersion + "+" + revision, properties["InformationalVersion"]);
         }
         finally
         {
@@ -1761,6 +1785,14 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             Assert.Equal(expectedPatch, versions[0].Patch);
             Assert.Equal(expectedPatch + 1, versions[1].Patch);
             Assert.Equal(versions[0].StatePath, versions[1].StatePath);
+
+            plan.SkipBuildRequested = true;
+            var conflict = Assert.Throws<InvalidOperationException>(() =>
+                DotNetPublishPipelineRunner.ValidateRequestedBuildModes(plan));
+            Assert.Contains("SkipBuild cannot be combined with MSI versioning ApplyToPublish", conflict.Message);
+
+            plan.SkipBuildRequested = false;
+            DotNetPublishPipelineRunner.ValidateRequestedBuildModes(plan);
         }
         finally
         {
@@ -1830,6 +1862,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release"
             };
@@ -1873,6 +1906,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release"
             };
@@ -1938,6 +1972,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release"
             };
@@ -2331,6 +2366,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Installers = new[]
                 {
@@ -2378,6 +2414,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Installers = new[]
                 {
@@ -2429,6 +2466,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 AllowOutputOutsideProjectRoot = false,
                 Configuration = "Release"
@@ -2480,6 +2518,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 AllowOutputOutsideProjectRoot = false,
                 Configuration = "Release"
@@ -2532,6 +2571,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 AllowOutputOutsideProjectRoot = false,
                 Configuration = "Release"
@@ -2579,6 +2619,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 AllowOutputOutsideProjectRoot = false,
                 Configuration = "Release"
@@ -2626,6 +2667,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 AllowOutputOutsideProjectRoot = false,
                 Configuration = "Release"
@@ -2670,6 +2712,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 AllowOutputOutsideProjectRoot = false,
                 Configuration = "Release"
@@ -2794,6 +2837,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release"
             };
@@ -2837,6 +2881,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release"
             };
@@ -2872,8 +2917,14 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         }
     }
 
-    [Fact]
-    public void ResolveOrPrepareInstallerProjectPath_GeneratesWixProjectFromAuthoring()
+    [Theory]
+    [InlineData("win-x64", "x64")]
+    [InlineData("win-x86", "x86")]
+    [InlineData("win-arm64", "arm64")]
+    [InlineData("win10-x64", "x64")]
+    [InlineData("win7-x86", "x86")]
+    [InlineData("win10-arm64", "arm64")]
+    public void ResolveOrPrepareInstallerProjectPath_GeneratesWixProjectFromAuthoring(string runtime, string platform)
     {
         var root = CreateTempRoot();
         try
@@ -2889,6 +2940,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Debug",
                 Installers = new[]
@@ -2906,7 +2958,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 InstallerId = "app.msi",
                 TargetName = "app",
                 Framework = "net10.0",
-                Runtime = "win-x64",
+                Runtime = runtime,
                 Style = DotNetPublishStyle.Portable
             };
             var prepare = new DotNetPublishMsiPrepareResult
@@ -2914,7 +2966,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
                 InstallerId = "app.msi",
                 Target = "app",
                 Framework = "net10.0",
-                Runtime = "win-x64",
+                Runtime = runtime,
                 Style = DotNetPublishStyle.Portable,
                 StagingDir = staging,
                 ManifestPath = Path.Combine(root, "Artifacts", "prepare.manifest.json"),
@@ -2936,6 +2988,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
             Assert.Contains("2.3.4", File.ReadAllText(sourcePath), StringComparison.Ordinal);
             var projectXml = File.ReadAllText(projectPath);
             Assert.Contains("Product.wxs", projectXml, StringComparison.Ordinal);
+            Assert.Contains($"<Platform>{platform}</Platform>", projectXml, StringComparison.Ordinal);
             Assert.Contains(harvestPath, projectXml, StringComparison.Ordinal);
             Assert.Contains("PayloadDir=", projectXml, StringComparison.Ordinal);
             Assert.Contains(staging, projectXml, StringComparison.Ordinal);
@@ -2954,6 +3007,7 @@ public sealed class DotNetPublishPipelineRunnerMsiBuildTests
         {
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release"
             };

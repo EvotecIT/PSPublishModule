@@ -132,6 +132,15 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
     public SwitchParameter SkipBuild { get; set; }
 
     /// <summary>
+    /// Disables signing only for targets selected by this invocation. The configuration remains unchanged.
+    /// Use for a temporary runtime smoke, not a signed release. Bundles selected by the effective profile are rejected
+    /// because bundle signing follows the source publish target.
+    /// </summary>
+    [Parameter(ParameterSetName = ParameterSetSettings)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public SwitchParameter NoPublishSign { get; set; }
+
+    /// <summary>
     /// Exports JSON config and exits without running the engine.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetSettings)]
@@ -204,6 +213,7 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
                     SkipInstallers = SkipInstallers.IsPresent,
                     SkipRestore = SkipRestore.IsPresent,
                     SkipBuild = SkipBuild.IsPresent,
+                    NoPublishSign = NoPublishSign.IsPresent,
                     JsonOnly = JsonOnly.IsPresent,
                     JsonPath = JsonPath,
                     Plan = Plan.IsPresent,

@@ -53,7 +53,7 @@ verify_snapshot() {
       length($0) < 67 || substr($0, 1, 64) !~ /^[a-f0-9]{64}$/ || substr($0, 65, 2) != "  " { exit 1 }
       { print substr($0, 67) }
     ' SHA256SUMS | "$sort_bin" >"$expected"
-    find . -type f ! -name SHA256SUMS ! -name READY ! -name VERIFIED -print | "$sort_bin" >"$actual"
+    find . -type f ! -path ./SHA256SUMS ! -path ./READY ! -path ./VERIFIED -print | "$sort_bin" >"$actual"
     "$cmp_bin" -s "$expected" "$actual"
     "$sha256_bin" -c SHA256SUMS >/dev/null
   ) || die "snapshot tree or checksum verification failed: $snapshot"

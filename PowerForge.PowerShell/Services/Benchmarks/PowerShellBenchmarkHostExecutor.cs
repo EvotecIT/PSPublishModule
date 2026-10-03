@@ -43,6 +43,12 @@ public sealed class PowerShellBenchmarkHostRunRequest
     /// <summary>Outlier mode after caller-side overrides.</summary>
     public PowerShellBenchmarkOutlierMode OutlierMode { get; set; } = PowerShellBenchmarkOutlierMode.None;
 
+    /// <summary>Optional Windows processor mask, restricted to the process's current mask and one processor group.</summary>
+    public ulong? ProcessorAffinityMask { get; set; }
+
+    /// <summary>Optional Windows process priority, restored after execution.</summary>
+    public System.Diagnostics.ProcessPriorityClass? ProcessPriority { get; set; }
+
     /// <summary>Suite name after caller-side overrides.</summary>
     public string SuiteName { get; set; } = string.Empty;
 
@@ -161,6 +167,12 @@ public sealed class PowerShellBenchmarkHostExecutor
             var result = BenchmarkJson.Read<BenchmarkRunResult>(resultPath);
             if (processResult.ExitCode != 0)
                 throw new InvalidOperationException($"Benchmark host '{host}' failed with exit code {processResult.ExitCode}. STDOUT: {processResult.Stdout} STDERR: {processResult.Stderr} Scratch: {scratchRoot}");
+            // Executable paths are distinct host selections even when their runtime
+            // edition and version match (for example Desktop x86 and x64).
+            var executablePath = Path.GetFullPath(executable);
+            result.Metadata["hostExecutablePath"] = executablePath;
+            if (Path.IsPathRooted(host))
+                foreach (var sample in result.Samples) sample.Host = executablePath;
             deleteScratch = true;
             return result;
         }
@@ -207,11 +219,16 @@ public sealed class PowerShellBenchmarkHostExecutor
             MemoryCleanup = request.MemoryCleanup.ToString(),
             CooldownMilliseconds = request.CooldownMilliseconds,
             OutlierMode = request.OutlierMode.ToString(),
+            ProcessorAffinityMask = request.ProcessorAffinityMask?.ToString("X", CultureInfo.InvariantCulture),
+            ProcessPriority = request.ProcessPriority?.ToString(),
             SuiteName = request.SuiteName ?? string.Empty,
             PlanningProfile = PowerShellBenchmarkProfileKind.Current.ToString(),
             BenchmarkVariables = request.BenchmarkVariables,
             Selection = selection,
-            ModulePaths = PowerShellBenchmarkTemporaryUserExecutor.GetImportableCallerModulePaths(),
+            ModulePaths = PowerShellBenchmarkTemporaryUserExecutor.GetImportableCallerModulePaths()
+                .Select(path => string.Equals(Path.GetExtension(path), ".dll", StringComparison.OrdinalIgnoreCase)
+                    ? PowerShellBenchmarkHostRuntime.ResolveAssemblyForHost(path, executable) : path)
+                .Distinct(PathComparer).ToArray(),
             RunStartedUtc = started.ToString("O"),
             UpdateReadmeBlocks = false,
             ValidateComparisonGates = false

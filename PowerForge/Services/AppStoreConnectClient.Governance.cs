@@ -5,6 +5,14 @@ namespace PowerForge;
 
 public sealed partial class AppStoreConnectClient
 {
+    /// <summary>Lists every current App Store territory id, following all response pages.</summary>
+    public Task<string[]> GetTerritoryIdsAsync(CancellationToken cancellationToken = default) =>
+        GetArrayAsync("territories?limit=200", item =>
+            GetString(item, "id") is { Length: > 0 } id
+                ? id
+                : throw new InvalidOperationException("App Store Connect returned a territory without an id."),
+            cancellationToken);
+
     /// <summary>Reads the app price schedule and its configured manual prices.</summary>
     public async Task<AppStoreConnectAppPriceScheduleInfo?> GetAppPriceScheduleAsync(
         string appId,
@@ -52,7 +60,7 @@ public sealed partial class AppStoreConnectClient
 
         var prices = spec.Prices.Select((price, index) => new
         {
-            Id = $"price-{index + 1}",
+            Id = $"${{price-{index + 1}}}",
             Spec = price
         }).ToArray();
         var body = new

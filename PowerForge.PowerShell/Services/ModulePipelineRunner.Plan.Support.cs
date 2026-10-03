@@ -723,20 +723,4 @@ public sealed partial class ModulePipelineRunner
             allowOnlineLookup: true);
     }
 
-    private bool TryAddExternalModuleDependency(
-        string moduleName,
-        HashSet<string> externalIndex,
-        List<string> externalModules)
-    {
-        if (ModulePipelinePlanningHelpers.ShouldSkipManifestDependencyModule(moduleName))
-        {
-            _logger.Info($"Skipping built-in PowerShell module '{moduleName}' from manifest dependency output.");
-            return false;
-        }
-
-        if (externalIndex.Add(moduleName))
-            externalModules.Add(moduleName);
-
-        return true;
-    }
 }

@@ -189,6 +189,7 @@ internal static class PowerForgeReleaseRequestMapper
             ModuleFailOnDiagnosticsSeverity = source.ModuleFailOnDiagnosticsSeverity,
             SkipRestore = source.SkipRestore,
             SkipBuild = source.SkipBuild,
+            SeparateBuildRequested = source.SeparateBuildRequested,
             SkipWorkspaceValidation = source.SkipWorkspaceValidation,
             WorkspaceConfigPath = source.WorkspaceConfigPath,
             WorkspaceProfile = source.WorkspaceProfile,

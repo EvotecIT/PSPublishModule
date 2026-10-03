@@ -134,6 +134,46 @@ public sealed class GitHubServerBackupActionTests
     }
 
     [Fact]
+    public async Task HostPublisher_ShouldUseSeparateIdentityAndPassLinuxSafetyFixture()
+    {
+        var unit = ReadRepoFile("Deployment", "Linux", "systemd", "powerforge-server-backup-host@.service");
+        var publisher = ReadRepoFile("Deployment", "Linux", "Invoke-PowerForgeServerBackupHost.ps1");
+        Assert.Contains("User=powerforge-%i-publisher", unit, StringComparison.Ordinal);
+        Assert.Contains("Group=powerforge-%i-publisher", unit, StringComparison.Ordinal);
+        Assert.Contains("$expectedUser = \"powerforge-$lane-publisher\"", publisher, StringComparison.Ordinal);
+        Assert.Contains("Host publisher account must not accept SSH authorized keys", publisher, StringComparison.Ordinal);
+        Assert.Contains("TimeoutStartSec=6h", unit, StringComparison.Ordinal);
+
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var testScript = GetRepoPath("PowerForge.Tests", "Scripts", "Test-BackupHostPublisherSafety.ps1");
+        var startInfo = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "pwsh",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+        startInfo.ArgumentList.Add("-NoLogo");
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-NonInteractive");
+        startInfo.ArgumentList.Add("-File");
+        startInfo.ArgumentList.Add(testScript);
+
+        using var process = System.Diagnostics.Process.Start(startInfo);
+        Assert.NotNull(process);
+        var standardOutput = process.StandardOutput.ReadToEndAsync();
+        var standardError = process.StandardError.ReadToEndAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        await process.WaitForExitAsync(timeout.Token);
+
+        Assert.True(
+            process.ExitCode == 0,
+            $"Host publisher safety fixture failed with exit code {process.ExitCode}.{Environment.NewLine}{await standardOutput}{Environment.NewLine}{await standardError}");
+    }
+
+    [Fact]
     public void Action_ShouldBoundAndRetryPrivateBackupGitTransport()
     {
         var script = ReadRepoFile(".github", "actions", "powerforge-server-backup", "Invoke-PowerForgeServerBackup.ps1");

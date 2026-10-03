@@ -42,7 +42,8 @@ public sealed class ReleaseValidationPostStagingTests : IDisposable
             }] },
             runReleaseValidation: (action, context, directory, token) => {
                 observed = context;
-                var generated = Assert.Single(context.AssetEntries, entry => entry.Source == "Winget");
+                Assert.Equal(3, context.AssetEntries.Count(entry => entry.Source == "Winget"));
+                var generated = Assert.Single(context.AssetEntries, entry => entry.Source == "Winget" && entry.Path.EndsWith(".installer.yaml", StringComparison.Ordinal));
                 if (mode == "missing") { File.Delete(generated.Path); }
                 if (mode == "unlisted") { context.StagedAssets = context.StagedAssets.Where(path => path != generated.Path).ToArray(); }
                 return new PowerForgeReleaseValidationService(new NullLogger()).Run(action, context, directory, token);
@@ -76,7 +77,8 @@ public sealed class ReleaseValidationPostStagingTests : IDisposable
         Assert.NotNull(observed);
         var validation = Assert.Single(result.ReleaseValidations);
         Assert.Equal(expectedSuccess, validation.Succeeded);
-        var winget = Assert.Single(result.ReleaseAssetEntries, entry => entry.Source == "Winget");
+        Assert.Equal(3, result.ReleaseAssetEntries.Count(entry => entry.Source == "Winget"));
+        var winget = Assert.Single(result.ReleaseAssetEntries, entry => entry.Source == "Winget" && entry.Path.EndsWith(".installer.yaml", StringComparison.Ordinal));
         using var manifest = JsonDocument.Parse(File.ReadAllText(result.ReleaseManifestPath!));
         Assert.Contains(manifest.RootElement.GetProperty("assetEntries").EnumerateArray(), entry => entry.GetProperty("Path").GetString() == winget.Path);
         if (expectedSuccess) {

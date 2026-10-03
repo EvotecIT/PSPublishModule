@@ -11,12 +11,12 @@ Runs a reusable PowerShell benchmark suite.
 ## SYNTAX
 ### Path (Default)
 ```powershell
-Invoke-BenchmarkSuite [-Path] <string> [-OutputRoot <string>] [-WarmupCount <Int32>] [-IterationCount <Int32>] [-RunMode <string>] [-RunOrder <PowerShellBenchmarkRunOrder>] [-MemoryCleanup <PowerShellBenchmarkMemoryCleanupMode>] [-CooldownMilliseconds <Int32>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [-Suite <string>] [-Case <string[]>] [-Engine <string[]>] [-Operation <string[]>] [-HostName <string[]>] [-ExternalHostTimeoutSeconds <int>] [-Profile <PowerShellBenchmarkProfileKind>] [-Cleanup <PowerShellBenchmarkCleanupMode>] [-Variable <hashtable>] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-BenchmarkSuite [-Path] <string> [-OutputRoot <string>] [-WarmupCount <Int32>] [-IterationCount <Int32>] [-RunMode <string>] [-RunOrder <PowerShellBenchmarkRunOrder>] [-MemoryCleanup <PowerShellBenchmarkMemoryCleanupMode>] [-CooldownMilliseconds <Int32>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [-ProcessorAffinityMask <UInt64>] [-ProcessPriority <ProcessPriorityClass>] [-Suite <string>] [-Case <string[]>] [-Engine <string[]>] [-Operation <string[]>] [-HostName <string[]>] [-ExternalHostTimeoutSeconds <int>] [-Profile <PowerShellBenchmarkProfileKind>] [-Cleanup <PowerShellBenchmarkCleanupMode>] [-Variable <hashtable>] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ### Settings
 ```powershell
-Invoke-BenchmarkSuite [-Settings] <scriptblock> [-OutputRoot <string>] [-WarmupCount <Int32>] [-IterationCount <Int32>] [-RunMode <string>] [-RunOrder <PowerShellBenchmarkRunOrder>] [-MemoryCleanup <PowerShellBenchmarkMemoryCleanupMode>] [-CooldownMilliseconds <Int32>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [-Suite <string>] [-Case <string[]>] [-Engine <string[]>] [-Operation <string[]>] [-HostName <string[]>] [-ExternalHostTimeoutSeconds <int>] [-Profile <PowerShellBenchmarkProfileKind>] [-Cleanup <PowerShellBenchmarkCleanupMode>] [-Variable <hashtable>] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-BenchmarkSuite [-Settings] <scriptblock> [-OutputRoot <string>] [-WarmupCount <Int32>] [-IterationCount <Int32>] [-RunMode <string>] [-RunOrder <PowerShellBenchmarkRunOrder>] [-MemoryCleanup <PowerShellBenchmarkMemoryCleanupMode>] [-CooldownMilliseconds <Int32>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [-ProcessorAffinityMask <UInt64>] [-ProcessPriority <ProcessPriorityClass>] [-Suite <string>] [-Case <string[]>] [-Engine <string[]>] [-Operation <string[]>] [-HostName <string[]>] [-ExternalHostTimeoutSeconds <int>] [-Profile <PowerShellBenchmarkProfileKind>] [-Cleanup <PowerShellBenchmarkCleanupMode>] [-Variable <hashtable>] [-Plan] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -232,6 +232,38 @@ Type: SwitchParameter
 Parameter Sets: Path, Settings
 Aliases: None
 Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ProcessorAffinityMask
+Optional Windows processor mask, restricted to the process's current mask and one processor group.
+
+```yaml
+Type: UInt64
+Parameter Sets: Path, Settings
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ProcessPriority
+Optional Windows process priority, restored after execution.
+
+```yaml
+Type: ProcessPriorityClass
+Parameter Sets: Path, Settings
+Aliases: None
+Possible values: Normal, Idle, High, RealTime, BelowNormal, AboveNormal
 
 Required: False
 Position: named

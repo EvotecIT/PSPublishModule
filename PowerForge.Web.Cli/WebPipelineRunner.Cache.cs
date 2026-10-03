@@ -28,6 +28,9 @@ internal static partial class WebPipelineRunner
             return false;
         if (task.Equals("github-artifacts", StringComparison.OrdinalIgnoreCase))
             return false;
+        if (task.Equals("private-gallery-index", StringComparison.OrdinalIgnoreCase) ||
+            task.Equals("private-gallery", StringComparison.OrdinalIgnoreCase))
+            return false;
         if (task.Equals("indexnow", StringComparison.OrdinalIgnoreCase))
             return false;
         if (task.Equals("exec", StringComparison.OrdinalIgnoreCase))
@@ -71,6 +74,13 @@ internal static partial class WebPipelineRunner
     {
         if (!IsCacheableTask(task))
             return false;
+
+        if (task.Equals("release-hub", StringComparison.OrdinalIgnoreCase))
+        {
+            // Only explicit file input is deterministic. Auto and GitHub can fetch
+            // newer releases without any local file changing.
+            return string.Equals(GetString(step, "source"), "file", StringComparison.OrdinalIgnoreCase);
+        }
 
         if (task.Equals("audit", StringComparison.OrdinalIgnoreCase) &&
             (GetBool(step, "checkAgentContentSecurity") ?? GetBool(step, "check-agent-content-security") ?? false))
@@ -129,7 +139,7 @@ internal static partial class WebPipelineRunner
             {
                 WriteIndented = true
             });
-            File.WriteAllText(cachePath, json);
+            WritePipelineTextAtomically(cachePath, json);
         }
         catch (Exception ex)
         {
@@ -145,11 +155,30 @@ internal static partial class WebPipelineRunner
             if (!string.IsNullOrWhiteSpace(directory))
                 Directory.CreateDirectory(directory);
             var json = JsonSerializer.Serialize(result, WebCliJson.Context.WebPipelineResult);
-            File.WriteAllText(profilePath, json);
+            WritePipelineTextAtomically(profilePath, json);
         }
         catch (Exception ex)
         {
             logger?.Warn($"Pipeline profile write failed: {ex.Message}");
+        }
+    }
+
+    private static void WritePipelineTextAtomically(string path, string content)
+    {
+        var directory = Path.GetDirectoryName(path);
+        if (string.IsNullOrWhiteSpace(directory))
+            throw new InvalidOperationException("Pipeline output path has no parent directory.");
+        Directory.CreateDirectory(directory);
+        var temporaryPath = Path.Combine(directory, "." + Path.GetFileName(path) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            File.WriteAllText(temporaryPath, content);
+            File.Move(temporaryPath, path, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+                File.Delete(temporaryPath);
         }
     }
 
@@ -173,6 +202,54 @@ internal static partial class WebPipelineRunner
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
+    internal static string? ComputeOutputStamp(string[] outputs)
+    {
+        try
+        {
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            foreach (var path in outputs
+                         .Distinct(WebCliHelpers.FileSystemPathComparer)
+                         .OrderBy(path => path, WebCliHelpers.FileSystemPathComparer))
+            {
+                if (File.Exists(path))
+                {
+                    AppendOutputFileStamp(hash, path);
+                    continue;
+                }
+
+                if (!Directory.Exists(path))
+                {
+                    hash.AppendData(Encoding.UTF8.GetBytes($"m|{path}\n"));
+                    continue;
+                }
+
+                hash.AppendData(Encoding.UTF8.GetBytes($"d|{path}\n"));
+                // Unlike the bounded input discovery stamp, output integrity
+                // must account for every generated file in a large site.
+                foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
+                             .OrderBy(file => file, WebCliHelpers.FileSystemPathComparer))
+                {
+                    AppendOutputFileStamp(hash, file);
+                }
+            }
+
+            return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+        }
+        catch
+        {
+            // An unreadable output cannot validate a cache hit.
+            return null;
+        }
+    }
+
+    private static void AppendOutputFileStamp(IncrementalHash hash, string path)
+    {
+        using var stream = File.OpenRead(path);
+        var info = new FileInfo(path);
+        hash.AppendData(Encoding.UTF8.GetBytes($"f|{path}|{info.Length}|{info.LastWriteTimeUtc.Ticks}|"));
+        hash.AppendData(SHA256.HashData(stream));
+    }
+
     private static IEnumerable<string> EnumerateFingerprintPaths(string baseDir, JsonElement step)
     {
         if (step.ValueKind != JsonValueKind.Object)
@@ -187,6 +264,12 @@ internal static partial class WebPipelineRunner
         foreach (var property in step.EnumerateObject())
         {
             if (!FingerprintPathKeys.Contains(property.Name))
+                continue;
+            // Output locations are already represented by the step JSON and
+            // checked for presence. Stamping generated content makes the first
+            // cache entry stale immediately after the task runs.
+            if (property.Name.Equals("out", StringComparison.OrdinalIgnoreCase) ||
+                property.Name.Equals("output", StringComparison.OrdinalIgnoreCase))
                 continue;
             if (isLlmsSite &&
                 (string.Equals(property.Name, "packageFiles", StringComparison.OrdinalIgnoreCase) ||
@@ -371,6 +454,26 @@ internal static partial class WebPipelineRunner
         {
             case "build":
                 return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+            case "nav-export":
+            {
+                var configuredOut = GetString(step, "out") ?? GetString(step, "output");
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(configuredOut))
+                        return ResolveOutputCandidates(baseDir, configuredOut);
+                    var config = ResolvePath(baseDir, GetString(step, "config"));
+                    if (string.IsNullOrWhiteSpace(config))
+                        return Array.Empty<string>();
+                    var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(config, WebCliJson.Options);
+                    var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+                    return new[] { WebCliHelpers.GetDefaultNavExportOutputPath(spec, plan.RootPath) };
+                }
+                catch
+                {
+                    // Invalid configuration is reported by task execution.
+                    return Array.Empty<string>();
+                }
+            }
             case "apidocs":
             {
                 var outputs = new List<string>();
@@ -1282,7 +1385,17 @@ internal static partial class WebPipelineRunner
                     .ToArray();
             }
             default:
-                return Array.Empty<string>();
+                try
+                {
+                    // Preserve output integrity for new file-producing tasks that
+                    // declare an explicit conventional output path.
+                    return ResolveOutputCandidates(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+                }
+                catch
+                {
+                    // Execution owns the error for an invalid output path.
+                    return Array.Empty<string>();
+                }
         }
     }
 

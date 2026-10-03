@@ -2,6 +2,49 @@ namespace PowerForge;
 
 internal static class DotNetPublishSigningProfileResolver
 {
+    internal static void DisableSelectedTargetSigning(DotNetPublishSpec spec)
+    {
+        if (spec is null)
+            throw new ArgumentNullException(nameof(spec));
+
+        // Resolve the active profile first so bundles and targets outside it remain unchanged.
+        var selected = DotNetPublishPipelineRunner.ResolveProfile(spec);
+        if (selected.Bundles is { Length: > 0 })
+            throw new InvalidOperationException("NoPublishSign cannot be used when bundles are selected because bundle signing follows the source publish target. Select a publish-only configuration for an unsigned smoke run.");
+
+        var selectedNames = new HashSet<string>(
+            (selected.Targets ?? Array.Empty<DotNetPublishTarget>())
+                .Where(target => target is not null && !string.IsNullOrWhiteSpace(target.Name))
+                .Select(target => target.Name),
+            StringComparer.OrdinalIgnoreCase);
+        var originalTargets = spec.Targets ?? Array.Empty<DotNetPublishTarget>();
+        var targets = originalTargets.ToArray();
+        for (var index = 0; index < originalTargets.Length; index++)
+        {
+            var originalTarget = originalTargets[index];
+            if (originalTarget is null || !selectedNames.Contains(originalTarget.Name))
+                continue;
+
+            if (originalTarget.Publish is null)
+                throw new ArgumentException($"Target.Publish is required for '{originalTarget.Name}'.", nameof(spec));
+
+            var target = DotNetPublishPipelineRunner.CloneTargets([originalTarget])[0];
+            if (target.Publish.Sign is not null)
+            {
+                target.Publish.Sign.Enabled = false;
+            }
+            else if (!string.IsNullOrWhiteSpace(target.Publish.SignProfile)
+                || target.Publish.SignOverrides is not null)
+            {
+                target.Publish.SignOverrides ??= new DotNetPublishSignPatch();
+                target.Publish.SignOverrides.Enabled = false;
+            }
+            targets[index] = target;
+        }
+
+        spec.Targets = targets;
+    }
+
     internal static DotNetPublishSignOptions? ResolveConfiguredSignOptions(
         IReadOnlyDictionary<string, DotNetPublishSignOptions>? signingProfiles,
         string? signProfile,

@@ -22,6 +22,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             Environment.SetEnvironmentVariable("POWERFORGE_GIT_PATH", Path.Combine(root, "missing-git"));
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 BenchmarkGates =
                 [
@@ -93,6 +94,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 }));
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Targets =
                 [
@@ -303,6 +305,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             byte[] provenBytes = File.ReadAllBytes(libraryOutput);
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 SourceRevision = revision,

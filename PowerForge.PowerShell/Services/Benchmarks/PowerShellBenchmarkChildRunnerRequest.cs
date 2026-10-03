@@ -17,6 +17,8 @@ internal sealed class PowerShellBenchmarkChildRunnerRequest
     public string MemoryCleanup { get; set; } = string.Empty;
     public int CooldownMilliseconds { get; set; }
     public string OutlierMode { get; set; } = string.Empty;
+    public string? ProcessorAffinityMask { get; set; }
+    public string? ProcessPriority { get; set; }
     public string SuiteName { get; set; } = string.Empty;
     public string PlanningProfile { get; set; } = PowerShellBenchmarkProfileKind.Current.ToString();
     public Dictionary<string, string?> BenchmarkVariables { get; set; } = new(StringComparer.OrdinalIgnoreCase);

@@ -19,6 +19,7 @@ internal sealed class DotNetPublishPreparationRequest
     public bool SkipInstallers { get; set; }
     public bool SkipRestore { get; set; }
     public bool SkipBuild { get; set; }
+    public bool NoPublishSign { get; set; }
     public bool JsonOnly { get; set; }
     public string? JsonPath { get; set; }
     public bool Plan { get; set; }

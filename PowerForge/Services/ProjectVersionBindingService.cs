@@ -34,6 +34,7 @@ internal sealed class ProjectVersionBindingService
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
         var plannedFiles = new Dictionary<string, PlannedFile>(comparer);
+        var pluginVersions = new Dictionary<string, string>(comparer);
 
         foreach (var binding in bindings)
         {
@@ -56,6 +57,15 @@ internal sealed class ProjectVersionBindingService
             EnsureNoReparsePoints(root, fullPath, bindingPath);
             if (!File.Exists(fullPath))
                 throw new FileNotFoundException($"Version binding file was not found: {bindingPath}", fullPath);
+
+            if (binding.SyncAgentPluginCompatibility)
+            {
+                if (!string.Equals(Path.GetFileName(fullPath), "plugin.json", StringComparison.Ordinal))
+                    throw new InvalidOperationException("SyncAgentPluginCompatibility must target a canonical plugin.json.");
+                if (pluginVersions.ContainsKey(fullPath))
+                    throw new InvalidOperationException("Declare plugin compatibility synchronization only once per plugin.json.");
+                pluginVersions.Add(fullPath, version);
+            }
 
             if (!plannedFiles.TryGetValue(fullPath, out var plannedFile))
             {
@@ -88,6 +98,24 @@ internal sealed class ProjectVersionBindingService
                 _ => replacementText,
                 count: 1);
             plannedFile.BindingCount++;
+        }
+
+        var overlay = plannedFiles.ToDictionary(pair => pair.Key, pair => pair.Value.UpdatedContent, comparer);
+        foreach (var plugin in pluginVersions)
+        {
+            foreach (var update in AgentPluginPackageService.PlanCompatibility(
+                Path.GetDirectoryName(plugin.Key)!, plugin.Value, overlay))
+            {
+                if (plannedFiles.TryGetValue(update.FilePath, out var existing))
+                {
+                    if (!string.Equals(existing.UpdatedContent, update.UpdatedContent, StringComparison.Ordinal))
+                        throw new InvalidOperationException("A version binding conflicts with generated plugin metadata: " + update.FilePath);
+                }
+                else
+                {
+                    plannedFiles.Add(update.FilePath, new PlannedFile(update.OriginalContent, update.UpdatedContent));
+                }
+            }
         }
 
         return plannedFiles

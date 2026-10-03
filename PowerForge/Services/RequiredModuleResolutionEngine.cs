@@ -103,8 +103,15 @@ internal sealed class RequiredModuleResolutionEngine
                     availableGuid = onlineInfo.Guid;
             }
 
-            var required = ResolveAutoOrLatest(draft.RequiredVersion, availableVersion);
+            // PowerShell manifest dependency fields accept System.Version values only. Keep any
+            // repository-only prerelease constraint separately, but never write it into
+            // ModuleVersion or RequiredVersion.
+            RejectBuildMetadata(draft.ModuleName, draft.RequiredVersion);
+            var requiredSource = ResolveAutoOrLatest(draft.RequiredVersion, availableVersion);
+            RejectBuildMetadata(draft.ModuleName, requiredSource);
+            var required = NormalizeManifestVersion(requiredSource);
             var minimumSource = !string.IsNullOrWhiteSpace(draft.MinimumVersion) ? draft.MinimumVersion : draft.ModuleVersion;
+            RejectBuildMetadata(draft.ModuleName, minimumSource);
             if (!string.IsNullOrWhiteSpace(draft.MinimumVersion) &&
                 !string.IsNullOrWhiteSpace(draft.ModuleVersion) &&
                 !string.Equals(draft.MinimumVersion, draft.ModuleVersion, StringComparison.OrdinalIgnoreCase))
@@ -112,7 +119,9 @@ internal sealed class RequiredModuleResolutionEngine
                 _logger.Warn($"Module dependency '{draft.ModuleName}' specifies both MinimumVersion and ModuleVersion; using MinimumVersion '{draft.MinimumVersion}'.");
             }
 
-            var moduleVersion = ResolveAutoOrLatest(minimumSource, availableVersion);
+            var resolvedMinimumSource = ResolveAutoOrLatest(minimumSource, availableVersion);
+            RejectBuildMetadata(draft.ModuleName, resolvedMinimumSource);
+            var moduleVersion = NormalizeManifestVersion(resolvedMinimumSource);
             var guid = ResolveAutoGuid(draft.Guid, availableGuid);
 
             if (IsAutoOrLatest(draft.RequiredVersion) && string.IsNullOrWhiteSpace(required))
@@ -125,7 +134,22 @@ internal sealed class RequiredModuleResolutionEngine
             if (!string.IsNullOrWhiteSpace(required))
                 moduleVersion = null;
 
-            results.Add(new RequiredModuleReference(draft.ModuleName, moduleVersion: moduleVersion, requiredVersion: required, guid: guid));
+            var autoOrLatest = IsAutoOrLatest(draft.RequiredVersion) || IsAutoOrLatest(minimumSource);
+            var explicitPrereleaseRequired = !IsAutoOrLatest(draft.RequiredVersion) && IsPrereleaseVersion(draft.RequiredVersion);
+            var explicitPrereleaseMinimum = !IsAutoOrLatest(minimumSource) && IsPrereleaseVersion(minimumSource);
+            var selectedVersion = autoOrLatest
+                ? availableVersion
+                : explicitPrereleaseRequired ? draft.RequiredVersion : null;
+            var selectedMinimumVersion = explicitPrereleaseMinimum ? minimumSource : null;
+            results.Add(new ResolvedRequiredModuleReference(
+                draft.ModuleName,
+                moduleVersion: moduleVersion,
+                requiredVersion: required,
+                maximumVersion: null,
+                guid: guid,
+                resolvedVersion: selectedVersion,
+                resolvedMinimumVersion: selectedMinimumVersion,
+                matchPrereleaseByBaseVersion: autoOrLatest));
         }
 
         if (resolvedOnline.Count > 0)
@@ -189,19 +213,19 @@ internal sealed class RequiredModuleResolutionEngine
     }
 
     internal static RequiredModuleReference[] ResolveOutputRequiredModules(
-        RequiredModuleReference[] modules,
+        RequiredModuleReference[]? modules,
         bool mergeMissing,
-        IReadOnlyCollection<string> approvedModules)
+        IReadOnlyCollection<string> fullyInlinedModules)
     {
         if (!mergeMissing)
             return modules ?? Array.Empty<RequiredModuleReference>();
 
         if (modules is null || modules.Length == 0)
             return Array.Empty<RequiredModuleReference>();
-        if (approvedModules is null || approvedModules.Count == 0)
+        if (fullyInlinedModules is null || fullyInlinedModules.Count == 0)
             return modules;
 
-        var approved = new HashSet<string>(approvedModules, StringComparer.OrdinalIgnoreCase);
+        var approved = new HashSet<string>(fullyInlinedModules, StringComparer.OrdinalIgnoreCase);
         return modules
             .Where(static module => !string.IsNullOrWhiteSpace(module.ModuleName))
             .Where(module => !approved.Contains(module.ModuleName!))
@@ -217,7 +241,9 @@ internal sealed class RequiredModuleResolutionEngine
             if (item is null || string.IsNullOrWhiteSpace(item.Name) || string.IsNullOrWhiteSpace(item.Version))
                 continue;
 
-            if (!TryParseVersionParts(item.Version, out var version, out var pre))
+            var repositoryVersion = ModulePublisher.GetRepositoryVersionText(item);
+            RejectBuildMetadata(item.Name, repositoryVersion);
+            if (!TryParseVersionParts(repositoryVersion, out var version, out var pre))
                 continue;
 
             if (!allowPrerelease && !string.IsNullOrWhiteSpace(pre))
@@ -225,12 +251,12 @@ internal sealed class RequiredModuleResolutionEngine
 
             if (!map.TryGetValue(item.Name, out var current))
             {
-                map[item.Name] = (version, pre, item.Version, item.Guid);
+                map[item.Name] = (version, pre, repositoryVersion, item.Guid);
                 continue;
             }
 
             if (CompareVersionParts(version, pre, current.Version, current.Pre) > 0)
-                map[item.Name] = (version, pre, item.Version, item.Guid);
+                map[item.Name] = (version, pre, repositoryVersion, item.Guid);
         }
 
         var result = new Dictionary<string, (string? Version, string? Guid)>(StringComparer.OrdinalIgnoreCase);
@@ -388,6 +414,30 @@ internal sealed class RequiredModuleResolutionEngine
         }
 
         return trimmed;
+    }
+
+    private static string? NormalizeManifestVersion(string? version)
+    {
+        if (string.IsNullOrWhiteSpace(version))
+            return null;
+        var normalized = version!.Trim();
+        var separator = normalized.IndexOfAny(new[] { '-', '+' });
+        var baseVersion = separator > 0 ? normalized.Substring(0, separator) : normalized;
+        if (!Version.TryParse(baseVersion, out var parsed) || parsed is null)
+            return version!.Trim();
+        return parsed.ToString();
+    }
+
+    private static bool IsPrereleaseVersion(string? version)
+        => !string.IsNullOrWhiteSpace(version) && version!.Trim().IndexOf('-') > 0;
+
+    private static void RejectBuildMetadata(string moduleName, string? version)
+    {
+        if (string.IsNullOrWhiteSpace(version) || version!.IndexOf('+') < 0)
+            return;
+
+        throw new InvalidOperationException(
+            $"Module dependency '{moduleName}' uses build metadata in version '{version.Trim()}'. PowerShell module manifests and installed-module discovery cannot preserve build metadata as an exact dependency identity; use a stable or prerelease version without '+'.");
     }
 
     private static string? ResolveAutoGuid(string? value, string? installedGuid)

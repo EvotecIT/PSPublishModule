@@ -72,7 +72,7 @@ public sealed class ModuleBuilder
         /// <summary>Base module version to write to the manifest before install resolution.</summary>
         public string ModuleVersion { get; set; } = "1.0.0";
         /// <summary>Installation strategy controlling versioned install behavior.</summary>
-        public InstallationStrategy Strategy { get; set; } = InstallationStrategy.AutoRevision;
+        public InstallationStrategy Strategy { get; set; } = InstallationStrategy.Exact;
         /// <summary>Number of installed versions to keep after install.</summary>
         public int KeepVersions { get; set; } = 3;
         /// <summary>Destination module roots to install to. When empty, defaults are used.</summary>

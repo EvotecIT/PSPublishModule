@@ -43,6 +43,32 @@ public sealed class ModuleDependencyInstallerExactVersionTests
     }
 
     [Fact]
+    public void EnsureInstalled_PreservesDistinctVersionRequestsForSameModuleName()
+    {
+        var runner = new StubPowerShellRunner(
+            latestInstalledVersions: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Tools.Dependency"] = null
+            },
+            installedExactVersions: new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase));
+        var installer = new ModuleDependencyInstaller(runner, new NullLogger());
+
+        var results = installer.EnsureInstalled(
+            new[]
+            {
+                new ModuleDependency("Tools.Dependency", requiredVersion: "2.0.0-beta.1"),
+                new ModuleDependency("Tools.Dependency", requiredVersion: "3.0.0-beta.1")
+            },
+            force: true,
+            prerelease: true);
+
+        Assert.Equal(2, runner.InstallCalls);
+        Assert.Equal(
+            new[] { "2.0.0-beta.1", "3.0.0-beta.1" },
+            results.Select(static result => result.RequestedVersion).ToArray());
+    }
+
+    [Fact]
     public void EnsureUpdated_InstallsExactRequiredVersion_WhenLatestInstalledVersionDiffers()
     {
         var runner = new StubPowerShellRunner(

@@ -68,6 +68,12 @@ if (-not [string]::IsNullOrWhiteSpace($request.MemoryCleanup)) {
 if (-not [string]::IsNullOrWhiteSpace($request.OutlierMode)) {
     $suite.OutlierMode = [PowerForge.PowerShellBenchmarkOutlierMode] $request.OutlierMode
 }
+if (-not [string]::IsNullOrWhiteSpace($request.ProcessorAffinityMask)) {
+    $suite.ProcessorAffinityMask = [Convert]::ToUInt64($request.ProcessorAffinityMask, 16)
+}
+if (-not [string]::IsNullOrWhiteSpace($request.ProcessPriority)) {
+    $suite.ProcessPriority = [System.Diagnostics.ProcessPriorityClass] $request.ProcessPriority
+}
 if (-not [string]::IsNullOrWhiteSpace($request.SuiteName)) {
     $suite.Name = $request.SuiteName
 }

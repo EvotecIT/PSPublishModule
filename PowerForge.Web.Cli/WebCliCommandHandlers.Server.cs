@@ -7,7 +7,7 @@ namespace PowerForge.Web.Cli;
 
 internal static partial class WebCliCommandHandlers
 {
-    private const string SupportedServerActions = "inspect, plan, validate, capture, deploy, verify, scaffold, bootstrap-plan, restore-secrets-plan";
+    private const string SupportedServerActions = "inspect, plan, validate, capture, deploy, verify, scaffold, bootstrap-plan, bootstrap, restore-secrets-plan";
 
     internal static int HandleServer(string[] subArgs, bool outputJson, WebConsoleLogger logger, int outputSchemaVersion)
     {
@@ -29,6 +29,7 @@ internal static partial class WebCliCommandHandlers
                 "deploy" => HandleServerDeploy(actionArgs, outputJson, logger, outputSchemaVersion),
                 "scaffold" => HandleServerScaffold(actionArgs, outputJson, logger, outputSchemaVersion),
                 "bootstrap-plan" => HandleServerBootstrapPlan(actionArgs, outputJson, logger, outputSchemaVersion),
+                "bootstrap" => HandleServerBootstrap(actionArgs, outputJson, logger, outputSchemaVersion),
                 "restore-secrets-plan" => HandleServerRestoreSecretsPlan(actionArgs, outputJson, logger, outputSchemaVersion),
                 _ => Fail($"Unknown server action '{subArgs[0]}'. Supported actions: {SupportedServerActions}.", outputJson, logger, "web.server")
             };
@@ -143,8 +144,11 @@ internal static partial class WebCliCommandHandlers
         var skipFiles = HasOption(subArgs, "--skip-files");
         var skipEncrypted = HasOption(subArgs, "--skip-encrypted");
         var failOnFailure = HasOption(subArgs, "--fail-on-failure");
+        var local = HasOption(subArgs, "--local");
+        if (local && HasOption(subArgs, "--ssh"))
+            throw new InvalidOperationException("Server capture cannot combine --local with --ssh.");
         var sshCommand = TryGetOptionValue(subArgs, "--ssh") ?? "ssh";
-        var target = BuildServerSshTarget(manifest.Target);
+        var target = local ? string.Empty : BuildServerSshTarget(manifest.Target);
 
         var outputRoot = ResolveCaptureOutputPath(outPathArg, manifest);
         Directory.CreateDirectory(outputRoot);
@@ -164,14 +168,15 @@ internal static partial class WebCliCommandHandlers
 
         if (dryRun)
         {
-            warnings.Add("Dry run requested; no SSH commands were executed.");
+            warnings.Add(local ? "Dry run requested; no local commands were executed." : "Dry run requested; no SSH commands were executed.");
         }
         else
         {
-            using var captureLock = AcquireRemoteOperationLocks(
+            using var captureLock = AcquireCaptureOperationLocks(
                 sshCommand,
                 target,
                 manifest.OperationLocks ?? Array.Empty<string>(),
+                local,
                 waitSecondsPerLock: 900);
             for (var commandIndex = 0; commandIndex < commandList.Length; commandIndex++)
             {
@@ -184,7 +189,8 @@ internal static partial class WebCliCommandHandlers
                     target,
                     command,
                     Path.Combine(outputRoot, "commands"),
-                    commandIndex);
+                    commandIndex,
+                    local);
                 captureLock?.EnsureHeld($"after capture command '{command.Id}'");
                 commandResults.Add(result);
                 if (!result.Success && command.Required)
@@ -194,7 +200,7 @@ internal static partial class WebCliCommandHandlers
             if (!skipFiles && plainFiles.Length > 0 && plainArchivePath is not null)
             {
                 captureLock?.EnsureHeld("before plain archive capture");
-                var archiveResult = CaptureRemoteTarArchive(sshCommand, target, plainFiles, plainArchivePath);
+                var archiveResult = CaptureRemoteTarArchive(sshCommand, target, plainFiles, plainArchivePath, local);
                 captureLock?.EnsureHeld("after plain archive capture");
                 if (!archiveResult.Success)
                 {
@@ -226,7 +232,8 @@ internal static partial class WebCliCommandHandlers
                         target,
                         encryptedFiles,
                         encryptedArchivePath,
-                        recipient);
+                        recipient,
+                        local);
                     captureLock?.EnsureHeld("after encrypted archive capture");
                     if (!encryptedResult.Success)
                     {
@@ -429,12 +436,15 @@ internal static partial class WebCliCommandHandlers
         string target,
         PowerForgeServerNamedCommand command,
         string commandOutputDirectory,
-        int commandIndex)
+        int commandIndex,
+        bool local)
     {
         var id = BuildCaptureCommandOutputStem(commandIndex, command.Id);
         var stdoutPath = Path.Combine(commandOutputDirectory, $"{id}.out.txt");
         var stderrPath = Path.Combine(commandOutputDirectory, $"{id}.err.txt");
-        var execution = RunProcessCaptureText(sshCommand, BuildSshArguments(target, command.Command ?? string.Empty));
+        var execution = RunProcessCaptureText(
+            local ? "/usr/bin/env" : sshCommand,
+            local ? BuildCaptureShellArguments(command.Command ?? string.Empty) : BuildCaptureSshArguments(target, BuildCaptureShellCommand(command.Command ?? string.Empty)));
 
         File.WriteAllText(stdoutPath, execution.Stdout);
         File.WriteAllText(stderrPath, execution.Stderr);
@@ -460,14 +470,23 @@ internal static partial class WebCliCommandHandlers
         return $"{commandIndex:D4}-{id}";
     }
 
+    // Local publisher accounts own their homes. Never load shell startup files or
+    // noninteractive shell hooks around a privileged capture operation.
+    internal static string[] BuildCaptureShellArguments(string command)
+        => ["-u", "BASH_ENV", "-u", "ENV", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "/bin/bash", "--noprofile", "--norc", "-p", "-o", "pipefail", "-c", command];
+
+    internal static string BuildCaptureShellCommand(string command)
+        => "/usr/bin/env " + string.Join(" ", BuildCaptureShellArguments(command).Select(ShellQuote));
+
     private static ProcessResult CaptureRemoteTarArchive(
         string sshCommand,
         string target,
         PowerForgeServerManagedFile[] files,
-        string outputPath)
+        string outputPath,
+        bool local)
     {
         var script = BuildRemoteTarScript(files);
-        return RunProcessCaptureBinary(sshCommand, BuildSshArguments(target, script), outputPath);
+        return RunProcessCaptureBinary(local ? "/usr/bin/env" : sshCommand, local ? BuildCaptureShellArguments(script) : BuildCaptureSshArguments(target, BuildCaptureShellCommand(script)), outputPath);
     }
 
     private static ProcessResult CaptureRemoteEncryptedTarArchive(
@@ -475,10 +494,11 @@ internal static partial class WebCliCommandHandlers
         string target,
         PowerForgeServerManagedFile[] files,
         string outputPath,
-        string recipient)
+        string recipient,
+        bool local)
     {
         var script = BuildRemoteEncryptedTarScript(files, recipient);
-        return RunProcessCaptureBinary(sshCommand, BuildSshArguments(target, script), outputPath);
+        return RunProcessCaptureBinary(local ? "/usr/bin/env" : sshCommand, local ? BuildCaptureShellArguments(script) : BuildCaptureSshArguments(target, BuildCaptureShellCommand(script)), outputPath);
     }
 
     internal static string BuildRemoteTarScript(PowerForgeServerManagedFile[] files)
@@ -508,9 +528,7 @@ internal static partial class WebCliCommandHandlers
         bool quoteArguments)
     {
         var captureFiles = GetRemoteCaptureFiles(files, allowWildcards: false);
-        if (string.IsNullOrWhiteSpace(recipient) ||
-            !recipient.StartsWith("age1", StringComparison.Ordinal) ||
-            recipient.Any(static character => !(character is >= 'a' and <= 'z' || character is >= '0' and <= '9')))
+        if (!IsValidAgeX25519Recipient(recipient))
             throw new InvalidOperationException("Remote encrypted capture requires an age public recipient beginning with age1.");
 
         static string Raw(string value) => value;
@@ -557,7 +575,7 @@ internal static partial class WebCliCommandHandlers
                 !path.Split('/', StringSplitOptions.RemoveEmptyEntries)
                     .Any(static segment => segment is "." or "..") &&
                 path.All(character => IsAsciiLetterOrDigit(character) ||
-                character is '/' or '.' or '_' or '-' ||
+                character is '/' or '.' or '_' or '-' or '@' ||
                 (allowWildcards && character is '*' or '?' or '[' or ']'));
             if (!valid)
                 throw new InvalidOperationException($"Capture path contains unsupported characters: {path}");
@@ -569,8 +587,11 @@ internal static partial class WebCliCommandHandlers
     private static string ShellQuote(string value)
         => "'" + value.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
 
-    private static string[] BuildSshArguments(string target, string command)
+    internal static string[] BuildSshArguments(string target, string command)
         => new[] { "-o", "ConnectTimeout=30", target, $"sh -lc {ShellQuote(command)}" };
+
+    internal static string[] BuildCaptureSshArguments(string target, string command)
+        => new[] { "-o", "ConnectTimeout=30", target, $"/bin/sh -c {ShellQuote(command)}" };
 
     private static ProcessResult RunProcessCaptureText(string fileName, IReadOnlyList<string> args)
     {

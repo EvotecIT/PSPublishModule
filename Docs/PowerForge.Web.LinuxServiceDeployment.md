@@ -2,7 +2,7 @@
 
 PowerForge provides generic package and deployment actions plus a root-owned promoter for small Linux systemd services. It complements server recovery: the actions deploy reproducible application code, while the recovery manifest captures host configuration, service units, certificates, encrypted secrets, and mutable state.
 
-The service repository stays thin. It owns the service code, a validation script, a secret-free package job, and a protected-environment deployment job. PowerForge owns checkout, packaging, artifact publication, provenance, SSH hygiene, archive validation, atomic promotion, health checks, retention, and rollback.
+The service repository stays thin. It owns the service code, a validation script, and a secret-free package job. Choose either the protected-environment push deployment below or the host-initiated artifact pull. PowerForge owns packaging, artifact provenance, archive validation, atomic promotion, health checks, retention, and rollback.
 
 ## Runtime Contract
 
@@ -193,6 +193,44 @@ the caller repository. Service artifacts are retained for seven days by default 
 manual protected-environment approval can outlive a short queue or weekend; override
 `artifact-retention-days` only when the repository has a different approval policy.
 
+## Host-Initiated Artifact Pull
+
+Use `Deployment/Linux/powerforge-service-artifact-pull.sh` when the host must initiate routine deployment and no GitHub runner should SSH into it. Keep the secret-free package job above, but omit its `deploy` job and remove the example `push.paths` filter: every branch-tip commit needs a package run for recovery or a fresh host. Use only one routine deployment lane per service. The host polls the configured workflow for a successful `push` or `workflow_dispatch` run at the current branch-tip commit, downloads its named artifact with size limits, checks the package's source repository, commit, run identity, and SHA-256, and hands the verified files to the same root-owned service promoter. It rechecks the branch immediately before promotion and stops on a detected change. A repeated run with unchanged root-owned configuration is skipped; changing pull or promoter configuration promotes the same package again. A successful rerun of failed jobs can retain a package made by an earlier run attempt, which is recorded separately in deployment metadata.
+
+Install `gh`, `git`, `jq`, `curl`, Python 3, the `acl` tools (`getfacl` and `setfacl`), and the promoter on the host. Run the pull script as a dedicated unprivileged deployment account, never as root. The matching promoter configuration under `/etc/powerforge/services/<service>.env` and the pull configuration under `/etc/powerforge/service-pull/<service>.env` must be root-owned, mode `0640`, and readable by only that account's dedicated primary group. No other account may be a member of that group or use it as a primary group. These files and the root-owned token file must not have named or other extended ACL entries, even if `stat` still reports mode `0640`; directory ACLs for traversal remain separate. Give the token a repository-scoped, read-only GitHub credential with Contents and Actions read access. Keep the token and the temporary signed artifact URL out of process arguments. The pull work directory must belong to the deployment account and have mode `0700`. The service release root and its parent chain remain root-controlled. Provision traversal for the deployment account through `SERVICE_ROOT` and any existing `releases` directory; the promoter grants that account only the ACL access needed to traverse each newly extracted release and read its `_powerforge/deployment.json`. If current metadata is inaccessible, the pull fails closed rather than redeploying unchanged bytes. The two example configuration files in `Deployment/Linux` show the separate pull and promotion settings.
+
+For a service named `example`, provision a separate `example-deploy` account and primary group, then extend the host setup above:
+
+```bash
+install -o root -g root -m 0755 \
+  Deployment/Linux/powerforge-service-artifact-pull.sh \
+  /usr/local/sbin/powerforge-service-artifact-pull
+install -d -o root -g root -m 0750 /etc/powerforge/service-pull
+install -d -o root -g root -m 0755 /var/lib/powerforge/service-pull
+install -d -o example-deploy -g example-deploy -m 0700 /var/lib/powerforge/service-pull/example
+setfacl -m u:example-deploy:--x /etc/powerforge/services
+setfacl -m u:example-deploy:--x /etc/powerforge/service-pull
+chgrp example-deploy /etc/powerforge/services/example.env
+install -o root -g example-deploy -m 0640 \
+  Deployment/Linux/powerforge-service-artifact-pull.env.example \
+  /etc/powerforge/service-pull/example.env
+```
+
+Set the example pull configuration to the actual repository, branch, workflow, artifact, and work root. Add `ARTIFACT_PULL_STAGE_ROOT=/var/lib/powerforge/service-pull/example/.stage` to the matching root-owned promoter configuration. The puller requires this staging path to be inside its private work root, preventing another account from reserving a predictable `/tmp` name. Every poll invokes the promoter's recovery-only mode before reading GitHub, so an interrupted promotion can settle before stale staging is removed; it also clears abandoned bounded download directories while holding the per-service lock. The puller records the exact pull and promoter config digests in deployment metadata; the root promoter snapshots both live files and rejects promotion unless those bytes match, closing the privileged handoff race. Provision `/etc/powerforge/service-pull/example.token` separately as root:`example-deploy` mode `0640`, without passing the token on a command line. The named ACL grants traversal of the shared promoter-config directory without exposing other services' configuration files; `setfacl` is required on the host. Keep the promoter's example config at root:`example-deploy` mode `0640` after subsequent updates.
+
+For the pull lane, grant the fixed promoter command to `example-deploy` instead of the `powerforge-example` SSH account used by the push lane. Validate it with `visudo -cf` and `sudo -l -U example-deploy`:
+
+```sudoers
+example-deploy ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-service-deploy --service example
+example-deploy ALL=(root) NOPASSWD: /usr/local/sbin/powerforge-service-deploy --service example --recover-only
+```
+
+```bash
+/usr/local/sbin/powerforge-service-artifact-pull example
+```
+
+A host timer can run that command after the account, token, GitHub CLI, package job, service unit, promoter, sudoers rule, and health provenance endpoint have been staged and checked. Package runs for an older commit, a failed workflow, a detected changed branch, mismatched artifact metadata, or an unavailable artifact are not promoted. Artifacts expire according to the package job's retention setting; after expiry, rerun the package workflow on the reviewed branch tip or publish a durable release artifact before attempting recovery. Until the public hostname is active, configure the promoter's local health URL and leave public health URLs empty; add public verification only after the route is live. This route does not configure Apache, certificates, backup, DNS, or the application health response for you. Cover those in the server-recovery manifest and test rollback before enabling unattended pulls.
+
 ## Promotion And Rollback
 
 The package action binds the archive SHA-256 to the source repository, exact source
@@ -224,6 +262,75 @@ also preserve the service configuration and systemd unit/drop-ins; transaction s
 is temporary and is either committed or replayed by the next promoter invocation.
 
 ## Recovery Coverage
+
+### Host-local bootstrap entrypoint
+
+Use the same reviewed server-recovery manifest for installation and recovery.
+`server bootstrap` generates the existing review plan by default; it does not
+install anything until `--apply` is supplied:
+
+```bash
+powerforge-web server bootstrap --manifest ./server-recovery.json --out ./bootstrap-review
+sudo powerforge-web server bootstrap --manifest /etc/powerforge/server-recovery.json --apply --output json
+```
+
+Apply runs on the Linux target, not over SSH. Install the reviewed manifest as a
+root-owned regular file under root-owned, non-group/world-writable ancestors.
+The installed CLI and its assemblies must also be trusted operator-owned inputs.
+Provision the manifest's protected credential files separately: do not put secret
+values in command arguments or the manifest. Keep application data, web settings,
+collector credentials, and recovery keys in their existing separate locations.
+
+The shared command reuses the planner's account, package, repository, managed-file,
+systemd, deployment, and lock ordering. It rejects unresolved manual/sensitive
+steps before applying any work, rather than partially installing an incomplete
+profile. At least one required verification command or URL is mandatory. After
+bootstrap it runs the same verification engine locally and returns failure if
+required checks fail. Local verification can also be invoked separately:
+
+For a private repository, pre-provision the SSH identity and pinned host-key
+file under root-owned, non-writable, non-symlink paths. Bootstrap checks those
+paths before Git reads them. On rerun, a repository declared with `branch`
+must be clean, on that branch, and not ahead of or divergent from its remote;
+bootstrap fast-forwards it before installing managed files. It compares the
+declared URL with Git's stored origin URL, before `insteadOf` transport rewrites.
+A repository declared with `ref` is checked out at that revision instead. Updates reject
+incoming tracked paths that collide with existing ignored files, including
+secrets. Set `enforceDisabled: true` on an intentionally inactive systemd unit
+when recovery must stop and disable an existing installation before other work
+begins. Disabled timers are handled before services; both persistent and
+runtime enablement are cleared. Each declared package command repeats the
+stop/disable check after it runs, including when the package command fails;
+bootstrap repeats the check before repository changes and before verification.
+An absent unit with an enablement symlink in systemd's unit search paths fails
+closed; remove the stale link before retrying rather than silently accepting a
+future auto-start.
+After verification commands and URLs, bootstrap reasserts the disabled state
+before reporting success; a failed check also triggers that final attempt.
+The generated bootstrap script attempts the same reconciliation when any step
+exits early, while retaining the original failure status. If reconciliation
+itself fails, inspect the host and stop the unit before retrying.
+When operation locks are declared, `bootstrap --apply` retains the engine-owned
+lock through the bootstrap shell, verification commands and URLs, and final
+reconciliation. The reviewable standalone plan script holds its lock through
+its own EXIT reconciliation; run `--apply` for the additional verification
+window. Combining `enforceDisabled` with
+`deploy.operationLockOwner: command` is unsupported and fails plan validation.
+Standalone `server verify` does not change unit state. This is not an activation
+barrier during a package or verification command. Do not install a
+package that deliberately starts an `enforceDisabled` unit as part of this
+profile. Inspect the host after a failed bootstrap before retrying.
+
+```bash
+powerforge-web server verify --manifest ./server-recovery.json --local --fail-on-failure --output json
+```
+
+The command does not make whole-host bootstrap transactional. Package/account
+changes made before a later failure may remain; inspect the host and use the
+reviewed recovery plan before retrying. Service promotion still uses its existing
+transaction recovery and rollback. A profile needing interactive certificate
+issuance or a manual secret restore remains a review plan until that prerequisite
+is supplied. It does not silently skip those steps or activate DNS/private content.
 
 For a recoverable service, the repository recovery manifest should include:
 

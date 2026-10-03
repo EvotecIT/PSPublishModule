@@ -163,13 +163,15 @@ internal sealed class RequiredModuleRepositoryPublisher
 
     internal static PSResourceInfo? SelectRequiredModuleVersionForPublish(
         RequiredModuleReference requiredModule,
-        IReadOnlyList<PSResourceInfo> candidates)
+        IReadOnlyList<PSResourceInfo> candidates,
+        bool allowPrerelease = false,
+        bool matchPrereleaseByBaseVersion = false)
     {
         if (requiredModule is null || candidates is null || candidates.Count == 0)
             return null;
 
         PSResourceInfo? selected = null;
-        var allowPrerelease = AllowsPrerelease(requiredModule);
+        allowPrerelease |= AllowsPrerelease(requiredModule);
         foreach (var candidate in candidates)
         {
             if (candidate is null ||
@@ -182,7 +184,10 @@ internal sealed class RequiredModuleRepositoryPublisher
             if (!allowPrerelease && IsPrereleaseVersion(versionText))
                 continue;
 
-            if (!ModulePublisher.DoesVersionMatchRequiredModule(requiredModule, versionText))
+            var constraintVersion = matchPrereleaseByBaseVersion && IsPrereleaseVersion(versionText)
+                ? GetBaseVersion(versionText)
+                : versionText;
+            if (!ModulePublisher.DoesVersionMatchRequiredModule(requiredModule, constraintVersion))
                 continue;
 
             if (selected is null ||
@@ -193,6 +198,13 @@ internal sealed class RequiredModuleRepositoryPublisher
         }
 
         return selected;
+    }
+
+    private static string GetBaseVersion(string version)
+    {
+        var normalized = (version ?? string.Empty).Trim();
+        var separator = normalized.IndexOfAny(new[] { '-', '+' });
+        return separator > 0 ? normalized.Substring(0, separator) : normalized;
     }
 
     internal static bool AllowsPrerelease(RequiredModuleReference requiredModule)

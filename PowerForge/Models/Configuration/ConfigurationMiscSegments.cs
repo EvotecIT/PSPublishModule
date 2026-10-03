@@ -233,6 +233,10 @@ public sealed class AppleAppConfiguration
     /// <summary>Path to a .xcodeproj directory or project.pbxproj file. Relative paths resolve from the pipeline project root.</summary>
     public string ProjectPath { get; set; } = string.Empty;
 
+    /// <summary>For native .NET macOS apps, ProjectPath is a dotnet-publish JSON config and this selects its MacApp installer.</summary>
+    public string? DotNetPublishInstallerId { get; set; }
+
+
     /// <summary>Xcode scheme name for future archive/export automation.</summary>
     public string? Scheme { get; set; }
 

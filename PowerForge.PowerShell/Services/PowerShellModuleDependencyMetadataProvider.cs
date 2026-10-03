@@ -58,7 +58,11 @@ internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDepend
             reference.ModuleVersion,
             reference.RequiredVersion,
             reference.MaximumVersion,
-            reference.Guid
+            reference.Guid,
+            MatchPrereleaseByBaseVersion = reference is ModuleInstalledReference installedReference &&
+                                           installedReference.MatchPrereleaseByBaseVersion,
+            ResolvedVersion = GetResolvedVersion(reference),
+            ResolvedMinimumVersion = GetResolvedMinimumVersion(reference)
         }));
 
         var script = EmbeddedScripts.Load("Scripts/ModulePipeline/Get-InstalledModuleInfo.ps1");
@@ -94,7 +98,11 @@ internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDepend
                 reference.ModuleVersion,
                 reference.RequiredVersion,
                 reference.MaximumVersion,
-                reference.Guid
+                reference.Guid,
+                MatchPrereleaseByBaseVersion = reference is ResolvedRequiredModuleReference resolvedReference &&
+                                               resolvedReference.MatchPrereleaseByBaseVersion,
+                ResolvedVersion = GetResolvedVersion(reference),
+                ResolvedMinimumVersion = GetResolvedMinimumVersion(reference)
             });
             var result = RunScript(script, new[] { reference.ModuleName.Trim(), EncodeText(referenceJson) }, TimeSpan.FromMinutes(1));
             if (result.ExitCode != 0)
@@ -175,6 +183,16 @@ internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDepend
 
         return resolved;
     }
+
+    private static string? GetResolvedVersion(RequiredModuleReference reference)
+        => reference is ResolvedRequiredModuleReference resolved
+            ? resolved.ResolvedVersion
+            : reference is ModuleInstalledReference installed ? installed.ResolvedVersion : null;
+
+    private static string? GetResolvedMinimumVersion(RequiredModuleReference reference)
+        => reference is ResolvedRequiredModuleReference resolved
+            ? resolved.ResolvedMinimumVersion
+            : reference is ModuleInstalledReference installed ? installed.ResolvedMinimumVersion : null;
 
     private PowerShellRunResult RunScript(string scriptText, IReadOnlyList<string> args, TimeSpan timeout)
     {

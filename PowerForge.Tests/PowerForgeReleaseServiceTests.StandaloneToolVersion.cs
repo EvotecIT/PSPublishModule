@@ -301,6 +301,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Targets =
                     [
@@ -428,6 +429,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 loadDotNetToolsSpec: (_, configPath) => (new DotNetPublishSpec(), configPath),
                 planDotNetTools: (_, _, _, _) => new DotNetPublishPlan
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectRoot = root,
                     Targets =
                     [

@@ -1,6 +1,6 @@
 # PowerShell compiler: next major milestones
 
-Updated: 2026-09-28. Active continuation: `feature/powershell-compiler`. The readiness assessment records the qualified revisions and remaining integration boundaries.
+Updated: 2026-10-03. Active continuation: `feature/powershell-compiler`. The readiness assessment records the qualified revisions and remaining integration boundaries.
 
 M24–M28 have completed bounded local implementation gates, including the September 22 audit corrections. M28 covers executable run/watch, Strict library NuGet packaging, grouped project diagnostics, and a module consumer quickstart on both supported Windows PowerShell hosts. **M29 has completed its pinned local coverage gate:** 30 newly emitted and differentially executed module functions across four blocker families, an offline standalone compiled workflow, and zero accepted per-function regressions. M29a now addresses ordinary PowerShell command forms that still fall back in real scripts; M30 then handles integration, distribution, providers, and platform qualification. Direct source-debugger qualification is deferred; it is not a condition for broader compiler coverage. Completion of a local milestone does not establish general PowerShell compatibility, a released package, or qualification on an untested host.
 
@@ -12,7 +12,7 @@ Keep the canonical parser → binder → bound IR → analysis → lowering → 
 
 Generated compiler artifacts accept `net10.0` and `net472`; executables accept only `net10.0`. Hosted artifact qualification targets PowerShell 7.6 and Windows PowerShell 5.1. This is distinct from the shared `PowerForge.PowerShell` host library, whose project still builds `net472;net8.0;net10.0`. Existing 7.4 observations and the host-library build target do not reopen generated-artifact net8 support. Do not remove a shared-library target without checking its consumers.
 
-The September 22 pinned PSSharedGoods census reached **196/282** complete emitted functions, leaving 86 retained or unsupported. Its eight recent `-as` additions have since passed focused original/generated execution on both supported Windows hosts. This is one packet's result, not a language-coverage percentage or speedup. The pinned multi-module portfolio was the M29 acceptance surface: no one module's count can establish ecosystem coverage, and an emitted Hybrid method may still delegate work to PowerShell.
+The last complete five-module `net10.0` census reached **544/565** complete emitted functions, with 21 retained. A later PSSharedGoods-only comparison reached **273/282**, up from 272/282 in that portfolio. The seven-workload external comparison separately recorded **128/183**, followed by a Locksmith2-only increase from 75/100 to 77/100. These snapshots have different revisions and must not be combined into a new portfolio total. The [support-gap inventory](PowerForge.PowerShellCompilation.SupportGaps.md) records the affected packets and execution limits. An emitted Hybrid method may still delegate work to PowerShell.
 
 ## Delivery order
 
@@ -22,6 +22,26 @@ The September 22 pinned PSSharedGoods census reached **196/282** complete emitte
 | 1 | M29a everyday PowerShell forms | In progress | Common authored command shapes compile where their semantics and command identity are proved; remaining host boundaries are explicit |
 | 2 | M30 distribution and platforms | Partial / separate qualification | Supported hosts, release set, public-feed lifecycle, and clean-target execution are evidenced independently |
 | 3 | M31 performance | Planned | Repeatable workload benefit after semantic and deployment correctness |
+
+### Recommended next two deliveries (October 3 assessment)
+
+**First: close M29a's common-form qualification gate.** Most of the planned breadth now exists. Prioritize a current, reproducible supported contract before adding more isolated type or command rules.
+
+- [ ] Reconcile failing recurring-gate assertions with the current semantic and diagnostic contracts. Compare against the pre-integration branch to distinguish inherited failures from integration regressions; repair accepted-code defects before new breadth.
+- [ ] Refresh the fixed five-module census on both supported targets and the separate seven-workload frontier at one compiler revision. Preserve per-function identities, retained-region ownership, and a no-loss comparison.
+- [ ] Classify each remaining function as a justified hosted boundary, a target/source prerequisite, or a reachable semantic gap. Select any additional implementation by complete offline workflow, rather than by one CLR type or a diagnostic occurrence count.
+- [ ] Reconfirm representative unchanged module and standalone workflows on their claimed hosts, including streams, types/cardinality, errors, continuation, state, stopping, and cleanup. Keep emitted, executed, and runtime-free evidence separate.
+
+**Completion:** the existing M29a exit gate has current evidence, the recurring gate passes, and every residual has an explicit disposition. This does not require runtime-free translation of arbitrary WPF, directory, native-interoperability, or installer behavior.
+
+**Second: qualify M30's Windows distribution baseline.** Start with Windows x64, PowerShell 7.6/`net10.0` and Windows PowerShell 5.1/`net472` module/library consumption, plus the already supported `net10.0` executable profiles.
+
+- [ ] Complete candidate CI/review and the full compiler qualification lane before default-branch integration. Measure the focused lane against its actual CI budget.
+- [ ] Qualify the serviced PowerShell host and the generated-artifact SDK lock separately. Exercise native-function and statement-error bridges, missing capabilities, and authenticated artifact consumption.
+- [ ] Prove the coherent compiler/core/CLI/module/provider package set through ordinary restore, installation, execution, upgrade/rebuild, and rollback on clean targets. Include interrupted operations, tampering, side-by-side versions, and space/non-ASCII/long paths.
+- [ ] Complete public-feed lifecycle proof after separate publication authorization. Partition actual Linux execution from Windows-only tests; promote further platforms only with a consumer need and observed target execution.
+
+**Completion:** every advertised baseline profile has an obtainable, reproducible package set and clean-target lifecycle evidence. Local packing can close its own gate; public-feed availability remains a separate gate. M31 then measures and improves qualified workflows, including the recorded recursive Hybrid-call regression.
 
 Known accepted-code defects take priority over breadth or performance. Keep remediation proportional to a reachable trigger and consequence: cover the observed failure and consequential sibling paths, then stop expanding the matrix once the supported contract is demonstrated. Record every finding as reproduced, source-demonstrated, or unverified; record its owner, affected modes, test, and closure evidence. Do not mark a milestone complete because its aggregate test count increased.
 
@@ -220,7 +240,8 @@ Two additional pinned third-party packets extend the evidence beyond the five-mo
 
 **Status: Partial; public release and target qualification remain separate from local implementation.**
 
-- [ ] Reconcile the continuation with the then-current default branch, inspect conflicts at shared owners, and run exact-candidate CI/review before integration. Do not infer readiness from the branch's earlier main merge or local test result.
+- [x] Reconcile the continuation with `origin/main` at `daba966bace70b35cac14088f5c5d8b91e893225` on October 3. Resolve compiler documentation and oracle conflicts while preserving generated-artifact net8 retirement and ingesting the PowerShell 7.6.6 host/SDK servicing update.
+- [ ] Run exact-candidate CI/review and full qualification before default-branch integration. A merge of main into the continuation does not establish release or integration readiness.
 - [x] Split routine compiler feedback from deliberate full qualification. The former 1,145-test run took 51m35s locally, including 51.2 serial minutes in one artifact-builder test class. With the test assembly already built, the focused lane passed 272/272 selected contract tests in 3m58s plus six Strict programs, about 4m48s end to end on the same machine. The broad artifact matrix remains available with `-Lane Full` and a manual CI dispatch. The [assessment](PowerForge.PowerShellCompilation.Assessment.md) records both evidence sets and limits.
 - [ ] Measure the focused lane on the actual CI runner, including pinned-host acquisition, all required contract families, the available Windows hosts, and the six Strict programs. Check repeatability and the new 20-minute step budget. Run the full lane on the integration candidate when the broader artifact matrix is needed; do not present focused CI as equivalent to that qualification.
 - [ ] Complete the compiler/core/CLI/PowerShell/provider release set and clean public-feed install, upgrade, rollback, and execution after publication authorization. Record source, package, installed version, and runtime evidence separately.

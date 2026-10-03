@@ -12,7 +12,8 @@ public sealed partial class DotNetPublishPipelineRunner
         string taskInputAllowedRoot,
         IReadOnlyCollection<(XDocument Document, string DeclaringPath)> relatedDocuments,
         IReadOnlyDictionary<string, string>? evaluatedGlobalProperties,
-        string? controlledProjectPath)
+        string? controlledProjectPath,
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties)
     {
         foreach (XElement task in document.Descendants().Where(IsControlledBuildTaskElement))
         {
@@ -21,7 +22,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     task,
                     evaluatedGlobalProperties,
                     declaringPath,
-                    relatedDocuments.Select(related => related.Document)))
+                    relatedDocuments.Select(related => related.Document),
+                    immutableGlobalProperties))
             {
                 continue;
             }
@@ -43,7 +45,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         relatedDocuments,
                         evaluatedGlobalProperties,
                         out string[] expandedValues,
-                        consumingElement: task))
+                        consumingElement: task,
+                        immutableGlobalProperties: immutableGlobalProperties))
                 {
                     return false;
                 }

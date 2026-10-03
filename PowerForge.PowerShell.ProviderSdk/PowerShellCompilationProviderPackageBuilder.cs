@@ -152,7 +152,7 @@ public sealed class PowerShellCompilationProviderPackageBuilder
                 semanticProfileId: manifest.SourceSemanticProfiles.FirstOrDefault(),
                 runtimeIdentifier: manifest.SupportedRuntimeIdentifiers.FirstOrDefault());
             if (File.Exists(request.OutputPath))
-                File.Replace(temporary, request.OutputPath, destinationBackupFileName: null);
+                ReplacePackage(temporary, request.OutputPath);
             else
                 File.Move(temporary, request.OutputPath);
             return new PowerShellCompilationProviderPackageReader().Resolve(
@@ -163,6 +163,26 @@ public sealed class PowerShellCompilationProviderPackageBuilder
         finally
         {
             if (File.Exists(temporary)) File.Delete(temporary);
+        }
+    }
+
+    private static void ReplacePackage(string temporary, string destination)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                File.Replace(temporary, destination, destinationBackupFileName: null);
+                return;
+            }
+            catch (IOException exception) when (attempt < 5 &&
+                (exception.HResult & 0xffff) is 32 or 33 or 1175 &&
+                File.Exists(temporary) && File.Exists(destination))
+            {
+                // A freshly packed archive can still be held by a scanner on Windows.
+                // Keep the validated candidate and original intact while the handle clears.
+                Thread.Sleep(100 * (attempt + 1));
+            }
         }
     }
 

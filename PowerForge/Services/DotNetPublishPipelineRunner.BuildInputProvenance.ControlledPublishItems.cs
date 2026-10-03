@@ -15,9 +15,11 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyCollection<string> trustedBuildInfrastructureRoots,
         IReadOnlyCollection<string> evaluatedBuildInputs,
         IReadOnlyCollection<string> executableMsBuildInputs,
+        IReadOnlyCollection<string> evaluatedImports,
         string? evaluatedPathMap,
         bool proveControlledGeneratedInputs,
         IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes,
+        IReadOnlyCollection<EvaluatedProjectReference> rootProjectReferences,
         IReadOnlyDictionary<string, string> evaluatedProperties,
         out EvaluatedPublishInput[] publishInputs,
         out string? failureReason)
@@ -42,10 +44,19 @@ public sealed partial class DotNetPublishPipelineRunner
                         request,
                         evaluatedProperties,
                         graphBuildNodes),
+                    BuildControlledPublishTargetGuardContexts(
+                        request,
+                        evaluatedProperties,
+                        evaluatedImports,
+                        graphBuildNodes),
                     out controlledGitRoot,
-                    out string? controlledProjectPath))
+                    out string? controlledProjectPath,
+                    out string? checkoutFailureReason))
             {
-                failureReason = "the controlled source checkout could not be created.";
+                failureReason = "the controlled source checkout could not be created" +
+                    (string.IsNullOrWhiteSpace(checkoutFailureReason)
+                        ? "."
+                        : ": " + checkoutFailureReason);
                 return false;
             }
             if (!TryCreateControlledBuildEnvironment(
@@ -59,12 +70,15 @@ public sealed partial class DotNetPublishPipelineRunner
                 failureReason = "the controlled build environment could not be created.";
                 return false;
             }
-            if (!TryCreateControlledPublishInputPlaceholders(
+            if (!TryCreateControlledPublishInputPlaceholdersForContexts(
                     controlledGitRoot!,
                     controlledSourceRoot,
                     controlledProjectPath!,
                     executableMsBuildInputs,
-                    request.GlobalProperties))
+                    request.ReadEffectiveGlobalProperties(),
+                    ReadControlledFrameworkMatrixProjects(graphBuildNodes).Count > 0,
+                    BuildControlledPublishTargetGuardContexts(
+                        request, evaluatedProperties, evaluatedImports, graphBuildNodes)))
             {
                 failureReason = "controlled publish-input placeholders could not be created.";
                 return false;
@@ -128,6 +142,26 @@ public sealed partial class DotNetPublishPipelineRunner
                 .Save(controlledNuGetConfig);
             string offlinePackageSourceList = string.Join(";", distinctOfflinePackageSources);
 
+            if (!TryCreateControlledRestoreContextProps(
+                    request,
+                    graphBuildNodes,
+                    rootProjectReferences,
+                    evaluatedProperties,
+                    controlledGitRoot!,
+                    controlledSourceRoot,
+                    controlledOutputRoot,
+                    controlledEnvironment,
+                    graphVerifiedPackages.Concat(verifiedPackages is null
+                        ? Array.Empty<VerifiedPackageInputCatalog>()
+                        : new[] { verifiedPackages }).Distinct().ToArray(),
+                    out string? restoreContextProps,
+                    out string? restoreContextFailureReason))
+            {
+                failureReason = "the controlled restore contexts could not be mapped: " +
+                    restoreContextFailureReason;
+                return false;
+            }
+
             if (!TryBuildControlledPublishProjectGraph(
                     graphBuildNodes,
                     controlledGitRoot!,
@@ -136,6 +170,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledNuGetConfig,
                     offlinePackageSourceList,
                     controlledOutputRoot,
+                    restoreContextProps,
                     out string? controlledGraphFailureReason))
             {
                 failureReason = "the controlled project-reference graph could not be built" +
@@ -152,7 +187,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     controlledEnvironment,
                     controlledNuGetConfig,
                     offlinePackageSourceList,
-                    controlledOutputRoot))
+                    controlledOutputRoot,
+                    restoreContextProps))
             {
                 failureReason = "the controlled root project could not be restored.";
                 return false;
@@ -186,6 +222,7 @@ public sealed partial class DotNetPublishPipelineRunner
             arguments.Add("-p:BuildProjectReferences=" +
                 rebuildProjectReferences.ToString().ToLowerInvariant());
             arguments.Add("-p:RestoreRecursive=false");
+            AppendControlledRestoreContextProps(arguments, restoreContextProps);
             if (!TryBuildControlledPathMap(
                     controlledSourceRoot,
                     controlledGitRoot!,
@@ -458,16 +495,18 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyDictionary<string, string?> controlledEnvironment,
         string controlledNuGetConfig,
         string offlinePackageSourceList,
-        string controlledOutputRoot)
+        string controlledOutputRoot,
+        string? restoreContextProps)
     {
         try
         {
             var arguments = new List<string>
             {
-                "restore",
+                "msbuild",
                 controlledProjectPath,
                 "-nologo",
                 "-verbosity:quiet",
+                "-target:Restore",
                 "-p:RestoreRecursive=false"
             };
             if (!TryAppendControlledProjectEvaluationProperties(
@@ -483,13 +522,14 @@ public sealed partial class DotNetPublishPipelineRunner
                 controlledNuGetConfig,
                 offlinePackageSourceList,
                 Path.Combine(controlledOutputRoot, "root-packages.lock.json"));
+            AppendControlledRestoreContextProps(arguments, restoreContextProps);
 
-            var process = RunBuildInputEvaluationProcess(
-                "dotnet",
+            var process = RunControlledMsBuildEvaluationProcess(
                 Path.GetDirectoryName(controlledProjectPath)!,
                 arguments,
                 controlledEnvironment,
-                TimeSpan.FromMinutes(5));
+                TimeSpan.FromMinutes(5),
+                controlledOutputRoot);
             return process.ExitCode == 0 && !process.TimedOut;
         }
         catch
@@ -531,6 +571,57 @@ public sealed partial class DotNetPublishPipelineRunner
                 FileSystemPathSafety.ExistingPathComparer);
     }
 
+    private static TargetGuardEvaluationContext[] BuildControlledPublishTargetGuardContexts(
+        ProjectEvaluationRequest rootRequest,
+        IReadOnlyDictionary<string, string> rootEvaluatedProperties,
+        IReadOnlyCollection<string> rootEvaluatedImports,
+        IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes)
+    {
+        HashSet<string> matrixProjects = ReadControlledFrameworkMatrixProjects(graphBuildNodes);
+        return graphBuildNodes
+            .Select(node => new TargetGuardEvaluationContext(
+                node.Request.ProjectPath,
+                node.Request.ReadEffectiveGlobalProperties(),
+                node.Request.BuildControlledEvaluationProperties(node.EvaluatedProperties),
+                node.EvaluatedImports,
+                ReadTargetGuardGeneratedImportRoots(node.Request.ProjectPath, node.EvaluatedProperties),
+                unstableGuardProperties: matrixProjects.Contains(Path.GetFullPath(node.Request.ProjectPath))
+                    ? new[] { "TargetFramework" }
+                    : Array.Empty<string>()))
+            .Append(new TargetGuardEvaluationContext(
+                rootRequest.ProjectPath,
+                rootRequest.ReadEffectiveGlobalProperties(),
+                rootRequest.BuildControlledEvaluationProperties(rootEvaluatedProperties),
+                rootEvaluatedImports,
+                ReadTargetGuardGeneratedImportRoots(rootRequest.ProjectPath, rootEvaluatedProperties),
+                unstableGuardProperties: matrixProjects.Contains(Path.GetFullPath(rootRequest.ProjectPath))
+                    ? new[] { "TargetFramework" }
+                    : Array.Empty<string>()))
+            .ToArray();
+    }
+
+    private static HashSet<string> ReadControlledFrameworkMatrixProjects(
+        IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes)
+    {
+        var matrixProjects = new HashSet<string>(FileSystemPathSafety.ExistingPathComparer);
+        foreach (IGrouping<string, ControlledPublishGraphNode> project in graphBuildNodes.GroupBy(
+                     node => Path.GetFullPath(node.Request.ProjectPath),
+                     FileSystemPathSafety.ExistingPathComparer))
+        {
+            if (project.GroupBy(BuildControlledRestoreContextKey, StringComparer.Ordinal)
+                .Any(context =>
+                {
+                    string?[] selectedFrameworks = context
+                        .Select(node => node.Request.TargetFramework).ToArray();
+                    return context.Any(node => SelectControlledMultiFrameworkRestoreFrameworks(
+                        node.EvaluatedProperties,
+                        selectedFrameworks).Length > 1);
+                }))
+                matrixProjects.Add(project.Key);
+        }
+        return matrixProjects;
+    }
+
     private static bool TryBuildControlledPublishProjectGraph(
         IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes,
         string originalGitRoot,
@@ -539,17 +630,31 @@ public sealed partial class DotNetPublishPipelineRunner
         string controlledNuGetConfig,
         string offlinePackageSourceList,
         string controlledOutputRoot,
+        string? restoreContextProps,
         out string? failureReason)
     {
         failureReason = null;
+        var projectContexts = graphBuildNodes
+            .GroupBy(node => Path.GetFullPath(node.Request.ProjectPath),
+                FileSystemPathSafety.ExistingPathComparer)
+            .ToDictionary(group => group.Key, group => (
+                Isolated: group.Select(BuildControlledRestoreContextKey)
+                    .Distinct(StringComparer.Ordinal).Skip(1).Any(),
+                CanonicalControlledProjectPath: Path.GetFullPath(Path.Combine(
+                    controlledSourceRoot,
+                    FrameworkCompatibility.GetRelativePath(originalGitRoot, group.Key)))),
+                FileSystemPathSafety.ExistingPathComparer);
         foreach (ControlledPublishGraphNode node in graphBuildNodes)
         {
             string projectPath = Path.GetFullPath(node.Request.ProjectPath);
+            var projectContext = projectContexts[projectPath];
+            string contextKey = BuildControlledRestoreContextKey(node);
             string?[] selectedFrameworks = graphBuildNodes
                 .Where(candidate =>
                     FileSystemPathSafety.ExistingPathComparer.Equals(
                         Path.GetFullPath(candidate.Request.ProjectPath),
-                        projectPath))
+                        projectPath) &&
+                    BuildControlledRestoreContextKey(candidate).Equals(contextKey, StringComparison.Ordinal))
                 .Select(candidate => candidate.Request.TargetFramework)
                 .ToArray();
             string[] frameworks = SelectControlledMultiFrameworkRestoreFrameworks(
@@ -567,6 +672,9 @@ public sealed partial class DotNetPublishPipelineRunner
                 return false;
             }
             bool restoreWithFrameworkMatrix = frameworks.Length > 1;
+            bool frameworkSpecificOutput = projectContext.Isolated &&
+                node.EvaluatedProperties.TryGetValue("AppendTargetFrameworkToOutputPath", out string? appendFramework) &&
+                !string.Equals(appendFramework?.Trim(), "true", StringComparison.OrdinalIgnoreCase);
             if (restoreWithFrameworkMatrix)
             {
                 // Restore immediately before this node so each effective property context owns the
@@ -585,6 +693,7 @@ public sealed partial class DotNetPublishPipelineRunner
                         controlledNuGetConfig,
                         offlinePackageSourceList,
                         controlledOutputRoot,
+                        restoreContextProps,
                         out failureReason))
                 {
                     return false;
@@ -593,12 +702,16 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!TryBuildControlledPublishGraphNode(
                     node,
                     restore: !restoreWithFrameworkMatrix,
+                    projectContext.Isolated,
+                    frameworkSpecificOutput,
+                    projectContext.CanonicalControlledProjectPath,
                     originalGitRoot,
                     controlledSourceRoot,
                     controlledEnvironment,
                     controlledNuGetConfig,
                     offlinePackageSourceList,
                     controlledOutputRoot,
+                    restoreContextProps,
                     out failureReason))
                 return false;
         }
@@ -745,7 +858,25 @@ public sealed partial class DotNetPublishPipelineRunner
         string controlledSourceRoot,
         string controlledProjectPath,
         IReadOnlyCollection<string> executableMsBuildInputs,
-        IReadOnlyDictionary<string, string> evaluatedGlobalProperties)
+        IReadOnlyDictionary<string, string> evaluatedGlobalProperties,
+        bool hasControlledFrameworkMatrix)
+        => TryCreateControlledPublishInputPlaceholdersForContexts(
+            gitRoot,
+            controlledSourceRoot,
+            controlledProjectPath,
+            executableMsBuildInputs,
+            evaluatedGlobalProperties,
+            hasControlledFrameworkMatrix,
+            targetGuardContexts: null);
+
+    internal static bool TryCreateControlledPublishInputPlaceholdersForContexts(
+        string gitRoot,
+        string controlledSourceRoot,
+        string controlledProjectPath,
+        IReadOnlyCollection<string> executableMsBuildInputs,
+        IReadOnlyDictionary<string, string> evaluatedGlobalProperties,
+        bool hasControlledFrameworkMatrix,
+        IReadOnlyCollection<TargetGuardEvaluationContext>? targetGuardContexts)
     {
         try
         {
@@ -765,55 +896,156 @@ public sealed partial class DotNetPublishPipelineRunner
                 documents.Add((XDocument.Load(controlledPath, LoadOptions.None), controlledPath));
             }
 
-            string controlledProjectDirectory = Path.GetDirectoryName(controlledProjectPath)!;
+            string sourceProjectPath = Path.GetFullPath(Path.Combine(
+                gitRoot,
+                FrameworkCompatibility.GetRelativePath(controlledSourceRoot, controlledProjectPath)));
+            var proofsByDocument = new Dictionary<string, List<TargetGuardDocumentProof>>(
+                FileSystemPathSafety.ExistingPathComparer);
+            foreach (TargetGuardEvaluationContext sourceContext in targetGuardContexts ??
+                     [new TargetGuardEvaluationContext(
+                         sourceProjectPath,
+                         evaluatedGlobalProperties,
+                         evaluatedGlobalProperties,
+                         executableMsBuildInputs)])
+            {
+                if (!IsSameOrBelowBuildInputPath(sourceContext.ProjectPath, gitRoot))
+                    return false;
+                string contextProjectPath = Path.GetFullPath(Path.Combine(
+                    controlledSourceRoot,
+                    FrameworkCompatibility.GetRelativePath(gitRoot, sourceContext.ProjectPath)));
+                var stableGuardGlobals = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (KeyValuePair<string, string> property in sourceContext.GlobalProperties)
+                {
+                    if (!TryRemapControlledBuildValue(
+                            property.Value,
+                            gitRoot,
+                            controlledSourceRoot,
+                            Path.GetDirectoryName(sourceContext.ProjectPath)!,
+                            out string controlledValue))
+                    {
+                        return false;
+                    }
+                    if (string.Equals(controlledValue, property.Value, StringComparison.Ordinal))
+                        stableGuardGlobals[property.Key] = property.Value;
+                }
+                Dictionary<string, string> immutableProperties = ReadImmutableTargetGuardProperties(
+                    stableGuardGlobals,
+                    executableMsBuildInputs.Concat(documents.Select(source => source.DeclaringPath)),
+                    sourceContext.UnstableGuardProperties.Concat(
+                        hasControlledFrameworkMatrix ? new[] { "TargetFramework" } : Array.Empty<string>()));
+                var controlledContext = new TargetGuardEvaluationContext(
+                    contextProjectPath,
+                    stableGuardGlobals,
+                    stableGuardGlobals,
+                    sourceContext.EvaluatedImports.Select(import =>
+                        IsSameOrBelowBuildInputPath(import, controlledSourceRoot) ||
+                        !IsSameOrBelowBuildInputPath(import, gitRoot)
+                            ? Path.GetFullPath(import)
+                            : Path.GetFullPath(Path.Combine(
+                                controlledSourceRoot,
+                                FrameworkCompatibility.GetRelativePath(gitRoot, import))))
+                        .ToArray());
+                var proof = new TargetGuardDocumentProof(controlledContext, immutableProperties);
+                foreach (string sourcePath in sourceContext.EvaluatedImports.Append(sourceContext.ProjectPath))
+                {
+                    if (!IsSameOrBelowBuildInputPath(sourcePath, gitRoot))
+                        continue;
+                    string controlledPath = Path.GetFullPath(Path.Combine(
+                        controlledSourceRoot,
+                        FrameworkCompatibility.GetRelativePath(gitRoot, sourcePath)));
+                    if (!proofsByDocument.TryGetValue(controlledPath, out List<TargetGuardDocumentProof>? proofs))
+                    {
+                        proofs = new List<TargetGuardDocumentProof>();
+                        proofsByDocument[controlledPath] = proofs;
+                    }
+                    proofs.Add(proof);
+                }
+            }
             foreach ((XDocument document, string declaringPath) in documents)
             {
+                if (!proofsByDocument.TryGetValue(declaringPath, out List<TargetGuardDocumentProof>? proofs))
+                {
+                    // A candidate import without an authoritative loading instance cannot
+                    // borrow the root project's global properties or path resolution.
+                    proofs = [new TargetGuardDocumentProof(
+                        new TargetGuardEvaluationContext(
+                            declaringPath,
+                            EmptyTargetGuardProperties,
+                            EmptyTargetGuardProperties,
+                            [declaringPath]),
+                        EmptyTargetGuardProperties)];
+                }
                 foreach (XElement item in document.Descendants().Where(IsTargetTimePublishFileItem))
                 {
+                    if (proofs.All(proof => IsDefinitelyInactiveControlledBuildOperation(
+                            item,
+                            proof.EvaluatedProperties,
+                            declaringPath,
+                            immutableGlobalProperties: proof.ImmutableProperties)))
+                    {
+                        continue;
+                    }
                     foreach (XAttribute include in item.Attributes().Where(attribute =>
                                  attribute.Name.LocalName.Equals("Include", StringComparison.OrdinalIgnoreCase)))
                     {
-                        if (!TryExpandControlledTaskInputValues(
-                                include.Value,
-                                declaringPath,
-                                controlledProjectDirectory,
-                                documents,
-                                evaluatedGlobalProperties,
-                                out string[] expandedValues,
-                                consumingElement: item))
+                        foreach (TargetGuardDocumentProof proof in proofs)
                         {
-                            return false;
-                        }
-                        foreach (string value in expandedValues.SelectMany(expanded =>
-                                     DecodeMsBuildEscapes(expanded).Split(';')))
-                        {
-                            string candidate = value.Trim().Trim('\'', '"');
-                            if (candidate.Length == 0)
-                                continue;
-                            if (!TryResolveControlledTaskInputPath(
-                                    candidate,
+                            if (IsDefinitelyInactiveControlledBuildOperation(
+                                    item,
+                                    proof.EvaluatedProperties,
                                     declaringPath,
-                                    controlledProjectDirectory,
-                                    controlledSourceRoot,
-                                    controlledSourceRoot,
-                                    out string inputPath))
-                            {
-                                return false;
-                            }
-                            if (File.Exists(inputPath))
-                            {
-                                if (HasReparsePointBelowRoot(inputPath, controlledSourceRoot))
-                                    return false;
+                                    immutableGlobalProperties: proof.ImmutableProperties))
                                 continue;
-                            }
-                            if (Directory.Exists(inputPath))
+                            string contextProjectDirectory = Path.GetDirectoryName(proof.Context.ProjectPath)!;
+                            var contextDocumentPaths = new HashSet<string>(
+                                proof.Context.EvaluatedImports.Append(proof.Context.ProjectPath),
+                                FileSystemPathSafety.ExistingPathComparer);
+                            (XDocument Document, string DeclaringPath)[] contextDocuments = documents
+                                .Where(source => contextDocumentPaths.Contains(source.DeclaringPath))
+                                .ToArray();
+                            if (contextDocuments.Length == 0)
                                 return false;
-                            string parentDirectory = Directory.CreateDirectory(
-                                Path.GetDirectoryName(inputPath)!).FullName;
-                            if (HasReparsePointBelowRoot(parentDirectory, controlledSourceRoot))
+                            if (!TryExpandControlledTaskInputValues(
+                                    include.Value,
+                                    declaringPath,
+                                    contextProjectDirectory,
+                                    contextDocuments,
+                                    proof.EvaluatedProperties,
+                                    out string[] expandedValues,
+                                    consumingElement: item,
+                                    immutableGlobalProperties: proof.ImmutableProperties))
                                 return false;
-                            using (File.Create(inputPath))
+                            foreach (string value in expandedValues.SelectMany(expanded =>
+                                     DecodeMsBuildEscapes(expanded).Split(';')))
                             {
+                                string candidate = value.Trim().Trim('\'', '"');
+                                if (candidate.Length == 0)
+                                    continue;
+                                if (!TryResolveControlledTaskInputPath(
+                                        candidate,
+                                        declaringPath,
+                                        contextProjectDirectory,
+                                        controlledSourceRoot,
+                                        controlledSourceRoot,
+                                        out string inputPath))
+                                {
+                                    return false;
+                                }
+                                if (File.Exists(inputPath))
+                                {
+                                    if (HasReparsePointBelowRoot(inputPath, controlledSourceRoot))
+                                        return false;
+                                    continue;
+                                }
+                                if (Directory.Exists(inputPath))
+                                    return false;
+                                string parentDirectory = Directory.CreateDirectory(
+                                    Path.GetDirectoryName(inputPath)!).FullName;
+                                if (HasReparsePointBelowRoot(parentDirectory, controlledSourceRoot))
+                                    return false;
+                                using (File.Create(inputPath))
+                                {
+                                }
                             }
                         }
                     }

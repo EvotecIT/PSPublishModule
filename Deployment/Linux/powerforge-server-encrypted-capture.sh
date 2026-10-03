@@ -22,6 +22,7 @@ fi
 shift
 (( $# > 0 )) || die 'at least one capture path is required'
 [[ "$recipient" =~ ^age1[0-9a-z]+$ ]] || die 'recipient must be an age public recipient'
+printf '' | /usr/bin/age -r "$recipient" -o /dev/null 2>/dev/null || die 'recipient must be a valid checksummed age public recipient'
 
 required_paths=()
 optional_paths=()
@@ -36,7 +37,7 @@ while (($# > 0)); do
     continue
   fi
   path="$1"
-  [[ "$path" =~ ^/[A-Za-z0-9._/-]+$ ]] || die "unsafe capture path: $path"
+  [[ "$path" =~ ^/[A-Za-z0-9._@/-]+$ ]] || die "unsafe capture path: $path"
   [[ "$path" != *'//'* ]] || die "capture path contains an empty segment: $path"
   [[ ! "$path" =~ (^|/)\.{1,2}(/|$) ]] || die "capture path contains a traversal segment: $path"
   if (( optional_mode == 1 )); then

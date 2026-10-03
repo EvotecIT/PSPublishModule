@@ -67,6 +67,7 @@ public sealed partial class DotNetPublishPipelineRunner
             Directory.CreateDirectory(controlDirectory);
             Directory.CreateDirectory(commandDirectory);
             DirectoryCopy(sourceRoot, packageRoot, stagingRoot);
+            RemoveCopiedPortableEvidence(plan, source, packageRoot);
 
             string executablePath = Path.GetFullPath(Path.Combine(packageRoot, debian.Executable.Replace('/', Path.DirectorySeparatorChar)));
             EnsurePathWithinRoot(packageRoot, executablePath, $"Debian installer '{installerId}' executable");

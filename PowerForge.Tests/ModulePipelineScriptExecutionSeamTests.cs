@@ -656,6 +656,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         public ModuleSigningResult NextSigningResult { get; set; } = new();
         public Queue<ModuleSigningResult> SigningResults { get; } = new();
         public bool AutoSuccessfulSigningResult { get; set; }
+        public bool RejectIncompleteBinaryPayload { get; set; }
         public bool AutoSuccessfulPublishResult { get; set; }
         public Action<int>? SigningCallStarted { get; set; }
         public Action<int, string[]>? SigningFilesCompleted { get; set; }
@@ -734,7 +735,17 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         }
 
         public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget)
-            => throw new InvalidOperationException("Not used in this test.");
+        {
+            if (!RejectIncompleteBinaryPayload)
+                throw new InvalidOperationException("Not used in this test.");
+
+            string corePath = Path.Combine(moduleRoot, "Lib", "Core");
+            if (File.Exists(Path.Combine(corePath, "Consumer.dll")) &&
+                !File.Exists(Path.Combine(corePath, "Dependency.dll")))
+            {
+                throw new InvalidOperationException("Delivered binary dependency is missing: Dependency.dll");
+            }
+        }
 
         public ModuleTestSuiteResult RunModuleTestSuite(ModuleTestSuiteSpec spec)
             => throw new InvalidOperationException("Not used in this test.");

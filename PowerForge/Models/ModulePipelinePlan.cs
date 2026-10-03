@@ -208,6 +208,12 @@ public sealed class ModulePipelinePlan
     /// </summary>
     public string[] ApprovedModules { get; }
 
+    /// <summary>Concrete source policies used internally to resolve approved module donors.</summary>
+    internal ApprovedModuleResolution[] ApprovedModuleResolutions { get; set; } = Array.Empty<ApprovedModuleResolution>();
+
+    /// <summary>Internal source policies for declared required and embedded module dependencies.</summary>
+    internal ModuleDependencySourceResolution[] DependencySourceResolutions { get; set; } = Array.Empty<ModuleDependencySourceResolution>();
+
     /// <summary>
     /// Optional ModuleSkip configuration (ignored modules/functions when validating merge dependencies).
     /// </summary>

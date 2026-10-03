@@ -43,6 +43,12 @@ public sealed class PowerShellBenchmarkTemporaryUserRequest
     /// <summary>Outlier mode after caller-side overrides.</summary>
     public PowerShellBenchmarkOutlierMode OutlierMode { get; set; } = PowerShellBenchmarkOutlierMode.None;
 
+    /// <summary>Optional Windows processor mask, restricted to the process's current mask and one processor group.</summary>
+    public ulong? ProcessorAffinityMask { get; set; }
+
+    /// <summary>Optional Windows process priority, restored after execution.</summary>
+    public System.Diagnostics.ProcessPriorityClass? ProcessPriority { get; set; }
+
     /// <summary>Suite name after caller-side overrides.</summary>
     public string SuiteName { get; set; } = string.Empty;
 
@@ -144,6 +150,8 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
                 MemoryCleanup = request.MemoryCleanup.ToString(),
                 CooldownMilliseconds = request.CooldownMilliseconds,
                 OutlierMode = request.OutlierMode.ToString(),
+                ProcessorAffinityMask = request.ProcessorAffinityMask?.ToString("X", System.Globalization.CultureInfo.InvariantCulture),
+                ProcessPriority = request.ProcessPriority?.ToString(),
                 SuiteName = request.SuiteName ?? string.Empty,
                 PlanningProfile = PowerShellBenchmarkProfileKind.TemporaryLocalUser.ToString(),
                 BenchmarkVariables = request.BenchmarkVariables,
@@ -270,9 +278,11 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
     {
         try
         {
-            using var powerShell = PowerShell.Create();
-            if (Runspace.DefaultRunspace is not null)
-                powerShell.Runspace = Runspace.DefaultRunspace;
+            // The caller's pipeline is already running while Invoke-BenchmarkSuite
+            // discovers its modules. A nested pipeline can inspect that runspace;
+            // an ordinary pipeline bound to it fails and loses the module imports.
+            using var powerShell = Runspace.DefaultRunspace is not null
+                ? PowerShell.Create(RunspaceMode.CurrentRunspace) : PowerShell.Create();
             powerShell.AddCommand("Get-Module");
             return powerShell.Invoke<PSModuleInfo>()
                 .Select(module => module.Path)

@@ -51,6 +51,37 @@ public sealed class ServerRecoveryDurableBackupTests
     }
 
     [Fact]
+    public void Validation_ShouldAcceptScopedSqliteBackupAndRejectUnsafeSources()
+    {
+        var manifest = CreateManifest();
+        manifest.DurableBackup!.Databases =
+        [
+            new PowerForgeServerDurableBackupDatabase
+            {
+                Id = "public-history",
+                Provider = "sqlite",
+                Database = "/var/lib/changeintel/public.db",
+                RunAs = "changeintel",
+                Required = true
+            }
+        ];
+
+        Assert.Empty(WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest));
+
+        manifest.DurableBackup.Databases[0].RunAs = "root";
+        manifest.DurableBackup.Databases[0].Database = "/var/lib/powerforge-backup-export/public.db";
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+        Assert.Contains(errors, error => error.Contains("non-root runAs", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("must not overlap durableBackup.exportRoot", StringComparison.Ordinal));
+
+        manifest.DurableBackup.Databases[0].RunAs = "changeintel";
+        manifest.DurableBackup.Databases[0].Database = "/var/lib/changeintel/public.db";
+        manifest.DurableBackup.EncryptedFiles![0].Target = "/var/lib/changeintel/public.db-wal";
+        Assert.Contains(WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest),
+            error => error.Contains("must not overlap durableBackup.encryptedFiles", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Schema_ShouldAcceptTheTypedContractAndRejectUnknownFields()
     {
         var schema = JsonSchema.FromText(File.ReadAllText(GetRepoPath("Schemas", "powerforge.web.serverrecovery.schema.json")));
@@ -62,7 +93,7 @@ public sealed class ServerRecoveryDurableBackupTests
               "durableBackup": {
                 "exportRoot": "/var/lib/powerforge-backup-export",
                 "exportGroup": "powerforge-export",
-                "recipient": "age1example",
+                "recipient": "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd",
                 "stagingRetentionHours": 48,
                 "databases": [
                   { "id": "control", "provider": "postgresql", "database": "control", "required": true }
@@ -78,6 +109,13 @@ public sealed class ServerRecoveryDurableBackupTests
             """)!;
 
         Assert.True(schema.Evaluate(valid, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
+        var sqlite = valid.DeepClone();
+        sqlite["durableBackup"]!["databases"]![0]!["provider"] = "sqlite";
+        sqlite["durableBackup"]!["databases"]![0]!["database"] = "/var/lib/changeintel/public.db";
+        sqlite["durableBackup"]!["databases"]![0]!["runAs"] = "changeintel";
+        Assert.True(schema.Evaluate(sqlite, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
+        sqlite["durableBackup"]!["databases"]![0]!.AsObject().Remove("runAs");
+        Assert.False(schema.Evaluate(sqlite, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
         var missingRecipient = valid.DeepClone();
         missingRecipient["durableBackup"]!.AsObject().Remove("recipient");
         Assert.False(schema.Evaluate(missingRecipient, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
@@ -143,7 +181,7 @@ public sealed class ServerRecoveryDurableBackupTests
             {
                 ExportRoot = "/var/lib/powerforge-backup-export",
                 ExportGroup = "powerforge-export",
-                Recipient = "age1example",
+                Recipient = "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd",
                 StagingRetentionHours = 48,
                 Databases =
                 [

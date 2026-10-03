@@ -101,7 +101,7 @@ public static class PowerShellCompilationSemanticOracleCatalog
             "invariant-per-case",
             new[] { "CoreEdition", "CrossPlatform", "CimCmdlets" },
             "https://github.com/PowerShell/PowerShell",
-            "7acb29279dd64e646d821f75d1cc8ad59455a9a6",
+            "f260eb9c31ec72c5282f98e5ea24d9be4f8d7536",
             "https://learn.microsoft.com/powershell/scripting/whats-new/what-s-new-in-powershell-76");
     }
 

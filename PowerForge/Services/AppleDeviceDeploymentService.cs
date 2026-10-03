@@ -7,8 +7,9 @@ namespace PowerForge;
 /// </summary>
 public sealed partial class AppleDeviceDeploymentService
 {
+    // Xcode 27 allows an empty hostname, annotates identifiers, and adds Reality.
     private static readonly Regex DeviceLineRegex = new(
-        @"^(?<name>.+?)\s{2,}(?<hostname>\S+)\s{2,}(?<identifier>[0-9A-Fa-f-]{36})\s{2,}(?<state>.+?)\s{2,}(?<model>.+)$",
+        @"^(?<name>.+?)\s{2,}(?:(?<hostname>\S+)\s{2,})?(?<identifier>[0-9A-Fa-f-]+)(?: \((?:UDID|ECID|CoreDevice ID)\))?\s{2,}(?<state>.+?)\s{2,}(?<model>.+?)(?:\s{2,}(?:physical|simulated))?$",
         RegexOptions.Compiled);
 
     private static readonly Regex BundleIdRegex = new(
@@ -119,6 +120,10 @@ public sealed partial class AppleDeviceDeploymentService
             cancellationToken).ConfigureAwait(false);
 
         var destination = ResolveDestination(request.Destination, deviceIdentifier, request.Platform, request.ArchiveVariant);
+        if (bindProductForDeployment && deviceIdentifier is not null &&
+            TryParseDestinationDeviceIdentifier(destination) is { } destinationIdentifier &&
+            !destinationIdentifier.Equals(deviceIdentifier, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Destination and the resolved device selector select different devices.", nameof(request));
         var derivedDataPath = ResolveDerivedDataPath(request);
         var resultDerivedDataPath = derivedDataPath;
         var deploymentProductRoot = bindProductForDeployment
@@ -401,6 +406,9 @@ public sealed partial class AppleDeviceDeploymentService
                 "CONFIGURATION_BUILD_DIR=$(SYMROOT)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)");
         }
 
+        if (request.OptimizeSwift)
+            args.Add("SWIFT_OPTIMIZATION_LEVEL=-O");
+
         args.Add("build");
         args.AddRange(AppleBuildProvenance.AppendXcodeBuildSetting(
             request.AdditionalArguments,
@@ -569,76 +577,6 @@ public sealed partial class AppleDeviceDeploymentService
             request,
             requireTrustedSystemTool: false,
             cancellationToken).ConfigureAwait(false);
-
-    /// <summary>
-    /// Builds, installs, and optionally launches an Apple app on a physical device.
-    /// </summary>
-    /// <param name="request">Deployment request.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Deployment result.</returns>
-    public async Task<AppleAppDeviceDeploymentResult> DeployAsync(
-        AppleAppDeviceDeploymentRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        if (request is null)
-            throw new ArgumentNullException(nameof(request));
-        _ = AppleTrustedExecutionEnvironment.ResolveSystemTool(
-            request.XcrunExecutable,
-            "xcrun",
-            "/usr/bin/xcrun",
-            "Exact-source Apple device deployment");
-
-        using var buildOperation = await BuildForDeploymentAsync(
-            request,
-            cancellationToken).ConfigureAwait(false);
-        var build = buildOperation.Result;
-        var deployment = new AppleAppDeviceDeploymentResult
-        {
-            Build = build,
-            LaunchRequested = request.Launch
-        };
-
-        if (!build.Succeeded)
-            return deployment;
-
-        var retainedAppPath = buildOperation.PreserveResultProduct();
-
-        var deployDeviceIdentifier = request.DeviceIdentifier ?? TryParseDestinationDeviceIdentifier(request.Destination);
-        var install = await InstallCoreAsync(new AppleAppInstallRequest
-        {
-            DeviceIdentifier = deployDeviceIdentifier,
-            Device = request.Device,
-            AppPath = buildOperation.ProductSnapshot?.AppPath ?? build.AppPath,
-            XcrunExecutable = request.XcrunExecutable,
-            Timeout = request.Timeout
-        }, requireTrustedSystemTool: true, cancellationToken).ConfigureAwait(false);
-        buildOperation.ProductSnapshot?.ValidateUnchanged();
-        install.AppPath = retainedAppPath;
-        deployment.Install = install;
-
-        if (!install.Succeeded || !request.Launch)
-            return deployment;
-
-        var bundleIdentifier = string.IsNullOrWhiteSpace(request.BundleIdentifier)
-            ? install.BundleIdentifier
-            : request.BundleIdentifier!.Trim();
-        if (string.IsNullOrWhiteSpace(bundleIdentifier))
-            throw new InvalidOperationException("BundleIdentifier is required to launch and could not be parsed from the install output.");
-
-        deployment.Launch = await LaunchCoreAsync(new AppleAppLaunchRequest
-        {
-            DeviceIdentifier = deployDeviceIdentifier,
-            Device = request.Device,
-            BundleIdentifier = bundleIdentifier!,
-            XcrunExecutable = request.XcrunExecutable,
-            EnvironmentVariables = new Dictionary<string, string>(request.LaunchEnvironment, StringComparer.Ordinal),
-            Arguments = request.LaunchArguments,
-            TerminateExisting = request.TerminateExisting,
-            Timeout = request.Timeout
-        }, requireTrustedSystemTool: true, cancellationToken).ConfigureAwait(false);
-
-        return deployment;
-    }
 
     internal static IReadOnlyList<AppleDeviceInfo> ParseDevices(string output)
     {
@@ -815,7 +753,7 @@ public sealed partial class AppleDeviceDeploymentService
             " ",
             RegexOptions.CultureInvariant);
 
-    private static string? TryParseDestinationDeviceIdentifier(string? destination)
+    internal static string? TryParseDestinationDeviceIdentifier(string? destination)
     {
         if (string.IsNullOrWhiteSpace(destination))
             return null;

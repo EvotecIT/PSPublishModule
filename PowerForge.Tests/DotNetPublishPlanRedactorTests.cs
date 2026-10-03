@@ -7,6 +7,7 @@ public sealed class DotNetPublishPlanRedactorTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             EnvironmentVariables = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
             {
                 ["LICENSING_PACKAGES_TOKEN"] = "token-value",
@@ -28,6 +29,7 @@ public sealed class DotNetPublishPlanRedactorTests
     {
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Steps = new[]
             {
                 new DotNetPublishStep

@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="10.0.1" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0" />
   </ItemGroup>
@@ -33,6 +33,7 @@
     <ProjectReference Include="Fixtures\PowerShellCompilationExternalBinaryModuleFixture\PowerShellCompilationExternalBinaryModuleFixture.csproj" />
     <ProjectReference Include="Fixtures\PowerShellCompilationForgedCancellationProviderFixture\PowerShellCompilationForgedCancellationProviderFixture.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="Fixtures\PowerShellCompilationForgedCancellationReferenceProviderFixture\PowerShellCompilationForgedCancellationReferenceProviderFixture.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="Fixtures\ProcessOutputPressureFixture\ProcessOutputPressureFixture.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>
@@ -52,4 +53,10 @@
     <None Update="Fixtures\PowerShellCompilationReservationWorkflow\*.psm1" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <Target Name="CopyProcessOutputPressureFixture" AfterTargets="Build">
+    <ItemGroup>
+      <ProcessOutputFixture Include="$(MSBuildProjectDirectory)/Fixtures/ProcessOutputPressureFixture/bin/$(Configuration)/net10.0/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ProcessOutputFixture)" DestinationFiles="@(ProcessOutputFixture->'$(TargetDir)ProcessOutputPressureFixture/%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
 </Project>

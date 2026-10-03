@@ -85,6 +85,14 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
     [Parameter]
     public PowerShellBenchmarkOutlierMode? OutlierMode { get; set; }
 
+    /// <summary>Optional Windows processor mask, restricted to the process's current mask and one processor group.</summary>
+    [Parameter]
+    public ulong? ProcessorAffinityMask { get; set; }
+
+    /// <summary>Optional Windows process priority, restored after execution.</summary>
+    [Parameter]
+    public System.Diagnostics.ProcessPriorityClass? ProcessPriority { get; set; }
+
     /// <summary>
     /// Optional suite name override.
     /// </summary>
@@ -213,6 +221,8 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
                     MemoryCleanup = suite.MemoryCleanup,
                     CooldownMilliseconds = suite.CooldownMilliseconds,
                     OutlierMode = suite.OutlierMode,
+                    ProcessorAffinityMask = suite.ProcessorAffinityMask,
+                    ProcessPriority = suite.ProcessPriority,
                     SuiteName = suite.Name,
                     BenchmarkVariables = benchmarkVariables,
                     Selection = GetSelection(),
@@ -243,6 +253,8 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
                     MemoryCleanup = suite.MemoryCleanup,
                     CooldownMilliseconds = suite.CooldownMilliseconds,
                     OutlierMode = suite.OutlierMode,
+                    ProcessorAffinityMask = suite.ProcessorAffinityMask,
+                    ProcessPriority = suite.ProcessPriority,
                     SuiteName = suite.Name,
                     Cleanup = suite.Cleanup,
                     BenchmarkVariables = benchmarkVariables,
@@ -269,6 +281,8 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
         if (MemoryCleanup.HasValue) suite.MemoryCleanup = MemoryCleanup.Value;
         if (CooldownMilliseconds.HasValue) suite.CooldownMilliseconds = Math.Max(0, CooldownMilliseconds.Value);
         if (OutlierMode.HasValue) suite.OutlierMode = OutlierMode.Value;
+        if (ProcessorAffinityMask.HasValue) suite.ProcessorAffinityMask = ProcessorAffinityMask.Value;
+        if (ProcessPriority.HasValue) suite.ProcessPriority = ProcessPriority.Value;
         if (!string.IsNullOrWhiteSpace(Suite)) suite.Name = Suite!;
         if (Profile.HasValue) suite.Profile = Profile.Value;
         if (Cleanup.HasValue) suite.Cleanup = Cleanup.Value;

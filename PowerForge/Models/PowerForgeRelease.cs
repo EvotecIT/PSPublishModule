@@ -163,6 +163,9 @@ internal sealed class PowerForgeReleaseRequest
 
     public bool SkipBuild { get; set; }
 
+    /// <summary>Project DSL explicitly requested a separate build before no-build publish.</summary>
+    internal bool SeparateBuildRequested { get; set; }
+
     public bool SkipWorkspaceValidation { get; set; }
 
     public string? WorkspaceConfigPath { get; set; }
@@ -337,6 +340,9 @@ internal sealed class PowerForgeReleaseResult
     public DotNetPublishPlan? DotNetToolPlan { get; set; }
 
     public DotNetPublishResult? DotNetTools { get; set; }
+
+    /// <summary>Exact source commit bound to the built DotNet release and retained across publish checkpoints.</summary>
+    public string? DotNetSourceCommitSha { get; set; }
 
     public PowerForgeAppleReleasePlan? AppleAppPlan { get; set; }
 
@@ -550,6 +556,8 @@ internal sealed class PowerForgeAppleLocalDeploymentOptions
 
     public string Configuration { get; set; } = "Debug";
 
+    public bool OptimizeSwift { get; set; }
+
     public string InstallRoot { get; set; } = "/Applications";
 
     public bool Launch { get; set; } = true;
@@ -717,6 +725,8 @@ internal sealed class PowerForgeAppleReleasePlan
 
 internal sealed class PowerForgeAppleAppReleaseTargetPlan
 {
+    public string? DotNetPublishInstallerId { get; set; }
+
     public string Name { get; set; } = string.Empty;
 
     public string? BundleId { get; set; }
@@ -853,10 +863,13 @@ internal sealed class PowerForgeReleaseGitHubOptions
 
     public string? TokenEnvName { get; set; }
 
-    /// <summary>Optional exact commit used to create and verify the unified release tag.</summary>
+    /// <summary>Optional exact commit, or HEAD resolved and verified from the clean DotNet publish checkout, used for the unified release tag.</summary>
     public string? Commitish { get; set; }
 
     public bool GenerateReleaseNotes { get; set; } = true;
+
+    /// <summary>Create the unified GitHub release as a draft so its exact assets can be qualified before promotion.</summary>
+    public bool IsDraft { get; set; }
 
     public bool IsPreRelease { get; set; }
 
@@ -963,6 +976,8 @@ internal sealed class PowerForgeWingetManifestArtifact
     public string PackageVersion { get; set; } = string.Empty;
 
     public string ManifestPath { get; set; } = string.Empty;
+
+    public string? ManifestDirectory { get; set; }
 
     public string[] InstallerUrls { get; set; } = Array.Empty<string>();
 }

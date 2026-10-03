@@ -165,7 +165,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         CopyBundleItems(plan, bundle, outputDir, tokens);
         CopyBundleModules(plan, bundle, outputDir, tokens);
-        GenerateBundleScripts(plan, bundle, outputDir, tokens);
+        GenerateBundleScripts(plan, bundle, outputDir, tokens, artefacts, bundleProvenanceSteps);
         RunBundleScripts(plan, bundle, tokens);
         if (bundle.PostProcess is not null)
         {
@@ -185,7 +185,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 PostProcess = bundle.PostProcess
             });
 
-            SignBundlePostProcessFiles(plan, bundle, outputDir);
+            SignBundlePostProcessFiles(plan, bundle, outputDir, artefacts, bundleProvenanceSteps);
         }
 
         string[] signedFilePaths = Array.Empty<string>();
@@ -193,6 +193,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string? primaryExecutable = null;
         if (sign?.Enabled == true)
         {
+            ValidateBundleSourceBeforeSigning(plan, outputDir, artefacts, bundleProvenanceSteps);
             signedFilePaths = TrySignOutput(outputDir, sign);
             primaryExecutable = ResolvePrimaryExecutable(outputDir, runtime, sourceTargetPlan!.ExecutableIdentities, recursive: true)
                 ?? throw new InvalidOperationException(
@@ -219,11 +220,17 @@ public sealed partial class DotNetPublishPipelineRunner
                         EnumerateBundleGeneratedArtefactPaths(artefacts),
                         provenanceStep))
                     .ToArray());
+            if (bundle.Zip && string.IsNullOrWhiteSpace(step.BundleZipPath))
+                throw new InvalidOperationException($"Bundle '{bundle.Id}' ZIP path was not resolved.");
             (string inventoryPath, string signaturePath) = PowerForgePortablePayloadInventoryCms.ResolveEvidencePaths(
                 outputDir,
                 primaryExecutable,
-                bundle.Zip);
-            PowerForgePortablePayloadInventoryCms.EnsureEvidencePathsAvailable(inventoryPath, signaturePath);
+                bundle.Zip,
+                bundle.Zip ? step.BundleZipPath : null);
+            if (bundle.Zip)
+                Directory.CreateDirectory(Path.GetDirectoryName(inventoryPath)!);
+            else
+                PowerForgePortablePayloadInventoryCms.EnsureEvidencePathsAvailable(inventoryPath, signaturePath);
             PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
                     outputDir,
                     sourceTargetPlan.Name,
@@ -244,17 +251,16 @@ public sealed partial class DotNetPublishPipelineRunner
                     bundleId,
                     sourceDirty: provenance.Dirty is not false,
                     includeCompleteOutput: bundle.Zip);
+            inventory.BuildInputMode = DescribeBuildInputMode(plan);
             byte[] inventoryBytes = PowerForgePortablePayloadInventoryCms.Serialize(inventory);
             byte[] signatureBytes = _signPortableInventory(
                 inventoryBytes,
                 ResolvePortableInventorySigningOptions(signedFilePaths, sign));
-            PowerForgePortablePayloadInventoryCms.WriteEvidenceFiles(
-                inventoryPath,
-                inventoryBytes,
-                signaturePath,
-                signatureBytes);
-            if (!bundle.Zip)
-                evidencePaths = new[] { inventoryPath, signaturePath };
+            if (bundle.Zip)
+                PowerForgePortablePayloadInventoryCms.RewriteEvidenceFiles(inventoryPath, inventoryBytes, signaturePath, signatureBytes);
+            else
+                PowerForgePortablePayloadInventoryCms.WriteEvidenceFiles(inventoryPath, inventoryBytes, signaturePath, signatureBytes);
+            evidencePaths = new[] { inventoryPath, signaturePath };
         }
 
         string? zipPath = null;
@@ -313,30 +319,22 @@ public sealed partial class DotNetPublishPipelineRunner
         if (target?.Publish?.Sign?.Enabled != true)
             return;
 
-        string? executable = sourceArtefact.ExePath;
-        if (string.IsNullOrWhiteSpace(executable) || !File.Exists(executable))
-        {
-            executable = ResolvePrimaryExecutable(
-                sourceArtefact.OutputDir,
-                sourceArtefact.Runtime,
-                target.ExecutableIdentities);
-        }
-        if (string.IsNullOrWhiteSpace(executable))
+        string[] sourceEvidencePaths = sourceArtefact.EvidencePaths;
+        if (sourceEvidencePaths.Length != 2)
             throw new InvalidOperationException(
-                $"Signed bundle source '{sourceArtefact.Target}' does not identify its primary executable.");
-
-        (string inventoryPath, string signaturePath) = PowerForgePortablePayloadInventoryCms.ResolveEvidencePaths(
-            sourceArtefact.OutputDir,
-            executable!,
-            target.Publish.Zip);
+                $"Signed payload source '{sourceArtefact.Target}' is missing its publisher-owned release-inventory evidence.");
         string sourceRoot = Path.GetFullPath(sourceArtefact.OutputDir);
-        foreach (string sourceEvidencePath in new[] { inventoryPath, signaturePath })
+        foreach (string sourceEvidencePath in sourceEvidencePaths)
         {
             if (!File.Exists(sourceEvidencePath))
                 throw new InvalidOperationException(
                     $"Signed bundle source '{sourceArtefact.Target}' is missing release-inventory evidence '{sourceEvidencePath}'.");
 
             string relativePath = FrameworkCompatibility.GetRelativePath(sourceRoot, Path.GetFullPath(sourceEvidencePath));
+            // Detached ZIP evidence was never copied into the application payload.
+            if (relativePath == ".." || relativePath.StartsWith("../", StringComparison.Ordinal) ||
+                relativePath.StartsWith("..\\", StringComparison.Ordinal) || Path.IsPathRooted(relativePath))
+                continue;
             string copiedPath = Path.GetFullPath(Path.Combine(destinationRoot, relativePath));
             EnsurePathWithinRoot(destinationRoot, copiedPath, "Copied portable release-inventory evidence");
             if (!File.Exists(copiedPath) ||
@@ -361,9 +359,20 @@ public sealed partial class DotNetPublishPipelineRunner
                 artefact.PublishDir,
                 artefact.OutputDir,
                 artefact.ZipPath
-            })
+            }.Concat(artefact.EvidencePaths))
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(static path => path!);
+
+    internal static void ValidateBundleSourceBeforeSigning(
+        DotNetPublishPlan plan,
+        string outputDir,
+        IReadOnlyList<DotNetPublishArtefactResult> artefacts,
+        IReadOnlyList<DotNetPublishStep> provenanceSteps)
+    {
+        string[] generatedPaths = EnumerateBundleGeneratedArtefactPaths(artefacts).ToArray();
+        foreach (DotNetPublishStep provenanceStep in provenanceSteps)
+            _ = ReadPortableInventorySourceProvenance(plan, outputDir, generatedPaths, provenanceStep);
+    }
 
     internal static DotNetPublishStep[] ResolveBundleProvenanceSteps(
         DotNetPublishPlan plan,
@@ -557,7 +566,9 @@ public sealed partial class DotNetPublishPipelineRunner
         DotNetPublishPlan plan,
         DotNetPublishBundlePlan bundle,
         string outputDir,
-        IReadOnlyDictionary<string, string> tokens)
+        IReadOnlyDictionary<string, string> tokens,
+        IReadOnlyList<DotNetPublishArtefactResult> artefacts,
+        IReadOnlyList<DotNetPublishStep> provenanceSteps)
     {
         foreach (var script in bundle.GeneratedScripts ?? Array.Empty<DotNetPublishBundleGeneratedScriptPlan>())
         {
@@ -599,7 +610,10 @@ public sealed partial class DotNetPublishPipelineRunner
 
             _logger.Info($"Generated bundle script -> {FrameworkCompatibility.GetRelativePath(outputDir, outputPath)} ({bundle.Id})");
             if (script.Sign is not null && script.Sign.Enabled)
+            {
+                ValidateBundleSourceBeforeSigning(plan, outputDir, artefacts, provenanceSteps);
                 _ = TrySignFiles(new[] { outputPath }, outputDir, script.Sign, scope: $"bundle '{bundle.Id}' generated scripts");
+            }
         }
     }
 
@@ -736,7 +750,9 @@ public sealed partial class DotNetPublishPipelineRunner
     private void SignBundlePostProcessFiles(
         DotNetPublishPlan plan,
         DotNetPublishBundlePlan bundle,
-        string outputDir)
+        string outputDir,
+        IReadOnlyList<DotNetPublishArtefactResult> artefacts,
+        IReadOnlyList<DotNetPublishStep> provenanceSteps)
     {
         var sign = bundle.PostProcess?.Sign;
         if (sign is null || !sign.Enabled)
@@ -744,6 +760,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         var patterns = NormalizeBundleSignPatterns(bundle.PostProcess?.SignPatterns, sign);
         var targets = FindBundleSignTargets(outputDir, patterns);
+        ValidateBundleSourceBeforeSigning(plan, outputDir, artefacts, provenanceSteps);
         var signed = TrySignFiles(
             targets,
             outputDir,

@@ -53,14 +53,18 @@ public sealed partial class DotNetPublishPipelineRunner
     private static bool ContainsUncontrolledTaskInputPropertyFunction(
         XDocument document,
         IReadOnlyCollection<XDocument> relatedDocuments,
-        IReadOnlyDictionary<string, string> evaluatedProperties)
+        IReadOnlyDictionary<string, string> evaluatedProperties,
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties)
     {
         if (relatedDocuments
             .SelectMany(related => related.Descendants())
             .Where(element =>
                 element.Parent is not null &&
                 element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) &&
-                ControlledSdkEnvironmentProperties.Contains(element.Name.LocalName))
+                ControlledSdkEnvironmentProperties.Contains(element.Name.LocalName) &&
+                !IsDefinitelyInactiveControlledBuildOperation(
+                    element, evaluatedProperties, definingProjectPath: null,
+                    immutableGlobalProperties: immutableGlobalProperties))
             .Any(element => ContainsUncontrolledEnvironmentAssignments(element.Value)))
             return true;
 
@@ -71,7 +75,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     element,
                     evaluatedProperties,
                     definingProjectPath: null,
-                    relatedDocuments))
+                    relatedDocuments,
+                    immutableGlobalProperties))
             .SelectMany(element => element.Attributes())
             .Where(attribute =>
                 !attribute.Name.LocalName.Equals("ContinueOnError", StringComparison.OrdinalIgnoreCase))
@@ -83,7 +88,8 @@ public sealed partial class DotNetPublishPipelineRunner
                     element,
                     evaluatedProperties,
                     definingProjectPath: null,
-                    relatedDocuments))
+                    relatedDocuments,
+                    immutableGlobalProperties))
             .SelectMany(task => task.AncestorsAndSelf())
             .SelectMany(element => element.Attributes())
             .Where(attribute => attribute.Name.LocalName.Equals(
@@ -96,7 +102,10 @@ public sealed partial class DotNetPublishPipelineRunner
             .Where(element =>
                 element.Parent is not null &&
                 element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) &&
-                ControlledSdkTaskInputProperties.Contains(element.Name.LocalName))
+                ControlledSdkTaskInputProperties.Contains(element.Name.LocalName) &&
+                !IsDefinitelyInactiveControlledBuildOperation(
+                    element, evaluatedProperties, definingProjectPath: null,
+                    immutableGlobalProperties: immutableGlobalProperties))
             .Select(element => element.Value);
         var pending = new Queue<string>(taskInputs.Concat(sdkTaskInputs).Concat(conditions));
         var inspected = new HashSet<string>(StringComparer.Ordinal);
@@ -125,14 +134,18 @@ public sealed partial class DotNetPublishPipelineRunner
                         relatedDocuments,
                         "PropertyName",
                         propertyName,
-                        evaluatedProperties))
+                        evaluatedProperties,
+                        immutableGlobalProperties))
                     return true;
                 foreach (XElement property in relatedDocuments
                              .SelectMany(related => related.Descendants())
                              .Where(element =>
                                  element.Name.LocalName.Equals(propertyName, StringComparison.OrdinalIgnoreCase) &&
                                  element.Parent is not null &&
-                                 element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase)))
+                                 element.Parent.Name.LocalName.Equals("PropertyGroup", StringComparison.OrdinalIgnoreCase) &&
+                                 !IsDefinitelyInactiveControlledBuildOperation(
+                                     element, evaluatedProperties, definingProjectPath: null,
+                                     immutableGlobalProperties: immutableGlobalProperties)))
                 {
                     pending.Enqueue(property.Value);
                     foreach (XAttribute attribute in property.Attributes())
@@ -150,7 +163,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         relatedDocuments,
                         "ItemName",
                         itemName,
-                        evaluatedProperties))
+                        evaluatedProperties,
+                        immutableGlobalProperties))
                     return true;
                 foreach (XElement item in relatedDocuments
                              .SelectMany(related => related.Descendants())
@@ -158,7 +172,10 @@ public sealed partial class DotNetPublishPipelineRunner
                                  element.Name.LocalName.Equals(itemName, StringComparison.OrdinalIgnoreCase) &&
                                  element.Parent is not null &&
                                  (element.Parent.Name.LocalName.Equals("ItemGroup", StringComparison.OrdinalIgnoreCase) ||
-                                  element.Parent.Name.LocalName.Equals("ItemDefinitionGroup", StringComparison.OrdinalIgnoreCase))))
+                                  element.Parent.Name.LocalName.Equals("ItemDefinitionGroup", StringComparison.OrdinalIgnoreCase)) &&
+                                 !IsDefinitelyInactiveControlledBuildOperation(
+                                     element, evaluatedProperties, definingProjectPath: null,
+                                     immutableGlobalProperties: immutableGlobalProperties)))
                 {
                     pending.Enqueue(item.Value);
                     foreach (XAttribute attribute in item.DescendantsAndSelf().Attributes())
@@ -179,7 +196,10 @@ public sealed partial class DotNetPublishPipelineRunner
                                  element.Name.LocalName.Equals(metadataName, StringComparison.OrdinalIgnoreCase) &&
                                  (itemName.Length == 0 ||
                                   element.Ancestors().Any(ancestor =>
-                                      ancestor.Name.LocalName.Equals(itemName, StringComparison.OrdinalIgnoreCase)))))
+                                      ancestor.Name.LocalName.Equals(itemName, StringComparison.OrdinalIgnoreCase))) &&
+                                 !IsDefinitelyInactiveControlledBuildOperation(
+                                     element, evaluatedProperties, definingProjectPath: null,
+                                     immutableGlobalProperties: immutableGlobalProperties)))
                 {
                     pending.Enqueue(metadata.Value);
                     foreach (XAttribute attribute in metadata.Attributes())
@@ -195,7 +215,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyCollection<XDocument> relatedDocuments,
         string assignmentAttributeName,
         string referencedName,
-        IReadOnlyDictionary<string, string> evaluatedProperties)
+        IReadOnlyDictionary<string, string> evaluatedProperties,
+        IReadOnlyDictionary<string, string>? immutableGlobalProperties = null)
     {
         foreach (XElement output in relatedDocuments
                      .SelectMany(related => related.Descendants())
@@ -204,10 +225,11 @@ public sealed partial class DotNetPublishPipelineRunner
                          element.Parent is not null &&
                          IsControlledBuildTaskElement(element.Parent) &&
                          !IsDefinitelyInactiveControlledBuildOperation(
-                             element.Parent,
+                             element,
                              evaluatedProperties,
                              definingProjectPath: null,
-                             relatedDocuments) &&
+                             relatedDocuments,
+                             immutableGlobalProperties) &&
                          !element.Parent.Name.LocalName.Equals(
                              "ReadLinesFromFile",
                              StringComparison.OrdinalIgnoreCase)))

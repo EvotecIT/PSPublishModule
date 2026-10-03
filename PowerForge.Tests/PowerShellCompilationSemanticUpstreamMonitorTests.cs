@@ -35,8 +35,8 @@ public sealed class PowerShellCompilationSemanticUpstreamMonitorTests
         using var report = JsonDocument.Parse(File.ReadAllText(fixture.OutputPath));
         var review = Assert.Single(report.RootElement.GetProperty("ReviewRequests").EnumerateArray());
         Assert.Equal(PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, review.GetProperty("ProfileId").GetString());
-        Assert.Equal("v7.6.5", review.GetProperty("PinnedTag").GetString());
-        Assert.Equal("v7.6.6", review.GetProperty("ObservedTag").GetString());
+        Assert.Equal("v7.6.6", review.GetProperty("PinnedTag").GetString());
+        Assert.Equal("v7.6.7", review.GetProperty("ObservedTag").GetString());
         Assert.Equal(
             PowerShellCompilationSemanticOracleCaseCatalog.Cases.Count,
             review.GetProperty("AffectedCaseIds").GetArrayLength());
@@ -101,16 +101,16 @@ public sealed class PowerShellCompilationSemanticUpstreamMonitorTests
 
     private const string CurrentRefsJson = """
     [
-      { "tag": "v7.4.19", "commit": "b3d5b858eba508785484768b4b3e318742416b83" },
-      { "tag": "v7.6.5", "commit": "7acb29279dd64e646d821f75d1cc8ad59455a9a6" }
+      { "tag": "v7.4.20", "commit": "013edf910bbe781f503c27370941ce54d02d3f33" },
+      { "tag": "v7.6.6", "commit": "f260eb9c31ec72c5282f98e5ea24d9be4f8d7536" }
     ]
     """;
 
     private const string ChangedRefsJson = """
     [
-      { "tag": "v7.4.19", "commit": "b3d5b858eba508785484768b4b3e318742416b83" },
-      { "tag": "v7.6.5", "commit": "7acb29279dd64e646d821f75d1cc8ad59455a9a6" },
-      { "tag": "v7.6.6", "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }
+      { "tag": "v7.4.20", "commit": "013edf910bbe781f503c27370941ce54d02d3f33" },
+      { "tag": "v7.6.6", "commit": "f260eb9c31ec72c5282f98e5ea24d9be4f8d7536" },
+      { "tag": "v7.6.7", "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }
     ]
     """;
 

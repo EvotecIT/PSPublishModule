@@ -51,7 +51,7 @@ public sealed class GitHubArtifactCleanupService
         if (spec is null) throw new ArgumentNullException(nameof(spec));
 
         var normalized = NormalizeSpec(spec);
-        var allArtifacts = ListArtifacts(normalized.ApiBaseUri, normalized.Repository, normalized.Token, normalized.PageSize);
+        var allArtifacts = ListArtifacts(normalized.ApiBaseUri, normalized.Repository, normalized.Token, normalized.PageSize, normalized.ExactIncludeNames);
         var now = DateTimeOffset.UtcNow;
         var ageCutoff = normalized.MaxAgeDays is > 0
             ? now.AddDays(-normalized.MaxAgeDays.Value)
@@ -187,6 +187,7 @@ public sealed class GitHubArtifactCleanupService
         public string Repository { get; set; } = string.Empty;
         public string Token { get; set; } = string.Empty;
         public string[] IncludeNames { get; set; } = Array.Empty<string>();
+        public string[] ExactIncludeNames { get; set; } = Array.Empty<string>();
         public string[] ExcludeNames { get; set; } = Array.Empty<string>();
         public int KeepLatestPerName { get; set; }
         public int? MaxAgeDays { get; set; }
@@ -207,7 +208,12 @@ public sealed class GitHubArtifactCleanupService
             throw new InvalidOperationException("GitHub token is required.");
 
         var include = NormalizePatterns(spec.IncludeNames);
-        if (include.Length == 0)
+        var exactInclude = NormalizeExactNames(spec.ExactIncludeNames);
+        if (include.Length > 0 && exactInclude.Length > 0)
+            throw new InvalidOperationException("IncludeNames and ExactIncludeNames cannot be combined.");
+        if (exactInclude.Length > 0)
+            include = exactInclude;
+        else if (include.Length == 0)
             include = DefaultIncludePatterns.ToArray();
 
         var exclude = NormalizePatterns(spec.ExcludeNames);
@@ -218,6 +224,7 @@ public sealed class GitHubArtifactCleanupService
             Repository = repository,
             Token = token,
             IncludeNames = include,
+            ExactIncludeNames = exactInclude,
             ExcludeNames = exclude,
             KeepLatestPerName = Math.Max(0, spec.KeepLatestPerName),
             MaxAgeDays = spec.MaxAgeDays is < 1 ? null : spec.MaxAgeDays,
@@ -228,49 +235,68 @@ public sealed class GitHubArtifactCleanupService
         };
     }
 
-    private GitHubArtifactRecord[] ListArtifacts(Uri apiBaseUri, string repository, string token, int pageSize)
+    private GitHubArtifactRecord[] ListArtifacts(Uri apiBaseUri, string repository, string token, int pageSize, string[] exactIncludeNames)
     {
         var records = new List<GitHubArtifactRecord>();
-        var page = 1;
-        int? totalCount = null;
-
-        while (true)
+        var seenIds = new HashSet<long>();
+        var names = exactIncludeNames.Length == 0 ? new string?[] { null } : exactIncludeNames;
+        foreach (var name in names)
         {
-            var uri = BuildApiUri(apiBaseUri, repository, $"actions/artifacts?per_page={pageSize}&page={page}");
-            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-            using var response = _client.SendAsync(request).ConfigureAwait(false).GetAwaiter().GetResult();
-            var body = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-            if (!response.IsSuccessStatusCode)
-                throw BuildHttpFailure("listing artifacts", response, body);
-
-            using var doc = JsonDocument.Parse(body);
-            var root = doc.RootElement;
-
-            if (root.TryGetProperty("total_count", out var totalElement) && totalElement.ValueKind == JsonValueKind.Number)
-                totalCount = totalElement.GetInt32();
-
-            if (!root.TryGetProperty("artifacts", out var artifactsElement) || artifactsElement.ValueKind != JsonValueKind.Array)
-                break;
-
-            var pageCount = 0;
-            foreach (var item in artifactsElement.EnumerateArray())
+            var page = 1;
+            var listedForName = 0;
+            int? totalCount = null;
+            while (true)
             {
-                records.Add(ParseArtifact(item));
-                pageCount++;
+                var query = $"actions/artifacts?per_page={pageSize}&page={page}";
+                if (name is not null)
+                    query += $"&name={Uri.EscapeDataString(name)}";
+                var uri = BuildApiUri(apiBaseUri, repository, query);
+                using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+                using var response = _client.SendAsync(request).ConfigureAwait(false).GetAwaiter().GetResult();
+                var body = response.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+                if (!response.IsSuccessStatusCode)
+                    throw BuildHttpFailure("listing artifacts", response, body);
+
+                using var doc = JsonDocument.Parse(body);
+                var root = doc.RootElement;
+                if (!root.TryGetProperty("total_count", out var totalElement) ||
+                    totalElement.ValueKind != JsonValueKind.Number ||
+                    !totalElement.TryGetInt32(out var currentTotal) || currentTotal < 0)
+                    throw new InvalidOperationException("GitHub artifact listing did not contain a valid total_count.");
+                totalCount ??= currentTotal;
+                if (currentTotal != totalCount.Value)
+                    throw new InvalidOperationException("GitHub artifact total_count changed during listing; no deletions were attempted.");
+
+                if (!root.TryGetProperty("artifacts", out var artifactsElement) || artifactsElement.ValueKind != JsonValueKind.Array)
+                    throw new InvalidOperationException("GitHub artifact listing did not contain an artifacts array.");
+
+                var pageCount = 0;
+                foreach (var item in artifactsElement.EnumerateArray())
+                {
+                    var artifact = ParseArtifact(item);
+                    if (artifact.Id <= 0 || string.IsNullOrWhiteSpace(artifact.Name) ||
+                        artifact.CreatedAt is null || artifact.UpdatedAt is null ||
+                        artifact.UpdatedAt < artifact.CreatedAt)
+                        throw new InvalidOperationException("GitHub artifact listing contained an artifact without a valid ID, name, or timestamps; no deletions were attempted.");
+                    if (name is not null && !string.Equals(artifact.Name, name, StringComparison.Ordinal))
+                        throw new InvalidOperationException($"GitHub artifact name filter returned an unexpected name for '{name}'.");
+                    if (!seenIds.Add(artifact.Id))
+                        throw new InvalidOperationException($"GitHub artifact listing repeated artifact #{artifact.Id}; no deletions were attempted.");
+                    records.Add(artifact);
+                    pageCount++;
+                }
+
+                listedForName += pageCount;
+                if (listedForName > totalCount.Value)
+                    throw new InvalidOperationException("GitHub artifact listing exceeded total_count; no deletions were attempted.");
+                if (listedForName == totalCount.Value)
+                    break;
+                if (pageCount < pageSize)
+                    throw new InvalidOperationException("GitHub artifact listing ended before total_count was reached; no deletions were attempted.");
+                page++;
             }
-
-            if (pageCount == 0)
-                break;
-
-            if (totalCount is not null && records.Count >= totalCount.Value)
-                break;
-
-            if (pageCount < pageSize)
-                break;
-
-            page++;
         }
 
         return records.ToArray();
@@ -324,6 +350,21 @@ public sealed class GitHubArtifactCleanupService
             .Select(p => p.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static string[] NormalizeExactNames(string[]? names)
+    {
+        if (names?.Any(string.IsNullOrWhiteSpace) == true)
+            throw new InvalidOperationException("ExactIncludeNames cannot contain an empty name.");
+        var normalized = (names ?? Array.Empty<string>())
+            .Select(name => name.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (normalized.Any(name => name.Contains('*') || name.Contains('?') || name.StartsWith("re:", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("ExactIncludeNames accepts exact artifact names only; wildcards and regular expressions are not supported.");
+        if (normalized.Distinct(StringComparer.OrdinalIgnoreCase).Count() != normalized.Length)
+            throw new InvalidOperationException("ExactIncludeNames cannot contain names that differ only by case.");
+        return normalized;
     }
 
     private static bool MatchesAnyPattern(string value, string[] patterns, bool defaultWhenEmpty)

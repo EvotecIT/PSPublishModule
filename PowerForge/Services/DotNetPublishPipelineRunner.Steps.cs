@@ -284,21 +284,24 @@ public sealed partial class DotNetPublishPipelineRunner
     private void BuildGlobal(DotNetPublishPlan plan, string? runtime)
     {
         var workDir = plan.ProjectRoot;
-        var props = BuildMsBuildPropertyArgs(plan.MsBuildProperties);
         foreach (var path in GetGlobalBuildPaths(plan, runtime))
         {
             var label = string.IsNullOrWhiteSpace(runtime) ? string.Empty : $" ({runtime})";
             _logger.Info($"Build{label} -> {path}");
 
-            var args = new List<string> { "build", path, "-c", plan.Configuration, "--nologo", "--disable-build-servers" };
-            if (!string.IsNullOrWhiteSpace(runtime))
-            {
-                args.AddRange(new[] { "-r", runtime! });
-                if (plan.Restore) args.Add("--no-restore");
-            }
-            args.AddRange(props);
+            var args = BuildGlobalBuildArguments(plan, path, runtime);
             RunDotnet(workDir, args, plan.EnvironmentVariables);
         }
+    }
+
+    internal static List<string> BuildGlobalBuildArguments(DotNetPublishPlan plan, string path, string? runtime)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+        var args = new List<string> { "build", path, "-c", plan.Configuration, "--nologo", "--disable-build-servers" };
+        if (!string.IsNullOrWhiteSpace(runtime)) args.AddRange(new[] { "-r", runtime! });
+        if (plan.Restore || plan.SkipRestoreRequested) args.Add("--no-restore");
+        args.AddRange(BuildMsBuildPropertyArgs(plan.MsBuildProperties));
+        return args;
     }
 
     internal static string[] GetGlobalBuildPaths(DotNetPublishPlan plan, string? runtime)
@@ -337,7 +340,7 @@ public sealed partial class DotNetPublishPipelineRunner
         };
         if (!string.IsNullOrWhiteSpace(framework)) args.AddRange(new[] { "-f", framework });
         if (!string.IsNullOrWhiteSpace(runtime)) args.AddRange(new[] { "-r", runtime });
-        if (plan.Restore) args.Add("--no-restore");
+        if (plan.Restore || plan.SkipRestoreRequested) args.Add("--no-restore");
         AppendPublishStyleArgs(args, target.Publish, style);
         args.AddRange(BuildMsBuildPropertyArgs(BuildPublishMsBuildProperties(plan, target, framework, runtime, style)));
         return args;
@@ -460,6 +463,11 @@ public sealed partial class DotNetPublishPipelineRunner
         string[] signedFilePaths = Array.Empty<string>();
         if (target.Publish.Sign?.Enabled == true)
         {
+            // A normal publish may execute MSBuild targets. Recheck the Git source
+            // before invoking the signer, not only after signatures have been written.
+            if (!plan.UseControlledSourceProvenance)
+                signingProvenance = ReadPortableInventorySourceProvenance(
+                    plan, outputDir, plannedPublishGeneratedPaths, publishStep);
             signedFilePaths = TrySignOutput(outputDir, target.Publish.Sign);
             if (signedFilePaths.Length > 0)
             {
@@ -502,8 +510,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 (string inventoryPath, string signaturePath) = PowerForgePortablePayloadInventoryCms.ResolveEvidencePaths(
                     outputDir,
                     executable,
-                    target.Publish.Zip);
-                PowerForgePortablePayloadInventoryCms.EnsureEvidencePathsAvailable(inventoryPath, signaturePath);
+                    target.Publish.Zip,
+                    target.Publish.Zip ? ResolvePublishZipPath(outputDir, plan, target, tokens) : null);
+                if (target.Publish.Zip)
+                    Directory.CreateDirectory(Path.GetDirectoryName(inventoryPath)!);
+                else
+                    PowerForgePortablePayloadInventoryCms.EnsureEvidencePathsAvailable(inventoryPath, signaturePath);
                 PowerForgePortablePayloadInventory inventory = PowerForgePortablePayloadInventoryCms.Create(
                     outputDir,
                     target.Name,
@@ -523,17 +535,16 @@ public sealed partial class DotNetPublishPipelineRunner
                     signedFilePaths,
                     sourceDirty: provenance.Dirty is not false,
                     includeCompleteOutput: target.Publish.Zip);
+                inventory.BuildInputMode = DescribeBuildInputMode(plan);
                 byte[] inventoryBytes = PowerForgePortablePayloadInventoryCms.Serialize(inventory);
                 byte[] signatureBytes = _signPortableInventory(
                     inventoryBytes,
                     ResolvePortableInventorySigningOptions(signedFilePaths, target.Publish.Sign));
-                PowerForgePortablePayloadInventoryCms.WriteEvidenceFiles(
-                    inventoryPath,
-                    inventoryBytes,
-                    signaturePath,
-                    signatureBytes);
-                if (!target.Publish.Zip)
-                    evidencePaths = new[] { inventoryPath, signaturePath };
+                if (target.Publish.Zip)
+                    PowerForgePortablePayloadInventoryCms.RewriteEvidenceFiles(inventoryPath, inventoryBytes, signaturePath, signatureBytes);
+                else
+                    PowerForgePortablePayloadInventoryCms.WriteEvidenceFiles(inventoryPath, inventoryBytes, signaturePath, signatureBytes);
+                evidencePaths = new[] { inventoryPath, signaturePath };
             }
         }
 
@@ -656,7 +667,10 @@ public sealed partial class DotNetPublishPipelineRunner
         }
 
         if (plan.NoRestoreInPublish) publishArgs.Add("--no-restore");
-        if (plan.NoBuildInPublish && !TargetUsesPublishMsiVersionProperties(plan, target.Name, framework, runtime, style))
+        // Normal publishing rebuilds by default. Explicit skip-build and the
+        // project DSL's separate-build mode preserve their no-build contract.
+        if ((plan.UseControlledSourceProvenance || plan.SkipBuildRequested || plan.SeparateBuildRequested) && plan.NoBuildInPublish &&
+            !TargetUsesPublishMsiVersionProperties(plan, target.Name, framework, runtime, style))
             publishArgs.Add("--no-build");
 
         AppendPublishStyleArgs(publishArgs, target.Publish, style);
@@ -805,19 +819,37 @@ public sealed partial class DotNetPublishPipelineRunner
 
                 if (properties.TryGetValue(propertyName, out var existing))
                 {
-                    if (!string.Equals(existing, value, StringComparison.OrdinalIgnoreCase))
+                    if (!PublishVersionPropertyMatches(propertyName, existing, value!, plan.SourceRevision))
                     {
                         throw new InvalidOperationException(
                             $"Installer '{installer.Id}' resolved publish property '{propertyName}' to '{value}', " +
                             $"but the target already has '{existing}'. Align installer versioning or publish the target separately.");
                     }
 
+                    // Keep source metadata in InformationalVersion; numeric identities use MSI's canonical shape.
+                    if (!propertyName.Equals("InformationalVersion", StringComparison.OrdinalIgnoreCase))
+                        properties[propertyName] = value!;
                     continue;
                 }
 
                 properties[propertyName] = value!;
             }
         }
+    }
+
+    private static bool PublishVersionPropertyMatches(
+        string propertyName, string existing, string resolved, string? sourceRevision)
+    {
+        if (string.Equals(existing, resolved, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (propertyName.Equals("AssemblyVersion", StringComparison.OrdinalIgnoreCase) ||
+            propertyName.Equals("FileVersion", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Equals(existing + ".0", resolved, StringComparison.OrdinalIgnoreCase);
+        }
+        return propertyName.Equals("InformationalVersion", StringComparison.OrdinalIgnoreCase) &&
+               !string.IsNullOrWhiteSpace(sourceRevision) &&
+               string.Equals(existing, resolved + "+" + sourceRevision, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TargetUsesPublishMsiVersionProperties(
@@ -833,6 +865,34 @@ public sealed partial class DotNetPublishPipelineRunner
             framework,
             runtime,
             style);
+
+    internal static void ValidateRequestedBuildModes(DotNetPublishPlan plan)
+    {
+        if (plan is null) throw new ArgumentNullException(nameof(plan));
+        if (!plan.SkipBuildRequested) return;
+
+        foreach (var step in plan.Steps ?? Array.Empty<DotNetPublishStep>())
+        {
+            if (step.Kind != DotNetPublishStepKind.Publish || string.IsNullOrWhiteSpace(step.TargetName))
+                continue;
+
+            var target = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
+                .FirstOrDefault(candidate => string.Equals(candidate.Name, step.TargetName, StringComparison.OrdinalIgnoreCase));
+            if (target is null) continue;
+
+            if (TargetUsesPublishMsiVersionProperties(
+                    plan,
+                    target.Name,
+                    step.Framework ?? string.Empty,
+                    step.Runtime ?? string.Empty,
+                    step.Style ?? target.Publish.Style))
+            {
+                throw new InvalidOperationException(
+                    $"SkipBuild cannot be combined with MSI versioning ApplyToPublish for target '{target.Name}': " +
+                    "the versioned publish must compile the MSI payload.");
+            }
+        }
+    }
 
     private static bool TargetUsesPublishMsiVersionProperties(
         IEnumerable<DotNetPublishInstallerPlan> installers,
@@ -863,10 +923,11 @@ public sealed partial class DotNetPublishPipelineRunner
     {
         string[] versions = (plan.Installers ?? Array.Empty<DotNetPublishInstallerPlan>())
             .Where(installer =>
-                string.Equals(installer.PrepareFromTarget, targetName, StringComparison.OrdinalIgnoreCase) ||
-                (installer.Versioning?.AdditionalPublishTargets ?? Array.Empty<string>()).Contains(
-                    targetName,
-                    StringComparer.OrdinalIgnoreCase))
+                installer.Versioning is { Enabled: true, ApplyToPublish: true } &&
+                (string.Equals(installer.PrepareFromTarget, targetName, StringComparison.OrdinalIgnoreCase) ||
+                 (installer.Versioning.AdditionalPublishTargets ?? Array.Empty<string>()).Contains(
+                     targetName,
+                     StringComparer.OrdinalIgnoreCase)))
             .Select(installer => FindResolvedMsiVersion(
                 plan,
                 installer.Id,

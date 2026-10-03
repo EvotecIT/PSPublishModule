@@ -1118,6 +1118,12 @@ internal static partial class WebPipelineRunner
                 surfaces["apiDotNet"] = true;
             if (!surfaces.ContainsKey("releases") && (!string.IsNullOrWhiteSpace(githubRepo) || project.Metrics?.Release is not null))
                 surfaces["releases"] = true;
+            if (surfaces.TryGetValue("releases", out var releasesEnabled) && !releasesEnabled)
+            {
+                links.Remove("releases");
+                if (project.Metrics is not null)
+                    project.Metrics.Release = null;
+            }
 
             var changelogLink = TryGetDictionaryValue(links, "changelog");
             if (IsDefaultGitHubChangelogLink(changelogLink, githubRepo))
@@ -1148,7 +1154,8 @@ internal static partial class WebPipelineRunner
                     links["source"] = sourceUrl.Trim();
             }
 
-            if (string.IsNullOrWhiteSpace(TryGetDictionaryValue(links, "releases")))
+            if (surfaces.TryGetValue("releases", out releasesEnabled) && releasesEnabled &&
+                string.IsNullOrWhiteSpace(TryGetDictionaryValue(links, "releases")))
             {
                 var releasesUrl = project.Metrics?.Release?.LatestUrl;
                 if (string.IsNullOrWhiteSpace(releasesUrl) && !string.IsNullOrWhiteSpace(githubRepo))
@@ -2171,6 +2178,7 @@ internal static partial class WebPipelineRunner
         if (stats is null)
             return 0;
 
+        WebEcosystemStatsGenerator.NormalizePublicProjectLinks(stats);
         var githubByFullName = new Dictionary<string, WebEcosystemGitHubRepository>(StringComparer.OrdinalIgnoreCase);
         var githubByRepoName = new Dictionary<string, WebEcosystemGitHubRepository>(StringComparer.OrdinalIgnoreCase);
         var ambiguousGitHubRepoNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -2230,33 +2238,39 @@ internal static partial class WebPipelineRunner
                     }
                 }
 
+                var repositoryKey = package.ProjectRepositoryKey;
+                var repositoryNameKey = package.ProjectRepositoryNameKey;
                 if (!string.IsNullOrWhiteSpace(package.ProjectUrl) &&
                     TryExtractGitHubRepo(package.ProjectUrl!, out var packageRepo))
                 {
-                    if (!nugetByGitHubProject.TryGetValue(packageRepo, out var projectPackages))
+                    repositoryKey = WebEcosystemStatsGenerator.GetPackageRepositoryKey(packageRepo);
+                    repositoryNameKey = WebEcosystemStatsGenerator.GetPackageRepositoryKey(ExtractRepositoryName(packageRepo));
+                }
+                if (!string.IsNullOrWhiteSpace(repositoryKey))
+                {
+                    if (!nugetByGitHubProject.TryGetValue(repositoryKey, out var projectPackages))
                     {
                         projectPackages = new List<WebEcosystemNuGetPackage>();
-                        nugetByGitHubProject[packageRepo] = projectPackages;
+                        nugetByGitHubProject[repositoryKey] = projectPackages;
                     }
 
                     projectPackages.Add(package);
-                    var packageRepoName = ExtractRepositoryName(packageRepo);
-                    if (!string.IsNullOrWhiteSpace(packageRepoName))
+                    if (!string.IsNullOrWhiteSpace(repositoryNameKey))
                     {
-                        if (nugetGitHubProjectByName.TryGetValue(packageRepoName, out var knownPackageRepo) &&
-                            !string.Equals(knownPackageRepo, packageRepo, StringComparison.OrdinalIgnoreCase))
+                        if (nugetGitHubProjectByName.TryGetValue(repositoryNameKey, out var knownPackageRepo) &&
+                            !string.Equals(knownPackageRepo, repositoryKey, StringComparison.OrdinalIgnoreCase))
                         {
-                            ambiguousNuGetGitHubProjectNames.Add(packageRepoName);
+                            ambiguousNuGetGitHubProjectNames.Add(repositoryNameKey);
                         }
                         else
                         {
-                            nugetGitHubProjectByName[packageRepoName] = packageRepo;
+                            nugetGitHubProjectByName[repositoryNameKey] = repositoryKey;
                         }
 
-                        if (!nugetByGitHubProjectName.TryGetValue(packageRepoName, out var projectNamePackages))
+                        if (!nugetByGitHubProjectName.TryGetValue(repositoryNameKey, out var projectNamePackages))
                         {
                             projectNamePackages = new List<WebEcosystemNuGetPackage>();
-                            nugetByGitHubProjectName[packageRepoName] = projectNamePackages;
+                            nugetByGitHubProjectName[repositoryNameKey] = projectNamePackages;
                         }
 
                         projectNamePackages.Add(package);
@@ -2359,7 +2373,7 @@ internal static partial class WebPipelineRunner
             if (nuget is not null)
                 nugetPackages.Add(nuget);
             if (!string.IsNullOrWhiteSpace(project.GitHubRepo) &&
-                nugetByGitHubProject.TryGetValue(project.GitHubRepo.Trim(), out var projectNuGetPackages))
+                nugetByGitHubProject.TryGetValue(WebEcosystemStatsGenerator.GetPackageRepositoryKey(project.GitHubRepo), out var projectNuGetPackages))
             {
                 foreach (var package in projectNuGetPackages)
                 {
@@ -2375,8 +2389,9 @@ internal static partial class WebPipelineRunner
                     nugetPackages.Add(aliasPackage);
                 }
 
-                if (ambiguousNuGetGitHubProjectNames.Contains(candidate) ||
-                    !nugetByGitHubProjectName.TryGetValue(candidate, out var aliasProjectPackages))
+                var aliasRepositoryKey = WebEcosystemStatsGenerator.GetPackageRepositoryKey(candidate);
+                if (ambiguousNuGetGitHubProjectNames.Contains(aliasRepositoryKey) ||
+                    !nugetByGitHubProjectName.TryGetValue(aliasRepositoryKey, out var aliasProjectPackages))
                     continue;
 
                 foreach (var package in aliasProjectPackages)
@@ -2444,10 +2459,26 @@ internal static partial class WebPipelineRunner
             }
 
             var hasAnyMetrics = github is not null || nuget is not null || module is not null;
-            if (!hasAnyMetrics)
-                continue;
-
             var existingMetrics = project.Metrics;
+            var normalizedLinks = false;
+            if (existingMetrics?.NuGet?.ProjectUrl is { } nugetProjectUrl &&
+                WebEcosystemStatsGenerator.NormalizePublicProjectLink(nugetProjectUrl, stats.GitHub) is null)
+            {
+                existingMetrics.NuGet.ProjectUrl = null;
+                normalizedLinks = true;
+            }
+            if (existingMetrics?.PowerShellGallery?.ProjectUrl is { } moduleProjectUrl &&
+                WebEcosystemStatsGenerator.NormalizePublicProjectLink(moduleProjectUrl, stats.GitHub) is null)
+            {
+                existingMetrics.PowerShellGallery.ProjectUrl = null;
+                normalizedLinks = true;
+            }
+            if (!hasAnyMetrics)
+            {
+                if (normalizedLinks) merged++;
+                continue;
+            }
+
             var mergedGitHub = github is null
                 ? existingMetrics?.GitHub
                 : new ProjectCatalogGitHubMetrics
@@ -2536,6 +2567,8 @@ internal static partial class WebPipelineRunner
         foreach (var project in projects)
         {
             if (string.IsNullOrWhiteSpace(project.GitHubRepo))
+                continue;
+            if (TryGetProjectSurfaceValue(project.Surfaces, "releases") is false)
                 continue;
 
             var repository = project.GitHubRepo.Trim();

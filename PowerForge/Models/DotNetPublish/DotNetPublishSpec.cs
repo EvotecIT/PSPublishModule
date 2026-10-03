@@ -302,10 +302,33 @@ public sealed class DotNetPublishMacAppOptions
     public string[] DocumentExtensions { get; set; } = Array.Empty<string>();
 
     /// <summary>
-    /// codesign identity. Use '-' only for local ad-hoc proof; direct distribution requires a
+    /// codesign identity. Use Apple Development with DevelopmentOnly for routine local use.
+    /// Use '-' only for ad-hoc packaging proof; direct distribution requires a
     /// Developer ID Application identity and subsequent notarization through PowerForge's Apple release flow.
     /// </summary>
     public string CodesignIdentity { get; set; } = string.Empty;
+
+    /// <summary>Produce a sandboxed Mac App Store installer instead of a local ZIP.</summary>
+    public bool AppStore { get; set; }
+
+    /// <summary>Sign a local development bundle with an Apple Development identity; never a distribution artifact.</summary>
+    public bool DevelopmentOnly { get; set; }
+
+    /// <summary>Expected Apple signing team for development or App Store signatures.</summary>
+    public string? TeamId { get; set; }
+
+    /// <summary>Mac Installer Distribution signing identity used by productbuild.</summary>
+    public string? InstallerSigningIdentity { get; set; }
+
+    /// <summary>Optional provisioning profile for restricted capabilities, resolved from the project root.</summary>
+    public string? ProvisioningProfilePath { get; set; }
+
+    /// <summary>Reviewed license manifest, resolved from the project root.</summary>
+    public string? ThirdPartyNoticesManifestPath { get; set; }
+
+    /// <summary>Generated .deps.json for the exact build used by a single-file publish, resolved from the project root.</summary>
+    public string? DependenciesPath { get; set; }
+
 
     /// <summary>
     /// Enable hardened runtime when signing with an Apple identity. Defaults to true. PowerForge omits
@@ -1192,7 +1215,8 @@ public sealed class DotNetPublishDotNetOptions
     public bool Clean { get; set; }
 
     /// <summary>
-    /// When true, runs <c>dotnet build</c> before publishing and uses <c>--no-build</c> in publish by default.
+    /// When true, runs <c>dotnet build</c> before publishing. A normal publish still
+    /// performs its own build unless an explicit no-build mode is selected.
     /// </summary>
     public bool Build { get; set; } = true;
 
@@ -1202,9 +1226,17 @@ public sealed class DotNetPublishDotNetOptions
     public bool NoRestoreInPublish { get; set; } = true;
 
     /// <summary>
-    /// When true, publishes with <c>--no-build</c> (recommended when <see cref="Build"/> is true).
+    /// Allows <c>--no-build</c> for controlled-source or explicit skip-build runs.
+    /// Normal direct publishing rebuilds even when this setting is true. Project-release
+    /// configuration may explicitly choose a separate build followed by no-build publish.
     /// </summary>
     public bool NoBuildInPublish { get; set; } = true;
+
+    /// <summary>
+    /// Opts into the controlled-checkout build-input proof. Normal publishing uses the selected
+    /// working tree and still verifies the resulting signed artifacts and source state.
+    /// </summary>
+    public bool UseControlledSourceProvenance { get; set; }
 
     /// <summary>
     /// Default runtime identifiers to publish for (when a target does not specify its own runtimes).

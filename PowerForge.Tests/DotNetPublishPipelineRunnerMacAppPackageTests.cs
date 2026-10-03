@@ -56,6 +56,92 @@ public sealed class DotNetPublishPipelineRunnerMacAppPackageTests
     }
 
     [Fact]
+    public void Plan_StoreInstallerUsesPkgAndRequiresDistributionSigning()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            var spec = CreateSpec(root, "osx-arm64");
+            var installer = Assert.Single(spec.Installers);
+            var mac = installer.MacApp!;
+            mac.AppStore = true;
+            Assert.Throws<ArgumentException>(() => new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+            mac.CodesignIdentity = "Apple Distribution: Example (ABCDE12345)";
+            mac.TeamId = "ABCDE12345";
+            mac.InstallerSigningIdentity = "3rd Party Mac Developer Installer: Example (ABCDE12345)";
+            mac.EntitlementsPath = "AppStore.entitlements";
+            var plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            Assert.EndsWith(".pkg", Assert.Single(plan.Steps, step => step.Kind == DotNetPublishStepKind.MacAppPackage).InstallerOutputPath);
+            installer.OutputName = "explicit.pkg";
+            plan = new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null);
+            Assert.EndsWith("explicit.pkg", Assert.Single(plan.Steps, step => step.Kind == DotNetPublishStepKind.MacAppPackage).InstallerOutputPath);
+            installer.OutputName = "wrong.zip";
+            Assert.Throws<ArgumentException>(() => new DotNetPublishPipelineRunner(new NullLogger()).Plan(spec, null));
+        }
+        finally { TryDelete(root); }
+    }
+
+    [Fact]
+    public void StorePayloadRequiresSandboxAndSingleFileAndPreservesResourceNotices()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            string code = Directory.CreateDirectory(Path.Combine(root, "Contents", "MacOS")).FullName;
+            string resources = Directory.CreateDirectory(Path.Combine(root, "Contents", "Resources")).FullName;
+            File.WriteAllBytes(Path.Combine(code, "OfficeIMO.Studio"), new byte[] { 0xcf, 0xfa, 0xed, 0xfe });
+            Directory.CreateDirectory(Path.Combine(code, "Licenses"));
+            File.WriteAllText(Path.Combine(code, "Licenses", "NOTICE.txt"), "Copyright notice");
+            var mac = CreateMacOptions();
+            mac.EntitlementsPath = "AppStore.entitlements";
+            File.WriteAllText(Path.Combine(root, mac.EntitlementsPath), "<plist><dict><key>com.apple.security.app-sandbox</key><false/></dict></plist>");
+            Assert.Throws<InvalidOperationException>(() => DotNetPublishPipelineRunner.PrepareMacStorePayload(mac, code, resources, root));
+            File.WriteAllText(Path.Combine(root, mac.EntitlementsPath), "<plist><dict><key>com.apple.security.app-sandbox</key><true/></dict></plist>");
+            File.WriteAllText(Path.Combine(code, "managed.dll"), "managed assembly");
+            Assert.Throws<InvalidOperationException>(() => DotNetPublishPipelineRunner.PrepareMacStorePayload(mac, code, resources, root));
+            File.Delete(Path.Combine(code, "managed.dll"));
+            DotNetPublishPipelineRunner.PrepareMacStorePayload(mac, code, resources, root);
+            Assert.True(File.Exists(Path.Combine(code, "OfficeIMO.Studio")));
+            Assert.Equal("Copyright notice", File.ReadAllText(Path.Combine(resources, "Licenses", "NOTICE.txt")));
+        }
+        finally { TryDelete(root); }
+    }
+
+    [Theory]
+    [InlineData("ABCDE12345", "2099-01-01T00:00:00Z", false, true)]
+    [InlineData("OTHER12345", "2099-01-01T00:00:00Z", false, false)]
+    [InlineData("ABCDE12345", "2000-01-01T00:00:00Z", false, false)]
+    [InlineData("ABCDE12345", "2099-01-01T00:00:00Z", true, false)]
+    public void StoreProfileRejectsWrongTeamExpiredAndDevelopmentProfiles(string team, string expiry, bool development, bool valid)
+    {
+        var mac = CreateMacOptions();
+        mac.TeamId = "ABCDE12345";
+        var profile = System.Xml.Linq.XDocument.Parse($"<plist><dict><key>TeamIdentifier</key><array><string>{team}</string></array><key>ExpirationDate</key><date>{expiry}</date><key>Entitlements</key><dict><key>com.apple.application-identifier</key><string>{team}.{mac.BundleIdentifier}</string><key>get-task-allow</key><{(development ? "true" : "false")}/></dict></dict></plist>");
+        if (valid) DotNetPublishPipelineRunner.ValidateMacStoreProvisioningProfile(mac, profile);
+        else Assert.Throws<InvalidOperationException>(() => DotNetPublishPipelineRunner.ValidateMacStoreProvisioningProfile(mac, profile));
+    }
+
+    [Fact]
+    public void StoreProfileRejectsAnotherCertificateWithTheSameSubjectAndTeam()
+    {
+        using var key = System.Security.Cryptography.RSA.Create(2048);
+        var request = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+            "CN=Apple Distribution: Example, OU=ABCDE12345", key,
+            System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+        using var authorized = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+        using var replacement = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(2));
+        Assert.Equal(authorized.Subject, replacement.Subject);
+        var mac = CreateMacOptions();
+        mac.TeamId = "ABCDE12345";
+        var profile = System.Xml.Linq.XDocument.Parse($"<plist><dict><key>TeamIdentifier</key><array><string>{mac.TeamId}</string></array><key>ExpirationDate</key><date>2099-01-01T00:00:00Z</date><key>Entitlements</key><dict><key>com.apple.application-identifier</key><string>{mac.TeamId}.{mac.BundleIdentifier}</string></dict><key>DeveloperCertificates</key><array><data>{Convert.ToBase64String(authorized.RawData)}</data></array></dict></plist>");
+        DotNetPublishPipelineRunner.ValidateMacStoreProvisioningProfile(mac, profile);
+        DotNetPublishPipelineRunner.ValidateMacStoreProvisioningCertificate(profile, authorized.RawData);
+        Assert.Throws<InvalidOperationException>(() => DotNetPublishPipelineRunner.ValidateMacStoreProvisioningCertificate(profile, replacement.RawData));
+        profile.Root!.Element("dict")!.Elements("array").Last().RemoveNodes();
+        Assert.Throws<InvalidOperationException>(() => DotNetPublishPipelineRunner.ValidateMacStoreProvisioningCertificate(profile, authorized.RawData));
+    }
+
+    [Fact]
     public void Plan_RejectsMacAppForNonMacRuntime()
     {
         string root = CreateTempRoot();
@@ -136,6 +222,32 @@ public sealed class DotNetPublishPipelineRunnerMacAppPackageTests
     }
 
     [Fact]
+    public void Plan_PreservesDevelopmentSigningAndRejectsAdHocOrStoreMixing()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            var spec = CreateSpec(root, "osx-arm64");
+            var mac = Assert.Single(spec.Installers).MacApp!;
+            mac.DevelopmentOnly = true;
+            mac.TeamId = "ABCDE12345";
+            var runner = new DotNetPublishPipelineRunner(new NullLogger());
+            Assert.Throws<ArgumentException>(() => runner.Plan(spec, null));
+            mac.CodesignIdentity = "Apple Development: Example (ABCDEFGHIJ)";
+            var planned = Assert.Single(runner.Plan(spec, null).Installers).MacApp!;
+            Assert.True(planned.DevelopmentOnly);
+            Assert.Equal(mac.CodesignIdentity, planned.CodesignIdentity);
+            Assert.Equal(mac.TeamId, planned.TeamId);
+            mac.TeamId = null;
+            Assert.Throws<ArgumentException>(() => runner.Plan(spec, null));
+            mac.TeamId = "ABCDE12345";
+            mac.AppStore = true;
+            Assert.Throws<ArgumentException>(() => runner.Plan(spec, null));
+        }
+        finally { TryDelete(root); }
+    }
+
+    [Fact]
     public void InfoPlist_ContainsStableIdentityAndDocumentContracts()
     {
         DotNetPublishMacAppOptions options = CreateMacOptions();
@@ -178,6 +290,7 @@ public sealed class DotNetPublishPipelineRunnerMacAppPackageTests
             string package = Path.Combine(root, "artifacts", "OfficeIMO-Studio.zip");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Installers = new[]
                 {

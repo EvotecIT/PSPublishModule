@@ -32,9 +32,9 @@ used by merge/missing-function workflows and are not emitted as manifest depende
 Built-in Microsoft.PowerShell.* modules are ignored during manifest refresh because they are inbox runtime
 modules, not gallery-resolvable dependencies.
 
-Version and Guid values set to Auto or Latest are resolved from installed modules by default. When
-New-ConfigurationBuild -ResolveMissingModulesOnline is enabled, repository results can be used without
-installing the dependency first.
+Dependencies resolve from installed modules by default. Select -VersionSource PSGallery or
+-VersionSource PublishRepository when repository state must be authoritative. Select
+-VersionSource Auto explicitly when an installed-first, repository-fallback policy is desired.
 
 Choose only one versioning style per dependency: a minimum version (-Version or
 -MinimumVersion) or an exact version (-RequiredVersion). Mixing them for the same module is treated
@@ -79,10 +79,10 @@ Allows approved helper functions to be copied into the built module when they ar
 
 ### EXAMPLE 6
 ```powershell
-PS> New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto'
+PS> New-ConfigurationModule -Type RequiredModule -Name 'Pester' -Version 'Latest' -Guid 'Auto' -VersionSource PSGallery
 ```
 
-Pairs well with New-ConfigurationBuild -ResolveMissingModulesOnline when the module is not installed locally.
+Resolves repository metadata explicitly instead of allowing an installed local build to win.
 
 ## PARAMETERS
 
@@ -191,7 +191,7 @@ Accept wildcard characters: False
 ```
 
 ### -VersionSource
-Source used when resolving Auto/Latest version values.
+Source used when resolving dependency versions. Installed modules are used by default.
 
 ```yaml
 Type: ModuleDependencyVersionSource

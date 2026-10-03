@@ -88,6 +88,10 @@ public sealed partial class ModulePipelineRunner
         state.MergeExecution = plan.BuildSpec.RefreshManifestOnly || IsReusingCompiledPowerShellModule(plan)
             ? MergeExecutionResult.None
             : ApplyMerge(plan, buildResult);
+        manifestRequiredModules = ResolveOutputRequiredModules(
+            plan.RequiredModules,
+            plan.MergeMissing,
+            state.MergeExecution.FullyInlinedApprovedModules);
         if (!plan.BuildSpec.RefreshManifestOnly && !IsReusingCompiledPowerShellModule(plan))
             ApplyPlaceholders(plan, buildResult);
 
@@ -205,6 +209,9 @@ public sealed partial class ModulePipelineRunner
                 }
                 catch (Exception ex)
                 {
+                    if (plan.GateMode == ConfigurationGateMode.Documentation)
+                        throw new InvalidOperationException($"Failed to update project documentation. {ex.Message}", ex);
+
                     _logger.Warn($"Failed to update project docs folder. Error: {ex.Message}");
                     if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
                 }

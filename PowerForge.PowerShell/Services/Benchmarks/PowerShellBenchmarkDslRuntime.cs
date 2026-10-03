@@ -236,6 +236,19 @@ public static partial class PowerShellBenchmarkDslRuntime
     /// <param name="cooldownMilliseconds">Optional delay between measured samples.</param>
     /// <param name="outlierMode">Optional summary outlier policy.</param>
     public static void Policy(int? warmup, int? iteration, string? runMode, string? order, string? memoryCleanup, int? cooldownMilliseconds, string? outlierMode)
+        => Policy(warmup, iteration, runMode, order, memoryCleanup, cooldownMilliseconds, outlierMode, null, null);
+
+    /// <summary>Applies run policy and optional scoped Windows process placement.</summary>
+    /// <param name="warmup">Optional warmup count.</param>
+    /// <param name="iteration">Optional measured count.</param>
+    /// <param name="runMode">Optional run label.</param>
+    /// <param name="order">Optional work-item ordering.</param>
+    /// <param name="memoryCleanup">Optional memory cleanup policy.</param>
+    /// <param name="cooldownMilliseconds">Optional delay between samples.</param>
+    /// <param name="outlierMode">Optional outlier policy.</param>
+    /// <param name="processorAffinityMask">Optional Windows processor mask.</param>
+    /// <param name="processPriority">Optional Windows process priority.</param>
+    public static void Policy(int? warmup, int? iteration, string? runMode, string? order, string? memoryCleanup, int? cooldownMilliseconds, string? outlierMode, ulong? processorAffinityMask, string? processPriority)
     {
         var suite = RequireSuite();
         if (warmup.HasValue)
@@ -252,6 +265,9 @@ public static partial class PowerShellBenchmarkDslRuntime
             suite.CooldownMilliseconds = Math.Max(0, cooldownMilliseconds.Value);
         if (!string.IsNullOrWhiteSpace(outlierMode))
             suite.OutlierMode = ParseEnum<PowerShellBenchmarkOutlierMode>(outlierMode!, "outlier mode");
+        if (processorAffinityMask.HasValue) suite.ProcessorAffinityMask = processorAffinityMask.Value;
+        if (!string.IsNullOrWhiteSpace(processPriority))
+            suite.ProcessPriority = ParseEnum<System.Diagnostics.ProcessPriorityClass>(processPriority!, "process priority");
     }
 
     /// <summary>
@@ -489,7 +505,9 @@ param(
     [Parameter(Position=3)] [object] $Order,
     [Parameter(Position=4)] [int] $CooldownMilliseconds,
     [Parameter(Position=5)] [object] $OutlierMode,
-    [Parameter(Position=6)] [object] $MemoryCleanup
+    [Parameter(Position=6)] [object] $MemoryCleanup,
+    [Nullable[System.UInt64]] $ProcessorAffinityMask,
+    [string] $ProcessPriority
 )
 $w = $null
 $i = $null
@@ -497,7 +515,7 @@ $c = $null
 if ($PSBoundParameters.ContainsKey('Warmup')) { $w = $Warmup }
 if ($PSBoundParameters.ContainsKey('Iteration')) { $i = $Iteration }
 if ($PSBoundParameters.ContainsKey('CooldownMilliseconds')) { $c = $CooldownMilliseconds }
-$arguments = [object[]]::new(7)
+$arguments = [object[]]::new(9)
 $arguments[0] = $w
 $arguments[1] = $i
 $arguments[2] = $RunMode
@@ -505,6 +523,8 @@ $arguments[3] = [string] $Order
 $arguments[4] = [string] $MemoryCleanup
 $arguments[5] = $c
 $arguments[6] = [string] $OutlierMode
+$arguments[7] = $ProcessorAffinityMask
+$arguments[8] = $ProcessPriority
 __PowerForgeBenchmarkDslInvoke -Name 'Policy' -Arguments $arguments
 """;
 

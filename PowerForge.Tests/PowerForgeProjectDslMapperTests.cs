@@ -141,6 +141,7 @@ public sealed class PowerForgeProjectDslMapperTests
         Assert.Empty(spec.Tools.DotNetPublish.Installers);
         Assert.True(spec.Tools.DotNetPublish.DotNet.Build);
         Assert.True(spec.Tools.DotNetPublish.DotNet.NoBuildInPublish);
+        Assert.True(request.SeparateBuildRequested);
         Assert.Single(request.ToolOutputs);
         Assert.Equal(PowerForgeReleaseToolOutputKind.Tool, request.ToolOutputs[0]);
     }
@@ -167,7 +168,7 @@ public sealed class PowerForgeProjectDslMapperTests
             }
         };
 
-        var (spec, _) = PowerForgeProjectDslMapper.CreateRelease(
+        var (spec, request) = PowerForgeProjectDslMapper.CreateRelease(
             project,
             @"C:\repo\.powerforge\project.release.json",
             @"C:\repo");
@@ -175,6 +176,7 @@ public sealed class PowerForgeProjectDslMapperTests
         Assert.NotNull(spec.Tools?.DotNetPublish);
         Assert.False(spec.Tools!.DotNetPublish!.DotNet.Build);
         Assert.False(spec.Tools.DotNetPublish.DotNet.NoBuildInPublish);
+        Assert.False(request.SeparateBuildRequested);
     }
 
     [Fact]

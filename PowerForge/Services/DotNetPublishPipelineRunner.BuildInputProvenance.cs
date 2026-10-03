@@ -494,9 +494,11 @@ public sealed partial class DotNetPublishPipelineRunner
                     graphTrustedRoots,
                     graphBuildInputs,
                     graphMsBuildInputs,
+                    evaluationsByEvaluation[evaluationKey].EvaluatedImports,
                     pathMapsByEvaluation[evaluationKey],
                     buildPlan?.NoBuildInPublish == true,
                     graphNodes,
+                    evaluationsByEvaluation[evaluationKey].ProjectReferences,
                     evaluationsByEvaluation[evaluationKey].EvaluatedProperties,
                     out EvaluatedPublishInput[] publishInputs,
                     out string? publishInputFailureReason))
@@ -676,6 +678,11 @@ public sealed partial class DotNetPublishPipelineRunner
                         referencedProjectKey,
                         out string[]? evaluatedMsBuildInputs)
                         ? evaluatedMsBuildInputs
+                        : Array.Empty<string>(),
+                    evaluationsByEvaluation.TryGetValue(
+                        referencedProjectKey,
+                        out EvaluatedProjectInputs? importEvaluation)
+                        ? importEvaluation.EvaluatedImports
                         : Array.Empty<string>(),
                     evaluationsByEvaluation.TryGetValue(
                         referencedProjectKey,
@@ -1048,6 +1055,7 @@ public sealed partial class DotNetPublishPipelineRunner
             "-getProperty:TargetDir",
             "-getProperty:TargetPath",
             "-getProperty:BuildProjectReferences",
+            "-getProperty:ImportDirectoryBuildProps",
             "-getProperty:_GlobalPropertiesToRemoveFromProjectReferences",
             "-getProperty:BaseIntermediateOutputPath",
             "-getProperty:MSBuildProjectExtensionsPath",
@@ -1153,6 +1161,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 FileSystemPathSafety.ExistingPathComparer);
             var importPaths = new HashSet<string>(
                 FileSystemPathSafety.ExistingPathComparer);
+            string[] evaluatedImportPaths = Array.Empty<string>();
             string[] trustedBuildInfrastructureRoots = Array.Empty<string>();
             PreprocessedProjectReferenceDeclaration[] projectReferenceDeclarations =
                 Array.Empty<PreprocessedProjectReferenceDeclaration>();
@@ -1288,7 +1297,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     return false;
                 }
                 importPaths.UnionWith(preprocessedImports);
-                string[] evaluatedImportPaths = importPaths.ToArray();
+                evaluatedImportPaths = importPaths.ToArray();
                 importPaths.UnionWith(ReadDeclaredBuildInputCandidates(
                     request.ProjectPath,
                     importPaths));
@@ -1504,6 +1513,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             .Concat(new[] { request.ProjectPath })
                             .Concat(rawReferences.Values.Select(reference => reference.ProjectPath))
                             .ToArray(),
+                        evaluatedImportPaths.Concat(new[] { request.ProjectPath }).ToArray(),
                         rawReferences.Values.ToArray(),
                         taskWideProjectReferencePropertyRemovals,
                         projectReferenceDeclarations,
@@ -1561,6 +1571,8 @@ public sealed partial class DotNetPublishPipelineRunner
             evaluation = new EvaluatedProjectInputs(
                 inputs.ToArray(),
                 importPaths.Concat(new[] { request.ProjectPath }).Distinct(
+                    FileSystemPathSafety.ExistingPathComparer).ToArray(),
+                evaluatedImportPaths.Concat(new[] { request.ProjectPath }).Distinct(
                     FileSystemPathSafety.ExistingPathComparer).ToArray(),
                 sourceInputs.ToArray(),
                 references.Values.ToArray(),

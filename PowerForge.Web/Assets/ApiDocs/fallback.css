@@ -64,10 +64,11 @@ body.pf-api-docs .pf-combobox-list::-webkit-scrollbar{width:8px}
 body.pf-api-docs .pf-combobox-list::-webkit-scrollbar-track{background:rgba(15,23,42,.75);border-radius:999px}
 body.pf-api-docs .pf-combobox-list::-webkit-scrollbar-thumb{background:linear-gradient(180deg,rgba(148,163,184,.48),rgba(148,163,184,.28));border-radius:999px;border:1px solid rgba(148,163,184,.24)}
 body.pf-api-docs .pf-combobox-list::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,rgba(167,139,250,.55),rgba(148,163,184,.35))}
-body.pf-api-docs .pf-combobox-option{display:block;width:100%;padding:7px 8px;border:0;border-radius:8px;background:transparent;color:#e6e9f3;font-size:.82rem;line-height:1.25;text-align:left;cursor:pointer}
+body.pf-api-docs .pf-combobox-option{display:block;width:100%;min-width:0;white-space:normal;overflow-wrap:anywhere;padding:7px 8px;border:0;border-radius:8px;background:transparent;color:#e6e9f3;font-size:.82rem;line-height:1.25;text-align:left;cursor:pointer}
 body.pf-api-docs .pf-combobox-option:hover,body.pf-api-docs .pf-combobox-option:focus-visible{background:rgba(167,139,250,.18);color:#f5f3ff;outline:none}
 body.pf-api-docs .pf-combobox-option.active{background:rgba(167,139,250,.24);color:#f5f3ff}
 .sidebar-count{font-size:.75rem;color:#94a3b8;margin:8px 0 12px}
+.sidebar-browse-all{display:block;margin:-4px 0 12px;font-size:.75rem;color:var(--pf-accent,#a78bfa)!important;text-decoration:underline!important;text-underline-offset:2px}
 .sidebar-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .sidebar-tools button{background:#0f172a;border:1px solid rgba(148,163,184,.2);color:#cbd5f5;border-radius:999px;padding:4px 10px;font-size:.7rem;cursor:pointer}
 .sidebar-tools button:hover{border-color:#a78bfa;color:#e6e9f3}
@@ -220,6 +221,7 @@ body.pf-api-docs .type-icon-glyph,body.pf-api-docs .chip-icon-glyph{display:bloc
 .member-section-toggle{background:transparent;border:0;color:#94a3b8;cursor:pointer}
 .member-section.collapsed .member-section-body{display:none}
 .member-card{background:#0f172a;border:1px solid rgba(148,163,184,.18);border-radius:12px;padding:12px 14px;margin-top:10px;display:grid;gap:8px}
+.member-search-target{position:absolute;width:1px;height:1px;pointer-events:none;scroll-margin-top:9rem}
 .member-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .member-signature{display:block;background:#111827;border-radius:8px;padding:6px 8px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:.85rem;color:#e2e8f0}
 .member-header .member-signature{margin:0}

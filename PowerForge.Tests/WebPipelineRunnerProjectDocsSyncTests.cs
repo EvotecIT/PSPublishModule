@@ -455,12 +455,16 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
             File.WriteAllText(Path.Combine(sourceExamples, "build-alpha-report.md"),
                 """
                 ---
-                title: "Build Alpha Report"
+                title: 'Build an Alpha report'
                 layout: docs
                 ---
 
                 Curated example body.
                 """);
+
+            File.WriteAllText(Path.Combine(sourceExamples, "Example-HTMLToPDF.md"), "# Convert HTML to PDF\n\nConversion example.");
+            var group = Directory.CreateDirectory(Path.Combine(sourceExamples, "Example-CSVToHTML")).FullName;
+            File.WriteAllText(Path.Combine(group, "Example-CSVToHTML.ps1"), "ConvertTo-Html");
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
@@ -493,7 +497,7 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
             Assert.True(File.Exists(examplePath));
 
             var example = File.ReadAllText(examplePath);
-            Assert.Contains("title: \"Build Alpha Report\"", example, StringComparison.Ordinal);
+            Assert.Contains("title: 'Build an Alpha report'", example, StringComparison.Ordinal);
             Assert.Contains("meta.project_base_slug: \"alpha-toolkit\"", example, StringComparison.Ordinal);
             Assert.Contains("meta.project_name: \"AlphaToolkit\"", example, StringComparison.Ordinal);
             Assert.Contains("meta.project_section: \"examples\"", example, StringComparison.Ordinal);
@@ -505,6 +509,15 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
             var index = File.ReadAllText(indexPath);
             Assert.Contains("title: \"AlphaToolkit Examples\"", index, StringComparison.Ordinal);
             Assert.Contains("meta.project_base_slug: \"alpha-toolkit\"", index, StringComparison.Ordinal);
+            Assert.Contains("[Build an Alpha report](./build-alpha-report/)", index, StringComparison.Ordinal);
+            Assert.Contains("[Convert HTML to PDF](./Example-HTMLToPDF/)", index, StringComparison.Ordinal);
+            Assert.Contains("[CSV To HTML](./Example-CSVToHTML/)", index, StringComparison.Ordinal);
+            var groupIndex = File.ReadAllText(Path.Combine(root, "content", "project-examples", "alpha-toolkit", "examples", "Example-CSVToHTML", "_index.md"));
+            Assert.Contains("title: \"CSV To HTML\"", groupIndex, StringComparison.Ordinal);
+            Assert.Contains("[CSV To HTML](./Example-CSVToHTML/)", groupIndex, StringComparison.Ordinal);
+            var generatedExample = File.ReadAllText(Path.Combine(root, "content", "project-examples", "alpha-toolkit", "examples", "Example-CSVToHTML", "Example-CSVToHTML.md"));
+            Assert.Contains("title: \"CSV To HTML\"", generatedExample, StringComparison.Ordinal);
+            Assert.Contains("An example script from the AlphaToolkit repository.", generatedExample, StringComparison.Ordinal);
         }
         finally
         {

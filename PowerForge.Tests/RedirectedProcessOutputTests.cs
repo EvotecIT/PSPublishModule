@@ -1,9 +1,44 @@
 using System.Text;
+using System.Diagnostics;
+using System.Text.Json;
 
 namespace PowerForge.Tests;
 
+[Trait("Category", "DotNetPublishPrGate")]
 public sealed class RedirectedProcessOutputTests
 {
+    [Theory]
+    [InlineData("closed")]
+    [InlineData("inherited")]
+    public async Task Unix_pipe_output_survives_worker_pool_pressure_without_losing_the_exit_boundary(string mode)
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var fixture = Path.Combine(AppContext.BaseDirectory, "ProcessOutputPressureFixture", "PowerForge.ProcessOutputPressureFixture.dll");
+        Assert.True(File.Exists(fixture), fixture);
+        var start = new ProcessStartInfo("dotnet")
+        {
+            UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8
+        };
+        start.ArgumentList.Add(fixture);
+        start.ArgumentList.Add(mode);
+        using var process = Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        try
+        {
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(process.ExitCode == 0, await error);
+            using var result = JsonDocument.Parse(await output);
+            Assert.Equal(0, result.RootElement.GetProperty("ExitCode").GetInt32());
+            Assert.False(result.RootElement.GetProperty("TimedOut").GetBoolean());
+            Assert.True(result.RootElement.GetProperty("CompletedWhilePoolBlocked").GetBoolean());
+            Assert.EndsWith("parent-output😀", result.RootElement.GetProperty("StdOut").GetString());
+            Assert.Equal("parent-error漢字", result.RootElement.GetProperty("StdErr").GetString());
+        }
+        finally { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+    }
+
     [Theory]
     [InlineData("utf-8")]
     [InlineData("utf-16")]

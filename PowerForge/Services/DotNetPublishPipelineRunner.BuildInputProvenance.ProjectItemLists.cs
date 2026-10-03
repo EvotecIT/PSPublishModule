@@ -108,6 +108,8 @@ public sealed partial class DotNetPublishPipelineRunner
             ProjectEvaluationRequest request,
             string? pathMap,
             IReadOnlyDictionary<string, string> evaluatedProperties,
+            string[] evaluatedImports,
+            EvaluatedProjectReference[] projectReferences,
             string? packageId,
             string? packageVersion,
             string? packageValidationBaselineVersion)
@@ -115,6 +117,8 @@ public sealed partial class DotNetPublishPipelineRunner
             Request = request;
             PathMap = pathMap;
             EvaluatedProperties = evaluatedProperties;
+            EvaluatedImports = evaluatedImports;
+            ProjectReferences = projectReferences;
             PackageId = packageId;
             PackageVersion = packageVersion;
             PackageValidationBaselineVersion = packageValidationBaselineVersion;
@@ -125,6 +129,10 @@ public sealed partial class DotNetPublishPipelineRunner
         internal string? PathMap { get; }
 
         internal IReadOnlyDictionary<string, string> EvaluatedProperties { get; }
+
+        internal string[] EvaluatedImports { get; }
+
+        internal EvaluatedProjectReference[] ProjectReferences { get; }
 
         internal string? PackageId { get; }
 
@@ -282,9 +290,11 @@ public sealed partial class DotNetPublishPipelineRunner
         IReadOnlyCollection<string> trustedBuildInfrastructureRoots,
         IReadOnlyCollection<string> evaluatedBuildInputs,
         IReadOnlyCollection<string> executableMsBuildInputs,
+        IReadOnlyCollection<string> evaluatedImports,
         string? evaluatedPathMap,
         bool proveControlledGeneratedInputs,
         IReadOnlyCollection<ControlledPublishGraphNode> graphBuildNodes,
+        IReadOnlyCollection<EvaluatedProjectReference> rootProjectReferences,
         IReadOnlyDictionary<string, string> evaluatedProperties,
         out EvaluatedPublishInput[] publishInputs,
         out string? failureReason)
@@ -308,9 +318,11 @@ public sealed partial class DotNetPublishPipelineRunner
             trustedBuildInfrastructureRoots,
             evaluatedBuildInputs,
             executableMsBuildInputs,
+            evaluatedImports,
             evaluatedPathMap,
             proveControlledGeneratedInputs,
             graphBuildNodes,
+            rootProjectReferences,
             evaluatedProperties,
             out publishInputs,
             out failureReason);
@@ -345,6 +357,8 @@ public sealed partial class DotNetPublishPipelineRunner
                 requestsByEvaluation[key],
                 pathMapsByEvaluation[key],
                 evaluationsByEvaluation[key].EvaluatedProperties,
+                evaluationsByEvaluation[key].EvaluatedImports,
+                evaluationsByEvaluation[key].ProjectReferences,
                 evaluationsByEvaluation[key].PackageId,
                 evaluationsByEvaluation[key].PackageVersion,
                 evaluationsByEvaluation[key].PackageValidationBaselineVersion))

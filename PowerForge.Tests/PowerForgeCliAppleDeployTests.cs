@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace PowerForge.Tests;
 
-public sealed class PowerForgeCliAppleDeployTests
+public sealed partial class PowerForgeCliAppleDeployTests
 {
     [Fact]
     public void AppleDeploy_diagnostic_redacts_credentials_before_truncation()
@@ -459,6 +459,7 @@ public sealed class PowerForgeCliAppleDeployTests
                   "DefaultPlatform": "iOS",
                   "DefaultDevice": "EvoPhone",
                   "Configuration": "Debug",
+                  "OptimizeSwift": true,
                   "InstallRoot": "/Applications",
                   "DefaultProfile": "Plus",
                   "Profiles": [
@@ -516,6 +517,7 @@ public sealed class PowerForgeCliAppleDeployTests
                 Assert.Equal("Plus", result.GetProperty("profile").GetString());
                 Assert.Equal("EvoPhone", result.GetProperty("device").GetString());
                 Assert.Equal("Debug", result.GetProperty("configuration").GetString());
+                Assert.True(result.GetProperty("optimizeSwift").GetBoolean());
                 Assert.Equal(
                     expectedRevision,
                     result.GetProperty("sourceRevision").GetString());

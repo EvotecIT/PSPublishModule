@@ -86,6 +86,7 @@ public sealed class DotNetPublishPipelineRunnerBenchmarkGateTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 BenchmarkGates = new[]
                 {
@@ -153,6 +154,7 @@ public sealed class DotNetPublishPipelineRunnerBenchmarkGateTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Outputs = new DotNetPublishOutputs
                 {
@@ -220,6 +222,7 @@ public sealed class DotNetPublishPipelineRunnerBenchmarkGateTests
 
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 BenchmarkGates = new[]
                 {
@@ -278,6 +281,7 @@ public sealed class DotNetPublishPipelineRunnerBenchmarkGateTests
             var runReportMarkdownPath = Path.Combine(root, "Artifacts", "DotNetPublish", "run-report.md");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Outputs = new DotNetPublishOutputs
                 {

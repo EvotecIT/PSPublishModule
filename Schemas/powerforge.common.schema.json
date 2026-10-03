@@ -8,6 +8,11 @@
       "type": "string",
       "enum": ["Exact", "AutoRevision"]
     },
+    "ModuleDependencyVersionSource": {
+      "type": "string",
+      "enum": ["Installed", "PSGallery", "PublishRepository", "Auto"],
+      "default": "Installed"
+    },
     "LegacyFlatModuleHandling": {
       "type": "string",
       "enum": ["Warn", "Convert", "Delete", "Ignore"]

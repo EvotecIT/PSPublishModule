@@ -135,7 +135,7 @@ public sealed class NewConfigurationModuleBuildProfileCommand : PSCmdlet
 
     /// <summary>Versioned install strategy.</summary>
     [Parameter]
-    public InstallationStrategy VersionedInstallStrategy { get; set; } = InstallationStrategy.AutoRevision;
+    public InstallationStrategy VersionedInstallStrategy { get; set; } = InstallationStrategy.Exact;
 
     /// <summary>Number of installed versions to keep.</summary>
     [Parameter]

@@ -6,11 +6,15 @@ namespace PowerForge.Web.Cli;
 internal static partial class WebPipelineRunner
 {
     private static JsonDocument LoadPipelineDocumentWithExtends(string pipelinePath)
+        => LoadPipelineDocumentWithExtends(pipelinePath, out _);
+
+    private static JsonDocument LoadPipelineDocumentWithExtends(string pipelinePath, out HashSet<string> sourcePaths)
     {
         if (string.IsNullOrWhiteSpace(pipelinePath))
             throw new ArgumentException("Pipeline path is required.", nameof(pipelinePath));
 
-        var merged = LoadPipelineJsonWithExtends(pipelinePath, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        sourcePaths = new HashSet<string>(StringComparer.Ordinal);
+        var merged = LoadPipelineJsonWithExtends(pipelinePath, new HashSet<string>(StringComparer.OrdinalIgnoreCase), sourcePaths);
         var json = merged.ToJsonString(new JsonSerializerOptions
         {
             WriteIndented = false
@@ -23,7 +27,7 @@ internal static partial class WebPipelineRunner
         });
     }
 
-    private static JsonObject LoadPipelineJsonWithExtends(string pipelinePath, HashSet<string> chain)
+    private static JsonObject LoadPipelineJsonWithExtends(string pipelinePath, HashSet<string> chain, HashSet<string> sourcePaths)
     {
         var fullPath = Path.GetFullPath(pipelinePath.Trim().Trim('"'));
         if (!File.Exists(fullPath))
@@ -31,6 +35,7 @@ internal static partial class WebPipelineRunner
 
         if (!chain.Add(fullPath))
             throw new InvalidOperationException($"Pipeline config inheritance loop detected at {fullPath}");
+        sourcePaths.Add(fullPath);
 
         var node = ParsePipelineConfigNode(fullPath);
         var basePaths = ReadPipelineExtends(node);
@@ -41,7 +46,7 @@ internal static partial class WebPipelineRunner
         foreach (var basePath in basePaths)
         {
             var resolved = Path.IsPathRooted(basePath) ? basePath : Path.Combine(baseDir, basePath);
-            var baseNode = LoadPipelineJsonWithExtends(resolved, chain);
+            var baseNode = LoadPipelineJsonWithExtends(resolved, chain, sourcePaths);
             merged = MergePipelineObjects(merged, baseNode);
         }
 

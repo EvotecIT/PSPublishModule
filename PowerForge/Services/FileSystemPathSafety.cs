@@ -3,6 +3,36 @@ namespace PowerForge;
 /// <summary>Filesystem preflight shared by artifact writers and validators; not a concurrent-mutation sandbox.</summary>
 internal static class FileSystemPathSafety
 {
+    /// <summary>Resolves existing parent aliases, including macOS /var and /tmp aliases.
+    /// The selected leaf itself must not be a link. This is a preflight, not a replacement-race guard.</summary>
+    internal static string ResolveParentDirectoryAliases(string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var root = Path.GetPathRoot(fullPath)!;
+        var segments = fullPath.Substring(root.Length).Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
+        var current = root;
+        for (var index = 0; index < segments.Length; index++)
+        {
+            current = Path.Combine(current, segments[index]);
+            FileAttributes attributes;
+            try { attributes = File.GetAttributes(current); }
+            catch (FileNotFoundException) { continue; }
+            catch (DirectoryNotFoundException) { continue; }
+            if ((attributes & FileAttributes.ReparsePoint) == 0) continue;
+            if (index == segments.Length - 1)
+                throw new InvalidDataException("Selected package/output root must not be a link: " + fullPath);
+#if NET8_0_OR_GREATER
+            var target = new DirectoryInfo(current).ResolveLinkTarget(returnFinalTarget: true);
+            if (target is null || !Directory.Exists(target.FullName))
+                throw new InvalidDataException("Unresolved directory alias: " + current);
+            current = target.FullName;
+#else
+            throw new InvalidDataException("Use a path without linked ancestors on this runtime: " + fullPath);
+#endif
+        }
+        return current;
+    }
+
     /// <summary>Rejects special file inputs before a potentially blocking open; not a concurrent-replacement guard.</summary>
     internal static void RequireRegularFile(string path, bool followSymbolicLinks = false)
     {

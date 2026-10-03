@@ -16,6 +16,7 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
         {
             const string moduleName = "TestModule";
             const string approvedModule = "Approved.Module";
+            const string runtimeModule = "Runtime.Module";
 
             WriteMinimalModule(root.FullName, moduleName, "1.0.0");
 
@@ -28,7 +29,11 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
             var runner = new ModulePipelineRunner(
                 new NullLogger(),
                 new ThrowingPowerShellRunner(),
-                new FakeDependencyMetadataProvider(),
+                new FakeDependencyMetadataProvider(new InstalledModuleMetadata(
+                    runtimeModule,
+                    "1.0.0",
+                    "11111111-1111-1111-1111-111111111111",
+                    root.FullName)),
                 new FakeHostedOperations(),
                 new FakeManifestMutator(),
                 analysisService);
@@ -52,6 +57,15 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
                         {
                             ModuleName = approvedModule
                         }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration
+                        {
+                            ModuleName = runtimeModule,
+                            RequiredVersion = "1.0.0"
+                        }
                     }
                 }
             };
@@ -68,8 +82,141 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
             Assert.Equal("Get-Thing", analysisService.LastCode);
             Assert.NotNull(analysisService.LastOptions);
             Assert.Equal(new[] { approvedModule }, analysisService.LastOptions!.ApprovedModules);
+            Assert.Empty(analysisService.LastOptions.KnownFunctions);
             Assert.True(analysisService.LastOptions.IncludeFunctionsRecursively);
             Assert.Empty(analysisService.LastOptions.IgnoreFunctions);
+            Assert.True(analysisService.LastOptions.RequireApprovedModuleSources);
+            var runtimeSource = Assert.Single(analysisService.LastOptions.RuntimeModuleSources);
+            Assert.Equal(runtimeModule, runtimeSource.Name);
+            Assert.Equal(root.FullName, runtimeSource.ModuleBasePath);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void AnalyzeMissingFunctions_PassesModuleLevelConsumerFunctionsButNotPrivateScopedFunctionsAsKnown()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var analysisService = new RecordingMissingFunctionAnalysisService(
+                new MissingFunctionAnalysisResult(
+                    Array.Empty<MissingCommandReference>(),
+                    Array.Empty<MissingCommandReference>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>()));
+            var runner = new ModulePipelineRunner(
+                new NullLogger(),
+                new ThrowingPowerShellRunner(),
+                new FakeDependencyMetadataProvider(),
+                new FakeHostedOperations(),
+                new FakeManifestMutator(),
+                analysisService);
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = Array.Empty<IConfigurationSegment>()
+            };
+            const string code = "function Get-ConsumerHelper { 'ok' }\nfunction private:Get-PrivateHelper { 'private' }";
+            var method = typeof(ModulePipelineRunner).GetMethod("AnalyzeMissingFunctions", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+
+            method!.Invoke(runner, new object?[] { null, code, runner.Plan(spec) });
+
+            Assert.NotNull(analysisService.LastOptions);
+            Assert.Contains("Get-ConsumerHelper", analysisService.LastOptions!.KnownFunctions, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Get-PrivateHelper", analysisService.LastOptions.KnownFunctions, StringComparer.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void ValidateMissingFunctions_IgnoresCommandsResolvedFromTheConsumerModuleItself()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var report = new MissingFunctionAnalysisResult(
+                summary: new[]
+                {
+                    new MissingCommandReference("Get-ConsumerHelper", moduleName, "Function", false, false, string.Empty)
+                },
+                summaryFiltered: Array.Empty<MissingCommandReference>(),
+                functions: Array.Empty<string>(),
+                functionsTopLevelOnly: Array.Empty<string>());
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = Array.Empty<IConfigurationSegment>()
+            };
+            var method = typeof(ModulePipelineRunner).GetMethod("ValidateMissingFunctions", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+
+            method!.Invoke(runner, new object?[] { report, runner.Plan(spec), null });
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData("Out-Null")]
+    [InlineData("Set-Alias")]
+    public void ValidateMissingFunctions_IgnoresCommandsProvidedByTheDefaultPowerShellSession(string commandName)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var report = new MissingFunctionAnalysisResult(
+                summary: new[] { new MissingCommandReference(commandName, string.Empty, string.Empty, false, false, "not resolved in build host") },
+                summaryFiltered: Array.Empty<MissingCommandReference>(),
+                functions: Array.Empty<string>(),
+                functionsTopLevelOnly: Array.Empty<string>());
+            var runner = new ModulePipelineRunner(new NullLogger());
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec
+                {
+                    Name = moduleName,
+                    SourcePath = root.FullName,
+                    Version = "1.0.0",
+                    CsprojPath = null
+                },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = Array.Empty<IConfigurationSegment>()
+            };
+            var method = typeof(ModulePipelineRunner).GetMethod("ValidateMissingFunctions", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.NotNull(method);
+
+            method!.Invoke(runner, new object?[] { report, runner.Plan(spec), null });
         }
         finally
         {
@@ -180,8 +327,20 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
 
     internal sealed class FakeDependencyMetadataProvider : IModuleDependencyMetadataProvider
     {
+        private readonly InstalledModuleMetadata? _installed;
+
+        internal FakeDependencyMetadataProvider(InstalledModuleMetadata? installed = null)
+        {
+            _installed = installed;
+        }
+
         public IReadOnlyDictionary<string, InstalledModuleMetadata> GetLatestInstalledModules(IReadOnlyList<string> names)
-            => new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase);
+        {
+            var output = new Dictionary<string, InstalledModuleMetadata>(StringComparer.OrdinalIgnoreCase);
+            if (_installed is not null && names.Contains(_installed.Name, StringComparer.OrdinalIgnoreCase))
+                output[_installed.Name] = _installed;
+            return output;
+        }
 
         public IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(string moduleName)
             => Array.Empty<RequiredModuleReference>();

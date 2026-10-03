@@ -213,6 +213,7 @@ public sealed class DotNetPublishPipelineRunnerBundleProvenanceTests
 
         return new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             ProjectRoot = root,
             Configuration = "Release",
             Targets =

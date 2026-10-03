@@ -24,14 +24,12 @@ internal static partial class WebCliCommandHandlers
             errors.Add("durableBackup.stagingRetentionHours must be from 24 through 720.");
 
         var recipient = backup.Recipient;
-        if (string.IsNullOrWhiteSpace(recipient) ||
-            recipient.Length <= 4 ||
-            !recipient.StartsWith("age1", StringComparison.Ordinal) ||
-            recipient.Any(static character => !(character is >= 'a' and <= 'z' || character is >= '0' and <= '9')))
+        if (!IsValidAgeX25519Recipient(recipient))
             errors.Add("durableBackup requires a literal age public recipient in durableBackup.recipient.");
 
         var databaseIds = new HashSet<string>(StringComparer.Ordinal);
         var databaseNames = new HashSet<string>(StringComparer.Ordinal);
+        var sqlitePaths = new HashSet<string>(StringComparer.Ordinal);
         var databases = backup.Databases ?? Array.Empty<PowerForgeServerDurableBackupDatabase>();
         if (databases.Length == 0)
             errors.Add("durableBackup.databases requires at least one database.");
@@ -39,14 +37,32 @@ internal static partial class WebCliCommandHandlers
         {
             if (string.IsNullOrWhiteSpace(database.Id) || !IsSafeIdentifier(database.Id) || !databaseIds.Add(database.Id))
                 errors.Add($"Durable backup database id '{database.Id}' is missing, unsafe, or duplicated.");
-            if (!string.Equals(database.Provider, "postgresql", StringComparison.Ordinal))
-                errors.Add($"Durable backup database '{database.Id}' provider must be postgresql.");
-            if (string.IsNullOrWhiteSpace(database.Database) ||
-                database.Database.Length > 63 ||
-                !(database.Database[0] is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or '_') ||
-                database.Database.Any(static character => !(character is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '_')) ||
-                !databaseNames.Add(database.Database))
-                errors.Add($"Durable backup database name '{database.Database}' is missing, unsafe, or duplicated.");
+            if (string.Equals(database.Provider, "postgresql", StringComparison.Ordinal))
+            {
+                if (database.RunAs is not null)
+                    errors.Add($"PostgreSQL database '{database.Id}' must not set runAs.");
+                if (string.IsNullOrWhiteSpace(database.Database) ||
+                    database.Database.Length > 63 ||
+                    !(database.Database[0] is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or '_') ||
+                    database.Database.Any(static character => !(character is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '_')) ||
+                    !databaseNames.Add(database.Database))
+                    errors.Add($"Durable backup database name '{database.Database}' is missing, unsafe, or duplicated.");
+            }
+            else if (string.Equals(database.Provider, "sqlite", StringComparison.Ordinal))
+            {
+                var path = NormalizeCapturePath(database.Database, $"durableBackup.databases[{database.Id}].database", errors);
+                if (path is not null)
+                {
+                    if (HasTrailingPathSeparator(database.Database) || path.IndexOfAny(['*', '?', '[', ']']) >= 0 || !sqlitePaths.Add(path))
+                        errors.Add($"SQLite database path '{database.Database}' must be exact, unique, and must not end with '/'.");
+                }
+                if (!IsValidDurableUnixName(database.RunAs) || string.Equals(database.RunAs, "root", StringComparison.Ordinal))
+                    errors.Add($"SQLite database '{database.Id}' requires a non-root runAs account.");
+            }
+            else
+            {
+                errors.Add($"Durable backup database '{database.Id}' provider must be postgresql or sqlite.");
+            }
         }
 
         var encryptedFiles = backup.EncryptedFiles ?? Array.Empty<PowerForgeServerManagedFile>();
@@ -74,6 +90,16 @@ internal static partial class WebCliCommandHandlers
 
         if (exportRoot is not null && encryptedPaths.Any(path => PathContains(exportRoot, path) || PathContains(path, exportRoot)))
             errors.Add("durableBackup.encryptedFiles must not overlap durableBackup.exportRoot.");
+        foreach (var sqlitePath in sqlitePaths)
+        {
+            if (exportRoot is not null && (PathContains(exportRoot, sqlitePath) || PathContains(sqlitePath, exportRoot)))
+                errors.Add($"SQLite database path '{sqlitePath}' must not overlap durableBackup.exportRoot.");
+            if (encryptedPaths.Any(path => PathContains(path, sqlitePath) || PathContains(sqlitePath, path) ||
+                                           path == sqlitePath + "-wal" || path == sqlitePath + "-shm" || path == sqlitePath + "-journal"))
+                errors.Add($"SQLite database path '{sqlitePath}' must not overlap durableBackup.encryptedFiles.");
+            if (artifactPaths.Any(path => PathContains(path, sqlitePath) || PathContains(sqlitePath, path)))
+                errors.Add($"SQLite database path '{sqlitePath}' must not overlap artifact store.");
+        }
         foreach (var encryptedPath in encryptedPaths)
         {
             foreach (var artifactPath in artifactPaths)

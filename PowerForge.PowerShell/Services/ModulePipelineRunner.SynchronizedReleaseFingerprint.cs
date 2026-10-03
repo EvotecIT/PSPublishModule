@@ -484,7 +484,8 @@ public sealed partial class ModulePipelineRunner
                 binding?.Path?.Trim() ?? string.Empty,
                 binding?.Project?.Trim() ?? string.Empty,
                 binding?.Pattern ?? string.Empty,
-                binding?.Replacement ?? string.Empty
+                binding?.Replacement ?? string.Empty,
+                binding?.SyncAgentPluginCompatibility.ToString() ?? string.Empty
             }).ToArray());
 
     private static string SerializeSynchronizedReleaseValues(IEnumerable<string>? values)

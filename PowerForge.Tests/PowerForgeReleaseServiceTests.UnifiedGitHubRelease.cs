@@ -831,6 +831,58 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void PublishBuiltReleaseOutputs_PreservesDraftReleaseIntentForQualifiedAssets()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var asset = Path.Combine(root, "Studio-0.1.9759-win-x64.msi");
+            File.WriteAllText(asset, "signed asset fixture");
+            GitHubReleasePublishRequest? published = null;
+            var service = new PowerForgeReleaseService(
+                new NullLogger(),
+                executePackages: (_, _, _) => throw new InvalidOperationException("Packages must not run."),
+                planTools: (_, _, _) => throw new InvalidOperationException("Tools must not plan."),
+                runTools: _ => throw new InvalidOperationException("Tools must not run."),
+                publishGitHubRelease: request =>
+                {
+                    published = request;
+                    return new GitHubReleasePublishResult { Succeeded = true };
+                });
+            var built = new PowerForgeReleaseResult
+            {
+                Success = true,
+                ReleaseAssets = [asset],
+                ReleaseAssetEntries = [new PowerForgeReleaseAssetEntry { Path = asset, Version = "0.1.9759" }]
+            };
+            var result = service.PublishBuiltReleaseOutputs(
+                new PowerForgeReleaseSpec
+                {
+                    GitHub = new PowerForgeReleaseGitHubOptions
+                    {
+                        Publish = true,
+                        IsDraft = true,
+                        VersionSource = PowerForgeReleaseVersionSource.Assets,
+                        Owner = "EvotecIT",
+                        Repository = "OfficeIMO",
+                        TokenEnvName = "PATH"
+                    }
+                },
+                new PowerForgeReleaseRequest { ConfigPath = Path.Combine(root, "release.json") },
+                built);
+
+            Assert.True(result.Success);
+            Assert.NotNull(published);
+            Assert.True(published.IsDraft);
+            Assert.Equal([asset], published.AssetFilePaths);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void PublishBuiltReleaseOutputs_SubmitsPreviouslyGeneratedWingetManifests()
     {
         var root = CreateSandbox();

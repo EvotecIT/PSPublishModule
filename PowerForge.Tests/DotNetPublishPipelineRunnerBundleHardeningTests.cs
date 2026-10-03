@@ -302,6 +302,7 @@ public sealed class DotNetPublishPipelineRunnerBundleHardeningTests
     {
         return new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             ProjectRoot = root,
             Bundles = new[] { bundle }
         };

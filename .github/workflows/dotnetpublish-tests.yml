@@ -14,6 +14,7 @@ on:
     paths:
       - PowerForge/**
       - PowerForge.Cli/**
+      - PowerForge.PowerShell/**
       - PowerForge.Tests/**
       - PSPublishModule/**
       - Schemas/**
@@ -29,7 +30,7 @@ on:
 jobs:
   DotNetPublishTests:
     runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","linux"]' || '["ubuntu-latest"]') }}
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v7
@@ -42,9 +43,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
-          key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+          key: ${{ runner.os }}-nuget-publish-sdk-locked-v1-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
 
       - name: Restore focused test graph
         shell: pwsh
@@ -77,9 +76,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ env.NUGET_PACKAGES }}
-          key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+          key: ${{ runner.os }}-nuget-publish-sdk-locked-v1-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
 
       - name: Restore deep test graph
         shell: pwsh

@@ -2,11 +2,22 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
+    internal static string DescribeBuildInputMode(DotNetPublishPlan plan)
+        => plan.UseControlledSourceProvenance
+            ? "controlled-source"
+            : plan.SkipBuildRequested && plan.NoBuildInPublish
+                ? "prebuilt-unverified"
+                : plan.SeparateBuildRequested && plan.NoBuildInPublish
+                    ? "separate-build-unverified"
+                : "working-tree";
+
     internal static SourceProvenance ReadPortableInventorySourceProvenance(
         DotNetPublishPlan plan,
         string? outputDirectory = null,
         IEnumerable<string>? additionalGeneratedPaths = null,
-        DotNetPublishStep? publishStep = null)
+        DotNetPublishStep? publishStep = null,
+        IReadOnlyDictionary<string, string>? cleanTrackedGeneratedProvenanceState = null,
+        string? msiReservationOwner = null)
     {
         string[] projectPaths = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
             .Select(target => target.ProjectPath)
@@ -38,7 +49,9 @@ public sealed partial class DotNetPublishPipelineRunner
             buildProjectPaths: projectPaths,
             buildConfiguration: plan.Configuration,
             buildPlan: plan,
-            buildStep: publishStep);
+            buildStep: publishStep,
+            cleanTrackedGeneratedProvenanceState: cleanTrackedGeneratedProvenanceState,
+            msiReservationOwner: msiReservationOwner);
         if (string.IsNullOrWhiteSpace(provenance.Revision) ||
             !string.Equals(provenance.Revision, plan.SourceRevision, StringComparison.OrdinalIgnoreCase))
         {

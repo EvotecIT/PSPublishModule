@@ -6,6 +6,37 @@ namespace PowerForge.Tests;
 public sealed class WebCliServerCaptureTests
 {
     [Fact]
+    public void CaptureLocal_ExecutesManifestCommandsWithoutContactingTarget()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-local-capture-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var manifestPath = Path.Combine(root, "manifest.json");
+            var outputPath = Path.Combine(root, "capture");
+            File.WriteAllText(manifestPath, """
+                {"schemaVersion":2,"name":"local-capture-test","target":{"host":"no-such-host.invalid"},"capture":{"commands":[{"id":"marker","command":"printf local-capture-ok","required":true}]}}
+                """);
+
+            var exitCode = WebCliCommandHandlers.HandleServer(
+                ["capture", "--manifest", manifestPath, "--out", outputPath, "--local", "--fail-on-failure"],
+                outputJson: false,
+                logger: new WebConsoleLogger(),
+                outputSchemaVersion: 1);
+
+            Assert.Equal(0, exitCode);
+            Assert.Equal("local-capture-ok", File.ReadAllText(Path.Combine(outputPath, "commands", "0000-marker.out.txt")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void HydrateCapturedRepositoryRefs_UsesSuccessfulExactCommandOutput()
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-ref-capture-" + Guid.NewGuid().ToString("N"));
@@ -203,9 +234,9 @@ public sealed class WebCliServerCaptureTests
         var script = WebCliCommandHandlers.BuildRemoteEncryptedTarScript(
         [
             new PowerForgeServerManagedFile { Target = "/etc/example/required.env", Required = true }
-        ], "age1example");
+        ], "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd");
 
-        Assert.Equal("sudo -n /usr/local/sbin/powerforge-server-encrypted-capture --recipient 'age1example' -- '/etc/example/required.env'", script);
+        Assert.Equal("sudo -n /usr/local/sbin/powerforge-server-encrypted-capture --recipient 'age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd' -- '/etc/example/required.env'", script);
         Assert.DoesNotContain(" tar ", script, StringComparison.Ordinal);
         Assert.DoesNotContain("| age", script, StringComparison.Ordinal);
     }
@@ -217,10 +248,10 @@ public sealed class WebCliServerCaptureTests
         [
             new PowerForgeServerManagedFile { Target = "/var/lib/example/optional.env" },
             new PowerForgeServerManagedFile { Target = "/etc/example/required.env", Required = true }
-        ], "age1example");
+        ], "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd");
 
         Assert.Equal(
-            "sudo -n /usr/local/sbin/powerforge-server-encrypted-capture --recipient 'age1example' -- '/etc/example/required.env' --optional '/var/lib/example/optional.env'",
+            "sudo -n /usr/local/sbin/powerforge-server-encrypted-capture --recipient 'age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd' -- '/etc/example/required.env' --optional '/var/lib/example/optional.env'",
             script);
     }
 
@@ -230,36 +261,36 @@ public sealed class WebCliServerCaptureTests
         var command = WebCliCommandHandlers.BuildRemoteEncryptedCaptureSudoersCommand(
         [
             new PowerForgeServerManagedFile { Target = "/etc/example/required.env", Required = true }
-        ], "age1example");
+        ], "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd");
 
-        Assert.Equal("/usr/local/sbin/powerforge-server-encrypted-capture --recipient age1example -- /etc/example/required.env", command);
+        Assert.Equal("/usr/local/sbin/powerforge-server-encrypted-capture --recipient age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd -- /etc/example/required.env", command);
         Assert.Equal(
-            "/usr/local/sbin/powerforge-server-encrypted-capture --recipient age1example -- /etc/example/required.env --optional /var/lib/example/optional.env",
+            "/usr/local/sbin/powerforge-server-encrypted-capture --recipient age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd -- /etc/example/required.env --optional /var/lib/example/optional.env",
             WebCliCommandHandlers.BuildRemoteEncryptedCaptureSudoersCommand(
             [
                 new PowerForgeServerManagedFile { Target = "/var/lib/example/optional.env" },
                 new PowerForgeServerManagedFile { Target = "/etc/example/required.env", Required = true }
-            ], "age1example"));
+            ], "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd"));
         Assert.Throws<InvalidOperationException>(() =>
             WebCliCommandHandlers.BuildRemoteEncryptedCaptureSudoersCommand(
             [
                 new PowerForgeServerManagedFile { Target = "/etc/example/*", Required = true }
-            ], "age1example"));
+            ], "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd"));
         Assert.Throws<InvalidOperationException>(() =>
             WebCliCommandHandlers.BuildRemoteEncryptedCaptureSudoersCommand(
             [
                 new PowerForgeServerManagedFile { Target = "etc/example/secret.env", Required = true }
-            ], "age1example"));
+            ], "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd"));
         Assert.Throws<InvalidOperationException>(() =>
             WebCliCommandHandlers.BuildRemoteEncryptedCaptureSudoersCommand(
             [
                 new PowerForgeServerManagedFile { Target = "/etc/example/../secret.env", Required = true }
-            ], "age1example"));
+            ], "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd"));
         Assert.Throws<InvalidOperationException>(() =>
             WebCliCommandHandlers.BuildRemoteEncryptedCaptureSudoersCommand(
             [
                 new PowerForgeServerManagedFile { Target = "/etc/example/secr\u00E9t.env", Required = true }
-            ], "age1example"));
+            ], "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd"));
     }
 
     [Fact]

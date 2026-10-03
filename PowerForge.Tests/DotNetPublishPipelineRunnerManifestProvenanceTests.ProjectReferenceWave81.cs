@@ -281,6 +281,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         provenAppBytes = File.ReadAllBytes(Path.Combine(root, "bin", "Release", "net8.0", "App.dll"));
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             ProjectRoot = root,
             Configuration = "Release",
             SourceRevision = revision,

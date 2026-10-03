@@ -22,6 +22,41 @@ public sealed partial class DotNetPublishPipelineRunner
         foreach (string path in sourceRootPaths ?? Array.Empty<string>())
             AddSourceDirtyScopePath(scope, projectRoot, gitRoot, path, directory: true);
 
+        if (buildPlan is not null && !buildPlan.UseControlledSourceProvenance)
+        {
+            // A normal publish builds the operator-selected working tree. Git state is useful
+            // release context, but reconstructing MSBuild and NuGet in a controlled checkout
+            // is an optional, stronger proof rather than a prerequisite for signing.
+            scope.BuildInputsResolved = true;
+            // Without an evaluated input graph, a sibling project or imported target may
+            // contribute to the build. Check the Git working tree as a whole so the
+            // recorded clean/dirty flag never claims only the top-level project was used.
+            AddSourceDirtyScopePath(scope, projectRoot, gitRoot, gitRoot, directory: true);
+            scope.ProjectDirectories = (buildProjectPaths ?? Array.Empty<string>())
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => Path.GetDirectoryName(Path.GetFullPath(Path.IsPathRooted(path)
+                    ? path
+                    : Path.Combine(projectRoot, path)))!)
+                .Distinct(FileSystemPathSafety.ExistingPathComparer)
+                .ToArray();
+            foreach (string path in buildProjectPaths ?? Array.Empty<string>())
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                    continue;
+                string fullPath = Path.GetFullPath(Path.IsPathRooted(path)
+                    ? path
+                    : Path.Combine(projectRoot, path));
+                scope.BuildInputs.Add(fullPath);
+                scope.SourceInputs.Add(fullPath);
+            }
+            foreach (string directory in scope.ProjectDirectories)
+            {
+                AddProjectDirectoryScopePath(scope, projectRoot, gitRoot, directory);
+                AddSourceDirtyScopePath(scope, projectRoot, gitRoot, directory, directory: true);
+            }
+            return scope;
+        }
+
         scope.BuildInputsResolved = TryEvaluateDotNetBuildInputs(
             buildProjectPaths,
             buildConfiguration,

@@ -5,7 +5,8 @@ public sealed partial class DotNetNuGetClient
     /// <summary>
     /// Signs packages one at a time so one transient certificate-provider or file-access
     /// failure cannot hide packages that were already signed by a multi-package command.
-    /// Each failed package receives one immediate retry.
+    /// Each failed package receives one immediate retry, except a timeout: a stalled
+    /// certificate or timestamp operation stops the batch so the operator can act.
     /// </summary>
     internal async Task<(DotNetNuGetSignResult Result, string[] FailedPackages)> SignPackagesIndividuallyAsync(
         DotNetNuGetSignRequest request,
@@ -19,9 +20,11 @@ public sealed partial class DotNetNuGetClient
         var started = DateTime.UtcNow;
         var messages = new List<string>();
         var failures = new List<(string PackagePath, DotNetNuGetSignResult Result)>();
+        int attemptedPackageCount = 0;
         foreach (string packagePath in request.PackagePaths)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            attemptedPackageCount++;
             DotNetNuGetSignResult? last = null;
             for (int attempt = 1; attempt <= 2; attempt++)
             {
@@ -42,10 +45,14 @@ public sealed partial class DotNetNuGetClient
                                  (attempt == 1 ? "signed" : "signed on retry"));
                     break;
                 }
+                if (last.TimedOut)
+                    break;
             }
 
             if (last is not null && !last.Succeeded)
                 failures.Add((packagePath, last));
+            if (last?.TimedOut == true)
+                break;
         }
 
         TimeSpan duration = DateTime.UtcNow - started;
@@ -65,13 +72,17 @@ public sealed partial class DotNetNuGetClient
 
         string[] failedPackages = failures
             .Select(failure => failure.PackagePath)
+            .Concat(request.PackagePaths.Skip(attemptedPackageCount))
             .ToArray();
         string details = string.Join(
             "; ",
             failures.Select(failure =>
                 $"{Path.GetFileName(failure.PackagePath)}: " +
                 (failure.Result.ErrorMessage ?? $"exit code {failure.Result.ExitCode}")));
-        string error = $"Signing failed for {failures.Count} of {request.PackagePaths.Length} package(s): {details}";
+        int unattemptedPackages = request.PackagePaths.Length - attemptedPackageCount;
+        string error = failures.Any(failure => failure.Result.TimedOut)
+            ? $"Signing timed out for {details}; {unattemptedPackages} remaining package(s) were not attempted. Check hardware-token authorization/PIN and the timestamp service before retrying."
+            : $"Signing failed for {failures.Count} of {request.PackagePaths.Length} package(s): {details}";
         DotNetNuGetSignResult firstFailure = failures[0].Result;
         return (
             new DotNetNuGetSignResult(

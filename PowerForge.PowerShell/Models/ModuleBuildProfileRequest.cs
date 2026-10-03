@@ -31,7 +31,7 @@ internal sealed class ModuleBuildProfileRequest
     public bool DotSourceLibraries { get; set; }
     public bool DotSourceClasses { get; set; }
     public bool InstallMissingModules { get; set; } = true;
-    public InstallationStrategy VersionedInstallStrategy { get; set; } = InstallationStrategy.AutoRevision;
+    public InstallationStrategy VersionedInstallStrategy { get; set; } = InstallationStrategy.Exact;
     public int VersionedInstallKeep { get; set; } = 3;
     public bool KillLockersBeforeInstall { get; set; }
     public bool KillLockersForce { get; set; }

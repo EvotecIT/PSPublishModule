@@ -6,6 +6,51 @@ namespace PowerForge.Tests;
 public sealed class ConfigurationSegmentJsonConverterTests
 {
     [Fact]
+    public void ModuleDependency_DefaultsToInstalled_AndJsonCanSelectPSGallery()
+    {
+        Assert.Equal(ModuleDependencyVersionSource.Installed, new ModuleDependencyConfiguration().VersionSource);
+
+        const string json = """
+            {
+              "Build": { "Name": "Generic.Module", "SourcePath": ".", "Version": "1.0.0" },
+              "Segments": [
+                {
+                  "Type": "RequiredModule",
+                  "Configuration": {
+                    "ModuleName": "PSSharedGoods",
+                    "MinimumVersion": "1.0.5",
+                    "VersionSource": "PSGallery"
+                  }
+                }
+              ]
+            }
+            """;
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        options.Converters.Add(new ConfigurationSegmentJsonConverter());
+
+        var spec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, options);
+        var segment = Assert.IsType<ConfigurationModuleSegment>(Assert.Single(spec!.Segments));
+        Assert.Equal(ModuleDependencyVersionSource.PSGallery, segment.Configuration.VersionSource);
+        Assert.Equal("1.0.5", segment.Configuration.MinimumVersion);
+
+        using var schema = JsonDocument.Parse(File.ReadAllText(SchemaPath("powerforge.segments.schema.json")));
+        Assert.True(schema.RootElement
+            .GetProperty("$defs")
+            .GetProperty("ModuleDependencyConfiguration")
+            .GetProperty("properties")
+            .TryGetProperty("VersionSource", out _));
+        using var commonSchema = JsonDocument.Parse(File.ReadAllText(SchemaPath("powerforge.common.schema.json")));
+        Assert.Equal(
+            "Installed",
+            commonSchema.RootElement
+                .GetProperty("$defs")
+                .GetProperty("ModuleDependencyVersionSource")
+                .GetProperty("default")
+                .GetString());
+    }
+
+    [Fact]
     [Trait("Category", "PowerShellCompilation")]
     public void Deserialize_reads_build_module_powershell_compilation()
     {

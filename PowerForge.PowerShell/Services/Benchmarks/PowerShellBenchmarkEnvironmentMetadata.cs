@@ -64,6 +64,10 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
             ["outlierMode"] = suite.OutlierMode.ToString(),
             ["runMode"] = suite.RunMode
         };
+        if (suite.ProcessorAffinityMask.HasValue)
+            metadata["requestedProcessAffinityMask"] = "0x" + suite.ProcessorAffinityMask.Value.ToString("X", CultureInfo.InvariantCulture);
+        if (suite.ProcessPriority.HasValue)
+            metadata["requestedProcessPriority"] = suite.ProcessPriority.Value.ToString();
         foreach (var item in suite.Metadata)
             metadata["benchmark." + item.Key] = item.Value;
         AddMetadata(metadata, "gitSha", startedProvenance.GitSha);

@@ -1040,7 +1040,7 @@ public sealed partial class DotNetPublishPipelineRunner
             finally
             {
                 if (!completed) TryKillProcessTree(p);
-                try { Task.WhenAll(stdoutCapture.StopAsync(), stderrCapture.StopAsync()).GetAwaiter().GetResult(); }
+                try { StopRedirectedOutputReads(stdoutCapture, stderrCapture); }
                 catch when (!completed) { /* Preserve the original failure after both readers finish. */ }
             }
             string timedStdout = stdoutCapture.Snapshot();

@@ -58,10 +58,28 @@ public sealed partial class GitHubReleasePublisher {
             string.IsNullOrWhiteSpace(expectedTagCommitSha) &&
             !requirePublishedStableRelease) return;
 
-        var currentRelease = GetReleaseByTag(owner, repo, token, apiBaseUrl, tagName, reusedExistingRelease: true, cancellationToken);
+        // A draft has no tag ref yet. Its API target_commitish is the source binding until publication.
+        GitHubReleaseApiResponse currentRelease;
+        try
+        {
+            currentRelease = GetReleaseByTag(owner, repo, token, apiBaseUrl, tagName, reusedExistingRelease: true, cancellationToken);
+        }
+        catch (GitHubApiRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            currentRelease = GetReleaseById(owner, repo, token, apiBaseUrl, releaseId, cancellationToken);
+            if (!currentRelease.IsDraft)
+                throw new InvalidOperationException($"Published GitHub release {releaseId} is no longer reachable by tag '{tagName}'.", ex);
+        }
+        if (currentRelease.IsDraft && !string.Equals(currentRelease.TagName, tagName, StringComparison.Ordinal))
+            throw new InvalidOperationException($"GitHub draft release {releaseId} changed its tag before asset mutation.");
+        if (currentRelease.IsDraft && requirePublishedStableRelease)
+            ValidatePublishedStableRelease(tagName, requirePublishedStableRelease, currentRelease);
         var currentTagCommitSha = string.IsNullOrWhiteSpace(expectedTagCommitSha)
             ? null
-            : GetTagCommitSha(owner, repo, token, apiBaseUrl, tagName, cancellationToken);
+            : currentRelease.IsDraft
+                ? TryGetTagCommitSha(owner, repo, token, apiBaseUrl, tagName, cancellationToken)
+                    ?? currentRelease.TargetCommitish
+                : GetTagCommitSha(owner, repo, token, apiBaseUrl, tagName, cancellationToken);
         ValidateExpectedReleaseState(
             tagName,
             releaseId,
@@ -100,8 +118,14 @@ public sealed partial class GitHubReleasePublisher {
         }
     }
 
-    private static string? GetTagCommitSha(string owner, string repo, string token, string apiBaseUrl, string tagName, CancellationToken cancellationToken) {
-        var reference = GetGitObject(token, apiBaseUrl, $"/repos/{owner}/{repo}/git/ref/tags/{Uri.EscapeDataString(tagName)}", cancellationToken);
+    private static string? GetTagCommitSha(string owner, string repo, string token, string apiBaseUrl, string tagName, CancellationToken cancellationToken, bool allowMissingRef = false) {
+        GitHubGitObjectResponse reference;
+        try {
+            reference = GetGitObject(token, apiBaseUrl, $"/repos/{owner}/{repo}/git/ref/tags/{Uri.EscapeDataString(tagName)}", cancellationToken);
+        }
+        catch (GitHubApiRequestException ex) when (allowMissingRef && ex.StatusCode == System.Net.HttpStatusCode.NotFound) {
+            return null;
+        }
         var sha = reference.Sha;
         var type = reference.Type;
         for (var depth = 0; string.Equals(type, "tag", StringComparison.OrdinalIgnoreCase) && depth < 10; depth++) {
@@ -112,7 +136,13 @@ public sealed partial class GitHubReleasePublisher {
 
         if (string.Equals(type, "tag", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"GitHub tag '{tagName}' exceeded the supported annotated-tag depth.");
-        return string.IsNullOrWhiteSpace(sha) ? null : sha;
+        return string.IsNullOrWhiteSpace(sha)
+            ? throw new InvalidOperationException($"GitHub tag '{tagName}' has no commit object.")
+            : sha;
+    }
+
+    private static string? TryGetTagCommitSha(string owner, string repo, string token, string apiBaseUrl, string tagName, CancellationToken cancellationToken) {
+        return GetTagCommitSha(owner, repo, token, apiBaseUrl, tagName, cancellationToken, allowMissingRef: true);
     }
 
     private static GitHubGitObjectResponse GetGitObject(string token, string apiBaseUrl, string path, CancellationToken cancellationToken) {

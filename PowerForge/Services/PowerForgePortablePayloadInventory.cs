@@ -5,6 +5,7 @@ using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace PowerForge;
 
@@ -24,6 +25,13 @@ internal sealed class PowerForgePortablePayloadInventory
     public string Style { get; set; } = string.Empty;
     public string SourceRevision { get; set; } = string.Empty;
     public bool SourceDirty { get; set; }
+    /// <summary>
+    /// Describes how publish bytes were obtained. SourceRevision identifies the checkout;
+    /// it does not by itself prove that prebuilt bytes came from that checkout.
+    /// Null is retained for inventories written before this optional field existed.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BuildInputMode { get; set; }
     public string ConfigurationPolicySha256 { get; set; } = string.Empty;
     public string Version { get; set; } = string.Empty;
     public string ExecutablePath { get; set; } = string.Empty;
@@ -68,14 +76,30 @@ internal static class PowerForgePortablePayloadInventoryCms
     internal static (string InventoryPath, string SignaturePath) ResolveEvidencePaths(
         string outputDirectory,
         string executablePath,
-        bool archivePayload)
-        => archivePayload
-            ? (
+        bool archivePayload,
+        string? archivePath = null)
+    {
+        if (archivePayload)
+        {
+            if (string.IsNullOrWhiteSpace(archivePath))
+                throw new InvalidOperationException("Portable archive path is required for detached release evidence.");
+            EnsureEvidencePathsAvailable(
                 Path.Combine(outputDirectory, PowerForgePortablePayloadInventory.InventoryFileName),
-                Path.Combine(outputDirectory, PowerForgePortablePayloadInventory.SignatureFileName))
-            : (
-                executablePath + PowerForgePortablePayloadInventory.DirectInventorySuffix,
-                executablePath + PowerForgePortablePayloadInventory.DirectSignatureSuffix);
+                Path.Combine(outputDirectory, PowerForgePortablePayloadInventory.SignatureFileName));
+            string relative = FrameworkCompatibility.GetRelativePath(
+                Path.GetFullPath(outputDirectory), Path.GetFullPath(archivePath!));
+            if (!Path.IsPathRooted(relative) && relative != ".." &&
+                !relative.StartsWith("../", StringComparison.Ordinal) &&
+                !relative.StartsWith("..\\", StringComparison.Ordinal))
+                throw new InvalidOperationException("Portable archive and its release evidence must be outside the application payload directory.");
+            return (
+                archivePath + PowerForgePortablePayloadInventory.DirectInventorySuffix,
+                archivePath + PowerForgePortablePayloadInventory.DirectSignatureSuffix);
+        }
+        return (
+            executablePath + PowerForgePortablePayloadInventory.DirectInventorySuffix,
+            executablePath + PowerForgePortablePayloadInventory.DirectSignatureSuffix);
+    }
 
     internal static void EnsureEvidencePathsAvailable(string inventoryPath, string signaturePath)
     {
@@ -457,7 +481,8 @@ internal static class PowerForgePortablePayloadInventoryCms
                     continue;
                 }
                 if (IsRootMetadataPath(normalized))
-                    continue;
+                    throw new InvalidOperationException(
+                        $"Portable archive contains embedded release-inventory evidence '{normalized}'; detached evidence requires an application-only archive.");
                 if (string.Equals(normalized, PowerForgePortablePayloadInventory.InventoryFileName, StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(normalized, PowerForgePortablePayloadInventory.SignatureFileName, StringComparison.OrdinalIgnoreCase))
                 {
@@ -523,41 +548,6 @@ internal static class PowerForgePortablePayloadInventoryCms
                 bundleId,
                 sourceDirty);
         }
-    }
-
-    internal static void RewriteArchiveEvidence(
-        string archivePath,
-        byte[] inventoryBytes,
-        byte[] signatureBytes)
-    {
-        using ZipArchive archive = ZipFile.Open(archivePath, ZipArchiveMode.Update);
-        foreach (string reservedPath in new[]
-                 {
-                     PowerForgePortablePayloadInventory.InventoryFileName,
-                     PowerForgePortablePayloadInventory.SignatureFileName
-                 })
-        {
-            ZipArchiveEntry[] matches = archive.Entries
-                .Where(entry => string.Equals(entry.FullName, reservedPath, StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-            if (matches.Any(entry => !string.Equals(entry.FullName, reservedPath, StringComparison.Ordinal)) ||
-                matches.Length > 1)
-            {
-                throw new InvalidOperationException(
-                    $"Portable archive contains ambiguous reserved release-inventory path '{reservedPath}'.");
-            }
-            foreach (ZipArchiveEntry match in matches)
-                match.Delete();
-        }
-
-        WriteArchiveEntry(
-            archive,
-            PowerForgePortablePayloadInventory.InventoryFileName,
-            inventoryBytes);
-        WriteArchiveEntry(
-            archive,
-            PowerForgePortablePayloadInventory.SignatureFileName,
-            signatureBytes);
     }
 
     internal static void RewriteEvidenceFiles(
@@ -653,13 +643,6 @@ internal static class PowerForgePortablePayloadInventoryCms
         using Stream input = entry.Open();
         using SHA256 sha256 = SHA256.Create();
         return BitConverter.ToString(sha256.ComputeHash(input)).Replace("-", string.Empty);
-    }
-
-    private static void WriteArchiveEntry(ZipArchive archive, string path, byte[] bytes)
-    {
-        ZipArchiveEntry entry = archive.CreateEntry(path, CompressionLevel.Optimal);
-        using Stream output = entry.Open();
-        output.Write(bytes, 0, bytes.Length);
     }
 
     private static X509Certificate2 FindSigningCertificate(DotNetPublishSignOptions options)

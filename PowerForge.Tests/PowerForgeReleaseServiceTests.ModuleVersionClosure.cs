@@ -110,6 +110,8 @@ public sealed partial class PowerForgeReleaseServiceTests
         string root = CreateSandbox();
         try
         {
+            // The read-only filesystem probe needs an entry to distinguish case behavior.
+            File.WriteAllText(Path.Combine(root, "CaseProbe.txt"), string.Empty);
             if (FrameworkCompatibility.GetPathStringComparisonForPath(root) != StringComparison.Ordinal)
                 return;
 

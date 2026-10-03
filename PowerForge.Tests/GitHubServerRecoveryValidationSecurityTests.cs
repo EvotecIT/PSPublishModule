@@ -6,9 +6,9 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
     private const string CallerRepository = "EvotecIT/ExampleSite";
     private const string EngineRepository = "EvotecIT/PSPublishModule";
     private const string EngineRef = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    private const string Recipient = "age1example";
+    private const string Recipient = "age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd";
     private const string ExpectedPlainCaptureCommand = "/usr/bin/tar -czf - /etc/example/config";
-    private const string ExpectedCaptureCommand = "/usr/local/sbin/powerforge-server-encrypted-capture --recipient age1example -- /etc/example/secret";
+    private const string ExpectedCaptureCommand = "/usr/local/sbin/powerforge-server-encrypted-capture --recipient age18mnmcf7j440ethr6459dvpjy540ll7q2e0088n6gjm4wlmft4cpqhxrmnd -- /etc/example/secret";
     private const string ExpectedInspectCommand = "/usr/sbin/apachectl -S";
     private const string RestrictedCaptureKey = "restrict ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPowerForgeRecoveryFixtureKey example";
 
@@ -31,6 +31,24 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
 
         Assert.True(result.ExitCode == 0, result.AllOutput);
         Assert.Equal("3", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldAcceptExplicitPublisherEngineHelper()
+    {
+        var result = RunValidator(usePublisherEngine: true);
+
+        Assert.True(result.ExitCode == 0, result.AllOutput);
+        Assert.Equal("3", result.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void Validator_ShouldNeverSubstituteActionCheckoutForDifferentlyPinnedPublisher()
+    {
+        var result = RunValidator(usePublisherEngine: true, publisherAtDifferentRef: true);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("credential-free validation", result.AllOutput, StringComparison.Ordinal);
     }
 
     [Fact]

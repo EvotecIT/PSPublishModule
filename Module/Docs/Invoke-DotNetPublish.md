@@ -11,12 +11,12 @@ Executes DotNet publish engine from DSL settings or an existing JSON config.
 ## SYNTAX
 ### Settings (Default)
 ```powershell
-Invoke-DotNetPublish -Settings <scriptblock> [-ProjectRoot <string>] [-Profile <string>] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-OutputPath <string>] [-MsBuildProperty <hashtable>] [-SkipInstallers] [-SkipRestore] [-SkipBuild] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-ExitCode] [<CommonParameters>]
+Invoke-DotNetPublish -Settings <scriptblock> [-ProjectRoot <string>] [-Profile <string>] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-OutputPath <string>] [-MsBuildProperty <hashtable>] [-SkipInstallers] [-SkipRestore] [-SkipBuild] [-NoPublishSign] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Config
 ```powershell
-Invoke-DotNetPublish -ConfigPath <string> [-ProjectRoot <string>] [-Profile <string>] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-OutputPath <string>] [-MsBuildProperty <hashtable>] [-SkipInstallers] [-SkipRestore] [-SkipBuild] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-ExitCode] [<CommonParameters>]
+Invoke-DotNetPublish -ConfigPath <string> [-ProjectRoot <string>] [-Profile <string>] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-OutputPath <string>] [-MsBuildProperty <hashtable>] [-SkipInstallers] [-SkipRestore] [-SkipBuild] [-NoPublishSign] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-ExitCode] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -141,6 +141,24 @@ Accept wildcard characters: False
 
 ### -NoInteractive
 Disables interactive output mode. Reserved for future UI parity.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: Settings, Config
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -NoPublishSign
+Disables signing only for targets selected by this invocation. The configuration remains unchanged.
+Use for a temporary runtime smoke, not a signed release. Bundles selected by the effective profile are rejected
+because bundle signing follows the source publish target.
 
 ```yaml
 Type: SwitchParameter

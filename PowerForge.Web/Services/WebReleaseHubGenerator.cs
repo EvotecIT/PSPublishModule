@@ -81,7 +81,33 @@ public static class WebReleaseHubGenerator
             .ToList();
 
         if (options.MaxReleases is { } max && max > 0 && releases.Count > max)
-            releases = releases.Take(max).ToList();
+        {
+            // Keep global channel markers in the document even when the timeline cap
+            // contains only another channel and product retention adds an older release.
+            var globalLatest = new[]
+                {
+                    releases.FirstOrDefault(static release => !release.IsDraft && !release.IsPrerelease),
+                    releases.FirstOrDefault(static release => !release.IsDraft && release.IsPrerelease)
+                }
+                .OfType<WebReleaseHubRelease>();
+            var retained = globalLatest.Concat(options.RetainLatestStableTagPrefixes
+                .Where(static prefix => !string.IsNullOrWhiteSpace(prefix))
+                .Select(prefix => releases.FirstOrDefault(release => IsStableReleaseWithTagPrefix(release, prefix)))
+                .OfType<WebReleaseHubRelease>())
+                .Concat(releases.Where(release => options.RetainAllStableTagPrefixes.Any(prefix =>
+                    !string.IsNullOrWhiteSpace(prefix) && IsStableReleaseWithTagPrefix(release, prefix))))
+                .ToArray();
+            var timeline = releases.Take(max).ToList();
+            foreach (WebReleaseHubRelease release in retained)
+            {
+                if (!timeline.Any(candidate => ReferenceEquals(candidate, release)))
+                    timeline.Add(release);
+            }
+            releases = timeline
+                .OrderByDescending(ResolveReleaseTimestamp)
+                .ThenByDescending(static release => release.Tag, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
 
         ClassifyAssets(releases, options, products);
         MarkLatest(releases, out var latestStableTag, out var latestPrereleaseTag);
@@ -416,14 +442,14 @@ public static class WebReleaseHubGenerator
             release.IsLatestPrerelease = false;
         }
 
-        var latestStable = releases.FirstOrDefault(static release => !release.IsPrerelease);
+        var latestStable = releases.FirstOrDefault(static release => !release.IsDraft && !release.IsPrerelease);
         if (latestStable is not null)
         {
             latestStable.IsLatestStable = true;
             latestStableTag = latestStable.Tag;
         }
 
-        var latestPreview = releases.FirstOrDefault(static release => release.IsPrerelease);
+        var latestPreview = releases.FirstOrDefault(static release => !release.IsDraft && release.IsPrerelease);
         if (latestPreview is not null)
         {
             latestPreview.IsLatestPrerelease = true;
@@ -550,14 +576,21 @@ public static class WebReleaseHubGenerator
         var pageSize = Math.Clamp(options.PageSize <= 0 ? 100 : options.PageSize, 1, 100);
         var maxPages = options.MaxPages <= 0 ? 5 : options.MaxPages;
         var maxReleases = options.MaxReleases is > 0 ? options.MaxReleases.Value : int.MaxValue;
+        bool retainStablePrefixes = options.RetainLatestStableTagPrefixes.Any(static prefix => !string.IsNullOrWhiteSpace(prefix)) ||
+                                    options.RetainAllStableTagPrefixes.Any(static prefix => !string.IsNullOrWhiteSpace(prefix));
+        bool fetchedAllAvailableReleases = false;
+        bool fetchFailed = false;
+        bool anonymousAfterTokenFailure = false;
 
-        for (var page = 1; page <= maxPages && results.Count < maxReleases; page++)
+        for (var page = 1;
+             page <= maxPages && (results.Count < maxReleases || retainStablePrefixes);
+             page++)
         {
             var url = $"https://api.github.com/repos/{owner}/{repo}/releases?per_page={pageSize}&page={page}";
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                if (!string.IsNullOrWhiteSpace(options.Token))
+                if (!anonymousAfterTokenFailure && !string.IsNullOrWhiteSpace(options.Token))
                     request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.Token);
 
                 using var response = GitHubClient.Send(request);
@@ -565,57 +598,132 @@ public static class WebReleaseHubGenerator
                 {
                     if (ShouldRetryGitHubWithoutAuthorization(request, response))
                     {
+                        if (page > 1)
+                        {
+                            warnings.Add($"GitHub release authorization changed after page 1 for {owner}/{repo}; refusing to mix pagination offsets.");
+                            fetchFailed = true;
+                            break;
+                        }
                         using var retryRequest = CloneRequestWithoutAuthorization(request);
                         using var retryResponse = GitHubClient.Send(retryRequest);
                         if (retryResponse.IsSuccessStatusCode)
                         {
                             warnings.Add($"GitHub release fetch retried without Authorization after token auth failed for {owner}/{repo}.");
+                            anonymousAfterTokenFailure = true;
                             using var retryStream = retryResponse.Content.ReadAsStream();
                             using var retryDoc = JsonDocument.Parse(retryStream);
                             if (retryDoc.RootElement.ValueKind != JsonValueKind.Array)
+                            {
+                                fetchFailed = true;
                                 break;
+                            }
 
                             var retryPageItems = ParseReleaseArray(retryDoc.RootElement, owner, repo, sourceIsGitHubApi: true);
                             if (retryPageItems.Count == 0)
+                            {
+                                fetchedAllAvailableReleases = true;
                                 break;
+                            }
 
                             results.AddRange(retryPageItems);
 
                             if (retryPageItems.Count < pageSize)
+                            {
+                                fetchedAllAvailableReleases = true;
                                 break;
+                            }
 
                             continue;
                         }
                     }
 
                     warnings.Add($"GitHub release fetch failed ({(int)response.StatusCode}) for {owner}/{repo}.");
+                    fetchFailed = true;
                     break;
                 }
 
                 using var stream = response.Content.ReadAsStream();
                 using var doc = JsonDocument.Parse(stream);
                 if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                {
+                    fetchFailed = true;
                     break;
+                }
 
                 var pageItems = ParseReleaseArray(doc.RootElement, owner, repo, sourceIsGitHubApi: true);
                 if (pageItems.Count == 0)
+                {
+                    fetchedAllAvailableReleases = true;
                     break;
+                }
 
                 results.AddRange(pageItems);
 
                 if (pageItems.Count < pageSize)
+                {
+                    fetchedAllAvailableReleases = true;
                     break;
+                }
             }
             catch (Exception ex)
             {
                 warnings.Add($"GitHub release fetch failed for {owner}/{repo}: {ex.GetType().Name}: {ex.Message}");
                 Trace.TraceWarning($"GitHub release fetch failed for {owner}/{repo}: {ex.GetType().Name}: {ex.Message}");
+                fetchFailed = true;
                 break;
             }
         }
 
+        // A full last page can be the exact end of the timeline. Probe the next page
+        // without including its releases, so a real truncation remains fail-closed.
+        if (!fetchFailed && !fetchedAllAvailableReleases && retainStablePrefixes)
+        {
+            try
+            {
+                var url = $"https://api.github.com/repos/{owner}/{repo}/releases?per_page={pageSize}&page={maxPages + 1}";
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                if (!anonymousAfterTokenFailure && !string.IsNullOrWhiteSpace(options.Token))
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.Token);
+                using var response = GitHubClient.Send(request);
+                // A failed authenticated sentinel must not be retried anonymously after
+                // previous pages were fetched with a different release visibility set.
+                if (!response.IsSuccessStatusCode)
+                    fetchFailed = true;
+                else
+                {
+                    using var stream = response.Content.ReadAsStream();
+                    using var doc = JsonDocument.Parse(stream);
+                    fetchedAllAvailableReleases = doc.RootElement.ValueKind == JsonValueKind.Array &&
+                                                 doc.RootElement.GetArrayLength() == 0;
+                    fetchFailed = doc.RootElement.ValueKind != JsonValueKind.Array;
+                }
+            }
+            catch (Exception ex)
+            {
+                warnings.Add($"GitHub release pagination probe failed for {owner}/{repo}: {ex.GetType().Name}: {ex.Message}");
+                fetchFailed = true;
+            }
+        }
+
+        if (fetchFailed)
+            warnings.Add($"Incomplete GitHub release fetch for {owner}/{repo}.");
+        if (!fetchedAllAvailableReleases && retainStablePrefixes)
+            warnings.Add($"Incomplete GitHub release fetch for retained stable tag prefixes in {owner}/{repo}; increase MaxPages.");
+
+        foreach (string prefix in options.RetainLatestStableTagPrefixes
+                     .Where(static value => !string.IsNullOrWhiteSpace(value)))
+        {
+            if (!fetchedAllAvailableReleases &&
+                !results.Any(release => IsStableReleaseWithTagPrefix(release, prefix)))
+                warnings.Add($"Incomplete GitHub release fetch for retained tag prefix '{prefix}'.");
+        }
+
         return results;
     }
+
+    private static bool IsStableReleaseWithTagPrefix(WebReleaseHubRelease release, string prefix)
+        => !release.IsDraft && !release.IsPrerelease &&
+           release.Tag?.StartsWith(prefix.Trim(), StringComparison.OrdinalIgnoreCase) == true;
 
     private static bool ShouldRetryGitHubWithoutAuthorization(HttpRequestMessage request, HttpResponseMessage response)
     {

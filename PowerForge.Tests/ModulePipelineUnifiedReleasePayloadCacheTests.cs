@@ -23,6 +23,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
 
             var runNumber = 1;
             var gitHubPublishCount = 0;
+            var firstRepositoryPreflightCount = 0;
+            var secondRepositoryPreflightCount = 0;
             string? resumedModulePayload = null;
             string? resumedPackagePayload = null;
             ProjectBuildHostExecutionResult ExecutePackageBuild(
@@ -71,6 +73,19 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                 => new(new List<string>())
                 {
                     ModuleAction = (action, context) => CreateActionResult(action, context, succeeded: true),
+                    AllowModuleImportValidation = true,
+                    BinaryDependencyValidation = path =>
+                    {
+                        if (!path.Contains(Path.Combine("PowerForge", "publish"), StringComparison.OrdinalIgnoreCase))
+                            return;
+                        if (runNumber == 1)
+                            firstRepositoryPreflightCount++;
+                        else
+                        {
+                            secondRepositoryPreflightCount++;
+                            throw new InvalidOperationException("Repository payload must not be reconstructed after Gallery completion.");
+                        }
+                    },
                     ModuleSigningCompleted = (_, verified) =>
                     {
                         foreach (string path in verified.Where(path =>
@@ -83,9 +98,10 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
 
             var firstRunner = CreateRunner(CreateHostedOperations(), ExecutePackageBuild, PublishGitHub);
             var firstException = Assert.Throws<InvalidOperationException>(() => firstRunner.Run(
-                CreateGalleryAndGitHubReleaseSpec(root.FullName, firstStagingPath, moduleName, signed: true)));
+                CreateGalleryAndGitHubReleaseSpec(root.FullName, firstStagingPath, moduleName, signed: true, importSelf: true)));
             Assert.Contains("GitHub outage", firstException.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(1, gitHubPublishCount);
+            Assert.True(firstRepositoryPreflightCount > 0);
             var checkpointRoot = GetCoordinatedReleaseCheckpointRoot(root.FullName);
             var payloadCache = Assert.Single(Directory.GetDirectories(checkpointRoot, "*.payload"));
             var interruptedCache = payloadCache + ".tmp-" + Guid.NewGuid().ToString("N");
@@ -95,10 +111,11 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             runNumber = 2;
             var secondRunner = CreateRunner(CreateHostedOperations(), ExecutePackageBuild, PublishGitHub);
             var result = secondRunner.Run(
-                CreateGalleryAndGitHubReleaseSpec(root.FullName, secondStagingPath, moduleName, signed: true));
+                CreateGalleryAndGitHubReleaseSpec(root.FullName, secondStagingPath, moduleName, signed: true, importSelf: true));
 
             Assert.Equal("2.0.11", result.Plan.ResolvedVersion);
             Assert.Equal(2, gitHubPublishCount);
+            Assert.Equal(0, secondRepositoryPreflightCount);
             Assert.Contains("timestamped-signature-1", resumedModulePayload, StringComparison.Ordinal);
             Assert.DoesNotContain("timestamped-signature-2", resumedModulePayload, StringComparison.Ordinal);
             Assert.Equal("timestamped-package-signature-1", resumedPackagePayload);
@@ -287,10 +304,16 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         string rootPath,
         string stagingPath,
         string moduleName,
-        bool signed = false)
+        bool signed = false,
+        bool importSelf = false)
     {
         var spec = CreateGitHubPostPublishSpec(rootPath, stagingPath, moduleName);
         var segments = spec.Segments.ToList();
+        if (importSelf)
+            segments.Insert(0, new ConfigurationImportModulesSegment
+            {
+                ImportModules = new ImportModulesConfiguration { Self = true }
+            });
         segments.Insert(
             1,
             new ConfigurationActionSegment

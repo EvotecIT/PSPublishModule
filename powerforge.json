@@ -51,7 +51,7 @@
         "Author": "Przemyslaw Klys",
         "CompanyName": "Evotec",
         "Copyright": "(c) 2011 - 2026 Przemyslaw Klys @ Evotec. All rights reserved.",
-        "Description": "Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery",
+        "Description": "Build, test, version, sign, and publish PowerShell modules with reusable PowerForge pipelines.",
         "PowerShellVersion": "5.1",
         "Tags": [
           "Windows",

@@ -89,6 +89,9 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
 
+        if (msbuildProps.TryGetValue("ArtifactsPath", out var artifactsPath) && !string.IsNullOrWhiteSpace(artifactsPath))
+            msbuildProps["ArtifactsPath"] = ResolvePath(projectRoot, artifactsPath);
+
         var targets = new List<DotNetPublishTargetPlan>();
         foreach (var t in spec.Targets)
         {
@@ -592,6 +595,7 @@ public sealed partial class DotNetPublishPipelineRunner
             Build = spec.DotNet.Build,
             NoRestoreInPublish = spec.DotNet.NoRestoreInPublish,
             NoBuildInPublish = spec.DotNet.NoBuildInPublish,
+            UseControlledSourceProvenance = spec.DotNet.UseControlledSourceProvenance,
             MsBuildProperties = msbuildProps,
             TrustedBuildPackages = NormalizeStrings(spec.DotNet.TrustedBuildPackages),
             EnvironmentVariables = resolvedEnvironmentVariables,
@@ -640,7 +644,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     target.Name,
                     combination.Framework,
                     combination.Runtime,
-                    combination.Style);
+                    combination.Style) ?? target.Version;
                 if (outputTemplate.IndexOf("{version}", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     if (string.IsNullOrWhiteSpace(releaseVersion))
@@ -868,6 +872,7 @@ public sealed partial class DotNetPublishPipelineRunner
             Build = dotNet.Build,
             NoRestoreInPublish = dotNet.NoRestoreInPublish,
             NoBuildInPublish = dotNet.NoBuildInPublish,
+            UseControlledSourceProvenance = dotNet.UseControlledSourceProvenance,
             Runtimes = (dotNet.Runtimes ?? Array.Empty<string>()).ToArray(),
             TrustedBuildPackages = (dotNet.TrustedBuildPackages ?? Array.Empty<string>()).ToArray(),
             MsBuildProperties = dotNet.MsBuildProperties is null
@@ -1109,6 +1114,13 @@ public sealed partial class DotNetPublishPipelineRunner
             Copyright = options.Copyright,
             DocumentExtensions = NormalizeStrings(options.DocumentExtensions),
             CodesignIdentity = options.CodesignIdentity,
+            AppStore = options.AppStore,
+            DevelopmentOnly = options.DevelopmentOnly,
+            TeamId = options.TeamId,
+            InstallerSigningIdentity = options.InstallerSigningIdentity,
+            ProvisioningProfilePath = options.ProvisioningProfilePath,
+            ThirdPartyNoticesManifestPath = options.ThirdPartyNoticesManifestPath,
+            DependenciesPath = options.DependenciesPath,
             HardenedRuntime = options.HardenedRuntime,
             Timestamp = options.Timestamp,
             EntitlementsPath = options.EntitlementsPath
@@ -1661,7 +1673,7 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToArray();
     }
 
-    private static DotNetPublishTarget[] CloneTargets(DotNetPublishTarget[] targets)
+    internal static DotNetPublishTarget[] CloneTargets(DotNetPublishTarget[] targets)
     {
         return (targets ?? Array.Empty<DotNetPublishTarget>())
             .Where(t => t is not null)
@@ -2723,6 +2735,8 @@ public sealed partial class DotNetPublishPipelineRunner
             var id = (installer.Id ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(id))
                 throw new ArgumentException("Installers[].Id is required.");
+            if (id.Contains('|'))
+                throw new ArgumentException($"Installer '{id}' ID cannot contain '|', which separates MSI version key components.");
             if (!ids.Add(id))
                 throw new ArgumentException($"Duplicate installer ID detected: {id}");
 
@@ -3493,11 +3507,13 @@ public sealed partial class DotNetPublishPipelineRunner
             ? Path.Combine("Artifacts", "DotNetPublish", "Installers", "{installer}", "{rid}")
             : installer.OutputPath!;
         string outputNameTemplate = string.IsNullOrWhiteSpace(installer.OutputName)
-            ? "{bundle}-{version}-{rid}.zip"
+            ? "{bundle}-{version}-{rid}" + (macApp.AppStore ? ".pkg" : ".zip")
             : installer.OutputName!;
         string outputDirectory = ResolvePath(projectRoot, ApplyTemplate(outputDirectoryTemplate, tokens));
         string outputName = ApplyTemplate(outputNameTemplate, tokens);
-        if (!outputName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        if (macApp.AppStore && !outputName.EndsWith(".pkg", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException($"Mac App Store installer '{installer.Id}' OutputName must end in .pkg.");
+        if (!macApp.AppStore && !outputName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             outputName += ".zip";
         if (!string.Equals(Path.GetFileName(outputName), outputName, StringComparison.Ordinal))
             throw new ArgumentException($"MacApp installer '{installer.Id}' OutputName must be a file name, not a path.");
@@ -3673,7 +3689,7 @@ public sealed partial class DotNetPublishPipelineRunner
             combo);
     }
 
-    private static bool InstallerMatchesCombo(
+    internal static bool InstallerMatchesCombo(
         string[] runtimes,
         string[] frameworks,
         DotNetPublishStyle[] styles,

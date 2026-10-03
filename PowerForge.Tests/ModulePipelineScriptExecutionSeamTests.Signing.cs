@@ -7,6 +7,55 @@ namespace PowerForge.Tests;
 public sealed partial class ModulePipelineScriptExecutionSeamTests
 {
     [Theory]
+    [InlineData(ArtefactType.Packed)]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Run_RejectsFilteredBinaryDependencyBeforeSigningArtefact(ArtefactType artefactType)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            string corePath = Directory.CreateDirectory(Path.Combine(root.FullName, "Lib", "Core")).FullName;
+            File.WriteAllText(Path.Combine(corePath, "Consumer.dll"), "consumer");
+            File.WriteAllText(Path.Combine(corePath, "Dependency.dll"), "dependency");
+            var hostedOperations = new FakeHostedOperations
+            {
+                AutoSuccessfulSigningResult = true,
+                RejectIncompleteBinaryPayload = true
+            };
+            var runner = CreateRunner(hostedOperations);
+            ModulePipelineSpec spec = CreateSignedPackedSpec(
+                root.FullName,
+                moduleName,
+                Path.Combine(root.FullName, "Artefacts", artefactType.ToString()));
+            spec.Segments = spec.Segments.Concat(new IConfigurationSegment[]
+            {
+                new ConfigurationImportModulesSegment
+                {
+                    ImportModules = new ImportModulesConfiguration { Self = true }
+                }
+            }).ToArray();
+            var information = Assert.Single(spec.Segments.OfType<ConfigurationInformationSegment>());
+            information.Configuration!.IncludeRoot = ["*.psd1", "*.psm1", "Lib"];
+            information.Configuration!.ExcludeFromPackage = ["Dependency.dll"];
+            var artefact = Assert.Single(spec.Segments.OfType<ConfigurationArtefactSegment>());
+            artefact.ArtefactType = artefactType;
+
+            InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() =>
+                runner.Run(spec, runner.Plan(spec)));
+
+            Assert.Contains("Delivered binary dependency is missing", failure.Message, StringComparison.Ordinal);
+            Assert.Equal(1, hostedOperations.SignCalls); // merged staging is signed before artifact assembly
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { }
+        }
+    }
+
+    [Theory]
     [InlineData(ArtefactType.Script)]
     [InlineData(ArtefactType.ScriptPacked)]
     public void Run_SignedScriptArtefactSignsRewrittenScriptEntryPoint(ArtefactType artefactType)

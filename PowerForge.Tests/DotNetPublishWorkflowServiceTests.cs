@@ -39,6 +39,7 @@ public sealed class DotNetPublishWorkflowServiceTests
         var logger = new CollectingLogger();
         var expectedPlan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Steps = new[] { new DotNetPublishStep() },
             Targets = new[] { new DotNetPublishTargetPlan { Name = "App" } }
         };
@@ -89,6 +90,29 @@ public sealed class DotNetPublishWorkflowServiceTests
         });
 
         Assert.Same(expectedResult, result.Result);
+    }
+
+    [Fact]
+    public void Execute_preserves_explicit_skip_build_request_in_plan()
+    {
+        var service = new DotNetPublishWorkflowService(
+            new NullLogger(),
+            planPublish: (_, _, _) => new DotNetPublishPlan { NoBuildInPublish = true },
+            runPublish: (plan, _) =>
+            {
+                Assert.True(plan.SkipBuildRequested);
+                Assert.True(plan.SkipRestoreRequested);
+                return new DotNetPublishResult { Succeeded = true };
+            });
+
+        DotNetPublishWorkflowResult result = service.Execute(new DotNetPublishPreparedContext
+        {
+            Spec = new DotNetPublishSpec(),
+            SkipBuildRequested = true,
+            SkipRestoreRequested = true
+        });
+
+        Assert.True(result.Result?.Succeeded);
     }
 
     private sealed class TestProgressReporter : IDotNetPublishProgressReporter

@@ -176,7 +176,7 @@ public static partial class WebApiDocsGenerator
         if (parameter.Position >= 0)
             model.Position = parameter.Position.ToString();
         if (parameter.HasDefaultValue)
-            model.DefaultValue = FormatDefaultValue(parameter.DefaultValue);
+            model.DefaultValue = FormatParameterDefaultValue(parameter);
     }
 
     private static string BuildMethodSignature(MethodInfo method)
@@ -205,10 +205,19 @@ public static partial class WebApiDocsGenerator
         var value = $"{prefix}{typeName} {name}".Trim();
         if (parameter.IsOptional)
         {
-            var def = parameter.HasDefaultValue ? FormatDefaultValue(parameter.DefaultValue) : "null";
+            var def = parameter.HasDefaultValue ? FormatParameterDefaultValue(parameter) : "default";
             value += $" = {def}";
         }
         return value;
+    }
+
+    private static string FormatParameterDefaultValue(ParameterInfo parameter)
+    {
+        // Reflection represents default(T) for non-nullable structs as null.
+        if (parameter.DefaultValue is null && parameter.ParameterType.IsValueType &&
+            Nullable.GetUnderlyingType(parameter.ParameterType) is null)
+            return "default";
+        return FormatDefaultValue(parameter.DefaultValue);
     }
 
     private static string BuildPropertySignature(PropertyInfo property)

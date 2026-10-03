@@ -8,6 +8,23 @@ This guide documents the JSON formats used by `powerforge-web pipeline` and
 Pipeline specs execute a list of steps in order. Paths are resolved relative to
 the pipeline JSON file location.
 
+Ecosystem stats and project catalog telemetry keep package metadata links within
+the configured organization's public GitHub repository inventory. NuGet and
+PowerShell Gallery project URLs for repositories absent from that inventory are
+omitted, including links retained in fallback snapshots or earlier catalog
+metrics. External websites and other organizations' links remain unchanged.
+Package-only stats without a GitHub organization preserve their project URLs.
+When GitHub fails, the pipeline uses an applicable retained public inventory
+before filtering fresh package links. A configured organization still applies
+when the retained snapshot has no GitHub inventory. Withheld NuGet project links
+retain SHA-256 `projectRepositoryKey` and `projectRepositoryNameKey` matching keys,
+so repository and alias matching, package-family counts, and download totals
+survive publication and later catalog refreshes without emitting repository names.
+These deterministic keys support matching; they do not encrypt source identities.
+Retained GitHub data from another organization is not used for the current one.
+An empty or capped public inventory can omit otherwise public repository links;
+set `maxItems` high enough to include the organization's repository inventory.
+
 Schema:
 - `Schemas/powerforge.web.pipelinespec.schema.json`
 
@@ -565,6 +582,9 @@ Notes:
 - `releasesPath` accepts local JSON (GitHub API array shape or release-hub shape) for deterministic/offline builds.
 - `changelogPath` can be used as a markdown fallback when `source:file`.
 - `tokenEnv` is preferred over inline `token` in CI.
+- `retainLatestStableTagPrefixes` keeps the newest published stable release for each tag prefix even when it falls outside `maxReleases`. `retainAllStableTagPrefixes` keeps every published stable release for each prefix, including older versions needed for complete download history.
+- `maxReleases` limits the normal timeline. The global latest stable and prerelease entries, plus configured retained product releases, can appear beyond that limit so the latest markers still identify releases present in the hub.
+- With either retention option, GitHub pagination must reach the end of the release list. Set `maxPages` high enough to cover the history; a full final page gets one extra request to verify whether more releases exist. An incomplete scan fails. A previous same-repository hub may be preserved for latest-only retention when it contains each requested prefix; retain-all requires a complete fresh scan.
 - `assetRules` classify multi-asset releases into product/channel/platform/kind buckets.
 - Output is page-agnostic and can be rendered on home/docs/changelog/downloads pages from `data.release_hub`.
 
@@ -1842,6 +1862,22 @@ Explicit URL/path mode:
   "dryRun": true
 }
 ```
+
+For a site that generates its sitemap at runtime, save a copy of that sitemap before the pipeline runs and keep the checkpoint outside disposable release directories:
+
+```json
+{
+  "task": "indexnow",
+  "baseUrl": "https://docs.example.com/",
+  "sitemap": "./sitemap.xml",
+  "sitemapStatePath": "/var/lib/example/indexnow-sitemap.json",
+  "keyPath": "/etc/example/indexnow.key",
+  "keyLocation": "https://docs.example.com/indexnow.txt",
+  "maxUrls": 10000
+}
+```
+
+The first successful run submits every sitemap URL. Later runs submit new URLs and URLs whose `<lastmod>` value changed; entries without `<lastmod>` are submitted when first seen, not on every run. Changing the configured endpoint set submits the current URLs to that set even when their `<lastmod>` values are unchanged. The checkpoint is replaced only after every selected request succeeds. A failed request, dry run, malformed or empty sitemap, checkpoint over 32 MiB, or URL count over `maxUrls` leaves the previous checkpoint intact; checkpoint size is checked before any network submission. With `continueOnError`, the step and its reports retain their existing behavior, but the checkpoint stays put for a later retry. A no-change run updates configured reports with zero submitted URLs. Removed sitemap entries are not submitted as deletion notices. Use a durable, single-writer state path and publish the matching key file at `keyLocation`. Before any pipeline step executes, the pipeline checks every enabled IndexNow step together and rejects state or report paths that overlap the pipeline configuration (including inherited files), sitemap, URL file, explicit or discovered verification key, another IndexNow output, or enabled pipeline profile/cache output. Case-only aliases use the case rules of the directory where the spelling differs; existing symbolic links are resolved. Output files are replaced atomically so a hard-linked output cannot overwrite its input. After a successful submission, report and checkpoint writes are attempted independently: a failed report still fails the step, but a successfully saved checkpoint prevents duplicate submission on the next run; a failed checkpoint retains the submission report for diagnosis and retries later. This option requires an HTTPS `baseUrl` and a URL sitemap for that same host; it does not fetch the sitemap or key file for you.
 
 Notes:
 - URL sources can be combined:

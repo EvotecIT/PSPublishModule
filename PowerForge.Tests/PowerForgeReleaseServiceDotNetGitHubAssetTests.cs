@@ -15,6 +15,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             File.WriteAllText(publishConfig, "{ \"Targets\": [] }");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ConfigurationInputPaths = new[] { releaseConfig, publishConfig },
                 GeneratedConfigurationInputPaths = Array.Empty<string>()
             };
@@ -51,6 +52,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             File.WriteAllText(publishConfig, "{ \"Targets\": [] }");
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ConfigurationInputPaths = new[] { releaseConfig, publishConfig }
             };
 
@@ -316,6 +318,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         };
         var plan = new DotNetPublishPlan
         {
+            UseControlledSourceProvenance = true,
             Targets = new[] { target },
             Bundles = new[]
             {
@@ -526,6 +529,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             };
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 Targets = new[] { target },
                 Bundles = category == DotNetPublishArtefactCategory.Bundle
                     ? new[]

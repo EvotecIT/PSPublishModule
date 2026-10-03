@@ -63,6 +63,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             var runner = new DotNetPublishPipelineRunner(new NullLogger());
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 Configuration = "Release",
                 SourceRevision = revision,

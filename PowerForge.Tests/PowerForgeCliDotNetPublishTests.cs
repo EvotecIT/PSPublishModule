@@ -8,6 +8,52 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeCliDotNetPublishTests
 {
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public async Task DotNetPublish_NoPublishSignDisablesSelectedTargetWithoutChangingConfig()
+    {
+        string repoRoot = FindRepositoryRoot();
+        string tempRoot = CreateTempDirectory();
+        try
+        {
+            string configPath = Path.Combine(tempRoot, "powerforge.dotnetpublish.json");
+            var spec = new DotNetPublishSpec
+            {
+                DotNet = new DotNetPublishDotNetOptions { ProjectRoot = repoRoot, Restore = false, Build = false },
+                Targets =
+                [
+                    new DotNetPublishTarget
+                    {
+                        Name = "monitoring",
+                        ProjectPath = "PowerForge.Cli/PowerForge.Cli.csproj",
+                        Publish = new DotNetPublishPublishOptions
+                        {
+                            Framework = "net10.0",
+                            Runtimes = ["win-x64"],
+                            Sign = new DotNetPublishSignOptions { Enabled = true }
+                        }
+                    }
+                ]
+            };
+            File.WriteAllText(configPath, JsonSerializer.Serialize(spec));
+
+            var (exitCode, stdout, stderr) = await RunCliAsync(
+                repoRoot,
+                $"\"{GetCliAssemblyPath(repoRoot)}\" dotnet publish --config \"{configPath}\" --target monitoring --no-publish-sign --plan --output json");
+
+            Assert.True(exitCode == 0, $"CLI exit code {exitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}");
+            using JsonDocument document = JsonDocument.Parse(stdout);
+            Assert.False(Assert.Single(document.RootElement.GetProperty("spec").GetProperty("targets").EnumerateArray())
+                .GetProperty("publish").GetProperty("sign").GetProperty("enabled").GetBoolean());
+            Assert.True(spec.Targets[0].Publish.Sign!.Enabled);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+                Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Version_CliAcceptsOutputSelectionBeforeVersionFlag()
     {
         var repoRoot = FindRepositoryRoot();

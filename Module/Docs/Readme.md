@@ -2,12 +2,12 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.145
+Help Version: 3.0.153
 Locale: en-US
 ---
 # PSPublishModule Module
 ## Description
-Simple project allowing preparing, managing, building and publishing modules to PowerShellGallery
+Build, test, version, sign, and publish PowerShell modules with reusable PowerForge pipelines.
 
 ## PSPublishModule Cmdlets
 ### [Add-AppStoreConnectBetaTesterToGroup](Add-AppStoreConnectBetaTesterToGroup.md)

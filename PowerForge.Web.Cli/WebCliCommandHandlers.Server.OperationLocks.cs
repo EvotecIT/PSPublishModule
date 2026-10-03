@@ -31,14 +31,23 @@ internal static partial class WebCliCommandHandlers
         string target,
         IEnumerable<string> paths,
         int waitSecondsPerLock = 0)
+        => AcquireCaptureOperationLocks(sshCommand, target, paths, local: false, waitSecondsPerLock: waitSecondsPerLock);
+
+    private static RemoteOperationLock? AcquireCaptureOperationLocks(
+        string sshCommand,
+        string target,
+        IEnumerable<string> paths,
+        bool local,
+        int waitSecondsPerLock = 0)
     {
         var locks = GetRemoteOperationLocks(paths);
         if (locks.Length == 0)
             return null;
 
+        var command = BuildRemoteOperationLockCommand(locks, waitSecondsPerLock);
         var process = CreateProcess(
-            sshCommand,
-            BuildSshArguments(target, BuildRemoteOperationLockCommand(locks, waitSecondsPerLock)));
+            local ? "/usr/bin/env" : sshCommand,
+            local ? BuildCaptureShellArguments(command) : BuildCaptureSshArguments(target, BuildCaptureShellCommand(command)));
         process.StartInfo.RedirectStandardInput = true;
         process.StartInfo.RedirectStandardOutput = true;
         process.StartInfo.RedirectStandardError = true;

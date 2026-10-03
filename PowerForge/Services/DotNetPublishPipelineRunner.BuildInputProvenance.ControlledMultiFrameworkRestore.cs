@@ -56,6 +56,7 @@ public sealed partial class DotNetPublishPipelineRunner
         string controlledNuGetConfig,
         string offlinePackageSourceList,
         string controlledOutputRoot,
+        string? restoreContextProps,
         out string? failureReason)
     {
         failureReason = null;
@@ -100,6 +101,13 @@ public sealed partial class DotNetPublishPipelineRunner
         arguments.Add("-p:_DisableNuGetRestoreTargetFrameworksOverride=true");
         arguments.Add("-p:BuildProjectReferences=false");
         arguments.Add("-p:RestoreRecursive=false");
+        AppendControlledRestoreContextProps(arguments, restoreContextProps);
+        if (!TryAppendControlledOriginalFrameworksContext(arguments, representative.Request,
+                restoreContextProps, originalGitRoot, controlledSourceRoot, controlledEnvironment))
+        {
+            failureReason = $"project '{originalProjectPath}' TargetFrameworks could not be remapped.";
+            return false;
+        }
         AppendControlledProofSafeguards(
             arguments,
             controlledNuGetConfig,
@@ -137,24 +145,39 @@ public sealed partial class DotNetPublishPipelineRunner
     }
 
     private static string BuildControlledRestoreContextKey(ControlledPublishGraphNode node)
-        => string.Join(
-            "\n",
-            node.Request.ReadEffectiveGlobalProperties()
-                .Where(property =>
-                    !property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) &&
-                    !property.Key.Equals("TargetFrameworks", StringComparison.OrdinalIgnoreCase))
-                .OrderBy(property => property.Key, StringComparer.OrdinalIgnoreCase)
-                .Select(property => property.Key.ToUpperInvariant() + "=" + property.Value));
+        => BuildControlledRestoreContextKey(node.Request);
+
+    private static string BuildControlledRestoreContextKey(ProjectEvaluationRequest request)
+    {
+        var key = new System.Text.StringBuilder();
+        // Concrete controlled builds retain only the selected RuntimeIdentifier.
+        // The context preflight rejects different source RID lists that would
+        // collapse to this key, since package conditions can inspect that list.
+        foreach (KeyValuePair<string, string> property in request.ReadEffectiveGlobalProperties()
+                     .Where(property =>
+                         !property.Key.Equals("TargetFramework", StringComparison.OrdinalIgnoreCase) &&
+                         !property.Key.Equals("RuntimeIdentifiers", StringComparison.OrdinalIgnoreCase))
+                     .OrderBy(property => property.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            AppendProjectReferenceKeySegment(key, property.Key.ToUpperInvariant());
+            AppendProjectReferenceKeySegment(key, property.Value);
+        }
+        return key.ToString();
+    }
 
     private static bool TryBuildControlledPublishGraphNode(
         ControlledPublishGraphNode node,
         bool restore,
+        bool isolatedRestoreContext,
+        bool frameworkSpecificOutput,
+        string canonicalControlledProjectPath,
         string originalGitRoot,
         string controlledSourceRoot,
         IReadOnlyDictionary<string, string?> controlledEnvironment,
         string controlledNuGetConfig,
         string offlinePackageSourceList,
         string controlledOutputRoot,
+        string? restoreContextProps,
         out string? failureReason)
     {
         failureReason = null;
@@ -182,7 +205,9 @@ public sealed partial class DotNetPublishPipelineRunner
             "-maxCpuCount:1",
             "-nodeReuse:false",
             "-verbosity:quiet",
-            "-target:Build"
+            "-target:Build" + (isolatedRestoreContext && restoreContextProps is not null
+                ? ";" + BuildControlledRestoreContextVerifierTargetNameFromProps(restoreContextProps)
+                : string.Empty)
         };
         if (restore)
             arguments.Add("-restore");
@@ -197,6 +222,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
         arguments.Add("-p:BuildProjectReferences=false");
         arguments.Add("-p:RestoreRecursive=false");
+        AppendControlledRestoreContextProps(arguments, restoreContextProps);
         if (!TryBuildControlledPathMap(
                 controlledSourceRoot,
                 originalGitRoot,
@@ -204,6 +230,13 @@ public sealed partial class DotNetPublishPipelineRunner
                 out string controlledPathMap))
         {
             failureReason = $"PathMap for controlled project '{originalProjectPath}' could not be constructed.";
+            return false;
+        }
+        if (restoreContextProps is not null && isolatedRestoreContext &&
+            !TryPrependControlledContextIntermediatePathMap(node,
+                canonicalControlledProjectPath, frameworkSpecificOutput, ref controlledPathMap))
+        {
+            failureReason = $"the original intermediate path for project '{originalProjectPath}' could not be mapped.";
             return false;
         }
         arguments.Add("-p:PathMap=" + EscapeMsBuildPropertyValue(controlledPathMap));
@@ -222,10 +255,11 @@ public sealed partial class DotNetPublishPipelineRunner
         if (process.ExitCode == 0 && !process.TimedOut)
             return true;
 
-        string? detail = TailLines(
-            string.IsNullOrWhiteSpace(process.StdErr) ? process.StdOut : process.StdErr,
-            maxLines: 8,
-            maxChars: 2000);
+        string? detail = string.Join(" ", new[]
+        {
+            TailLines(process.StdOut, maxLines: 8, maxChars: 2000),
+            TailLines(process.StdErr, maxLines: 4, maxChars: 500)
+        }.Where(value => !string.IsNullOrWhiteSpace(value)));
         failureReason = process.TimedOut
             ? $"project '{originalProjectPath}' timed out."
             : $"project '{originalProjectPath}' exited with code {process.ExitCode}.";

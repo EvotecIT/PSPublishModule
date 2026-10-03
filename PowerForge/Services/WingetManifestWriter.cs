@@ -15,32 +15,19 @@ internal static class WingetManifestWriter
         if (installers is null || installers.Count == 0)
         {
             throw new InvalidOperationException(
-                $"Winget package '{package.PackageIdentifier}' does not define any installers, so a singleton manifest cannot be generated.");
+                $"Winget package '{package.PackageIdentifier}' does not define any installers.");
         }
 
         var writer = new YamlTextWriter();
-        var packageLocale = string.IsNullOrWhiteSpace(package.PackageLocale) ? (winget.PackageLocale ?? "en-US") : package.PackageLocale!;
-        var manifestVersion = string.IsNullOrWhiteSpace(package.ManifestVersion) ? (winget.ManifestVersion ?? "1.12.0") : package.ManifestVersion!;
+        var manifestVersion = ResolveManifestVersion(winget, package);
         writer.WriteScalar("PackageIdentifier", package.PackageIdentifier);
         writer.WriteScalar("PackageVersion", packageVersion);
-        writer.WriteScalar("PackageLocale", packageLocale);
-        writer.WriteScalar("Publisher", package.Publisher);
-        writer.WriteOptionalScalar("PublisherUrl", package.PublisherUrl);
-        writer.WriteScalar("PackageName", package.PackageName);
-        writer.WriteOptionalScalar("PackageUrl", package.PackageUrl);
-        writer.WriteScalar("License", package.License);
-        writer.WriteOptionalScalar("LicenseUrl", package.LicenseUrl);
-        writer.WriteScalar("ShortDescription", package.ShortDescription);
-        writer.WriteOptionalScalar("Moniker", package.Moniker);
-        writer.WriteSequence("Tags", package.Tags);
-        writer.WriteSequence("Platform", package.Platform);
-        writer.WriteOptionalScalar("MinimumOSVersion", package.MinimumOSVersion);
 
         var firstInstaller = installers.FirstOrDefault();
         if (firstInstaller is null)
         {
             throw new InvalidOperationException(
-                $"Winget package '{package.PackageIdentifier}' does not define any installers, so a singleton manifest cannot be generated.");
+                $"Winget package '{package.PackageIdentifier}' does not define any installers.");
         }
 
         var installerType = NormalizeInstallerType(firstInstaller.InstallerType);
@@ -51,10 +38,12 @@ internal static class WingetManifestWriter
         if (distinctInstallerTypes.Length > 1)
         {
             throw new InvalidOperationException(
-                $"Winget package '{package.PackageIdentifier}' resolved mixed InstallerType values ({string.Join(", ", distinctInstallerTypes)}), which is not supported in singleton manifests.");
+                $"Winget package '{package.PackageIdentifier}' resolved mixed InstallerType values ({string.Join(", ", distinctInstallerTypes)}).");
         }
 
         writer.WriteScalar("InstallerType", installerType);
+        writer.WriteSequence("Platform", package.Platform);
+        writer.WriteOptionalScalar("MinimumOSVersion", package.MinimumOSVersion);
         writer.WriteKey("Installers");
         foreach (var installer in installers)
         {
@@ -72,10 +61,51 @@ internal static class WingetManifestWriter
             }
         }
 
-        writer.WriteScalar("ManifestType", "singleton");
+        writer.WriteScalar("ManifestType", "installer");
         writer.WriteScalar("ManifestVersion", manifestVersion);
-        return writer.ToString();
+        return AddSchemaHeader(writer.ToString(), "installer", manifestVersion);
     }
+
+    public static string BuildVersion(PowerForgeReleaseWingetOptions winget, PowerForgeReleaseWingetPackage package, string packageVersion)
+    {
+        var writer = new YamlTextWriter();
+        var manifestVersion = ResolveManifestVersion(winget, package);
+        writer.WriteScalar("PackageIdentifier", package.PackageIdentifier);
+        writer.WriteScalar("PackageVersion", packageVersion);
+        writer.WriteScalar("DefaultLocale", string.IsNullOrWhiteSpace(package.PackageLocale) ? (winget.PackageLocale ?? "en-US") : package.PackageLocale!);
+        writer.WriteScalar("ManifestType", "version");
+        writer.WriteScalar("ManifestVersion", manifestVersion);
+        return AddSchemaHeader(writer.ToString(), "version", manifestVersion);
+    }
+
+    public static string BuildDefaultLocale(PowerForgeReleaseWingetOptions winget, PowerForgeReleaseWingetPackage package, string packageVersion)
+    {
+        var writer = new YamlTextWriter();
+        var manifestVersion = ResolveManifestVersion(winget, package);
+        writer.WriteScalar("PackageIdentifier", package.PackageIdentifier);
+        writer.WriteScalar("PackageVersion", packageVersion);
+        writer.WriteScalar("PackageLocale", string.IsNullOrWhiteSpace(package.PackageLocale) ? (winget.PackageLocale ?? "en-US") : package.PackageLocale!);
+        writer.WriteScalar("Publisher", package.Publisher);
+        writer.WriteOptionalScalar("PublisherUrl", package.PublisherUrl);
+        writer.WriteScalar("PackageName", package.PackageName);
+        writer.WriteOptionalScalar("PackageUrl", package.PackageUrl);
+        writer.WriteScalar("License", package.License);
+        writer.WriteOptionalScalar("LicenseUrl", package.LicenseUrl);
+        writer.WriteScalar("ShortDescription", package.ShortDescription);
+        writer.WriteOptionalScalar("Moniker", package.Moniker);
+        writer.WriteSequence("Tags", package.Tags);
+        writer.WriteScalar("ManifestType", "defaultLocale");
+        writer.WriteScalar("ManifestVersion", manifestVersion);
+        return AddSchemaHeader(writer.ToString(), "defaultLocale", manifestVersion);
+    }
+
+    private static string ResolveManifestVersion(PowerForgeReleaseWingetOptions winget, PowerForgeReleaseWingetPackage package)
+        => !string.IsNullOrWhiteSpace(package.ManifestVersion) ? package.ManifestVersion!.Trim()
+            : !string.IsNullOrWhiteSpace(winget.ManifestVersion) ? winget.ManifestVersion!.Trim()
+            : "1.12.0";
+
+    private static string AddSchemaHeader(string yaml, string manifestType, string manifestVersion)
+        => $"# yaml-language-server: $schema=https://aka.ms/winget-manifest.{manifestType}.{manifestVersion}.schema.json{Environment.NewLine}{yaml}";
 
     private static string NormalizeInstallerType(string? installerType)
         => string.IsNullOrWhiteSpace(installerType) ? "zip" : installerType!.Trim();

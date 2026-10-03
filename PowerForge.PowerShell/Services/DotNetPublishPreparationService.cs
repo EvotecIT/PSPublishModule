@@ -39,7 +39,9 @@ internal sealed class DotNetPublishPreparationService
             JsonOutputPath = request.JsonOnly ? ResolveJsonOutputPath(spec, sourceLabel, request) : null,
             JsonOnly = request.JsonOnly,
             PlanOnly = request.Plan,
-            ValidateOnly = request.Validate
+            ValidateOnly = request.Validate,
+            SkipBuildRequested = request.SkipBuild,
+            SkipRestoreRequested = request.SkipRestore
         };
     }
 
@@ -259,6 +261,9 @@ internal sealed class DotNetPublishPreparationService
             spec.DotNet.Build = false;
             spec.DotNet.NoBuildInPublish = true;
         }
+
+        if (request.NoPublishSign)
+            DotNetPublishSigningProfileResolver.DisableSelectedTargetSigning(spec);
     }
 
     private static string? ResolveActiveProfileName(DotNetPublishSpec spec)

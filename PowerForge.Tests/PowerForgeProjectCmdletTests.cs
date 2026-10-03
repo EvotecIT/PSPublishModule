@@ -8,6 +8,29 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeProjectCmdletTests
 {
     [Fact]
+    public void NewConfigurationModule_DefaultsToInstalledSource_AndSupportsExplicitPSGallery()
+    {
+        using var defaultPs = CreatePowerShellWithModuleImported();
+        defaultPs.AddCommand("New-ConfigurationModule")
+            .AddParameter("Type", ModuleDependencyKind.RequiredModule)
+            .AddParameter("Name", new[] { "PSSharedGoods" })
+            .AddParameter("MinimumVersion", "1.0.5");
+        var defaultSegment = Assert.IsType<ConfigurationModuleSegment>(Assert.Single(defaultPs.Invoke()).BaseObject);
+        Assert.False(defaultPs.HadErrors);
+        Assert.Equal(ModuleDependencyVersionSource.Installed, defaultSegment.Configuration.VersionSource);
+
+        using var galleryPs = CreatePowerShellWithModuleImported();
+        galleryPs.AddCommand("New-ConfigurationModule")
+            .AddParameter("Type", ModuleDependencyKind.RequiredModule)
+            .AddParameter("Name", new[] { "PSSharedGoods" })
+            .AddParameter("MinimumVersion", "1.0.5")
+            .AddParameter("VersionSource", ModuleDependencyVersionSource.PSGallery);
+        var gallerySegment = Assert.IsType<ConfigurationModuleSegment>(Assert.Single(galleryPs.Invoke()).BaseObject);
+        Assert.False(galleryPs.HadErrors);
+        Assert.Equal(ModuleDependencyVersionSource.PSGallery, gallerySegment.Configuration.VersionSource);
+    }
+
+    [Fact]
     public void InvokePowerForgeRelease_Configuration_DoesNotRestrictAppleBuildConfigurations()
     {
         var property = typeof(PSPublishModule.InvokePowerForgeReleaseCommand)
@@ -353,7 +376,7 @@ public sealed class PowerForgeProjectCmdletTests
         Assert.Null(build.MergeMissing);
         Assert.False(build.SignMerged);
         Assert.True(build.InstallMissingModules);
-        Assert.Equal(InstallationStrategy.AutoRevision, build.VersionedInstallStrategy);
+        Assert.Equal(InstallationStrategy.Exact, build.VersionedInstallStrategy);
         Assert.Equal(3, build.VersionedInstallKeep);
     }
 

@@ -69,6 +69,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             string revision = RunGit(root, "rev-parse HEAD").Trim();
             var plan = new DotNetPublishPlan
             {
+                UseControlledSourceProvenance = true,
                 ProjectRoot = root,
                 SourceRevision = revision,
                 Steps =

@@ -23,7 +23,7 @@ internal static partial class WebCliCommandHandlers
         var markdownPath = Path.Combine(outputRoot, "bootstrap-plan.md");
         var scriptPath = Path.Combine(outputRoot, "bootstrap-plan.sh");
         WriteBootstrapPlanMarkdown(markdownPath, manifest, steps, warnings);
-        WriteBootstrapPlanScript(scriptPath, steps);
+        WriteBootstrapPlanScript(scriptPath, steps, manifest);
 
         var result = new PowerForgeServerBootstrapPlanResult
         {
@@ -77,7 +77,8 @@ internal static partial class WebCliCommandHandlers
 
     internal static List<PowerForgeServerBootstrapPlanStep> BuildBootstrapPlanSteps(
         PowerForgeServerRecoveryManifest manifest,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        bool includeOperatorVerification = true)
     {
         var steps = new List<PowerForgeServerBootstrapPlanStep>();
         var plannedCommands = new HashSet<string>(StringComparer.Ordinal);
@@ -95,6 +96,7 @@ internal static partial class WebCliCommandHandlers
         }
 
         var operationLocks = manifest.OperationLocks ?? Array.Empty<string>();
+        EnsureDisabledUnitBootstrapLockOwnership(manifest);
         var systemdUnits = (manifest.Systemd?.Services ?? Array.Empty<PowerForgeServerSystemdUnit>())
             .Concat(manifest.Systemd?.Timers ?? Array.Empty<PowerForgeServerSystemdUnit>())
             .ToArray();
@@ -109,29 +111,9 @@ internal static partial class WebCliCommandHandlers
                 BuildBootstrapOperationLockAcquireCommand(operationLocks), plannedCommands: plannedCommands);
         }
 
-        if (manifest.Packages?.Apt?.Length > 0)
-        {
-            AddStep(steps, ref order, "packages", "Install apt prerequisites",
-                "apt-get update && apt-get install -y " + string.Join(' ', manifest.Packages.Apt.Select(ShellQuote)),
-                plannedCommands: plannedCommands);
-        }
+        AddEarlyDisabledSystemdSteps(steps, ref order, manifest.Systemd, plannedCommands);
 
-        var dotnetPackages = GetDeclaredDotnetSdkPackageNames(manifest.Packages?.DotnetSdks);
-        if (dotnetPackages.Length > 0)
-        {
-            AddStep(steps, ref order, "runtimes", "Install .NET SDK prerequisites",
-                "apt-get update && apt-get install -y " + string.Join(' ', dotnetPackages.Select(ShellQuote)),
-                plannedCommands: plannedCommands);
-        }
-
-        if (manifest.Packages?.Powershell == true)
-        {
-            AddStep(steps, ref order, "runtimes", "Configure Microsoft package repository",
-                BuildMicrosoftPackageRepositoryInstallCommand(),
-                plannedCommands: plannedCommands);
-            AddStep(steps, ref order, "runtimes", "Install PowerShell prerequisite",
-                BuildPowerShellInstallCommand(), plannedCommands: plannedCommands);
-        }
+        AddBootstrapPackageSteps(steps, ref order, manifest, plannedCommands);
 
         foreach (var account in manifest.Accounts ?? Array.Empty<PowerForgeServerAccount>())
         {
@@ -152,7 +134,8 @@ internal static partial class WebCliCommandHandlers
             }
             useradd.Add(ShellQuote(account.Name));
             AddStep(steps, ref order, "accounts", $"Create account {account.Name}",
-                $"id -u {ShellQuote(account.Name)} >/dev/null 2>&1 || {string.Join(' ', useradd)}",
+                $"(id -u {ShellQuote(account.Name)} >/dev/null 2>&1 || {string.Join(' ', useradd)}) && " +
+                $"({BuildAccountIdentityCheckCommand(account)}) || {{ printf '%s\\n' {ShellQuote("Account identity differs from manifest: " + account.Name)} >&2; exit 3; }}",
                 plannedCommands: plannedCommands);
         }
 
@@ -185,6 +168,12 @@ internal static partial class WebCliCommandHandlers
                     $"{checks} || {{ echo {message} >&2; exit 3; }}",
                     plannedCommands: plannedCommands);
             }
+            if (!string.IsNullOrWhiteSpace(repository.SshIdentityFile) &&
+                !string.IsNullOrWhiteSpace(repository.SshKnownHostsFile))
+            {
+                AddStep(steps, ref order, "repositories", $"Verify {repository.Role} SSH trust files",
+                    BuildRepositorySshTrustGuard(repository), plannedCommands: plannedCommands);
+            }
             var refCaptureCommandIds = GetRepositoryRefCaptureCommandIds(repository);
             if (refCaptureCommandIds.Length > 0 && string.IsNullOrWhiteSpace(repository.Ref))
             {
@@ -200,18 +189,8 @@ internal static partial class WebCliCommandHandlers
             }
             else
             {
-                var branchArg = string.IsNullOrWhiteSpace(repository.Branch) ? string.Empty : $" --branch {ShellQuote(repository.Branch)}";
-                var gitDirectory = repository.Path.TrimEnd('/') + "/.git";
-                var gitPrefix = BuildRepositoryGitPrefix(repository);
-                var prepareCloneTarget = BuildRepositoryCloneTargetSafetyCommand(repository.Path);
-                var pinRef = string.IsNullOrWhiteSpace(repository.Ref)
-                    ? string.Empty
-                    : $"; git -C {ShellQuote(repository.Path)} checkout --detach {ShellQuote(repository.Ref)}";
-                var cleanCheck =
-                    $"; powerforge_repository_status=$(git --no-optional-locks -C {ShellQuote(repository.Path)} status --porcelain --untracked-files=normal); " +
-                    $"test -z \"$powerforge_repository_status\" || {{ echo {ShellQuote($"Repository must be clean before installing managed files: {repository.Path}")} >&2; exit 3; }}";
                 AddStep(steps, ref order, "repositories", $"Clone or update {repository.Role} repository",
-                    $"if [ -d {ShellQuote(gitDirectory)} ]; then powerforge_assert_root_controlled_path {ShellQuote(repository.Path)}; {gitPrefix}git -C {ShellQuote(repository.Path)} fetch --all --tags --prune; else {prepareCloneTarget}; {gitPrefix}git clone{branchArg} {ShellQuote(repository.Url)} {ShellQuote(repository.Path)}; fi; powerforge_assert_root_controlled_path {ShellQuote(repository.Path)}{pinRef}{cleanCheck}",
+                    BuildRepositoryBootstrapCommand(repository),
                     plannedCommands: plannedCommands);
             }
         }
@@ -258,7 +237,7 @@ internal static partial class WebCliCommandHandlers
         {
             if (string.IsNullOrWhiteSpace(command.Command))
                 throw new InvalidOperationException($"Bootstrap command '{command.Id}' must contain a non-whitespace command.");
-            AddStep(steps, ref order, "bootstrap", command.Id ?? "bootstrap command", command.Command, command.Sensitive, plannedCommands: plannedCommands);
+            AddStep(steps, ref order, "bootstrap", command.Id ?? "bootstrap command", BuildScopedServerCommand(command), command.Sensitive, plannedCommands: plannedCommands);
         }
 
         var apacheModules = manifest.Packages?.ApacheModules ?? manifest.Apache?.Modules ?? Array.Empty<string>();
@@ -367,9 +346,7 @@ internal static partial class WebCliCommandHandlers
         {
             if (string.IsNullOrWhiteSpace(command.Command))
                 throw new InvalidOperationException($"Deploy command '{command.Id}' must contain a non-whitespace command.");
-            var shell = string.IsNullOrWhiteSpace(command.WorkingDirectory)
-                ? command.Command
-                : $"cd {ShellQuote(command.WorkingDirectory)} && {command.Command}";
+            var shell = BuildScopedServerCommand(command);
             AddStep(
                 steps,
                 ref order,
@@ -403,7 +380,11 @@ internal static partial class WebCliCommandHandlers
             PowerForgeServerSystemdActivation.AfterDeploy,
             plannedCommands);
 
-        AddStep(steps, ref order, "verify", "Run PowerForge server verify", "# Run from an operator workstation: powerforge-web server verify --manifest <manifest> --fail-on-failure", manual: true, plannedCommands: plannedCommands);
+        AddDisabledSystemdSteps(steps, ref order, manifest.Systemd, plannedCommands,
+            "Reassert stopped and disabled before verification", repeat: true);
+
+        if (includeOperatorVerification)
+            AddStep(steps, ref order, "verify", "Run PowerForge server verify", "# Run from an operator workstation: powerforge-web server verify --manifest <manifest> --fail-on-failure", manual: true, plannedCommands: plannedCommands);
         return steps;
     }
 
@@ -747,46 +728,4 @@ internal static partial class WebCliCommandHandlers
         File.WriteAllText(path, builder.ToString());
     }
 
-    internal static void WriteBootstrapPlanScript(
-        string path,
-        IReadOnlyList<PowerForgeServerBootstrapPlanStep> steps)
-    {
-        var builder = new StringBuilder();
-        builder.AppendLine("#!/usr/bin/env bash");
-        builder.AppendLine("set -Eeuo pipefail");
-        builder.AppendLine("umask 022");
-        builder.AppendLine();
-        builder.AppendLine("# Generated by powerforge-web server bootstrap-plan.");
-        builder.AppendLine("# Review before running. Manual/TODO steps intentionally remain comments.");
-        builder.AppendLine();
-
-        foreach (var step in steps)
-        {
-            builder.AppendLine($"# {step.Order}. [{step.Category}] {step.Title}");
-            if (string.IsNullOrWhiteSpace(step.Command))
-            {
-                builder.AppendLine();
-                continue;
-            }
-
-            if (step.Manual || step.Sensitive || step.Command.TrimStart().StartsWith("#", StringComparison.Ordinal))
-            {
-                foreach (var line in step.Command.Split(new[] { '\r', '\n' }, StringSplitOptions.None))
-                    builder.AppendLine("# " + line);
-                if (step.Manual)
-                {
-                    builder.AppendLine($"echo {ShellQuote($"Manual bootstrap step required: {step.Title}")} >&2");
-                    builder.AppendLine("exit 3");
-                }
-            }
-            else
-            {
-                builder.AppendLine(step.Command);
-            }
-
-            builder.AppendLine();
-        }
-
-        File.WriteAllText(path, builder.ToString().Replace("\r\n", "\n", StringComparison.Ordinal));
-    }
 }

@@ -40,6 +40,7 @@ public sealed partial class ModulePipelineRunner
                 usedExistingPsm1: false,
                 requiredModules: plan.RequiredModules ?? Array.Empty<RequiredModuleReference>(),
                 approvedModules: plan.ApprovedModules ?? Array.Empty<string>(),
+                fullyInlinedApprovedModules: Array.Empty<string>(),
                 dependentModules: Array.Empty<string>(),
                 topLevelInlinedFunctions: 0,
                 totalInlinedFunctions: 0,
@@ -75,6 +76,7 @@ public sealed partial class ModulePipelineRunner
             usedExistingPsm1: mergeOutcome.UsedExistingPsm1,
             requiredModules: plan.RequiredModules ?? Array.Empty<RequiredModuleReference>(),
             approvedModules: plan.ApprovedModules ?? Array.Empty<string>(),
+            fullyInlinedApprovedModules: missingReport?.FullyInlinedApprovedModules ?? Array.Empty<string>(),
             dependentModules: dependentRequiredModules,
             topLevelInlinedFunctions: mergeOutcome.TopLevelInlinedFunctions,
             totalInlinedFunctions: mergeOutcome.TotalInlinedFunctions,
@@ -136,21 +138,28 @@ public sealed partial class ModulePipelineRunner
 
     private void RunBinaryDependencyPreflight(ModulePipelinePlan plan, ModuleBuildResult buildResult)
     {
-        var cfg = plan.ImportModules;
-        if (cfg is null || cfg.Self != true || cfg.SkipBinaryDependencyCheck == true) return;
+        ValidateDeliveredBinaryDependencies(plan, buildResult.StagingPath, buildResult.ManifestPath);
+    }
+
+    private void ValidateDeliveredBinaryDependencies(ModulePipelinePlan plan, string moduleRoot, string? manifestPath = null)
+    {
+        if (!ShouldValidateBinaryDependencies(plan)) return;
 
         foreach (var target in GetImportValidationTargets(
             plan.CompatiblePSEditions,
-            buildResult.StagingPath,
+            moduleRoot,
             plan.Manifest?.PowerShellVersion))
         {
             _hostedOperations.EnsureBinaryDependenciesValid(
-                buildResult.StagingPath,
+                moduleRoot,
                 target.PowerShellEdition,
-                buildResult.ManifestPath,
+                manifestPath ?? Path.Combine(moduleRoot, plan.ModuleName + ".psd1"),
                 target.Label);
         }
     }
+
+    private static bool ShouldValidateBinaryDependencies(ModulePipelinePlan plan)
+        => plan.ImportModules?.Self == true && plan.ImportModules.SkipBinaryDependencyCheck != true;
 
     internal static ModuleImportValidationTarget[] GetImportValidationTargets(
         IReadOnlyList<string>? compatiblePSEditions,

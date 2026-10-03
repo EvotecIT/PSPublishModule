@@ -47,6 +47,10 @@ public sealed class ModuleInstallerOptions
     /// </summary>
     public bool RequireAllDestinationRoots { get; }
 
+    // The build pipeline holds this lock across version resolution and manifest finalization.
+    // Direct installer callers acquire the same lock inside InstallFromStagingCore.
+    internal bool OperationLockHeld { get; set; }
+
     /// <summary>
     /// Creates options with destination roots, strategy, and retention.
     /// </summary>
