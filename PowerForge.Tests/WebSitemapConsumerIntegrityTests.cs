@@ -46,6 +46,30 @@ public sealed class WebSitemapConsumerIntegrityTests
     }
 
     [Fact]
+    public void RejectedProfileCollisionPreservesNewlyGeneratedSitemapLeaf()
+    {
+        WithSite(root =>
+        {
+            File.WriteAllText(Path.Combine(root, "site.json"), "{\"baseUrl\":\"https://example.test\"}");
+            File.WriteAllText(Path.Combine(root, "entries.json"), JsonSerializer.Serialize(
+                Enumerable.Range(0, 50_001).Select(index => new { path = $"/page-{index}/" })));
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, """
+                {"profile":true,"profilePath":"site/sitemap.part-0002.xml","steps":[
+                {"task":"build","config":"site.json","out":"site"},
+                {"task":"sitemap","config":"site.json","out":"site/sitemap.xml","entriesJson":"entries.json","includeHtmlFiles":false,"includeTextFiles":false},
+                {"task":"indexnow","baseUrl":"https://example.test/","sitemap":"site/sitemap.xml","siteRoot":"site","key":"fixture","dryRun":true}]}
+                """);
+            var result = WebPipelineRunner.RunPipeline(pipeline, logger: null);
+            Assert.False(result.Success);
+            Assert.Contains("distinct paths", result.Steps.Last().Message, StringComparison.Ordinal);
+            var leaf = System.Xml.Linq.XDocument.Load(Path.Combine(root, "site", "sitemap.part-0002.xml"));
+            Assert.Equal("urlset", leaf.Root!.Name.LocalName);
+            Assert.Single(leaf.Root.Elements());
+        });
+    }
+
+    [Fact]
     public void CachedSitemapRegeneratesMissingPartition()
     {
         WithSite(root =>

@@ -269,12 +269,17 @@ internal static partial class WebPipelineRunner
                 }
             }
 
+            var failureProfileOutputIsSafe = true;
             try
             {
                 // A preceding sitemap step can create index leaves absent during initial validation.
                 if (task.Equals("indexnow", StringComparison.OrdinalIgnoreCase))
+                {
+                    failureProfileOutputIsSafe = false;
                     ValidateIndexNowOutputPaths(enabledIndexNowSteps, baseDir, pipelineSourcePaths,
                         profileEnabled || profileWriteOnFail ? profilePath : null, cacheEnabled ? cachePath : null);
+                    failureProfileOutputIsSafe = true;
+                }
                 ExecuteTask(task, step, label, baseDir, fast, effectiveMode, logger, ref lastBuildOutPath, ref lastBuildUpdatedFiles, stepResult);
             }
             catch (Exception ex)
@@ -295,7 +300,7 @@ internal static partial class WebPipelineRunner
                 // - Success: write profile only when profile is enabled (to avoid noise/overhead).
                 // - Failure: write profile when profile is enabled OR profileOnFail is true (default),
                 //   so CI failures still produce actionable artifacts.
-                if (!string.IsNullOrWhiteSpace(profilePath) && (profileEnabled || profileWriteOnFail))
+                if (failureProfileOutputIsSafe && !string.IsNullOrWhiteSpace(profilePath) && (profileEnabled || profileWriteOnFail))
                 {
                     WritePipelineProfile(profilePath, result, logger);
                     result.ProfilePath = profilePath;
