@@ -85,6 +85,14 @@ public static partial class WebSiteBuilder
         return ResolveOutputRoute(item.OutputPath, primary);
     }
 
+    private static string ResolveCanonicalRoute(SiteSpec spec, ContentItem item)
+        => !string.IsNullOrWhiteSpace(item.Canonical)
+            ? item.Canonical
+            : ResolveOutputFormats(spec, item).Any(format => RendersHtmlPage(format) &&
+                (string.IsNullOrWhiteSpace(format.Suffix) || format.Suffix.Equals("html", StringComparison.OrdinalIgnoreCase)))
+                ? item.OutputPath
+                : ItemRendersHtml(spec, item) ? ResolveSitemapEntryPath(spec, item) : item.OutputPath;
+
     private static bool ItemDeclaresNoIndex(SiteSpec spec, ContentItem item, string outputRoot)
     {
         var forceFallbackNoIndex = IsLocalizedFallbackCopy(item) && !HasExplicitRobotsOverride(item);

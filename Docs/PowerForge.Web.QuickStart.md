@@ -179,6 +179,12 @@ powerforge-web build --config ./MySite/site.json --out ./Artifacts
 powerforge-web serve --path ./Artifacts --port 8080
 ```
 
+The preview serves regular files within the selected root and rejects linked
+files or directories. Missing assets return 404, including assets under `/docs`
+and `/playground`; extensionless routes in those sections can use their SPA
+entry pages. HEAD requests return headers without reading file contents, and
+GET requests stream the file.
+
 ## 7) Pipelines and publish specs
 For repeatable builds, use pipeline or publish specs:
 ```

@@ -25,14 +25,13 @@ public static partial class WebSiteBuilder
             {
                 var titleTemplate = ResolveEffectiveSeoTitleTemplate(spec, item);
                 var descriptionTemplate = ResolveEffectiveSeoDescriptionTemplate(spec, item);
-                var canonicalOrOutput = string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical;
+                var canonicalOrOutput = ResolveCanonicalRoute(spec, item);
                 var localization = ResolveLocalizationConfig(spec);
-                var languageBaseUrl = ResolveLanguageBaseUrl(spec, localization, item.Language);
                 return new
                 {
                     sourcePath = item.SourcePath,
                     outputPath = NormalizeRouteForMatch(item.OutputPath),
-                    canonicalUrl = ResolveAbsoluteUrl(languageBaseUrl, canonicalOrOutput),
+                    canonicalUrl = ResolveAbsolutePublicUrl(spec, localization, item.Language, canonicalOrOutput),
                     collection = item.Collection,
                     language = ResolveSeoLanguage(spec, item),
                     project = item.ProjectSlug,

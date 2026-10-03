@@ -955,6 +955,9 @@ public static partial class WebApiDocsGenerator
         if (trimmed.StartsWith("XML docs not found:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.INPUT.XML] " + warning;
 
+        if (trimmed.StartsWith("XML-only API documentation does not verify public accessibility.", StringComparison.OrdinalIgnoreCase))
+            return "[PFWEB.APIDOCS.INPUT.ACCESSIBILITY] " + warning;
+
         if (trimmed.StartsWith("PowerShell help not found:", StringComparison.OrdinalIgnoreCase))
             return "[PFWEB.APIDOCS.INPUT.HELP] " + warning;
 

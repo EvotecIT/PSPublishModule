@@ -78,6 +78,7 @@ internal static partial class WebCliCommandHandlers
             return Fail("Missing required --project.", outputJson, logger, "web.dotnet-publish");
         if (string.IsNullOrWhiteSpace(outPath))
             return Fail("Missing required --out.", outputJson, logger, "web.dotnet-publish");
+        WebOutputPathGuard.ValidateProject(project, outPath, cleanOutput: cleanOutput);
         if (cleanOutput)
             WebCliFileSystem.CleanOutputDirectory(outPath);
 
