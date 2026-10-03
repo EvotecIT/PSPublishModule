@@ -32,6 +32,9 @@ public static partial class WebApiDocsGenerator
             var implicitTarget = string.IsNullOrWhiteSpace(explicitTarget);
             if (!reflected.TryGetValue(pair.Key, out var member)) continue;
             var candidates = InheritedDocumentationMembers(member).ToArray();
+            var inheritedOwnerNames = candidates.Select(candidate => candidate is Type candidateType
+                    ? candidateType.Assembly.GetName().Name : candidate.DeclaringType!.Assembly.GetName().Name)
+                .OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
             string? target = null;
             var targets = implicitTarget ? candidates.Select(DocumentationId).ToArray() : new[] { explicitTarget! };
             foreach (var candidateId in targets)
@@ -39,13 +42,13 @@ public static partial class WebApiDocsGenerator
                 if (!members.ContainsKey(candidateId) && !string.IsNullOrWhiteSpace(options.AssemblyPath))
                 {
                     referenceInputs ??= WebApiDocumentationInputs.Discover(options.AssemblyPath);
-                    var candidate = candidates.FirstOrDefault(candidate => DocumentationId(candidate) == candidateId);
+                    var candidate = candidates.FirstOrDefault(candidate => DocumentationId(candidate) == candidateId) ?? candidates.FirstOrDefault();
                     var declaring = candidate as Type ?? candidate?.DeclaringType;
                     var ownerName = declaring?.Assembly.GetName().Name;
                     var assemblyDirectory = Path.GetDirectoryName(Path.GetFullPath(options.AssemblyPath));
                     var candidateInputs = referenceInputs.Where(path =>
                         !string.Equals(Path.GetDirectoryName(path), assemblyDirectory, StringComparison.OrdinalIgnoreCase) ||
-                        Path.GetFileNameWithoutExtension(path).Equals(ownerName, StringComparison.OrdinalIgnoreCase));
+                        inheritedOwnerNames.Contains(Path.GetFileNameWithoutExtension(path)));
                     foreach (var path in candidateInputs.OrderBy(path => ReferenceDocumentationPriority(path, ownerName, declaring?.Namespace)))
                     {
                         if (!loadedReferences.Add(path)) continue;

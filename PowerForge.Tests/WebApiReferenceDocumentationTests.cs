@@ -8,6 +8,32 @@ namespace PowerForge.Tests;
 
 public sealed class WebApiReferenceDocumentationTests
 {
+    [Fact]
+    public void Generate_ResolvesExplicitOtherMemberFromAdjacentInheritedOwner()
+    {
+        WithRoot(root =>
+        {
+            var assembly = Path.Combine(root, "PowerForge.Tests.dll");
+            File.Copy(typeof(WebReferenceNamedDerived).Assembly.Location, assembly);
+            File.WriteAllText(Path.ChangeExtension(assembly, ".xml"), "<doc><members><member name=\"M:PowerForge.Tests.WebReferenceNamedBase.Other\"><summary>The explicitly selected contract.</summary></member></members></doc>");
+            var xml = Path.Combine(root, "docs.xml");
+            File.WriteAllText(xml, """
+                <doc><members>
+                  <member name="T:PowerForge.Tests.WebReferenceNamedDerived"><summary>Derived.</summary></member>
+                  <member name="M:PowerForge.Tests.WebReferenceNamedDerived.Run"><inheritdoc cref="M:PowerForge.Tests.WebReferenceNamedBase.Other"/></member>
+                </members></doc>
+                """);
+            var output = Path.Combine(root, "api");
+            WebApiDocsGenerator.Generate(new WebApiDocsOptions
+            {
+                XmlPath = xml, AssemblyPath = assembly, OutputPath = output, Format = "json", IncludeUndocumentedTypes = false
+            });
+            using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(output, "types", "powerforge-tests-webreferencenamedderived.json")));
+            var method = json.RootElement.GetProperty("methods").EnumerateArray().Single(method => method.GetProperty("name").GetString() == "Run");
+            Assert.Equal("The explicitly selected contract.", method.GetProperty("summary").GetString());
+        });
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -200,3 +226,14 @@ public sealed class WebReferenceDocumentationFixture : IDisposable
 }
 
 public sealed class WebReferenceCollectionFixture : List<int> { }
+
+public class WebReferenceNamedBase
+{
+    public virtual void Run() { }
+    public void Other() { }
+}
+
+public sealed class WebReferenceNamedDerived : WebReferenceNamedBase
+{
+    public override void Run() { }
+}
