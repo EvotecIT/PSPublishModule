@@ -46,9 +46,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "Generated.BindingScopeSibling", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(1, result.Manifest!.CompiledMethods);
-        Assert.False(Assert.Single(result.Manifest.UnitDispositionLedger!.Entries,
-            static unit => unit.Name == "Read-SiblingBinding").RetainedHostedSource);
+        var binding = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries,
+            static unit => unit.Name == "Read-SiblingBinding");
+        Assert.True(binding.EmittedClrMethod);
+        Assert.False(binding.RetainedHostedSource);
         var modes = shape == "automatic" ? "'Automatic'" : shape == "validated" ? "'WriteFirst','ClearAttributes'" : "'WriteFirst','WritePreference'";
         var probe = "$global:VerbosePreference='SilentlyContinue'; foreach($mode in " + modes + ") { " + """
             $item=New-SiblingValue -Mode $mode

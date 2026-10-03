@@ -273,7 +273,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 RunExecutable(path);
                 break;
             case PowerShellCompilationArtifactKind.BinaryModule:
-                ImportModule(path);
+                ImportModule(path, artifact.Target.TargetFramework);
                 break;
             case PowerShellCompilationArtifactKind.Library:
                 _ = AssemblyName.GetAssemblyName(path);
@@ -309,16 +309,27 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 $"Target '{target.RuntimeIdentifier}' must be tested on its actual host; current host is '{currentOs}-{currentArchitecture}'.");
     }
 
-    private static void ImportModule(string manifestPath)
+    private static void ImportModule(string manifestPath, string targetFramework)
     {
-        var script = "& { $env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules'); " +
-                     "Import-Module -Name $args[0] -Force -ErrorAction Stop; 'ok' }";
+        var desktop = targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase);
+        if (desktop && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            throw new PlatformNotSupportedException("Testing a net472 binary module requires Windows PowerShell 5.1 on Windows.");
+        var host = desktop
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe")
+            : "pwsh";
+        const string script = "$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules'); " +
+                              "Import-Module -Name $env:POWERFORGE_MODULE_TEST_PATH -Force -ErrorAction Stop; 'ok'";
+        var encodedCommand = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
-            "pwsh",
+            host,
             Path.GetDirectoryName(manifestPath)!,
-            new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script, manifestPath },
+            new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encodedCommand },
             TimeSpan.FromMinutes(2),
-            new Dictionary<string, string?> { ["POWERSHELL_TELEMETRY_OPTOUT"] = "1" })).GetAwaiter().GetResult();
+            new Dictionary<string, string?>
+            {
+                ["POWERSHELL_TELEMETRY_OPTOUT"] = "1",
+                ["POWERFORGE_MODULE_TEST_PATH"] = manifestPath
+            })).GetAwaiter().GetResult();
         if (!run.Succeeded || !run.StdOut.Trim().Equals("ok", StringComparison.Ordinal))
             throw new InvalidOperationException($"Clean module import failed with exit {run.ExitCode}: {run.StdOut}{Environment.NewLine}{run.StdErr}".Trim());
     }

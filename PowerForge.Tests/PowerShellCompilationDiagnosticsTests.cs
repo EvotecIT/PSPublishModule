@@ -163,7 +163,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void HybridFailureMapDistinguishesFallbackAndCompiledLifecycleUnits(bool nested)
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-Fallback { [int] $value = 1; Get-Variable -Name value -ValueOnly }; " +
+            "function Get-Fallback { trap { continue }; [int] $value = 1; Get-Variable -Name value -ValueOnly }; " +
             "function Invoke-Lifecycle { [CmdletBinding()] param([Parameter(ValueFromPipeline)][int] $Value) " +
             "begin { $total = 0 } process { $total += $Value } end { $total } }; " +
             "Export-ModuleMember -Function Get-Fallback,Invoke-Lifecycle",

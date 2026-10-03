@@ -8,14 +8,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData(false)]
     [InlineData(true)]
-    public void RegionOpportunities_RejectDirectCallsWithoutAnEligibleBoundTarget(bool retainRejectedTarget)
+    public void RegionOpportunities_RejectStaticClrCallsWithoutAnEligibleBoundTarget(bool retainRejectedTarget)
     {
         var document = PowerShellSourceParser.Parse(
             "function Get-Leaf { param(); return 'value' }; " +
             "function Get-Middle { param(); Get-Leaf }; " +
             "function Get-Caller { param(); Get-Middle }; " +
             "function Get-Independent { param(); return 'safe' }", "missing-call-target.psm1");
-        var capabilities = PowerShellCompilationCapabilities.HybridModule;
+        var capabilities = PowerShellCompilationCapabilities.BinaryModule;
         var bound = new PowerShellSemanticBinder().BindWithRegionCandidates(new[] { document }, "net10.0", capabilities).Program;
         var leaf = Assert.Single(bound.Functions, function => function.Symbol.Name == "Get-Leaf");
         // Model the binder's two failure outputs while retaining actual bound CLR call edges.

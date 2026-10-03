@@ -30,8 +30,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "Generated.NativeConversions", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.True(result.Manifest!.CompiledMethods == casts.Length, string.Join(Environment.NewLine,
-            result.Manifest.UnitDispositionLedger!.Entries.SelectMany(unit => unit.DiagnosticChain.Select(cause => unit.Name + ": " + cause.Message))));
+        var units = result.Manifest!.UnitDispositionLedger!.Entries;
+        for (var index = 0; index < casts.Length; index++)
+        {
+            var unit = Assert.Single(units, unit => unit.Name == "Read-NativeCast" + index);
+            Assert.True(unit.EmittedClrMethod, string.Join(Environment.NewLine,
+                unit.DiagnosticChain.Select(cause => cause.Message)));
+            Assert.False(unit.RetainedHostedSource);
+        }
         const string probe = """
             Add-Type -TypeDefinition 'public sealed class NativeCastFailure { public override string ToString() { throw new System.InvalidOperationException("cast failed"); } }'
             $values=@(@{value=$null},@{value=''},@{value='12'},@{value='bad'},@{value=12.5},@{value=[psobject]12.5},

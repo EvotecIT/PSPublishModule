@@ -22,16 +22,15 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
         function Get-Typed { param([int] $Number) $Number + 1 }
         """;
 
-    [Theory]
-    [InlineData(PowerShellCompilationMode.Strict)]
-    [InlineData(PowerShellCompilationMode.Hybrid)]
-    public void ProjectExplain_GroupsFinalShapingAndBoundLocalCalls(PowerShellCompilationMode mode)
+    [Fact]
+    public void ProjectExplain_GroupsFinalShapingAndBoundLocalCalls()
     {
+        const PowerShellCompilationMode mode = PowerShellCompilationMode.Strict;
         using var fixture = Fixture.Create(ShapingSource, PowerShellCompilationArtifactKind.BinaryModule, mode);
         var result = new PowerShellCompilationProjectWorkflowService().Explain(fixture.Project);
         var target = Assert.Single(result.Targets);
         var report = Assert.IsType<PowerShellCompilationDiagnosticReport>(target.DiagnosticReport);
-        Assert.Equal(mode == PowerShellCompilationMode.Hybrid, result.Succeeded);
+        Assert.False(result.Succeeded);
         Assert.Equal(result.Succeeded, report.CanProceed);
         Assert.True(report.FinalShapeAvailable);
         var leaf = report.Units.Single(group => group.Unit.Name == "Get-Leaf");
@@ -39,9 +38,8 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
         var outer = report.Units.Single(group => group.Unit.Name == "Get-Outer");
         Assert.Contains(leaf.Issues, issue => issue.Stage == PowerShellCompilationDiagnosticStage.Shaping &&
             issue.Code == "binary-module.cmdlet-shape" && issue.Line == 1);
-        Assert.Equal(mode == PowerShellCompilationMode.Strict ? PowerShellCompilationDecisionKind.Rejected :
-            PowerShellCompilationDecisionKind.RuntimeFallback, leaf.Unit.Decision);
-        Assert.Equal(mode == PowerShellCompilationMode.Hybrid, leaf.Unit.RetainedHostedSource);
+        Assert.Equal(PowerShellCompilationDecisionKind.Rejected, leaf.Unit.Decision);
+        Assert.False(leaf.Unit.RetainedHostedSource);
         var call = Assert.Single(middle.LocalCalls);
         Assert.Equal(leaf.Unit.UnitId, call.CalleeUnitId);
         Assert.Equal("Functions.psm1", call.CalleeRelativePath);
@@ -58,6 +56,28 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
             File.ReadAllText(target.Path!), PowerShellCompilationProjectManifestService.JsonOptions)!;
         Assert.Equal(explanation.CanProceed, result.Succeeded); // Do not use the pre-shaping plan's success.
         Assert.False(Directory.Exists(Path.Combine(fixture.Root, fixture.Manifest.Artifacts.Single().OutputDirectory)));
+    }
+
+    [Fact]
+    public void ProjectExplain_ReportsNativeCommandsWithoutInventingBoundLocalCalls()
+    {
+        using var fixture = Fixture.Create(ShapingSource, PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid);
+        var result = new PowerShellCompilationProjectWorkflowService().Explain(fixture.Project);
+        var report = Assert.Single(result.Targets).DiagnosticReport!;
+
+        Assert.True(result.Succeeded);
+        Assert.True(report.CanProceed);
+        Assert.True(report.FinalShapeAvailable);
+        Assert.Equal(4, report.Units.Count(group => group.Unit.Kind == PowerShellCompilationUnitKind.Function));
+        Assert.All(report.Units.Where(group => group.Unit.Kind == PowerShellCompilationUnitKind.Function), group =>
+        {
+            Assert.True(group.Unit.Emitted);
+            Assert.False(group.Unit.RetainedHostedSource);
+            Assert.DoesNotContain(group.Issues, issue => issue.Stage == PowerShellCompilationDiagnosticStage.Shaping);
+            // Native command lookup can select session functions and aliases at invocation time.
+            Assert.Empty(group.LocalCalls);
+        });
     }
 
     [Fact]
@@ -154,11 +174,11 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
     public void ProjectExplain_RetainsCrossFileCallIdentityAndDoesNotMutateDecisionEvidence()
     {
         using var fixture = Fixture.Create("function Get-Outer { param([int] $Number) Get-Inner $Number }",
-            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
+            PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict);
         Directory.CreateDirectory(Path.Combine(fixture.Root, "Public"));
         File.WriteAllText(Path.Combine(fixture.Root, "Public", "Inner.ps1"),
             "function Get-Inner { param([int] $Number) $Number + 1 }");
-        File.WriteAllText(fixture.Source, ". \"$PSScriptRoot/Public/Inner.ps1\"\n" + File.ReadAllText(fixture.Source) + "\nGet-Outer 1\n");
+        File.WriteAllText(fixture.Source, ". \"$PSScriptRoot/Public/Inner.ps1\"\n" + File.ReadAllText(fixture.Source));
         var context = PowerShellCompilationProjectManifestService.Open(fixture.Project);
         var artifact = fixture.Manifest.Artifacts.Single();
         var input = new PowerShellCompilationInputResolver().Resolve(context.Sources,
@@ -178,11 +198,6 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
         var workflowReport = Assert.Single(new PowerShellCompilationProjectWorkflowService().Explain(fixture.Project).Targets).DiagnosticReport!;
         Assert.Equal(inner.Unit.UnitId, workflowReport.Units.Single(group => group.Unit.Name == "Get-Inner").Unit.UnitId);
         Assert.Equal(2, Assert.Single(outer.LocalCalls).Line);
-        var scriptCall = Assert.Single(report.Units.Single(group => group.Unit.Kind == PowerShellCompilationUnitKind.Script).LocalCalls);
-        Assert.Equal(outer.Unit.UnitId, scriptCall.CalleeUnitId);
-        Assert.Equal(0, scriptCall.Line);
-        Assert.Equal(0, scriptCall.Column);
-        Assert.Contains("call location unavailable", string.Join("\n", PowerShellCompilationDiagnosticReportFormatter.Format(report)));
     }
 
     internal sealed class Fixture : IDisposable

@@ -57,7 +57,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        foreach (var name in new[] { "Get-SwitchCatch", "Get-SwitchCatchThenItem" })
+        {
+            var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries, candidate => candidate.Name == name);
+            Assert.True(unit.EmittedClrMethod, name);
+            Assert.True(unit.UsesNativeFunctionBinding, name);
+            Assert.False(unit.RetainedHostedSource, name);
+        }
         const string probe = """
             foreach ($value in @('fail', 'other', '', $null)) {
                 'compiled=' + (@(Get-SwitchCatch -Value $value) -join ';')

@@ -122,7 +122,6 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
 {
     [Theory]
     [InlineData("trap { continue }; $true")]
-    [InlineData("dynamicparam { } end { $true }")]
     [InlineData("param($__writeOutput) $__writeOutput")]
     [InlineData("break")]
     [InlineData("continue")]

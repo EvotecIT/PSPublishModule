@@ -116,7 +116,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.False(File.Exists(output));
     }
 
-    [Fact]
+    [WindowsFact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void LibraryPackage_RestoresAndRunsNet472Consumer()
     {

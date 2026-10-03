@@ -252,7 +252,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Fact]
     [Trait("Category", "PowerShellCompilerGate")]
-    public void Transpile_PinnedComputerPropertySelectorsUseCompleteMethodsOrRetainedRegions()
+    public void Transpile_PinnedComputerPropertySelectorsUseCompleteMethods()
     {
         var cases = new[]
         {
@@ -274,27 +274,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
                 new[] { source }, "PowerForge.Compiled", name + "Methods", "net10.0",
                 PowerShellCompilationCapabilities.HybridModule);
-            if (name is not ("Get-ComputerDiskLogical" or "Get-ComputerOperatingSystem"))
-            {
-                Assert.Single(typed.Methods, method => method.SourceName == name);
-                Assert.DoesNotContain(typed.PromotedRegions, region => region.SourceName == name);
-                continue;
-            }
-            var matching = typed.PromotedRegions.Where(candidate =>
-                candidate.SourceName.Equals(name, StringComparison.OrdinalIgnoreCase) &&
-                candidate.ContinuationLocals.Any(static local => local.Alternatives.Count > 0)).ToArray();
-            Assert.True(matching.Length == 1,
-                file + Environment.NewLine + string.Join(Environment.NewLine, typed.RegionCandidates.Select(candidate =>
-                    candidate.StartLine + "-" + candidate.EndLine + " " + candidate.DecisionCode + ": " + candidate.Reason +
-                    " locals=" + string.Join(",", candidate.ContinuationLocals.Select(local => local.Name + ":" +
-                        local.Contract?.Shape)))));
-            var region = matching[0];
-            var local = Assert.Single(region.ContinuationLocals,
-                static candidate => candidate.Alternatives.Count > 0);
-            Assert.Equal(PowerShellRegionTransferShape.ClosedValueAlternative,
-                Assert.IsType<PowerShellRegionTransferContract>(local.Contract).Shape);
-            Assert.Equal(new[] { typeof(string).FullName, typeof(string[]).FullName },
-                local.Alternatives.Select(static alternative => alternative.TypeName));
+            var method = Assert.Single(typed.Methods, candidate => candidate.SourceName == name);
+            Assert.NotNull(method.NativeFunctionBinding);
+            Assert.DoesNotContain(typed.PromotedRegions, region => region.SourceName == name);
         }
     }
 

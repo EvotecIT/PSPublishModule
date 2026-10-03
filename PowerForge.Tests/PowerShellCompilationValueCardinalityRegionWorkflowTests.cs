@@ -11,9 +11,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         string framework,
         string host)
     {
+        // An authored type keeps terminal functions hosted, so this exercises their detached
+        // return contracts even as native whole-function admission expands.
         using var fixture = ArtifactFixture.Create("""
+            . "$PSScriptRoot/TerminalCardinality.ps1"
             function Get-ConditionalNoValue {
                 param([bool]$Stop)
+                data CardinalityBarrier { }
                 'head'
                 if ($Stop) { return }
                 Write-Error 'continued-error' -ErrorAction Continue
@@ -21,29 +25,36 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             }
             function Get-ConditionalNull {
                 param([bool]$Stop)
+                data CardinalityBarrier { }
                 'head'
                 if ($Stop) { return $null }
                 Write-Error 'continued-error' -ErrorAction Continue
                 'tail'
-            }
-            function Get-TerminalNoValue {
-                Write-Error 'terminal-error' -ErrorAction Continue
-                data CardinalityBarrier { }
-                return
-            }
-            function Get-TerminalNull {
-                Write-Error 'terminal-error' -ErrorAction Continue
-                data CardinalityBarrier { }
-                return $null
             }
             function Get-DirectNull {
                 return $null
             }
             Export-ModuleMember -Function Get-ConditionalNoValue,Get-ConditionalNull,Get-TerminalNoValue,Get-TerminalNull,Get-DirectNull
             """, ".psm1");
+        var terminalPath = Path.Combine(fixture.RootPath, "TerminalCardinality.ps1");
+        File.WriteAllText(terminalPath, """
+            class CardinalityToken { [object]Echo() { return $null } }
+            function Get-TerminalNoValue {
+                param([CardinalityToken]$Unused)
+                Write-Error 'terminal-error' -ErrorAction Continue
+                data CardinalityBarrier { }
+                return
+            }
+            function Get-TerminalNull {
+                param([CardinalityToken]$Unused)
+                Write-Error 'terminal-error' -ErrorAction Continue
+                data CardinalityBarrier { }
+                return $null
+            }
+            """);
 
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
-            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "ValueCardinalityRegions", framework,
+            new[] { fixture.ScriptPath, terminalPath }, "PowerForge.Compiled", "ValueCardinalityRegions", framework,
             PowerShellCompilationCapabilities.HybridModule);
         var regions = typed.PromotedRegions
             .Where(static region =>
@@ -52,12 +63,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             .OrderBy(static region => region.SourceName, StringComparer.Ordinal)
             .ToArray();
 
-        Assert.True(regions.Length == 4,
-            string.Join(Environment.NewLine, typed.RegionCandidates.Select(static candidate =>
-                candidate.SourceName + " " + candidate.StartLine + "-" + candidate.EndLine + " " +
-                candidate.DecisionCode + ": " + candidate.Reason + " terminal=" +
-                candidate.TerminalTransferContract?.Shape + " control=" +
-                candidate.ControlFlowContract?.ReturnValue.Shape)));
         AssertCardinalityRegion(regions, "Get-ConditionalNoValue", PowerShellRegionTransferShape.NoValue,
             PowerShellRegionTransferOutputBehavior.None, controlFlow: true);
         AssertCardinalityRegion(regions, "Get-ConditionalNull", PowerShellRegionTransferShape.NullValue,
@@ -73,9 +78,19 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             "Generated.ValueCardinalityRegions",
             PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid,
-            allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+            allowUnreviewedDependencyResolution: true)
+        {
+            TargetFramework = framework,
+            CompilationSourcePaths = new[] { fixture.ScriptPath, terminalPath },
+            RuntimeSourcePaths = new[] { fixture.ScriptPath, terminalPath }
+        });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(typed.PromotedRegions.Count(), result.Manifest!.PromotedTypedRegions);
+        foreach (var name in new[] { "Get-ConditionalNoValue", "Get-ConditionalNull", "Get-TerminalNoValue", "Get-TerminalNull" })
+        {
+            var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries, candidate => candidate.Name == name);
+            Assert.True(unit.RetainedHostedSource, name);
+            Assert.Single(unit.GeneratedRegionMemberNames);
+        }
 
         const string probe = """
             function Describe-Invocation([string]$Name, [hashtable]$Arguments) {

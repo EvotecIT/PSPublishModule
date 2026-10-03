@@ -112,7 +112,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var sources = new[]
         {
             (Path: FindCompleteConversionWorkflow("PSSharedGoods", "FullModule", "Private", "Deprecated", "Email", "Send-Email.ps1"),
-                Hash: "8889e968a67998b9827d1f6393a1849618c0490c6ad1660845193b3dc3add868", Name: "Send-Email", Emitted: false),
+                Hash: "8889e968a67998b9827d1f6393a1849618c0490c6ad1660845193b3dc3add868", Name: "Send-Email", Emitted: true),
             (Path: FindCompleteConversionWorkflow("PSSharedGoods", "FullModule", "Private", "Deprecated", "SQL", "New-SqlTableMapping.ps1"),
                 Hash: "c3463622ac542faf44ad2a42b5b35b78b2f3dee4866b836237c8c038c23f9515", Name: "New-SqlTableMapping", Emitted: true),
             (Path: FindCompleteConversionWorkflow("PSSharedGoods", "FullModule", "Public", "XML", "Set-XML.ps1"),

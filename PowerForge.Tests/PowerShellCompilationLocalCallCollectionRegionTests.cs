@@ -34,6 +34,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         var expectedCompiledConsumers = new[]
         {
+            "Get-ObjectPropertiesAdvanced",
             "New-SqlQuery",
             "New-SqlQueryAlterTable",
             "New-SqlQueryCreateTable"
@@ -44,19 +45,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 method.SourceName.Equals(consumer, StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(typed.PromotedRegions, region =>
                 region.SourceName.Equals(consumer, StringComparison.OrdinalIgnoreCase));
-        });
-
-        var retainedConsumerRegions = typed.PromotedRegions.Where(region =>
-            region.SourceName.Equals("Get-ObjectPropertiesAdvanced", StringComparison.OrdinalIgnoreCase) &&
-            region.LocalCalls.Any(static call => call.SourceName == "New-ArrayList")).ToArray();
-        Assert.NotEmpty(retainedConsumerRegions);
-        Assert.All(retainedConsumerRegions, static region =>
-        {
-            var call = Assert.Single(region.LocalCalls);
-            Assert.Equal(PowerShellRegionTransferOwnership.CompiledCalleeFresh, call.ResultContract.Ownership);
-            Assert.Equal(PowerShellRegionTransferOutputBehavior.NoEnumerate, call.ResultContract.OutputBehavior);
-            Assert.Equal(PowerShellRegionEnumerationOwner.None, call.ResultContract.EnumerationOwner);
-            Assert.Equal(PowerShellRegionEnumeratorLifetime.None, call.ResultContract.EnumeratorLifetime);
         });
     }
 

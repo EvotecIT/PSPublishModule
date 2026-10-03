@@ -7,7 +7,6 @@ namespace PowerForge;
 /// <summary>Embeds command-name finalization in independently rebuildable generated projects.</summary>
 internal static class PowerShellCommandMetadataBuildSupport
 {
-    internal const string PackageVersion = "10.0.10";
     internal static IReadOnlyList<string> PackageIds { get; } = Array.AsReadOnly(new[] { "System.Reflection.Metadata", "System.Collections.Immutable" });
 
     internal static bool RequiresBuildTool(PowerShellCompilationArtifactKind kind, PowerShellCompilationMode mode)
@@ -30,7 +29,7 @@ internal static class PowerShellCommandMetadataBuildSupport
             Environment.NewLine + Read("CommandMetadataTask.cs.template"), new UTF8Encoding(false));
         var project = XDocument.Load(projectPath);
         project.Root!.Add(new XElement("ItemGroup", PackageIds.Select(id => new XElement("PackageReference",
-            new XAttribute("Include", id), new XAttribute("Version", PackageVersion),
+            new XAttribute("Include", id), new XAttribute("Version", PowerShellCompilationGeneratedPackageCatalog.GetVersion(id)),
             new XAttribute("GeneratePathProperty", "true"), new XAttribute("PrivateAssets", "all"), new XAttribute("IncludeAssets", "none")))));
         project.Root!.Add(new XElement("Import", new XAttribute("Project", "Build/CommandMetadata.targets")));
         project.Save(projectPath);

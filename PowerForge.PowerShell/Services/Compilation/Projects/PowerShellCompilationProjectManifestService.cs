@@ -181,8 +181,24 @@ public sealed partial class PowerShellCompilationProjectManifestService
 
     private static string CreateTargetName(PowerShellCompilationTargetContract target)
     {
-        var rid = string.IsNullOrWhiteSpace(target.RuntimeIdentifier) ? "portable" : target.RuntimeIdentifier;
-        return $"{target.ArtifactKind}-{target.Mode}-{target.TargetFramework}-{rid}-{target.Deployment}".ToLowerInvariant();
+        var kind = target.ArtifactKind switch
+        {
+            PowerShellCompilationArtifactKind.BinaryModule => "module",
+            PowerShellCompilationArtifactKind.Library => "library",
+            PowerShellCompilationArtifactKind.Executable => "exe",
+            _ => throw new ArgumentOutOfRangeException(nameof(target))
+        };
+        var rid = string.IsNullOrWhiteSpace(target.RuntimeIdentifier) ? string.Empty : "-" + target.RuntimeIdentifier;
+        var deployment = target.Deployment switch
+        {
+            PowerShellCompilationDeploymentModel.FrameworkDependent => string.Empty,
+            PowerShellCompilationDeploymentModel.SelfContained => "-self",
+            PowerShellCompilationDeploymentModel.Trimmed => "-trimmed",
+            PowerShellCompilationDeploymentModel.ReadyToRun => "-r2r",
+            PowerShellCompilationDeploymentModel.NativeAot => "-aot",
+            _ => throw new ArgumentOutOfRangeException(nameof(target))
+        };
+        return $"{kind}-{target.Mode}-{target.TargetFramework}{rid}{deployment}".ToLowerInvariant();
     }
 
     private static bool IsSha256(string value)

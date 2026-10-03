@@ -57,9 +57,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "Generated.StringPipelineRegion", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(1, result.Manifest!.CompiledMethods);
-        Assert.Equal(0, result.Manifest.PromotedTypedRegions);
-        Assert.True(result.Manifest.RuntimeFallbackUnits > 0);
+        Assert.Equal(0, result.Manifest!.PromotedTypedRegions);
         var unit = Assert.Single(result.Manifest.UnitDispositionLedger!.Entries, static item => item.Name == "Format-PipelineText");
         Assert.True(unit.EmittedClrMethod);
         Assert.True(unit.UsesNativeFunctionBinding);

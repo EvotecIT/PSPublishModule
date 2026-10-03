@@ -30,7 +30,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "Generated.NativeSlotCallback", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        var slots = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries,
+            static unit => unit.Name == "Read-NativeSlots");
+        Assert.True(slots.EmittedClrMethod);
+        Assert.False(slots.RetainedHostedSource);
         const string probe = "Read-NativeSlots -Token (New-NativeSlotToken); Read-NativeSlots -Token plain";
         foreach (var modulePath in new[] { fixture.ScriptPath, result.ArtifactPath! })
         {

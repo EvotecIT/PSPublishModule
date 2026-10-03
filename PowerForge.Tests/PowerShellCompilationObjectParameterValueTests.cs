@@ -41,14 +41,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(built.Succeeded, built.Error + Environment.NewLine + built.BuildOutput);
-        Assert.True(built.Manifest!.CompiledMethods == 4, string.Join(Environment.NewLine,
-            built.Manifest.UnitDispositionLedger!.Entries.SelectMany(unit => unit.DiagnosticChain.Select(cause => unit.Name + ": " + cause.Message))));
-        Assert.All(built.Manifest.UnitDispositionLedger!.Entries.Where(unit => unit.Name is "Add-ToHashTable" or "Set-EmailBodyPreparedTable" or "Test-ParameterEquality" or "Test-ParameterInterpolation"), unit =>
+        var units = built.Manifest!.UnitDispositionLedger!.Entries;
+        foreach (var name in new[] { "Add-ToHashTable", "Set-EmailBodyPreparedTable", "Test-ParameterEquality", "Test-ParameterInterpolation" })
         {
+            var unit = Assert.Single(units, candidate => candidate.Name == name);
             Assert.True(unit.EmittedClrMethod, unit.Name);
             Assert.True(unit.UsesNativeFunctionBinding, unit.Name);
             Assert.False(unit.RetainedHostedSource, unit.Name);
-        });
+        }
         const string probe = """
             Add-Type -TypeDefinition @'
             public sealed class ParameterStringCallback {

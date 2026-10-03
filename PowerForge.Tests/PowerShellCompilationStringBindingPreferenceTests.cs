@@ -35,8 +35,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "Generated.StringBindingPreferences", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.True(result.Manifest!.CompiledMethods == 1,
-            string.Join(Environment.NewLine, result.Manifest.Diagnostics.Select(static diagnostic => diagnostic.Message)));
+        var preferences = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries,
+            static unit => unit.Name == "Invoke-BindingPreferences");
+        Assert.True(preferences.EmittedClrMethod);
+        Assert.False(preferences.RetainedHostedSource);
         const string probe = """
             $global:ErrorActionPreference='Continue'
             $global:VerbosePreference='SilentlyContinue'

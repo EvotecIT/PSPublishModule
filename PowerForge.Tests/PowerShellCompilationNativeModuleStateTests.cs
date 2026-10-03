@@ -73,8 +73,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             }
             function Read-RetainedStage {
                 [CmdletBinding()] param([string]$Value,[int]$Depth=0,[switch]$Fail)
-                dynamicparam { }
                 process {
+                    trap { throw $_ }
                     $script:State.Add('retained:'+ $Value)
                     if ($Depth -gt 0) { 'nested' | Invoke-StateFlow -Depth ($Depth-1) }
                     if ($Fail) { throw 'retained failure' }

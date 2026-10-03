@@ -25,8 +25,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             }
             function Wait-RetainedSignal {
                 [CmdletBinding()] param([object]$Signal)
-                dynamicparam { }
-                process { $Signal.Enter(); while($Signal.Pause) { } }
+                process { trap { throw $_ }; $Signal.Enter(); while($Signal.Pause) { } }
             }
             function Get-OwnedCount { [CmdletBinding()] param() return $script:Count -join ',' }
             Export-ModuleMember -Function Invoke-OwnedStop, Get-OwnedCount

@@ -5,6 +5,35 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(StatementErrorHosts))]
+    public void LocalCalls_ArtifactInvokesRetainedCalleeFromCompiledCaller(string framework, string host)
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Read-Child { param([string]$__writeOutput) $__writeOutput; 'after' }
+            function Read-Owner { param([string]$Value) Read-Child $Value; 'last' }
+            """, ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generated.LocalCallFallback", PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        var entries = result.Manifest.UnitDispositionLedger!.Entries;
+        Assert.Single(entries, unit => unit.RetainedHostedSource && !unit.EmittedClrMethod);
+        Assert.Single(entries, unit => unit.EmittedClrMethod && !unit.RetainedHostedSource);
+        const string probe = "@(Read-Owner 'ready'; Read-Owner 'again') | ConvertTo-Json -Compress";
+        var original = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
+            fixture.RootPath, "local-call-fallback");
+        var compiled = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
+            fixture.RootPath, "local-call-fallback");
+        Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
+        Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
+        Assert.Equal("[\"ready\",\"after\",\"last\",\"again\",\"after\",\"last\"]", original.StandardOutput.Trim());
+        Assert.Equal(original.StandardOutput, compiled.StandardOutput);
+        Assert.Equal(original.StandardError, compiled.StandardError);
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(StatementErrorHosts))]
     public void ScriptBlocks_ArtifactIsolatesUnrelatedNewerLifecycleSyntax(string framework, string host)
     {
         using var fixture = ArtifactFixture.Create("""

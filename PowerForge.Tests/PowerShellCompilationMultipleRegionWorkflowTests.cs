@@ -23,8 +23,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             }
             function Invoke-RetainedRegion {
                 [CmdletBinding()] param([string]$Value)
-                dynamicparam { }
                 process {
+                    trap { throw $_ }
                     $script:Trace.Add('retained:'+ $Value)
                     $Value.ToUpperInvariant()
                 }

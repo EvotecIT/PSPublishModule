@@ -37,9 +37,15 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "Generated.NativeStringConcatenation", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(2, result.Manifest!.CompiledMethods);
-        Assert.Equal(2, result.Manifest.UnitDispositionLedger!.Entries.Count(unit => unit.UsesNativeFunctionBinding));
-        Assert.DoesNotContain(result.Manifest.UnitDispositionLedger.Entries, unit => unit.EmittedClrMethod && unit.RetainedHostedSource);
+        var units = result.Manifest!.UnitDispositionLedger!.Entries;
+        foreach (var name in new[] { "Read-NativeConcatenation", "Read-NativeConcatenationFailure" })
+        {
+            var unit = Assert.Single(units, unit => unit.Name == name);
+            Assert.True(unit.EmittedClrMethod);
+            Assert.True(unit.UsesNativeFunctionBinding);
+            Assert.False(unit.RetainedHostedSource);
+        }
+        Assert.DoesNotContain(units, unit => unit.EmittedClrMethod && unit.RetainedHostedSource);
         const string probe = """
             $token=New-NativeConcatenationToken
             Read-NativeConcatenation -Token $token -Tail @('a','b')

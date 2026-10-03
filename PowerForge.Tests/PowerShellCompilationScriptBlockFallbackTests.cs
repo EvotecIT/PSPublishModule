@@ -5,7 +5,6 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     [Theory]
     [InlineData("function Read-Child([Missing.Authored.Type]$Value) { $Value }")]
     [InlineData("filter Read-Child { trap { continue }; $_ }")]
-    [InlineData("function Read-Child { dynamicparam { } end { 'value' } }")]
     [InlineData("function Read-Child { trap { continue }; 'value' }")]
     [InlineData("function Read-Child { param($__writeOutput) $__writeOutput }")]
     public void NestedFunctions_RetainOwnerWhenDeclarationOrChildCannotCompile(string declaration)
@@ -51,7 +50,6 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     }
 
     [Theory]
-    [InlineData("dynamicparam { } end { 'value' }")]
     [InlineData("trap { continue }; 'value'")]
     [InlineData("param($__writeOutput) $__writeOutput")]
     public void MethodScriptBlocks_RetainOwnerWhenChildCannotCompile(string body)
@@ -95,24 +93,24 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.Contains(result.Emitted.Diagnostics, diagnostic => diagnostic.Code == "PSL1015");
     }
 
-    [Fact]
-    public void Lowering_RetainsLocalCallersAfterCalleeLoweringFailure()
+    [Theory]
+    [InlineData("net10.0")]
+    [InlineData("net472")]
+    public void Lowering_PreservesNativeCallerWhenCalleeFallsBackToHostedSource(string framework)
     {
         var document = PowerShellSourceParser.Parse(
             "function Read-Child { param([string]$__writeOutput) $__writeOutput; 'after' } " +
             "function Read-Owner { Read-Child 'ready'; 'last' }", TestPath("call-lowering-fallback.psm1"));
         var result = new PowerShellSemanticCompilationPipeline().Compile(
-            new[] { document }, "net10.0", PowerShellCompilationCapabilities.HybridModule);
+            new[] { document }, framework, PowerShellCompilationCapabilities.HybridModule);
 
-        Assert.Empty(result.Emitted.Methods);
+        Assert.Equal("Read_Owner", Assert.Single(result.Emitted.Methods).GeneratedName);
         Assert.Contains("PSL1009", result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code));
-        Assert.Contains("PSL1015", result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code));
     }
 
     [Theory]
-    [InlineData("dynamicparam { } end { 'value' }")]
     [InlineData("trap { continue }; 'value'")]
-    [InlineData("$nested={ dynamicparam { } end { 'value' } }; & $nested")]
+    [InlineData("$nested={ trap { continue }; 'value' }; & $nested")]
     public void NativeScriptBlocks_RetainOwnersWithUnsupportedChildBodies(string body)
     {
         var document = PowerShellSourceParser.Parse(

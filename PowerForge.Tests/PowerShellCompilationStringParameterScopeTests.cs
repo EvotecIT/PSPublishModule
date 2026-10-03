@@ -73,8 +73,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.ScriptPath, fixture.OutputPath, "Generated.StringParameterScope", PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(1, result.Manifest!.CompiledMethods);
-        var unit = Assert.Single(result.Manifest.UnitDispositionLedger!.Entries, static item => item.Name == "Read-BindingContext");
+        var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries, static item => item.Name == "Read-BindingContext");
+        Assert.True(unit.EmittedClrMethod);
         Assert.Equal(pipeline, unit.UsesNativeFunctionBinding);
         Assert.False(unit.RetainedHostedSource);
         var original = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + selectedProbe,

@@ -2,13 +2,13 @@
   "packages": [
     {
       "id": "System.Reflection.Metadata",
-      "version": "10.0.10",
-      "contentHash": "NZIS6/IUBh70nJfVvE577oDc81y5GfYRgjWssC8AGpSlVzSu5YfbHXEtHXyLeEY7gqqbAaASwJEP0Oy3Q54Jfw=="
+      "version": "10.0.12",
+      "contentHash": "GvhJ5dVmJAw89wCWCyHXaU4A9iZjUtAW/ucshV6EpDW3l7VD8zHSWO14SHVD3m3jSuSE+FcNTrQFquJSQqJVVA=="
     },
     {
       "id": "System.Collections.Immutable",
-      "version": "10.0.10",
-      "contentHash": "Ih5zrydoDc1H5I0eNP6f4Lzw3cjsPMN4Nikd86kbyi66y0flkM9GfjVo62aUbcxeTbypzBCFAFQ+/6RF2jRORg=="
+      "version": "10.0.12",
+      "contentHash": "tRMzrybcwEEaudfpL9ghzfnSjEVVuhKa5sR86q30mYxXJdcKOLSBkpMFm62CGsbB50diPZta73Pxu8DgjGdDbA=="
     },
     {
       "id": "Microsoft.NETFramework.ReferenceAssemblies",
@@ -22,13 +22,13 @@
     },
     {
       "id": "Microsoft.PowerShell.SDK",
-      "version": "7.6.5",
-      "contentHash": "QQahpTrSQA0Bip0B+tkusI5SUHRYVbORpTlUZVLMWUwsdO2VVyDdpDDUMMbGZB6dw9JbwMA/B7auMAD3D9Ss/g=="
+      "version": "7.6.6",
+      "contentHash": "daxqvGA8Qx+GX+uthvQWEUwgg++3x9PbA2Ptis4jRBYSKeK1fEwxp72YgXvANeRiAmYeGYx3shwKkO08/AzVeA=="
     },
     {
       "id": "System.Security.Cryptography.Xml",
-      "version": "10.0.11",
-      "contentHash": "TokfVsaU2fmcwvsU6ihLCkseVfwhLX6Tmbl3qh3nOBIqHSX4yqFllpslA+PuHERH/ENu3kwqo4deZiyT0Wvh3Q=="
+      "version": "10.0.12",
+      "contentHash": "T3snzcc04R1JDj2XmzrLyk5fHT0YroBz5o2P+YdyJKYePSMqp8JsrxEJQPvUnK6oozQBvKLki9vnI7uMuWepKQ=="
     }
   ]
 }

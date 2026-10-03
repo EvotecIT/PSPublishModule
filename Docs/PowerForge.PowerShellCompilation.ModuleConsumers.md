@@ -49,7 +49,7 @@ Get-Command Get-PrivateValue -ErrorAction SilentlyContinue
 Remove-Module -Name $module.Name
 ```
 
-The first two commands appear in `Get-Command`; the private function does not. The compiled command returns `1`. The fallback command returns the current year from the live PowerShell host. `project explain` reports `Typed / BoundClr` for the compiled function and `RuntimeFallback / BoundClr+PowerShellRuntime` for the hosted function.
+The first two commands appear in `Get-Command`; the private function does not. `Get-CompiledValue` returns `1`. Despite its example name, `Get-FallbackValue` also emits as a CLR method: it invokes `Get-Date` through one hosted command region, then converts the returned year to an integer. Its per-function disposition reports an emitted method with a runtime command region, rather than retained function source. Unqualified `Get-Date` uses the importing session's command lookup, so an authored function or alias can override it. This Hybrid example requires PowerShell.
 
 Qualify the exact reviewed revision before packaging:
 
@@ -81,6 +81,6 @@ Import the newly built manifest in a fresh PowerShell session to avoid an alread
 
 Use a **separate copy** of the same source and manifest for a `net472` project. Run the same commands above with `--framework net472` at init, then import its built manifest from a Windows PowerShell 5.1 session. Keep the `net10.0` and `net472` projects, locks, environments, and artifacts separate; a restored environment belongs to its own manifest and target.
 
-The sample was exercised on PowerShell 7.6.5/`net10.0` and Windows PowerShell 5.1.26100.9444/`net472` on Windows x64. Both hosts exported only the two declared commands, returned `1` from the typed function and the current year from the fallback, and passed project explain/test/diagnose. This is host-specific evidence, not qualification for Linux, macOS, another PowerShell servicing version, or general PowerShell module compatibility.
+Keep the target-specific qualification evidence with the packaged project. The Windows x64 baseline uses PowerShell 7.6.6/`net10.0` and Windows PowerShell 5.1.26100.9444/`net472`; the [assessment](PowerForge.PowerShellCompilation.Assessment.md) records the observed exports, values, command shadowing, and project lifecycle checks. Additional operating systems and architectures require their own execution evidence.
 
 The generated project includes PDBs and a portable `source-map.json` under its emitted source directory. A working authored-source breakpoint, stepping, locals, stack, and exception path has **not** yet been observed. Do not use PDB presence or the map alone as debugger qualification; that [developer-tooling gate](PowerForge.PowerShellCompilation.NextMilestones.md) is deferred from the coverage milestone.

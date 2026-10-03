@@ -129,7 +129,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Theory]
-    [InlineData("net10.0", "10.0.11")]
+    [InlineData("net10.0", "10.0.12")]
     public void Build_EmittedBinaryModulePinsServicedSecurityXmlDependency(string targetFramework, string expectedVersion)
     {
         using var fixture = ArtifactFixture.Create("function Get-SecurityDependencyProof { return 42 }");
@@ -167,25 +167,25 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var project = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "GeneratedPackagedSecurityDependency.csproj"));
-        Assert.Contains("<PackageReference Include=\"System.Security.Cryptography.Xml\" Version=\"10.0.11\"", project, StringComparison.Ordinal);
+        Assert.Contains("<PackageReference Include=\"System.Security.Cryptography.Xml\" Version=\"10.0.12\"", project, StringComparison.Ordinal);
         var compilerPackages = result.Manifest!.DependencyGraph!.Nodes
             .Where(static node => node.Kind == PowerShellCompilationDependencyNodeKind.NuGetPackage)
             .ToArray();
         Assert.Contains(compilerPackages, static node =>
             node.Identity.Name == "Microsoft.PowerShell.SDK" &&
-            node.Identity.Version == "7.6.5" &&
+            node.Identity.Version == "7.6.6" &&
             node.Identity.ContentHashAlgorithm == "SHA-512" &&
             !string.IsNullOrWhiteSpace(node.Identity.ContentHash) &&
             node.Roles.HasFlag(PowerShellCompilationDependencyGraphRole.Build));
         Assert.Contains(compilerPackages, static node =>
-            node.Identity.Name == "System.Security.Cryptography.Xml" && node.Identity.Version == "10.0.11");
+            node.Identity.Name == "System.Security.Cryptography.Xml" && node.Identity.Version == "10.0.12");
         var provenance = result.Manifest.Files.Single(static file => file.Role == "BuildProvenance");
         using (var document = JsonDocument.Parse(File.ReadAllText(provenance.Path)))
         {
             var resolvedPackages = document.RootElement.GetProperty("resolvedPackages").EnumerateArray().ToArray();
             Assert.Contains(resolvedPackages, static package =>
                 package.GetProperty("id").GetString() == "Microsoft.PowerShell.SDK" &&
-                package.GetProperty("version").GetString() == "7.6.5" &&
+                package.GetProperty("version").GetString() == "7.6.6" &&
                 package.GetProperty("directCompilerReference").GetBoolean());
             Assert.All(resolvedPackages, static package => Assert.False(string.IsNullOrWhiteSpace(package.GetProperty("contentHash").GetString())));
         }
@@ -194,7 +194,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         {
             Assert.Contains(document.RootElement.GetProperty("components").EnumerateArray(), static component =>
                 component.TryGetProperty("purl", out var purl) &&
-                purl.GetString() == "pkg:nuget/Microsoft.PowerShell.SDK@7.6.5");
+                purl.GetString() == "pkg:nuget/Microsoft.PowerShell.SDK@7.6.6");
         }
     }
 

@@ -38,6 +38,7 @@ $requiredFamilies = @{
     'project NuGet CLI' = 'PowerForge.Tests.PowerForgeCliPowerShellCompilationTests.ProjectPackCli_*'
     'project grouped diagnostics' = 'PowerForge.Tests.PowerShellCompilationProjectDiagnosticsTests.*'
     'project diagnostics CLI' = 'PowerForge.Tests.PowerForgeCliPowerShellCompilationTests.ProjectDiagnosticsCli_*'
+    'project module lifecycle' = 'PowerForge.Tests.PowerShellCompilationProjectWorkflowTests.ProjectWorkflow_UsesReviewedLocksOfflineEnvironmentAndQualifiedPackage*'
 }
 $fastPatterns = @(
     'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.CompleteWorkflow_PinnedBinaryToStringPreservesBindingAndOutput'

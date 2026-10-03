@@ -8,15 +8,23 @@ namespace PowerForge.Tests;
 [Trait("Category", "PowerShellCompilation")]
 public sealed class PowerShellCompilationProjectWorkflowTests
 {
-    [Fact]
-    public void ProjectWorkflow_UsesReviewedLocksOfflineEnvironmentAndQualifiedPackage()
+    public static IEnumerable<object[]> ProjectModuleFrameworks()
     {
-        using var fixture = ProjectFixture.Create();
+        yield return new object[] { "net10.0" };
+        if (OperatingSystem.IsWindows()) yield return new object[] { "net472" };
+    }
+
+    [Theory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [MemberData(nameof(ProjectModuleFrameworks))]
+    public void ProjectWorkflow_UsesReviewedLocksOfflineEnvironmentAndQualifiedPackage(string framework)
+    {
+        using var fixture = ProjectFixture.Create(specialPath: true);
         var manifestService = new PowerShellCompilationProjectManifestService();
         var target = PowerShellCompilationTargetContractService.Create(
             PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid,
-            "net10.0",
+            framework,
             runtimeIdentifier: null,
             selfContained: false,
             singleFile: false,
@@ -108,7 +116,7 @@ public sealed class PowerShellCompilationProjectWorkflowTests
         var environment = JsonSerializer.Deserialize<PowerShellCompilationProjectEnvironment>(
             File.ReadAllText(environmentPath),
             PowerShellCompilationProjectManifestService.JsonOptions)!;
-        var package = Assert.Single(environment.Packages, static item => item.Id.Equals("Humanizer.Core", StringComparison.OrdinalIgnoreCase));
+        var package = Assert.Single(environment.Packages, static item => item.Id.Equals("System.Collections.Immutable", StringComparison.OrdinalIgnoreCase));
         var packageRoot = Path.Combine(environment.PackageRoot, package.Id.ToLowerInvariant(), package.Version.ToLowerInvariant());
         var nuGetPackagePath = Path.Combine(packageRoot, package.Id.ToLowerInvariant() + "." + package.Version.ToLowerInvariant() + ".nupkg");
         var archiveHashPath = nuGetPackagePath + ".sha512";
@@ -340,9 +348,10 @@ public sealed class PowerShellCompilationProjectWorkflowTests
         internal string ProjectPath { get; }
         internal string ManifestPath { get; }
 
-        internal static ProjectFixture Create()
+        internal static ProjectFixture Create(bool specialPath = false)
         {
-            var root = Path.Combine(Path.GetTempPath(), "PowerForgeProjectWorkflowTests", Guid.NewGuid().ToString("N"));
+            var root = Path.Combine(Path.GetTempPath(), "PowerForgeProjectWorkflowTests",
+                Guid.NewGuid().ToString("N") + (specialPath ? " Łódź ' sample" : string.Empty));
             Directory.CreateDirectory(root);
             var module = Path.Combine(root, "Generic.psm1");
             var manifest = Path.Combine(root, "Generic.psd1");

@@ -117,14 +117,15 @@ public sealed partial class PowerShellCompilationArtifactBuilder
 
     private static string GetPowerShellSdkVersion(string targetFramework)
     {
-        if (PowerShellCompilationTargetFrameworkPolicy.IsModern(targetFramework)) return "7.6.5";
+        if (PowerShellCompilationTargetFrameworkPolicy.IsModern(targetFramework))
+            return PowerShellCompilationGeneratedPackageCatalog.GetVersion("Microsoft.PowerShell.SDK");
         throw new ArgumentException(
             $"The generated PowerShell SDK reference requires {PowerShellCompilationTargetFrameworkPolicy.Modern}.",
             nameof(targetFramework));
     }
 
     private static string GetSecurityXmlVersion(string targetFramework)
-        => "10.0.11";
+        => PowerShellCompilationGeneratedPackageCatalog.GetVersion("System.Security.Cryptography.Xml");
 
     private static string GetPowerShellReference(string targetFramework)
         => targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase)

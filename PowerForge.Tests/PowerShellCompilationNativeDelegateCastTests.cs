@@ -70,7 +70,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var unit=Assert.Single(built.Manifest!.UnitDispositionLedger!.Entries,unit=>unit.Name=="Trace-Message");
         Assert.False(unit.EmittedClrMethod);
         Assert.True(unit.RetainedHostedSource);
-        Assert.Contains(unit.DiagnosticChain!, diagnostic => diagnostic.Message.Contains("RunspaceFactory", StringComparison.Ordinal));
+        Assert.Contains(unit.DiagnosticChain!, diagnostic =>
+            diagnostic.Message.Contains("System.Windows.TextWrapping", StringComparison.Ordinal) &&
+            diagnostic.Message.Contains("not available", StringComparison.Ordinal));
         const string probe="""
             & (Get-Command Trace-Message).Module { function script:Get-Date { [datetime]'2020-01-02T03:04:05' } }
             $box=[pscustomobject]@{Text='';Dispatcher=$null}
@@ -111,7 +113,6 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
 {
     [Theory]
     [InlineData("trap { continue }; 'value'")]
-    [InlineData("dynamicparam { } end { 'value' }")]
     [InlineData("param($__writeOutput) $__writeOutput")]
     public void NativeDelegateCasts_RetainOwnerWhenChildCannotCompile(string body)
     {
