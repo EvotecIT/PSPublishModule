@@ -692,7 +692,7 @@ public static partial class WebSiteBuilder
         var description = GetMetaString(item.Meta, "social_description");
         if (string.IsNullOrWhiteSpace(description))
             description = ResolveMetaDescription(spec, item);
-        var canonicalOrOutput = string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical;
+        var canonicalOrOutput = ResolveCanonicalRoute(spec, item);
         var url = ResolveAbsolutePublicUrl(spec, localization, item.Language, canonicalOrOutput);
         var siteName = string.IsNullOrWhiteSpace(spec.Social.SiteName) ? spec.Name : spec.Social.SiteName;
         var imageOverride = ResolveSocialImageOverride(item);
@@ -804,7 +804,7 @@ public static partial class WebSiteBuilder
             }));
         }
 
-        var pageUrl = ResolveAbsolutePublicUrl(spec, localization, item.Language, string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical);
+        var pageUrl = ResolveAbsolutePublicUrl(spec, localization, item.Language, ResolveCanonicalRoute(spec, item));
         if (spec.StructuredData.Website && item.Kind == PageKind.Home)
         {
             var webSiteModel = new Dictionary<string, object?>

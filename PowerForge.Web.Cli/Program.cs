@@ -14,7 +14,7 @@ var subCommand = argv[0].ToLowerInvariant();
 var subArgs = argv.Skip(1).ToArray();
 var outputJson = IsJsonOutput(subArgs);
 EnsureUtf8ConsoleEncoding();
-var logger = new WebConsoleLogger();
+var logger = new WebConsoleLogger(writeToStandardError: outputJson);
 
 try
 {

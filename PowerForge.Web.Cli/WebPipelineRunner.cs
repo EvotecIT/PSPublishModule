@@ -33,7 +33,7 @@ internal static partial class WebPipelineRunner
         "privateGallery", "private-gallery", "privateGalleryFeed", "private-gallery-feed", "gallery",
         "portalDocs", "portal-docs", "portalDocsIndex", "portal-docs-index", "docs",
         "map", "maps", "input", "inputs", "sources", "mapFiles", "map-files",
-        "xml", "help", "helpPath", "assembly",
+        "xml", "xmls", "xmlPaths", "help", "helpPath", "assembly", "entries",
         "siteOut", "site-out", "outRoot", "out-root", "projectsOut", "projects-out",
         "changelog", "changelogPath", "changelog-path", "releasesPath", "releases-path",
         "discoverRoot", "discover-root",
@@ -236,13 +236,13 @@ internal static partial class WebPipelineRunner
                 {
                     stepFingerprint = ComputeStepFingerprint(baseDir, step, fingerprintSalt);
                 }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or ArgumentException)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or ArgumentException or BadImageFormatException)
                 {
                     // Discovery failure must never reuse an old output. Execute the task
                     // so its normal validation reports the actionable configuration error.
                     cacheable = false;
                 }
-                if (cacheStateLocal!.Entries.TryGetValue(cacheKey, out var cacheEntry) &&
+                if (cacheable && cacheStateLocal!.Entries.TryGetValue(cacheKey, out var cacheEntry) &&
                     string.Equals(cacheEntry.Fingerprint, stepFingerprint, StringComparison.Ordinal) &&
                     !dependencyMiss &&
                     AreExpectedOutputsPresent(expectedOutputs) &&
@@ -272,6 +272,15 @@ internal static partial class WebPipelineRunner
             var failureProfileOutputIsSafe = true;
             try
             {
+                if ((task.Equals("build", StringComparison.OrdinalIgnoreCase) ||
+                     task.Equals("dotnet-publish", StringComparison.OrdinalIgnoreCase)) &&
+                    GetBool(step, "clean") == true)
+                {
+                    var cleanOutput = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+                    if (!string.IsNullOrWhiteSpace(cleanOutput))
+                        foreach (var input in pipelineSourcePaths)
+                            WebOutputPathGuard.ValidateSourceInput(cleanOutput, input);
+                }
                 // A preceding sitemap step can create index leaves absent during initial validation.
                 if (task.Equals("indexnow", StringComparison.OrdinalIgnoreCase))
                 {

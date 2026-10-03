@@ -59,6 +59,7 @@ public sealed class WebApiDocsGeneratorAccessibilityTests
                 IncludeUndocumentedTypes = false
             });
             Assert.Equal(2, xmlOnlyResult.TypeCount);
+            Assert.Contains(xmlOnlyResult.Warnings, warning => warning.StartsWith("[PFWEB.APIDOCS.INPUT.ACCESSIBILITY]", StringComparison.Ordinal));
             Assert.True(File.Exists(internalJsonPath));
             Assert.True(File.Exists(internalRoutePath));
             Assert.True(File.Exists(internalAliasPath));

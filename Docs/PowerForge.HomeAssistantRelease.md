@@ -106,7 +106,7 @@ When a release is required, PowerForge:
 1. synchronizes `manifest.json` and the bounded `[project]` table in `pyproject.toml`, or `package.json` and `package-lock.json`;
 2. creates and pushes a commit containing only the version metadata and source PR/merge trailers, using an explicit repository URL, disabled Git hooks, disabled redirects, and ephemeral authentication;
 3. starts a separate read-only job at that exact commit and runs the plugin npm validation/build or produces the configured integration zip;
-4. rejects any tracked source mutation made by build scripts and transfers only the declared asset;
+4. rejects tracked source, staged, file-mode, or checkout-commit changes made by build scripts and transfers only the declared asset; a plugin may regenerate its checked-in root HACS bundle when its bytes match the packaged asset;
 5. starts a separate privileged publish job that never executes receiver code;
 6. preflights any existing `v<version>` release and tag for the expected PowerForge marker and commit before same-named assets may be replaced;
 7. creates or safely resumes the release with GitHub-generated change and contributor

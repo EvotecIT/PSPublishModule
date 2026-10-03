@@ -33,7 +33,7 @@ public static partial class WebApiDocsGenerator
         foreach (var source in documents)
             foreach (var member in source.Document.Root!.Element("members")!.Elements("member"))
                 if (member.Attribute("name")?.Value is { Length: > 0 } name) members.TryAdd(name, member);
-        if (assembly is not null) ResolveImplicitInheritDoc(assembly, members, warnings);
+        if (assembly is not null) ResolveImplicitInheritDoc(assembly, members, options, warnings);
         foreach (var source in documents)
         {
             var xmlPath = source.Path;

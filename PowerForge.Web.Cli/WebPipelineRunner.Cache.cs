@@ -260,6 +260,13 @@ internal static partial class WebPipelineRunner
         if (step.ValueKind != JsonValueKind.Object)
             yield break;
 
+        if (GetString(step, "task") is null || string.Equals(GetString(step, "task"), "apidocs", StringComparison.OrdinalIgnoreCase))
+        {
+            var assembly = ResolvePath(baseDir, GetString(step, "assembly"));
+            if (!string.IsNullOrWhiteSpace(assembly) && File.Exists(assembly))
+                foreach (var input in WebApiDocumentationInputs.Discover(assembly)) yield return input;
+        }
+
         var isLlmsSite = string.Equals(GetString(step, "task"), "llms", StringComparison.OrdinalIgnoreCase) &&
                          string.Equals(
                              GetString(step, "contentKind") ?? GetString(step, "content-kind"),
@@ -311,21 +318,8 @@ internal static partial class WebPipelineRunner
                 if (item.ValueKind != JsonValueKind.Object)
                     continue;
 
-                foreach (var nestedProperty in item.EnumerateObject())
-                {
-                    if (!FingerprintPathKeys.Contains(nestedProperty.Name))
-                        continue;
-                    if (nestedProperty.Value.ValueKind != JsonValueKind.String)
-                        continue;
-
-                    var nestedValue = nestedProperty.Value.GetString();
-                    if (string.IsNullOrWhiteSpace(nestedValue) || IsExternalUri(nestedValue))
-                        continue;
-
-                    var nestedResolved = ResolvePath(baseDir, nestedValue);
-                    if (!string.IsNullOrWhiteSpace(nestedResolved))
-                        yield return Path.GetFullPath(nestedResolved);
-                }
+                foreach (var nestedPath in EnumerateFingerprintPaths(baseDir, item))
+                    yield return nestedPath;
             }
         }
 
