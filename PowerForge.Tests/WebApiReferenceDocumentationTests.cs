@@ -11,6 +11,50 @@ public sealed class WebApiReferenceDocumentationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void Generate_ResolvesNearestCollectionDocumentationAcrossFrameworkFiles(bool explicitTarget)
+    {
+        WithRoot(root =>
+        {
+            var xml = Path.Combine(root, "docs.xml");
+            var inherit = explicitTarget ? "<inheritdoc cref=\"T:System.Collections.Generic.List`1\"/>" : "<inheritdoc/>";
+            File.WriteAllText(xml, "<doc><members><member name=\"T:PowerForge.Tests.WebReferenceCollectionFixture\">" + inherit + "</member></members></doc>");
+            var output = Path.Combine(root, "api");
+            var result = WebApiDocsGenerator.Generate(new WebApiDocsOptions
+            {
+                XmlPath = xml, AssemblyPath = typeof(WebReferenceCollectionFixture).Assembly.Location,
+                OutputPath = output, Format = "json", IncludeUndocumentedTypes = false
+            });
+            Assert.Empty(result.Warnings);
+            Assert.Equal(1, result.TypeCount);
+            using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(output, "types", "powerforge-tests-webreferencecollectionfixture.json")));
+            Assert.Contains("list", json.RootElement.GetProperty("summary").GetString()!, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Pipeline_ReportsMalformedAssemblyAndWritesFailureProfileWithOrWithoutCaching(bool cache)
+    {
+        WithRoot(root =>
+        {
+            File.WriteAllText(Path.Combine(root, "bad.dll"), "Interrupted assembly output");
+            File.WriteAllText(Path.Combine(root, "docs.xml"), "<doc><members/></doc>");
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, "{\"cache\":" + (cache ? "true" : "false") + ",\"profilePath\":\"failure.json\",\"steps\":[{\"task\":\"apidocs\",\"xml\":\"docs.xml\",\"assembly\":\"bad.dll\",\"out\":\"api\",\"format\":\"json\"}]}");
+            var result = WebPipelineRunner.RunPipeline(pipeline, logger: null);
+            Assert.False(result.Success);
+            var step = Assert.Single(result.Steps);
+            Assert.False(step.Cached);
+            Assert.Contains("could not be inspected", step.Message);
+            using var profile = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "failure.json")));
+            Assert.False(profile.RootElement.GetProperty("success").GetBoolean());
+        });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void Generate_ResolvesFrameworkInheritanceWithoutAddingFrameworkPages(bool explicitTargets)
     {
         WithRoot(root =>
@@ -154,3 +198,5 @@ public sealed class WebReferenceDocumentationFixture : IDisposable
     public void Remove() { }
     public override string ToString() => "Fixture";
 }
+
+public sealed class WebReferenceCollectionFixture : List<int> { }

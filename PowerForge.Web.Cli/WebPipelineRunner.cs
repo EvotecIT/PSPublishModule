@@ -236,13 +236,13 @@ internal static partial class WebPipelineRunner
                 {
                     stepFingerprint = ComputeStepFingerprint(baseDir, step, fingerprintSalt);
                 }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or ArgumentException)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or ArgumentException or BadImageFormatException)
                 {
                     // Discovery failure must never reuse an old output. Execute the task
                     // so its normal validation reports the actionable configuration error.
                     cacheable = false;
                 }
-                if (cacheStateLocal!.Entries.TryGetValue(cacheKey, out var cacheEntry) &&
+                if (cacheable && cacheStateLocal!.Entries.TryGetValue(cacheKey, out var cacheEntry) &&
                     string.Equals(cacheEntry.Fingerprint, stepFingerprint, StringComparison.Ordinal) &&
                     !dependencyMiss &&
                     AreExpectedOutputsPresent(expectedOutputs) &&

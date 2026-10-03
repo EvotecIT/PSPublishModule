@@ -334,7 +334,7 @@ internal static partial class WebCliCommandHandlers
             return Fail(headline, outputJson, logger, "web.apidocs");
         }
         if (!outputJson && result.UsedReflectionFallback)
-            logger.Info("API docs used reflection fallback (XML missing or empty).");
+            logger.Info("API docs include public types discovered through reflection in addition to XML documentation.");
 
         if (outputJson)
         {

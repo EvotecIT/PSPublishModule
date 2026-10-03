@@ -11,12 +11,11 @@ internal static class WebApiDocumentationInputs
     {
         var assembly = Path.GetFullPath(assemblyPath);
         var directory = Path.GetDirectoryName(assembly)!;
-        var inputs = Directory.EnumerateFiles(directory, "*.xml", SearchOption.TopDirectoryOnly).ToList();
+        var inputs = Directory.EnumerateFiles(directory, "*.xml", SearchOption.TopDirectoryOnly)
+            .Where(path => File.Exists(Path.ChangeExtension(path, ".dll"))).ToList();
         using var stream = File.OpenRead(assembly);
         using var pe = new PEReader(stream);
         var metadata = pe.GetMetadataReader();
-        var names = metadata.AssemblyReferences.Select(handle => metadata.GetString(metadata.GetAssemblyReference(handle).Name))
-            .Append("System.Runtime").Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var framework = ReadFramework(metadata);
         if (framework?.Identifier == ".NETCoreApp")
         {
@@ -36,11 +35,7 @@ internal static class WebApiDocumentationInputs
                     Directory.Exists(candidate.Path))
                 .OrderByDescending(candidate => candidate.Version).ToArray();
             if (candidates.Length > 0)
-                foreach (var name in names)
-                {
-                    var xml = Path.Combine(candidates[0].Path, name + ".xml");
-                    if (File.Exists(xml)) inputs.Add(xml);
-                }
+                inputs.AddRange(Directory.EnumerateFiles(candidates[0].Path, "*.xml", SearchOption.TopDirectoryOnly));
         }
         return inputs.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
     }

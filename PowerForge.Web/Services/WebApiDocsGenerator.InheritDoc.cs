@@ -32,29 +32,44 @@ public static partial class WebApiDocsGenerator
             var implicitTarget = string.IsNullOrWhiteSpace(explicitTarget);
             if (!reflected.TryGetValue(pair.Key, out var member)) continue;
             var candidates = InheritedDocumentationMembers(member).ToArray();
-            var target = implicitTarget ? candidates.Select(DocumentationId).FirstOrDefault(members.ContainsKey)
-                : members.ContainsKey(explicitTarget!) ? explicitTarget : null;
-            if (target is null && candidates.Length > 0 && !string.IsNullOrWhiteSpace(options.AssemblyPath))
+            string? target = null;
+            var targets = implicitTarget ? candidates.Select(DocumentationId).ToArray() : new[] { explicitTarget! };
+            foreach (var candidateId in targets)
             {
-                referenceInputs ??= WebApiDocumentationInputs.Discover(options.AssemblyPath);
-                foreach (var candidate in candidates)
+                if (!members.ContainsKey(candidateId) && !string.IsNullOrWhiteSpace(options.AssemblyPath))
                 {
-                    var owner = candidate is Type candidateType ? candidateType.Assembly : candidate.DeclaringType!.Assembly;
-                    var name = owner == typeof(object).Assembly ? "System.Runtime" : owner.GetName().Name;
-                    foreach (var path in referenceInputs.Where(path => Path.GetFileNameWithoutExtension(path).Equals(name, StringComparison.OrdinalIgnoreCase)))
+                    referenceInputs ??= WebApiDocumentationInputs.Discover(options.AssemblyPath);
+                    var candidate = candidates.FirstOrDefault(candidate => DocumentationId(candidate) == candidateId);
+                    var declaring = candidate as Type ?? candidate?.DeclaringType;
+                    var ownerName = declaring?.Assembly.GetName().Name;
+                    var assemblyDirectory = Path.GetDirectoryName(Path.GetFullPath(options.AssemblyPath));
+                    var candidateInputs = referenceInputs.Where(path =>
+                        !string.Equals(Path.GetDirectoryName(path), assemblyDirectory, StringComparison.OrdinalIgnoreCase) ||
+                        Path.GetFileNameWithoutExtension(path).Equals(ownerName, StringComparison.OrdinalIgnoreCase));
+                    foreach (var path in candidateInputs.OrderBy(path => ReferenceDocumentationPriority(path, ownerName, declaring?.Namespace)))
                     {
                         if (!loadedReferences.Add(path)) continue;
                         var document = LoadXmlDocumentation(path);
                         foreach (var inherited in document.Root!.Element("members")!.Elements("member"))
                             if (inherited.Attribute("name")?.Value is { Length: > 0 } id) members.TryAdd(id, inherited);
+                        if (members.ContainsKey(candidateId)) break;
                     }
                 }
-                target = implicitTarget ? candidates.Select(DocumentationId).FirstOrDefault(members.ContainsKey)
-                    : members.ContainsKey(explicitTarget!) ? explicitTarget : null;
+                if (!members.ContainsKey(candidateId)) continue;
+                target = candidateId;
+                break;
             }
             if (implicitTarget && target is not null) inheritDoc.SetAttributeValue("cref", target);
             else if (implicitTarget) warnings.Add($"Implicit inheritdoc could not be resolved for {pair.Key}; supply the inherited XML documentation or an explicit cref.");
         }
+    }
+
+    private static int ReferenceDocumentationPriority(string path, string? ownerName, string? typeNamespace)
+    {
+        var name = Path.GetFileNameWithoutExtension(path);
+        if (name.Equals(ownerName, StringComparison.OrdinalIgnoreCase)) return 0;
+        if (typeNamespace is not null && (typeNamespace.Equals(name, StringComparison.Ordinal) || typeNamespace.StartsWith(name + ".", StringComparison.Ordinal))) return 1;
+        return name.Equals("System.Runtime", StringComparison.OrdinalIgnoreCase) ? 2 : 3;
     }
 
     private static string DocumentationId(MemberInfo member)
