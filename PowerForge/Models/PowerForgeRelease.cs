@@ -556,6 +556,8 @@ internal sealed class PowerForgeAppleLocalDeploymentOptions
 
     public string Configuration { get; set; } = "Debug";
 
+    public bool OptimizeSwift { get; set; }
+
     public string InstallRoot { get; set; } = "/Applications";
 
     public bool Launch { get; set; } = true;
