@@ -81,8 +81,10 @@ Apple Watch (Przemyslaw)   AppleWatch-Przemyslaw.coredevice.local   CF0D62D9-4A
         Assert.Contains("developer tools are not configured", ex.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task BuildAsync_builds_xcodebuild_device_command()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BuildAsync_builds_xcodebuild_device_command(bool optimizeSwift)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -100,6 +102,7 @@ Apple Watch (Przemyslaw)   AppleWatch-Przemyslaw.coredevice.local   CF0D62D9-4A
             {
                 ProjectPath = project.FullName,
                 Scheme = "Tactra",
+                OptimizeSwift = optimizeSwift,
                 DeviceIdentifier = "3DA86114-A96C-5109-970A-B52EA186B0E9",
                 DerivedDataPath = derived,
                 XcodeBuildExecutable = "/usr/bin/xcodebuild"
@@ -114,7 +117,7 @@ Apple Watch (Przemyslaw)   AppleWatch-Przemyslaw.coredevice.local   CF0D62D9-4A
             Assert.False(request.InheritEnvironment);
             Assert.Equal("/usr/bin:/bin:/usr/sbin:/sbin", request.EnvironmentVariables?["PATH"]);
             Assert.DoesNotContain("DEVELOPER_DIR", request.EnvironmentVariables!.Keys);
-            Assert.Equal(new[]
+            var expectedArguments = new List<string>
             {
                 "-project",
                 project.FullName,
@@ -130,7 +133,10 @@ Apple Watch (Przemyslaw)   AppleWatch-Przemyslaw.coredevice.local   CF0D62D9-4A
                 "-allowProvisioningDeviceRegistration",
                 "build",
                 $"POWERFORGE_SOURCE_REVISION={revision}"
-            }, request.Arguments);
+            };
+            if (optimizeSwift)
+                expectedArguments.Insert(expectedArguments.IndexOf("build"), "SWIFT_OPTIMIZATION_LEVEL=-O");
+            Assert.Equal(expectedArguments, request.Arguments);
         }
         finally
         {

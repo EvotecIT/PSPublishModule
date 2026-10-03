@@ -509,6 +509,7 @@
             },
             "DefaultDevice": { "type": [ "string", "null" ] },
             "Configuration": { "type": "string", "minLength": 1 },
+            "OptimizeSwift": { "type": "boolean", "description": "Optimize all Swift targets while retaining the chosen build configuration, including Debug compilation conditions." },
             "InstallRoot": { "type": "string", "minLength": 1 },
             "Launch": { "type": "boolean" },
             "UseBuildMirror": { "type": "boolean" },
