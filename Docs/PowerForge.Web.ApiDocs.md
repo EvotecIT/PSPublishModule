@@ -4,6 +4,25 @@ This guide documents the CSS hooks used by the built-in API docs templates and
 the JavaScript behaviors they rely on. Use it when creating a custom theme or
 overriding templates via `templateRoot`.
 
+## Documentation inputs and inheritance
+
+For C# references, supply both the XML documentation and its matching assembly.
+The assembly restricts output to the public API and supplies C# signatures.
+XML-only generation remains available, but reports a warning because XML member
+records do not encode accessibility. Treat that warning as a generation limit
+when publishing a reference from XML alone.
+
+With an assembly, implicit `<inheritdoc/>` resolves documented base members and
+implemented interface members, including generic interfaces, properties, and
+events. Documentation supplied through `XmlPaths` shares one inheritance lookup,
+so contract and implementation records can live in separate files. Supply the
+inherited documentation with the inputs; unresolved implicit
+inheritance produces a warning. An explicit `cref` remains supported.
+
+Malformed C# XML or PowerShell help stops generation before replacing existing
+reference files. Correct the input and rerun the generator; an empty reference
+is not a successful recovery from invalid documentation.
+
 ## Cross-package API search
 
 API generation emits `search.json` for types. The `docs` and `sidebar` templates

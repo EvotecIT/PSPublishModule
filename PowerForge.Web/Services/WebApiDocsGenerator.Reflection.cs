@@ -502,11 +502,12 @@ public static partial class WebApiDocsGenerator
     private static List<string> GetMethodModifiers(MethodInfo method)
     {
         var modifiers = new List<string>();
+        var overridesBase = method.IsVirtual && !SameReflectedMember(method.GetBaseDefinition(), method);
         if (method.IsStatic) modifiers.Add("static");
         if (method.IsAbstract) modifiers.Add("abstract");
-        else if (method.IsVirtual && method.GetBaseDefinition() != method) modifiers.Add("override");
-        else if (method.IsVirtual) modifiers.Add("virtual");
-        if (method.IsFinal && method.IsVirtual && method.GetBaseDefinition() != method) modifiers.Add("sealed");
+        else if (overridesBase) modifiers.Add("override");
+        else if (method.IsVirtual && !method.IsFinal) modifiers.Add("virtual");
+        if (method.IsFinal && overridesBase) modifiers.Add("sealed");
         if (IsAsync(method)) modifiers.Add("async");
         return modifiers;
     }

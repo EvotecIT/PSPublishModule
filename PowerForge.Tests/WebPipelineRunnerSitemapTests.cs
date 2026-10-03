@@ -87,7 +87,9 @@ public class WebPipelineRunnerSitemapTests
             Assert.True(File.Exists(metadataPath));
             var metadata = File.ReadAllText(metadataPath);
             Assert.Contains("2020-01-02T00:00:00.000Z", metadata, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("\"path\": \"/search\"", metadata, StringComparison.OrdinalIgnoreCase);
+            using var metadataJson = System.Text.Json.JsonDocument.Parse(metadata);
+            Assert.Contains(metadataJson.RootElement.GetProperty("entries").EnumerateArray(), entry =>
+                entry.GetProperty("path").GetString()?.TrimEnd('/') == "/search" && entry.GetProperty("noIndex").GetBoolean());
             Assert.Contains("\"noIndex\": true", metadata, StringComparison.OrdinalIgnoreCase);
         }
         finally
@@ -285,7 +287,7 @@ public class WebPipelineRunnerSitemapTests
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
-                """
+                $$"""
                 {
                   "steps": [
                     {
@@ -297,6 +299,7 @@ public class WebPipelineRunnerSitemapTests
                       "entries": [
                         {
                           "path": "/news/coverage/",
+                          "publication-date": "{{DateTimeOffset.UtcNow.AddHours(-1).ToString("O")}}",
                           "title": "Coverage"
                         }
                       ],

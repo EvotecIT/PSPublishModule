@@ -33,7 +33,15 @@ internal static class IncludePreprocessor
         return ApplyInternal(markdown, roots, sourcePath, maxDepth);
     }
 
-    private static string ApplyInternal(string markdown, IReadOnlyList<string> roots, string? sourcePath, int maxDepth)
+    internal static IReadOnlyList<string> DiscoverDependencies(string markdown, string rootPath, string sourcePath, string? sourceRootPath)
+    {
+        var dependencies = new HashSet<string>(FileSystemPathComparer);
+        ApplyInternal(markdown, BuildAllowedRoots(rootPath, sourcePath, sourceRootPath), sourcePath, 5, dependencies);
+        return dependencies.ToArray();
+    }
+
+    private static string ApplyInternal(string markdown, IReadOnlyList<string> roots, string? sourcePath, int maxDepth,
+        ISet<string>? dependencies = null)
     {
         if (string.IsNullOrWhiteSpace(markdown)) return string.Empty;
         if (maxDepth <= 0) return markdown;
@@ -45,10 +53,13 @@ internal static class IncludePreprocessor
             var path = match.Groups["path"].Value;
             if (string.IsNullOrWhiteSpace(path)) return string.Empty;
             var fullPath = ResolvePath(current.Roots, current.SourcePath, path);
-            if (fullPath is null || !File.Exists(fullPath))
+            if (fullPath is null)
+                return string.Empty;
+            dependencies?.Add(fullPath);
+            if (!File.Exists(fullPath))
                 return string.Empty;
             var content = File.ReadAllText(fullPath);
-            return ApplyInternal(content, current.Roots, fullPath, current.MaxDepth - 1);
+            return ApplyInternal(content, current.Roots, fullPath, current.MaxDepth - 1, dependencies);
         });
     }
 

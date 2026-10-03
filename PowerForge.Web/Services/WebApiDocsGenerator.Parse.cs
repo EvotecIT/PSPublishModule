@@ -14,12 +14,8 @@ namespace PowerForge.Web;
 /// <summary>Generates API documentation artifacts from XML docs.</summary>
 public static partial class WebApiDocsGenerator
 {
-    private static ApiDocModel ParseXml(string xmlPath, Assembly? assembly, WebApiDocsOptions options)
+    private static XDocument LoadXmlDocumentation(string xmlPath)
     {
-        var apiDoc = new ApiDocModel();
-        if (!File.Exists(xmlPath))
-            return apiDoc;
-
         using var stream = File.OpenRead(xmlPath);
         XDocument doc;
         try
@@ -28,31 +24,26 @@ public static partial class WebApiDocsGenerator
         }
         catch (Exception ex)
         {
-            Trace.TraceWarning($"Failed to parse XML docs: {xmlPath} ({ex.GetType().Name}: {ex.Message})");
-            return apiDoc;
+            throw new InvalidDataException($"Failed to parse XML documentation: {xmlPath}", ex);
         }
         var docElement = doc.Element("doc");
-        if (docElement is null) return apiDoc;
+        if (docElement is null) throw new InvalidDataException($"XML documentation requires a doc root: {xmlPath}");
+        if (docElement.Element("members") is null) throw new InvalidDataException($"XML documentation requires a members element: {xmlPath}");
+        return doc;
+    }
 
+    private static ApiDocModel ParseXml(XDocument doc, Assembly? assembly, WebApiDocsOptions options,
+        IReadOnlyDictionary<string, XElement> memberLookup)
+    {
+        var apiDoc = new ApiDocModel();
+        var docElement = doc.Element("doc")!;
         var assemblyElement = docElement.Element("assembly");
         if (assemblyElement is not null)
         {
             apiDoc.AssemblyName = assemblyElement.Element("name")?.Value ?? string.Empty;
         }
 
-        var members = docElement.Element("members");
-        if (members is null) return apiDoc;
-
-        var memberLookup = new Dictionary<string, XElement>(StringComparer.Ordinal);
-        foreach (var member in members.Elements("member"))
-        {
-            var memberName = member.Attribute("name")?.Value;
-            if (string.IsNullOrWhiteSpace(memberName))
-                continue;
-            if (!memberLookup.ContainsKey(memberName))
-                memberLookup[memberName] = member;
-        }
-
+        var members = docElement.Element("members")!;
         foreach (var member in members.Elements("member"))
         {
             var name = member.Attribute("name")?.Value;
@@ -112,8 +103,7 @@ public static partial class WebApiDocsGenerator
         }
         catch (Exception ex)
         {
-            warnings.Add($"Failed to parse PowerShell help: {Path.GetFileName(resolved)} ({ex.GetType().Name}: {ex.Message})");
-            return apiDoc;
+            throw new InvalidDataException($"Failed to parse PowerShell help: {resolved}", ex);
         }
 
         var commandNs = XNamespace.Get("http://schemas.microsoft.com/maml/dev/command/2004/10");
