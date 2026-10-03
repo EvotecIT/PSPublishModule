@@ -72,6 +72,18 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
     /// <summary>Executes the configured build pipeline.</summary>
     protected override void ProcessRecord()
     {
+        try
+        {
+            ExecuteWorkflow();
+        }
+        catch (Exception ex) when (ExitCode.IsPresent && ex is not PipelineStoppedException)
+        {
+            CompleteResult(new ProjectBuildResult { Success = false, ErrorMessage = ex.Message });
+        }
+    }
+
+    private void ExecuteWorkflow()
+    {
         var bound = MyInvocation?.BoundParameters;
         var isVerbose = bound?.ContainsKey("Verbose") == true;
 

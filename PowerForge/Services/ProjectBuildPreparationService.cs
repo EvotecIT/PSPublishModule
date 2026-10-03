@@ -33,29 +33,16 @@ internal sealed class ProjectBuildPreparationService
         if (requestedActions is null)
             throw new ArgumentNullException(nameof(requestedActions));
 
-        var anyConfigSpecified = config.UpdateVersions is not null ||
-                                 config.Build is not null ||
-                                 config.PublishNuget is not null ||
-                                 config.PublishGitHub is not null;
-        var anyOverrideSpecified = requestedActions.UpdateVersions is not null ||
-                                   requestedActions.Build is not null ||
-                                   requestedActions.PublishNuget is not null ||
-                                   requestedActions.PublishGitHub is not null;
-
+        var actions = ResolveActions(config, requestedActions);
         var context = new ProjectBuildPreparedContext
         {
             PlanOnly = requestedActions.PlanOnly ?? (config.PlanOnly ?? false),
-            UpdateVersions = requestedActions.UpdateVersions ?? (config.UpdateVersions ?? false),
-            Build = requestedActions.Build ?? (config.Build ?? false),
-            PublishNuget = requestedActions.PublishNuget ?? (config.PublishNuget ?? false),
-            PublishGitHub = requestedActions.PublishGitHub ?? (config.PublishGitHub ?? false),
+            UpdateVersions = actions.UpdateVersions,
+            Build = actions.Build,
+            PublishNuget = actions.PublishNuGet,
+            PublishGitHub = actions.PublishGitHub,
             CreateReleaseZip = config.CreateReleaseZip ?? true
         };
-
-        if (!anyConfigSpecified && !anyOverrideSpecified)
-        {
-            context.Build = true;
-        }
 
         context.RootPath = ProjectBuildSupportService.ResolveOptionalPath(config.RootPath, configDir) ?? configDir;
         context.StagingPath = ProjectBuildSupportService.ResolveOptionalPath(config.StagingPath, context.RootPath);
@@ -131,6 +118,19 @@ internal sealed class ProjectBuildPreparationService
         };
 
         return context;
+    }
+
+    internal static ProjectBuildEffectiveActions ResolveActions(
+        ProjectBuildConfiguration config,
+        ProjectBuildRequestedActions? requested = null)
+    {
+        var update = requested?.UpdateVersions ?? config.UpdateVersions;
+        var build = requested?.Build ?? config.Build;
+        var nuget = requested?.PublishNuget ?? config.PublishNuget;
+        var github = requested?.PublishGitHub ?? config.PublishGitHub;
+        var useDefaultBuild = update is null && build is null && nuget is null && github is null;
+        return new ProjectBuildEffectiveActions(
+            update ?? false, build ?? useDefaultBuild, nuget ?? false, github ?? false);
     }
 
     private static bool ResolveSigningEnabled(bool? configuredValue, string? certificateThumbprint)

@@ -82,11 +82,12 @@ Schema
 Actions and console behavior
 - When the configuration and command omit all action flags, the command builds packages. Version updates, NuGet publication, and GitHub publication require explicit flags in the configuration or command.
 - If any action flag is supplied, omitted actions remain disabled. Use `-UpdateVersions -Build -PublishNuget -PublishGitHub` when the complete release workflow is intended.
+- Inline and referenced module package lanes use the same action defaults. Publishing does not implicitly enable source version updates; request `UpdateVersions=true` when those edits are intended. A Build gate disables package signing unless it is a release checkpoint.
 - `-Plan` evaluates the requested workflow without building or publishing. Package identity, packability, and current version come from Release MSBuild evaluation, including imports and conditions.
 - Build and plan runs leave publication credentials unresolved. Credentials needed to read private version feeds remain available.
 - `-NoInteractive` disables Spectre progress. `-Quiet` suppresses progress and informational output while preserving result objects and errors.
 - Failed builds write PowerShell errors in every console mode. Use `-ErrorAction Stop` to stop post-build scripts, or `-ExitCode` to set the PowerShell host exit status to 0 or 1.
-- `-ExitCode` returns the result without writing a PowerShell error and allows subsequent statements to run. Use it when the caller handles the returned result and process status; use `-ErrorAction Stop` when failure must interrupt the script.
+- `-ExitCode` returns the result without writing a PowerShell error, including configuration and preparation failures, and allows subsequent statements to run. Use it when the caller handles the returned result and process status; use `-ErrorAction Stop` when failure must interrupt the script.
 
 Compatibility: configurations that previously omitted every action flag must explicitly enable publication and version updates. Standard module formatting also requires `UpdateProjectRoot=true` to format original sources; otherwise it operates on staging output.
 

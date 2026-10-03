@@ -195,7 +195,7 @@ public sealed partial class ModulePipelinePackageBuildTests
             runner.Run(spec);
 
             var call = Assert.Single(calls);
-            Assert.True(call.Request.UpdateVersions);
+            Assert.False(call.Request.UpdateVersions);
             Assert.True(call.Request.Build);
             Assert.False(call.Request.PublishNuget);
             Assert.False(call.Request.PublishGitHub);
@@ -208,7 +208,7 @@ public sealed partial class ModulePipelinePackageBuildTests
     }
 
     [Fact]
-    public void Run_GateBuild_BuildsPostModulePublishOnlyPackageLanesWithoutPublishing()
+    public void Run_GateBuild_BuildsPackageLanesAndPreservesExplicitVersionUpdateIntent()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
@@ -225,6 +225,7 @@ public sealed partial class ModulePipelinePackageBuildTests
                 {
                     "{",
                     "  \"RootPath\": \"Sources\",",
+                    "  \"UpdateVersions\": true,",
                     "  \"PublishNuget\": true",
                     "}"
                 }));
@@ -293,9 +294,10 @@ public sealed partial class ModulePipelinePackageBuildTests
 
             Assert.Equal(2, calls.Count);
             Assert.Equal(2, result.ProjectBuildResults.Length);
+            Assert.True(calls[0].Request.UpdateVersions);
+            Assert.False(calls[1].Request.UpdateVersions);
             foreach (var call in calls)
             {
-                Assert.True(call.Request.UpdateVersions);
                 Assert.True(call.Request.Build);
                 Assert.False(call.Request.PublishNuget);
                 Assert.False(call.Request.PublishGitHub);
@@ -333,6 +335,8 @@ public sealed partial class ModulePipelinePackageBuildTests
                   "RootPath": "Sources",
                   "Build": true,
                   "PublishNuget": true,
+                  "SignAssemblies": true,
+                  "SignPackages": true,
                   "CertificateThumbprint": "ABC123"
                 }
                 """);
@@ -395,6 +399,8 @@ public sealed partial class ModulePipelinePackageBuildTests
             Assert.Equal(
                 expectCertificate ? "ABC123" : null,
                 capturedConfiguration!.CertificateThumbprint);
+            Assert.Equal(expectCertificate, capturedConfiguration.SignAssemblies);
+            Assert.Equal(expectCertificate, capturedConfiguration.SignPackages);
         }
         finally
         {

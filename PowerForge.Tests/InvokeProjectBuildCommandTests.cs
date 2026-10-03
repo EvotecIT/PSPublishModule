@@ -7,6 +7,25 @@ namespace PowerForge.Tests;
 public sealed class InvokeProjectBuildCommandTests
 {
     [Theory]
+    [InlineData("missing")]
+    [InlineData("malformed")]
+    public void ExitCode_ConvertsConfigurationExceptionsToFailedResult(string kind)
+    {
+        WithSigningFailureConfig(path =>
+        {
+            if (kind == "missing") File.Delete(path);
+            else File.WriteAllText(path, "{ invalid");
+            using var shell = CreateShell();
+            shell.AddCommand("Invoke-ProjectBuild").AddParameter("ConfigPath", path)
+                .AddParameter("Quiet").AddParameter("ExitCode");
+            var result = Assert.IsType<ProjectBuildResult>(Assert.Single(shell.Invoke()).BaseObject);
+            Assert.False(result.Success);
+            Assert.False(string.IsNullOrWhiteSpace(result.ErrorMessage));
+            Assert.Empty(shell.Streams.Error);
+        });
+    }
+
+    [Theory]
     [InlineData("Quiet")]
     [InlineData("NoInteractive")]
     public void FailedBuild_HonorsErrorActionStop(string outputMode)
