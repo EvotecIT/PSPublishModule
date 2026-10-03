@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Xml.Linq;
 
 namespace PowerForge.Web;
 
@@ -22,12 +23,21 @@ public static partial class WebApiDocsGenerator
     private static ApiDocModel ParseXmlDocuments(
         IReadOnlyList<string> xmlPaths,
         Assembly? assembly,
-        WebApiDocsOptions options)
+        WebApiDocsOptions options,
+        List<string> warnings)
     {
         var combined = new ApiDocModel();
-        foreach (var xmlPath in xmlPaths)
+        var documents = xmlPaths.Where(File.Exists)
+            .Select(path => (Path: path, Document: LoadXmlDocumentation(path))).ToArray();
+        var members = new Dictionary<string, XElement>(StringComparer.Ordinal);
+        foreach (var source in documents)
+            foreach (var member in source.Document.Root!.Element("members")!.Elements("member"))
+                if (member.Attribute("name")?.Value is { Length: > 0 } name) members.TryAdd(name, member);
+        if (assembly is not null) ResolveImplicitInheritDoc(assembly, members, warnings);
+        foreach (var source in documents)
         {
-            var parsed = ParseXml(xmlPath, assembly, options);
+            var xmlPath = source.Path;
+            var parsed = ParseXml(source.Document, assembly, options, members);
             combined.AssemblyName ??= parsed.AssemblyName;
             combined.AssemblyVersion ??= parsed.AssemblyVersion;
 

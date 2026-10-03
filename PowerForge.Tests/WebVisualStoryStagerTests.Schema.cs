@@ -93,8 +93,9 @@ public partial class WebVisualStoryStagerTests
             "Schemas",
             "powerforge.web.visualstory.schema.json"));
         var schemaDocument = JsonNode.Parse(File.ReadAllText(schemaPath))!;
-        var schema = JsonSchema.FromText(
-            schemaDocument["properties"]!["artifacts"]!.ToJsonString());
+        var artifactSchema = schemaDocument["properties"]!["artifacts"]!.DeepClone();
+        artifactSchema["$schema"] = schemaDocument["$schema"]!.DeepClone();
+        var schema = JsonSchema.FromText(artifactSchema.ToJsonString());
         var valid = JsonNode.Parse(
             """
             [

@@ -5,22 +5,23 @@ namespace PowerForge.Web;
 
 public static partial class WebSitemapGenerator
 {
-    private static readonly string[] DefaultNewsPathPatterns = { "**/news/**", "news", "news/" };
+    private static readonly string[] DefaultNewsPathPatterns = { "news/**", "**/news/**", "news", "news/" };
     private static readonly string[] DefaultImagePathPatterns = { "**" };
     private static readonly string[] DefaultVideoPathPatterns = { "**" };
 
-    private static void WriteNewsSitemap(
+    private static string[] WriteNewsSitemap(
         string siteRoot,
         string baseUrl,
         WebSitemapNewsOptions options,
         IReadOnlyList<WebSitemapEntry> entries,
         string? browserStylesheetHref,
-        string defaultLastModified,
         string outputPath)
     {
         var patterns = BuildNewsPathPatterns(options.PathPatterns);
+        var now = DateTimeOffset.UtcNow;
         var selectedEntries = entries
             .Where(entry => MatchesAnyPathPattern(entry.Path, patterns))
+            .Where(entry => IsRecentNewsPublication(entry.PublicationDate, now))
             .OrderBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -31,18 +32,13 @@ public static partial class WebSitemapGenerator
             ? "en"
             : options.PublicationLanguage.Trim();
 
-        var doc = CreateSitemapDocument(
-            browserStylesheetHref,
-            new XElement(
-                sitemapNs + "urlset",
-                CreateSchemaAttributes(SitemapSchemaLocation),
-                new XAttribute(XNamespace.Xmlns + "news", newsNs.NamespaceName),
-                selectedEntries.Select(entry =>
+        var newsEntries = selectedEntries.Select(entry =>
                 {
                     var route = NormalizeRoute(entry.Path);
                     var loc = ResolveAbsoluteUrl(baseUrl, route);
                     var title = string.IsNullOrWhiteSpace(entry.Title) ? BuildTitleFromRoute(route) : entry.Title!;
-                    var publicationDate = ResolveNewsPublicationDate(entry.LastModified, defaultLastModified);
+                    var publicationDate = DateTimeOffset.Parse(entry.PublicationDate!, CultureInfo.InvariantCulture,
+                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal).ToString("O", CultureInfo.InvariantCulture);
 
                     var news = new XElement(
                         newsNs + "news",
@@ -64,11 +60,9 @@ public static partial class WebSitemapGenerator
                         sitemapNs + "url",
                         new XElement(sitemapNs + "loc", loc),
                         news);
-                })));
-
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPath) ?? siteRoot);
-        using var stream = File.Create(outputPath);
-        doc.Save(stream);
+                }).ToArray();
+        return WritePartitionedSitemap(siteRoot, baseUrl, outputPath, browserStylesheetHref, newsEntries,
+            new List<object>(CreateSchemaAttributes(SitemapSchemaLocation)) { new XAttribute(XNamespace.Xmlns + "news", newsNs.NamespaceName) }, 1000);
     }
 
     private static void WriteSitemapIndex(
@@ -107,7 +101,7 @@ public static partial class WebSitemapGenerator
         doc.Save(stream);
     }
 
-    private static void WriteImageSitemap(
+    private static string[] WriteImageSitemap(
         string siteRoot,
         string baseUrl,
         WebSitemapImageOptions options,
@@ -124,13 +118,7 @@ public static partial class WebSitemapGenerator
 
         var sitemapNs = SitemapNs;
         var imageNs = XNamespace.Get("http://www.google.com/schemas/sitemap-image/1.1");
-        var doc = CreateSitemapDocument(
-            browserStylesheetHref,
-            new XElement(
-                sitemapNs + "urlset",
-                CreateSchemaAttributes(SitemapSchemaLocation),
-                new XAttribute(XNamespace.Xmlns + "image", imageNs.NamespaceName),
-                selectedEntries.Select(entry =>
+        var imageEntries = selectedEntries.Select(entry =>
                 {
                     var route = NormalizeRoute(entry.Path);
                     var urlElement = new XElement(
@@ -149,14 +137,12 @@ public static partial class WebSitemapGenerator
                     }
 
                     return urlElement;
-                })));
-
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPath) ?? siteRoot);
-        using var stream = File.Create(outputPath);
-        doc.Save(stream);
+                }).ToArray();
+        return WritePartitionedSitemap(siteRoot, baseUrl, outputPath, browserStylesheetHref, imageEntries,
+            new List<object>(CreateSchemaAttributes(SitemapSchemaLocation)) { new XAttribute(XNamespace.Xmlns + "image", imageNs.NamespaceName) });
     }
 
-    private static void WriteVideoSitemap(
+    private static string[] WriteVideoSitemap(
         string siteRoot,
         string baseUrl,
         WebSitemapVideoOptions options,
@@ -173,13 +159,7 @@ public static partial class WebSitemapGenerator
 
         var sitemapNs = SitemapNs;
         var videoNs = XNamespace.Get("http://www.google.com/schemas/sitemap-video/1.1");
-        var doc = CreateSitemapDocument(
-            browserStylesheetHref,
-            new XElement(
-                sitemapNs + "urlset",
-                CreateSchemaAttributes(SitemapSchemaLocation),
-                new XAttribute(XNamespace.Xmlns + "video", videoNs.NamespaceName),
-                selectedEntries.Select(entry =>
+        var videoEntries = selectedEntries.Select(entry =>
                 {
                     var route = NormalizeRoute(entry.Path);
                     var pageUrl = ResolveAbsoluteUrl(baseUrl, route);
@@ -208,11 +188,9 @@ public static partial class WebSitemapGenerator
                     }
 
                     return urlElement;
-                })));
-
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPath) ?? siteRoot);
-        using var stream = File.Create(outputPath);
-        doc.Save(stream);
+                }).ToArray();
+        return WritePartitionedSitemap(siteRoot, baseUrl, outputPath, browserStylesheetHref, videoEntries,
+            new List<object>(CreateSchemaAttributes(SitemapSchemaLocation)) { new XAttribute(XNamespace.Xmlns + "video", videoNs.NamespaceName) });
     }
 
     private static string[] BuildNewsPathPatterns(string[]? pathPatterns)
@@ -292,19 +270,14 @@ public static partial class WebSitemapGenerator
         return "Site News";
     }
 
-    private static string ResolveNewsPublicationDate(string? lastModified, string fallbackDate)
+    private static bool IsRecentNewsPublication(string? publicationDate, DateTimeOffset now)
     {
-        if (!string.IsNullOrWhiteSpace(lastModified) &&
+        return !string.IsNullOrWhiteSpace(publicationDate) &&
             DateTimeOffset.TryParse(
-                lastModified,
+                publicationDate,
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-                out var parsed))
-        {
-            return parsed.ToString("yyyy-MM-ddTHH:mm:ssK", CultureInfo.InvariantCulture);
-        }
-
-        return fallbackDate;
+                out var parsed) && parsed <= now && parsed >= now.AddDays(-2);
     }
 
     private static string ResolveVideoThumbnailUrl(string baseUrl, string route, IReadOnlyList<string>? imageUrls)
