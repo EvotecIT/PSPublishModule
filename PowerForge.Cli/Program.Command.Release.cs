@@ -76,6 +76,7 @@ internal static partial class Program
         }
 
         PowerForgeReleaseSpec? specForRedaction = null;
+        BufferedLogger? interactiveBuffer = null;
         try
         {
             var loaded = LoadPowerForgeReleaseSpecWithPath(configPath);
@@ -85,7 +86,6 @@ internal static partial class Program
 
             var request = BuildReleaseRequestFromArgs(argv, fullConfigPath, planOnly, validateOnly, packagesOnly, moduleOnly, toolsOnly);
             var interactive = !request.AppleSummaryOnly && PipelineConsoleUi.ShouldUseInteractiveView(outputJson, cli);
-            BufferedLogger? interactiveBuffer = null;
             var (cmdLogger, logBuffer) = interactive
                 ? (interactiveBuffer = new BufferedLogger { IsVerbose = cli.Verbose }, interactiveBuffer)
                 : CreateCommandLogger(outputJson, cli, logger);
@@ -137,7 +137,9 @@ internal static partial class Program
             {
                 SpectrePowerForgeReleaseConsoleUi.WriteSummary(result, watch.Elapsed);
                 if (!result.Success && interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0 && !cli.Quiet)
-                    WriteLogTail(interactiveBuffer, logger);
+                {
+                    WriteInteractiveFailureTail(interactiveBuffer, logger);
+                }
                 return exitCode;
             }
 
@@ -296,6 +298,10 @@ internal static partial class Program
                 1,
                 RedactReleaseCredentialText(ex.Message, CollectReleaseCredentialMetadata(specForRedaction, null)),
                 logger);
+        }
+        finally
+        {
+            ReplayInteractiveWarnings(interactiveBuffer, logger);
         }
     }
 
