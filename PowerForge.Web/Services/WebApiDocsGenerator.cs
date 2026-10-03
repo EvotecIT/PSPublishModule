@@ -414,6 +414,7 @@ public static partial class WebApiDocsGenerator
             warnings.Add($"PowerShell help not found: {helpPath}");
 
         Assembly? assembly = null;
+        ApiDocsAssemblyLoadContext? assemblyContext = null;
         if (options.Type == ApiDocsType.CSharp && !string.IsNullOrWhiteSpace(options.AssemblyPath))
         {
             var requestedAssemblyPath = Path.GetFullPath(options.AssemblyPath);
@@ -422,12 +423,13 @@ public static partial class WebApiDocsGenerator
                     $"Configured API documentation assembly was not found: {requestedAssemblyPath}",
                     requestedAssemblyPath);
 
-            assembly = TryLoadAssembly(requestedAssemblyPath, warnings);
+            assembly = TryLoadAssembly(requestedAssemblyPath, warnings, out assemblyContext);
             if (assembly is null)
                 throw new InvalidOperationException(
                     $"Configured API documentation assembly could not be inspected: {requestedAssemblyPath}");
         }
 
+        using var assemblyContextScope = assemblyContext;
         var apiDoc = options.Type == ApiDocsType.PowerShell
             ? ParsePowerShellHelp(helpPath, warnings, options)
             : ParseXmlDocuments(xmlPaths, assembly, options, warnings);

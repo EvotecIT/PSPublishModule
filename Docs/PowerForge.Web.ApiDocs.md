@@ -16,8 +16,16 @@ With an assembly, implicit `<inheritdoc/>` resolves documented base members and
 implemented interface members, including generic interfaces, properties, and
 events. Documentation supplied through `XmlPaths` shares one inheritance lookup,
 so contract and implementation records can live in separate files. Supply the
-inherited documentation with the inputs; unresolved implicit
-inheritance produces a warning. An explicit `cref` remains supported.
+inherited documentation with the inputs for contracts outside the local build.
+Assembly-backed generation also discovers adjacent dependency XML and the
+matching installed .NET reference-pack XML. Those records supply inherited
+summaries without adding dependency or framework types to the reference.
+Pipeline caches account for their bytes and additional `xmls`/`xmlPaths` inputs.
+Unresolved implicit inheritance produces a warning. An explicit `cref` remains supported.
+
+Assembly inspection reads a fresh snapshot on each generation and releases its
+collectible load context afterward. Rebuilding a DLL at the same path updates
+the reference without holding the build output open.
 
 Malformed C# XML or PowerShell help stops generation before replacing existing
 reference files. Correct the input and rerun the generator; an empty reference
