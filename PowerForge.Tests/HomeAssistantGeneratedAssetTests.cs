@@ -5,6 +5,7 @@ namespace PowerForge.Tests;
 public sealed class HomeAssistantGeneratedAssetTests {
     [Theory]
     [InlineData("generated", true)]
+    [InlineData("pack-only", true)]
     [InlineData("source", false)]
     [InlineData("metadata", false)]
     [InlineData("staged", false)]
@@ -41,7 +42,7 @@ public sealed class HomeAssistantGeneratedAssetTests {
     private sealed class BuildRunner(string root, string mutation) : IProcessRunner {
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default) {
             if (request.Arguments.Contains("pack")) {
-                File.WriteAllText(Path.Combine(root, "card.js"), "rebuilt bundle");
+                if (mutation != "pack-only") File.WriteAllText(Path.Combine(root, "card.js"), "rebuilt bundle");
                 Directory.CreateDirectory(Path.Combine(root, "release"));
                 File.WriteAllText(Path.Combine(root, "release", "card.js"), mutation == "mismatch" ? "different bundle" : "rebuilt bundle");
                 if (mutation == "source") File.WriteAllText(Path.Combine(root, "source.ts"), "changed source");

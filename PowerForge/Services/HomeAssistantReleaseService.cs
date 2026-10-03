@@ -211,7 +211,7 @@ public sealed class HomeAssistantReleaseService {
         string? generatedAssetName = null;
         if (snapshot.Kind == HomeAssistantRepositoryKind.LovelacePlugin) {
             var generated = Path.Combine(root, snapshot.HacsFileName!);
-            if (File.Exists(generated)) {
+            if (File.Exists(generated) && _git.HasTrackedChanges(root, snapshot.HacsFileName!)) {
                 var packaged = result.AssetFiles.Single();
                 using var generatedStream = File.OpenRead(generated);
                 using var packagedStream = File.OpenRead(packaged);
