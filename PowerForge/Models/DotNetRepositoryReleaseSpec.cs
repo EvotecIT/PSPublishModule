@@ -110,8 +110,8 @@ public sealed class DotNetRepositoryReleaseSpec
     /// <summary>Timestamp server URL used during signing.</summary>
     public string? TimeStampServer { get; set; }
 
-    /// <summary>When true and a certificate is configured, signs build outputs before packing.</summary>
-    public bool SignAssemblies { get; set; } = true;
+    /// <summary>Requests signing of build outputs before packing. Requires a certificate thumbprint.</summary>
+    public bool SignAssemblies { get; set; }
 
     /// <summary>When true, assembly signing also signs copied dependency assemblies from build outputs.</summary>
     public bool SignDependencyAssemblies { get; set; }
@@ -119,8 +119,8 @@ public sealed class DotNetRepositoryReleaseSpec
     /// <summary>Explicitly replaces existing Authenticode assembly signatures. Defaults to false.</summary>
     public bool OverwriteSignedAssemblies { get; set; }
 
-    /// <summary>When true and a certificate is configured, signs generated NuGet packages.</summary>
-    public bool SignPackages { get; set; } = true;
+    /// <summary>Requests signing of generated NuGet packages. Requires a certificate thumbprint.</summary>
+    public bool SignPackages { get; set; }
 
     /// <summary>Explicitly replaces existing NuGet package signatures. Defaults to false.</summary>
     public bool OverwriteSignedPackages { get; set; }

@@ -54,10 +54,7 @@ internal sealed class ProjectBuildPreparationService
 
         if (!anyConfigSpecified && !anyOverrideSpecified)
         {
-            context.UpdateVersions = true;
             context.Build = true;
-            context.PublishNuget = true;
-            context.PublishGitHub = true;
         }
 
         context.RootPath = ProjectBuildSupportService.ResolveOptionalPath(config.RootPath, configDir) ?? configDir;
@@ -71,7 +68,10 @@ internal sealed class ProjectBuildPreparationService
         if (string.IsNullOrWhiteSpace(context.ReleaseZipOutputPath) && !string.IsNullOrWhiteSpace(context.StagingPath))
             context.ReleaseZipOutputPath = Path.Combine(context.StagingPath, "releases");
 
-        var feed = ProjectBuildPackageFeedResolver.Resolve(config, configDir);
+        var feed = ProjectBuildPackageFeedResolver.Resolve(
+            config, configDir,
+            publishNuget: context.PublishNuget && !context.PlanOnly,
+            publishGitHub: context.PublishGitHub && !context.PlanOnly);
         var nugetCredential = feed.VersionSourceCredential;
         var versionTrackService = new ProjectBuildVersionTrackService(_logger);
         var expectedVersionMap = versionTrackService.ResolveExpectedVersionMap(

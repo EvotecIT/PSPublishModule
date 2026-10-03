@@ -55,13 +55,6 @@ public sealed partial class ModulePipelineRunner
             };
         }
 
-        if (surface.Formatting?.Options is { UpdateProjectRoot: false } &&
-            ModulePipelinePlanningHelpers.HasStandardFormattingConfiguration(surface.Formatting))
-        {
-            surface.Formatting.Options.UpdateProjectRoot = true;
-            _logger.Info("UpdateProjectRoot not explicitly set; enabling because Default* formatting targets are configured (legacy compatibility).");
-        }
-
         if (surface.RefreshManifestOnly)
         {
             if (surface.SignModule) _logger.Info("RefreshPSD1Only enabled: disabling signing for this run.");

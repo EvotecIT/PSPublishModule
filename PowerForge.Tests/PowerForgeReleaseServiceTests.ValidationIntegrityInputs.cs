@@ -200,7 +200,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
 
             Assert.False(result.Success);
-            Assert.Equal(1, validationCalls);
+            Assert.True(validationCalls == 1, result.ErrorMessage);
             Assert.Contains("validation reached", result.ErrorMessage, StringComparison.Ordinal);
             Assert.Contains(actionPath, result.ModulePlan!.DeferredPublicationInputPaths, StringComparer.Ordinal);
             Assert.Contains(apiKeyPath, result.ModulePlan.DeferredPublicationInputPaths, StringComparer.Ordinal);

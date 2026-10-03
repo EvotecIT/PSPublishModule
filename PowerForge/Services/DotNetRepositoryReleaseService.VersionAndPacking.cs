@@ -16,15 +16,16 @@ public sealed partial class DotNetRepositoryReleaseService
         DotNetRepositoryProjectResult project,
         string? expectedVersion,
         DotNetRepositoryReleaseSpec spec,
-        out string? warning)
+        out string? warning,
+        string? evaluatedPackageVersion = null)
     {
         warning = null;
 
         if (!spec.UpdateVersions)
-            return ResolveCurrentProjectVersion(project, spec, out warning);
+            return ResolveCurrentProjectVersion(project, spec, out warning, evaluatedPackageVersion);
 
         if (string.IsNullOrWhiteSpace(expectedVersion))
-            return ResolveCurrentProjectVersion(project, spec, out warning);
+            return ResolveCurrentProjectVersion(project, spec, out warning, evaluatedPackageVersion);
 
         if (PackageVersionUtility.TryNormalizeExact(expectedVersion, out var exact))
             return exact;
@@ -45,9 +46,14 @@ public sealed partial class DotNetRepositoryReleaseService
     private string ResolveCurrentProjectVersion(
         DotNetRepositoryProjectResult project,
         DotNetRepositoryReleaseSpec spec,
-        out string? warning)
+        out string? warning,
+        string? evaluatedPackageVersion = null)
     {
         warning = null;
+        // Reuse only metadata from this execution. Version-binding refreshes call without it.
+        if (!string.IsNullOrWhiteSpace(evaluatedPackageVersion) &&
+            PackageVersionUtility.TryNormalizeExact(evaluatedPackageVersion, out var metadataVersion))
+            return metadataVersion;
         string? declaredVersion = null;
         string? declaredExactVersion = null;
         if (CsprojVersionEditor.TryGetVersion(project.CsprojPath, out var candidate))

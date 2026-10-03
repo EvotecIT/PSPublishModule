@@ -11,24 +11,32 @@ internal static class ProjectBuildPackageFeedResolver
     /// <summary>
     /// Resolves NuGet feed settings from project-build configuration and existing secret conventions.
     /// </summary>
-    public static ProjectBuildPackageFeedSettings Resolve(ProjectBuildConfiguration config, string configDir)
+    public static ProjectBuildPackageFeedSettings Resolve(
+        ProjectBuildConfiguration config,
+        string configDir,
+        bool publishNuget = true,
+        bool publishGitHub = true)
     {
         if (config is null)
             throw new ArgumentNullException(nameof(config));
         if (string.IsNullOrWhiteSpace(configDir))
             throw new ArgumentException("Configuration directory is required.", nameof(configDir));
 
-        var githubToken = ResolveGitHubToken(config, configDir);
         var githubPackagesOwner = ResolveGitHubPackagesOwner(config);
         var githubPackagesSource = ResolveGitHubPackagesSource(config, githubPackagesOwner);
         var versionSources = ResolveVersionSources(config, githubPackagesSource);
         var publishSource = ResolvePublishSource(config, githubPackagesSource);
-        var publishApiKey = ProjectBuildSupportService.ResolveSecret(
+        var needsGitHubToken = publishGitHub ||
+            (publishNuget && IsGitHubPackagesSource(publishSource)) ||
+            ContainsGitHubPackagesSource(versionSources) ||
+            ContainsGitHubPackagesSource(GetVersionTrackSources(config));
+        var githubToken = needsGitHubToken ? ResolveGitHubToken(config, configDir) : null;
+        var publishApiKey = publishNuget ? ProjectBuildSupportService.ResolveSecret(
             config.PublishApiKey,
             config.PublishApiKeyFilePath,
             config.PublishApiKeyEnvName,
-            configDir);
-        if (string.IsNullOrWhiteSpace(publishApiKey) && IsGitHubPackagesSource(publishSource))
+            configDir) : null;
+        if (publishNuget && string.IsNullOrWhiteSpace(publishApiKey) && IsGitHubPackagesSource(publishSource))
             publishApiKey = githubToken;
 
         return new ProjectBuildPackageFeedSettings

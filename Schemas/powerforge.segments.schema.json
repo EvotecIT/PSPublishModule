@@ -622,7 +622,7 @@
       "properties": {
         "Merge": { "$ref": "#/$defs/FormattingTargetOptions" },
         "Standard": { "$ref": "#/$defs/FormattingTargetOptions" },
-        "UpdateProjectRoot": { "type": "boolean" }
+        "UpdateProjectRoot": { "type": "boolean", "default": false, "description": "Opt in to formatting original project sources in addition to staging output." }
       }
     },
 

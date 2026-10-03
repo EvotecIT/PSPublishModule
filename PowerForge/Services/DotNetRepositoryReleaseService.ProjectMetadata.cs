@@ -29,10 +29,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 var candidate = candidates[index];
                 try
                 {
-                    return new ProjectMetadataResolution(
-                        ResolvePackageId(candidate.Path, candidate.Name, spec, logger),
-                        IsPackable(candidate.Path),
-                        error: null);
+                    return ResolveEvaluatedProjectMetadata(candidate.Path, candidate.Name, spec, logger);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -42,7 +39,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 {
                     return new ProjectMetadataResolution(
                         candidate.Name,
-                        IsPackable(candidate.Path),
+                        isPackable: false,
                         ex);
                 }
             },
@@ -79,15 +76,18 @@ public sealed partial class DotNetRepositoryReleaseService
         internal ProjectMetadataResolution(
             string packageId,
             bool isPackable,
-            Exception? error)
+            Exception? error,
+            string? packageVersion = null)
         {
             PackageId = packageId;
             IsPackable = isPackable;
             Error = error;
+            PackageVersion = packageVersion;
         }
 
         internal string PackageId { get; }
         internal bool IsPackable { get; }
         internal Exception? Error { get; }
+        internal string? PackageVersion { get; }
     }
 }

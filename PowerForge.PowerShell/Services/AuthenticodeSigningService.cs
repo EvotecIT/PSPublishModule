@@ -84,16 +84,22 @@ public sealed class AuthenticodeSigningService
                 var normalized = NormalizeThumbprint(thumbprint);
                 return new CodeSigningCertificateLookupResult
                 {
-                    Certificate = certs.FirstOrDefault(c => NormalizeThumbprint(c.Thumbprint) == normalized),
+                    Certificate = SelectValidCertificate(certs.FirstOrDefault(c => NormalizeThumbprint(c.Thumbprint) == normalized)),
                     AvailableCertificates = certs
                 };
             }
 
+            certs = certs.Where(c => c.NotBefore.ToUniversalTime() <= DateTime.UtcNow &&
+                                     c.NotAfter.ToUniversalTime() > DateTime.UtcNow).ToArray();
             return new CodeSigningCertificateLookupResult
             {
                 Certificate = certs.Length == 1 ? certs[0] : null,
                 AvailableCertificates = certs
             };
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
         }
         catch
         {
@@ -151,6 +157,7 @@ public sealed class AuthenticodeSigningService
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
         if (request.Certificate is null) throw new ArgumentException("Certificate is required.", nameof(request));
+        CodeSigningCertificateValidation.Validate(request.Certificate);
 
         var files = (request.FilePaths ?? Array.Empty<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path))
@@ -162,9 +169,16 @@ public sealed class AuthenticodeSigningService
             return Array.Empty<PSObject>();
 
         EnsureSigningCommandsAvailable();
-        return IsWindows()
+        var signatures = IsWindows()
             ? SignWithWindowsAuthenticode(files, request)
             : SignWithOpenAuthenticode(files, request);
+        foreach (var signature in signatures)
+        {
+            var status = signature.Properties["Status"]?.Value?.ToString();
+            if (!string.Equals(status, "Valid", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Authenticode signing failed for '{signature.Properties["Path"]?.Value}': {status}. {signature.Properties["StatusMessage"]?.Value}");
+        }
+        return signatures;
     }
 
     /// <summary>
@@ -298,6 +312,13 @@ public sealed class AuthenticodeSigningService
         return filePath.IndexOf($"{Path.DirectorySeparatorChar}Internals{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) >= 0 ||
                filePath.IndexOf("/Internals/", StringComparison.OrdinalIgnoreCase) >= 0 ||
                filePath.IndexOf("\\Internals\\", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static X509Certificate2? SelectValidCertificate(X509Certificate2? certificate)
+    {
+        if (certificate is not null)
+            CodeSigningCertificateValidation.Validate(certificate);
+        return certificate;
     }
 
     private static bool IsCodeSigningCert(X509Certificate2 cert)

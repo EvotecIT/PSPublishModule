@@ -57,6 +57,18 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
     [Parameter]
     public string? PlanPath { get; set; }
 
+    /// <summary>Disables the interactive Spectre progress view.</summary>
+    [Parameter]
+    public SwitchParameter NoInteractive { get; set; }
+
+    /// <summary>Suppresses progress and informational output. Failures still write PowerShell errors.</summary>
+    [Parameter]
+    public SwitchParameter Quiet { get; set; }
+
+    /// <summary>Sets the PowerShell host exit code to zero on success and one on failure.</summary>
+    [Parameter]
+    public SwitchParameter ExitCode { get; set; }
+
     /// <summary>Executes the configured build pipeline.</summary>
     protected override void ProcessRecord()
     {
@@ -74,9 +86,10 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
             // best effort only
         }
 
-        var interactive = SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
+        var interactive = !Quiet.IsPresent && !NoInteractive.IsPresent &&
+                          SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
         BufferedLogger? interactiveBuffer = null;
-        ILogger logger = interactive
+        ILogger logger = interactive || Quiet.IsPresent || ExitCode.IsPresent
             ? interactiveBuffer = new BufferedLogger { IsVerbose = isVerbose }
             : new CmdletLogger(this, isVerbose);
         var support = new ProjectBuildSupportService(logger);
@@ -99,7 +112,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
 
         if (!preparation.HasWork)
         {
-            WriteObject(new ProjectBuildResult
+            CompleteResult(new ProjectBuildResult
             {
                 Success = false,
                 ErrorMessage = "Nothing to do. Enable UpdateVersions, Build, PublishNuget, or PublishGitHub."
@@ -126,9 +139,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
                     PlanOnly = preparation.PlanOnly || !executeBuild,
                     UpdateVersions = preparation.UpdateVersions,
                     Build = preparation.Build,
-                    SignPackages = preparation.Build &&
-                        preparation.Spec.SignPackages &&
-                        !string.IsNullOrWhiteSpace(preparation.Spec.CertificateThumbprint),
+                    SignPackages = preparation.Spec.Pack && preparation.Spec.SignPackages,
                     PublishNuGet = preparation.PublishNuget,
                     PublishGitHub = preparation.PublishGitHub
                 },
@@ -156,8 +167,12 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         else
         {
             workflow = workflowService.Execute(config, configDir, preparation, executeBuild);
+            if (!Quiet.IsPresent && interactiveBuffer is not null)
+                new BufferedLogSupportService().WriteTail(
+                    interactiveBuffer.Entries,
+                    new SpectreConsoleLogger { IsVerbose = isVerbose });
         }
 
-        WriteObject(workflow.Result);
+        CompleteResult(workflow.Result);
     }
 }
