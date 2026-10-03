@@ -2,7 +2,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Management.Automation;
-using System.Runtime.ExceptionServices;
 using PowerForge;
 using PowerForge.ConsoleShared;
 
@@ -201,16 +200,7 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
         var buffer = interactive || Quiet.IsPresent || ExitCode.IsPresent
             ? new BufferedLogger { IsVerbose = isVerbose }
             : null;
-        ExceptionDispatchInfo? warningStop = null;
-        ILogger logger = new PublishLogger(buffer is null ? new CmdletLogger(this, isVerbose) : buffer, message =>
-        {
-            try { WriteWarning(message); }
-            catch (ActionPreferenceStopException ex)
-            {
-                warningStop = ExceptionDispatchInfo.Capture(ex);
-                throw;
-            }
-        });
+        var logger = new CmdletWarningLogger(this, buffer is null ? new CmdletLogger(this, isVerbose) : buffer);
         DotNetPublishWorkflowResult workflow;
         try
         {
@@ -255,13 +245,13 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
         }
         catch (Exception ex) when (ex is not PipelineStoppedException)
         {
-            warningStop?.Throw();
+            logger.RethrowWarningStop();
             CompleteResult(new DotNetPublishResult { Succeeded = false, ErrorMessage = ex.Message }, ex);
             return;
         }
 
         // The engine reports step exceptions as results. A PowerShell warning stop must still terminate the cmdlet.
-        warningStop?.Throw();
+        logger.RethrowWarningStop();
         if (!Quiet.IsPresent && buffer is not null && (!interactive || workflow.Result is null))
         {
             new BufferedLogSupportService().WriteTail(buffer.Entries, new SpectreConsoleLogger { IsVerbose = isVerbose });
@@ -294,17 +284,6 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
                 "InvokeDotNetPublishFailed", ErrorCategory.NotSpecified, ConfigPath));
         WriteObject(result);
         if (ExitCode.IsPresent) Host.SetShouldExit(result.Succeeded ? 0 : 1);
-    }
-
-    // Keep warning preferences synchronous even when progress output and errors are buffered.
-    private sealed class PublishLogger(ILogger output, Action<string> warning) : ILogger
-    {
-        public bool IsVerbose => output.IsVerbose;
-        public void Info(string message) => output.Info(message);
-        public void Success(string message) => output.Success(message);
-        public void Warn(string message) => warning(message);
-        public void Error(string message) => output.Error(message);
-        public void Verbose(string message) => output.Verbose(message);
     }
 
     private static Dictionary<string, string>? ConvertHashtable(Hashtable? values)

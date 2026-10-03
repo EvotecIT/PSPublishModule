@@ -164,7 +164,7 @@ Accept wildcard characters: False
 ```
 
 ### -Quiet
-Suppresses progress and informational output. Failures still write PowerShell errors.
+Suppresses progress and informational output while preserving results, warnings and errors.
 
 ```yaml
 Type: SwitchParameter

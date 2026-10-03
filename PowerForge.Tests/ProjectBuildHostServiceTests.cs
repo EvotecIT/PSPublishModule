@@ -5,7 +5,7 @@ namespace PowerForge.Tests;
 public sealed class ProjectBuildHostServiceTests
 {
     [Fact]
-    public void Execute_WritesPlanAndUsesRequestedActionOverrides()
+    public void Execute_WritesPlanUsesRequestedActionOverridesAndReportsWarnings()
     {
         using var scope = new TemporaryDirectoryScope();
         var configDirectory = scope.CreateDirectory("Repo");
@@ -16,6 +16,7 @@ public sealed class ProjectBuildHostServiceTests
             """
             {
               "RootPath": ".",
+              "PackStrategy": "typo",
               "Build": true,
               "PublishNuget": true,
               "PublishGitHub": true
@@ -23,8 +24,9 @@ public sealed class ProjectBuildHostServiceTests
             """);
 
         DotNetRepositoryReleaseSpec? captured = null;
+        var logger = new BufferedLogger();
         var service = new ProjectBuildHostService(
-            new NullLogger(),
+            logger,
             executeRelease: spec =>
             {
                 captured = spec;
@@ -54,6 +56,7 @@ public sealed class ProjectBuildHostServiceTests
         Assert.False(captured.Publish);
         Assert.Equal(planPath, result.PlanOutputPath);
         Assert.True(File.Exists(planPath));
+        Assert.Contains(logger.Entries, entry => entry.Level == "warn" && entry.Message.Contains("Unknown PackStrategy"));
     }
 
     [Fact]

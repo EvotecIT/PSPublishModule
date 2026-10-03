@@ -22985,7 +22985,7 @@ Defaults to powerforge.json in the project root.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Quiet</maml:name>
           <maml:description>
-            <maml:para>Suppresses host rendering and log output. Intended for callers that request structured results.</maml:para>
+            <maml:para>Suppresses progress and informational output while preserving warnings and errors. Intended for callers that request structured results.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -23376,7 +23376,7 @@ GitHub publish segments declared by the JSON module configuration.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Quiet</maml:name>
           <maml:description>
-            <maml:para>Suppresses host rendering and log output. Intended for callers that request structured results.</maml:para>
+            <maml:para>Suppresses progress and informational output while preserving warnings and errors. Intended for callers that request structured results.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -23670,7 +23670,7 @@ Defaults to powerforge.json in the project root.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Quiet</maml:name>
           <maml:description>
-            <maml:para>Suppresses host rendering and log output. Intended for callers that request structured results.</maml:para>
+            <maml:para>Suppresses progress and informational output while preserving warnings and errors. Intended for callers that request structured results.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -24315,7 +24315,7 @@ GitHub publish segments declared by the JSON module configuration.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>Quiet</maml:name>
         <maml:description>
-          <maml:para>Suppresses host rendering and log output. Intended for callers that request structured results.</maml:para>
+          <maml:para>Suppresses progress and informational output while preserving warnings and errors. Intended for callers that request structured results.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -29686,7 +29686,7 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Quiet</maml:name>
           <maml:description>
-            <maml:para>Suppresses progress and informational output. Failures still write PowerShell errors.</maml:para>
+            <maml:para>Suppresses progress and informational output while preserving results, warnings and errors.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -29809,7 +29809,7 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>Quiet</maml:name>
         <maml:description>
-          <maml:para>Suppresses progress and informational output. Failures still write PowerShell errors.</maml:para>
+          <maml:para>Suppresses progress and informational output while preserving results, warnings and errors.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>

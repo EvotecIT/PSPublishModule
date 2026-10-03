@@ -61,6 +61,37 @@ public sealed class InvokeProjectBuildCommandTests
         return PowerShell.Create(state);
     }
 
+    [Theory]
+    [InlineData(false, true, "Continue")]
+    [InlineData(true, false, "SilentlyContinue")]
+    [InlineData(true, true, "Stop")]
+    public void PlanWarning_UsesPowerShellWarningStream(bool quiet, bool exitCode, string preference)
+    {
+        WithSigningFailureConfig(path =>
+        {
+            File.WriteAllText(path, "{\"Build\":true,\"PackStrategy\":\"typo\"}");
+            File.WriteAllText(Path.Combine(Path.GetDirectoryName(path)!, "App.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><Version>1.0.0</Version></PropertyGroup></Project>");
+            using var shell = CreateShell();
+            shell.AddScript($"$ErrorActionPreference='Stop'; Invoke-ProjectBuild -ConfigPath '{path.Replace("'", "''")}' -Plan -NoInteractive {(quiet ? "-Quiet" : "")} {(exitCode ? "-ExitCode" : "")} -WarningAction {preference} -WarningVariable captured; 'continued'; $captured[0].Message");
+            System.Collections.ObjectModel.Collection<PSObject>? output = null;
+            var error = Record.Exception(() => output = shell.Invoke());
+            if (preference == "Stop")
+            {
+                Assert.True(error is not null || shell.HadErrors);
+                Assert.DoesNotContain(output ?? [], item => item.BaseObject is ProjectBuildResult || Equals(item.BaseObject, "continued"));
+            }
+            else
+            {
+                Assert.Null(error);
+                Assert.Equal("continued", output![1].BaseObject);
+                Assert.Contains("Unknown PackStrategy", Assert.IsType<string>(output[2].BaseObject));
+            }
+            if (preference == "SilentlyContinue") Assert.Empty(shell.Streams.Warning);
+            else Assert.Contains(shell.Streams.Warning, entry => entry.Message.Contains("Unknown PackStrategy"));
+        });
+    }
+
     private static void WithSigningFailureConfig(Action<string> action)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-project-command-" + Guid.NewGuid().ToString("N"));

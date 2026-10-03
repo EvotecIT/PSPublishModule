@@ -61,7 +61,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
     [Parameter]
     public SwitchParameter NoInteractive { get; set; }
 
-    /// <summary>Suppresses progress and informational output. Failures still write PowerShell errors.</summary>
+    /// <summary>Suppresses progress and informational output while preserving results, warnings and errors.</summary>
     [Parameter]
     public SwitchParameter Quiet { get; set; }
 
@@ -76,7 +76,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         {
             ExecuteWorkflow();
         }
-        catch (Exception ex) when (ExitCode.IsPresent && ex is not PipelineStoppedException)
+        catch (Exception ex) when (ExitCode.IsPresent && ex is not PipelineStoppedException && ex is not ActionPreferenceStopException)
         {
             CompleteResult(new ProjectBuildResult { Success = false, ErrorMessage = ex.Message });
         }
@@ -101,15 +101,16 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         var interactive = !Quiet.IsPresent && !NoInteractive.IsPresent &&
                           SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
         BufferedLogger? interactiveBuffer = null;
-        ILogger logger = interactive || Quiet.IsPresent || ExitCode.IsPresent
+        ILogger outputLogger = interactive || Quiet.IsPresent || ExitCode.IsPresent
             ? interactiveBuffer = new BufferedLogger { IsVerbose = isVerbose }
             : new CmdletLogger(this, isVerbose);
+        var logger = new CmdletWarningLogger(this, outputLogger);
         var support = new ProjectBuildSupportService(logger);
 
         var configFullPath = ResolveConfigPath(ConfigPath);
         var configDir = Path.GetDirectoryName(configFullPath) ?? SessionState.Path.CurrentFileSystemLocation.Path;
         var config = support.LoadConfig(configFullPath);
-        var preparation = new ProjectBuildPreparationService().Prepare(
+        var preparation = new ProjectBuildPreparationService(logger).Prepare(
             config,
             configDir,
             PlanPath,
@@ -157,6 +158,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
                 },
                 progress => workflowService.Execute(config, configDir, preparation, executeBuild, progress: progress));
 
+            logger.RethrowWarningStop();
             var summary = new DotNetRepositoryReleaseSummaryService().CreateSummary(workflow.Result.Release ?? new DotNetRepositoryReleaseResult
             {
                 Success = workflow.Result.Success,
@@ -179,6 +181,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         else
         {
             workflow = workflowService.Execute(config, configDir, preparation, executeBuild);
+            logger.RethrowWarningStop();
             if (!Quiet.IsPresent && interactiveBuffer is not null)
                 new BufferedLogSupportService().WriteTail(
                     interactiveBuffer.Entries,

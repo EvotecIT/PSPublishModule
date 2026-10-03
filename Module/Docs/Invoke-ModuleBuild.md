@@ -852,7 +852,7 @@ Accept wildcard characters: False
 ```
 
 ### -Quiet
-Suppresses host rendering and log output. Intended for callers that request structured results.
+Suppresses progress and informational output while preserving warnings and errors. Intended for callers that request structured results.
 
 ```yaml
 Type: SwitchParameter

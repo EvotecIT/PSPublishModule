@@ -258,9 +258,7 @@ internal static partial class Program
                 }
                 finally
                 {
-                    if (interactiveLogs is not null)
-                        foreach (var entry in interactiveLogs.Entries)
-                            if (entry.Level == "warn") logger.Warn(entry.Message);
+                    ReplayInteractiveWarnings(interactiveLogs, logger);
                 }
             }
             case "bundle-postprocess":
