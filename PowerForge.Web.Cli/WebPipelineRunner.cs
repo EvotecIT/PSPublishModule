@@ -272,6 +272,15 @@ internal static partial class WebPipelineRunner
             var failureProfileOutputIsSafe = true;
             try
             {
+                if ((task.Equals("build", StringComparison.OrdinalIgnoreCase) ||
+                     task.Equals("dotnet-publish", StringComparison.OrdinalIgnoreCase)) &&
+                    GetBool(step, "clean") == true)
+                {
+                    var cleanOutput = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+                    if (!string.IsNullOrWhiteSpace(cleanOutput))
+                        foreach (var input in pipelineSourcePaths)
+                            WebOutputPathGuard.ValidateSourceInput(cleanOutput, input);
+                }
                 // A preceding sitemap step can create index leaves absent during initial validation.
                 if (task.Equals("indexnow", StringComparison.OrdinalIgnoreCase))
                 {

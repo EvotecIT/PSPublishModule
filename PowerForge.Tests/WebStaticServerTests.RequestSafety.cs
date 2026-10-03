@@ -82,8 +82,9 @@ public partial class WebStaticServerTests
         using var cancellation = new CancellationTokenSource();
         var logs = new ConcurrentQueue<string>();
         var port = GetFreePortRange(10);
-        var server = Task.Run(() => WebStaticServer.ServeWithPortFallback(root, "localhost", port,
-            cancellation.Token, logs.Enqueue, maxPortAttempts: 10));
+        var server = Task.Factory.StartNew(() => WebStaticServer.ServeWithPortFallback(root, "localhost", port,
+            cancellation.Token, logs.Enqueue, maxPortAttempts: 10),
+            CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         try
         {
             var listening = await WaitForLogAsync(logs, m => m.StartsWith("Listening on http://localhost:"), TimeSpan.FromSeconds(15));

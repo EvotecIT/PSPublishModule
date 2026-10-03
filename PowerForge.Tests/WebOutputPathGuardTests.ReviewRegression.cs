@@ -107,6 +107,55 @@ public sealed partial class WebOutputPathGuardTests
         return WebPipelineRunner.RunPipeline(pipeline, logger: null);
     }
 
+    [Theory]
+    [InlineData("build")]
+    [InlineData("dotnet-publish")]
+    public void PipelineClean_PreservesInheritedPipelineInput(string task)
+    {
+        WithSite(root =>
+        {
+            var inherited = Path.Combine(root, "config", "base.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(inherited)!);
+            File.WriteAllText(inherited, "{\"steps\":[]}");
+            File.WriteAllText(Path.Combine(root, "App.csproj"), "<Project/>");
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, JsonSerializer.Serialize(new
+            {
+                extends = "config/base.json",
+                steps = new[] { new { task, config = "site.json", project = "App.csproj", @out = "config", clean = true } }
+            }));
+            var result = WebPipelineRunner.RunPipeline(pipeline, logger: null);
+            Assert.False(result.Success);
+            Assert.Contains("overlaps build source", Assert.Single(result.Steps).Message);
+            Assert.Equal("{\"steps\":[]}", File.ReadAllText(inherited));
+        });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Publish_GeneratedBuildOutputCanFeedOverlay(bool clean)
+    {
+        WithSite(root =>
+        {
+            var project = Path.Combine(root, "App", "App.csproj");
+            Directory.CreateDirectory(Path.GetDirectoryName(project)!);
+            // Stop at dotnet's project validation after observing generation and the overlay.
+            File.WriteAllText(project, "<Project/>");
+            var publish = Path.Combine(root, "publish.json");
+            File.WriteAllText(publish, JsonSerializer.Serialize(new
+            {
+                build = new { config = "site.json", @out = "Artifacts/site", clean },
+                overlay = new { source = "Artifacts/site", destination = "App/wwwroot" },
+                publish = new { project = "App/App.csproj", @out = "Artifacts/published", noRestore = true }
+            }));
+            var error = Assert.Throws<InvalidOperationException>(() => WebCliCommandHandlers.HandlePublish(
+                new[] { "--config", publish }, true, new WebConsoleLogger(), 1));
+            Assert.Contains("dotnet", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Home", File.ReadAllText(Path.Combine(root, "App", "wwwroot", "index.html")));
+        });
+    }
+
     [Fact]
     public void PipelineClean_PreservesExternalMarkdownIncludeDependencies()
     {

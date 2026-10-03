@@ -79,17 +79,17 @@ public static class WebStaticServer
                 log?.Invoke($"Requested port {requestedPort} is busy. Using {boundPort}.");
             log?.Invoke($"Listening on {prefix} (Ctrl+C to stop)");
 
-            using var cancellationRegistration = token.Register(() =>
-            {
-                try { listener.Close(); } catch { }
-            });
-
             while (!token.IsCancellationRequested)
             {
                 HttpListenerContext? context = null;
                 try
                 {
-                    context = listener.GetContext();
+                    // Cancel the managed wait directly; native synchronous receives can outlive listener shutdown.
+                    context = listener.GetContextAsync().WaitAsync(token).GetAwaiter().GetResult();
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    break;
                 }
                 catch (HttpListenerException)
                 {

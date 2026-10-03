@@ -35,7 +35,7 @@ public partial class WebStaticServerTests
 
             var logs = new ConcurrentQueue<string>();
             cts = new CancellationTokenSource();
-            serverTask = Task.Run(() =>
+            serverTask = Task.Factory.StartNew(() =>
             {
                 WebStaticServer.ServeWithPortFallback(
                     root,
@@ -44,7 +44,7 @@ public partial class WebStaticServerTests
                     cts.Token,
                     message => logs.Enqueue(message),
                     maxPortAttempts: 20);
-            });
+            }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
             var listeningLog = await WaitForLogAsync(
                 logs,
@@ -150,7 +150,7 @@ public partial class WebStaticServerTests
             var logs = new ConcurrentQueue<string>();
             cts = new CancellationTokenSource();
             var preferredPort = GetFreePortRange(20);
-            serverTask = Task.Run(() =>
+            serverTask = Task.Factory.StartNew(() =>
             {
                 WebStaticServer.ServeWithPortFallback(
                     root,
@@ -159,7 +159,7 @@ public partial class WebStaticServerTests
                     cts.Token,
                     message => logs.Enqueue(message),
                     maxPortAttempts: 20);
-            });
+            }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
             var listeningLog = await WaitForLogAsync(
                 logs,

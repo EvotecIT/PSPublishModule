@@ -86,6 +86,9 @@ internal static class WebOutputPathGuard
     internal static void ValidateSourceInput(string outputPath, string inputPath)
         => Protect(ResolveOutput(outputPath), inputPath);
 
+    internal static bool IsGeneratedOutputInput(string outputPath, string inputPath)
+        => Contains(ResolveOutput(outputPath), ResolveOutput(inputPath));
+
     private static string ResolveOutput(string outputPath)
     {
         if (string.IsNullOrWhiteSpace(outputPath))

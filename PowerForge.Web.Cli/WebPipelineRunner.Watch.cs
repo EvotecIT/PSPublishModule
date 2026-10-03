@@ -252,6 +252,7 @@ internal static partial class WebPipelineRunner
     {
         validConfiguration = false;
         var ignore = new List<string>();
+        var pipelineInputs = new List<string> { Path.GetFullPath(pipelinePath) };
 
         void AddRoot(string? value)
         {
@@ -278,7 +279,8 @@ internal static partial class WebPipelineRunner
         // Output roots inferred from pipeline steps (best-effort).
         try
         {
-            using var doc = LoadPipelineDocumentWithExtends(pipelinePath);
+            using var doc = LoadPipelineDocumentWithExtends(pipelinePath, out var sourcePaths);
+            pipelineInputs.AddRange(sourcePaths);
             var root = doc.RootElement;
             if (root.TryGetProperty("steps", out var steps) && steps.ValueKind == JsonValueKind.Array)
             {
@@ -304,6 +306,7 @@ internal static partial class WebPipelineRunner
         }
 
         return ignore
+            .Where(root => !pipelineInputs.Any(input => IsUnderAnyRoot(input, new[] { root })))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderByDescending(v => v.Length) // more specific first
             .ToList();
