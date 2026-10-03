@@ -430,7 +430,9 @@ public static partial class WebApiDocsGenerator
 
         var apiDoc = options.Type == ApiDocsType.PowerShell
             ? ParsePowerShellHelp(helpPath, warnings, options)
-            : ParseXmlDocuments(xmlPaths, assembly, options);
+            : ParseXmlDocuments(xmlPaths, assembly, options, warnings);
+        if (options.Type == ApiDocsType.CSharp && assembly is null)
+            warnings.Add("XML-only API documentation does not verify public accessibility. Supply AssemblyPath to restrict the reference to the public assembly surface.");
         var usedReflectionFallback = false;
         if (options.Type == ApiDocsType.CSharp && assembly is not null && options.IncludeUndocumentedTypes)
         {

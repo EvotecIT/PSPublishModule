@@ -14,7 +14,6 @@ namespace PowerForge.Web.Cli;
 internal static partial class WebPipelineRunner
 {
     private const long MaxStateFileSizeBytes = 10 * 1024 * 1024;
-    private const int MaxStampFileCount = 1000;
     private static readonly TimeSpan DefaultWatchDebounce = TimeSpan.FromMilliseconds(250);
     private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase
@@ -233,7 +232,16 @@ internal static partial class WebPipelineRunner
             if (cacheable)
             {
                 var fingerprintSalt = fast ? $"fast|{PipelineToolFingerprint}" : PipelineToolFingerprint;
-                stepFingerprint = ComputeStepFingerprint(baseDir, step, fingerprintSalt);
+                try
+                {
+                    stepFingerprint = ComputeStepFingerprint(baseDir, step, fingerprintSalt);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or ArgumentException)
+                {
+                    // Discovery failure must never reuse an old output. Execute the task
+                    // so its normal validation reports the actionable configuration error.
+                    cacheable = false;
+                }
                 if (cacheStateLocal!.Entries.TryGetValue(cacheKey, out var cacheEntry) &&
                     string.Equals(cacheEntry.Fingerprint, stepFingerprint, StringComparison.Ordinal) &&
                     !dependencyMiss &&

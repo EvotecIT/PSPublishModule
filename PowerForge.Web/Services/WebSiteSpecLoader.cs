@@ -52,7 +52,14 @@ public static class WebSiteSpecLoader
         return (spec, fullPath);
     }
 
-    private static JsonObject LoadJsonWithExtends(string configPath, HashSet<string> chain)
+    internal static IReadOnlyList<string> DiscoverConfigurationInputs(string configPath)
+    {
+        var inputs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        LoadJsonWithExtends(configPath, new HashSet<string>(StringComparer.OrdinalIgnoreCase), inputs);
+        return inputs.OrderBy(static path => path, StringComparer.Ordinal).ToArray();
+    }
+
+    private static JsonObject LoadJsonWithExtends(string configPath, HashSet<string> chain, ISet<string>? inputs = null)
     {
         var fullPath = Path.GetFullPath(configPath.Trim().Trim('"'));
         if (!File.Exists(fullPath))
@@ -60,6 +67,7 @@ public static class WebSiteSpecLoader
 
         if (!chain.Add(fullPath))
             throw new InvalidOperationException($"Site spec inheritance loop detected at {fullPath}");
+        inputs?.Add(fullPath);
 
         var json = File.ReadAllText(fullPath);
         var documentOptions = new JsonDocumentOptions
@@ -79,7 +87,7 @@ public static class WebSiteSpecLoader
         foreach (var basePath in basePaths)
         {
             var resolved = Path.IsPathRooted(basePath) ? basePath : Path.Combine(baseDir, basePath);
-            var baseNode = LoadJsonWithExtends(resolved, chain);
+            var baseNode = LoadJsonWithExtends(resolved, chain, inputs);
             merged = MergeObjects(merged, baseNode);
         }
 

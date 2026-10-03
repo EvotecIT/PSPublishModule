@@ -23,6 +23,7 @@ public class WebXrefTests
                 ---
 
                 [Install](xref:docs.install)
+                [Unsafe](javascript:alert(1))
                 """);
             File.WriteAllText(Path.Combine(docsPath, "install.md"),
                 """
@@ -43,6 +44,7 @@ public class WebXrefTests
 
             var docsHome = File.ReadAllText(Path.Combine(result.OutputPath, "docs", "index.html"));
             Assert.Contains("href=\"/docs/install/\"", docsHome, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("href=\"javascript:", docsHome, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

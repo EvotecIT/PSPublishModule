@@ -74,6 +74,9 @@ internal static partial class WebPipelineRunner
     {
         if (!IsCacheableTask(task))
             return false;
+        if (task.Equals("build", StringComparison.OrdinalIgnoreCase) &&
+            (GetBool(step, "syncSources") ?? GetBool(step, "sync-sources") ?? false))
+            return false;
 
         if (task.Equals("release-hub", StringComparison.OrdinalIgnoreCase))
         {
@@ -224,8 +227,7 @@ internal static partial class WebPipelineRunner
                 }
 
                 hash.AppendData(Encoding.UTF8.GetBytes($"d|{path}\n"));
-                // Unlike the bounded input discovery stamp, output integrity
-                // must account for every generated file in a large site.
+                // Integrity must account for every file in a large site.
                 foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
                              .OrderBy(file => file, WebCliHelpers.FileSystemPathComparer))
                 {
@@ -325,6 +327,16 @@ internal static partial class WebPipelineRunner
         }
 
         var task = GetString(step, "task") ?? string.Empty;
+        if (task.Equals("build", StringComparison.OrdinalIgnoreCase))
+        {
+            var configPath = ResolvePath(baseDir, GetString(step, "config"));
+            if (!string.IsNullOrWhiteSpace(configPath))
+            {
+                var outputPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+                foreach (var input in WebSiteInputDiscovery.Discover(configPath, outputPath))
+                    yield return input;
+            }
+        }
         if (IsLinkReadTask(task))
         {
             foreach (var path in GetLinkFingerprintPaths(step, baseDir))
@@ -402,42 +414,8 @@ internal static partial class WebPipelineRunner
 
     private static string BuildPathStamp(string path)
     {
-        if (File.Exists(path))
-        {
-            var info = new FileInfo(path);
-            return $"f|{path}|{info.Length}|{info.LastWriteTimeUtc.Ticks}";
-        }
-
-        if (!Directory.Exists(path))
-            return $"m|{path}";
-
-        try
-        {
-            var maxTicks = Directory.GetLastWriteTimeUtc(path).Ticks;
-            var fileCount = 0;
-            var truncated = false;
-            foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
-            {
-                if (fileCount >= MaxStampFileCount)
-                {
-                    truncated = true;
-                    break;
-                }
-
-                fileCount++;
-                var ticks = File.GetLastWriteTimeUtc(file).Ticks;
-                if (ticks > maxTicks)
-                    maxTicks = ticks;
-            }
-
-            return truncated
-                ? $"d|{path}|{fileCount}|{maxTicks}|truncated"
-                : $"d|{path}|{fileCount}|{maxTicks}";
-        }
-        catch
-        {
-            return $"d|{path}|unreadable";
-        }
+        // An unreadable dependency must never produce a reusable fingerprint.
+        return ComputeOutputStamp(new[] { path }) ?? $"unreadable:{Guid.NewGuid():N}";
     }
 
     private static bool IsExternalUri(string value)

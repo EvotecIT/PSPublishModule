@@ -28,6 +28,7 @@ public static partial class WebSitemapGenerator
     private static WebSitemapEntry BuildEntryFromHtmlFile(string filePath, string route)
     {
         var content = TryReadHtmlContent(filePath);
+        var signals = string.IsNullOrWhiteSpace(content) ? default : ReadCanonicalAndPublication(content!);
         var section = ResolveSectionFromRoute(route);
         var title = string.IsNullOrWhiteSpace(content) ? null : TryReadHtmlTitleFromContent(content!);
         if (string.IsNullOrWhiteSpace(title))
@@ -38,7 +39,9 @@ public static partial class WebSitemapGenerator
             Title = title,
             Section = section,
             LastModified = string.IsNullOrWhiteSpace(content) ? null : TryReadLastModifiedFromHtml(content!),
-            NoIndex = !string.IsNullOrWhiteSpace(content) && HasNoIndexRobots(content!),
+            Canonical = signals.Canonical,
+            PublicationDate = signals.PublicationDate,
+            NoIndex = signals.NoIndex || (!string.IsNullOrWhiteSpace(content) && HasNoIndexRobots(content!)),
             ImageUrls = string.IsNullOrWhiteSpace(content) ? Array.Empty<string>() : ExtractImageUrls(content!),
             VideoUrls = string.IsNullOrWhiteSpace(content) ? Array.Empty<string>() : ExtractVideoUrls(content!)
         };
@@ -350,6 +353,8 @@ public static partial class WebSitemapGenerator
                 Section = GetString(item, "section"),
                 Priority = GetString(item, "priority"),
                 ChangeFrequency = GetString(item, "changefreq") ?? GetString(item, "changeFrequency"),
+                Canonical = GetString(item, "canonical"),
+                PublicationDate = GetString(item, "publicationDate") ?? GetString(item, "datePublished"),
                 LastModified = GetString(item, "lastmod") ??
                                GetString(item, "lastModified") ??
                                GetString(item, "last_modified") ??

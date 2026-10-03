@@ -137,7 +137,7 @@ public class WebSitemapGeneratorCanonicalizationTests
     }
 
     [Fact]
-    public void Generate_MergesPowerForgeSitemapMetadata_ByDefault()
+    public void Generate_MergesPowerForgeSitemapMetadata_AndHonorsRenderedNoIndex()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-sitemap-generated-metadata-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "_powerforge"));
@@ -185,11 +185,11 @@ public class WebSitemapGeneratorCanonicalizationTests
                 .Single(url => string.Equals(url.Element(ns + "loc")?.Value, "https://example.test/", StringComparison.OrdinalIgnoreCase));
 
             Assert.Contains("https://example.test/", locs, StringComparer.OrdinalIgnoreCase);
-            Assert.Contains("https://example.test/secret/", locs, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://example.test/secret/", locs, StringComparer.OrdinalIgnoreCase);
             Assert.DoesNotContain("https://example.test/flagged/", locs, StringComparer.OrdinalIgnoreCase);
             Assert.Contains("https://example.test/custom/", locs, StringComparer.OrdinalIgnoreCase);
             Assert.Equal("2021-02-03T04:05:06.000Z", home.Element(ns + "lastmod")?.Value);
-            Assert.Equal(3, result.LastModifiedCount);
+            Assert.Equal(2, result.LastModifiedCount);
         }
         finally
         {
@@ -652,6 +652,7 @@ public class WebSitemapGeneratorCanonicalizationTests
                     {
                         Path = "/news/launch/",
                         Title = "Launch Announcement",
+                        PublicationDate = DateTimeOffset.UtcNow.AddHours(-1).ToString("O"),
                         LastModified = "2026-02-18"
                     },
                     new WebSitemapEntry
@@ -731,7 +732,7 @@ public class WebSitemapGeneratorCanonicalizationTests
                 IncludeTextFiles = false,
                 Entries = new[]
                 {
-                    new WebSitemapEntry { Path = "/pl/news/release/", Title = "Release" },
+                    new WebSitemapEntry { Path = "/pl/news/release/", Title = "Release", PublicationDate = DateTimeOffset.UtcNow.AddHours(-1).ToString("O") },
                     new WebSitemapEntry { Path = "/blog/update/", Title = "Blog Update" }
                 },
                 NewsSitemap = new WebSitemapNewsOptions()

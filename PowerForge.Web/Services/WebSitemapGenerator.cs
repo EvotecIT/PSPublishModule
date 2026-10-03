@@ -8,144 +8,6 @@ using System.Xml.Linq;
 
 namespace PowerForge.Web;
 
-/// <summary>Options for sitemap generation.</summary>
-public sealed class WebSitemapOptions
-{
-    /// <summary>Root directory of the generated site.</summary>
-    public string SiteRoot { get; set; } = ".";
-    /// <summary>Base URL for sitemap entries.</summary>
-    public string BaseUrl { get; set; } = string.Empty;
-    /// <summary>Optional output path override.</summary>
-    public string? OutputPath { get; set; }
-    /// <summary>Optional existing API sitemap path to merge.</summary>
-    public string? ApiSitemapPath { get; set; }
-    /// <summary>Additional paths to include.</summary>
-    public string[]? ExtraPaths { get; set; }
-    /// <summary>Explicit sitemap entries.</summary>
-    public WebSitemapEntry[]? Entries { get; set; }
-    /// <summary>Optional JSON file containing sitemap entries (array or object with entries[]).</summary>
-    public string? EntriesJsonPath { get; set; }
-    /// <summary>When true, merge sitemap metadata emitted by the PowerForge site build under _powerforge/sitemap-entries.json.</summary>
-    public bool UseGeneratedSitemapMetadata { get; set; } = true;
-    /// <summary>When true, include HTML files.</summary>
-    public bool IncludeHtmlFiles { get; set; } = true;
-    /// <summary>When true, include HTML files that declare robots noindex.</summary>
-    public bool IncludeNoIndexHtml { get; set; }
-    /// <summary>When true, apply default exclusion patterns for utility HTML files.</summary>
-    public bool UseDefaultExcludePatterns { get; set; } = true;
-    /// <summary>Additional exclusion patterns for HTML route discovery.</summary>
-    public string[]? ExcludePatterns { get; set; }
-    /// <summary>When true, include text files (robots/llms).</summary>
-    public bool IncludeTextFiles { get; set; } = true;
-    /// <summary>When true, include HTML pages that declare robots noindex metadata.</summary>
-    public bool IncludeNoIndexPages { get; set; }
-    /// <summary>When true, emit localized alternate URLs (hreflang/x-default) when localization is configured.</summary>
-    public bool IncludeLanguageAlternates { get; set; } = true;
-    /// <summary>When true, generate an HTML sitemap.</summary>
-    public bool GenerateHtml { get; set; }
-    /// <summary>When true, generate a machine-readable sitemap JSON file.</summary>
-    public bool GenerateJson { get; set; }
-    /// <summary>Optional sitemap JSON output path.</summary>
-    public string? JsonOutputPath { get; set; }
-    /// <summary>Optional HTML sitemap output path.</summary>
-    public string? HtmlOutputPath { get; set; }
-    /// <summary>Optional HTML sitemap template path.</summary>
-    public string? HtmlTemplatePath { get; set; }
-    /// <summary>Optional HTML title override.</summary>
-    public string? HtmlTitle { get; set; }
-    /// <summary>Optional CSS href to include in the HTML sitemap.</summary>
-    public string? HtmlCssHref { get; set; }
-    /// <summary>When true, include the generated HTML sitemap route in sitemap.xml.</summary>
-    public bool IncludeGeneratedHtmlRouteInXml { get; set; }
-    /// <summary>When true, write a lightweight browser stylesheet for generated XML sitemaps. The generated stylesheet file is overwritten on each run when the href resolves under the site root.</summary>
-    public bool GenerateBrowserStylesheet { get; set; } = true;
-    /// <summary>Optional href override for the generated XML sitemap browser stylesheet.</summary>
-    public string? BrowserStylesheetHref { get; set; }
-    /// <summary>Optional news sitemap generation options.</summary>
-    public WebSitemapNewsOptions? NewsSitemap { get; set; }
-    /// <summary>Optional image sitemap generation options.</summary>
-    public WebSitemapImageOptions? ImageSitemap { get; set; }
-    /// <summary>Optional video sitemap generation options.</summary>
-    public WebSitemapVideoOptions? VideoSitemap { get; set; }
-    /// <summary>Optional sitemap index output path.</summary>
-    public string? SitemapIndexPath { get; set; }
-}
-
-/// <summary>Options for specialized news sitemap output.</summary>
-public sealed class WebSitemapNewsOptions
-{
-    /// <summary>Optional output path override for the news sitemap XML.</summary>
-    public string? OutputPath { get; set; }
-    /// <summary>Optional path patterns used to select entries for news sitemap output.</summary>
-    public string[]? PathPatterns { get; set; }
-    /// <summary>Optional publication name for news metadata.</summary>
-    public string? PublicationName { get; set; }
-    /// <summary>Optional publication language code for news metadata (for example: en).</summary>
-    public string? PublicationLanguage { get; set; }
-    /// <summary>Optional news genres metadata.</summary>
-    public string? Genres { get; set; }
-    /// <summary>Optional news access metadata.</summary>
-    public string? Access { get; set; }
-    /// <summary>Optional news keywords metadata.</summary>
-    public string? Keywords { get; set; }
-}
-
-/// <summary>Options for specialized image sitemap output.</summary>
-public sealed class WebSitemapImageOptions
-{
-    /// <summary>Optional output path override for the image sitemap XML.</summary>
-    public string? OutputPath { get; set; }
-    /// <summary>Optional path patterns used to select entries for image sitemap output.</summary>
-    public string[]? PathPatterns { get; set; }
-}
-
-/// <summary>Options for specialized video sitemap output.</summary>
-public sealed class WebSitemapVideoOptions
-{
-    /// <summary>Optional output path override for the video sitemap XML.</summary>
-    public string? OutputPath { get; set; }
-    /// <summary>Optional path patterns used to select entries for video sitemap output.</summary>
-    public string[]? PathPatterns { get; set; }
-}
-
-/// <summary>Explicit sitemap entry metadata.</summary>
-public sealed class WebSitemapEntry
-{
-    /// <summary>Route path (relative to base URL).</summary>
-    public string Path { get; set; } = "/";
-    /// <summary>Optional display title used by HTML sitemap renderers.</summary>
-    public string? Title { get; set; }
-    /// <summary>Optional description used by HTML sitemap renderers.</summary>
-    public string? Description { get; set; }
-    /// <summary>Optional section/group label used by HTML sitemap renderers.</summary>
-    public string? Section { get; set; }
-    /// <summary>Optional change frequency value.</summary>
-    public string? ChangeFrequency { get; set; }
-    /// <summary>Optional priority value.</summary>
-    public string? Priority { get; set; }
-    /// <summary>Optional last-modified date.</summary>
-    public string? LastModified { get; set; }
-    /// <summary>Optional localized alternate URLs for this path.</summary>
-    public WebSitemapAlternate[] Alternates { get; set; } = Array.Empty<WebSitemapAlternate>();
-    /// <summary>Optional page-associated image URLs (absolute or site-relative).</summary>
-    public string[] ImageUrls { get; set; } = Array.Empty<string>();
-    /// <summary>Optional page-associated video URLs (absolute or site-relative).</summary>
-    public string[] VideoUrls { get; set; } = Array.Empty<string>();
-    /// <summary>When true, page declares robots noindex metadata.</summary>
-    public bool NoIndex { get; set; }
-}
-
-/// <summary>Localized alternate URL mapping for sitemap entries.</summary>
-public sealed class WebSitemapAlternate
-{
-    /// <summary>Language code (for example en, pl, x-default).</summary>
-    public string HrefLang { get; set; } = string.Empty;
-    /// <summary>Route path relative to site root.</summary>
-    public string Path { get; set; } = "/";
-    /// <summary>Optional absolute URL override for this alternate.</summary>
-    public string? Url { get; set; }
-}
-
 /// <summary>Generates sitemap.xml for the site output.</summary>
 public static partial class WebSitemapGenerator
 {
@@ -194,6 +56,7 @@ public static partial class WebSitemapGenerator
 
         var entries = new Dictionary<string, WebSitemapEntry>(StringComparer.OrdinalIgnoreCase);
         var htmlRoutes = new List<string>();
+        var renderedSignals = new Dictionary<string, (string? Canonical, string? PublicationDate, bool NoIndex)>(StringComparer.OrdinalIgnoreCase);
         var localization = options.IncludeLanguageAlternates ? TryLoadLocalizationConfig(siteRoot) : null;
         var generateJson = options.GenerateJson || options.GenerateHtml;
         string? htmlOutputPath = null;
@@ -261,6 +124,7 @@ public static partial class WebSitemapGenerator
                 var route = NormalizeRoute(relative);
                 if (string.IsNullOrWhiteSpace(route)) continue;
                 var entry = BuildEntryFromHtmlFile(file, route);
+                renderedSignals[route] = (entry.Canonical, entry.PublicationDate, entry.NoIndex);
                 if (entry.NoIndex && !options.IncludeNoIndexHtml && !options.IncludeNoIndexPages)
                     continue;
                 AddOrUpdate(entries, route, entry);
@@ -335,6 +199,7 @@ public static partial class WebSitemapGenerator
         }
 
         CollapseHtmlRouteAliases(entries);
+        ApplySitemapUrlPolicy(siteRoot, baseUrl, entries, options, renderedSignals);
 
         if (options.IncludeLanguageAlternates && localization is not null)
             ApplyLanguageAlternates(entries, htmlRoutes, localization, baseUrl);
@@ -354,34 +219,25 @@ public static partial class WebSitemapGenerator
         if (entriesXml.Any(entry => entry.Descendants(xhtmlNs + "link").Any()))
             rootAttributes.Add(new XAttribute(XNamespace.Xmlns + "xhtml", xhtmlNs.NamespaceName));
 
-        var doc = CreateSitemapDocument(
-            browserStylesheetHref,
-            new XElement(
-                ns + "urlset",
-                rootAttributes,
-                entriesXml));
-
-        Directory.CreateDirectory(Path.GetDirectoryName(outputPath) ?? siteRoot);
-        using (var stream = File.Create(outputPath))
-        {
-            doc.Save(stream);
-        }
+        var regularPaths = WritePartitionedSitemap(siteRoot, baseUrl, outputPath, browserStylesheetHref, entriesXml, rootAttributes);
+        var newsPaths = Array.Empty<string>();
+        var imagePaths = Array.Empty<string>();
+        var videoPaths = Array.Empty<string>();
         WriteSitemapBrowserStylesheet(siteRoot, browserStylesheetHref);
 
         if (generateNewsSitemap && !string.IsNullOrWhiteSpace(newsOutputPath))
         {
-            WriteNewsSitemap(
+            newsPaths = WriteNewsSitemap(
                 siteRoot,
                 baseUrl,
                 options.NewsSitemap!,
                 orderedEntries,
                 browserStylesheetHref,
-                today,
                 newsOutputPath);
         }
         if (generateImageSitemap && !string.IsNullOrWhiteSpace(imageOutputPath))
         {
-            WriteImageSitemap(
+            imagePaths = WriteImageSitemap(
                 siteRoot,
                 baseUrl,
                 options.ImageSitemap!,
@@ -391,7 +247,7 @@ public static partial class WebSitemapGenerator
         }
         if (generateVideoSitemap && !string.IsNullOrWhiteSpace(videoOutputPath))
         {
-            WriteVideoSitemap(
+            videoPaths = WriteVideoSitemap(
                 siteRoot,
                 baseUrl,
                 options.VideoSitemap!,
@@ -408,10 +264,7 @@ public static partial class WebSitemapGenerator
                 indexOutputPath,
                 browserStylesheetHref,
                 today,
-                outputPath,
-                newsOutputPath,
-                imageOutputPath,
-                videoOutputPath);
+                regularPaths.Cast<string?>().Concat(newsPaths).Concat(imagePaths).Concat(videoPaths).ToArray());
         }
 
         if (generateJson && !string.IsNullOrWhiteSpace(jsonOutputPath))
@@ -430,7 +283,9 @@ public static partial class WebSitemapGenerator
             NewsOutputPath = newsOutputPath,
             ImageOutputPath = imageOutputPath,
             VideoOutputPath = videoOutputPath,
-            IndexOutputPath = indexOutputPath,
+            IndexOutputPath = indexOutputPath ?? (regularPaths.Length > 1 ? outputPath : null),
+            XmlOutputPaths = regularPaths.Concat(newsPaths).Concat(imagePaths).Concat(videoPaths).Concat(new[] { outputPath, newsOutputPath, indexOutputPath, imageOutputPath, videoOutputPath })
+                .Where(static path => !string.IsNullOrWhiteSpace(path)).Select(static path => path!).Distinct(StringComparer.Ordinal).ToArray(),
             JsonOutputPath = jsonOutputPath,
             HtmlOutputPath = htmlOutputPath,
             UrlCount = entriesXml.Length,
@@ -1122,6 +977,8 @@ public static partial class WebSitemapGenerator
                 existing.Priority = update.Priority;
             if (!string.IsNullOrWhiteSpace(update.LastModified))
                 existing.LastModified = update.LastModified;
+            if (!string.IsNullOrWhiteSpace(update.Canonical)) existing.Canonical = update.Canonical;
+            if (!string.IsNullOrWhiteSpace(update.PublicationDate)) existing.PublicationDate = update.PublicationDate;
             if (update.Alternates is { Length: > 0 })
                 existing.Alternates = update.Alternates;
             if (update.ImageUrls is { Length: > 0 })
@@ -1148,6 +1005,8 @@ public static partial class WebSitemapGenerator
             ChangeFrequency = update.ChangeFrequency,
             Priority = update.Priority,
             LastModified = update.LastModified,
+            Canonical = update.Canonical,
+            PublicationDate = update.PublicationDate,
             Alternates = update.Alternates,
             ImageUrls = update.ImageUrls,
             VideoUrls = update.VideoUrls,
@@ -1262,6 +1121,8 @@ public static partial class WebSitemapGenerator
             destination.Priority = source.Priority;
         if (string.IsNullOrWhiteSpace(destination.LastModified) && !string.IsNullOrWhiteSpace(source.LastModified))
             destination.LastModified = source.LastModified;
+        if (string.IsNullOrWhiteSpace(destination.Canonical)) destination.Canonical = source.Canonical;
+        if (string.IsNullOrWhiteSpace(destination.PublicationDate)) destination.PublicationDate = source.PublicationDate;
         if ((destination.Alternates is null || destination.Alternates.Length == 0) &&
             source.Alternates is { Length: > 0 })
         {
