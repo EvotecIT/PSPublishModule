@@ -22,12 +22,13 @@ public static partial class WebApiDocsGenerator
     private static ApiDocModel ParseXmlDocuments(
         IReadOnlyList<string> xmlPaths,
         Assembly? assembly,
-        WebApiDocsOptions options)
+        WebApiDocsOptions options,
+        List<string> warnings)
     {
         var combined = new ApiDocModel();
         foreach (var xmlPath in xmlPaths)
         {
-            var parsed = ParseXml(xmlPath, assembly, options);
+            var parsed = ParseXml(xmlPath, assembly, options, warnings);
             combined.AssemblyName ??= parsed.AssemblyName;
             combined.AssemblyVersion ??= parsed.AssemblyVersion;
 

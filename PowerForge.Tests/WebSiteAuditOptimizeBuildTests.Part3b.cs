@@ -317,7 +317,7 @@ public partial class WebSiteAuditOptimizeBuildTests
                 BaselineRoot = root,
                 CheckLinks = false,
                 CheckAssets = false,
-                BaselinePath = "..\\outside.json"
+                BaselinePath = Path.Combine("..", "outside.json")
             }));
         }
         finally

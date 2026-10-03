@@ -299,6 +299,9 @@ public static partial class WebApiDocsGenerator
 
             if (!string.IsNullOrWhiteSpace(type.Assembly))
                 AppendTypeMetaHtmlRow(html, "Assembly", $"<code>{System.Web.HttpUtility.HtmlEncode(type.Assembly)}</code>");
+            if (!string.IsNullOrWhiteSpace(type.Source?.Revision))
+                AppendTypeMetaHtmlRow(html, "Source revision", $"<code>{type.Source.Revision[..12]}</code>" +
+                    (type.Source.WorkingTreeChanged ? " with working tree changes" : string.Empty));
 
             if (type.Source is not null)
             {
@@ -1400,7 +1403,7 @@ public static partial class WebApiDocsGenerator
         var baseName = $"{memberKind}-{member.Name}";
         if (member.Parameters.Count > 0)
         {
-            var suffix = string.Join("-", member.Parameters.Select(p => NormalizeTypeName(p.Type)));
+            var suffix = string.Join("-", member.Parameters.Select(p => NormalizeTypeName(p.AnchorType ?? p.Type)));
             if (!string.IsNullOrWhiteSpace(suffix))
                 baseName = $"{baseName}-{suffix}";
         }

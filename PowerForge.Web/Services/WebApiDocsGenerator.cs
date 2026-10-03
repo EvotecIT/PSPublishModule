@@ -177,7 +177,7 @@ public sealed class WebApiDocsOptions
     /// Useful when generated source paths need a stable repo-relative prefix in mixed-repo layouts.
     /// </summary>
     public string? SourcePathPrefix { get; set; }
-    /// <summary>Optional source URL pattern (use {path} and {line}).</summary>
+    /// <summary>Optional source URL pattern (use {path}, {line}, and {revision} for the source repository's current commit).</summary>
     public string? SourceUrlPattern { get; set; }
     /// <summary>
     /// Optional source URL mapping rules used for mixed-source API docs.
@@ -430,7 +430,7 @@ public static partial class WebApiDocsGenerator
 
         var apiDoc = options.Type == ApiDocsType.PowerShell
             ? ParsePowerShellHelp(helpPath, warnings, options)
-            : ParseXmlDocuments(xmlPaths, assembly, options);
+            : ParseXmlDocuments(xmlPaths, assembly, options, warnings);
         var usedReflectionFallback = false;
         if (options.Type == ApiDocsType.CSharp && assembly is not null && options.IncludeUndocumentedTypes)
         {

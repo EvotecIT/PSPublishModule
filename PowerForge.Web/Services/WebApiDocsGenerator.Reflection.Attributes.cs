@@ -104,7 +104,8 @@ public static partial class WebApiDocsGenerator
             DocumentationSignature = source.DocumentationSignature,
             Source = source.Source is null
                 ? null
-                : new ApiSourceLink { Path = source.Source.Path, Line = source.Source.Line, Url = source.Source.Url }
+                : new ApiSourceLink { Path = source.Source.Path, Line = source.Source.Line, Url = source.Source.Url,
+                    Revision = source.Source.Revision, WorkingTreeChanged = source.Source.WorkingTreeChanged }
         };
         foreach (var attr in source.Attributes)
             clone.Attributes.Add(attr);
@@ -142,6 +143,7 @@ public static partial class WebApiDocsGenerator
             {
                 Name = p.Name,
                 Type = p.Type,
+                AnchorType = p.AnchorType,
                 Summary = p.Summary,
                 IsOptional = p.IsOptional,
                 DefaultValue = p.DefaultValue,
@@ -159,19 +161,25 @@ public static partial class WebApiDocsGenerator
         return clone;
     }
 
-    private static ApiParameterModel BuildParameterModel(ParameterInfo parameter)
+    private static ApiParameterModel BuildParameterModel(ParameterInfo parameter) => BuildParameterModel(parameter, null);
+
+    private static ApiParameterModel BuildParameterModel(ParameterInfo parameter, NullabilityInfoContext? nullability)
     {
         var model = new ApiParameterModel
         {
             Name = parameter.Name ?? string.Empty,
             Type = GetReadableTypeName(parameter.ParameterType)
         };
-        ApplyParameterMetadata(model, parameter);
+        ApplyParameterMetadata(model, parameter, nullability);
         return model;
     }
 
-    private static void ApplyParameterMetadata(ApiParameterModel model, ParameterInfo parameter)
+    private static void ApplyParameterMetadata(ApiParameterModel model, ParameterInfo parameter, NullabilityInfoContext? nullability = null)
     {
+        if (!string.IsNullOrWhiteSpace(parameter.Name)) model.Name = parameter.Name;
+        model.AnchorType ??= model.Type;
+        model.Type = GetAnnotatedTypeName(parameter.ParameterType, parameter, nullability,
+            qualified: model.AnchorType?.Contains('.') == true);
         model.IsOptional = parameter.IsOptional;
         if (parameter.Position >= 0)
             model.Position = parameter.Position.ToString();
@@ -179,7 +187,7 @@ public static partial class WebApiDocsGenerator
             model.DefaultValue = FormatParameterDefaultValue(parameter);
     }
 
-    private static string BuildMethodSignature(MethodInfo method)
+    private static string BuildMethodSignature(MethodInfo method, NullabilityInfoContext nullability)
     {
         var prefix = BuildMethodPrefix(method);
         var name = method.Name;
@@ -188,19 +196,19 @@ public static partial class WebApiDocsGenerator
             var args = method.GetGenericArguments().Select(GetReadableTypeName);
             name += $"<{string.Join(", ", args)}>";
         }
-        var returnType = GetReadableTypeName(method.ReturnType);
+        var returnType = GetAnnotatedTypeName(method.ReturnType, method.ReturnParameter, nullability);
         var parameters = method.GetParameters()
-            .Select(BuildParameterSignature)
+            .Select(parameter => BuildParameterSignature(parameter, nullability))
             .ToList();
         return $"{prefix}{returnType} {name}({string.Join(", ", parameters)})".Trim();
     }
 
-    private static string BuildParameterSignature(ParameterInfo parameter)
+    private static string BuildParameterSignature(ParameterInfo parameter, NullabilityInfoContext nullability)
     {
         var prefix = parameter.IsOut ? "out " : parameter.ParameterType.IsByRef ? "ref " : string.Empty;
         if (parameter.GetCustomAttributes(typeof(ParamArrayAttribute), false).Length > 0)
             prefix = "params " + prefix;
-        var typeName = GetReadableTypeName(parameter.ParameterType);
+        var typeName = GetAnnotatedTypeName(parameter.ParameterType, parameter, nullability);
         var name = parameter.Name ?? "value";
         var value = $"{prefix}{typeName} {name}".Trim();
         if (parameter.IsOptional)
@@ -220,7 +228,7 @@ public static partial class WebApiDocsGenerator
         return FormatDefaultValue(parameter.DefaultValue);
     }
 
-    private static string BuildPropertySignature(PropertyInfo property)
+    private static string BuildPropertySignature(PropertyInfo property, NullabilityInfoContext nullability)
     {
         var accessors = new List<string>();
         if (property.GetMethod is not null) accessors.Add("get;");
@@ -229,29 +237,29 @@ public static partial class WebApiDocsGenerator
         var parameters = property.GetIndexParameters();
         var displayName = parameters.Length == 0
             ? property.Name
-            : $"this[{string.Join(", ", parameters.Select(BuildParameterSignature))}]";
-        return $"{prefix}{GetReadableTypeName(property.PropertyType)} {displayName} {{ {string.Join(" ", accessors)} }}".Trim();
+            : $"this[{string.Join(", ", parameters.Select(parameter => BuildParameterSignature(parameter, nullability)))}]";
+        return $"{prefix}{GetAnnotatedTypeName(property.PropertyType, property, nullability)} {displayName} {{ {string.Join(" ", accessors)} }}".Trim();
     }
 
-    private static string BuildFieldSignature(FieldInfo field)
+    private static string BuildFieldSignature(FieldInfo field, NullabilityInfoContext nullability)
     {
         var prefix = BuildFieldPrefix(field);
-        return $"{prefix}{GetReadableTypeName(field.FieldType)} {field.Name}".Trim();
+        return $"{prefix}{GetAnnotatedTypeName(field.FieldType, field, nullability)} {field.Name}".Trim();
     }
 
-    private static string BuildEventSignature(EventInfo evt)
+    private static string BuildEventSignature(EventInfo evt, NullabilityInfoContext nullability)
     {
         var prefix = BuildEventPrefix(evt);
-        var handler = evt.EventHandlerType is null ? "EventHandler" : GetReadableTypeName(evt.EventHandlerType);
+        var handler = evt.EventHandlerType is null ? "EventHandler" : GetAnnotatedTypeName(evt.EventHandlerType, evt, nullability);
         return $"{prefix}event {handler} {evt.Name}".Trim();
     }
 
-    private static string BuildConstructorSignature(ConstructorInfo ctor, Type declaringType)
+    private static string BuildConstructorSignature(ConstructorInfo ctor, Type declaringType, NullabilityInfoContext nullability)
     {
         var prefix = BuildMethodPrefix(ctor);
         var name = GetReadableTypeName(declaringType);
         var parameters = ctor.GetParameters()
-            .Select(BuildParameterSignature)
+            .Select(parameter => BuildParameterSignature(parameter, nullability))
             .ToList();
         return $"{prefix}{name}({string.Join(", ", parameters)})".Trim();
     }
@@ -687,7 +695,7 @@ public static partial class WebApiDocsGenerator
             var homeDrive = Environment.GetEnvironmentVariable("HOMEDRIVE");
             var homePath = Environment.GetEnvironmentVariable("HOMEPATH");
             if (!string.IsNullOrWhiteSpace(homeDrive) && !string.IsNullOrWhiteSpace(homePath))
-                AddCandidate(Path.Combine(homeDrive + homePath, ".nuget", "packages"));
+                AddCandidate(Path.Combine(homeDrive + homePath.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar), ".nuget", "packages"));
 
             var specialFolderProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             if (!string.IsNullOrWhiteSpace(specialFolderProfile))

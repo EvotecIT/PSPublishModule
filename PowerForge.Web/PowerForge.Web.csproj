@@ -49,6 +49,7 @@
     <EmbeddedResource Include="Assets\ApiDocs\api-header.html" />
     <EmbeddedResource Include="Assets\ApiDocs\api-footer.html" />
     <EmbeddedResource Include="Assets\WebMcp\site-search.v1.js" />
+    <EmbeddedResource Include="Assets\Audit\layout.js" />
     <EmbeddedResource Include="Assets\Media\media-viewer.v1.js" />
     <EmbeddedResource Include="Assets\Media\media-viewer.v1.css" />
     <EmbeddedResource Include="Assets\SitemapProtocol\sitemap.xsd" />
