@@ -5,7 +5,7 @@ using System.Linq;
 using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Text.Json;
-using System.Xml.Linq;
+using PowerForge.Web;
 
 namespace PowerForge.Web.Cli;
 
@@ -83,12 +83,12 @@ internal static partial class WebPipelineRunner
                 throw new FileNotFoundException($"indexnow: sitemap file not found: {sitemapPath}");
             if (!string.IsNullOrWhiteSpace(sitemapStatePath))
             {
-                sitemapCheckpoint = IndexNowSitemapCheckpoint.Load(sitemapPath, sitemapStatePath, baseUrl ?? string.Empty, endpointValues);
+                sitemapCheckpoint = IndexNowSitemapCheckpoint.Load(sitemapPath, sitemapStatePath, baseUrl ?? string.Empty, endpointValues, siteRoot);
                 urls.AddRange(sitemapCheckpoint.ChangedUrls);
             }
             else
             {
-                urls.AddRange(ReadSitemapLocUrls(sitemapPath));
+                urls.AddRange(WebLocalSitemapReader.Read(sitemapPath, baseUrl, siteRoot).Entries.Select(entry => entry.Url));
             }
         }
 
@@ -239,6 +239,9 @@ internal static partial class WebPipelineRunner
             var keyPath = ResolvePath(baseDir, GetString(step, "keyPath") ?? GetString(step, "key-path"));
             var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
             var keyLocation = GetString(step, "keyLocation") ?? GetString(step, "key-location");
+            if (!string.IsNullOrWhiteSpace(sitemapPath) && File.Exists(sitemapPath))
+                inputs.AddRange(WebLocalSitemapReader.Read(sitemapPath,
+                    GetString(step, "baseUrl") ?? GetString(step, "base-url"), siteRoot, allowMissing: true).InputPaths);
             foreach (var input in new[] { sitemapPath, urlFilePath, keyPath }
                          .Concat(EnumerateIndexNowKeyCandidates(baseDir, siteRoot, keyLocation)
                              .Select(static candidate => candidate.Path)))
@@ -512,27 +515,6 @@ internal static partial class WebPipelineRunner
                     yield return trimmed;
             }
         }
-    }
-
-    private static IEnumerable<string> ReadSitemapLocUrls(string sitemapPath)
-    {
-        XDocument document;
-        try
-        {
-            document = XDocument.Load(sitemapPath, LoadOptions.None);
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException($"indexnow: failed to parse sitemap '{sitemapPath}': {ex.Message}", ex);
-        }
-
-        return document
-            .Descendants()
-            .Where(static node => node.Name.LocalName.Equals("loc", StringComparison.OrdinalIgnoreCase))
-            .Select(node => (node.Value ?? string.Empty).Trim())
-            .Where(static value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
     }
 
     private static IEnumerable<string> BuildIndexNowUrlsFromUpdatedFiles(string baseUrl, string siteRoot, string[] updatedFiles)

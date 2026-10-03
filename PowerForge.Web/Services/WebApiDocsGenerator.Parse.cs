@@ -14,12 +14,8 @@ namespace PowerForge.Web;
 /// <summary>Generates API documentation artifacts from XML docs.</summary>
 public static partial class WebApiDocsGenerator
 {
-    private static ApiDocModel ParseXml(string xmlPath, Assembly? assembly, WebApiDocsOptions options, List<string> warnings)
+    private static XDocument LoadXmlDocumentation(string xmlPath)
     {
-        var apiDoc = new ApiDocModel();
-        if (!File.Exists(xmlPath))
-            return apiDoc;
-
         using var stream = File.OpenRead(xmlPath);
         XDocument doc;
         try
@@ -32,28 +28,22 @@ public static partial class WebApiDocsGenerator
         }
         var docElement = doc.Element("doc");
         if (docElement is null) throw new InvalidDataException($"XML documentation requires a doc root: {xmlPath}");
+        if (docElement.Element("members") is null) throw new InvalidDataException($"XML documentation requires a members element: {xmlPath}");
+        return doc;
+    }
 
+    private static ApiDocModel ParseXml(XDocument doc, Assembly? assembly, WebApiDocsOptions options,
+        IReadOnlyDictionary<string, XElement> memberLookup)
+    {
+        var apiDoc = new ApiDocModel();
+        var docElement = doc.Element("doc")!;
         var assemblyElement = docElement.Element("assembly");
         if (assemblyElement is not null)
         {
             apiDoc.AssemblyName = assemblyElement.Element("name")?.Value ?? string.Empty;
         }
 
-        var members = docElement.Element("members");
-        if (members is null) throw new InvalidDataException($"XML documentation requires a members element: {xmlPath}");
-
-        var memberLookup = new Dictionary<string, XElement>(StringComparer.Ordinal);
-        foreach (var member in members.Elements("member"))
-        {
-            var memberName = member.Attribute("name")?.Value;
-            if (string.IsNullOrWhiteSpace(memberName))
-                continue;
-            if (!memberLookup.ContainsKey(memberName))
-                memberLookup[memberName] = member;
-        }
-        if (assembly is not null)
-            ResolveImplicitInheritDoc(assembly, memberLookup, warnings);
-
+        var members = docElement.Element("members")!;
         foreach (var member in members.Elements("member"))
         {
             var name = member.Attribute("name")?.Value;

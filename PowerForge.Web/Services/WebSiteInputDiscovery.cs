@@ -15,7 +15,19 @@ internal static class WebSiteInputDiscovery
         }
         Add(plan.ContentRoot);
         foreach (var input in plan.ContentRoots) Add(input);
-        foreach (var collection in plan.Collections) Add(collection.InputPath);
+        foreach (var collection in spec.Collections ?? Array.Empty<CollectionSpec>())
+        {
+            if (collection is null) continue;
+            var resolved = CollectionPresetDefaults.Apply(collection);
+            foreach (var source in WebSiteBuilder.EnumerateCollectionFilesForDiscovery(plan, resolved))
+            {
+                Add(source);
+                var (_, body) = FrontMatterParser.Parse(File.ReadAllText(source));
+                var sourceRoot = WebSiteBuilder.ResolveCollectionRootForDiscovery(plan, resolved, source);
+                Add(sourceRoot);
+                inputs.AddRange(IncludePreprocessor.DiscoverDependencies(body, plan.RootPath, source, sourceRoot));
+            }
+        }
         Add(plan.ProjectsRoot);
         Add(plan.SharedRoot);
         Add(string.IsNullOrWhiteSpace(spec.ThemesRoot) ? "themes" : spec.ThemesRoot);

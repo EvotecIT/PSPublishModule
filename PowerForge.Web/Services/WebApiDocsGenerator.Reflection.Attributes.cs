@@ -997,7 +997,9 @@ public static partial class WebApiDocsGenerator
             var paramElement = i < ownParamElements.Count
                 ? ownParamElements[i]
                 : (i < inheritedParamElements.Count ? inheritedParamElements[i] : null);
-            var paramName = paramElement is not null
+            var paramName = ownParamElements.Count == 0 && parameterNames is not null && i < parameterNames.Count
+                ? parameterNames[i]
+                : paramElement is not null
                 ? paramElement.Attribute("name")?.Value ?? $"arg{i + 1}"
                 : (parameterNames != null && i < parameterNames.Count && !string.IsNullOrWhiteSpace(parameterNames[i])
                     ? parameterNames[i]

@@ -1824,9 +1824,7 @@ internal static partial class WebPipelineRunner
             GetString(step, "news-out"));
         var newsPaths = GetArrayOfStrings(step, "newsPaths") ?? GetArrayOfStrings(step, "news-paths");
         var newsMetadata = GetSitemapNewsMetadata(step);
-        var newsEnabled = !string.IsNullOrWhiteSpace(newsOutput) ||
-                          (newsPaths?.Length ?? 0) > 0 ||
-                          newsMetadata is not null;
+        var newsEnabled = IsSitemapNewsEnabled(step);
         var imageOutput = ResolvePath(baseDir,
             GetString(step, "imageOutput") ??
             GetString(step, "imageOut") ??
@@ -1974,6 +1972,12 @@ internal static partial class WebPipelineRunner
 
         return value.Trim().Replace('_', '-').Trim('/').ToLowerInvariant();
     }
+
+    private static bool IsSitemapNewsEnabled(JsonElement step) =>
+        !string.IsNullOrWhiteSpace(GetString(step, "newsOutput") ?? GetString(step, "newsOut") ??
+            GetString(step, "news-output") ?? GetString(step, "news-out")) ||
+        (GetArrayOfStrings(step, "newsPaths") ?? GetArrayOfStrings(step, "news-paths")) is { Length: > 0 } ||
+        GetSitemapNewsMetadata(step) is not null;
 
     private static WebSitemapNewsOptions? GetSitemapNewsMetadata(JsonElement step)
     {

@@ -5,8 +5,10 @@ namespace PowerForge.Tests;
 
 public sealed class WebApiDocsInheritanceIntegrityTests
 {
-    [Fact]
-    public void AssemblyResolvesImplicitInterfaceAndBaseDocumentationAndCSharpModifiers()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AssemblyResolvesImplicitInterfaceAndBaseDocumentationAndCSharpModifiers(bool separateContracts)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-api-inheritance-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -28,10 +30,23 @@ public sealed class WebApiDocsInheritanceIntegrityTests
                   <member name="M:PowerForge.Tests.WebInheritanceImplementation.Execute(System.String)"><inheritdoc/></member>
                 </members></doc>
                 """);
+            var xmlPaths = new[] { xml };
+            if (separateContracts)
+            {
+                var document = System.Xml.Linq.XDocument.Load(xml);
+                var contracts = document.Root!.Element("members")!.Elements("member")
+                    .Where(member => !member.Attribute("name")!.Value.Contains("WebInheritanceImplementation", StringComparison.Ordinal)).ToArray();
+                var contractPath = Path.Combine(root, "contracts.xml");
+                new System.Xml.Linq.XDocument(new System.Xml.Linq.XElement("doc",
+                    new System.Xml.Linq.XElement("members", contracts))).Save(contractPath);
+                foreach (var contract in contracts) contract.Remove();
+                document.Save(xml);
+                xmlPaths = new[] { xml, contractPath };
+            }
             var output = Path.Combine(root, "api");
             var result = WebApiDocsGenerator.Generate(new WebApiDocsOptions
             {
-                XmlPath = xml, AssemblyPath = typeof(WebInheritanceImplementation).Assembly.Location,
+                XmlPaths = xmlPaths, AssemblyPath = typeof(WebInheritanceImplementation).Assembly.Location,
                 OutputPath = output, Format = "json", IncludeUndocumentedTypes = false
             });
             Assert.DoesNotContain(result.Warnings, warning => warning.Contains("Implicit inheritdoc", StringComparison.Ordinal));
@@ -47,6 +62,7 @@ public sealed class WebApiDocsInheritanceIntegrityTests
             var methods = json.RootElement.GetProperty("methods").EnumerateArray().ToArray();
             var run = methods.Single(method => method.GetProperty("name").GetString() == "Run");
             Assert.DoesNotContain("virtual", run.GetProperty("signature").GetString()!);
+            Assert.Equal("value", run.GetProperty("parameters")[0].GetProperty("name").GetString());
             var execute = methods.Single(method => method.GetProperty("name").GetString() == "Execute");
             Assert.Contains("override", execute.GetProperty("signature").GetString()!);
             Assert.Contains("sealed", execute.GetProperty("signature").GetString()!);
@@ -69,7 +85,7 @@ public class WebInheritanceBase
 
 public sealed class WebInheritanceImplementation : WebInheritanceBase, IWebInheritanceContract<string>
 {
-    public string Run(string input) => input;
+    public string Run(string value) => value;
     public string Name => "Fixture";
     public event EventHandler Changed { add { } remove { } }
     public sealed override void Execute(string input) { }

@@ -77,6 +77,9 @@ internal static partial class WebPipelineRunner
         if (task.Equals("build", StringComparison.OrdinalIgnoreCase) &&
             (GetBool(step, "syncSources") ?? GetBool(step, "sync-sources") ?? false))
             return false;
+        // Publication eligibility changes with the clock even when every input byte is unchanged.
+        if (task.Equals("sitemap", StringComparison.OrdinalIgnoreCase) && IsSitemapNewsEnabled(step))
+            return false;
 
         if (task.Equals("release-hub", StringComparison.OrdinalIgnoreCase))
         {
@@ -671,11 +674,13 @@ internal static partial class WebPipelineRunner
             case "sitemap":
             {
                 var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
+                if (string.IsNullOrWhiteSpace(siteRoot)) siteRoot = lastBuildOutPath;
                 var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
                 if (string.IsNullOrWhiteSpace(outPath) && !string.IsNullOrWhiteSpace(siteRoot))
                     outPath = Path.Combine(siteRoot, "sitemap.xml");
                 var outputs = new List<string>();
                 outputs.AddRange(ResolveOutputCandidates(baseDir, outPath));
+                var xmlOutputs = new List<string>(outputs);
 
                 var htmlEnabled = GetBool(step, "html") ?? false;
                 var htmlOutput = ResolvePath(baseDir,
@@ -707,16 +712,13 @@ internal static partial class WebPipelineRunner
                     GetString(step, "newsOut") ??
                     GetString(step, "news-output") ??
                     GetString(step, "news-out"));
-                var newsEnabled = !string.IsNullOrWhiteSpace(newsOutput) ||
-                                  (GetArrayOfStrings(step, "newsPaths")?.Length ?? 0) > 0 ||
-                                  (GetArrayOfStrings(step, "news-paths")?.Length ?? 0) > 0 ||
-                                  GetString(step, "newsMetadata") is not null ||
-                                  GetString(step, "news-metadata") is not null;
+                var newsEnabled = IsSitemapNewsEnabled(step);
                 if (newsEnabled)
                 {
                     if (string.IsNullOrWhiteSpace(newsOutput) && !string.IsNullOrWhiteSpace(siteRoot))
                         newsOutput = Path.Combine(siteRoot, "sitemap-news.xml");
                     outputs.AddRange(ResolveOutputCandidates(baseDir, newsOutput));
+                    xmlOutputs.AddRange(ResolveOutputCandidates(baseDir, newsOutput));
                 }
 
                 var imageOutput = ResolvePath(baseDir,
@@ -732,6 +734,7 @@ internal static partial class WebPipelineRunner
                     if (string.IsNullOrWhiteSpace(imageOutput) && !string.IsNullOrWhiteSpace(siteRoot))
                         imageOutput = Path.Combine(siteRoot, "sitemap-images.xml");
                     outputs.AddRange(ResolveOutputCandidates(baseDir, imageOutput));
+                    xmlOutputs.AddRange(ResolveOutputCandidates(baseDir, imageOutput));
                 }
 
                 var videoOutput = ResolvePath(baseDir,
@@ -747,6 +750,7 @@ internal static partial class WebPipelineRunner
                     if (string.IsNullOrWhiteSpace(videoOutput) && !string.IsNullOrWhiteSpace(siteRoot))
                         videoOutput = Path.Combine(siteRoot, "sitemap-videos.xml");
                     outputs.AddRange(ResolveOutputCandidates(baseDir, videoOutput));
+                    xmlOutputs.AddRange(ResolveOutputCandidates(baseDir, videoOutput));
                 }
 
                 var indexOutput = ResolvePath(baseDir,
@@ -755,7 +759,24 @@ internal static partial class WebPipelineRunner
                     GetString(step, "indexOut") ??
                     GetString(step, "index-out"));
                 if (!string.IsNullOrWhiteSpace(indexOutput))
+                {
                     outputs.AddRange(ResolveOutputCandidates(baseDir, indexOutput));
+                    xmlOutputs.AddRange(ResolveOutputCandidates(baseDir, indexOutput));
+                }
+                var baseUrl = GetString(step, "baseUrl") ?? GetString(step, "base-url");
+                try
+                {
+                    var config = ResolvePath(baseDir, GetString(step, "config"));
+                    if (string.IsNullOrWhiteSpace(baseUrl) && !string.IsNullOrWhiteSpace(config) && File.Exists(config))
+                        baseUrl = ResolveSitemapBaseUrl(WebSiteSpecLoader.LoadWithPath(config).Spec,
+                            GetString(step, "language") ?? GetString(step, "lang"));
+                    foreach (var xml in xmlOutputs.Where(File.Exists))
+                        outputs.AddRange(WebLocalSitemapReader.Read(xml, baseUrl, siteRoot, allowMissing: true).InputPaths);
+                }
+                catch (Exception error) when (error is IOException or InvalidOperationException or System.Xml.XmlException or JsonException)
+                {
+                    // Changed/corrupt endpoints invalidate the stored output stamp; execution reports input errors.
+                }
 
                 return outputs
                     .Distinct(StringComparer.OrdinalIgnoreCase)

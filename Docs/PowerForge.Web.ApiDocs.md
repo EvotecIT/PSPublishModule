@@ -14,7 +14,9 @@ when publishing a reference from XML alone.
 
 With an assembly, implicit `<inheritdoc/>` resolves documented base members and
 implemented interface members, including generic interfaces, properties, and
-events. Supply the inherited documentation with the input; unresolved implicit
+events. Documentation supplied through `XmlPaths` shares one inheritance lookup,
+so contract and implementation records can live in separate files. Supply the
+inherited documentation with the inputs; unresolved implicit
 inheritance produces a warning. An explicit `cref` remains supported.
 
 Malformed C# XML or PowerShell help stops generation before replacing existing

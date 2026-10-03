@@ -123,7 +123,7 @@ public static partial class WebSitemapGenerator
                 if (!options.IncludeNoIndexHtml && HtmlDeclaresNoIndex(file)) continue;
                 var route = NormalizeRoute(relative);
                 if (string.IsNullOrWhiteSpace(route)) continue;
-                var entry = BuildEntryFromHtmlFile(file, route);
+                var entry = BuildEntryFromHtmlFile(file, route, baseUrl);
                 renderedSignals[route] = (entry.Canonical, entry.PublicationDate, entry.NoIndex);
                 if (entry.NoIndex && !options.IncludeNoIndexHtml && !options.IncludeNoIndexPages)
                     continue;

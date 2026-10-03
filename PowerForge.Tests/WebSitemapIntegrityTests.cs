@@ -8,6 +8,27 @@ public sealed class WebSitemapIntegrityTests
 {
     private static readonly XNamespace Ns = "http://www.sitemaps.org/schemas/sitemap/0.9";
 
+    [Theory]
+    [InlineData("./", "")]
+    [InlineData("../topic/", "")]
+    [InlineData("//example.test/docs/topic/", "")]
+    [InlineData("topic/", "<base href='/docs/'>")]
+    public void RenderedSelfCanonicalUsesDocumentUrlAndBase(string canonical, string documentBase)
+    {
+        WithSite(root =>
+        {
+            Directory.CreateDirectory(Path.Combine(root, "docs", "topic"));
+            File.WriteAllText(Path.Combine(root, "docs", "topic", "index.html"),
+                $"{documentBase}<link rel='canonical' href='{canonical}'>");
+            var result = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root, BaseUrl = "https://example.test", IncludeTextFiles = false
+            });
+            Assert.Equal(new[] { "https://example.test/docs/topic/" },
+                XDocument.Load(result.OutputPath).Descendants(Ns + "loc").Select(node => node.Value));
+        });
+    }
+
     [Fact]
     public void CanonicalAndExclusionPolicyAppliesAfterAllEntrySources()
     {

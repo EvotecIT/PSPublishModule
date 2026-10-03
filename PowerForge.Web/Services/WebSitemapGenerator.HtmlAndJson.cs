@@ -25,10 +25,10 @@ public static partial class WebSitemapGenerator
     private static readonly Regex TimeTagRegex = new("<time\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
     private static readonly string[] NoIndexMetaNames = { "robots", "googlebot", "bingbot", "slurp" };
 
-    private static WebSitemapEntry BuildEntryFromHtmlFile(string filePath, string route)
+    private static WebSitemapEntry BuildEntryFromHtmlFile(string filePath, string route, string baseUrl)
     {
         var content = TryReadHtmlContent(filePath);
-        var signals = string.IsNullOrWhiteSpace(content) ? default : ReadCanonicalAndPublication(content!);
+        var signals = string.IsNullOrWhiteSpace(content) ? default : ReadCanonicalAndPublication(content!, ResolveAbsoluteUrl(baseUrl, route));
         var section = ResolveSectionFromRoute(route);
         var title = string.IsNullOrWhiteSpace(content) ? null : TryReadHtmlTitleFromContent(content!);
         if (string.IsNullOrWhiteSpace(title))

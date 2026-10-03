@@ -6,7 +6,7 @@ namespace PowerForge.Web;
 
 public static partial class WebSitemapGenerator
 {
-    private static (string? Canonical, string? PublicationDate, bool NoIndex) ReadCanonicalAndPublication(string html)
+    private static (string? Canonical, string? PublicationDate, bool NoIndex) ReadCanonicalAndPublication(string html, string documentUrl)
     {
         var document = HtmlParser.ParseWithHtmlAgilityPack(html);
         string? canonical = null;
@@ -36,6 +36,14 @@ public static partial class WebSitemapGenerator
                 }
                 catch (JsonException) { /* Invalid optional structured data is not a publication date. */ }
             }
+        }
+        if (!string.IsNullOrWhiteSpace(canonical) && Uri.TryCreate(documentUrl, UriKind.Absolute, out var documentUri))
+        {
+            var baseHref = document.DocumentNode.Descendants("base")
+                .Select(node => node.Attributes["href"]?.Value).FirstOrDefault(value => value is not null);
+            var canonicalBase = Uri.TryCreate(documentUri, WebUtility.HtmlDecode(baseHref), out var documentBase)
+                ? documentBase : documentUri;
+            if (Uri.TryCreate(canonicalBase, canonical, out var resolved)) canonical = resolved.AbsoluteUri;
         }
         return (canonical, publicationDate, noIndex);
     }
@@ -71,7 +79,7 @@ public static partial class WebSitemapGenerator
             var hasSignals = renderedSignals.TryGetValue(entry.Path, out var signals);
             if (!hasSignals && TryResolveHtmlFileForRoute(siteRoot, entry.Path, out var htmlPath) && TryReadHtmlContent(htmlPath) is { } html)
             {
-                signals = ReadCanonicalAndPublication(html);
+                signals = ReadCanonicalAndPublication(html, ResolveAbsoluteUrl(baseUrl, entry.Path));
                 hasSignals = true;
             }
             if (hasSignals)

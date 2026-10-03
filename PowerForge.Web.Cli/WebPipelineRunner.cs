@@ -271,6 +271,10 @@ internal static partial class WebPipelineRunner
 
             try
             {
+                // A preceding sitemap step can create index leaves absent during initial validation.
+                if (task.Equals("indexnow", StringComparison.OrdinalIgnoreCase))
+                    ValidateIndexNowOutputPaths(enabledIndexNowSteps, baseDir, pipelineSourcePaths,
+                        profileEnabled || profileWriteOnFail ? profilePath : null, cacheEnabled ? cachePath : null);
                 ExecuteTask(task, step, label, baseDir, fast, effectiveMode, logger, ref lastBuildOutPath, ref lastBuildUpdatedFiles, stepResult);
             }
             catch (Exception ex)
@@ -309,7 +313,8 @@ internal static partial class WebPipelineRunner
                     Message = stepResult.Message
                 };
                 cacheUpdated = true;
-                cacheOutputs[cacheKey] = expectedOutputs;
+                cacheOutputs[cacheKey] = task.Equals("sitemap", StringComparison.OrdinalIgnoreCase)
+                    ? GetExpectedStepOutputs(task, step, baseDir, lastBuildOutPath) : expectedOutputs;
             }
             result.Steps.Add(stepResult);
             stepResultsByIndex[stepIndex] = stepResult;

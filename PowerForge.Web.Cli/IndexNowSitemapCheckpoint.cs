@@ -4,8 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
-using System.Xml;
-using System.Xml.Linq;
+using PowerForge.Web;
 
 namespace PowerForge.Web.Cli;
 
@@ -16,7 +15,6 @@ namespace PowerForge.Web.Cli;
 internal sealed class IndexNowSitemapCheckpoint
 {
     private const int SchemaVersion = 2;
-    private const long MaxSitemapBytes = 50L * 1024 * 1024;
     private const long MaxCheckpointBytes = 32L * 1024 * 1024;
 
     private sealed class StoredState
@@ -45,7 +43,7 @@ internal sealed class IndexNowSitemapCheckpoint
 
     /// <summary>Loads the current sitemap and the previous successful submission state.</summary>
     internal static IndexNowSitemapCheckpoint Load(
-        string sitemapPath, string statePath, string baseUrl, IReadOnlyList<string> endpoints)
+        string sitemapPath, string statePath, string baseUrl, IReadOnlyList<string> endpoints, string? siteRoot = null)
     {
         if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var site) || site.Scheme != Uri.UriSchemeHttps ||
             !string.IsNullOrEmpty(site.UserInfo) || !string.IsNullOrEmpty(site.Query) || !string.IsNullOrEmpty(site.Fragment))
@@ -56,7 +54,10 @@ internal sealed class IndexNowSitemapCheckpoint
         if (IndexNowFilePathIdentity.MayReferToSameFile(sitemapFullPath, stateFullPath))
             throw new InvalidOperationException("indexnow: sitemap and sitemapStatePath must be different files.");
 
-        var current = ReadSitemap(sitemapFullPath, site);
+        var sitemap = WebLocalSitemapReader.Read(sitemapFullPath, baseUrl, siteRoot);
+        if (sitemap.InputPaths.Any(input => IndexNowFilePathIdentity.MayReferToSameFile(input, stateFullPath)))
+            throw new InvalidOperationException("indexnow: sitemap inputs and sitemapStatePath must be different files.");
+        var current = ReadSitemap(sitemap, site);
         var stored = ReadState(stateFullPath);
         if (current.Count == 0 && stored is not null && stored.Urls.Count > 0)
             throw new InvalidOperationException("indexnow: sitemap is empty; preserving the previous successful checkpoint.");
@@ -100,36 +101,21 @@ internal sealed class IndexNowSitemapCheckpoint
         }
     }
 
-    private static Dictionary<string, string?> ReadSitemap(string path, Uri site)
+    private static Dictionary<string, string?> ReadSitemap(WebLocalSitemapReader.Result sitemap, Uri site)
     {
-        if (new FileInfo(path).Length > MaxSitemapBytes)
-            throw new InvalidOperationException("indexnow: sitemap exceeds the 50 MiB protocol limit.");
-
-        var settings = new XmlReaderSettings
-        {
-            DtdProcessing = DtdProcessing.Prohibit,
-            XmlResolver = null,
-            MaxCharactersInDocument = MaxSitemapBytes
-        };
-        using var reader = XmlReader.Create(path, settings);
-        var document = XDocument.Load(reader, LoadOptions.None);
-        var root = document.Root;
-        if (root is null || !string.Equals(root.Name.LocalName, "urlset", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("indexnow: sitemapStatePath requires a URL sitemap, not a sitemap index.");
-
         // The submission path deduplicates URLs without regard to case. Reject those aliases here
         // rather than marking an unsent sitemap entry as successfully submitted.
         var seenSubmissionUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var urls = new Dictionary<string, string?>(StringComparer.Ordinal);
-        foreach (var entry in root.Elements().Where(static element => element.Name.LocalName == "url"))
+        foreach (var entry in sitemap.Entries)
         {
-            var value = entry.Elements().FirstOrDefault(static element => element.Name.LocalName == "loc")?.Value.Trim();
+            var value = entry.Url;
             if (!Uri.TryCreate(value, UriKind.Absolute, out var url) || url.Scheme != Uri.UriSchemeHttps ||
                 !string.Equals(url.Authority, site.Authority, StringComparison.OrdinalIgnoreCase) ||
                 !string.IsNullOrEmpty(url.UserInfo) || !string.IsNullOrEmpty(url.Fragment))
                 throw new InvalidOperationException("indexnow: stateful sitemap contains a URL outside the configured HTTPS host.");
 
-            var lastmod = entry.Elements().FirstOrDefault(static element => element.Name.LocalName == "lastmod")?.Value.Trim();
+            var lastmod = entry.LastModified;
             if (!seenSubmissionUrls.Add(url.AbsoluteUri) || !urls.TryAdd(url.AbsoluteUri, lastmod))
                 throw new InvalidOperationException("indexnow: stateful sitemap contains a duplicate URL.");
         }
