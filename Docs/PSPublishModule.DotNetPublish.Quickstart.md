@@ -42,6 +42,12 @@ Invoke-DotNetPublish -ConfigPath '.\powerforge.dotnetpublish.json' -Plan
 Invoke-DotNetPublish -ConfigPath '.\powerforge.dotnetpublish.json' -ExitCode
 ```
 
+Interactive runs use the same Spectre progress layout and step ledger as module and package builds. The ledger preserves completed work and marks later steps skipped after a failure. Publish rows identify each step's selected framework, runtime, and style.
+
+Use `-NoInteractive` for plain console logging, or `-Quiet` to suppress progress and informational output while retaining result objects and errors. Both options preserve the build workflow.
+
+Failures write PowerShell errors in every display mode. Use `-ErrorAction Stop` when subsequent script statements must not run after failure. `-ExitCode` instead returns the result without an error record, sets the PowerShell host exit status to 0 or 1, and permits subsequent statements. Configuration and preparation failures follow the same rule.
+
 ## Fast Run Overrides (No File Edits Needed)
 
 Use overrides for local/CI experiments while keeping base JSON stable:

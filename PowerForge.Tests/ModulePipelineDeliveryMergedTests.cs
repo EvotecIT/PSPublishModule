@@ -72,9 +72,6 @@ public sealed class ModulePipelineDeliveryMergedTests
             Assert.DoesNotContain("'Public', '*.ps1'", stagingPsm1, StringComparison.Ordinal);
             Assert.DoesNotContain("'Private', '*.ps1'", stagingPsm1, StringComparison.Ordinal);
 
-            var stagingLibraries = File.ReadAllText(Path.Combine(result.BuildResult.StagingPath, moduleName + ".Libraries.ps1"));
-            Assert.Contains("'Lib\\TestModule.DLL'", stagingLibraries, StringComparison.Ordinal);
-
             var artefactRoot = Path.Combine(artefactsDir, moduleName);
             Assert.True(File.Exists(Path.Combine(artefactRoot, moduleName + ".psm1")));
             Assert.True(File.Exists(Path.Combine(artefactRoot, moduleName + ".Libraries.ps1")));

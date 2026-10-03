@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Management.Automation;
 using PowerForge;
+using PowerForge.ConsoleShared;
 
 namespace PSPublishModule;
 
@@ -169,11 +170,16 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
     public SwitchParameter Validate { get; set; }
 
     /// <summary>
-    /// Disables interactive output mode. Reserved for future UI parity.
+    /// Disables the interactive Spectre progress view.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetSettings)]
     [Parameter(ParameterSetName = ParameterSetConfig)]
     public SwitchParameter NoInteractive { get; set; }
+
+    /// <summary>Suppresses progress and informational output while preserving results and errors.</summary>
+    [Parameter(ParameterSetName = ParameterSetSettings)]
+    [Parameter(ParameterSetName = ParameterSetConfig)]
+    public SwitchParameter Quiet { get; set; }
 
     /// <summary>
     /// Sets host exit code: 0 on success, 1 on failure.
@@ -189,9 +195,13 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
     {
         var boundParameters = MyInvocation?.BoundParameters;
         var isVerbose = boundParameters?.ContainsKey("Verbose") == true;
-        var logger = new CmdletLogger(this, isVerbose);
-        var exitCodeMode = ExitCode.IsPresent;
-
+        var interactive = !Quiet.IsPresent && !NoInteractive.IsPresent &&
+                          SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
+        var buffer = interactive || Quiet.IsPresent || ExitCode.IsPresent
+            ? new BufferedLogger { IsVerbose = isVerbose }
+            : null;
+        ILogger logger = buffer is null ? new CmdletLogger(this, isVerbose) : buffer;
+        DotNetPublishWorkflowResult workflow;
         try
         {
             var preparation = new DotNetPublishPreparationService(logger).Prepare(
@@ -221,47 +231,64 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
                 },
                 warn: message => WriteWarning(message));
 
-            var workflow = new DotNetPublishWorkflowService(
+
+            workflow = new DotNetPublishWorkflowService(
                 logger,
-                createProgressReporter: plan => NoInteractive.IsPresent
-                    ? null
-                    : new DotNetPublishCmdletProgressReporter(
-                        message => Host.UI.WriteLine(message),
-                        WriteProgress,
-                        plan.Steps.Length))
-                .Execute(preparation);
-
-            if (!string.IsNullOrWhiteSpace(workflow.JsonOutputPath))
-            {
-                WriteObject(workflow.JsonOutputPath);
-                if (exitCodeMode) Host.SetShouldExit(0);
-                return;
-            }
-
-            if (workflow.Plan is not null)
-            {
-                WriteObject(DotNetPublishPlanRedactor.RedactInPlace(workflow.Plan));
-                if (exitCodeMode) Host.SetShouldExit(0);
-                return;
-            }
-
-            var result = workflow.Result ?? throw new InvalidOperationException("DotNet publish workflow did not produce a result.");
-            WriteObject(result);
-            if (!result.Succeeded)
-            {
-                var error = string.IsNullOrWhiteSpace(result.ErrorMessage)
-                    ? "DotNet publish failed."
-                    : result.ErrorMessage!;
-                throw new InvalidOperationException(error);
-            }
-
-            if (exitCodeMode) Host.SetShouldExit(0);
+                runPublish: (plan, progress) =>
+                {
+                    var runner = new DotNetPublishPipelineRunner(logger);
+                    return interactive
+                        ? SpectreDotNetPublishConsoleUi.RunInteractive(
+                            plan, preparation.SourceLabel, detailed => runner.Run(plan, detailed))
+                        : runner.Run(plan, progress);
+                }).Execute(preparation);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not PipelineStoppedException)
         {
-            WriteError(new ErrorRecord(ex, "InvokeDotNetPublishFailed", ErrorCategory.NotSpecified, null));
-            if (exitCodeMode) Host.SetShouldExit(1);
+            CompleteResult(new DotNetPublishResult { Succeeded = false, ErrorMessage = ex.Message }, ex);
+            return;
         }
+
+        if (!Quiet.IsPresent && buffer is not null)
+        {
+            if (interactive && workflow.Result is not null)
+            {
+                foreach (var entry in buffer.Entries)
+                    if (entry.Level == "warn") WriteWarning(entry.Message);
+            }
+            else
+            {
+                new BufferedLogSupportService().WriteTail(buffer.Entries, new SpectreConsoleLogger { IsVerbose = isVerbose });
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(workflow.JsonOutputPath))
+        {
+            WriteObject(workflow.JsonOutputPath);
+            if (ExitCode.IsPresent) Host.SetShouldExit(0);
+            return;
+        }
+        if (workflow.Plan is not null)
+        {
+            WriteObject(DotNetPublishPlanRedactor.RedactInPlace(workflow.Plan));
+            if (ExitCode.IsPresent) Host.SetShouldExit(0);
+            return;
+        }
+        CompleteResult(workflow.Result ?? new DotNetPublishResult
+        {
+            Succeeded = false,
+            ErrorMessage = "DotNet publish workflow did not produce a result."
+        });
+    }
+
+    private void CompleteResult(DotNetPublishResult result, Exception? error = null)
+    {
+        if (!result.Succeeded && !ExitCode.IsPresent)
+            WriteError(new ErrorRecord(
+                error ?? new InvalidOperationException(result.ErrorMessage ?? "DotNet publish failed."),
+                "InvokeDotNetPublishFailed", ErrorCategory.NotSpecified, ConfigPath));
+        WriteObject(result);
+        if (ExitCode.IsPresent) Host.SetShouldExit(result.Succeeded ? 0 : 1);
     }
 
     private static Dictionary<string, string>? ConvertHashtable(Hashtable? values)
