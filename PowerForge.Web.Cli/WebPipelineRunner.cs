@@ -33,7 +33,7 @@ internal static partial class WebPipelineRunner
         "privateGallery", "private-gallery", "privateGalleryFeed", "private-gallery-feed", "gallery",
         "portalDocs", "portal-docs", "portalDocsIndex", "portal-docs-index", "docs",
         "map", "maps", "input", "inputs", "sources", "mapFiles", "map-files",
-        "xml", "help", "helpPath", "assembly",
+        "xml", "xmls", "xmlPaths", "help", "helpPath", "assembly", "entries",
         "siteOut", "site-out", "outRoot", "out-root", "projectsOut", "projects-out",
         "changelog", "changelogPath", "changelog-path", "releasesPath", "releases-path",
         "discoverRoot", "discover-root",

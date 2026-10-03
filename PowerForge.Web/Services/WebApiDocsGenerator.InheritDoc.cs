@@ -8,7 +8,7 @@ public static partial class WebApiDocsGenerator
     private static bool SameReflectedMember(MemberInfo left, MemberInfo right) =>
         left.Module == right.Module && left.MetadataToken == right.MetadataToken;
 
-    private static void ResolveImplicitInheritDoc(Assembly assembly, IReadOnlyDictionary<string, XElement> members, List<string> warnings)
+    private static void ResolveImplicitInheritDoc(Assembly assembly, Dictionary<string, XElement> members, WebApiDocsOptions options, List<string> warnings)
     {
         var reflected = new Dictionary<string, MemberInfo>(StringComparer.Ordinal);
         const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
@@ -22,14 +22,38 @@ public static partial class WebApiDocsGenerator
                     reflected[DocumentationId(member)] = member;
             }
         }
-        foreach (var pair in members)
+        IReadOnlyList<string>? referenceInputs = null;
+        var loadedReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in members.ToArray())
         {
             var inheritDoc = pair.Value.Element("inheritdoc");
-            if (inheritDoc is null || !string.IsNullOrWhiteSpace(inheritDoc.Attribute("cref")?.Value)) continue;
+            if (inheritDoc is null) continue;
+            var explicitTarget = inheritDoc.Attribute("cref")?.Value;
+            var implicitTarget = string.IsNullOrWhiteSpace(explicitTarget);
             if (!reflected.TryGetValue(pair.Key, out var member)) continue;
-            var target = InheritedDocumentationMembers(member).Select(DocumentationId).FirstOrDefault(members.ContainsKey);
-            if (target is not null) inheritDoc.SetAttributeValue("cref", target);
-            else warnings.Add($"Implicit inheritdoc could not be resolved for {pair.Key}; supply the inherited XML documentation or an explicit cref.");
+            var candidates = InheritedDocumentationMembers(member).ToArray();
+            var target = implicitTarget ? candidates.Select(DocumentationId).FirstOrDefault(members.ContainsKey)
+                : members.ContainsKey(explicitTarget!) ? explicitTarget : null;
+            if (target is null && candidates.Length > 0 && !string.IsNullOrWhiteSpace(options.AssemblyPath))
+            {
+                referenceInputs ??= WebApiDocumentationInputs.Discover(options.AssemblyPath);
+                foreach (var candidate in candidates)
+                {
+                    var owner = candidate is Type candidateType ? candidateType.Assembly : candidate.DeclaringType!.Assembly;
+                    var name = owner == typeof(object).Assembly ? "System.Runtime" : owner.GetName().Name;
+                    foreach (var path in referenceInputs.Where(path => Path.GetFileNameWithoutExtension(path).Equals(name, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        if (!loadedReferences.Add(path)) continue;
+                        var document = LoadXmlDocumentation(path);
+                        foreach (var inherited in document.Root!.Element("members")!.Elements("member"))
+                            if (inherited.Attribute("name")?.Value is { Length: > 0 } id) members.TryAdd(id, inherited);
+                    }
+                }
+                target = implicitTarget ? candidates.Select(DocumentationId).FirstOrDefault(members.ContainsKey)
+                    : members.ContainsKey(explicitTarget!) ? explicitTarget : null;
+            }
+            if (implicitTarget && target is not null) inheritDoc.SetAttributeValue("cref", target);
+            else if (implicitTarget) warnings.Add($"Implicit inheritdoc could not be resolved for {pair.Key}; supply the inherited XML documentation or an explicit cref.");
         }
     }
 
