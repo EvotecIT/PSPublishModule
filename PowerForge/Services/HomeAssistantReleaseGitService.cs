@@ -81,8 +81,27 @@ internal sealed class HomeAssistantReleaseGitService {
     private static string NormalizeGitPath(string path)
         => path.Trim().Replace('\\', '/');
 
-    internal void EnsureNoTrackedChanges(string repositoryRoot) {
-        var result = Run(repositoryRoot, "status", "--porcelain", "--untracked-files=no");
+    internal bool HasTrackedChanges(string repositoryRoot, string relativePath) {
+        var result = RunAllowFailure(repositoryRoot, "diff", "--quiet", "HEAD", "--", ":(literal)" + relativePath);
+        if (result.ExitCode == 0) return false;
+        if (result.ExitCode == 1) return true;
+        throw new InvalidOperationException("Unable to inspect generated release asset changes.");
+    }
+
+    internal void EnsureNoTrackedChanges(string repositoryRoot, string? generatedAssetName = null) {
+        // A plugin may keep its generated HACS bundle under source control. Only
+        // its working-tree contents may change; staged edits and mode changes
+        // still violate the immutable source boundary.
+        if (generatedAssetName is not null) {
+            var staged = RunAllowFailure(repositoryRoot, "diff", "--cached", "--quiet", "HEAD");
+            var metadata = Run(repositoryRoot, "diff", "--summary", "HEAD", "--", ":(literal)" + generatedAssetName);
+            if (staged.ExitCode != 0 || !string.IsNullOrWhiteSpace(metadata.StdOut))
+                throw new InvalidOperationException("The release build changed tracked files or Git metadata outside generated asset contents.");
+        }
+        var arguments = new List<string> { "status", "--porcelain", "--untracked-files=no", "--", "." };
+        if (generatedAssetName is not null)
+            arguments.Add(":(exclude,literal)" + generatedAssetName);
+        var result = Run(repositoryRoot, arguments.ToArray());
         if (!string.IsNullOrWhiteSpace(result.StdOut))
             throw new InvalidOperationException("The release build changed tracked files after the immutable release commit was created.\n" + result.StdOut.Trim());
     }
