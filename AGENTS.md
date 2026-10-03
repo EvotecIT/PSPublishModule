@@ -65,7 +65,7 @@ Recommended environment variable (makes site scripts deterministic):
 ## What To Read First (Canonical)
 
 1. `Docs\PowerForge.Web.Roadmap.md` (inventory: Have/Partial/Missing + milestones)
-2. `Docs\PowerForge.Web.AgentHandoff.md` (high-signal handoff + commands)
+2. `Docs\PowerForge.Web.Pipeline.md` (pipeline commands and execution)
 3. `Docs\PowerForge.Web.QualityGates.md` (CI/dev contract, baselines, budgets)
 4. `Docs\PowerForge.Web.WebsiteStarter.md` (golden path for building new sites without surprises)
 5. `Docs\PowerForge.Web.Parity.md` (rough parity notes vs DocFX/Hugo/Astro/etc.)

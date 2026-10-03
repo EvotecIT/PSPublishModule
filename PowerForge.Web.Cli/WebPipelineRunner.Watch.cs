@@ -21,29 +21,34 @@ internal static partial class WebPipelineRunner
         string[]? onlyTasks = null,
         string[]? skipTasks = null)
     {
-        var cts = new CancellationTokenSource();
-        Console.CancelKeyPress += (_, e) =>
+        using var cts = new CancellationTokenSource();
+        ConsoleCancelEventHandler cancelHandler = (_, e) =>
         {
             e.Cancel = true;
             cts.Cancel();
         };
+        Console.CancelKeyPress += cancelHandler;
 
         logger.Info("Watch mode enabled (Ctrl+C to stop).");
         var exitCode = 0;
-        WatchPipelineLoop(
-            pipelinePath,
-            logger,
-            cts.Token,
-            forceProfile,
-            fast,
-            mode,
-            onlyTasks,
-            skipTasks,
-            onRunCompleted: res => exitCode = res.Success ? 0 : 1);
+        try
+        {
+            WatchPipelineLoop(
+                pipelinePath,
+                logger,
+                cts.Token,
+                forceProfile,
+                fast,
+                mode,
+                onlyTasks,
+                skipTasks,
+                onRunCompleted: res => exitCode = res.Success ? 0 : 1);
+        }
+        finally { Console.CancelKeyPress -= cancelHandler; }
         return exitCode;
     }
 
-    private static void WatchPipelineLoop(
+    internal static void WatchPipelineLoop(
         string pipelinePath,
         WebConsoleLogger logger,
         CancellationToken token,
@@ -56,8 +61,7 @@ internal static partial class WebPipelineRunner
     {
         var normalizedPipelinePath = Path.GetFullPath(pipelinePath.Trim().Trim('"'));
         var baseDir = Path.GetDirectoryName(normalizedPipelinePath) ?? ".";
-        var ignoreRoots = CollectWatchIgnoreRoots(pipelinePath, baseDir);
-        var ignoreRootStrings = ignoreRoots.Select(p => p.Replace('\\', '/')).ToArray();
+        var ignoreRoots = CollectWatchIgnoreRoots(pipelinePath, baseDir, out _);
 
         var gate = new object();
         var pending = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -73,7 +77,7 @@ internal static partial class WebPipelineRunner
             if (string.IsNullOrWhiteSpace(fullPath))
                 return;
 
-            if (IsUnderAnyRoot(fullPath, ignoreRoots))
+            if (IsUnderAnyRoot(fullPath, Volatile.Read(ref ignoreRoots)))
                 return;
 
             // Drop noisy temp/editor artifacts.
@@ -173,14 +177,32 @@ internal static partial class WebPipelineRunner
 
         void RunOnce()
         {
-            var result = RunPipeline(
-                pipelinePath,
-                logger,
-                forceProfile: forceProfile,
-                fast: fast,
-                mode: mode,
-                onlyTasks: onlyTasks,
-                skipTasks: skipTasks);
+            WebPipelineResult result;
+            try
+            {
+                var currentIgnoreRoots = CollectWatchIgnoreRoots(pipelinePath, baseDir, out var validConfiguration);
+                if (validConfiguration) Volatile.Write(ref ignoreRoots, currentIgnoreRoots);
+                result = RunPipeline(
+                    pipelinePath,
+                    logger,
+                    forceProfile: forceProfile,
+                    fast: fast,
+                    mode: mode,
+                    onlyTasks: onlyTasks,
+                    skipTasks: skipTasks);
+            }
+            catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+            {
+                result = new WebPipelineResult
+                {
+                    Success = false,
+                    StepCount = 1,
+                    Steps = new List<WebPipelineStepResult>
+                    {
+                        new() { Task = "configuration", Success = false, Message = FormatFailureMessage(ex) }
+                    }
+                };
+            }
 
             foreach (var step in result.Steps)
             {
@@ -226,8 +248,9 @@ internal static partial class WebPipelineRunner
         return false;
     }
 
-    private static List<string> CollectWatchIgnoreRoots(string pipelinePath, string baseDir)
+    private static List<string> CollectWatchIgnoreRoots(string pipelinePath, string baseDir, out bool validConfiguration)
     {
+        validConfiguration = false;
         var ignore = new List<string>();
 
         void AddRoot(string? value)
@@ -271,6 +294,7 @@ internal static partial class WebPipelineRunner
                     }
                 }
             }
+            validConfiguration = true;
         }
         catch
         {

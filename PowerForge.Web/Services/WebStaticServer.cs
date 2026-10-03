@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
+using PowerForge;
 
 namespace PowerForge.Web;
 
@@ -60,7 +61,7 @@ public static class WebStaticServer
         if (string.IsNullOrWhiteSpace(rootPath))
             throw new ArgumentException("Root path is required.", nameof(rootPath));
 
-        var basePath = Path.GetFullPath(rootPath);
+        var basePath = FileSystemPathSafety.ResolveParentDirectoryAliases(Path.GetFullPath(rootPath));
         if (!Directory.Exists(basePath))
             throw new DirectoryNotFoundException($"Directory does not exist: {basePath}");
 
@@ -78,7 +79,7 @@ public static class WebStaticServer
                 log?.Invoke($"Requested port {requestedPort} is busy. Using {boundPort}.");
             log?.Invoke($"Listening on {prefix} (Ctrl+C to stop)");
 
-            token.Register(() =>
+            using var cancellationRegistration = token.Register(() =>
             {
                 try { listener.Close(); } catch { }
             });
@@ -102,7 +103,7 @@ public static class WebStaticServer
                 if (context is null)
                     continue;
 
-                _ = Task.Run(() => HandleRequest(context, basePath), token);
+                _ = Task.Run(() => HandleRequest(context, basePath));
             }
         }
     }
@@ -184,13 +185,37 @@ public static class WebStaticServer
 
     private static void HandleRequest(HttpListenerContext context, string basePath)
     {
+        try
+        {
+            HandleRequestCore(context, basePath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            // Files may disappear during a rebuild. Invalid paths and linked entries must never be served.
+            try
+            {
+                context.Response.StatusCode = ex is InvalidOperationException or InvalidDataException or ArgumentException ? 404 : 503;
+                context.Response.ContentLength64 = 0;
+            }
+            catch (Exception responseError) when (responseError is HttpListenerException or ObjectDisposedException or InvalidOperationException) { }
+        }
+        catch (HttpListenerException) { } // The preview client disconnected.
+        finally
+        {
+            try { context.Response.Close(); }
+            catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException) { }
+        }
+    }
+
+    private static void HandleRequestCore(HttpListenerContext context, string basePath)
+    {
         var request = context.Request;
         var response = context.Response;
 
         if (request.HttpMethod != "GET" && request.HttpMethod != "HEAD")
         {
             response.StatusCode = 405;
-            response.Close();
+            response.Headers["Allow"] = "GET, HEAD";
             return;
         }
 
@@ -205,35 +230,35 @@ public static class WebStaticServer
             var spaFallback = ResolveSpaFallback(basePath, path);
             if (!string.IsNullOrWhiteSpace(spaFallback) && File.Exists(spaFallback))
             {
-                WriteFile(response, spaFallback, 200, request.HttpMethod == "HEAD");
+                WriteFile(response, basePath, spaFallback, 200, request.HttpMethod == "HEAD");
                 return;
             }
 
             var notFound = Path.Combine(basePath, "404.html");
             if (File.Exists(notFound))
             {
-                WriteFile(response, notFound, 404);
+                WriteFile(response, basePath, notFound, 404, request.HttpMethod == "HEAD");
                 return;
             }
 
             var payload = Encoding.UTF8.GetBytes("404 - Not Found");
             response.StatusCode = 404;
             response.ContentType = "text/plain; charset=utf-8";
-            response.OutputStream.Write(payload, 0, payload.Length);
-            response.Close();
+            response.ContentLength64 = payload.Length;
+            if (request.HttpMethod != "HEAD") response.OutputStream.Write(payload, 0, payload.Length);
             return;
         }
 
-        WriteFile(response, filePath, 200, request.HttpMethod == "HEAD");
+        WriteFile(response, basePath, filePath, 200, request.HttpMethod == "HEAD");
     }
 
     private static string? ResolveSpaFallback(string basePath, string urlPath)
     {
-        if (string.IsNullOrWhiteSpace(urlPath)) return null;
+        if (string.IsNullOrWhiteSpace(urlPath) || Path.HasExtension(urlPath)) return null;
         var normalized = urlPath.TrimEnd('/');
-        if (normalized.StartsWith("/docs", StringComparison.OrdinalIgnoreCase))
+        if (normalized.Equals("/docs", StringComparison.OrdinalIgnoreCase) || normalized.StartsWith("/docs/", StringComparison.OrdinalIgnoreCase))
             return Path.Combine(basePath, "docs", "index.html");
-        if (normalized.StartsWith("/playground", StringComparison.OrdinalIgnoreCase))
+        if (normalized.Equals("/playground", StringComparison.OrdinalIgnoreCase) || normalized.StartsWith("/playground/", StringComparison.OrdinalIgnoreCase))
             return Path.Combine(basePath, "playground", "index.html");
         return null;
     }
@@ -353,17 +378,21 @@ public static class WebStaticServer
         return full.StartsWith(normalizedRoot, FileSystemPathComparison);
     }
 
-    private static void WriteFile(HttpListenerResponse response, string filePath, int statusCode, bool headOnly = false)
+    private static void WriteFile(HttpListenerResponse response, string basePath, string filePath, int statusCode, bool headOnly)
     {
-        var bytes = File.ReadAllBytes(filePath);
+        FileSystemPathSafety.RejectReparsePoints(filePath, basePath, "Preview file");
+        FileSystemPathSafety.RequireRegularFile(filePath);
         response.StatusCode = statusCode;
         response.ContentType = GetContentType(Path.GetExtension(filePath));
-        response.ContentLength64 = bytes.Length;
-        if (!headOnly)
+        if (headOnly)
         {
-            response.OutputStream.Write(bytes, 0, bytes.Length);
+            response.ContentLength64 = new FileInfo(filePath).Length;
+            return;
         }
-        response.Close();
+        using var file = new FileStream(filePath, FileMode.Open, FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete, 64 * 1024, FileOptions.SequentialScan);
+        response.ContentLength64 = file.Length;
+        file.CopyTo(response.OutputStream, 64 * 1024);
     }
 
     internal static string GetContentType(string extension)

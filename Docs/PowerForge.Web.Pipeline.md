@@ -8,6 +8,17 @@ This guide documents the JSON formats used by `powerforge-web pipeline` and
 Pipeline specs execute a list of steps in order. Paths are resolved relative to
 the pipeline JSON file location.
 
+Keep build and publish output separate from source directories, for example
+`out: "./_site"`. Website generation and .NET publish reject output paths that
+would overwrite their configuration, content, assets, or project sources before
+cleanup begins. A linked output root is also rejected.
+For .NET publish, `clean: true` also refuses folders containing C#, F#, or Visual
+Basic source or project files. If source files are intentional publish artifacts,
+omit `clean` or use a fresh output folder.
+
+With `--output json`, stdout contains the JSON result and progress logs go to
+stderr, so callers can parse stdout directly.
+
 Ecosystem stats and project catalog telemetry keep package metadata links within
 the configured organization's public GitHub repository inventory. NuGet and
 PowerShell Gallery project URLs for repositories absent from that inventory are
@@ -83,7 +94,7 @@ Notes:
 - `--mode <name>`: sets a pipeline mode label used for step filtering (see "Step modes" below).
 - `--only <task[,task...]>`: run only the specified tasks.
 - `--skip <task[,task...]>`: skip the specified tasks.
-- `--watch`: rerun the pipeline when files change (watches the pipeline folder, ignores output folders).
+- `--watch`: rerun the pipeline when files change (watches the pipeline folder, ignores output folders). An incomplete configuration save reports an error and keeps watching; the next valid edit rebuilds. Output ignore paths refresh when the pipeline changes.
 
 ### Security model
 

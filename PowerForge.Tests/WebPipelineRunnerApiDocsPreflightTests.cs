@@ -77,7 +77,7 @@ public class WebPipelineRunnerApiDocsPreflightTests
                       "out": "./_site/api",
                       "format": "json",
                       "failOnWarnings": true,
-                      "suppressWarnings": [ "PFWEB.APIDOCS.SOURCE" ],
+                      "suppressWarnings": [ "PFWEB.APIDOCS.SOURCE", "PFWEB.APIDOCS.INPUT.ACCESSIBILITY" ],
                       "sourceUrlMappings": [
                         {
                           "pathPrefix": "PowerForge.Web",
@@ -256,7 +256,8 @@ public class WebPipelineRunnerApiDocsPreflightTests
                       "format": "json",
                       "failOnWarnings": true,
                       "sourceRoot": ".",
-                      "sourceUrl": "https://github.com/EvotecIT/TestRepo/blob/main/{path}#L{line}"
+                      "sourceUrl": "https://github.com/EvotecIT/TestRepo/blob/main/{path}#L{line}",
+                      "suppressWarnings": [ "PFWEB.APIDOCS.INPUT.ACCESSIBILITY" ]
                     }
                   ]
                 }
@@ -1715,7 +1716,8 @@ public class WebPipelineRunnerApiDocsPreflightTests
                       "format": "json",
                       "failOnWarnings": true,
                       "sourceRoot": ".",
-                      "sourceUrl": "https://github.com/EvotecIT/TestRepo/blob/main/{pathNoRoot}#L{line}"
+                      "sourceUrl": "https://github.com/EvotecIT/TestRepo/blob/main/{pathNoRoot}#L{line}",
+                      "suppressWarnings": [ "PFWEB.APIDOCS.INPUT.ACCESSIBILITY" ]
                     }
                   ]
                 }

@@ -391,6 +391,7 @@ internal static partial class WebPipelineRunner
         if (TrySkipDotNetStepForMissingProject(project, skipIfProjectMissing, stepResult, "dotnet publish"))
             return;
 
+        WebOutputPathGuard.ValidateProject(project, outPath, baseDir, cleanOutput);
         if (cleanOutput)
             WebCliFileSystem.CleanOutputDirectory(outPath);
 

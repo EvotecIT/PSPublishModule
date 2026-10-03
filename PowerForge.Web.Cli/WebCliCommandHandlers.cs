@@ -33,6 +33,7 @@ internal static partial class WebCliCommandHandlers
 
         var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(buildConfig, WebCliJson.Options);
         var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
+        WebOutputPathGuard.ValidateSite(spec, plan, buildOut);
         if (publishSpec.Build.Clean)
             WebCliFileSystem.CleanOutputDirectory(buildOut);
         _ = WebSiteBuilder.Build(spec, plan, buildOut, WebCliJson.Options);

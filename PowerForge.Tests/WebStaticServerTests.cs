@@ -6,7 +6,7 @@ using PowerForge.Web;
 
 namespace PowerForge.Tests;
 
-public class WebStaticServerTests
+public partial class WebStaticServerTests
 {
     [Fact]
     public void GetContentType_RecognizesAnimatedPng()

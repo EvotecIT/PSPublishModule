@@ -56,6 +56,7 @@ public class WebCliApiDocsPreflightTests
                 "--format", "json",
                 "--fail-on-warnings",
                 "--suppress-warning", "PFWEB.APIDOCS.SOURCE",
+                "--suppress-warning", "PFWEB.APIDOCS.INPUT.ACCESSIBILITY",
                 "--source-map", "PowerForge.Web=https://example.invalid/blob/main/{path}#L{line}"
             };
 
@@ -154,7 +155,8 @@ public class WebCliApiDocsPreflightTests
                 "--format", "json",
                 "--fail-on-warnings",
                 "--source-root", root,
-                "--source-url", "https://github.com/EvotecIT/TestRepo/blob/main/{pathNoRoot}#L{line}"
+                "--source-url", "https://github.com/EvotecIT/TestRepo/blob/main/{pathNoRoot}#L{line}",
+                "--suppress-warning", "PFWEB.APIDOCS.INPUT.ACCESSIBILITY"
             };
 
             var exitCode = WebCliCommandHandlers.HandleSubCommand("apidocs", args, outputJson: true, logger: new WebConsoleLogger(), outputSchemaVersion: 1);

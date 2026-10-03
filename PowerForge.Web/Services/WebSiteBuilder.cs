@@ -56,6 +56,7 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(outputPath)) throw new ArgumentException("Output path is required.", nameof(outputPath));
 
         var outDir = Path.GetFullPath(outputPath.Trim().Trim('"'));
+        WebOutputPathGuard.ValidateSite(spec, plan, outDir);
         Directory.CreateDirectory(outDir);
 
         var metaDir = Path.Combine(outDir, "_powerforge");
