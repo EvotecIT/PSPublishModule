@@ -79,7 +79,7 @@ public sealed class ReleaseCatalogPreparationServiceTests : IDisposable
             Assert.Equal("/qn /norestart", package.InstallerParameters);
             Assert.False(package.IsSilentInstall);
         });
-        Assert.Equal(new[] { "X64", "ARM64" }, plan.DesktopPackages.SelectMany(package => package.Architectures));
+        Assert.Equal(new[] { "X64", "Arm64" }, plan.DesktopPackages.SelectMany(package => package.Architectures));
     }
 
     [Theory]

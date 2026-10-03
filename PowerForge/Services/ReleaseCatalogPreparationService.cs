@@ -81,7 +81,7 @@ internal sealed class ReleaseCatalogPreparationService
             {
                 PackageUrl = entry.InstallerUrl,
                 Languages = new[] { package.PackageLocale ?? winget.PackageLocale ?? "en-US" },
-                Architectures = new[] { entry.Architecture.ToUpperInvariant() },
+                Architectures = new[] { entry.Architecture == "arm64" ? "Arm64" : entry.Architecture.ToUpperInvariant() },
                 IsSilentInstall = false, InstallerParameters = "/qn /norestart", PackageType = "msi"
             });
         }
