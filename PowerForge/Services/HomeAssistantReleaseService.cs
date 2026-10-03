@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Threading;
 
 namespace PowerForge;
@@ -195,7 +196,8 @@ public sealed class HomeAssistantReleaseService {
             GetRequiredAssetName(snapshot),
             string.Empty);
         result.AssetFiles.AddRange(_repository.BuildAssets(snapshot, root, spec.ReleaseVersion));
-        _git.EnsureNoTrackedChanges(root);
+        if (!string.Equals(_git.GetHeadSha(root), expectedCommit, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The release build changed the immutable checkout commit.");
 
         if (!string.IsNullOrWhiteSpace(result.RequiredAssetName)) {
             var asset = result.AssetFiles.SingleOrDefault(path =>
@@ -205,6 +207,21 @@ public sealed class HomeAssistantReleaseService {
         } else if (result.AssetFiles.Count > 0) {
             throw new InvalidOperationException("The repository produced release assets without declaring a required HACS asset name.");
         }
+
+        string? generatedAssetName = null;
+        if (snapshot.Kind == HomeAssistantRepositoryKind.LovelacePlugin) {
+            var generated = Path.Combine(root, snapshot.HacsFileName!);
+            if (File.Exists(generated)) {
+                var packaged = result.AssetFiles.Single();
+                using var generatedStream = File.OpenRead(generated);
+                using var packagedStream = File.OpenRead(packaged);
+                using var hash = SHA256.Create();
+                if (!hash.ComputeHash(generatedStream).SequenceEqual(hash.ComputeHash(packagedStream)))
+                    throw new InvalidOperationException("The generated HACS bundle does not match the packaged release asset.");
+                generatedAssetName = snapshot.HacsFileName;
+            }
+        }
+        _git.EnsureNoTrackedChanges(root, generatedAssetName);
 
         result.Message = "Release assets were built from the exact prepared commit without GitHub write credentials.";
         return result;
