@@ -11,7 +11,7 @@ Builds an Apple app for local installation using xcodebuild.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-AppleAppBuild [-ProjectPath] <string> -Scheme <string> [-Workspace] [-ProductName <string>] [-Configuration <string>] [-Platform <ApplePlatform>] [-Destination <string>] [-DeviceIdentifier <string>] [-Device <string>] [-DerivedDataPath <string>] [-AppPath <string>] [-XcodeBuild <string>] [-Xcrun <string>] [-AllowProvisioningUpdates] [-UseBuildMirror] [-BuildRoot <string>] [-BuildMirrorPath <string>] [-Rsync <string>] [-AdditionalArgument <string[]>] [-TimeoutMinutes <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
+New-AppleAppBuild [-ProjectPath] <string> -Scheme <string> [-Workspace] [-ProductName <string>] [-Configuration <string>] [-OptimizeSwift] [-Platform <ApplePlatform>] [-Destination <string>] [-DeviceIdentifier <string>] [-Device <string>] [-DerivedDataPath <string>] [-AppPath <string>] [-XcodeBuild <string>] [-Xcrun <string>] [-AllowProvisioningUpdates] [-UseBuildMirror] [-BuildRoot <string>] [-BuildMirrorPath <string>] [-Rsync <string>] [-AdditionalArgument <string[]>] [-TimeoutMinutes <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -176,6 +176,22 @@ Physical device identifier used for destination resolution.
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -OptimizeSwift
+Optimize Swift while retaining the selected configuration and compilation conditions.
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Management.Automation;
+using System.Runtime.ExceptionServices;
 using PowerForge;
 using PowerForge.ConsoleShared;
 
@@ -176,7 +177,7 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = ParameterSetConfig)]
     public SwitchParameter NoInteractive { get; set; }
 
-    /// <summary>Suppresses progress and informational output while preserving results and errors.</summary>
+    /// <summary>Suppresses progress and informational output while preserving results, warnings and errors.</summary>
     [Parameter(ParameterSetName = ParameterSetSettings)]
     [Parameter(ParameterSetName = ParameterSetConfig)]
     public SwitchParameter Quiet { get; set; }
@@ -200,7 +201,16 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
         var buffer = interactive || Quiet.IsPresent || ExitCode.IsPresent
             ? new BufferedLogger { IsVerbose = isVerbose }
             : null;
-        ILogger logger = buffer is null ? new CmdletLogger(this, isVerbose) : buffer;
+        ExceptionDispatchInfo? warningStop = null;
+        ILogger logger = new PublishLogger(buffer is null ? new CmdletLogger(this, isVerbose) : buffer, message =>
+        {
+            try { WriteWarning(message); }
+            catch (ActionPreferenceStopException ex)
+            {
+                warningStop = ExceptionDispatchInfo.Capture(ex);
+                throw;
+            }
+        });
         DotNetPublishWorkflowResult workflow;
         try
         {
@@ -229,7 +239,7 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
                     Plan = Plan.IsPresent,
                     Validate = Validate.IsPresent
                 },
-                warn: message => WriteWarning(message));
+                warn: message => logger.Warn(message));
 
 
             workflow = new DotNetPublishWorkflowService(
@@ -245,21 +255,16 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
         }
         catch (Exception ex) when (ex is not PipelineStoppedException)
         {
+            warningStop?.Throw();
             CompleteResult(new DotNetPublishResult { Succeeded = false, ErrorMessage = ex.Message }, ex);
             return;
         }
 
-        if (!Quiet.IsPresent && buffer is not null)
+        // The engine reports step exceptions as results. A PowerShell warning stop must still terminate the cmdlet.
+        warningStop?.Throw();
+        if (!Quiet.IsPresent && buffer is not null && (!interactive || workflow.Result is null))
         {
-            if (interactive && workflow.Result is not null)
-            {
-                foreach (var entry in buffer.Entries)
-                    if (entry.Level == "warn") WriteWarning(entry.Message);
-            }
-            else
-            {
-                new BufferedLogSupportService().WriteTail(buffer.Entries, new SpectreConsoleLogger { IsVerbose = isVerbose });
-            }
+            new BufferedLogSupportService().WriteTail(buffer.Entries, new SpectreConsoleLogger { IsVerbose = isVerbose });
         }
 
         if (!string.IsNullOrWhiteSpace(workflow.JsonOutputPath))
@@ -289,6 +294,17 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
                 "InvokeDotNetPublishFailed", ErrorCategory.NotSpecified, ConfigPath));
         WriteObject(result);
         if (ExitCode.IsPresent) Host.SetShouldExit(result.Succeeded ? 0 : 1);
+    }
+
+    // Keep warning preferences synchronous even when progress output and errors are buffered.
+    private sealed class PublishLogger(ILogger output, Action<string> warning) : ILogger
+    {
+        public bool IsVerbose => output.IsVerbose;
+        public void Info(string message) => output.Info(message);
+        public void Success(string message) => output.Success(message);
+        public void Warn(string message) => warning(message);
+        public void Error(string message) => output.Error(message);
+        public void Verbose(string message) => output.Verbose(message);
     }
 
     private static Dictionary<string, string>? ConvertHashtable(Hashtable? values)

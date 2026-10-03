@@ -11,12 +11,12 @@ Executes DotNet publish engine from DSL settings or an existing JSON config.
 ## SYNTAX
 ### Settings (Default)
 ```powershell
-Invoke-DotNetPublish -Settings <scriptblock> [-ProjectRoot <string>] [-Profile <string>] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-OutputPath <string>] [-MsBuildProperty <hashtable>] [-SkipInstallers] [-SkipRestore] [-SkipBuild] [-NoPublishSign] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-ExitCode] [<CommonParameters>]
+Invoke-DotNetPublish -Settings <scriptblock> [-ProjectRoot <string>] [-Profile <string>] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-OutputPath <string>] [-MsBuildProperty <hashtable>] [-SkipInstallers] [-SkipRestore] [-SkipBuild] [-NoPublishSign] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-Quiet] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Config
 ```powershell
-Invoke-DotNetPublish -ConfigPath <string> [-ProjectRoot <string>] [-Profile <string>] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-OutputPath <string>] [-MsBuildProperty <hashtable>] [-SkipInstallers] [-SkipRestore] [-SkipBuild] [-NoPublishSign] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-ExitCode] [<CommonParameters>]
+Invoke-DotNetPublish -ConfigPath <string> [-ProjectRoot <string>] [-Profile <string>] [-Target <string[]>] [-Runtimes <string[]>] [-Frameworks <string[]>] [-Styles <DotNetPublishStyle[]>] [-OutputPath <string>] [-MsBuildProperty <hashtable>] [-SkipInstallers] [-SkipRestore] [-SkipBuild] [-NoPublishSign] [-JsonOnly] [-JsonPath <string>] [-Plan] [-Validate] [-NoInteractive] [-Quiet] [-ExitCode] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -140,7 +140,7 @@ Accept wildcard characters: False
 ```
 
 ### -NoInteractive
-Disables interactive output mode. Reserved for future UI parity.
+Disables the interactive Spectre progress view.
 
 ```yaml
 Type: SwitchParameter
@@ -226,6 +226,22 @@ Optional project root override used to resolve relative publish inputs and outpu
 
 ```yaml
 Type: String
+Parameter Sets: Settings, Config
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Quiet
+Suppresses progress and informational output while preserving results, warnings and errors.
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: Settings, Config
 Aliases: None
 Possible values:
