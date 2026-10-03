@@ -23,6 +23,12 @@ public sealed class DotNetPublishMsiPackageMetadata
     /// <summary>Windows Installer UpgradeCode property.</summary>
     public string? UpgradeCode { get; set; }
 
+    /// <summary>Fixed install scope when declared by the MSI, otherwise null.</summary>
+    public string? Scope { get; set; }
+
+    /// <summary>Installer architecture from the MSI summary template, otherwise null.</summary>
+    public string? Architecture { get; set; }
+
     /// <summary>Error captured when package metadata could not be read.</summary>
     public string? ReadError { get; set; }
 }

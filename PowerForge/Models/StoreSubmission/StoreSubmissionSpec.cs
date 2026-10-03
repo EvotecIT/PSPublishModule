@@ -83,6 +83,9 @@ internal sealed class StoreSubmissionTarget
     public string MinimumSystemRam { get; set; } = "None";
 
     public StoreSubmissionDesktopPackage[] DesktopPackages { get; set; } = Array.Empty<StoreSubmissionDesktopPackage>();
+
+    /// <summary>JSON package array produced by release prepare-catalog, relative to this configuration.</summary>
+    public string? DesktopPackagesPath { get; set; }
 }
 
 internal sealed class StoreSubmissionRequest

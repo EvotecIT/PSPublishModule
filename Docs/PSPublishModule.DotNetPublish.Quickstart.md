@@ -225,6 +225,40 @@ Normal signed publishing uses the selected working tree. It checks the Git worki
 
 ## Submitting To Partner Center
 
+For an existing signed MSI release, prepare catalog inputs from downloaded release
+assets without rebuilding or reserving another version. Run this on Windows:
+
+```powershell
+powerforge release prepare-catalog --config ./powerforge.release.json `
+    --manifest ./downloads/release-manifest.json --checksums ./downloads/SHA256SUMS.txt `
+    --asset-root ./downloads --out ./catalog
+winget validate ./catalog/Winget/Contoso.App/1.2.3
+wingetcreate submit ./catalog/Winget/Contoso.App/1.2.3
+```
+
+The release config supplies one enabled `Winget.Packages` entry with MSI installer
+selectors. The manifest uses PowerForge release schema version 1. Preparation
+verifies the manifest and installer checksums, Windows Authenticode trust, MSI
+name, version and architecture, and writes three WinGet manifests plus
+`desktop-packages.json`. MSI ProductCode, UpgradeCode and fixed machine scope
+come from the selected packages. The output directory must be new. Installer
+URLs must resolve to immutable, public HTTPS downloads of those same bytes;
+preparation does not test remote availability, embedded payload signatures or
+installation behavior. Qualify those separately before submission.
+
+For a `DesktopInstaller` Store target, set `DesktopPackagesPath` to that generated
+JSON array instead of copying package URLs and switches into the submission
+config. The path is relative to the Store config file. Defining both
+`DesktopPackages` and `DesktopPackagesPath` is rejected. Generated MSI entries
+specify `/qn /norestart` for silent installation.
+
+The first Store product reservation and submission, including age ratings,
+must be created in Partner Center. Later package updates use the existing
+`powerforge store submit` API path. Desktop installer submissions require the
+desktop API scope `https://api.store.microsoft.com/.default`, seller ID and an
+authorized Partner Center application. Keep credentials in environment variables
+or the supported secret source. See [Microsoft's first-submission requirements](https://learn.microsoft.com/en-us/windows/apps/publish/store-submission-api).
+
 - Use `powerforge store submit` after `StorePackages[]` has produced a `*.msixupload` or `*.appxupload` artifact.
 - Keep Store submission in a separate config file, typically `powerforge.store.submit.json` or `Build/store.submit.json`.
 - Prefer `ManifestPath` + `ManifestRoot` for app packages so the submit step selects the artifact recorded by the DotNetPublish manifest instead of hardcoding the generated Store output directory.

@@ -81,6 +81,10 @@
                 "PackageType": { "type": [ "string", "null" ] }
               }
             }
+          },
+          "DesktopPackagesPath": {
+            "type": [ "string", "null" ],
+            "description": "Path to the JSON package array produced by release prepare-catalog. Use instead of DesktopPackages."
           }
         }
       }
