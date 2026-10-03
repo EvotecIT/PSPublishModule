@@ -110,9 +110,12 @@ function GetDocumentationParameterDeclaringMetadata([type]$implementingType, [st
       $parameterName,
       [System.Reflection.BindingFlags]'Instance,Public,FlattenHierarchy')
     if ($null -ne $property -and $null -ne $property.DeclaringType) {
+      $declaringType = $property.DeclaringType
+      # XML member identities use the generic definition, without closed type arguments.
+      if ($declaringType.IsGenericType) { $declaringType = $declaringType.GetGenericTypeDefinition() }
       return [pscustomobject]@{
-        TypeName = [string]$property.DeclaringType.FullName
-        AssemblyPath = $(try { [string]$property.DeclaringType.Assembly.Location } catch { $null })
+        TypeName = [string]$declaringType.FullName
+        AssemblyPath = $(try { [string]$declaringType.Assembly.Location } catch { $null })
       }
     }
   } catch {

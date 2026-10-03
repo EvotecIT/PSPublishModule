@@ -259,7 +259,7 @@ internal sealed class DocumentationParameterHelp
     [DataMember(Name = "nullableArrayRanks")]
     public List<int> NullableArrayRanks { get; set; } = new();
 
-    /// <summary>Full name of the .NET type that declares the cmdlet property.</summary>
+    /// <summary>Full name of the .NET type definition that declares the cmdlet property, for XML documentation lookup.</summary>
     [DataMember(Name = "declaringType")]
     public string? DeclaringType { get; set; }
 

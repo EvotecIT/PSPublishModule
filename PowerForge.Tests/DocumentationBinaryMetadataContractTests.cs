@@ -45,11 +45,14 @@ public sealed class DocumentationBinaryMetadataContractTests
             var nullable = Assert.Single(command.Parameters, parameter => parameter.Name == "NullableMode");
             var nullableMatrix = Assert.Single(command.Parameters, parameter => parameter.Name == "NullableModeMatrix");
             var inherited = Assert.Single(command.Parameters, parameter => parameter.Name == "InheritedLabel");
+            var genericInherited = Assert.Single(command.Parameters, parameter => parameter.Name == "GenericLabel");
 
             Assert.Equal("BinaryDocMode", nullable.Type);
             Assert.Equal("BinaryDocMode[,]", nullableMatrix.Type);
             Assert.Equal(new[] { "Advanced", "Basic" }, nullable.PossibleValues.OrderBy(value => value));
             Assert.Equal("Inherited label documented in a separate declaring assembly.", inherited.Description);
+            Assert.Equal("Generic-base label documented in a separate declaring assembly.", genericInherited.Description);
+            Assert.Equal("BinaryDocInheritedBase.GenericDocumentationMetadataContractCommandBase`1", genericInherited.DeclaringType);
             Assert.DoesNotContain(command.Parameters, parameter => parameter.Name == "HiddenTransport");
             Assert.All(command.Syntax, syntax => Assert.DoesNotContain("HiddenTransport", syntax.Text, StringComparison.Ordinal));
 
@@ -96,6 +99,8 @@ public sealed class DocumentationBinaryMetadataContractTests
             Assert.True(File.Exists(bundledAlias));
             var primaryDocument = System.Xml.Linq.XDocument.Load(primary);
             var aliasDocument = System.Xml.Linq.XDocument.Load(binaryAlias);
+            Assert.Contains("Generic-base label documented in a separate declaring assembly.", File.ReadAllText(primary), StringComparison.Ordinal);
+            Assert.Contains("Generic-base label documented in a separate declaring assembly.", File.ReadAllText(Path.Combine(root, "Docs", command.Name + ".md")), StringComparison.Ordinal);
             Assert.Equal(primaryDocument.Root!.ToString(), aliasDocument.Root!.ToString());
             Assert.Contains("PowerForgeGeneratedExternalHelpAlias", File.ReadAllText(binaryAlias), StringComparison.Ordinal);
             Assert.Contains(binaryAlias, result.ExternalHelpFilePaths, StringComparer.OrdinalIgnoreCase);
@@ -500,12 +505,6 @@ public sealed class DocumentationBinaryMetadataContractTests
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-binary-alias-case-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
-        if (FrameworkCompatibility.GetPathStringComparison(root) != StringComparison.Ordinal)
-        {
-            try { Directory.Delete(root, true); } catch { }
-            return;
-        }
-
         var stagingRoot = Path.Combine(root, "Module");
         var siblingRoot = Path.Combine(root, "module");
         var primaryDirectory = Path.Combine(stagingRoot, "en-US");
@@ -515,6 +514,11 @@ public sealed class DocumentationBinaryMetadataContractTests
 
         try
         {
+            // An empty directory has no evidence of its case semantics. Probe after the
+            // sibling entries exist, when case-insensitive filesystems alias these paths.
+            if (FrameworkCompatibility.GetPathStringComparison(root) != StringComparison.Ordinal)
+                return;
+
             var primary = Path.Combine(primaryDirectory, "Owner-help.xml");
             var assemblyPath = Path.Combine(siblingBinaryDirectory, "Outside.dll");
             File.WriteAllText(primary, "<helpItems />");
