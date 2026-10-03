@@ -1,7 +1,15 @@
 {
   "schemaVersion": 1,
-  "recordedAtUtc": "2026-10-03T23:12:59.8996127Z",
+  "recordedAtUtc": "2026-10-03T23:16:32.8563275Z",
   "state": "InProgress",
+  "finalReleaseVersion": "3.0.155",
+  "versionSelection": {
+    "reason": "Independent default-branch CLI release occupies public PowerForge.Build 3.0.154",
+    "defaultBranchCheckpoint": "deac0de17",
+    "allEleven155PackageIdsUnoccupiedAtCheckpoint": true,
+    "psGallery155UnoccupiedAtCheckpoint": true,
+    "historical154LocalFeedEvidenceRetained": true
+  },
   "interpretation": "Evidence is bound to its stated package/source identity. This signed local-feed candidate predates the restore-workspace correction. Public-feed availability and final-candidate integration/signing remain separate gates.",
   "target": {
     "os": "Microsoft Windows Server 2025 Standard",
