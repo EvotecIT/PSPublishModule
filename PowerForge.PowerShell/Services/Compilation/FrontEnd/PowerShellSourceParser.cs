@@ -50,6 +50,13 @@ internal static class PowerShellSourceParser
                 .Append(parameterBlock.Extent.Text));
     }
 
+    /// <summary>Reads directly owned using declarations through the shared AST visitor contract.</summary>
+    internal static bool HasUsingStatements(ScriptBlockAst syntax)
+        // Reference assets expose StatementAst while Windows PowerShell returns UsingStatementAst.
+        // A direct getter call binds to that incompatible generic return signature on Desktop.
+        => syntax.Find(node => node is UsingStatementAst && ReferenceEquals(node.Parent, syntax),
+            searchNestedScriptBlocks: false) is not null;
+
     /// <summary>Returns complete authored lines, preserving their original line endings for native error metadata.</summary>
     internal static string GetSourceLines(ParsedSourceDocument document, SourceSpan span)
     {

@@ -88,7 +88,7 @@ internal static class PowerShellTypedExecutableCompiler
         ValidateDependencyTopLevels(parsed.Values, entryPoint);
         ValidateEntryPointDeclarationOrder(entrySource);
         if (nativeScriptEntry && (requestedSources.Length != 1 ||
-            entrySource.Ast.UsingStatements.Count != 0 || entrySource.Ast.ScriptRequirements is not null ||
+            PowerShellSourceParser.HasUsingStatements(entrySource.Ast) || entrySource.Ast.ScriptRequirements is not null ||
             entrySource.Ast.EndBlock?.Statements.Any(static statement => statement is TypeDefinitionAst) == true ||
             entrySource.Ast.BeginBlock is not null || entrySource.Ast.ProcessBlock is not null ||
             entrySource.Ast.DynamicParamBlock is not null ||

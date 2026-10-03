@@ -219,7 +219,7 @@ internal static class PowerShellMappingCommandSemanticBinder
             process.ScriptBlock.EndBlock is null ||
             process.ScriptBlock.EndBlock.Traps?.Count > 0 ||
             process.ScriptBlock.Attributes?.Count > 0 ||
-            process.ScriptBlock.UsingStatements?.Count > 0 ||
+            PowerShellSourceParser.HasUsingStatements(process.ScriptBlock) ||
             process.ScriptBlock.ScriptRequirements is not null)
             return false;
 

@@ -32,7 +32,7 @@ internal static class PowerShellConstantBooleanDelegateSemanticBinder
             block.EndBlock is null ||
             block.EndBlock.Traps?.Count > 0 ||
             block.Attributes?.Count > 0 ||
-            block.UsingStatements?.Count > 0 ||
+            PowerShellSourceParser.HasUsingStatements(block) ||
             block.ScriptRequirements is not null)
             return Reject(diagnostics, "Typed Boolean delegates accept only a plain end block with no lifecycle blocks, traps, attributes, requirements, or using statements.", span);
 

@@ -43,7 +43,7 @@ internal static class PowerShellHybridExecutableEntryPlanner
             return null;
 
         var ast = Parser.ParseFile(fullPath, out _, out var errors);
-        if (errors.Length != 0 || ast.UsingStatements.Count != 0 ||
+        if (errors.Length != 0 || PowerShellSourceParser.HasUsingStatements(ast) ||
             ast.EndBlock?.Statements is not { Count: > 0 } statements ||
             ast.ParamBlock?.Attributes.Count > 0)
             return null;

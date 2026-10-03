@@ -12,7 +12,7 @@ Keep the canonical parser → binder → bound IR → analysis → lowering → 
 
 Generated compiler artifacts accept `net10.0` and `net472`; executables accept only `net10.0`. Hosted artifact qualification targets PowerShell 7.6 and Windows PowerShell 5.1. This is distinct from the shared `PowerForge.PowerShell` host library, whose project still builds `net472;net8.0;net10.0`. Existing 7.4 observations and the host-library build target do not reopen generated-artifact net8 support. Do not remove a shared-library target without checking its consumers.
 
-The last complete five-module `net10.0` census reached **544/565** complete emitted functions, with 21 retained. A later PSSharedGoods-only comparison reached **273/282**, up from 272/282 in that portfolio. The seven-workload external comparison separately recorded **128/183**, followed by a Locksmith2-only increase from 75/100 to 77/100. These snapshots have different revisions and must not be combined into a new portfolio total. The [support-gap inventory](PowerForge.PowerShellCompilation.SupportGaps.md) records the affected packets and execution limits. An emitted Hybrid method may still delegate work to PowerShell.
+The complete October 3 five-module census reaches **545/565** complete emitted functions on `net10.0` and **542/565** on `net472`. The twenty modern-target residuals have named hosted boundaries; three additional legacy residuals have explicit reference or target prerequisites. The separate seven-workload comparison emits **130/183** functions and **130/196** units. All packets preserve their accepted per-function and retained-region dispositions. The [support-gap inventory](PowerForge.PowerShellCompilation.SupportGaps.md) records the pinned inputs and execution limits. An emitted Hybrid method may still delegate work to PowerShell.
 
 ## Delivery order
 
@@ -27,10 +27,10 @@ The last complete five-module `net10.0` census reached **544/565** complete emit
 
 **First: close M29a's common-form qualification gate.** Most of the planned breadth now exists. Prioritize a current, reproducible supported contract before adding more isolated type or command rules.
 
-- [ ] Reconcile failing recurring-gate assertions with the current semantic and diagnostic contracts. Compare against the pre-integration branch to distinguish inherited failures from integration regressions; repair accepted-code defects before new breadth.
+- [x] Reconcile failing recurring-gate assertions with the current semantic and diagnostic contracts. The rebuilt Windows Full baseline passes 1,353 tests and six Strict programs after the inherited assertion repairs and process-lifetime corrections. Subsequent clean-target compiler-host fixes still require current-candidate CI qualification.
 - [x] Refresh the fixed five-module census on both supported targets and the separate seven-workload frontier at one compiler revision. The October 3 ledger records 545/565 complete functions on net10.0, 542/565 on net472, and zero per-function or retained-region losses. The seven external workloads emit 130/183 functions and 130/196 units with zero checkpoint regressions.
 - [x] Classify each remaining function as a justified hosted boundary, a target/source prerequisite, or a reachable semantic gap. The twenty modern-target residuals have named justified hosted boundaries and consumer-driven priorities; the three additional legacy residuals have explicit target/reference prerequisites. Select expansion by a complete consumer workflow.
-- [ ] Reconfirm representative unchanged module and standalone workflows on their claimed hosts, including streams, types/cardinality, errors, continuation, state, stopping, and cleanup. Keep emitted, executed, and runtime-free evidence separate.
+- [x] Reconfirm representative unchanged module and standalone workflows on their claimed hosts, including streams, types/cardinality, errors, continuation, state, stopping, and cleanup. The Windows Full baseline and native Linux lane retain separate hosted and runtime-free evidence; external workload census results remain analysis evidence.
 
 **Completion:** the existing M29a exit gate has current evidence, the recurring gate passes, and every residual has an explicit disposition. This does not require runtime-free translation of arbitrary WPF, directory, native-interoperability, or installer behavior.
 

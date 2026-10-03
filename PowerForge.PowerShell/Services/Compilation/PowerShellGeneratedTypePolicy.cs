@@ -89,13 +89,39 @@ internal static class PowerShellGeneratedTypePolicy
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         if (!PowerShellCompilationPathSafety.PathStartsWith(
                 Path.GetFullPath(location),
-                runtimeDirectory))
+                runtimeDirectory) && !IsFrameworkRuntimeAssembly(type.Assembly, location))
             return false;
         if (string.IsNullOrWhiteSpace(targetFramework))
             return true;
 
         var fullName = type.FullName;
         return !string.IsNullOrWhiteSpace(fullName) && GetTargetTypes(targetFramework!).Contains(fullName!);
+    }
+
+    private static bool IsFrameworkRuntimeAssembly(Assembly assembly, string location)
+    {
+#if NETFRAMEWORK
+        // Desktop hosts load framework assemblies from the GAC as well as Framework64.
+        // Match an implicit approved reference identity rather than trusting arbitrary GAC types.
+        if (!assembly.GlobalAssemblyCache ||
+            !PowerShellCompilationPathSafety.PathStartsWith(Path.GetFullPath(location),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                    "Microsoft.NET", "assembly") + Path.DirectorySeparatorChar) ||
+            !Net472ImplicitReferenceAssemblies.Contains(Path.GetFileName(location), StringComparer.OrdinalIgnoreCase))
+            return false;
+        var referenceRoot = ResolveNet472ReferenceDirectory();
+        if (referenceRoot is null) return false;
+        var referencePath = Path.Combine(referenceRoot, Path.GetFileName(location));
+        if (!File.Exists(referencePath)) return false;
+        var expected = AssemblyName.GetAssemblyName(referencePath);
+        var actual = assembly.GetName();
+        var expectedToken = expected.GetPublicKeyToken();
+        return string.Equals(actual.Name, expected.Name, StringComparison.OrdinalIgnoreCase) &&
+               actual.Version == expected.Version && expectedToken is { Length: > 0 } &&
+               expectedToken.SequenceEqual(actual.GetPublicKeyToken() ?? Array.Empty<byte>());
+#else
+        return false;
+#endif
     }
 
     private static HashSet<string> GetTargetTypes(string targetFramework)
