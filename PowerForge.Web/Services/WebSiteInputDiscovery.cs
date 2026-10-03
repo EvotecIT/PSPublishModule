@@ -7,7 +7,12 @@ internal static class WebSiteInputDiscovery
     {
         var (spec, path) = WebSiteSpecLoader.LoadWithPath(configPath);
         var plan = WebSitePlanner.Plan(spec, path);
-        var inputs = new List<string>(WebSiteSpecLoader.DiscoverConfigurationInputs(path));
+        return Discover(spec, plan, outputRoot);
+    }
+
+    internal static IReadOnlyList<string> Discover(SiteSpec spec, WebSitePlan plan, string? outputRoot)
+    {
+        var inputs = new List<string>(WebSiteSpecLoader.DiscoverConfigurationInputs(plan.ConfigPath));
         void Add(string? input)
         {
             if (!string.IsNullOrWhiteSpace(input))

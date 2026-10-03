@@ -33,7 +33,13 @@ internal static partial class WebCliCommandHandlers
 
         var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(buildConfig, WebCliJson.Options);
         var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
-        WebOutputPathGuard.ValidateSite(spec, plan, buildOut);
+        WebOutputPathGuard.ValidateSite(spec, plan, buildOut, baseDir, publishSpec.Build.Clean);
+        var publishProject = ResolvePathRelative(baseDir, publishSpec.Publish.Project);
+        var publishOut = ResolvePathRelative(baseDir, publishSpec.Publish.Out);
+        WebOutputPathGuard.ValidateProject(publishProject, buildOut, baseDir, publishSpec.Build.Clean);
+        WebOutputPathGuard.ValidateProject(publishProject, publishOut, baseDir);
+        if (publishSpec.Overlay is not null && !string.IsNullOrWhiteSpace(publishSpec.Overlay.Source))
+            WebOutputPathGuard.ValidateSourceInput(buildOut, ResolvePathRelative(baseDir, publishSpec.Overlay.Source));
         if (publishSpec.Build.Clean)
             WebCliFileSystem.CleanOutputDirectory(buildOut);
         _ = WebSiteBuilder.Build(spec, plan, buildOut, WebCliJson.Options);
@@ -55,10 +61,9 @@ internal static partial class WebCliCommandHandlers
             overlayCopied = overlay.CopiedCount;
         }
 
-        var publishOut = ResolvePathRelative(baseDir, publishSpec.Publish.Out);
         var publishResult = WebDotNetRunner.Publish(new WebDotNetPublishOptions
         {
-            ProjectPath = ResolvePathRelative(baseDir, publishSpec.Publish.Project),
+            ProjectPath = publishProject,
             OutputPath = publishOut,
             Configuration = publishSpec.Publish.Configuration,
             Framework = publishSpec.Publish.Framework,

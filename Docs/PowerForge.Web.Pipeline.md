@@ -12,8 +12,8 @@ Keep build and publish output separate from source directories, for example
 `out: "./_site"`. Website generation and .NET publish reject output paths that
 would overwrite their configuration, content, assets, or project sources before
 cleanup begins. A linked output root is also rejected.
-For .NET publish, `clean: true` also refuses folders containing C#, F#, or Visual
-Basic source or project files. If source files are intentional publish artifacts,
+For .NET publish, `clean: true` also refuses folders containing C#, F#, Visual
+Basic, Razor, XAML or resource source, or project files. If source files are intentional publish artifacts,
 omit `clean` or use a fresh output folder.
 
 With `--output json`, stdout contains the JSON result and progress logs go to

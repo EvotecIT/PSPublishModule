@@ -6,13 +6,17 @@ namespace PowerForge.Tests;
 
 public sealed class WebPipelineRunnerWatchRecoveryTests
 {
-    [Fact]
-    public async Task WatchPipeline_RecoversAfterIncompleteConfigurationSave()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task WatchPipeline_RecoversAfterInvalidConfigurationSave(bool invalidOutput)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-watch-recovery-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "content"));
         var pipeline = Path.Combine(root, "pipeline.json");
-        File.WriteAllText(pipeline, "{ incomplete json");
+        File.WriteAllText(pipeline, invalidOutput
+            ? """{"steps":[{"task":"build","config":"site.json","out":"_site"}]}"""
+            : "{ incomplete json");
         File.WriteAllText(Path.Combine(root, "site.json"), """{"collections":[{"name":"pages","input":"content","output":"/"}]}""");
         File.WriteAllText(Path.Combine(root, "content", "index.md"), "---\ntitle: Home\nslug: index\n---\nRecovered content");
         var runs = Channel.CreateUnbounded<WebPipelineResult>();
@@ -22,6 +26,15 @@ public sealed class WebPipelineRunnerWatchRecoveryTests
         try
         {
             var failed = await runs.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(15));
+            if (invalidOutput)
+            {
+                Assert.True(failed.Success);
+                File.WriteAllText(pipeline, """{"steps":[{"task":"build","config":"site.json","out":"."}]}""");
+                do
+                {
+                    failed = await runs.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(15));
+                } while (failed.Success);
+            }
             Assert.False(failed.Success);
             Assert.False(watcher.IsCompleted);
             File.WriteAllText(pipeline, """{"steps":[{"task":"build","config":"site.json","out":"_site"}]}""");

@@ -88,7 +88,10 @@ public static partial class WebSiteBuilder
     private static string ResolveCanonicalRoute(SiteSpec spec, ContentItem item)
         => !string.IsNullOrWhiteSpace(item.Canonical)
             ? item.Canonical
-            : ItemRendersHtml(spec, item) ? ResolveSitemapEntryPath(spec, item) : item.OutputPath;
+            : ResolveOutputFormats(spec, item).Any(format => RendersHtmlPage(format) &&
+                (string.IsNullOrWhiteSpace(format.Suffix) || format.Suffix.Equals("html", StringComparison.OrdinalIgnoreCase)))
+                ? item.OutputPath
+                : ItemRendersHtml(spec, item) ? ResolveSitemapEntryPath(spec, item) : item.OutputPath;
 
     private static bool ItemDeclaresNoIndex(SiteSpec spec, ContentItem item, string outputRoot)
     {

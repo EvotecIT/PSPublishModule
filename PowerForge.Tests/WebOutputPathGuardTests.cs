@@ -4,7 +4,7 @@ using PowerForge.Web.Cli;
 
 namespace PowerForge.Tests;
 
-public sealed class WebOutputPathGuardTests
+public sealed partial class WebOutputPathGuardTests
 {
     [Theory]
     [InlineData(".")]

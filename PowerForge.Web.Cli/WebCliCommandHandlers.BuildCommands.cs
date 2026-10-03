@@ -131,7 +131,7 @@ internal static partial class WebCliCommandHandlers
             }
         }
 
-        WebOutputPathGuard.ValidateSite(spec, plan, outPath);
+        WebOutputPathGuard.ValidateSite(spec, plan, outPath, cleanOutput: cleanOutput);
         if (cleanOutput)
             WebCliFileSystem.CleanOutputDirectory(outPath);
         var result = WebSiteBuilder.Build(

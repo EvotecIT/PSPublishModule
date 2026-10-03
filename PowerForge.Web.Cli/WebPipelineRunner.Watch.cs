@@ -264,6 +264,8 @@ internal static partial class WebPipelineRunner
                 return;
             if (!full.EndsWith(Path.DirectorySeparatorChar))
                 full += Path.DirectorySeparatorChar;
+            if (IsUnderAnyRoot(Path.GetFullPath(pipelinePath), new[] { full }))
+                return;
             ignore.Add(full);
         }
 

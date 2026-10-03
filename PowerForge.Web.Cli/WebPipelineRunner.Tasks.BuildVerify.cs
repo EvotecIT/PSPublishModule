@@ -31,7 +31,7 @@ internal static partial class WebPipelineRunner
         var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(config, WebCliJson.Options);
         ApplyBuildStepOverrides(spec, socialAutoGenerate);
         var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
-        WebOutputPathGuard.ValidateSite(spec, plan, outPath, baseDir);
+        WebOutputPathGuard.ValidateSite(spec, plan, outPath, baseDir, cleanOutput);
         if (cleanOutput)
             WebCliFileSystem.CleanOutputDirectory(outPath);
 

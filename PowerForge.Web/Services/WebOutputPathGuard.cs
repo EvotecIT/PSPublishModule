@@ -9,7 +9,7 @@ internal static class WebOutputPathGuard
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
 
-    internal static void ValidateSite(SiteSpec spec, WebSitePlan plan, string outputPath, string? pipelineRoot = null)
+    internal static void ValidateSite(SiteSpec spec, WebSitePlan plan, string outputPath, string? pipelineRoot = null, bool cleanOutput = false)
     {
         var output = ResolveOutput(outputPath);
         Protect(output, plan.RootPath, allowOutputBelowInput: true);
@@ -26,16 +26,28 @@ internal static class WebOutputPathGuard
             ProtectInput(input);
         foreach (var input in plan.ContentRoots ?? Array.Empty<string>()) ProtectInput(input);
         foreach (var collection in plan.Collections ?? Array.Empty<WebCollectionPlan>()) ProtectInput(collection.InputPath);
+        foreach (var collection in spec.Collections ?? Array.Empty<CollectionSpec>())
+        {
+            if (collection is null || collection.Input?.Contains('*') != true) continue;
+            var resolved = CollectionPresetDefaults.Apply(collection);
+            foreach (var file in WebSiteBuilder.EnumerateCollectionFilesForDiscovery(plan, resolved))
+                ProtectInput(WebSiteBuilder.ResolveCollectionRootForDiscovery(plan, resolved, file));
+        }
         foreach (var project in plan.Projects ?? Array.Empty<WebProjectPlan>())
         {
             ProtectInput(project.RootPath);
             ProtectInput(project.ContentPath);
         }
-        foreach (var input in new[] { spec.DataRoot ?? "data", spec.ThemesRoot ?? "themes", "static" })
+        foreach (var input in new[] { string.IsNullOrWhiteSpace(spec.DataRoot) ? "data" : spec.DataRoot,
+                     string.IsNullOrWhiteSpace(spec.ThemesRoot) ? "themes" : spec.ThemesRoot, "static", spec.Versioning?.HubPath })
             if (!string.IsNullOrWhiteSpace(input)) ProtectInput(Path.Combine(plan.RootPath, input));
         foreach (var asset in spec.StaticAssets ?? Array.Empty<StaticAssetSpec>())
             if (!string.IsNullOrWhiteSpace(asset.Source))
                 ProtectInput(Path.IsPathRooted(asset.Source) ? asset.Source : Path.Combine(plan.RootPath, asset.Source));
+        // Reuse the cache's complete source inventory for destructive cleanup, including external includes.
+        // Normal generation keeps the cheaper root preflight rather than reparsing every Markdown source.
+        if (cleanOutput)
+            foreach (var input in WebSiteInputDiscovery.Discover(spec, plan, outputRoot: null)) ProtectInput(input);
     }
 
     internal static void ValidateProject(string projectPath, string outputPath, string? pipelineRoot = null, bool cleanOutput = false)
@@ -54,6 +66,13 @@ internal static class WebOutputPathGuard
             {
                 var extension = Path.GetExtension(file);
                 if (extension.Equals(".cs", StringComparison.OrdinalIgnoreCase) ||
+                    extension.Equals(".razor", StringComparison.OrdinalIgnoreCase) ||
+                    extension.Equals(".cshtml", StringComparison.OrdinalIgnoreCase) ||
+                    extension.Equals(".vbhtml", StringComparison.OrdinalIgnoreCase) ||
+                    extension.Equals(".xaml", StringComparison.OrdinalIgnoreCase) ||
+                    extension.Equals(".axaml", StringComparison.OrdinalIgnoreCase) ||
+                    extension.Equals(".resx", StringComparison.OrdinalIgnoreCase) ||
+                    extension.Equals(".resw", StringComparison.OrdinalIgnoreCase) ||
                     extension.Equals(".fs", StringComparison.OrdinalIgnoreCase) ||
                     extension.Equals(".vb", StringComparison.OrdinalIgnoreCase) ||
                     extension.Equals(".csproj", StringComparison.OrdinalIgnoreCase) ||
@@ -63,6 +82,9 @@ internal static class WebOutputPathGuard
             }
         }
     }
+
+    internal static void ValidateSourceInput(string outputPath, string inputPath)
+        => Protect(ResolveOutput(outputPath), inputPath);
 
     private static string ResolveOutput(string outputPath)
     {
