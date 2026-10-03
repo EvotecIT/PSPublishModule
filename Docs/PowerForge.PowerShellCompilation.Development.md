@@ -1,12 +1,12 @@
 # Develop compiled PowerShell projects
 
-`powerforge powershell project run` builds and runs one executable target from source. `watch` repeats that workflow after edits. These commands are available on the `feature/powershell-compiler` development branch; this guide does not imply that a published package contains them.
+`powerforge powershell project run` builds and runs one executable target from source. `watch` repeats that workflow after edits. The CLI uses the same compiler and project owners as the PowerShell module.
 
 Use the .NET 10 SDK for building the CLI and generated executables. The Windows examples below select `win-x64`; a declared target must match the operating system and architecture of the process running PowerForge. Additional platform qualification is tracked separately in M30.
 
 ## Build the development CLI
 
-From a checkout of the compiler branch:
+From a repository checkout:
 
 ```powershell
 dotnet build ./PowerForge.Cli/PowerForge.Cli.csproj -c Release -f net10.0
@@ -14,6 +14,8 @@ $powerforge = (Resolve-Path ./PowerForge.Cli/bin/Release/net10.0/PowerForge.Cli.
 ```
 
 Keep `$powerforge` as an absolute path so you can work from your own project directory. The following commands use that locally built CLI and do not require installing a global tool.
+
+Keep the project directory and final executable path compact on Windows. Restore acquires dependencies in an isolated temporary workspace and retains its verified lock and environment under the project. This permits deep internal package paths without changing machine long-path policy; it does not remove Windows process-launch limits on the final executable or working directory. On Windows Server 2025 with long-path policy disabled, the qualification workflow uses a 249-character project path, a 238-character executable path, and internal package paths up to 397 characters. See the [distribution evidence](PowerForge.PowerShellCompilation.Assessment.md#windows-distribution-checkpoint) for the tested scope.
 
 ## Create and run an executable
 

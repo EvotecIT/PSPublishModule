@@ -1,8 +1,8 @@
 # Consume a compiled PowerShell module
 
-This guide uses the `feature/powershell-compiler` development branch. The commands are not yet evidence of a published release.
+Hybrid compiled modules retain PowerShell command resolution and export behavior while emitting qualified CLR methods. Use PowerShell 7.6 for `net10.0` artifacts and Windows PowerShell 5.1 for `net472` artifacts.
 
-Build the local CLI as shown in the [development guide](PowerForge.PowerShellCompilation.Development.md) and keep its DLL path in `$powerforge`. Run the following commands in a short, clean project directory on Windows. Long generated executable and module paths are a separate [M30 qualification item](PowerForge.PowerShellCompilation.NextMilestones.md).
+Build the local CLI as shown in the [development guide](PowerForge.PowerShellCompilation.Development.md) and keep its DLL path in `$powerforge`. Run the following commands in a clean project directory on Windows. Spaces, apostrophes, and non-ASCII characters are qualified in the module workflow. Keep the final artifact and launch directory compact; isolated restore workspaces support deep internal package paths within the [tested Windows path boundary](PowerForge.PowerShellCompilation.Assessment.md#windows-distribution-checkpoint).
 
 Save this as `Example.psm1`:
 
@@ -26,7 +26,7 @@ Save this as `Example.psd1` beside it:
 }
 ```
 
-The manifest controls the exported surface. Hybrid mode emits eligible functions as CLR methods and retains source requiring the PowerShell runtime. `Get-Date` intentionally makes `Get-FallbackValue` a hosted example; it is not a runtime-free or performance claim.
+The manifest controls the exported surface. Hybrid mode emits eligible functions as CLR methods and retains source requiring the PowerShell runtime. `Get-FallbackValue` emits a method with a hosted `Get-Date` command region; this example requires PowerShell and makes no performance claim.
 
 ## Build, inspect, and import
 

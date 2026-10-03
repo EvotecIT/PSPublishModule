@@ -129,7 +129,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         };
     }
 
-    private static void WriteSdkSelection(string workspace, string sdkVersion)
+    internal static void WriteSdkSelection(string workspace, string sdkVersion)
     {
         if (string.IsNullOrWhiteSpace(sdkVersion))
             throw new InvalidOperationException("The selected dotnet SDK returned an empty version identity.");
