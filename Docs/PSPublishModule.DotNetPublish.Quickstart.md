@@ -225,6 +225,12 @@ Normal signed publishing uses the selected working tree. It checks the Git worki
 
 ## Submitting To Partner Center
 
+For routine WinGet and MSI Store updates, use the [catalog update profile and
+reusable workflow](PSPublishModule.CatalogUpdates.md). It maps immutable public
+Store downloads, verifies their bytes, preflights both channels and preserves
+independent submission receipts. The lower-level preparation and Store commands
+below remain useful when integrating another release operator.
+
 For an existing signed MSI release, prepare catalog inputs from downloaded release
 assets without rebuilding or reserving another version. Run this on Windows:
 

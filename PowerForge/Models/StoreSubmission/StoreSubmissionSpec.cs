@@ -16,8 +16,10 @@ internal sealed class StoreSubmissionAuthenticationOptions
     public string? SellerId { get; set; }
 
     public string? TenantId { get; set; }
+    public string? TenantIdEnvVar { get; set; }
 
     public string? ClientId { get; set; }
+    public string? ClientIdEnvVar { get; set; }
 
     public string? ClientSecret { get; set; }
 
@@ -162,6 +164,9 @@ internal sealed class StoreSubmissionResult
     public bool UploadedPackageArchive { get; set; }
 
     public bool CommittedSubmission { get; set; }
+
+    /// <summary>True before the first desktop package mutation is sent, including an ambiguous HTTP failure.</summary>
+    public bool DesktopPackageMutationStarted { get; set; }
 
     public string? FinalStatus { get; set; }
 

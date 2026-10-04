@@ -17,7 +17,9 @@ internal static class StoreSubmissionSpecSanitizer
             {
                 SellerId = authentication.SellerId,
                 TenantId = authentication.TenantId,
+                TenantIdEnvVar = authentication.TenantIdEnvVar,
                 ClientId = authentication.ClientId,
+                ClientIdEnvVar = authentication.ClientIdEnvVar,
                 ClientSecret = null,
                 ClientSecretEnvVar = authentication.ClientSecretEnvVar,
                 AccessToken = null,

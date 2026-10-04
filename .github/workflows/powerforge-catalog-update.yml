@@ -1,0 +1,140 @@
+name: Update MSI catalogs
+
+on:
+  workflow_call:
+    inputs:
+      environment-name:
+        required: true
+        type: string
+      profile-path:
+        required: true
+        type: string
+      release-tag:
+        required: true
+        type: string
+      delivery-release-id:
+        required: true
+        type: string
+      manifest-name:
+        type: string
+        default: release-manifest.json
+      checksums-name:
+        type: string
+        default: SHA256SUMS.txt
+      channel:
+        type: string
+        default: all
+      execute:
+        type: boolean
+        default: false
+      confirm-no-prior-submission:
+        type: boolean
+        default: false
+    secrets:
+      WINGET_CREATE_GITHUB_TOKEN:
+        required: false
+      PARTNER_CENTER_TENANT_ID:
+        required: false
+      PARTNER_CENTER_CLIENT_ID:
+        required: false
+      PARTNER_CENTER_CLIENT_SECRET:
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: catalog-${{ github.repository }}-${{ inputs.profile-path }}-${{ inputs.release-tag }}
+  cancel-in-progress: false
+
+jobs:
+  catalog:
+    # Catalog publication is a deliberate dispatch, with the caller's environment approval policy.
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    environment: ${{ inputs.environment-name }}
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      WINGET_CREATE_GITHUB_TOKEN: ${{ secrets.WINGET_CREATE_GITHUB_TOKEN }}
+      PARTNER_CENTER_TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+      PARTNER_CENTER_CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+      PARTNER_CENTER_CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+      CATALOG_PROFILE: ${{ inputs.profile-path }}
+      CATALOG_TAG: ${{ inputs.release-tag }}
+      CATALOG_DELIVERY: ${{ inputs.delivery-release-id }}
+      CATALOG_CHANNEL: ${{ inputs.channel }}
+      CATALOG_MANIFEST: ${{ inputs.manifest-name }}
+      CATALOG_CHECKSUMS: ${{ inputs.checksums-name }}
+      CATALOG_EXECUTE: ${{ inputs.execute }}
+      CATALOG_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      CATALOG_CONFIRM_NO_PRIOR_SUBMISSION: ${{ inputs.confirm-no-prior-submission }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: product
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: catalog-owner
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: catalog-owner/global.json
+      - name: Build pinned catalog owner
+        shell: pwsh
+        working-directory: catalog-owner
+        run: dotnet build PowerForge.Cli/PowerForge.Cli.csproj -c Release -f net10.0 --nologo
+      - name: Resolve task paths and required tools
+        id: paths
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-Command gh, winget, wingetcreate | Out-Null
+          if (!(Test-Path -LiteralPath $env:RUNNER_TEMP -PathType Container)) { throw 'Runner scratch root is unavailable.' }
+          "output=$env:RUNNER_TEMP/catalog-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT" | Out-File -LiteralPath $env:GITHUB_OUTPUT -Append -Encoding utf8
+      - name: Prepare or restore and preflight catalog update
+        id: prepare
+        shell: pwsh
+        working-directory: product
+        env:
+          CATALOG_OUTPUT: ${{ steps.paths.outputs.output }}
+        run: |
+          ../catalog-owner/.github/scripts/catalog-update-workflow.ps1 -Action Prepare -ToolPath ../catalog-owner/PowerForge.Cli/bin/Release/net10.0/PowerForge.Cli.dll -ProfilePath $env:CATALOG_PROFILE -ReleaseTag $env:CATALOG_TAG -DeliveryReleaseId $env:CATALOG_DELIVERY -OutputPath $env:CATALOG_OUTPUT -Channel $env:CATALOG_CHANNEL -ManifestName $env:CATALOG_MANIFEST -ChecksumsName $env:CATALOG_CHECKSUMS
+      - name: Reserve catalog submissions
+        if: ${{ inputs.execute }}
+        id: reserve
+        shell: pwsh
+        working-directory: product
+        env:
+          CATALOG_OUTPUT: ${{ steps.paths.outputs.output }}
+        run: |
+          ../catalog-owner/.github/scripts/catalog-update-workflow.ps1 -Action Reserve -ToolPath ../catalog-owner/PowerForge.Cli/bin/Release/net10.0/PowerForge.Cli.dll -ProfilePath $env:CATALOG_PROFILE -ReleaseTag $env:CATALOG_TAG -DeliveryReleaseId $env:CATALOG_DELIVERY -OutputPath $env:CATALOG_OUTPUT -Channel $env:CATALOG_CHANNEL
+      - name: Archive intent before any catalog mutation
+        if: ${{ inputs.execute }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.prepare.outputs.artifact-prefix }}${{ github.run_id }}-${{ github.run_attempt }}-intent
+          path: ${{ steps.paths.outputs.output }}/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Submit reserved channels
+        if: ${{ inputs.execute }}
+        shell: pwsh
+        working-directory: product
+        env:
+          CATALOG_OUTPUT: ${{ steps.paths.outputs.output }}
+          CATALOG_RESERVATION_KEY: ${{ steps.reserve.outputs.reservation-key }}
+        run: |
+          ../catalog-owner/.github/scripts/catalog-update-workflow.ps1 -Action Submit -ToolPath ../catalog-owner/PowerForge.Cli/bin/Release/net10.0/PowerForge.Cli.dll -ProfilePath $env:CATALOG_PROFILE -ReleaseTag $env:CATALOG_TAG -DeliveryReleaseId $env:CATALOG_DELIVERY -OutputPath $env:CATALOG_OUTPUT -Channel $env:CATALOG_CHANNEL
+      - name: Retain preparation or final receipt
+        if: ${{ always() && steps.prepare.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.prepare.outputs.artifact-prefix }}${{ github.run_id }}-${{ github.run_attempt }}-result
+          path: ${{ steps.paths.outputs.output }}/
+          if-no-files-found: error
+          retention-days: 90
