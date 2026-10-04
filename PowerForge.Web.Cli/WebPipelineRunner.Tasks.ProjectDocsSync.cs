@@ -257,6 +257,7 @@ internal static partial class WebPipelineRunner
                 apiSourceCandidates,
                 examplesSourceCandidates,
                 syncApi,
+                failOnMissingApiSource,
                 syncExamples,
                 artifactWorkRoot,
                 artifactTimeoutSeconds,
@@ -1066,6 +1067,7 @@ internal static partial class WebPipelineRunner
             projects.Add(new ProjectDocsCatalogItem
             {
                 Slug = slug ?? string.Empty,
+                Version = GetString(projectElement, "version"),
                 HubPath = hubPath,
                 ContentMode = normalizedContentMode,
                 HasDocsSurface = hasDocsSurface,
@@ -1136,6 +1138,7 @@ internal static partial class WebPipelineRunner
         IReadOnlyList<string> apiSourceCandidates,
         IReadOnlyList<string> examplesSourceCandidates,
         bool syncApi,
+        bool failOnMissingApiSource,
         bool syncExamples,
         string artifactWorkRoot,
         int timeoutSeconds,
@@ -1159,6 +1162,7 @@ internal static partial class WebPipelineRunner
                 HydrateProjectArtifactSurface(
                     project,
                     ProjectDocsSurfaceType.Docs,
+                    requireArtifact: false,
                     slug,
                     sourcesRoot,
                     projectDocsSourceCandidates,
@@ -1176,6 +1180,7 @@ internal static partial class WebPipelineRunner
                 HydrateProjectArtifactSurface(
                     project,
                     ProjectDocsSurfaceType.Api,
+                    requireArtifact: failOnMissingApiSource,
                     slug,
                     sourcesRoot,
                     projectApiSourceCandidates,
@@ -1193,6 +1198,7 @@ internal static partial class WebPipelineRunner
                 HydrateProjectArtifactSurface(
                     project,
                     ProjectDocsSurfaceType.Examples,
+                    requireArtifact: false,
                     slug,
                     sourcesRoot,
                     projectExamplesSourceCandidates,
@@ -1209,6 +1215,7 @@ internal static partial class WebPipelineRunner
     private static void HydrateProjectArtifactSurface(
         ProjectDocsCatalogItem project,
         ProjectDocsSurfaceType surface,
+        bool requireArtifact,
         string slug,
         string sourcesRoot,
         IReadOnlyList<string> sourceCandidates,
@@ -1242,6 +1249,8 @@ internal static partial class WebPipelineRunner
                 stats,
                 out var extractedRoot))
         {
+            if (requireArtifact)
+                throw new InvalidOperationException($"Required API artifact could not be hydrated for '{slug}'.");
             return;
         }
 
@@ -1249,6 +1258,8 @@ internal static partial class WebPipelineRunner
         if (string.IsNullOrWhiteSpace(extractedSurfaceRoot))
         {
             stats.Failures++;
+            if (requireArtifact)
+                throw new InvalidOperationException($"Required API artifact has no API directory for '{slug}'.");
             return;
         }
 
@@ -1281,8 +1292,9 @@ internal static partial class WebPipelineRunner
             _ => null
         };
 
-        if (IsZipArtifactSource(directArtifact))
-            return directArtifact;
+        var resolvedArtifact = ExpandProjectArtifactVersion(directArtifact, project.Version);
+        if (IsZipArtifactSource(resolvedArtifact))
+            return resolvedArtifact;
 
         var linkedArtifact = surface switch
         {
@@ -1292,8 +1304,9 @@ internal static partial class WebPipelineRunner
             _ => null
         };
 
-        if (IsZipArtifactSource(linkedArtifact))
-            return linkedArtifact;
+        var resolvedLink = ExpandProjectArtifactVersion(linkedArtifact, project.Version);
+        if (IsZipArtifactSource(resolvedLink))
+            return resolvedLink;
 
         if (surface == ProjectDocsSurfaceType.Api &&
             project.HasApiPowerShellSurface &&
@@ -1303,7 +1316,17 @@ internal static partial class WebPipelineRunner
             return packageUrl;
         }
 
-        return linkedArtifact;
+        return resolvedLink;
+    }
+
+    private static string? ExpandProjectArtifactVersion(string? source, string? version)
+    {
+        if (string.IsNullOrWhiteSpace(source) || !source.Contains("{version}", StringComparison.Ordinal))
+            return source;
+        if (string.IsNullOrWhiteSpace(version) ||
+            !System.Text.RegularExpressions.Regex.IsMatch(version, @"^[0-9]+\.[0-9]+\.[0-9]+$"))
+            throw new InvalidOperationException("Versioned project artifact URL requires a published three-part project version.");
+        return source.Replace("{version}", version, StringComparison.Ordinal);
     }
 
     private static bool IsZipArtifactSource(string? source)
@@ -1635,6 +1658,7 @@ internal static partial class WebPipelineRunner
     private sealed class ProjectDocsCatalogItem
     {
         public string Slug { get; init; } = string.Empty;
+        public string? Version { get; init; }
         public string? HubPath { get; init; }
         public string ContentMode { get; init; } = "hybrid";
         public bool HasDocsSurface { get; init; }

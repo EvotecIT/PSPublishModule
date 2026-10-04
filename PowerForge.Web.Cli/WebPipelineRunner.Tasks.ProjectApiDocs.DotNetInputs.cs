@@ -32,17 +32,20 @@ internal static partial class WebPipelineRunner
             break;
         }
 
-        string? assemblyPath = null;
-        if (xmlFiles.Length == 1)
+        var dllFiles = Directory.GetFiles(dotNetRoot, "*.dll", SearchOption.AllDirectories)
+            .Select(Path.GetFullPath)
+            .ToArray();
+        var assemblyPaths = xmlFiles.Select(xmlPath =>
         {
-            var baseName = Path.GetFileNameWithoutExtension(xmlFiles[0]);
-            var xmlDirectory = Path.GetDirectoryName(xmlFiles[0]) ?? dotNetRoot;
-            assemblyPath = Directory.GetFiles(xmlDirectory, "*.dll", SearchOption.TopDirectoryOnly)
-                .FirstOrDefault(path => Path.GetFileNameWithoutExtension(path).Equals(baseName, StringComparison.OrdinalIgnoreCase));
-            assemblyPath ??= Directory.GetFiles(dotNetRoot, "*.dll", SearchOption.AllDirectories)
-                .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
-        }
+            var baseName = Path.GetFileNameWithoutExtension(xmlPath);
+            var exactPath = Path.ChangeExtension(xmlPath, ".dll");
+            if (File.Exists(exactPath))
+                return exactPath;
+            var matches = dllFiles.Where(path => Path.GetFileNameWithoutExtension(path).Equals(baseName, StringComparison.OrdinalIgnoreCase)).ToArray();
+            return matches.Length == 1 ? matches[0] : null;
+        }).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var primaryAssembly = assemblyPaths.FirstOrDefault(path => !Path.GetFileNameWithoutExtension(path).Contains('.', StringComparison.Ordinal))
+                              ?? assemblyPaths.FirstOrDefault();
 
         candidate = new ProjectApiInputCandidate
         {
@@ -50,7 +53,8 @@ internal static partial class WebPipelineRunner
             RootPath = dotNetRoot,
             XmlPath = xmlFiles[0],
             XmlPaths = xmlFiles,
-            AssemblyPath = string.IsNullOrWhiteSpace(assemblyPath) ? null : Path.GetFullPath(assemblyPath),
+            AssemblyPath = primaryAssembly,
+            AssemblyPaths = assemblyPaths,
             HasPlaceholderContent = hasPlaceholder,
             PlaceholderPath = placeholderPath
         };
