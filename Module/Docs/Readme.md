@@ -2,7 +2,7 @@
 Module Name: PSPublishModule
 Module Guid: eb76426a-1992-40a5-82cd-6480f883ef4d
 Download Help Link: https://github.com/EvotecIT/PSPublishModule
-Help Version: 3.0.153
+Help Version: 3.0.155
 Locale: en-US
 ---
 # PSPublishModule Module
@@ -615,6 +615,9 @@ Sends a test delivery to an App Store Connect webhook.
 
 ### [Test-BenchmarkGate](Test-BenchmarkGate.md)
 Tests normalized benchmark summaries against a JSON baseline.
+
+### [Test-BenchmarkHistory](Test-BenchmarkHistory.md)
+Checks duration medians against accepted history from the same workload and runner environment.
 
 ### [Test-IsolatedModuleProfile](Test-IsolatedModuleProfile.md)
 Validates a curated isolated module profile without importing it.
