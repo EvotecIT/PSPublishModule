@@ -28,6 +28,8 @@ internal sealed class ThemeRenderContext
     public string PreloadsHtml { get; init; } = string.Empty;
     public string CriticalCssHtml { get; init; } = string.Empty;
     public string CanonicalHtml { get; init; } = string.Empty;
+    /// <summary>HTML-encoded resolved SEO title for use inside a title element.</summary>
+    public string TitleHtml { get; init; } = string.Empty;
     public string DescriptionMetaHtml { get; init; } = string.Empty;
     public string HeadHtml { get; init; } = string.Empty;
     public string OpenGraphHtml { get; init; } = string.Empty;

@@ -49,17 +49,6 @@ public sealed partial class WebAgentContentSecurityScannerTests
         }
     }
 
-    private sealed class DelayedRegistryHandler(TimeSpan delay, HttpResponseMessage response) : HttpMessageHandler
-    {
-        protected override async Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            await Task.Delay(delay).ConfigureAwait(false);
-            return response;
-        }
-    }
-
     private sealed class ChunkedReadStream(string content, int chunkSize) : MemoryStream(Encoding.UTF8.GetBytes(content))
     {
         public override int Read(byte[] buffer, int offset, int count)
