@@ -121,7 +121,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         {
             var first = await ReadProcessesAfter(string.Empty);
             observed = first.Processes;
-            File.WriteAllText(fixture.ScriptPath, source + "\n# edited source\n");
+            await WriteWatchedSourceAsync(fixture.ScriptPath, source + "\n# edited source\n", cancellation.Token);
             var second = await ReadProcessesAfter(first.Marker);
             Assert.All(first.Processes, process => Assert.True(process.HasExited));
             observed = observed.Concat(second.Processes).ToArray();

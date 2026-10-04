@@ -101,14 +101,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         try
         {
             Assert.Null((await Next("failed")).Result!.Process);
-            File.WriteAllText(fixture.ScriptPath, "return 1");
+            await WriteWatchedSourceAsync(fixture.ScriptPath, "return 1", cancellation.Token);
             AssertRun((await Next("exited")).Result!, "1");
             await Assert.ThrowsAsync<IOException>(() => workflow.RunAsync(project, cancellationToken: cancellation.Token));
-            File.WriteAllText(fixture.ScriptPath, "function Broken {");
+            await WriteWatchedSourceAsync(fixture.ScriptPath, "function Broken {", cancellation.Token);
             var failure = await Next("failed");
             Assert.Null(failure.Result!.Process);
-            File.WriteAllText(fixture.ScriptPath, "return 2");
-            File.WriteAllText(fixture.ScriptPath, "return 3");
+            await WriteWatchedSourceAsync(fixture.ScriptPath, "return 2", cancellation.Token);
+            await WriteWatchedSourceAsync(fixture.ScriptPath, "return 3", cancellation.Token);
             AssertRun((await Next("exited")).Result!, "3");
         }
         finally
@@ -124,6 +124,23 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 var update = await events.Reader.ReadAsync(cancellation.Token);
                 if (update.State == state) return update;
                 if (update.State == "failed" && state == "exited") Assert.Fail(update.Message);
+            }
+        }
+    }
+
+    private static async Task WriteWatchedSourceAsync(string path, string source, CancellationToken cancellationToken)
+    {
+        // Windows polling reads briefly deny writes. Keep editor contention separate
+        // from the rebuild/process-lifetime assertions; persistent locks still fail.
+        var elapsed = System.Diagnostics.Stopwatch.StartNew();
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try { File.WriteAllText(path, source); return; }
+            catch (IOException exception) when ((exception.HResult & 0xffff) is 32 or 33 &&
+                elapsed.Elapsed < TimeSpan.FromSeconds(5))
+            {
+                await Task.Delay(25, cancellationToken);
             }
         }
     }
