@@ -91,7 +91,9 @@ must support these tools' native and .NET runtime prerequisites.
 
 Set `verify-authentication: true` with `execute: false` to check publishing
 credentials and Store API readiness without creating a submission. This does
-not confirm that a version has no previous submission or enable replay.
+not confirm that a version has no previous submission or enable replay. WinGet
+checks the publishing token against GitHub's authenticated-user endpoint; this
+confirms token authentication, not every repository permission or catalog acceptance.
 
 The workflow downloads MSI assets and metadata from the selected public GitHub
 release on every run. It restores progress only from the same caller workflow,

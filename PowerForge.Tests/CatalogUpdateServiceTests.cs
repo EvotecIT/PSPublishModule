@@ -223,12 +223,97 @@ public sealed class CatalogUpdateServiceTests : IDisposable
         finally { for (var i = 0; i < names.Length; i++) Environment.SetEnvironmentVariable(names[i], previous[i]); }
     }
 
+    [Theory]
+    [InlineData(false, HttpStatusCode.Unauthorized)]
+    [InlineData(true, HttpStatusCode.Unauthorized)]
+    [InlineData(false, HttpStatusCode.Forbidden)]
+    [InlineData(true, HttpStatusCode.Forbidden)]
+    public async Task RejectedWinGetPublisherCannotPassAuthenticationOrStartSubmission(bool execute, HttpStatusCode status)
+    {
+        _release.Winget!.Submission!.Token = "rejected-publisher-token";
+        var runner = new Runner();
+        var handler = new PublisherHandler { Status = status, ExpectedToken = "rejected-publisher-token" };
+        using var client = new HttpClient(handler);
+        var service = Service(runner, wingetClient: client); await Prepare(service);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => service.SubmitAsync(_profile, ProfilePath,
+            _release, ReleasePath, Output, "winget", null, null, execute, requireAuthentication: true));
+        Assert.DoesNotContain(handler.ExpectedToken, error.Message);
+        Assert.Equal(1, handler.Requests);
+        Assert.Equal(0, runner.Calls);
+        Assert.Equal("Prepared", service.Read(Output, ProfilePath, ReleasePath).Winget.State);
+    }
+
+    [Fact]
+    public async Task WinGetAuthenticationUsesPublishingEnvironmentTokenWithoutMutation()
+    {
+        const string name = "CATALOG_TEST_WINGET_PUBLISHER";
+        var previous = Environment.GetEnvironmentVariable(name);
+        try
+        {
+            Environment.SetEnvironmentVariable(name, "publisher-from-env");
+            _release.Winget!.Submission!.Token = null;
+            _release.Winget.Submission.TokenEnvName = name;
+            var handler = new PublisherHandler { ExpectedToken = "publisher-from-env" };
+            using var client = new HttpClient(handler);
+            var runner = new Runner(); var service = Service(runner, wingetClient: client); await Prepare(service);
+            await service.SubmitAsync(_profile, ProfilePath, _release, ReleasePath, Output, "winget", null, null,
+                false, requireAuthentication: true);
+            Assert.Equal(1, handler.Requests); Assert.Equal(0, runner.Calls);
+            Assert.Equal("Prepared", service.Read(Output, ProfilePath, ReleasePath).Winget.State);
+            Assert.DoesNotContain("publisher-from-env", File.ReadAllText(Path.Combine(Output, "catalog-update.json")));
+        }
+        finally { Environment.SetEnvironmentVariable(name, previous); }
+    }
+
+    [Fact]
+    public async Task OrdinaryPreflightDoesNotRequirePublishingAuthentication()
+    {
+        var handler = new PublisherHandler { Status = HttpStatusCode.Unauthorized };
+        using var client = new HttpClient(handler);
+        var service = Service(wingetClient: client); await Prepare(service);
+        await service.SubmitAsync(_profile, ProfilePath, _release, ReleasePath, Output, "winget", null, null, false);
+        Assert.Equal(0, handler.Requests);
+    }
+
+    [Fact]
+    public async Task CancelledWinGetAuthenticationKeepsArchivedReservationReusable()
+    {
+        var runner = new Runner(); var service = Service(runner); await Prepare(service);
+        var key = Guid.NewGuid().ToString("N");
+        service.Reserve(Output, ProfilePath, ReleasePath, "winget", key);
+        using var cancellation = new CancellationTokenSource(); cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.SubmitAsync(_profile, ProfilePath,
+            _release, ReleasePath, Output, "winget", null, null, true, cancellation.Token, key));
+        var receipt = service.Read(Output, ProfilePath, ReleasePath);
+        Assert.Equal("Reserved", receipt.Winget.State); Assert.Equal(key, receipt.Winget.ReservationKey);
+        Assert.Equal(0, runner.Calls);
+    }
+
     private static CatalogUpdateService Service(Runner? runner = null, StoreSubmissionService? store = null,
-        Func<CatalogInstaller, bool, CancellationToken, Task>? verify = null) => new(
+        Func<CatalogInstaller, bool, CancellationToken, Task>? verify = null, HttpClient? wingetClient = null) => new(
         new ReleaseCatalogPreparationService(path => new DotNetPublishMsiPackageMetadata
         { Path = path, ProductName = "Fixture App", ProductVersion = "1.2.3", Manufacturer = "Fixture", Architecture = "x64", Scope = "machine",
             ProductCode = "{11111111-1111-1111-1111-111111111111}", UpgradeCode = "{22222222-2222-2222-2222-222222222222}" }, _ => true),
-        new WingetSubmissionService(processRunner: runner ?? new Runner()), store, verify ?? ((_, _, _) => Task.CompletedTask), (_, _) => Task.FromResult("open"));
+        new WingetSubmissionService(processRunner: runner ?? new Runner(), httpClient: wingetClient ?? PublisherClient),
+        store, verify ?? ((_, _, _) => Task.CompletedTask), (_, _) => Task.FromResult("open"));
+
+    private static readonly HttpClient PublisherClient = new(new PublisherHandler());
+
+    private sealed class PublisherHandler : HttpMessageHandler
+    {
+        public HttpStatusCode Status = HttpStatusCode.OK;
+        public string ExpectedToken = "test-token";
+        public int Requests;
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Requests++;
+            Assert.Equal(HttpMethod.Get, request.Method);
+            Assert.Equal("https://api.github.com/user", request.RequestUri!.AbsoluteUri);
+            Assert.Equal("Bearer", request.Headers.Authorization!.Scheme);
+            Assert.Equal(ExpectedToken, request.Headers.Authorization.Parameter);
+            return Task.FromResult(new HttpResponseMessage(Status));
+        }
+    }
 
     private static StoreSubmissionSpec StoreSpec() => new()
     {
