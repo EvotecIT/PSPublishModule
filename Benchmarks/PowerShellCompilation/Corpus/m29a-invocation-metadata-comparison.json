@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "recordedOn": "2026-09-28",
+  "source": {
+    "workload": "github-api-client-helpers",
+    "repository": "https://github.com/microsoft/PowerShellForGitHub",
+    "revision": "fd4fa65f23ca30f18f85312a85348e660c287a9c",
+    "archiveSha256": "f5b7dae55fdd932f4460762e794849fe1f1e6c6083e36509dfbcba676ce7fb15",
+    "sourceFingerprint": "a5f8c9ed3e1ab708fed8f075eb2b1ab4210d9578ab3216015c01631c987b09a5",
+    "unchangedFunction": "Write-InvocationLog",
+    "functionSha256": "ceffa801f781837e6991f89527b799c341a66ca6a3b3a7c9c08d71ff838f8deb"
+  },
+  "affectedAssessment": {
+    "before": { "emittedFunctions": 9, "totalFunctions": 10, "evidenceSha256": "43fd4c1cff6418a3f321cebd9eb18f53a7d5b9f2875da69abaff5d2202a175a3" },
+    "after": { "emittedFunctions": 10, "totalFunctions": 10, "regressions": 0, "evidenceSha256": "803003a085be6b2e23143d16e1272bef162ee25d197129e0119081cda81daa40" }
+  },
+  "qualification": {
+    "hosts": ["PowerShell 7/net10.0 Windows x64", "Windows PowerShell 5.1/net472 Windows x64"],
+    "focusedTests": { "passed": 4, "failed": 0, "trxSha256": "cfc7be24c1205824febb48104da1a1231f05c822f9364da4ff0e034bad418e99" },
+    "observed": ["explicit caller InvocationInfo", "authored scope-one default and module identity", "global and per-call redacted parameters", "excluded parameters", "invalid binding", "parameter metadata", "Strict and missing native/host capability rejection"],
+    "offlineBoundary": "In-memory Write-Log provider; no GitHub request or file log",
+    "generatedBoundary": "Hybrid native function with PowerShell-hosted command and invocation metadata",
+    "limits": ["No full PowerShellForGitHub module import", "No network request", "No arbitrary caller-scope or runtime-free InvocationInfo claim", "No five-module portfolio count change"]
+  }
+}

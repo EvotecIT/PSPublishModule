@@ -81,7 +81,7 @@ internal sealed class PowerShellBoundOptimizer
                     _deadBranchesRemoved++;
                     continue;
                 }
-                statements.Add(new PowerShellBoundWhileStatement(loop.Span, loop.Kind, condition, body));
+                statements.Add(new PowerShellBoundWhileStatement(loop.Span, loop.Kind, condition, body, loop.CheckHostInterrupts));
                 continue;
             }
             statements.Add(OptimizeStatement(statement));
@@ -92,11 +92,28 @@ internal sealed class PowerShellBoundOptimizer
     private PowerShellBoundStatement OptimizeStatement(PowerShellBoundStatement statement)
         => statement switch
         {
+            PowerShellBoundOutputCaptureStatement capture => new PowerShellBoundOutputCaptureStatement(
+                capture.Span, capture.Target, OptimizeBlock(capture.Body), capture.NativeTarget, capture.Operation,
+                capture.Kind, capture.CapturedElementType, capture.ShareEmptyArray, capture.TransfersEnclosingLoop),
+            PowerShellBoundStatementErrorBoundary boundary => new PowerShellBoundStatementErrorBoundary(
+                OptimizeBlock(boundary.Body), boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus, boundary.NativeSequencePoint),
             PowerShellBoundAssignmentStatement assignment => new PowerShellBoundAssignmentStatement(
                 assignment.Span, assignment.Target, OptimizeExpression(assignment.Value), assignment.Operation,
-                assignment.NormalizeNullString, assignment.IntegralSemantics),
+                assignment.NormalizeNullString, assignment.IntegralSemantics, assignment.PreserveStatementErrors),
             PowerShellBoundModuleVariableAssignmentStatement assignment => new PowerShellBoundModuleVariableAssignmentStatement(
                 assignment.Span, assignment.Name, OptimizeExpression(assignment.Value)),
+            PowerShellBoundNativeAssignmentStatement assignment => new PowerShellBoundNativeAssignmentStatement(
+                assignment.Span, assignment.Name, OptimizeExpression(assignment.Value), assignment.Operation, assignment.Target,
+                assignment.ClosesNativeLocalCallBinding),
+            PowerShellBoundRegionControlFlowReturnStatement controlFlow =>
+                new PowerShellBoundRegionControlFlowReturnStatement(
+                    controlFlow.Span,
+                    ((PowerShellBoundRegionControlFlowExpression)controlFlow.Expression!).Kind,
+                    ((PowerShellBoundRegionControlFlowExpression)controlFlow.Expression!).Value is { } controlValue
+                        ? OptimizeExpression(controlValue)
+                        : null),
+            // Transfer operands are immutable local reads; retain their ordered ABI owner.
+            PowerShellBoundRegionTransferStatement transfer => transfer,
             PowerShellBoundReturnStatement returned => new PowerShellBoundReturnStatement(
                 returned.Span, returned.Expression is null ? null : OptimizeExpression(returned.Expression), returned.EmitsValue),
             PowerShellBoundExpressionStatement expression => new PowerShellBoundExpressionStatement(
@@ -106,26 +123,26 @@ internal sealed class PowerShellBoundOptimizer
                 loop.Initializer is null ? null : (PowerShellBoundMutationExpression)OptimizeExpression(loop.Initializer),
                 loop.Condition is null ? null : OptimizeExpression(loop.Condition),
                 loop.Iterator is null ? null : (PowerShellBoundMutationExpression)OptimizeExpression(loop.Iterator),
-                OptimizeBlock(loop.Body)),
+                OptimizeBlock(loop.Body), loop.CheckHostInterrupts),
             PowerShellBoundForEachStatement loop => new PowerShellBoundForEachStatement(
                 loop.Span,
                 loop.Variable,
                 loop.ElementType,
                 OptimizeExpression(loop.Collection),
-                loop.ScalarString,
+                loop.EnumerationKind,
                 OptimizeBlock(loop.Body),
                 loop.DeclareVariable,
-                loop.NullCollectionElement is null ? null : OptimizeExpression(loop.NullCollectionElement),
-                loop.SystemArray),
+                loop.NullCollectionElement is null ? null : OptimizeExpression(loop.NullCollectionElement), loop.CheckHostInterrupts, loop.NativeBinding),
             PowerShellBoundThrowStatement thrown => new PowerShellBoundThrowStatement(
-                thrown.Span, thrown.Expression is null ? null : OptimizeExpression(thrown.Expression)),
+                thrown.Span, thrown.Expression is null ? null : OptimizeExpression(thrown.Expression),
+                thrown.PreserveStatementErrors, thrown.SourcePath, thrown.SourceText),
             PowerShellBoundTryStatement attempted => new PowerShellBoundTryStatement(
                 attempted.Span,
                 OptimizeBlock(attempted.Body),
                 attempted.Catches.Select(clause => new PowerShellBoundCatchClause(clause.ExceptionTypes.ToArray(), OptimizeBlock(clause.Body))).ToArray(),
-                attempted.FinallyBlock is null ? null : OptimizeBlock(attempted.FinallyBlock)),
+                attempted.FinallyBlock is null ? null : OptimizeBlock(attempted.FinallyBlock), attempted.SuspendHostStopping),
             PowerShellBoundStreamWriteStatement stream => new PowerShellBoundStreamWriteStatement(
-                stream.Span, stream.Kind, stream.Provider, OptimizeExpression(stream.Message)),
+                stream.Span, stream.Kind, stream.Provider, OptimizeExpression(stream.Message), stream.OutputBinding, stream.UsesNativeInvocation, stream.UsesCommandHostEnumeration),
             PowerShellBoundIndexAssignmentStatement index => new PowerShellBoundIndexAssignmentStatement(
                 index.Span, OptimizeExpression(index.Target), OptimizeExpression(index.Index), OptimizeExpression(index.Value), index.Kind, index.UsePowerShellRuntimeErrors),
             PowerShellBoundClrMemberAssignmentStatement member => new PowerShellBoundClrMemberAssignmentStatement(
@@ -140,17 +157,33 @@ internal sealed class PowerShellBoundOptimizer
 
     private PowerShellBoundExpression OptimizeExpression(PowerShellBoundExpression expression)
     {
+        if (expression is PowerShellBoundRegionValueAlternativeExpression alternative)
+            return new PowerShellBoundRegionValueAlternativeExpression(
+                alternative.Span,
+                alternative.AlternativeIndex,
+                OptimizeExpression(alternative.Value),
+                alternative.Type);
+        if (expression is PowerShellBoundRegionControlFlowExpression controlFlow)
+            return new PowerShellBoundRegionControlFlowExpression(
+                controlFlow.Span,
+                controlFlow.Kind,
+                controlFlow.Value is null ? null : OptimizeExpression(controlFlow.Value));
+        if (expression is PowerShellBoundMembershipExpression membership)
+            return new PowerShellBoundMembershipExpression(membership.Span, OptimizeExpression(membership.Left),
+                OptimizeExpression(membership.Right), membership.ElementType, membership.CollectionOnRight,
+                membership.IgnoreCase, membership.Negate, membership.UsesNativeInvocation, membership.UsesCommandHostInvocation);
         if (expression is PowerShellBoundBinaryExpression binary)
         {
             var left = OptimizeExpression(binary.Left);
             var right = OptimizeExpression(binary.Right);
-            if (left is PowerShellBoundLiteralExpression leftLiteral && right is PowerShellBoundLiteralExpression rightLiteral &&
+            if (!binary.UsesNativeInvocation && left is PowerShellBoundLiteralExpression leftLiteral && right is PowerShellBoundLiteralExpression rightLiteral &&
                 TryFold(binary.Operation, leftLiteral.Value, rightLiteral.Value, binary.Type.ClrType, out var value))
             {
                 _constantExpressionsFolded++;
                 return new PowerShellBoundLiteralExpression(binary.Span, value, binary.Type, PowerShellValueState.Known);
             }
-            return new PowerShellBoundBinaryExpression(binary.Span, binary.Operation, left, right, binary.Type);
+            return new PowerShellBoundBinaryExpression(binary.Span, binary.Operation, left, right, binary.Type,
+                binary.PreserveStatementErrors, binary.UsesNativeInvocation, binary.NativeIgnoreCase, binary.OperatorSpan, binary.OperatorSourceText);
         }
         if (expression is PowerShellBoundUnaryExpression unary)
         {
@@ -165,24 +198,65 @@ internal sealed class PowerShellBoundOptimizer
         if (expression is PowerShellBoundConversionExpression conversion)
         {
             var operand = OptimizeExpression(conversion.Operand);
-            if (!conversion.UsePowerShellLanguageRuntime && !conversion.UsePowerShellTruthiness &&
+            if (conversion.NativeSourcePath is null && !conversion.UseNativeConversion && !conversion.UsePowerShellLanguageRuntime && !conversion.UsePowerShellTruthiness && !conversion.NormalizeNullString &&
+                operand.Type.Provenance != PowerShellTypeFactProvenance.Unknown &&
+                operand is not PowerShellBoundInvocationExpression &&
                 operand.Type.ClrType == conversion.Type.ClrType)
             {
+                // Local-call types are provisional until semantic fixed-point analysis.
                 _identityConversionsRemoved++;
                 return operand;
             }
             if (conversion.UsePowerShellLanguageRuntime) _runtimeConversionSitesSpecialized++;
-            return new PowerShellBoundConversionExpression(conversion.Span, conversion.Type, operand, conversion.UsePowerShellLanguageRuntime, conversion.UsePowerShellTruthiness);
+            return new PowerShellBoundConversionExpression(conversion.Span, conversion.Type, operand, conversion.UsePowerShellLanguageRuntime,
+                conversion.UsePowerShellTruthiness, conversion.NormalizeNullString, conversion.NativeSourcePath,
+                conversion.NativeSourceText, conversion.NativePostTestCondition, conversion.UseNativeConversion,
+                conversion.UseNativeCustomObjectConversion, conversion.NativeRuntimeTypeName, conversion.NativeRuntimeTypeSpan);
         }
         if (expression is PowerShellBoundInvocationExpression invocation)
             return new PowerShellBoundInvocationExpression(invocation.Span, invocation.Target,
                 invocation.Arguments.Select(OptimizeExpression).ToArray(), invocation.Type,
-                invocation.AuthoredEvaluationOrder.ToArray(), invocation.BoundParameterNames.ToArray());
+                invocation.AuthoredEvaluationOrder.ToArray(), invocation.BoundParameterNames.ToArray(),
+                invocation.ReturnsModuleStateDerived, invocation.CapturesSuccessOutput,
+                invocation.ResultProjection, invocation.ClosedCollectionFactory);
+        if (expression is PowerShellBoundClosedCollectionFactoryResultExpression factoryResult)
+            return new PowerShellBoundClosedCollectionFactoryResultExpression(
+                (PowerShellBoundVariableExpression)OptimizeExpression(factoryResult.Value));
         if (expression is PowerShellBoundMutationExpression mutation)
             return new PowerShellBoundMutationExpression(mutation.Span, mutation.Target, mutation.TargetClrType, mutation.Operation,
-                mutation.Value is null ? null : OptimizeExpression(mutation.Value), mutation.Type, mutation.NormalizeNullString, mutation.IntegralSemantics);
+                mutation.Value is null ? null : OptimizeExpression(mutation.Value), mutation.Type, mutation.NormalizeNullString,
+                mutation.IntegralSemantics, mutation.PreserveStatementErrors, mutation.NativeTargetRead, mutation.NativeSourceText, mutation.NativeSetSequencePoint, mutation.NativeAssignmentTarget);
         if (expression is PowerShellBoundArrayExpression array)
             return new PowerShellBoundArrayExpression(array.Span, array.Type.ClrType, array.Kind, array.Elements.Select(OptimizeExpression).ToArray());
+        if (expression is PowerShellBoundNativeMemberExpression memberRead)
+            return new PowerShellBoundNativeMemberExpression(memberRead.Span,
+                memberRead.Receiver is null ? null : OptimizeExpression(memberRead.Receiver),
+                memberRead.LiteralTargetType,
+                memberRead.NameExpression is null ? null : OptimizeExpression(memberRead.NameExpression),
+                memberRead.Name,
+                memberRead.IsStatic);
+        if (expression is PowerShellBoundNativeInvocationExpression nativeInvocation)
+            return new PowerShellBoundNativeInvocationExpression(nativeInvocation.Span,
+                nativeInvocation.Receiver is null ? null : OptimizeExpression(nativeInvocation.Receiver),
+                nativeInvocation.LiteralTargetType, nativeInvocation.Name, nativeInvocation.IsStatic,
+                nativeInvocation.Arguments.Select(OptimizeExpression).ToArray(), nativeInvocation.TargetConstraint,
+                nativeInvocation.ArgumentConstraints.ToArray(), nativeInvocation.References.ToArray());
+        if (expression is PowerShellBoundNativeIndexExpression nativeIndex)
+            return new PowerShellBoundNativeIndexExpression(nativeIndex.Span, OptimizeExpression(nativeIndex.Receiver),
+                nativeIndex.Arguments.Select(OptimizeExpression).ToArray(), nativeIndex.TargetConstraint, nativeIndex.IndexConstraint);
+        if (expression is PowerShellBoundNativeCollectionExpression collection)
+            return new PowerShellBoundNativeCollectionExpression(collection.Span, collection.SourcePath,
+                collection.Items.Select(item => new PowerShellBoundNativeCollectionItem(item.Span, item.SourceText,
+                    OptimizeExpression(item.Value), item.SetSuccess, item.EmitsOutput, item.IsPipelineStatement)).ToArray(), collection.ShareEmptyResult, collection.SingleExpression, collection.CollapseResult);
+        if (expression is PowerShellBoundNativeStatementValueExpression statementValue)
+            return new PowerShellBoundNativeStatementValueExpression(statementValue.Span, OptimizeBlock(statementValue.Body));
+        if (expression is PowerShellBoundNativeConditionalValueExpression conditionalValue)
+            return new PowerShellBoundNativeConditionalValueExpression(conditionalValue.Span,
+                conditionalValue.Clauses.Select(clause => new PowerShellBoundNativeConditionalValueClause(
+                    OptimizeExpression(clause.Condition), OptimizeExpression(clause.Value))).ToArray(),
+                OptimizeExpression(conditionalValue.Otherwise), conditionalValue.PreserveRecords);
+        if (expression is PowerShellBoundArrayCopyExpression copy)
+            return new PowerShellBoundArrayCopyExpression(copy.Span, OptimizeExpression(copy.Source), copy.ShareEmptyResult);
         return expression;
     }
 

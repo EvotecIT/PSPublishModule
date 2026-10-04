@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "29272e4a4fb9c5e40b40b4c38aa50f2d91a34e02",
+  "purpose": "Qualify native script invocation ownership before general Hybrid root lowering; fixture-only proof, no new admission or emitted-function gain.",
+  "sourceHashes": {
+    "PowerForge.Tests/Fixtures/PowerShellCompilationStatementErrorFixture/NativeScriptEntryFixture.cs": "ec53894d6551f8b430f083098ceac80169d19399bcdd487ac206c471a1c921bb",
+    "PowerForge.Tests/Fixtures/PowerShellCompilationStatementErrorFixture/NativeScriptEntryProbe.ps1": "70a721f9584f1233e543d9eb331492770c0b991cc00f47234ce9d58c7d942d74",
+    "PowerForge.Tests/PowerShellCompilationNativeScriptEntryHostTests.cs": "ce1fa9f94fd0b47e9f4813aa4e0690e0ee9f8890205399f10b88431a7f1c9e8c"
+  },
+  "trxSha256": "0a56365a0bdd487b892666a40f358e06c57db0b7958e3b5523b1bb084ab0bfea",
+  "counters": {
+    "total": "2",
+    "executed": "2",
+    "passed": "2",
+    "failed": "0",
+    "error": "0",
+    "timeout": "0",
+    "aborted": "0",
+    "inconclusive": "0",
+    "passedButRunAborted": "0",
+    "notRunnable": "0",
+    "notExecuted": "0",
+    "disconnected": "0",
+    "warning": "0",
+    "completed": "0",
+    "inProgress": "0",
+    "pending": "0"
+  },
+  "results": [
+    {
+      "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeScriptEntry_PreservesSingleBindingLiveStorageAndAuthoredContext(framework: \"net472\", host: \"powershell.exe\")",
+      "outcome": "Passed"
+    },
+    {
+      "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeScriptEntry_PreservesSingleBindingLiveStorageAndAuthoredContext(framework: \"net10.0\", host: \"pwsh\")",
+      "outcome": "Passed"
+    }
+  ],
+  "hosts": [
+    "PowerShell 7 / net10.0 on Windows x64",
+    "Windows PowerShell 5.1 / net472 on Windows x64"
+  ],
+  "successfulCases": [
+    {
+      "case": "omitted",
+      "value": "default",
+      "defaultEvaluations": 1,
+      "validationEvaluations": 0,
+      "boundName": false,
+      "remainingArgumentCount": 0
+    },
+    {
+      "case": "explicit",
+      "value": "explicit",
+      "defaultEvaluations": 0,
+      "validationEvaluations": 1,
+      "boundName": true,
+      "remainingArgumentCount": 0
+    },
+    {
+      "case": "constrained-rebinding",
+      "value": "changed",
+      "defaultEvaluations": 0,
+      "validationEvaluations": 2,
+      "boundName": true,
+      "remainingArgumentCount": 0
+    },
+    {
+      "case": "remaining-argument",
+      "value": "explicit",
+      "defaultEvaluations": 0,
+      "validationEvaluations": 1,
+      "boundName": true,
+      "remainingArgumentCount": 1
+    }
+  ],
+  "proof": [
+    "Each successful compiled invocation executes exactly one native C# callback.",
+    "Each original case has nine explicitly checked authored observations. Compiled values, CLR types, cardinality and order match.",
+    "The callback accesses live bound parameter storage, PSBoundParameters membership, MyInvocation command type, PSCommandPath, PSScriptRoot and a written script local.",
+    "Rejected ValidateScript value preserves error ID/category/message and Failed invocation state, produces no body output and invokes no compiled callback.",
+    "Fresh parser AST compilation data is patched, not a shared cached ScriptBlock clone."
+  ],
+  "designFindings": [
+    "PowerShell.AddCommand(CommandInfo) directly selects CommandProcessor for IScriptCommandInfo in LocalPipeline.CreateCommandProcessBase, even for basic scripts. It rejected an additional positional argument that the original accepted.",
+    "Native call-operator dispatch selects the ordinary script owner. A compiler-owned try/rethrow preserves the terminating validation failure state.",
+    "Native local reads must use the active tuple owner where required. Null/empty args Count observation is qualified, not args reference identity."
+  ],
+  "primarySourceReferences": [
+    "https://github.com/PowerShell/PowerShell/blob/v7.6.5/src/System.Management.Automation/engine/hostifaces/LocalPipeline.cs#L847-L864",
+    "https://github.com/PowerShell/PowerShell/blob/v7.6.5/src/System.Management.Automation/engine/CommandDiscovery.cs#L531-L539",
+    "https://github.com/PowerShell/PowerShell/blob/v7.6.5/src/System.Management.Automation/engine/ExternalScriptInfo.cs#L197-L224"
+  ],
+  "earlierRuns": [
+    {
+      "file": "native-entry-owner.trx",
+      "sha256": "07c865c4d57652ea4e6b023e17c92e12dd32d4031ea909d260ca540542efa79b",
+      "status": "Failed; not qualification"
+    },
+    {
+      "file": "native-entry-owner-corrected.trx",
+      "sha256": "8c293639c702f7720cc1d4902ef94d653bfaa08df036a15ae61edb5fdc3572df",
+      "status": "Failed; not qualification"
+    },
+    {
+      "file": "native-entry-dispatch.trx",
+      "sha256": "d68b2aa50bff4f444699fde4728b1179683e859733017de32fb0c31086ec28a9",
+      "status": "Failed; not qualification"
+    },
+    {
+      "file": "native-entry-dispatch-corrected.trx",
+      "sha256": "d0e55df07c26efd48f7edbdf49718215f7e0312c9315390870cb8182050f514a",
+      "status": "Failed; not qualification"
+    },
+    {
+      "file": "native-entry-error-identity.trx",
+      "sha256": "a0b49ddb06e7a23f112df8c656539066daf6e30ed06206abeb41031d9002c95b",
+      "status": "Failed; not qualification"
+    },
+    {
+      "file": "native-entry-qualified.trx",
+      "sha256": "e8ad1f2d4f9d0f0c5be832d692b679f97a1b1f2697c9547b65f9294a6518a7c8",
+      "status": "Failed; not qualification"
+    }
+  ],
+  "limits": [
+    "Synthetic host-owner fixture, not an unchanged third-party application or compiler-generated executable.",
+    "No admission/compiler/Strict/module disposition change. Portfolio remains 544/565 emitted, 21 retained, 15 justified hosted and 6 unqualified WPF.",
+    "InvocationName, MyCommand.Name, caller scope, ScriptName/line, command shadowing, full args identity, streams, stopping, cleanup and control transfers remain unqualified.",
+    "No security-policy/ConstrainedLanguage/authorization qualification: production integration must preserve native policy checks and source/dependency locks.",
+    "No callback/generated source-mapping claim; fixture variable-read extents are test metadata.",
+    "No aggregate gate or census required for fixture-only owner evidence. No PR, merge or release."
+  ]
+}

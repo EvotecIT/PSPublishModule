@@ -66,7 +66,12 @@ internal static class PowerShellHybridDependencyResolver
         => DiscoverDependenciesCore(sourcePath, additionalEntryPaths, moduleScopeOnly: false, conventionalLoaders);
 
     internal static string[] DiscoverModuleScopeDependencies(string sourcePath)
-        => DiscoverDependenciesCore(sourcePath, additionalEntryPaths: null, moduleScopeOnly: true, conventionalLoaders: null);
+        => DiscoverModuleScopeDependencies(sourcePath, null, null);
+
+    internal static string[] DiscoverModuleScopeDependencies(string sourcePath,
+        IEnumerable<string>? additionalEntryPaths,
+        IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders)
+        => DiscoverDependenciesCore(sourcePath, additionalEntryPaths, moduleScopeOnly: true, conventionalLoaders);
 
     private static string[] DiscoverDependenciesCore(
         string sourcePath,
@@ -95,7 +100,10 @@ internal static class PowerShellHybridDependencyResolver
             ParseError[] errors;
             var ast = Parser.ParseFile(current, out tokens, out errors);
             if (errors.Length > 0)
-                throw new InvalidOperationException($"Dot-sourced hybrid module dependency '{current}' could not be parsed.");
+                throw new InvalidOperationException(
+                    $"Dot-sourced hybrid module dependency '{current}' could not be parsed: " +
+                    string.Join("; ", errors.Take(3).Select(error =>
+                        $"{error.Extent.StartLineNumber}:{error.Extent.StartColumnNumber} {error.Message}")));
             var dotSourceCommands = moduleScopeOnly
                 ? (ast.EndBlock is null ? Enumerable.Empty<StatementAst>() : ast.EndBlock.Statements)
                     .OfType<PipelineAst>()

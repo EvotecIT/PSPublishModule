@@ -31,8 +31,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
 
     /// <summary>Builds the requested PowerShell artifact.</summary>
     public PowerShellCompilationBuildResult Build(PowerShellCompilationBuildSpec spec)
+        => Build(spec, CancellationToken.None);
+
+    /// <summary>Builds an artifact, canceling child build processes and checking cancellation before publication.</summary>
+    public PowerShellCompilationBuildResult Build(PowerShellCompilationBuildSpec spec, CancellationToken cancellationToken)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
+        cancellationToken.ThrowIfCancellationRequested();
         ApplyExplicitTargetContract(spec);
         ValidateSpec(spec);
         var runtimeIdentifier = ResolveRuntimeIdentifier(spec);
@@ -88,7 +93,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             if (dependencyGraph.Cycles.Length > 0)
                 throw new InvalidOperationException("PowerShell compilation dependency graph contains a static dependency cycle: " + string.Join(" -> ", dependencyGraph.Cycles[0]));
             var targetContract = ResolveTargetContract(spec, runtimeIdentifier);
-            var toolchain = CaptureToolchain(workspace, targetContract, dependencyGraph);
+            var toolchain = CaptureToolchain(workspace, targetContract, dependencyGraph, cancellationToken);
             WriteTargetContract(workspace, targetContract);
             var missingDependencies = dependencyPlan
                 .Where(static dependency => dependency.Disposition == PowerShellCompilationDependencyDisposition.Missing)
@@ -108,7 +113,15 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             }
             failureStage = PowerShellCompilationFailureStage.Analysis;
             var capabilities = PowerShellCompilationBuildSpec.GetCapabilities(spec.Kind, spec.Mode);
-            var plan = AnalyzeCompilationSources(compilationSourcePaths, spec.Mode, spec.TargetFramework, spec.SemanticProfileId, capabilities, commandProviderInputs);
+            var nativeManifestPath = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
+                ? PowerShellCompiledModuleManifest.ResolveSourceManifest(spec.SourcePath, spec.ModuleManifestPath) : spec.ModuleManifestPath;
+            var nativeDependencyTypes = PowerShellNativeDependencyTypes.Create(nativeManifestPath, dependencyPlan, dependencyGraph);
+            var plan = AnalyzeCompilationSources(compilationSourcePaths, spec.Mode, spec.TargetFramework, spec.SemanticProfileId, capabilities,
+                commandProviderInputs, nativeDependencyTypes);
+            // Artifact shaping must use the same resolved target as explain, locks
+            // and publication. Source-only analysis intentionally has no delivery target.
+            plan = new PowerShellCompilationPlan(plan.Mode, plan.Files, plan.TargetFramework,
+                plan.Dependencies, plan.DependencyGraph, targetContract);
             failurePlan = plan;
             if (plan.ParseErrorFiles > 0)
                 throw new InvalidOperationException("PowerShell source contains parser errors; no artifact was produced.");
@@ -141,7 +154,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     spec.TargetFramework,
                     spec.SemanticProfileId,
                     commandProviderInputs);
-                File.WriteAllText(Path.Combine(workspace, "CompiledPowerShellScript.cs"), executable.CompiledSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                WriteCompiledPowerShellSource(Path.Combine(workspace, "CompiledPowerShellScript.cs"), executable.CompiledSource,
+                    spec.SourcePath, compilationSourcePaths, includeSyntheticEntry: true);
                 File.WriteAllText(Path.Combine(workspace, "Program.cs"), executable.ProgramSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 projectPath = Path.Combine(workspace, artifactName + ".csproj");
                 var publishSingleFile = ShouldEnablePublishSingleFile(spec);
@@ -187,7 +201,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             {
                 if (spec.Mode == PowerShellCompilationMode.Package)
                     throw new InvalidOperationException("DLL artifacts require Hybrid or Strict mode because they contain genuinely typed methods.");
-                var transpiler = new PowerShellTypedCompilationTranspiler(commandProviderInputs, spec.SemanticProfileId);
+                var transpiler = new PowerShellTypedCompilationTranspiler(commandProviderInputs, spec.SemanticProfileId, nativeDependencyTypes);
                 typed = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
                     ? transpiler.TranspileForBinaryModule(
                         compilationSourcePaths,
@@ -211,7 +225,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     }
                     if (spec.Mode == PowerShellCompilationMode.Hybrid)
                     {
-                        typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, spec.TargetFramework, spec.SemanticProfileId, capabilities);
+                        typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, spec.TargetFramework, spec.SemanticProfileId, capabilities, nativeDependencyTypes);
                         typed = PowerShellAdvancedFunctionLifecyclePlanner.AddHostedLifecycleMethods(typed, spec.TargetFramework);
                     }
                     exportedFunctions = exportContract?.SelectFunctions(typed.Methods.Select(static method => method.SourceName));
@@ -235,11 +249,16 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 if (spec.Mode == PowerShellCompilationMode.Strict && typed.Diagnostics.Length > 0)
                     throw new InvalidOperationException($"Strict mode rejected {typed.Diagnostics.Length} compilation blocker(s). {DescribeBlockers(typed.Diagnostics)}");
                 if (spec.Mode == PowerShellCompilationMode.Strict &&
-                    plan.Files.SelectMany(static file => file.Units).Any(static unit => unit.Kind != PowerShellCompilationUnitKind.Function))
+                    plan.Files.Any(file => file.Units.Any(unit => unit.Kind != PowerShellCompilationUnitKind.Function &&
+                        !(typed.RuntimeFreeModule is not null && typed.Methods.Any(method => method.IsModuleInitializer &&
+                            PowerShellCompilationPathSafety.PathEquals(method.SourcePath, file.FullPath) &&
+                            method.SourceName.Equals(unit.Name, StringComparison.OrdinalIgnoreCase) && method.SourceLine == unit.StartLine)))))
                     throw new InvalidOperationException("Strict DLL compilation rejected a top-level script unit because DLL emitters currently produce typed functions only.");
-                File.WriteAllText(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                WriteCompiledPowerShellSource(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode,
+                    spec.SourcePath, compilationSourcePaths);
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
                 {
+                    WriteBinaryHostRuntime(workspace, typed);
                     File.WriteAllText(
                         Path.Combine(workspace, "CompiledCmdlets.cs"),
                         PowerShellBinaryCmdletSourceGenerator.Generate(typed, exportedFunctions, spec.TargetFramework),
@@ -259,12 +278,14 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         .Replace("{{ASSEMBLY_VERSION}}", EscapeXml(GetBinaryModuleAssemblyVersion(spec))),
                     new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 requiresPowerShellRuntime = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule;
+                if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
+                    PowerShellCommandMetadataBuildSupport.Write(workspace, projectPath, typed, exportedFunctions);
                 usesPowerShellRuntimeFallback = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule &&
                     spec.Mode == PowerShellCompilationMode.Hybrid &&
-                    (typed.Methods.Count(static method => method.Lifecycle is null) != plan.TotalUnits || runtimeManifestHooks.Length > 0);
-                compiledMethods = typed.Methods.Count(static method => method.Lifecycle is null);
+                    (typed.Methods.Count(static method => method.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline) != plan.TotalUnits || runtimeManifestHooks.Length > 0);
+                compiledMethods = typed.Methods.Count(static method => method.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline);
                 compiledMethodDetails = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && exportedFunctions is not null
-                    ? typed.Methods.Where(method => method.Lifecycle is null || exportedFunctions.Contains(method.SourceName, StringComparer.OrdinalIgnoreCase)).ToArray()
+                    ? typed.Methods.Where(method => method.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline || exportedFunctions.Contains(method.SourceName, StringComparer.OrdinalIgnoreCase)).ToArray()
                     : typed.Methods;
                 optimizationEvidence = typed.Optimization;
                 irSnapshots = typed.IrSnapshots;
@@ -282,6 +303,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 File.WriteAllText(
                     Path.Combine(workspace, "Program.cs"),
                     ReadTemplate(PackagedProgramTemplate)
+                        .Replace("{{ENTRY_INVOCATION}}", PowerShellPackagedEntryInvocationSource.Render(nativeEntry: false))
                         .Replace("{{PARAMETERS}}", parameterInitializers.Parameters)
                         .Replace("{{SWITCH_PARAMETERS}}", parameterInitializers.SwitchParameters)
                         .Replace("{{BOOLEAN_PARAMETERS}}", parameterInitializers.BooleanParameters)
@@ -332,7 +354,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         workspace,
                         "PowerForge.Compiled",
                         typed?.TypeName ?? "CompiledPowerShellScript",
-                        compiledMethodDetails);
+                        compiledMethodDetails,
+                        typed?.RuntimeFreeModule);
                     publicAbi = runtimeFreeContract.PublicAbi;
                 }
                 else if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
@@ -356,7 +379,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             if (spec.UseBuildCache || !string.IsNullOrWhiteSpace(spec.NuGetLockFilePath))
             {
                 failureStage = PowerShellCompilationFailureStage.Restore;
-                restore = RunDotNetRestore(spec, projectPath, runtimeIdentifier);
+                restore = RunDotNetRestore(spec, projectPath, runtimeIdentifier, cancellationToken);
                 if (restore.TimedOut)
                     throw new TimeoutException($"Generated .NET restore exceeded {spec.TimeoutSeconds} seconds.");
                 if (restore.ExitCode != 0)
@@ -373,7 +396,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 : PowerShellCompilationFailureStage.Optimization;
             var process = PowerShellCompilationArtifactBuildCache.TryRestore(spec, buildCache, publishDirectory)
                 ? new GeneratedBuildProcessResult(0, "PowerForge compilation build cache: verified content-addressed hit.", timedOut: false)
-                : RunDotNetBuild(spec, projectPath, publishDirectory, runtimeIdentifier, restoreCompleted: restore is not null);
+                : RunDotNetBuild(spec, projectPath, publishDirectory, runtimeIdentifier, restoreCompleted: restore is not null, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             result.BuildOutput = BoundOutput(string.Join(Environment.NewLine,
                 new[] { restore?.Output, process.Output }.Where(static output => !string.IsNullOrWhiteSpace(output))));
             if (process.TimedOut)
@@ -583,7 +607,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     Files = PowerShellArtifactSetPublisher.RebaseFiles(stagedArtifact.Files, artifactStagingDirectory, spec.OutputDirectory),
                     Dependencies = dependencyPlan,
                     DependencyGraph = dependencyGraph,
-                    DependencyLockReviewed = spec.ExpectedDependencyLock is not null,
+                    DependencyLockReviewed = spec.ExpectedDependencyLock is not null && spec.DevelopmentBaselineLockSha256 is null,
+                    DevelopmentBaselineLockSha256 = spec.DevelopmentBaselineLockSha256,
                     CommandProviders = commandProviders,
                     ProviderLock = providerResolution.Lock.Packages.Length == 0 ? null : providerResolution.Lock,
                     ProviderLockReviewed = providerResolution.Lock.Packages.Length > 0 && spec.ExpectedProviderLock is not null,
@@ -596,7 +621,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 };
                 var manifestPath = Path.Combine(spec.OutputDirectory, artifactName + ".powerforge-compilation.json");
                 WriteManifest(Path.Combine(artifactStagingDirectory, Path.GetFileName(manifestPath)), manifest);
-            PowerShellArtifactSetPublisher.Commit(
+                cancellationToken.ThrowIfCancellationRequested();
+                PowerShellArtifactSetPublisher.Commit(
                     artifactStagingDirectory,
                     spec.OutputDirectory,
                     artifactName,
@@ -621,6 +647,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             {
                 PowerShellArtifactSetPublisher.TryDeleteDirectory(artifactStagingDirectory);
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {

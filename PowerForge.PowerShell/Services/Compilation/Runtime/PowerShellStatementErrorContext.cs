@@ -1,0 +1,181 @@
+namespace PowerForge.Generated.Runtime
+{
+    using System;
+    using System.Management.Automation;
+    using System.Management.Automation.Language;
+
+    /// <summary>
+    /// Invocation-owned bridge from compiled statement errors to the qualified PowerShell host.
+    /// Intended for embedding in generated command artifacts; runtime-independent targets do not use this type.
+    /// </summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public sealed partial class PowerShellStatementErrorContext : IDisposable
+    {
+        private readonly NativeContract _contract;
+        private readonly object _preferenceTuple;
+        private readonly object _context;
+        private readonly object _runtime;
+        private readonly object _outputPipe;
+        private readonly object _errorPipe;
+        private readonly bool _mergeErrorToOutput;
+        private readonly bool _redirectError;
+        private readonly string _sourceName;
+        private readonly bool _ownsVariableLists;
+        private readonly PowerShellCommandVariableScope? _variableScope;
+        private readonly object? _nativeFunction;
+        private readonly IScriptExtent? _invocationExtent;
+        private IScriptExtent? _lastErrorExtent;
+        private int _handlerDepth;
+        private bool _disposed;
+
+        internal PowerShellStatementErrorContext(PSCmdlet cmdlet, string sourceName)
+        {
+            _contract = NativeContract.Shared;
+            if (cmdlet is null) throw new ArgumentNullException(nameof(cmdlet));
+            _sourceName = sourceName ?? throw new ArgumentNullException(nameof(sourceName));
+            _invocationExtent = (IScriptExtent)_contract.GetRequired(_contract.InvocationScriptPosition, cmdlet.MyInvocation);
+            _ownsVariableLists = true;
+            _context = _contract.GetRequired(_contract.CmdletContext, cmdlet);
+            _runtime = cmdlet.CommandRuntime;
+            if (!_contract.CommandRuntimeType.IsInstanceOfType(_runtime))
+                throw new NotSupportedException("Statement error continuation requires the native PowerShell command runtime.");
+            _outputPipe = _contract.GetRequired(_contract.OutputPipe, _runtime);
+            _errorPipe = _contract.GetRequired(_contract.ErrorOutputPipe, _runtime);
+            _mergeErrorToOutput = Equals(_contract.ErrorMergeTo.GetValue(_runtime, null), _contract.MergeToOutput);
+            _redirectError = (bool)_contract.GetRequired(_contract.IsRedirected, _errorPipe);
+            // Preserve the raw inherited preference. In Windows PowerShell 5.1,
+            // an inherited string and a bound ActionPreference can take different native paths.
+            var preference = cmdlet.MyInvocation.BoundParameters.TryGetValue("ErrorAction", out var boundPreference)
+                ? boundPreference
+                : cmdlet.SessionState.PSVariable.GetValue("ErrorActionPreference", ActionPreference.Continue);
+            _preferenceTuple = _contract.CreateTuple("ErrorActionPreference", preference);
+
+            // A native cmdlet registers these lists during binding. A script function
+            // owns them only while its clause runs, including cleanup during unwinding.
+            _variableScope = PowerShellCommandVariableScope.EnterClause(cmdlet);
+        }
+
+        internal IDisposable EnterHandler()
+        {
+            ThrowIfDisposed();
+            // Native subexpressions and callbacks consult the live execution
+            // context before their errors reach our statement adapter. Match
+            // the authored try scope, including nested handler restoration.
+            var previousPropagation = _nativeFunction is null ? (bool?)null :
+                (bool)_contract.GetRequired(_contract.PropagateExceptions, _context);
+            if (previousPropagation.HasValue) _contract.PropagateExceptions.SetValue(_context, true, null);
+            _handlerDepth++;
+            return new HandlerScope(this, previousPropagation);
+        }
+
+        internal void Handle(
+            Exception error,
+            string file,
+            int line,
+            int column,
+            int endLine,
+            int endColumn,
+            string sourceText)
+        {
+            ThrowIfDisposed();
+            var extent = CreateExtent(file, line, column, endLine, endColumn, sourceText);
+            if (_nativeFunction is null && ExpressionErrorExtents.TryGetValue(error, out var expressionExtent))
+            {
+                extent = expressionExtent;
+                ExpressionErrorExtents.Remove(error);
+            }
+            _lastErrorExtent = extent;
+            if (_nativeFunction is not null)
+            {
+                HandleNativeFunction(error, extent);
+                return;
+            }
+            var function = NativeContract.Construct(_contract.FunctionContextConstructor);
+            _contract.FunctionExecutionContext.SetValue(function, _context);
+            _contract.FunctionOutputPipe.SetValue(function, _outputPipe);
+            _contract.FunctionSequencePoints.SetValue(function, new IScriptExtent[] { extent });
+
+            var sessionState = _contract.GetRequired(_contract.EngineSessionState, _context);
+            var scope = NativeContract.Invoke(_contract.NewScope, sessionState, false)!;
+            var previousErrorPipe = _contract.ShellErrorPipe.GetValue(_context, null);
+            var previousPropagation = (bool)_contract.GetRequired(_contract.PropagateExceptions, _context);
+            var scopeEntered = false;
+            try
+            {
+                _contract.CurrentScope.SetValue(sessionState, scope, null);
+                scopeEntered = true;
+                _contract.ScopeLocalsTuple.SetValue(scope, _preferenceTuple, null);
+                if (_mergeErrorToOutput)
+                    _contract.ShellErrorPipe.SetValue(_context, _outputPipe, null);
+                else if (_redirectError)
+                    _contract.ShellErrorPipe.SetValue(_context, _errorPipe, null);
+                if (_handlerDepth != 0)
+                    _contract.PropagateExceptions.SetValue(_context, true, null);
+                NativeContract.Invoke(_contract.CheckActionPreference, null, function, error);
+            }
+            finally
+            {
+                _contract.PropagateExceptions.SetValue(_context, previousPropagation, null);
+                _contract.ShellErrorPipe.SetValue(_context, previousErrorPipe, null);
+                if (scopeEntered) NativeContract.Invoke(_contract.RemoveScope, sessionState, scope);
+            }
+        }
+
+        internal Exception LeaveCommand(Exception error)
+        {
+            if (_nativeFunction is not null) return error;
+            if (error is RuntimeException { WasThrownFromThrowStatement: true }) return error;
+            if (error is CmdletInvocationException)
+            {
+                if (!_ownsVariableLists) NativeContract.Invoke(_contract.AppendErrorToVariables, _runtime, error);
+                return error;
+            }
+            var errorInvocation = (error as RuntimeException)?.ErrorRecord.InvocationInfo;
+            var extent = _invocationExtent ?? (errorInvocation is null
+                ? _lastErrorExtent ?? CreateExtent(string.Empty, 1, 1, 1, 1, string.Empty)
+                : (IScriptExtent)_contract.GetRequired(_contract.InvocationScriptPosition, errorInvocation));
+            var function = NativeContract.Construct(_contract.FunctionInfoConstructor,
+                _sourceName, ScriptBlock.Create(string.Empty), _context);
+            var invocation = NativeContract.Construct(_contract.InvocationInfoConstructor, function, extent, _context);
+            var wrapped = (Exception)NativeContract.Construct(_contract.CommandExceptionConstructor, error, invocation);
+            if (!_ownsVariableLists) NativeContract.Invoke(_contract.AppendErrorToVariables, _runtime, wrapped);
+            return wrapped;
+        }
+
+        private static IScriptExtent CreateExtent(string file, int line, int column, int endLine, int endColumn, string text)
+            => PowerShellSourceExtent.Create(file, line, column, endLine, endColumn, text);
+
+        /// <summary>Releases only this invocation's stream-variable registrations.</summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _variableScope?.Dispose();
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(PowerShellStatementErrorContext));
+        }
+
+        private sealed class HandlerScope : IDisposable
+        {
+            private PowerShellStatementErrorContext? _owner;
+            private readonly bool? _previousPropagation;
+            internal HandlerScope(PowerShellStatementErrorContext owner, bool? previousPropagation)
+            {
+                _owner = owner;
+                _previousPropagation = previousPropagation;
+            }
+            public void Dispose()
+            {
+                var owner = _owner;
+                if (owner is null) return;
+                _owner = null;
+                owner._handlerDepth--;
+                if (_previousPropagation.HasValue)
+                    owner._contract.PropagateExceptions.SetValue(owner._context, _previousPropagation.Value, null);
+            }
+        }
+    }
+}

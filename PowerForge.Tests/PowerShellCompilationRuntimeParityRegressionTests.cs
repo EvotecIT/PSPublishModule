@@ -15,7 +15,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             PowerShellCompilationArtifactKind.Executable,
             PowerShellCompilationMode.Strict);
 
-        var plan = new PowerShellCompilationAnalyzer().Analyze(resolved, PowerShellCompilationMode.Strict, "net8.0");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(resolved, PowerShellCompilationMode.Strict, "net10.0");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
@@ -43,10 +43,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.OutputPath,
             "PowerForge.CheckedCompoundAssignments",
             PowerShellCompilationArtifactKind.Library,
-            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
-        {
-            EmitSource = true
-        });
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var assembly = System.Reflection.Assembly.LoadFrom(result.ArtifactPath!);
@@ -60,10 +57,9 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         {
             var method = assembly.GetTypes().SelectMany(static type => type.GetMethods()).Single(candidate => candidate.Name == item.Name);
             var exception = Assert.Throws<System.Reflection.TargetInvocationException>(() => method.Invoke(null, item.Arguments));
-            Assert.IsType<OverflowException>(exception.InnerException);
+            var conversion = Assert.IsType<InvalidCastException>(exception.InnerException);
+            Assert.IsType<OverflowException>(conversion.InnerException);
         }
-        var source = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
-        Assert.Equal(3, source.Split(new[] { "checked(" }, StringSplitOptions.None).Length - 1);
 
         var engines = new List<string> { "pwsh" };
         if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
@@ -75,8 +71,9 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 "-NoProfile",
                 "-NonInteractive",
                 "-Command",
-                "$ErrorActionPreference = 'Stop'; [byte] $value = 255; [byte] $operand = 1; $value += $operand");
-            Assert.NotEqual(0, native.ExitCode);
+                "$ErrorActionPreference = 'Stop'; [byte] $value = 255; [byte] $operand = 1; try { $value += $operand; 'unexpected-success' } catch [InvalidCastException] { 'invalid-cast'; $value }");
+            Assert.Equal(0, native.ExitCode);
+            Assert.Equal("invalid-cast" + Environment.NewLine + "255", native.StandardOutput.Trim());
         }
     }
 
@@ -170,11 +167,12 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(1, result.Manifest!.CompiledMethods);
-        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
-        Assert.Contains(result.Manifest.Diagnostics, static diagnostic =>
-            diagnostic.Message.Contains("pipeline cardinality", StringComparison.OrdinalIgnoreCase));
-        Assert.Equal("System.String", RuntimeParityRunModuleProof(result.ArtifactPath!, "Get-ConsumedType"));
+        Assert.Equal(2, result.Manifest!.CompiledMethods);
+        Assert.All(result.Manifest.UnitDispositionLedger!.Entries.Where(unit => unit.EmittedClrMethod),
+            unit => Assert.True(unit.UsesNativeFunctionBinding));
+        var compiledValue = RuntimeParityRunModuleProof(result.ArtifactPath!, "Get-ConsumedType");
+        Assert.Equal(RuntimeParityRunModuleProof(fixture.ScriptPath, "Get-ConsumedType"), compiledValue);
+        Assert.Equal("System.String", compiledValue);
     }
 
     [Fact]

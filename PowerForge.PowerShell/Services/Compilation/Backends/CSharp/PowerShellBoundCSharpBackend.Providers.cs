@@ -8,11 +8,69 @@ internal sealed partial class PowerShellBoundCSharpBackend
         StringBuilder builder,
         PowerShellLoweredStreamWriteStatement stream,
         string prefix,
-        Func<string, string> getTemporaryIdentifier)
+        Func<string, string> getTemporaryIdentifier,
+        string? successOutputSink)
     {
+        var successSink = successOutputSink ?? "__writeOutput";
+        if (stream.OutputBinding != PowerShellOutputBindingKind.Default)
+        {
+            var value = getTemporaryIdentifier("outputArgument");
+            builder.Append(prefix).Append("object? ").Append(value).Append(" = (object?)")
+                .Append(EmitExpression(stream.Message)).AppendLine(";");
+            builder.Append(prefix).Append("if (global::System.Object.ReferenceEquals(").Append(value)
+                .Append(", global::System.Management.Automation.Internal.AutomationNull.Value)) ")
+                .Append(value).AppendLine(" = null;");
+            if (stream.OutputBinding == PowerShellOutputBindingKind.PositionalNoEnumeratePowerShell7)
+            {
+                builder.Append(prefix).Append("if (global::System.Management.Automation.LanguagePrimitives.GetEnumerable(")
+                    .Append(value).AppendLine(") is null)")
+                    .Append(prefix).Append("    ").Append(value)
+                    .Append(" = new global::System.Collections.Generic.List<object?> { ").Append(value).AppendLine(" };");
+            }
+            builder.Append(prefix).Append(successSink).Append('(').Append(value).AppendLine(");");
+            return;
+        }
+        if (stream.Provider is null)
+        {
+            if (stream.Kind != PowerShellStreamCommandKind.Success)
+                throw new InvalidOperationException("Implicit stream output must target the success stream.");
+            if (stream.Message is PowerShellLoweredNativeCommandExpression { PreserveReturnRecords: true } returnedPipeline)
+            {
+                builder.Append(prefix).Append(EmitNativeCommandRecords(returnedPipeline, successSink)).AppendLine(";");
+                return;
+            }
+            if (stream.Message.ClrType == typeof(void))
+            {
+                builder.Append(prefix).Append(EmitExpression(stream.Message)).AppendLine(";");
+                return;
+            }
+            if (stream.UsesNativeInvocation)
+            {
+                builder.Append(prefix).Append("__nativeFunction.WriteOutput((object?)")
+                    .Append(EmitExpression(stream.Message)).Append(", ").Append(successSink).AppendLine(");");
+                return;
+            }
+            if (stream.UsesCommandHostEnumeration)
+            {
+                builder.Append(prefix).Append("__statementErrors.WriteOutput((object?)")
+                    .Append(EmitExpression(stream.Message)).Append(", ").Append(successSink).Append(", ")
+                    .Append(EmitSourceExtentArguments(stream.Message.Span)).AppendLine(");");
+                return;
+            }
+            if (stream.EnumerateAuthoredArray)
+            {
+                var record = getTemporaryIdentifier("outputRecord");
+                builder.Append(prefix).Append("foreach (var ").Append(record).Append(" in ")
+                    .Append(EmitExpression(stream.Message)).AppendLine(")")
+                    .Append(prefix).Append("    ").Append(successSink).Append("((object?)").Append(record).AppendLine(");");
+                return;
+            }
+            builder.Append(prefix).Append(successSink).Append("((object?)").Append(EmitExpression(stream.Message)).AppendLine(");");
+            return;
+        }
         var sink = stream.Kind switch
         {
-            PowerShellStreamCommandKind.Success => "__writeOutput",
+            PowerShellStreamCommandKind.Success => successSink,
             PowerShellStreamCommandKind.Verbose => "__writeVerbose",
             PowerShellStreamCommandKind.Debug => "__writeDebug",
             PowerShellStreamCommandKind.Warning => "__writeWarning",

@@ -117,23 +117,30 @@ public sealed class PowerShellCompilationRegionGraph
 {
     /// <summary>Creates an immutable graph in authored region order.</summary>
     [JsonConstructor]
-    public PowerShellCompilationRegionGraph(IReadOnlyList<PowerShellCompilationRegion>? regions)
-        => Regions = Array.AsReadOnly((regions ?? Array.Empty<PowerShellCompilationRegion>())
+    public PowerShellCompilationRegionGraph(IReadOnlyList<PowerShellCompilationRegion>? regions,
+        IReadOnlyList<PowerShellCompilationScriptBlockRegion>? scriptBlocks = null)
+    {
+        Regions = Array.AsReadOnly((regions ?? Array.Empty<PowerShellCompilationRegion>())
             .OrderBy(static region => region.Ordinal)
             .ToArray());
+        ScriptBlocks = Array.AsReadOnly((scriptBlocks ?? Array.Empty<PowerShellCompilationScriptBlockRegion>())
+            .OrderBy(static block => block.StartOffset).ToArray());
+    }
 
     /// <summary>Region-graph schema version.</summary>
-    public int SchemaVersion => 1;
+    public int SchemaVersion => ScriptBlocks.Count == 0 ? 1 : 2;
     /// <summary>Coarse regions in authored execution order.</summary>
     public IReadOnlyList<PowerShellCompilationRegion> Regions { get; }
+    /// <summary>Compiled literal bodies, each with its own invocation order and boundary graph.</summary>
+    public IReadOnlyList<PowerShellCompilationScriptBlockRegion> ScriptBlocks { get; }
     /// <summary>Total hosted command boundaries represented by the graph.</summary>
-    public int HostedCommandBoundarySites => Regions.Sum(static region => region.HostedCommandBoundarySites);
+    public int HostedCommandBoundarySites => Regions.Sum(static region => region.HostedCommandBoundarySites) + ScriptBlocks.Sum(static block => block.Graph.HostedCommandBoundarySites);
     /// <summary>Total parent Hybrid module-state reads represented by the graph.</summary>
-    public int ModuleStateReadBoundarySites => Regions.Sum(static region => region.ModuleStateReadBoundarySites);
+    public int ModuleStateReadBoundarySites => Regions.Sum(static region => region.ModuleStateReadBoundarySites) + ScriptBlocks.Sum(static block => block.Graph.ModuleStateReadBoundarySites);
     /// <summary>Total parent Hybrid module-state writes represented by the graph.</summary>
-    public int ModuleStateWriteBoundarySites => Regions.Sum(static region => region.ModuleStateWriteBoundarySites);
+    public int ModuleStateWriteBoundarySites => Regions.Sum(static region => region.ModuleStateWriteBoundarySites) + ScriptBlocks.Sum(static block => block.Graph.ModuleStateWriteBoundarySites);
     /// <summary>Total statically visible typed/hosted crossings represented by the graph.</summary>
-    public int StaticBoundaryCrossings => Regions.Sum(static region => region.StaticBoundaryCrossings);
+    public int StaticBoundaryCrossings => Regions.Sum(static region => region.StaticBoundaryCrossings) + ScriptBlocks.Sum(static block => block.Graph.StaticBoundaryCrossings);
     /// <summary>Total deterministic structural cost used to rank candidates for measured profiling.</summary>
-    public int StaticBoundaryCostUnits => Regions.Sum(static region => region.StaticBoundaryCostUnits);
+    public int StaticBoundaryCostUnits => Regions.Sum(static region => region.StaticBoundaryCostUnits) + ScriptBlocks.Sum(static block => block.Graph.StaticBoundaryCostUnits);
 }

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "def0609671a77542877de3fd941f5bb5ee0fbb24",
+  "purpose": "Qualify ordinary top-level function declarations inside the bounded Hybrid native script-root executable.",
+  "claimedHost": "Windows x64, PowerShell 7 SDK, .NET 10 Hybrid executable",
+  "sourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/PowerShellHybridNativeEntryPlanner.cs": "0325ca9174e99bc1c7fc81b536fc08c0e4ef27c89078755a7a08dd0299298c85",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellTypedExecutableCompiler.cs": "6400648b8fe0af174a775dd014559ca6c452eb1ae7162dc561042dc2c9c1ad6c",
+    "PowerForge.Tests/PowerShellCompilationNativeScriptArtifactTests.cs": "49f43feb4df26d060348d61a127dabe6f8dc84d9efc125f6277b16f88075aba5",
+    "PowerForge.Tests/PowerShellCompilationNativeScriptRootTests.cs": "c803dcabaea5816394ca255bd5500f949e322da6d9d8fc3931c40414851cc536"
+  },
+  "validation": [
+    {
+      "result": "Passed 23/23 final affected tests in 47 seconds",
+      "scope": "Native-root original/generated executable, negative hosted dispositions, existing script-root cases and Strict reserved-name sibling",
+      "trxSha256": "f0bd5fc8d6e6ed481cc4c088f4b449f3241fff153e6e43974dda4913d30d70e3"
+    },
+    {
+      "result": "PowerForge.PowerShell net472 build succeeded with zero warnings and errors",
+      "scope": "Shared-owner source compatibility; no net472 executable execution claim"
+    },
+    {
+      "result": "Independent read-only review found an unnecessary Invoke fallback; targeted confirmation closed it and exposed an adjacent normalized-name fallback",
+      "scope": "The final artifact also executes both distinct names after the adjacent correction; no second full review loop"
+    }
+  ],
+  "syntheticArtifact": {
+    "emittedRoots": 1,
+    "nestedCompiledDeclarations": 3,
+    "separatelyEmittedLocalMethods": 0,
+    "helperNames": ["Invoke", "Get-A", "Get_A"],
+    "originalGeneratedCases": ["omitted Count", "-Count 0", "-Count 5"],
+    "observed": "Exit code, stdout and stderr matched for all cases; emitted root and three child regions, generated declaration registration and for loop, and exact packaged source were asserted."
+  },
+  "excludedFailures": [
+    "The first broader check failed three stale assertions expecting all declarations to remain rejected; those were corrected and the final affected check passed.",
+    "The first normalized-name artifact run failed a stale assertion expecting one child region after the fixture gained three helpers; the corrected final artifact passed.",
+    "A first test filter matched zero tests and is not counted as validation."
+  ],
+  "limits": [
+    "Synthetic executable proof only; no unchanged third-party declaration-bearing application has been qualified.",
+    "Nested exit, late declarations, function/alias drive mutation, unqualified child bodies, dependencies and other commands retain hosted fallback.",
+    "Only explicit net10.0/win-x64 Hybrid native script-root artifacts are claimed; Strict retains its separate fail-closed contract.",
+    "No named-module function gain, broad gate, fresh module census, PR, merge or release."
+  ]
+}

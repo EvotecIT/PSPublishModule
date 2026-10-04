@@ -6,10 +6,12 @@ public enum PowerShellCompilationLifecycleExecution
     /// <summary>No advanced lifecycle is present.</summary>
     None,
     /// <summary>A generated cmdlet delegates lifecycle execution to a PowerShell steppable pipeline.</summary>
-    HostedSteppablePipeline
+    HostedSteppablePipeline,
+    /// <summary>Compiled CLR clauses execute inside the original native function invocation.</summary>
+    CompiledNativeCallbacks
 }
 
-/// <summary>Explicit begin/process/end/clean contract for a generated cmdlet.</summary>
+/// <summary>Explicit begin/process/end/clean contract for a generated command.</summary>
 public sealed class PowerShellCompilationLifecycleContract
 {
     /// <summary>Lifecycle schema version.</summary>
@@ -42,7 +44,7 @@ public sealed class PowerShellCompilationLifecycleContract
     public bool SupportsShouldProcess { get; set; }
     /// <summary>Declared confirmation impact.</summary>
     public string ConfirmImpact { get; set; } = string.Empty;
-    /// <summary>SHA-256 of the authored lifecycle function embedded in the generated cmdlet.</summary>
+    /// <summary>SHA-256 of the authored lifecycle function compiled or retained by the generated command.</summary>
     public string SourceSha256 { get; set; } = string.Empty;
     /// <summary>Pipeline parameters used to reconstruct the current input record.</summary>
     public string[] PipelineParameterNames { get; set; } = Array.Empty<string>();

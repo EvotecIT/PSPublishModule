@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "recordedOn": "2026-09-28",
+  "source": {
+    "workload": "locksmith2",
+    "revision": "f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639",
+    "archiveSha256": "d4f511b16ed95d15bfa37ba06ddfc92709f0412e8669004cb70e3407ae9fc8b9",
+    "sourceFingerprint": "b1e65521a013471cfc80589f0edd062a714f4b498a347685a06d7dce97b1b4ef",
+    "license": "Commons Clause License Condition v1.0",
+    "unchangedFunctionSha256": {
+      "Private/Set/Set-CAComputerPrincipal.ps1": "b254899d02e3d5fcc139a79af3cbc3907b17fff4a69d68b3d1ed90aa2f4bcc10",
+      "Private/Set/Set-Owner.ps1": "c2ec3368d5ede9d5f6b48b9dd76fcdadf0bb65cc830033cd6e2cea3f9dc6efdd"
+    },
+    "unchangedManifestClassSha256": {
+      "Classes/LS2Principal.ps1": "5b8542654843f25be0218a346780cdd40ec6f236bc73004e228eb960cb49fca1",
+      "Classes/LS2AdcsObject.ps1": "abb27b68cdfe94c111013009ab453aa96a7f67748e2b33abd1e703640a9c93a5",
+      "Classes/LS2Issue.ps1": "736d4440eace31299822b2d8e20863b1c26a7cb9186da235c478910226202e38"
+    }
+  },
+  "fixture": {
+    "unchangedFunctionTextsVerbatimInMiniModules": 2,
+    "classCopiesHashIdenticalPerMiniModule": 3,
+    "computer": {
+      "moduleSourceSha256": "a5f3669b85df2844515ba51aca55190b9b9764b89fe5bb13f8f639062a9527b9",
+      "moduleManifestSha256": "6aee6ad445579164a16cddd1735a6069c1634f774dc3d3545e2944a9d5f8a8a7",
+      "observerSha256": "021a9095af237e532326050ef3ad49928a21d3d6a68c08a2f8f92cb75574131a",
+      "boundary": "An owned in-memory New-GCSearcher supplies found, missing and throwing FindOne cases and records search/disposal order. The observer validates the authored DNS filter and property request. Resolve-Principal is an owned call-recording stub; directory-entry and LDAP commands throw if reached."
+    },
+    "owner": {
+      "moduleSourceSha256": "88ea2d3d4955761271b200095c49b39be92ac76fc299b0ad8647a7fe970805f4",
+      "moduleManifestSha256": "95265af493be2aaf228a266f73fa599516c23d15700bf15fc9f9a8de91e49a12",
+      "observerSha256": "caf164752df2438ba4d52c6eb6c5339e1c92719fde315fec774cb361527c1aef",
+      "boundary": "The unchanged setter parses raw and SDDL-prefixed SIDs and normalizes Owner. Resolve-Principal is an owned call-recording stub; directory entry, GC and LDAP commands throw if reached."
+    }
+  },
+  "generated": {
+    "mode": "Hybrid",
+    "oneCompleteNativeBoundMethodPerMiniModuleAndTarget": true,
+    "hostedCommandRegionsPerMethod": 3,
+    "computerNet10ManifestSha256": "3a716b9b376a88decd75bc2a55791f1696e919571b36ddca38bb69bbf363d85f",
+    "computerNet472ManifestSha256": "65bd51e0b9c111190c759cb2374eaf3580fa24f5c3f76060c5973f3cfa074691",
+    "ownerNet10ManifestSha256": "12f5b59b4ff094343892c562eacf7cdd3f0803ad026eca6af7361dbc8b31197e",
+    "ownerNet472ManifestSha256": "39293b15af8e8b99164596878fe7a0e359057ff33db1eeb42fdd3ae0153b7c55",
+    "strict": {
+      "targets": ["net10.0", "net472"],
+      "canProceedEachMiniModuleAndTarget": false,
+      "typedUnitsEachMiniModuleAndTarget": 0,
+      "rejectedUnitsEachMiniModuleAndTarget": 1,
+      "computerNet10ExplainSha256": "ab25cdd64bdea7ab43c69d555406b08ff93d27456a00f6a2b4f25164d2a37f77",
+      "computerNet472ExplainSha256": "145c9eaff581c105cfc90f2203edd69f5845311a784d972fea1a944b4b340da2",
+      "ownerNet10ExplainSha256": "b166b8902dda09e97cb97f7a8620a3535f8d7dd2022e908b46473b33a4c40cad",
+      "ownerNet472ExplainSha256": "2f3dd0f275cd49c65b6894c2d047aa3f0814c11376eaa69c7e9d9a48ea3f2fac"
+    }
+  },
+  "execution": {
+    "hosts": ["PowerShell 7/net10.0 Windows x64", "Windows PowerShell 5.1/net472 Windows x64"],
+    "originalGeneratedAndCrossHostRawJsonEqualForEachObserver": true,
+    "allEightClaimedChildExitCodesZero": true,
+    "allEightClaimedStderrEmpty": true,
+    "computerRawOutputSha256EachRun": "da1c7acae484eca46a7824c57b4b7d8ec385ea83e2527dc32ced0173e034b489",
+    "ownerRawOutputSha256EachRun": "9fb8af8513bccafd8e9f71318813f148ab3d88d23f05caae9148c6b73ebb20a3",
+    "newlyExecutedMethods": ["Set-CAComputerPrincipal", "Set-Owner"],
+    "computerResult": {
+      "foundSid": "S-1-5-18",
+      "foundPathResolvesSidAndDisposesSearcher": true,
+      "missingPathDisposesSearcher": true,
+      "noDnsPathDoesNotSearch": true,
+      "nonCaFiltered": true,
+      "allFourCaObjectReferencesPreserved": true,
+      "failingFindOneReturnsCaButDoesNotDisposeSearcher": true
+    },
+    "ownerResult": {
+      "rawSidRemains": "S-1-5-18",
+      "sddlOwnerNormalizesTo": "S-1-5-19",
+      "absentOwnerRemainsEmpty": true,
+      "resolutionCalls": ["System.Security.Principal.SecurityIdentifier:S-1-5-18", "System.Security.Principal.SecurityIdentifier:S-1-5-19"],
+      "allThreeObjectReferencesPreserved": true
+    }
+  },
+  "separateAclHostObservation": {
+    "probeSha256": "ed72dba212e92e14e8aa2e487041824091ae7a624e79335e936f94082095d3e9",
+    "powerShell7OutputSha256": "bee10a7a5010a674a1e46227577068558d18a7b78f4973914b7e1bff207621db",
+    "windowsPowerShell51OutputSha256": "196db11fb523b4ba3a2d956175bf2e07b81cb266fe45e04326261a7876ef5b18",
+    "freshInMemoryActiveDirectorySecurityAccessMember": { "powerShell7": false, "windowsPowerShell51": true },
+    "getAccessRulesCountEachHost": 1,
+    "interpretation": "Four unchanged ACL setters read ObjectSecurity.Access. This isolated host-type observation is a qualification prerequisite, not proof of complete module or live DirectoryEntry behavior; the fixture did not inject an Access member to claim positive PowerShell 7 ACL coverage."
+  },
+  "sameInputAssessment": {
+    "evidenceSha256": "146a82d7eaa2fc563cdeb677526c363f42b29535d1313f9645355bd8b00602bf",
+    "completeEmittedFunctions": "75/100",
+    "regressions": 0,
+    "newlyEmittedMethodsWithDirectOfflineProof": "30/37"
+  },
+  "limits": [
+    "The generated methods are PowerShell-host-backed Hybrid callbacks, not runtime-free translation or Strict acceptance.",
+    "Owned GC search and principal-resolution stubs protect live AD; this does not prove real GC result shape, PrincipalStore population, NTAccount translation or directory failure behavior.",
+    "The pinned computer setter does not dispose its GC searcher when FindOne throws. Original and generated runs preserve that authored resource behavior; it is not a cleanup guarantee.",
+    "The Owner observer covers SID and absent-owner paths only; NTAccount translation, malformed identity warnings and real principal lookup remain unqualified.",
+    "Both observers bypass the AD-backed LS2AdcsObject constructor; full Locksmith2 import, CA/AD effects and non-Windows hosts remain unqualified.",
+    "The Commons Clause source and task-local executable observers are not tracked in this repository."
+  ]
+}

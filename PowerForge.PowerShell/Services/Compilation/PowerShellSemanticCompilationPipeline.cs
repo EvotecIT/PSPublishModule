@@ -48,19 +48,38 @@ internal sealed class PowerShellSemanticCompilationPipeline
     internal PowerShellSemanticCompilationResult Compile(
         IEnumerable<ParsedSourceDocument> documents,
         string? targetFramework = null,
-        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
+        PowerShellNativeDependencyTypes? nativeDependencyTypes = null)
     {
-        var binding = _binder.BindWithRegionCandidates(documents, targetFramework, capabilities);
+        var sourceDocuments = documents.Select(document => document.WithNativeDependencyTypes(
+            nativeDependencyTypes ?? document.NativeDependencyTypes)).ToArray();
+        var binding = _binder.BindWithRegionCandidates(sourceDocuments, targetFramework, capabilities);
         var bound = binding.Program;
+        capabilities = bound.TargetCapabilities;
         var optimized = _optimizer.Optimize(bound);
         var analyzed = _analyzer.Analyze(optimized.Program);
+        // OutputType metadata is provisional. Rebind consumers through the ordinary binder
+        // when canonical return analysis discovers a different value representation.
+        var returnTypes = new Dictionary<string, PowerShellTypeFact>(StringComparer.Ordinal);
+        var remainingRounds = Math.Max(1, bound.Functions.Length + 1);
+        while (TryRefineCallReturnTypes(analyzed, returnTypes))
+        {
+            if (remainingRounds-- == 0)
+                throw new InvalidOperationException("Local-call return contracts did not reach a stable representation.");
+            binding = _binder.BindWithRegionCandidates(sourceDocuments, targetFramework, capabilities, returnTypes);
+            bound = binding.Program;
+            optimized = _optimizer.Optimize(bound);
+            analyzed = _analyzer.Analyze(optimized.Program);
+        }
         var lowered = _lowerer.Lower(analyzed, capabilities);
         var emitted = _backend.Emit(lowered);
-        var regions = CompileRegions(binding.RegionCandidates, bound.Documents, capabilities);
+        var regionCandidates = _binder.RecoverRetainedRegionCandidates(sourceDocuments, bound, lowered,
+            binding.RegionCandidates, binding.RegionOpportunities);
+        var regions = CompileRegions(regionCandidates, analyzed, capabilities, bound.SemanticHostFamily);
         var regionOpportunities = new PowerShellBoundRegionOpportunityAnalyzer(_optimizer, _analyzer, _lowerer).Analyze(
             binding.RegionOpportunities,
             bound,
-            binding.RegionCandidates,
+            regionCandidates,
             capabilities);
         return new PowerShellSemanticCompilationResult(
             bound,
@@ -70,26 +89,77 @@ internal sealed class PowerShellSemanticCompilationPipeline
             emitted,
             regions.Promoted,
             regions.Decisions,
-            regionOpportunities);
+            regionOpportunities, binding.RuntimeFreeModule);
+    }
+
+    private static bool TryRefineCallReturnTypes(PowerShellBoundProgram program,
+        IDictionary<string, PowerShellTypeFact> returnTypes)
+    {
+        var functions = program.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
+        var changed = false;
+        foreach (var call in program.Functions.SelectMany(function => PowerShellSemanticAnalyzer.EnumerateStatements(function.Body))
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions).OfType<PowerShellBoundInvocationExpression>())
+        {
+            if (call.ResultProjection != PowerShellLocalCallResultProjection.None) continue;
+            if (!functions.TryGetValue(call.Target.StableKey, out var target) || target.NativeFunctionBinding is not null ||
+                target.ReturnType.Provenance == PowerShellTypeFactProvenance.Unknown) continue;
+            // The call's value contract is independent of the generated method's CLR return.
+            var capturesCommandOutput = (target.ReturnType.ClrType == typeof(void) ||
+                target.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion)) &&
+                program.TargetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors) &&
+                program.TargetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams);
+            if (!capturesCommandOutput && target.ReturnType.ClrType == typeof(void) &&
+                target.OutputCardinality != PowerShellOutputCardinality.None) continue;
+            var actual = capturesCommandOutput
+                ? new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.CapturedCommandOutput,
+                    "Consuming a local command collapses its success records to empty, one record, or an array.")
+                : target.ReturnType;
+            if (actual.ClrType == call.Type.ClrType &&
+                actual.Provenance == call.Type.Provenance) continue;
+            if (returnTypes.TryGetValue(target.Symbol.StableKey, out var previous) &&
+                previous.ClrType == actual.ClrType && previous.Provenance == actual.Provenance) continue;
+            returnTypes[target.Symbol.StableKey] = actual;
+            changed = true;
+        }
+        return changed;
     }
 
     private PowerShellRegionCompilationResult CompileRegions(
         IReadOnlyList<PowerShellBoundRegionCandidate> candidates,
-        IReadOnlyList<PowerShellBoundSourceDocument> documents,
-        PowerShellCompilationCapability capabilities)
+        PowerShellBoundProgram callableProgram,
+        PowerShellCompilationCapability capabilities,
+        PowerShellCompilationSemanticHostFamily semanticHostFamily)
     {
         if (candidates.Count == 0) return PowerShellRegionCompilationResult.Empty;
+        var callable = callableProgram.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
+        var eligible = new List<PowerShellBoundRegionCandidate>();
+        var decisions = new Dictionary<string, PowerShellRegionCandidateDecision>(StringComparer.Ordinal);
+        foreach (var candidate in candidates)
+        {
+            if (!HasResolvedClosedRegionCalls(candidate, callable))
+            {
+                decisions[candidate.RegionId] = new PowerShellRegionCandidateDecision(
+                    candidate,
+                    new PowerShellTypedRegionPromotionDecision(false, "region.local-call-closure",
+                        "The candidate local-call closure is missing, recursive, unresolved, or outside its closed result contract."),
+                    emission: null);
+                continue;
+            }
+            eligible.Add(candidate);
+        }
+        if (eligible.Count == 0)
+            return new PowerShellRegionCompilationResult(Array.Empty<PowerShellPromotedRegionEmission>(), decisions.Values.ToArray());
         var candidateProgram = new PowerShellBoundProgram(
-            documents.ToArray(),
-            candidates.Select(static candidate => candidate.RegionFunction).ToArray(),
-            Array.Empty<PowerShellSemanticDiagnostic>());
+            callableProgram.Documents.ToArray(),
+            eligible.Select(static candidate => candidate.RegionFunction).ToArray(),
+            Array.Empty<PowerShellSemanticDiagnostic>(), targetCapabilities: capabilities, semanticHostFamily: semanticHostFamily);
         var optimized = _optimizer.Optimize(candidateProgram);
         var analyzed = _analyzer.Analyze(optimized.Program);
         var lowered = _lowerer.Lower(analyzed, capabilities);
         var emitted = _backend.Emit(lowered);
-        var byKey = candidates.ToDictionary(static candidate => candidate.RegionFunction.Symbol.StableKey, StringComparer.Ordinal);
+        var byKey = eligible.ToDictionary(static candidate => candidate.RegionFunction.Symbol.StableKey, StringComparer.Ordinal);
         var analyzedByKey = analyzed.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
-        var decisions = new Dictionary<string, PowerShellRegionCandidateDecision>(StringComparer.Ordinal);
         var promoted = new List<PowerShellPromotedRegionEmission>();
         for (var index = 0; index < lowered.Functions.Length && index < emitted.Methods.Length; index++)
         {
@@ -123,6 +193,38 @@ internal sealed class PowerShellSemanticCompilationPipeline
             promoted.OrderBy(static region => region.Candidate.RegionFunction.Symbol.StableKey, StringComparer.Ordinal).ToArray(),
             decisions.Values.OrderBy(static decision => decision.Candidate.RegionFunction.Symbol.StableKey, StringComparer.Ordinal).ToArray());
     }
+
+    private static bool HasResolvedClosedRegionCalls(
+        PowerShellBoundRegionCandidate candidate,
+        IReadOnlyDictionary<string, PowerShellBoundFunction> callable)
+    {
+        var calls = PowerShellSemanticAnalyzer.EnumerateStatements(candidate.RegionFunction.Body)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+            .OfType<PowerShellBoundInvocationExpression>()
+            .ToArray();
+        if (calls.Select(static call => call.Target.StableKey).Distinct(StringComparer.Ordinal).Count() != candidate.LocalCalls.Count ||
+            calls.Any(call =>
+                call.ResultProjection != PowerShellLocalCallResultProjection.ClosedCollectionFactory ||
+                call.ClosedCollectionFactory is null ||
+                call.Arguments.Length != 0 ||
+                !callable.TryGetValue(call.Target.StableKey, out var target) ||
+                target.Parameters.Count != 0 ||
+                !target.Symbol.Name.Equals(call.ClosedCollectionFactory.SourceName, StringComparison.OrdinalIgnoreCase) ||
+                PowerShellSemanticAnalyzer.EnumerateStatements(target.Body)
+                    .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+                    .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+                    .OfType<PowerShellBoundInvocationExpression>()
+                    .Any()))
+            return false;
+
+        var evidenceNames = candidate.LocalCalls.Select(static call => call.SourceName)
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase);
+        var resolvedNames = calls.Select(static call => call.ClosedCollectionFactory!.SourceName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase);
+        return evidenceNames.SequenceEqual(resolvedNames, StringComparer.OrdinalIgnoreCase);
+    }
 }
 
 internal sealed class PowerShellSemanticCompilationResult
@@ -135,7 +237,8 @@ internal sealed class PowerShellSemanticCompilationResult
         PowerShellBoundCSharpResult emitted,
         PowerShellPromotedRegionEmission[] promotedRegions,
         PowerShellRegionCandidateDecision[] regionCandidateDecisions,
-        PowerShellCompilationRegionOpportunity[] regionOpportunities)
+        PowerShellCompilationRegionOpportunity[] regionOpportunities,
+        PowerShellRuntimeFreeModuleDefinition? runtimeFreeModule = null)
     {
         Bound = bound;
         Optimization = optimization;
@@ -145,6 +248,7 @@ internal sealed class PowerShellSemanticCompilationResult
         PromotedRegions = promotedRegions ?? Array.Empty<PowerShellPromotedRegionEmission>();
         RegionCandidateDecisions = regionCandidateDecisions ?? Array.Empty<PowerShellRegionCandidateDecision>();
         RegionOpportunities = regionOpportunities ?? Array.Empty<PowerShellCompilationRegionOpportunity>();
+        RuntimeFreeModule = runtimeFreeModule;
     }
 
     internal PowerShellBoundProgram Bound { get; }
@@ -155,6 +259,7 @@ internal sealed class PowerShellSemanticCompilationResult
     internal PowerShellImmutableArray<PowerShellPromotedRegionEmission> PromotedRegions { get; }
     internal PowerShellImmutableArray<PowerShellRegionCandidateDecision> RegionCandidateDecisions { get; }
     internal PowerShellImmutableArray<PowerShellCompilationRegionOpportunity> RegionOpportunities { get; }
+    internal PowerShellRuntimeFreeModuleDefinition? RuntimeFreeModule { get; }
 }
 
 internal sealed class PowerShellRegionCompilationResult

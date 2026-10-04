@@ -1,0 +1,200 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Qualify exact PowerShell SDK member-kind and command-metadata identities through existing host-data policy.",
+  "baselineCompilerCommit": "17f2d42662e8953fa67fbe10c899627bc6f5a295",
+  "baselineComparison": "m29a-static-string-comparison.net10.json",
+  "baselineComparisonSha256": "33feb483f41e4ad7974e54310c4fb938b10d6616d7b1c81f8f15f88cdbcf657a",
+  "baselineRetainedInventorySha256": "2c9c4b3732fc100fd834063859b12c1f682112e5f5d8ec076ef1e7e0b1e69f04",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 483,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "baselineEmitted": 253,
+      "candidateEmitted": 253,
+      "candidateExplanationSha256": "81fe2a60f0935e38a8410709b065cb6a72dde4295c29fba1077efb2060c5d280",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "baselineEmitted": 63,
+      "candidateEmitted": 63,
+      "candidateExplanationSha256": "0fe9323878dbf15bc173231b8ad447afc5ddf1d9833e9b2cd631e66cc998bee3",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "baselineEmitted": 60,
+      "candidateEmitted": 60,
+      "candidateExplanationSha256": "dff885fe4d0660da2265dd9e9bb43bf7ebe41b9f0c96ea10399850007c2f74d8",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "baselineEmitted": 81,
+      "candidateEmitted": 82,
+      "candidateExplanationSha256": "bd1ed242853a52e3693b050ae10e81231b62de3dc3efb3e30eb693b97bb9e822",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": [
+        {
+          "unitId": "fbd8d469bd5e783f9c339fb2",
+          "name": "Show-HiddenMember",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "baselineEmitted": 26,
+      "candidateEmitted": 27,
+      "candidateExplanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": [
+        {
+          "unitId": "169888f0d53b845d16127f9e",
+          "name": "GetHelpFileName",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    }
+  ],
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "320001791bf431c9998a07e2ed47b86f9f2ce61915aa42bae6e83583e6d0c298"
+  },
+  "workflowSourceHashes": {
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/MemberInspection/Show-HiddenMember.ps1": "cd5d7e833db4183695181880ebc4d45d76f5eca4e474bc08ee816bf2e1967ca1"
+  },
+  "externalHelpWorkflow": {
+    "source": "https://github.com/PowerShell/platyPS",
+    "revisionKind": "PSGalleryPackageVersion",
+    "revision": "0.14.2",
+    "sourcePackageSha256": "12176941c2972577d7adbf4877ad6aebcca0920c416b46ef1131e5a5248ec59b",
+    "redistributionDisposition": "Package declares a LicenseUri to an unpinned master branch; no exact-version redistribution right was established by this packet.",
+    "qualification": {
+      "compilerCommit": "17f2d42662e8953fa67fbe10c899627bc6f5a295",
+      "moduleSourceSha256": "2f884e73e086dd5f1a192ef806141affcb6226fc5052a7e0001860b2033c9b10",
+      "functionSourceSha256": "c1daf1ab91ccdc8dcb05a7fb2302d2736fa9553c983f00d23b7c1af025e33560",
+      "targets": [
+        {
+          "framework": "net10.0",
+          "observations": 10,
+          "originalSha256": "7649cfafe276abb4c58fcb7053890b992fb4603becb0e59a68e63f78db20e6a2",
+          "generatedSha256": "7649cfafe276abb4c58fcb7053890b992fb4603becb0e59a68e63f78db20e6a2"
+        },
+        {
+          "framework": "net472",
+          "observations": 10,
+          "originalSha256": "7649cfafe276abb4c58fcb7053890b992fb4603becb0e59a68e63f78db20e6a2",
+          "generatedSha256": "7649cfafe276abb4c58fcb7053890b992fb4603becb0e59a68e63f78db20e6a2"
+        }
+      ],
+      "compilerSourceHashes": {
+        "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "320001791bf431c9998a07e2ed47b86f9f2ce61915aa42bae6e83583e6d0c298"
+      },
+      "compilerBinarySha256": "f5769d003afaed16c298aa134a98d69925ab465bc86338a75726ae53477da5ad"
+    },
+    "harnessSourceHashes": {
+      "Benchmarks/PowerShellCompilation/Invoke-HelpFileNameProbe.ps1": "4fc4cc8347afa1f9d6b6cc273b16ff26a86639c03af7adc7b451c9d059309a65",
+      "Benchmarks/PowerShellCompilation/qualify-help-file-name.py": "1daad7cb57ff958ea2385177ecbf838988761d68d62599f3295d9d8ac60a58b8"
+    }
+  },
+  "validation": {
+    "focusedTests": 6,
+    "focusedDurationSeconds": 15,
+    "focusedTrxSha256": "31434f30a4790650f2283d6863e61db0bb82066c42fb37a486da0fb981c34e1f",
+    "testSourceHashes": {
+      "PowerForge.Tests/PowerShellCompilationSdkMetadataTests.cs": "072760261006a39d20699f051e4b44c5bf958edd9d1cdef3dce2d086616b6c78",
+      "PowerForge.Tests/PowerShellCompilationHostDataContractsTests.cs": "a3f1983d1deed66c1a6133dbe56d70b8ab7a75e9f822e46ace729df343729cf9"
+    },
+    "net472BuildWarnings": 0,
+    "net472BuildErrors": 0,
+    "net472BuildDurationSeconds": 3.82,
+    "independentReview": "One read-only owner pass: no actionable findings. Parameter capabilities, containers, selection, SDK references and new differential proof inspected.",
+    "memberWorkflowObservationsPerHost": 36,
+    "syntheticCommandMetadataObservationsPerHost": 4,
+    "externalHelpWorkflowObservationsPerHost": 10,
+    "newlyExecutedCompleteFunctions": [
+      "Show-HiddenMember",
+      "GetHelpFileName"
+    ],
+    "limits": [
+      "Hybrid retains active host commands, metadata and session identity; not runtime-free reflection.",
+      "Positive containers are CommandInfo[] and List<PSMemberTypes>; other canonical shapes are not separate execution claims.",
+      "Show-HiddenMember authored PS5.1 scalar Where MethodNotFound behavior is preserved under captured nonterminating errors.",
+      "GetHelpFileName probe covers null, builtin, global function, alias and dynamic module metadata; external scripts, nested manifest/multiple-module and disk paths are not newly qualified.",
+      "Full five-packet census is net10.0 only. No live AD/network/admin, Linux, performance, package or release proof."
+    ]
+  },
+  "candidateEmitted": 485,
+  "candidateRetained": 80,
+  "retainedFeatureImpact": {
+    "assignment.target": 1,
+    "binary-module.cmdlet-shape": 2,
+    "command.foreach-object": 2,
+    "command.get-help": 1,
+    "command.get-item": 1,
+    "command.get-location": 1,
+    "command.new-object": 2,
+    "command.out-gridview": 1,
+    "command.out-string": 1,
+    "command.read-host": 1,
+    "command.resolve-path": 1,
+    "command.select-object": 1,
+    "command.set-clipboard": 1,
+    "command.showcontainer": 1,
+    "command.test-connection": 1,
+    "command.write-verbose": 4,
+    "command.write-warning": 2,
+    "control.finally.stream-stop": 2,
+    "expression.conversion": 4,
+    "parameter.default": 1,
+    "parameter.metadata": 3,
+    "parameter.type": 23,
+    "pipeline.lifecycle": 2,
+    "psb2611": 1,
+    "psb2961": 1,
+    "runtime.scope": 2,
+    "scriptblock.typed": 1,
+    "semantic.lowering.missing": 2,
+    "source.type-definition": 5,
+    "syntax.foreachstatement": 1,
+    "syntax.functiondefinition": 1,
+    "syntax.invokememberexpression": 5,
+    "syntax.memberexpression": 3,
+    "syntax.pipeline": 1,
+    "syntax.subexpression": 1,
+    "syntax.switchstatement": 2,
+    "syntax.trystatement": 1,
+    "syntax.typedefinition": 1,
+    "syntax.typeexpression": 2,
+    "syntax.unsupported": 36
+  }
+}

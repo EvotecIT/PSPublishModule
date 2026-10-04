@@ -1,0 +1,5555 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Native ownership of method-led Hybrid pipelines and single routing of returned native pipeline errors",
+  "baselineCompilerCommit": "a5e8a5180ddbe1b498aff38de57af73f7dca9d62",
+  "baselineComparison": "m29a-captured-loops-comparison.net10.json",
+  "functions": 565,
+  "baselineEmitted": 505,
+  "candidateEmitted": 506,
+  "candidateRetained": 59,
+  "packets": [
+    {
+      "packet": "pssg",
+      "functions": 282,
+      "emitted": 263,
+      "retained": 19,
+      "gains": [
+        {
+          "unitId": "a1bb1dcefddec8c45377fd27",
+          "name": "Get-ObjectEnumValues"
+        }
+      ],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "38bf0858539f9280f34716a62207c79314b8322a4cd3c119671f3c506d48f856",
+      "elapsedSeconds": 34.96
+    },
+    {
+      "packet": "cleanup",
+      "functions": 68,
+      "emitted": 63,
+      "retained": 5,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1",
+      "elapsedSeconds": 19.83
+    },
+    {
+      "packet": "pinf",
+      "functions": 66,
+      "emitted": 63,
+      "retained": 3,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "5e9f5116623536238dd8564152297efd986b979ff6a2ba03d9eff38e38da2264",
+      "elapsedSeconds": 10.96
+    },
+    {
+      "packet": "pst",
+      "functions": 109,
+      "emitted": 90,
+      "retained": 19,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "58f9421a20c0f866af3b63740ecfd6679f2f92004ba59f7f267e50533d715e70",
+      "elapsedSeconds": 16.11
+    },
+    {
+      "packet": "platyps",
+      "functions": 40,
+      "emitted": 27,
+      "retained": 13,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "f3a8acb7feecc018adfe9d5daf63170ea3af30eed2b718cb1426d9e2346c005f",
+      "elapsedSeconds": 20.34
+    }
+  ],
+  "compilerAndTestSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellStatementErrorCallPass.cs": "14a556345cb31501013a77983edf826124c7384fd0c50580335b0dcf52fc7336",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellCommandRegionSemanticBinder.cs": "15f3bb88806cd0529637cfbaf1a8aee585d9177bfab8f3f28a9b3551e6b3e0bb",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs": "4553e416ca876b8da169fbe31b742a71cda4c48a16c1f1399e0ac5adccd986f5",
+    "PowerForge.Tests/PowerShellCompilationCompletePipelineWorkflowTests.cs": "2ce18a40820280a235dd8e7633bde2081c3a767e2d6475f4b57531df0871aa3b",
+    "PowerForge.Tests/PowerShellCompilationDictionaryRegionWorkflowTests.cs": "ce02c2adbbd8f9175669aac04a194521198fcbf621cfd46ac514ed00fbbffc78",
+    "PowerForge.Tests/PowerShellCompilationMethodPipelineTests.cs": "73205723becb56aee36d236706b47fe759f4d121a25e1aa139ef685aa1cdf143"
+  },
+  "proof": {
+    "sourceSha256": "60529c0ca3e421083814206f9f1fd004f9215b5c3f08a981db08a93579568d3b",
+    "probeSha256": "25656b6bbe3b6876bd3029659f4ffe1ef02f7a8745aa412e412614c4bce3a412",
+    "realSourceSha256": "d5622ecacebcc19f16d793c1527ad2bb5233398dc78f6d6738560cef362682d3",
+    "hosts": {
+      "net10.0": {
+        "host": "pwsh",
+        "artifactSha256": "d4c1f1fd79cc8040e7f29dcb5a1c61186b631b378d239cd9a09683f913a1749a",
+        "manifestSha256": "bd7390733c50831fe7a982c001eed2c83f925804a8d34e94a8a7fd834b010207",
+        "compiledMethods": 7,
+        "ledger": [
+          {
+            "unitId": "7a4a4620afb24ac8402fd01f",
+            "relativePath": "input.psm1",
+            "name": "Read-MethodDirect",
+            "kind": "Function",
+            "startLine": 1,
+            "semanticEligible": true,
+            "emittedClrMethod": true,
+            "emittedBinaryCmdlet": false,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "runtimeCommandRegions": 1,
+            "boundaryCrossings": 2,
+            "shapingFallback": false,
+            "omitted": false,
+            "rejected": false,
+            "generatedMemberName": "Read_MethodDirect",
+            "dependencyCauses": [],
+            "boundaryCauses": [
+              "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+              "The emitted CLR method contains hosted PowerShell command regions.",
+              "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation.",
+              "The emitted CLR method requires the invocation's native PowerShell loop-stopping callback."
+            ],
+            "diagnosticChain": [],
+            "moduleStateReadBoundaryCrossings": 0,
+            "moduleStateWriteBoundaryCrossings": 0,
+            "regionGraph": {
+              "schemaVersion": 1,
+              "regions": [
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:69:217:Mixed",
+                  "ordinal": 0,
+                  "execution": "Mixed",
+                  "startOffset": 69,
+                  "endOffset": 217,
+                  "startLine": 1,
+                  "startColumn": 70,
+                  "endLine": 1,
+                  "endColumn": 218,
+                  "inputs": [
+                    "PowerShellSessionState:*",
+                    "PowerShellSessionVariable:_"
+                  ],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "streams": [
+                    "Success",
+                    "Error",
+                    "Warning",
+                    "Verbose",
+                    "Debug",
+                    "Information",
+                    "Host"
+                  ],
+                  "errors": [
+                    "ClrException",
+                    "PowerShellErrorRecord",
+                    "PowerShellSessionStateError",
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                  "hostedCommandBoundarySites": 1,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 1,
+                  "staticBoundaryValueTransfers": 3,
+                  "staticBoundaryCostUnits": 4
+                },
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:219:225:Typed",
+                  "ordinal": 1,
+                  "execution": "Typed",
+                  "startOffset": 219,
+                  "endOffset": 225,
+                  "startLine": 1,
+                  "startColumn": 220,
+                  "endLine": 1,
+                  "endColumn": 226,
+                  "inputs": [],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [],
+                  "streams": [
+                    "Success",
+                    "Error"
+                  ],
+                  "errors": [
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation",
+                  "hostedCommandBoundarySites": 0,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 0,
+                  "staticBoundaryValueTransfers": 0,
+                  "staticBoundaryCostUnits": 0
+                }
+              ],
+              "scriptBlocks": [],
+              "hostedCommandBoundarySites": 1,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 1,
+              "staticBoundaryCostUnits": 4
+            },
+            "promotedTypedRegions": 0,
+            "generatedRegionMemberNames": []
+          },
+          {
+            "unitId": "75eacd198f3e43b18d072f47",
+            "relativePath": "input.psm1",
+            "name": "Read-MethodParenthesized",
+            "kind": "Function",
+            "startLine": 2,
+            "semanticEligible": true,
+            "emittedClrMethod": true,
+            "emittedBinaryCmdlet": false,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "runtimeCommandRegions": 1,
+            "boundaryCrossings": 2,
+            "shapingFallback": false,
+            "omitted": false,
+            "rejected": false,
+            "generatedMemberName": "Read_MethodParenthesized",
+            "dependencyCauses": [],
+            "boundaryCauses": [
+              "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+              "The emitted CLR method contains hosted PowerShell command regions.",
+              "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation.",
+              "The emitted CLR method requires the invocation's native PowerShell loop-stopping callback."
+            ],
+            "diagnosticChain": [],
+            "moduleStateReadBoundaryCrossings": 0,
+            "moduleStateWriteBoundaryCrossings": 0,
+            "regionGraph": {
+              "schemaVersion": 1,
+              "regions": [
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:305:455:Mixed",
+                  "ordinal": 0,
+                  "execution": "Mixed",
+                  "startOffset": 305,
+                  "endOffset": 455,
+                  "startLine": 2,
+                  "startColumn": 77,
+                  "endLine": 2,
+                  "endColumn": 227,
+                  "inputs": [
+                    "PowerShellSessionState:*",
+                    "PowerShellSessionVariable:_"
+                  ],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "streams": [
+                    "Success",
+                    "Error",
+                    "Warning",
+                    "Verbose",
+                    "Debug",
+                    "Information",
+                    "Host"
+                  ],
+                  "errors": [
+                    "ClrException",
+                    "PowerShellErrorRecord",
+                    "PowerShellSessionStateError",
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                  "hostedCommandBoundarySites": 1,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 1,
+                  "staticBoundaryValueTransfers": 3,
+                  "staticBoundaryCostUnits": 4
+                },
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:457:463:Typed",
+                  "ordinal": 1,
+                  "execution": "Typed",
+                  "startOffset": 457,
+                  "endOffset": 463,
+                  "startLine": 2,
+                  "startColumn": 229,
+                  "endLine": 2,
+                  "endColumn": 235,
+                  "inputs": [],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [],
+                  "streams": [
+                    "Success",
+                    "Error"
+                  ],
+                  "errors": [
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation",
+                  "hostedCommandBoundarySites": 0,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 0,
+                  "staticBoundaryValueTransfers": 0,
+                  "staticBoundaryCostUnits": 0
+                }
+              ],
+              "scriptBlocks": [],
+              "hostedCommandBoundarySites": 1,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 1,
+              "staticBoundaryCostUnits": 4
+            },
+            "promotedTypedRegions": 0,
+            "generatedRegionMemberNames": []
+          },
+          {
+            "unitId": "067cbfca53acdf627395620e",
+            "relativePath": "input.psm1",
+            "name": "Read-MethodLiteral",
+            "kind": "Function",
+            "startLine": 3,
+            "semanticEligible": true,
+            "emittedClrMethod": true,
+            "emittedBinaryCmdlet": false,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "runtimeCommandRegions": 1,
+            "boundaryCrossings": 2,
+            "shapingFallback": false,
+            "omitted": false,
+            "rejected": false,
+            "generatedMemberName": "Read_MethodLiteral",
+            "dependencyCauses": [],
+            "boundaryCauses": [
+              "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+              "The emitted CLR method contains hosted PowerShell command regions.",
+              "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation.",
+              "The emitted CLR method requires the invocation's native PowerShell loop-stopping callback."
+            ],
+            "diagnosticChain": [],
+            "moduleStateReadBoundaryCrossings": 0,
+            "moduleStateWriteBoundaryCrossings": 0,
+            "regionGraph": {
+              "schemaVersion": 1,
+              "regions": [
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:537:734:Mixed",
+                  "ordinal": 0,
+                  "execution": "Mixed",
+                  "startOffset": 537,
+                  "endOffset": 734,
+                  "startLine": 3,
+                  "startColumn": 71,
+                  "endLine": 3,
+                  "endColumn": 268,
+                  "inputs": [
+                    "PowerShellSessionState:*",
+                    "PowerShellSessionVariable:_"
+                  ],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [
+                    "PowerShellSessionState:*",
+                    "PowerShellSessionVariable:RESULT"
+                  ],
+                  "streams": [
+                    "Success",
+                    "Error",
+                    "Warning",
+                    "Verbose",
+                    "Debug",
+                    "Information",
+                    "Host"
+                  ],
+                  "errors": [
+                    "ClrException",
+                    "PowerShellErrorRecord",
+                    "PowerShellSessionStateError",
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                  "hostedCommandBoundarySites": 1,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 1,
+                  "staticBoundaryValueTransfers": 4,
+                  "staticBoundaryCostUnits": 5
+                },
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:736:742:Typed",
+                  "ordinal": 1,
+                  "execution": "Typed",
+                  "startOffset": 736,
+                  "endOffset": 742,
+                  "startLine": 3,
+                  "startColumn": 270,
+                  "endLine": 3,
+                  "endColumn": 276,
+                  "inputs": [],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [],
+                  "streams": [
+                    "Success",
+                    "Error"
+                  ],
+                  "errors": [
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation",
+                  "hostedCommandBoundarySites": 0,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 0,
+                  "staticBoundaryValueTransfers": 0,
+                  "staticBoundaryCostUnits": 0
+                }
+              ],
+              "scriptBlocks": [],
+              "hostedCommandBoundarySites": 1,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 1,
+              "staticBoundaryCostUnits": 5
+            },
+            "promotedTypedRegions": 0,
+            "generatedRegionMemberNames": []
+          },
+          {
+            "unitId": "c262e3e181f53e05e21432f6",
+            "relativePath": "input.psm1",
+            "name": "Read-MethodReturn",
+            "kind": "Function",
+            "startLine": 4,
+            "semanticEligible": true,
+            "emittedClrMethod": true,
+            "emittedBinaryCmdlet": false,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "runtimeCommandRegions": 1,
+            "boundaryCrossings": 2,
+            "shapingFallback": false,
+            "omitted": false,
+            "rejected": false,
+            "generatedMemberName": "Read_MethodReturn",
+            "dependencyCauses": [],
+            "boundaryCauses": [
+              "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+              "The emitted CLR method contains hosted PowerShell command regions.",
+              "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation.",
+              "The emitted CLR method requires the invocation's native PowerShell loop-stopping callback."
+            ],
+            "diagnosticChain": [],
+            "moduleStateReadBoundaryCrossings": 0,
+            "moduleStateWriteBoundaryCrossings": 0,
+            "regionGraph": {
+              "schemaVersion": 1,
+              "regions": [
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:815:970:Mixed",
+                  "ordinal": 0,
+                  "execution": "Mixed",
+                  "startOffset": 815,
+                  "endOffset": 970,
+                  "startLine": 4,
+                  "startColumn": 70,
+                  "endLine": 4,
+                  "endColumn": 225,
+                  "inputs": [
+                    "PowerShellSessionState:*",
+                    "PowerShellSessionVariable:_"
+                  ],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "streams": [
+                    "Success",
+                    "Error",
+                    "Warning",
+                    "Verbose",
+                    "Debug",
+                    "Information",
+                    "Host"
+                  ],
+                  "errors": [
+                    "ClrException",
+                    "PowerShellErrorRecord",
+                    "PowerShellSessionStateError",
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                  "hostedCommandBoundarySites": 1,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 1,
+                  "staticBoundaryValueTransfers": 3,
+                  "staticBoundaryCostUnits": 4
+                },
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:972:978:Typed",
+                  "ordinal": 1,
+                  "execution": "Typed",
+                  "startOffset": 972,
+                  "endOffset": 978,
+                  "startLine": 4,
+                  "startColumn": 227,
+                  "endLine": 4,
+                  "endColumn": 233,
+                  "inputs": [],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [],
+                  "streams": [
+                    "Success",
+                    "Error"
+                  ],
+                  "errors": [
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation",
+                  "hostedCommandBoundarySites": 0,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 0,
+                  "staticBoundaryValueTransfers": 0,
+                  "staticBoundaryCostUnits": 0
+                }
+              ],
+              "scriptBlocks": [],
+              "hostedCommandBoundarySites": 1,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 1,
+              "staticBoundaryCostUnits": 4
+            },
+            "promotedTypedRegions": 0,
+            "generatedRegionMemberNames": []
+          },
+          {
+            "unitId": "e3a212fa7914ffd840b0bc8d",
+            "relativePath": "input.psm1",
+            "name": "Read-MethodUncaught",
+            "kind": "Function",
+            "startLine": 5,
+            "semanticEligible": true,
+            "emittedClrMethod": true,
+            "emittedBinaryCmdlet": false,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "runtimeCommandRegions": 1,
+            "boundaryCrossings": 2,
+            "shapingFallback": false,
+            "omitted": false,
+            "rejected": false,
+            "generatedMemberName": "Read_MethodUncaught",
+            "dependencyCauses": [],
+            "boundaryCauses": [
+              "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+              "The emitted CLR method contains hosted PowerShell command regions.",
+              "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation."
+            ],
+            "diagnosticChain": [],
+            "moduleStateReadBoundaryCrossings": 0,
+            "moduleStateWriteBoundaryCrossings": 0,
+            "regionGraph": {
+              "schemaVersion": 1,
+              "regions": [
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:1053:1123:Mixed",
+                  "ordinal": 0,
+                  "execution": "Mixed",
+                  "startOffset": 1053,
+                  "endOffset": 1123,
+                  "startLine": 5,
+                  "startColumn": 72,
+                  "endLine": 5,
+                  "endColumn": 142,
+                  "inputs": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "streams": [
+                    "Success",
+                    "Error",
+                    "Warning",
+                    "Verbose",
+                    "Debug",
+                    "Information",
+                    "Host"
+                  ],
+                  "errors": [
+                    "PowerShellErrorRecord"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                  "hostedCommandBoundarySites": 1,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 1,
+                  "staticBoundaryValueTransfers": 2,
+                  "staticBoundaryCostUnits": 3
+                },
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:1053:1123:Typed",
+                  "ordinal": 1,
+                  "execution": "Typed",
+                  "startOffset": 1053,
+                  "endOffset": 1123,
+                  "startLine": 5,
+                  "startColumn": 72,
+                  "endLine": 5,
+                  "endColumn": 142,
+                  "inputs": [],
+                  "outputs": [],
+                  "mutations": [],
+                  "streams": [],
+                  "errors": [],
+                  "ordering": "AuthoredSequentialSingleEvaluation",
+                  "hostedCommandBoundarySites": 0,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 0,
+                  "staticBoundaryValueTransfers": 0,
+                  "staticBoundaryCostUnits": 0
+                }
+              ],
+              "scriptBlocks": [],
+              "hostedCommandBoundarySites": 1,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 1,
+              "staticBoundaryCostUnits": 3
+            },
+            "promotedTypedRegions": 0,
+            "generatedRegionMemberNames": []
+          },
+          {
+            "unitId": "008b6b4849112461af0356ca",
+            "relativePath": "input.psm1",
+            "name": "Read-MethodFinally",
+            "kind": "Function",
+            "startLine": 6,
+            "semanticEligible": true,
+            "emittedClrMethod": true,
+            "emittedBinaryCmdlet": false,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "runtimeCommandRegions": 1,
+            "boundaryCrossings": 2,
+            "shapingFallback": false,
+            "omitted": false,
+            "rejected": false,
+            "generatedMemberName": "Read_MethodFinally",
+            "dependencyCauses": [],
+            "boundaryCauses": [
+              "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+              "The emitted CLR method contains hosted PowerShell command regions.",
+              "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation.",
+              "The emitted CLR method requires the invocation's native PowerShell loop-stopping callback."
+            ],
+            "diagnosticChain": [],
+            "moduleStateReadBoundaryCrossings": 0,
+            "moduleStateWriteBoundaryCrossings": 0,
+            "regionGraph": {
+              "schemaVersion": 1,
+              "regions": [
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:1197:1297:Mixed",
+                  "ordinal": 0,
+                  "execution": "Mixed",
+                  "startOffset": 1197,
+                  "endOffset": 1297,
+                  "startLine": 6,
+                  "startColumn": 71,
+                  "endLine": 6,
+                  "endColumn": 171,
+                  "inputs": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "streams": [
+                    "Success",
+                    "Error",
+                    "Warning",
+                    "Verbose",
+                    "Debug",
+                    "Information",
+                    "Host"
+                  ],
+                  "errors": [
+                    "PowerShellErrorRecord",
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                  "hostedCommandBoundarySites": 1,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 1,
+                  "staticBoundaryValueTransfers": 2,
+                  "staticBoundaryCostUnits": 3
+                }
+              ],
+              "scriptBlocks": [],
+              "hostedCommandBoundarySites": 1,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 1,
+              "staticBoundaryCostUnits": 3
+            },
+            "promotedTypedRegions": 0,
+            "generatedRegionMemberNames": []
+          },
+          {
+            "unitId": "c5d30c23659f96c1d34f3df8",
+            "relativePath": "input.psm1",
+            "name": "Get-ObjectEnumValues",
+            "kind": "Function",
+            "startLine": 7,
+            "semanticEligible": true,
+            "emittedClrMethod": true,
+            "emittedBinaryCmdlet": false,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "runtimeCommandRegions": 1,
+            "boundaryCrossings": 2,
+            "shapingFallback": false,
+            "omitted": false,
+            "rejected": false,
+            "generatedMemberName": "Get_ObjectEnumValues",
+            "dependencyCauses": [],
+            "boundaryCauses": [
+              "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+              "The emitted CLR method contains hosted PowerShell command regions.",
+              "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation."
+            ],
+            "diagnosticChain": [],
+            "moduleStateReadBoundaryCrossings": 0,
+            "moduleStateWriteBoundaryCrossings": 0,
+            "regionGraph": {
+              "schemaVersion": 1,
+              "regions": [
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:2149:2166:Typed",
+                  "ordinal": 0,
+                  "execution": "Typed",
+                  "startOffset": 2149,
+                  "endOffset": 2166,
+                  "startLine": 30,
+                  "startColumn": 5,
+                  "endLine": 30,
+                  "endColumn": 22,
+                  "inputs": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "outputs": [
+                    "PowerShellSessionState:*",
+                    "PowerShellSessionVariable:ENUMVALUES"
+                  ],
+                  "mutations": [
+                    "PowerShellSessionState:*",
+                    "PowerShellSessionVariable:ENUMVALUES"
+                  ],
+                  "streams": [
+                    "Error"
+                  ],
+                  "errors": [
+                    "PowerShellSessionStateError",
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation",
+                  "hostedCommandBoundarySites": 0,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 0,
+                  "staticBoundaryValueTransfers": 0,
+                  "staticBoundaryCostUnits": 0
+                },
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:2172:2278:Hosted",
+                  "ordinal": 1,
+                  "execution": "Hosted",
+                  "startOffset": 2172,
+                  "endOffset": 2278,
+                  "startLine": 31,
+                  "startColumn": 5,
+                  "endLine": 34,
+                  "endColumn": 6,
+                  "inputs": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "outputs": [
+                    "PowerShellSessionState:*",
+                    "stream:Success"
+                  ],
+                  "mutations": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "streams": [
+                    "Success",
+                    "Error",
+                    "Warning",
+                    "Verbose",
+                    "Debug",
+                    "Information",
+                    "Host"
+                  ],
+                  "errors": [
+                    "PowerShellErrorRecord"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                  "hostedCommandBoundarySites": 1,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 1,
+                  "staticBoundaryValueTransfers": 2,
+                  "staticBoundaryCostUnits": 3
+                },
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:2284:2295:Typed",
+                  "ordinal": 2,
+                  "execution": "Typed",
+                  "startOffset": 2284,
+                  "endOffset": 2295,
+                  "startLine": 35,
+                  "startColumn": 5,
+                  "endLine": 35,
+                  "endColumn": 16,
+                  "inputs": [
+                    "PowerShellSessionState:*",
+                    "PowerShellSessionVariable:ENUMVALUES"
+                  ],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [],
+                  "streams": [
+                    "Success",
+                    "Error"
+                  ],
+                  "errors": [
+                    "PowerShellSessionStateError",
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation",
+                  "hostedCommandBoundarySites": 0,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 0,
+                  "staticBoundaryValueTransfers": 0,
+                  "staticBoundaryCostUnits": 0
+                }
+              ],
+              "scriptBlocks": [],
+              "hostedCommandBoundarySites": 1,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 1,
+              "staticBoundaryCostUnits": 3
+            },
+            "promotedTypedRegions": 0,
+            "generatedRegionMemberNames": []
+          }
+        ],
+        "observations": [
+          {
+            "name": "Read-MethodDirect",
+            "case": "empty",
+            "action": "Continue",
+            "records": [
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "empty",
+            "action": "Stop",
+            "records": [
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "one",
+            "action": "Continue",
+            "records": [
+              "first",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "one",
+            "action": "Stop",
+            "records": [
+              "first",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "two",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "two",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "null",
+            "action": "Continue",
+            "records": [
+              "caught:InvokeMethodOnNull",
+              "finally",
+              "done"
+            ],
+            "trace": "",
+            "outer": null,
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "null",
+            "action": "Stop",
+            "records": [
+              "caught:InvokeMethodOnNull",
+              "finally",
+              "done"
+            ],
+            "trace": "",
+            "outer": null,
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "method",
+            "action": "Continue",
+            "records": [
+              "caught:InvalidOperationException",
+              "finally",
+              "done"
+            ],
+            "trace": "method;",
+            "outer": null,
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "method",
+            "action": "Stop",
+            "records": [
+              "caught:InvalidOperationException",
+              "finally",
+              "done"
+            ],
+            "trace": "method;",
+            "outer": null,
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "get",
+            "action": "Continue",
+            "records": [
+              "caught:ExceptionInGetEnumerator",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;",
+            "outer": null,
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "get",
+            "action": "Stop",
+            "records": [
+              "caught:ExceptionInGetEnumerator",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;",
+            "outer": null,
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "move",
+            "action": "Continue",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "move",
+            "action": "Stop",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "current",
+            "action": "Continue",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "current",
+            "action": "Stop",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "dispose",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "dispose",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "empty",
+            "action": "Continue",
+            "records": [
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "empty",
+            "action": "Stop",
+            "records": [
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "one",
+            "action": "Continue",
+            "records": [
+              "first",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "one",
+            "action": "Stop",
+            "records": [
+              "first",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "two",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "two",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "null",
+            "action": "Continue",
+            "records": [
+              "caught:InvokeMethodOnNull",
+              "finally",
+              "done"
+            ],
+            "trace": "",
+            "outer": null,
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "null",
+            "action": "Stop",
+            "records": [
+              "caught:InvokeMethodOnNull",
+              "finally",
+              "done"
+            ],
+            "trace": "",
+            "outer": null,
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "method",
+            "action": "Continue",
+            "records": [
+              "caught:InvalidOperationException",
+              "finally",
+              "done"
+            ],
+            "trace": "method;",
+            "outer": null,
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "method",
+            "action": "Stop",
+            "records": [
+              "caught:InvalidOperationException",
+              "finally",
+              "done"
+            ],
+            "trace": "method;",
+            "outer": null,
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "get",
+            "action": "Continue",
+            "records": [
+              "caught:ExceptionInGetEnumerator",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;",
+            "outer": null,
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "get",
+            "action": "Stop",
+            "records": [
+              "caught:ExceptionInGetEnumerator",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;",
+            "outer": null,
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "move",
+            "action": "Continue",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "move",
+            "action": "Stop",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "current",
+            "action": "Continue",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "current",
+            "action": "Stop",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "dispose",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "dispose",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "empty",
+            "action": "Continue",
+            "records": [
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "empty",
+            "action": "Stop",
+            "records": [
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "one",
+            "action": "Continue",
+            "records": [
+              "first",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "one",
+            "action": "Stop",
+            "records": [
+              "first",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "two",
+            "action": "Continue",
+            "records": [
+              [
+                "first",
+                null,
+                "nested"
+              ],
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "two",
+            "action": "Stop",
+            "records": [
+              [
+                "first",
+                null,
+                "nested"
+              ],
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "null",
+            "action": "Continue",
+            "records": [
+              "caught:InvokeMethodOnNull",
+              "finally",
+              "done"
+            ],
+            "trace": "",
+            "outer": null,
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "null",
+            "action": "Stop",
+            "records": [
+              "caught:InvokeMethodOnNull",
+              "finally",
+              "done"
+            ],
+            "trace": "",
+            "outer": null,
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "method",
+            "action": "Continue",
+            "records": [
+              "caught:InvalidOperationException",
+              "finally",
+              "done"
+            ],
+            "trace": "method;",
+            "outer": null,
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "method",
+            "action": "Stop",
+            "records": [
+              "caught:InvalidOperationException",
+              "finally",
+              "done"
+            ],
+            "trace": "method;",
+            "outer": null,
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "get",
+            "action": "Continue",
+            "records": [
+              "caught:ExceptionInGetEnumerator",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;",
+            "outer": null,
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "get",
+            "action": "Stop",
+            "records": [
+              "caught:ExceptionInGetEnumerator",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;",
+            "outer": null,
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "move",
+            "action": "Continue",
+            "records": [
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "move",
+            "action": "Stop",
+            "records": [
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "current",
+            "action": "Continue",
+            "records": [
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "current",
+            "action": "Stop",
+            "records": [
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "dispose",
+            "action": "Continue",
+            "records": [
+              [
+                "first",
+                null,
+                "nested"
+              ],
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "dispose",
+            "action": "Stop",
+            "records": [
+              [
+                "first",
+                null,
+                "nested"
+              ],
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "empty",
+            "action": "Continue",
+            "records": [
+              "finally"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "empty",
+            "action": "Stop",
+            "records": [
+              "finally"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "one",
+            "action": "Continue",
+            "records": [
+              "first",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "one",
+            "action": "Stop",
+            "records": [
+              "first",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "two",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "two",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "null",
+            "action": "Continue",
+            "records": [
+              "caught:InvokeMethodOnNull",
+              "finally",
+              "done"
+            ],
+            "trace": "",
+            "outer": null,
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "null",
+            "action": "Stop",
+            "records": [
+              "caught:InvokeMethodOnNull",
+              "finally",
+              "done"
+            ],
+            "trace": "",
+            "outer": null,
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "method",
+            "action": "Continue",
+            "records": [
+              "caught:InvalidOperationException",
+              "finally",
+              "done"
+            ],
+            "trace": "method;",
+            "outer": null,
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "method",
+            "action": "Stop",
+            "records": [
+              "caught:InvalidOperationException",
+              "finally",
+              "done"
+            ],
+            "trace": "method;",
+            "outer": null,
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "get",
+            "action": "Continue",
+            "records": [
+              "caught:ExceptionInGetEnumerator",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;",
+            "outer": null,
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "get",
+            "action": "Stop",
+            "records": [
+              "caught:ExceptionInGetEnumerator",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;",
+            "outer": null,
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "move",
+            "action": "Continue",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "move",
+            "action": "Stop",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "current",
+            "action": "Continue",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "current",
+            "action": "Stop",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "dispose",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "dispose",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "empty",
+            "action": "Continue",
+            "records": [],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "empty",
+            "action": "Stop",
+            "records": [],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "one",
+            "action": "Continue",
+            "records": [
+              "first"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "one",
+            "action": "Stop",
+            "records": [
+              "first"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "two",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "two",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "null",
+            "action": "Continue",
+            "records": [],
+            "trace": "",
+            "outer": "InvokeMethodOnNull,Read-MethodUncaught",
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "null",
+            "action": "Stop",
+            "records": [],
+            "trace": "",
+            "outer": "InvokeMethodOnNull,Read-MethodUncaught",
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "method",
+            "action": "Continue",
+            "records": [],
+            "trace": "method;",
+            "outer": "InvalidOperationException,Read-MethodUncaught",
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "method",
+            "action": "Stop",
+            "records": [],
+            "trace": "method;",
+            "outer": "InvalidOperationException,Read-MethodUncaught",
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "get",
+            "action": "Continue",
+            "records": [],
+            "trace": "method;get;",
+            "outer": "ExceptionInGetEnumerator,Read-MethodUncaught",
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "get",
+            "action": "Stop",
+            "records": [],
+            "trace": "method;get;",
+            "outer": "ExceptionInGetEnumerator,Read-MethodUncaught",
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "move",
+            "action": "Continue",
+            "records": [],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": "BadEnumeration,Read-MethodUncaught",
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "move",
+            "action": "Stop",
+            "records": [],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": "BadEnumeration,Read-MethodUncaught",
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "current",
+            "action": "Continue",
+            "records": [],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": "BadEnumeration,Read-MethodUncaught",
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "current",
+            "action": "Stop",
+            "records": [],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": "BadEnumeration,Read-MethodUncaught",
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "dispose",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "dispose",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "empty",
+            "action": "Continue",
+            "records": [
+              "finally"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "empty",
+            "action": "Stop",
+            "records": [
+              "finally"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "one",
+            "action": "Continue",
+            "records": [
+              "first",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "one",
+            "action": "Stop",
+            "records": [
+              "first",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "two",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "two",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "null",
+            "action": "Continue",
+            "records": [],
+            "trace": "",
+            "outer": "InvokeMethodOnNull,Read-MethodFinally",
+            "errors": [
+              "InvokeMethodOnNull",
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "null",
+            "action": "Stop",
+            "records": [],
+            "trace": "",
+            "outer": "InvokeMethodOnNull,Read-MethodFinally",
+            "errors": [
+              "InvokeMethodOnNull",
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "method",
+            "action": "Continue",
+            "records": [],
+            "trace": "method;",
+            "outer": "InvalidOperationException,Read-MethodFinally",
+            "errors": [
+              "InvalidOperationException",
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "method",
+            "action": "Stop",
+            "records": [],
+            "trace": "method;",
+            "outer": "InvalidOperationException,Read-MethodFinally",
+            "errors": [
+              "InvalidOperationException",
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "get",
+            "action": "Continue",
+            "records": [],
+            "trace": "method;get;",
+            "outer": "ExceptionInGetEnumerator,Read-MethodFinally",
+            "errors": [
+              "ExceptionInGetEnumerator",
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "get",
+            "action": "Stop",
+            "records": [],
+            "trace": "method;get;",
+            "outer": "ExceptionInGetEnumerator,Read-MethodFinally",
+            "errors": [
+              "ExceptionInGetEnumerator",
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "move",
+            "action": "Continue",
+            "records": [],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": "BadEnumeration,Read-MethodFinally",
+            "errors": [
+              "BadEnumeration",
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "move",
+            "action": "Stop",
+            "records": [],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": "BadEnumeration,Read-MethodFinally",
+            "errors": [
+              "BadEnumeration",
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "current",
+            "action": "Continue",
+            "records": [],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": "BadEnumeration,Read-MethodFinally",
+            "errors": [
+              "BadEnumeration",
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "current",
+            "action": "Stop",
+            "records": [],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": "BadEnumeration,Read-MethodFinally",
+            "errors": [
+              "BadEnumeration",
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "dispose",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "dispose",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Get-ObjectEnumValues",
+            "input": "System.DayOfWeek",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "pairs": [
+                  "System.DayOfWeek:Friday:5",
+                  "System.DayOfWeek:Monday:1",
+                  "System.DayOfWeek:Saturday:6",
+                  "System.DayOfWeek:Sunday:0",
+                  "System.DayOfWeek:Thursday:4",
+                  "System.DayOfWeek:Tuesday:2",
+                  "System.DayOfWeek:Wednesday:3"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Get-ObjectEnumValues",
+            "input": "System.ConsoleColor",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "pairs": [
+                  "System.ConsoleColor:Black:0",
+                  "System.ConsoleColor:Blue:9",
+                  "System.ConsoleColor:Cyan:11",
+                  "System.ConsoleColor:DarkBlue:1",
+                  "System.ConsoleColor:DarkCyan:3",
+                  "System.ConsoleColor:DarkGray:8",
+                  "System.ConsoleColor:DarkGreen:2",
+                  "System.ConsoleColor:DarkMagenta:5",
+                  "System.ConsoleColor:DarkRed:4",
+                  "System.ConsoleColor:DarkYellow:6",
+                  "System.ConsoleColor:Gray:7",
+                  "System.ConsoleColor:Green:10",
+                  "System.ConsoleColor:Magenta:13",
+                  "System.ConsoleColor:Red:12",
+                  "System.ConsoleColor:White:15",
+                  "System.ConsoleColor:Yellow:14"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Get-ObjectEnumValues",
+            "input": "System.String",
+            "records": [
+              "error:ArgumentException",
+              {
+                "type": "System.Collections.Hashtable",
+                "pairs": []
+              }
+            ]
+          },
+          {
+            "name": "Get-ObjectEnumValues",
+            "input": "Missing.Type",
+            "records": [
+              "error:InvalidCastFromStringToType",
+              {
+                "type": "System.Collections.Hashtable",
+                "pairs": []
+              }
+            ]
+          },
+          {
+            "name": "Get-ObjectEnumValues",
+            "input": "",
+            "records": [
+              "error:InvalidCastFromStringToType",
+              {
+                "type": "System.Collections.Hashtable",
+                "pairs": []
+              }
+            ]
+          }
+        ],
+        "mismatches": [],
+        "strict": {
+          "canProceed": false,
+          "typedUnits": 0,
+          "rejectedUnits": 7
+        },
+        "version": "7.6.6",
+        "matchingOriginalGenerated": true,
+        "originalOutputSha256": "8ce73147c2984da0d0a8af4649ec49227dcab254b8854a72199cc271f2e1089f",
+        "generatedOutputSha256": "8ce73147c2984da0d0a8af4649ec49227dcab254b8854a72199cc271f2e1089f"
+      },
+      "net472": {
+        "host": "powershell.exe",
+        "artifactSha256": "d4c1f1fd79cc8040e7f29dcb5a1c61186b631b378d239cd9a09683f913a1749a",
+        "manifestSha256": "46e0ba5a8da6210cb17f8d85e1faffb35859daaa1ed1be94fe9adb479d804586",
+        "compiledMethods": 7,
+        "ledger": [
+          {
+            "unitId": "7a4a4620afb24ac8402fd01f",
+            "relativePath": "input.psm1",
+            "name": "Read-MethodDirect",
+            "kind": "Function",
+            "startLine": 1,
+            "semanticEligible": true,
+            "emittedClrMethod": true,
+            "emittedBinaryCmdlet": false,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "runtimeCommandRegions": 1,
+            "boundaryCrossings": 2,
+            "shapingFallback": false,
+            "omitted": false,
+            "rejected": false,
+            "generatedMemberName": "Read_MethodDirect",
+            "dependencyCauses": [],
+            "boundaryCauses": [
+              "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+              "The emitted CLR method contains hosted PowerShell command regions.",
+              "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation.",
+              "The emitted CLR method requires the invocation's native PowerShell loop-stopping callback."
+            ],
+            "diagnosticChain": [],
+            "moduleStateReadBoundaryCrossings": 0,
+            "moduleStateWriteBoundaryCrossings": 0,
+            "regionGraph": {
+              "schemaVersion": 1,
+              "regions": [
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:69:217:Mixed",
+                  "ordinal": 0,
+                  "execution": "Mixed",
+                  "startOffset": 69,
+                  "endOffset": 217,
+                  "startLine": 1,
+                  "startColumn": 70,
+                  "endLine": 1,
+                  "endColumn": 218,
+                  "inputs": [
+                    "PowerShellSessionState:*",
+                    "PowerShellSessionVariable:_"
+                  ],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "streams": [
+                    "Success",
+                    "Error",
+                    "Warning",
+                    "Verbose",
+                    "Debug",
+                    "Information",
+                    "Host"
+                  ],
+                  "errors": [
+                    "ClrException",
+                    "PowerShellErrorRecord",
+                    "PowerShellSessionStateError",
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                  "hostedCommandBoundarySites": 1,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 1,
+                  "staticBoundaryValueTransfers": 3,
+                  "staticBoundaryCostUnits": 4
+                },
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:219:225:Typed",
+                  "ordinal": 1,
+                  "execution": "Typed",
+                  "startOffset": 219,
+                  "endOffset": 225,
+                  "startLine": 1,
+                  "startColumn": 220,
+                  "endLine": 1,
+                  "endColumn": 226,
+                  "inputs": [],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [],
+                  "streams": [
+                    "Success",
+                    "Error"
+                  ],
+                  "errors": [
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation",
+                  "hostedCommandBoundarySites": 0,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 0,
+                  "staticBoundaryValueTransfers": 0,
+                  "staticBoundaryCostUnits": 0
+                }
+              ],
+              "scriptBlocks": [],
+              "hostedCommandBoundarySites": 1,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 1,
+              "staticBoundaryCostUnits": 4
+            },
+            "promotedTypedRegions": 0,
+            "generatedRegionMemberNames": []
+          },
+          {
+            "unitId": "75eacd198f3e43b18d072f47",
+            "relativePath": "input.psm1",
+            "name": "Read-MethodParenthesized",
+            "kind": "Function",
+            "startLine": 2,
+            "semanticEligible": true,
+            "emittedClrMethod": true,
+            "emittedBinaryCmdlet": false,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "runtimeCommandRegions": 1,
+            "boundaryCrossings": 2,
+            "shapingFallback": false,
+            "omitted": false,
+            "rejected": false,
+            "generatedMemberName": "Read_MethodParenthesized",
+            "dependencyCauses": [],
+            "boundaryCauses": [
+              "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+              "The emitted CLR method contains hosted PowerShell command regions.",
+              "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation.",
+              "The emitted CLR method requires the invocation's native PowerShell loop-stopping callback."
+            ],
+            "diagnosticChain": [],
+            "moduleStateReadBoundaryCrossings": 0,
+            "moduleStateWriteBoundaryCrossings": 0,
+            "regionGraph": {
+              "schemaVersion": 1,
+              "regions": [
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:305:455:Mixed",
+                  "ordinal": 0,
+                  "execution": "Mixed",
+                  "startOffset": 305,
+                  "endOffset": 455,
+                  "startLine": 2,
+                  "startColumn": 77,
+                  "endLine": 2,
+                  "endColumn": 227,
+                  "inputs": [
+                    "PowerShellSessionState:*",
+                    "PowerShellSessionVariable:_"
+                  ],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "streams": [
+                    "Success",
+                    "Error",
+                    "Warning",
+                    "Verbose",
+                    "Debug",
+                    "Information",
+                    "Host"
+                  ],
+                  "errors": [
+                    "ClrException",
+                    "PowerShellErrorRecord",
+                    "PowerShellSessionStateError",
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                  "hostedCommandBoundarySites": 1,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 1,
+                  "staticBoundaryValueTransfers": 3,
+                  "staticBoundaryCostUnits": 4
+                },
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:457:463:Typed",
+                  "ordinal": 1,
+                  "execution": "Typed",
+                  "startOffset": 457,
+                  "endOffset": 463,
+                  "startLine": 2,
+                  "startColumn": 229,
+                  "endLine": 2,
+                  "endColumn": 235,
+                  "inputs": [],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [],
+                  "streams": [
+                    "Success",
+                    "Error"
+                  ],
+                  "errors": [
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation",
+                  "hostedCommandBoundarySites": 0,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 0,
+                  "staticBoundaryValueTransfers": 0,
+                  "staticBoundaryCostUnits": 0
+                }
+              ],
+              "scriptBlocks": [],
+              "hostedCommandBoundarySites": 1,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 1,
+              "staticBoundaryCostUnits": 4
+            },
+            "promotedTypedRegions": 0,
+            "generatedRegionMemberNames": []
+          },
+          {
+            "unitId": "067cbfca53acdf627395620e",
+            "relativePath": "input.psm1",
+            "name": "Read-MethodLiteral",
+            "kind": "Function",
+            "startLine": 3,
+            "semanticEligible": true,
+            "emittedClrMethod": true,
+            "emittedBinaryCmdlet": false,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "runtimeCommandRegions": 1,
+            "boundaryCrossings": 2,
+            "shapingFallback": false,
+            "omitted": false,
+            "rejected": false,
+            "generatedMemberName": "Read_MethodLiteral",
+            "dependencyCauses": [],
+            "boundaryCauses": [
+              "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+              "The emitted CLR method contains hosted PowerShell command regions.",
+              "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation.",
+              "The emitted CLR method requires the invocation's native PowerShell loop-stopping callback."
+            ],
+            "diagnosticChain": [],
+            "moduleStateReadBoundaryCrossings": 0,
+            "moduleStateWriteBoundaryCrossings": 0,
+            "regionGraph": {
+              "schemaVersion": 1,
+              "regions": [
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:537:734:Mixed",
+                  "ordinal": 0,
+                  "execution": "Mixed",
+                  "startOffset": 537,
+                  "endOffset": 734,
+                  "startLine": 3,
+                  "startColumn": 71,
+                  "endLine": 3,
+                  "endColumn": 268,
+                  "inputs": [
+                    "PowerShellSessionState:*",
+                    "PowerShellSessionVariable:_"
+                  ],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [
+                    "PowerShellSessionState:*",
+                    "PowerShellSessionVariable:RESULT"
+                  ],
+                  "streams": [
+                    "Success",
+                    "Error",
+                    "Warning",
+                    "Verbose",
+                    "Debug",
+                    "Information",
+                    "Host"
+                  ],
+                  "errors": [
+                    "ClrException",
+                    "PowerShellErrorRecord",
+                    "PowerShellSessionStateError",
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                  "hostedCommandBoundarySites": 1,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 1,
+                  "staticBoundaryValueTransfers": 4,
+                  "staticBoundaryCostUnits": 5
+                },
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:736:742:Typed",
+                  "ordinal": 1,
+                  "execution": "Typed",
+                  "startOffset": 736,
+                  "endOffset": 742,
+                  "startLine": 3,
+                  "startColumn": 270,
+                  "endLine": 3,
+                  "endColumn": 276,
+                  "inputs": [],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [],
+                  "streams": [
+                    "Success",
+                    "Error"
+                  ],
+                  "errors": [
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation",
+                  "hostedCommandBoundarySites": 0,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 0,
+                  "staticBoundaryValueTransfers": 0,
+                  "staticBoundaryCostUnits": 0
+                }
+              ],
+              "scriptBlocks": [],
+              "hostedCommandBoundarySites": 1,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 1,
+              "staticBoundaryCostUnits": 5
+            },
+            "promotedTypedRegions": 0,
+            "generatedRegionMemberNames": []
+          },
+          {
+            "unitId": "c262e3e181f53e05e21432f6",
+            "relativePath": "input.psm1",
+            "name": "Read-MethodReturn",
+            "kind": "Function",
+            "startLine": 4,
+            "semanticEligible": true,
+            "emittedClrMethod": true,
+            "emittedBinaryCmdlet": false,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "runtimeCommandRegions": 1,
+            "boundaryCrossings": 2,
+            "shapingFallback": false,
+            "omitted": false,
+            "rejected": false,
+            "generatedMemberName": "Read_MethodReturn",
+            "dependencyCauses": [],
+            "boundaryCauses": [
+              "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+              "The emitted CLR method contains hosted PowerShell command regions.",
+              "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation.",
+              "The emitted CLR method requires the invocation's native PowerShell loop-stopping callback."
+            ],
+            "diagnosticChain": [],
+            "moduleStateReadBoundaryCrossings": 0,
+            "moduleStateWriteBoundaryCrossings": 0,
+            "regionGraph": {
+              "schemaVersion": 1,
+              "regions": [
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:815:970:Mixed",
+                  "ordinal": 0,
+                  "execution": "Mixed",
+                  "startOffset": 815,
+                  "endOffset": 970,
+                  "startLine": 4,
+                  "startColumn": 70,
+                  "endLine": 4,
+                  "endColumn": 225,
+                  "inputs": [
+                    "PowerShellSessionState:*",
+                    "PowerShellSessionVariable:_"
+                  ],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "streams": [
+                    "Success",
+                    "Error",
+                    "Warning",
+                    "Verbose",
+                    "Debug",
+                    "Information",
+                    "Host"
+                  ],
+                  "errors": [
+                    "ClrException",
+                    "PowerShellErrorRecord",
+                    "PowerShellSessionStateError",
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                  "hostedCommandBoundarySites": 1,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 1,
+                  "staticBoundaryValueTransfers": 3,
+                  "staticBoundaryCostUnits": 4
+                },
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:972:978:Typed",
+                  "ordinal": 1,
+                  "execution": "Typed",
+                  "startOffset": 972,
+                  "endOffset": 978,
+                  "startLine": 4,
+                  "startColumn": 227,
+                  "endLine": 4,
+                  "endColumn": 233,
+                  "inputs": [],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [],
+                  "streams": [
+                    "Success",
+                    "Error"
+                  ],
+                  "errors": [
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation",
+                  "hostedCommandBoundarySites": 0,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 0,
+                  "staticBoundaryValueTransfers": 0,
+                  "staticBoundaryCostUnits": 0
+                }
+              ],
+              "scriptBlocks": [],
+              "hostedCommandBoundarySites": 1,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 1,
+              "staticBoundaryCostUnits": 4
+            },
+            "promotedTypedRegions": 0,
+            "generatedRegionMemberNames": []
+          },
+          {
+            "unitId": "e3a212fa7914ffd840b0bc8d",
+            "relativePath": "input.psm1",
+            "name": "Read-MethodUncaught",
+            "kind": "Function",
+            "startLine": 5,
+            "semanticEligible": true,
+            "emittedClrMethod": true,
+            "emittedBinaryCmdlet": false,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "runtimeCommandRegions": 1,
+            "boundaryCrossings": 2,
+            "shapingFallback": false,
+            "omitted": false,
+            "rejected": false,
+            "generatedMemberName": "Read_MethodUncaught",
+            "dependencyCauses": [],
+            "boundaryCauses": [
+              "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+              "The emitted CLR method contains hosted PowerShell command regions.",
+              "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation."
+            ],
+            "diagnosticChain": [],
+            "moduleStateReadBoundaryCrossings": 0,
+            "moduleStateWriteBoundaryCrossings": 0,
+            "regionGraph": {
+              "schemaVersion": 1,
+              "regions": [
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:1053:1123:Mixed",
+                  "ordinal": 0,
+                  "execution": "Mixed",
+                  "startOffset": 1053,
+                  "endOffset": 1123,
+                  "startLine": 5,
+                  "startColumn": 72,
+                  "endLine": 5,
+                  "endColumn": 142,
+                  "inputs": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "streams": [
+                    "Success",
+                    "Error",
+                    "Warning",
+                    "Verbose",
+                    "Debug",
+                    "Information",
+                    "Host"
+                  ],
+                  "errors": [
+                    "PowerShellErrorRecord"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                  "hostedCommandBoundarySites": 1,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 1,
+                  "staticBoundaryValueTransfers": 2,
+                  "staticBoundaryCostUnits": 3
+                },
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:1053:1123:Typed",
+                  "ordinal": 1,
+                  "execution": "Typed",
+                  "startOffset": 1053,
+                  "endOffset": 1123,
+                  "startLine": 5,
+                  "startColumn": 72,
+                  "endLine": 5,
+                  "endColumn": 142,
+                  "inputs": [],
+                  "outputs": [],
+                  "mutations": [],
+                  "streams": [],
+                  "errors": [],
+                  "ordering": "AuthoredSequentialSingleEvaluation",
+                  "hostedCommandBoundarySites": 0,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 0,
+                  "staticBoundaryValueTransfers": 0,
+                  "staticBoundaryCostUnits": 0
+                }
+              ],
+              "scriptBlocks": [],
+              "hostedCommandBoundarySites": 1,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 1,
+              "staticBoundaryCostUnits": 3
+            },
+            "promotedTypedRegions": 0,
+            "generatedRegionMemberNames": []
+          },
+          {
+            "unitId": "008b6b4849112461af0356ca",
+            "relativePath": "input.psm1",
+            "name": "Read-MethodFinally",
+            "kind": "Function",
+            "startLine": 6,
+            "semanticEligible": true,
+            "emittedClrMethod": true,
+            "emittedBinaryCmdlet": false,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "runtimeCommandRegions": 1,
+            "boundaryCrossings": 2,
+            "shapingFallback": false,
+            "omitted": false,
+            "rejected": false,
+            "generatedMemberName": "Read_MethodFinally",
+            "dependencyCauses": [],
+            "boundaryCauses": [
+              "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+              "The emitted CLR method contains hosted PowerShell command regions.",
+              "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation.",
+              "The emitted CLR method requires the invocation's native PowerShell loop-stopping callback."
+            ],
+            "diagnosticChain": [],
+            "moduleStateReadBoundaryCrossings": 0,
+            "moduleStateWriteBoundaryCrossings": 0,
+            "regionGraph": {
+              "schemaVersion": 1,
+              "regions": [
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:1197:1297:Mixed",
+                  "ordinal": 0,
+                  "execution": "Mixed",
+                  "startOffset": 1197,
+                  "endOffset": 1297,
+                  "startLine": 6,
+                  "startColumn": 71,
+                  "endLine": 6,
+                  "endColumn": 171,
+                  "inputs": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "streams": [
+                    "Success",
+                    "Error",
+                    "Warning",
+                    "Verbose",
+                    "Debug",
+                    "Information",
+                    "Host"
+                  ],
+                  "errors": [
+                    "PowerShellErrorRecord",
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                  "hostedCommandBoundarySites": 1,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 1,
+                  "staticBoundaryValueTransfers": 2,
+                  "staticBoundaryCostUnits": 3
+                }
+              ],
+              "scriptBlocks": [],
+              "hostedCommandBoundarySites": 1,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 1,
+              "staticBoundaryCostUnits": 3
+            },
+            "promotedTypedRegions": 0,
+            "generatedRegionMemberNames": []
+          },
+          {
+            "unitId": "c5d30c23659f96c1d34f3df8",
+            "relativePath": "input.psm1",
+            "name": "Get-ObjectEnumValues",
+            "kind": "Function",
+            "startLine": 7,
+            "semanticEligible": true,
+            "emittedClrMethod": true,
+            "emittedBinaryCmdlet": false,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "runtimeCommandRegions": 1,
+            "boundaryCrossings": 2,
+            "shapingFallback": false,
+            "omitted": false,
+            "rejected": false,
+            "generatedMemberName": "Get_ObjectEnumValues",
+            "dependencyCauses": [],
+            "boundaryCauses": [
+              "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+              "The emitted CLR method contains hosted PowerShell command regions.",
+              "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation."
+            ],
+            "diagnosticChain": [],
+            "moduleStateReadBoundaryCrossings": 0,
+            "moduleStateWriteBoundaryCrossings": 0,
+            "regionGraph": {
+              "schemaVersion": 1,
+              "regions": [
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:2149:2166:Typed",
+                  "ordinal": 0,
+                  "execution": "Typed",
+                  "startOffset": 2149,
+                  "endOffset": 2166,
+                  "startLine": 30,
+                  "startColumn": 5,
+                  "endLine": 30,
+                  "endColumn": 22,
+                  "inputs": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "outputs": [
+                    "PowerShellSessionState:*",
+                    "PowerShellSessionVariable:ENUMVALUES"
+                  ],
+                  "mutations": [
+                    "PowerShellSessionState:*",
+                    "PowerShellSessionVariable:ENUMVALUES"
+                  ],
+                  "streams": [
+                    "Error"
+                  ],
+                  "errors": [
+                    "PowerShellSessionStateError",
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation",
+                  "hostedCommandBoundarySites": 0,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 0,
+                  "staticBoundaryValueTransfers": 0,
+                  "staticBoundaryCostUnits": 0
+                },
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:2172:2278:Hosted",
+                  "ordinal": 1,
+                  "execution": "Hosted",
+                  "startOffset": 2172,
+                  "endOffset": 2278,
+                  "startLine": 31,
+                  "startColumn": 5,
+                  "endLine": 34,
+                  "endColumn": 6,
+                  "inputs": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "outputs": [
+                    "PowerShellSessionState:*",
+                    "stream:Success"
+                  ],
+                  "mutations": [
+                    "PowerShellSessionState:*"
+                  ],
+                  "streams": [
+                    "Success",
+                    "Error",
+                    "Warning",
+                    "Verbose",
+                    "Debug",
+                    "Information",
+                    "Host"
+                  ],
+                  "errors": [
+                    "PowerShellErrorRecord"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                  "hostedCommandBoundarySites": 1,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 1,
+                  "staticBoundaryValueTransfers": 2,
+                  "staticBoundaryCostUnits": 3
+                },
+                {
+                  "regionId": "region:b7e4fd41225da76b41578956622eb47fb3fdc5f0433ee7713a92903bff4f40c6:2284:2295:Typed",
+                  "ordinal": 2,
+                  "execution": "Typed",
+                  "startOffset": 2284,
+                  "endOffset": 2295,
+                  "startLine": 35,
+                  "startColumn": 5,
+                  "endLine": 35,
+                  "endColumn": 16,
+                  "inputs": [
+                    "PowerShellSessionState:*",
+                    "PowerShellSessionVariable:ENUMVALUES"
+                  ],
+                  "outputs": [
+                    "stream:Success"
+                  ],
+                  "mutations": [],
+                  "streams": [
+                    "Success",
+                    "Error"
+                  ],
+                  "errors": [
+                    "PowerShellSessionStateError",
+                    "PowerShellStatementError"
+                  ],
+                  "ordering": "AuthoredSequentialSingleEvaluation",
+                  "hostedCommandBoundarySites": 0,
+                  "moduleStateReadBoundarySites": 0,
+                  "moduleStateWriteBoundarySites": 0,
+                  "staticBoundaryCrossings": 0,
+                  "staticBoundaryValueTransfers": 0,
+                  "staticBoundaryCostUnits": 0
+                }
+              ],
+              "scriptBlocks": [],
+              "hostedCommandBoundarySites": 1,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 1,
+              "staticBoundaryCostUnits": 3
+            },
+            "promotedTypedRegions": 0,
+            "generatedRegionMemberNames": []
+          }
+        ],
+        "observations": [
+          {
+            "name": "Read-MethodDirect",
+            "case": "empty",
+            "action": "Continue",
+            "records": [
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "empty",
+            "action": "Stop",
+            "records": [
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "one",
+            "action": "Continue",
+            "records": [
+              "first",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "one",
+            "action": "Stop",
+            "records": [
+              "first",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "two",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "two",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "null",
+            "action": "Continue",
+            "records": [
+              "caught:InvokeMethodOnNull",
+              "finally",
+              "done"
+            ],
+            "trace": "",
+            "outer": null,
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "null",
+            "action": "Stop",
+            "records": [
+              "caught:InvokeMethodOnNull",
+              "finally",
+              "done"
+            ],
+            "trace": "",
+            "outer": null,
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "method",
+            "action": "Continue",
+            "records": [
+              "caught:InvalidOperationException",
+              "finally",
+              "done"
+            ],
+            "trace": "method;",
+            "outer": null,
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "method",
+            "action": "Stop",
+            "records": [
+              "caught:InvalidOperationException",
+              "finally",
+              "done"
+            ],
+            "trace": "method;",
+            "outer": null,
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "get",
+            "action": "Continue",
+            "records": [
+              "caught:ExceptionInGetEnumerator",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;",
+            "outer": null,
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "get",
+            "action": "Stop",
+            "records": [
+              "caught:ExceptionInGetEnumerator",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;",
+            "outer": null,
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "move",
+            "action": "Continue",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "move",
+            "action": "Stop",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "current",
+            "action": "Continue",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "current",
+            "action": "Stop",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "dispose",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodDirect",
+            "case": "dispose",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "empty",
+            "action": "Continue",
+            "records": [
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "empty",
+            "action": "Stop",
+            "records": [
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "one",
+            "action": "Continue",
+            "records": [
+              "first",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "one",
+            "action": "Stop",
+            "records": [
+              "first",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "two",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "two",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "null",
+            "action": "Continue",
+            "records": [
+              "caught:InvokeMethodOnNull",
+              "finally",
+              "done"
+            ],
+            "trace": "",
+            "outer": null,
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "null",
+            "action": "Stop",
+            "records": [
+              "caught:InvokeMethodOnNull",
+              "finally",
+              "done"
+            ],
+            "trace": "",
+            "outer": null,
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "method",
+            "action": "Continue",
+            "records": [
+              "caught:InvalidOperationException",
+              "finally",
+              "done"
+            ],
+            "trace": "method;",
+            "outer": null,
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "method",
+            "action": "Stop",
+            "records": [
+              "caught:InvalidOperationException",
+              "finally",
+              "done"
+            ],
+            "trace": "method;",
+            "outer": null,
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "get",
+            "action": "Continue",
+            "records": [
+              "caught:ExceptionInGetEnumerator",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;",
+            "outer": null,
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "get",
+            "action": "Stop",
+            "records": [
+              "caught:ExceptionInGetEnumerator",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;",
+            "outer": null,
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "move",
+            "action": "Continue",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "move",
+            "action": "Stop",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "current",
+            "action": "Continue",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "current",
+            "action": "Stop",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "dispose",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodParenthesized",
+            "case": "dispose",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "empty",
+            "action": "Continue",
+            "records": [
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "empty",
+            "action": "Stop",
+            "records": [
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "one",
+            "action": "Continue",
+            "records": [
+              "first",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "one",
+            "action": "Stop",
+            "records": [
+              "first",
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "two",
+            "action": "Continue",
+            "records": [
+              [
+                "first",
+                null,
+                "nested"
+              ],
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "two",
+            "action": "Stop",
+            "records": [
+              [
+                "first",
+                null,
+                "nested"
+              ],
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "null",
+            "action": "Continue",
+            "records": [
+              "caught:InvokeMethodOnNull",
+              "finally",
+              "done"
+            ],
+            "trace": "",
+            "outer": null,
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "null",
+            "action": "Stop",
+            "records": [
+              "caught:InvokeMethodOnNull",
+              "finally",
+              "done"
+            ],
+            "trace": "",
+            "outer": null,
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "method",
+            "action": "Continue",
+            "records": [
+              "caught:InvalidOperationException",
+              "finally",
+              "done"
+            ],
+            "trace": "method;",
+            "outer": null,
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "method",
+            "action": "Stop",
+            "records": [
+              "caught:InvalidOperationException",
+              "finally",
+              "done"
+            ],
+            "trace": "method;",
+            "outer": null,
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "get",
+            "action": "Continue",
+            "records": [
+              "caught:ExceptionInGetEnumerator",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;",
+            "outer": null,
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "get",
+            "action": "Stop",
+            "records": [
+              "caught:ExceptionInGetEnumerator",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;",
+            "outer": null,
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "move",
+            "action": "Continue",
+            "records": [
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "move",
+            "action": "Stop",
+            "records": [
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "current",
+            "action": "Continue",
+            "records": [
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "current",
+            "action": "Stop",
+            "records": [
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "dispose",
+            "action": "Continue",
+            "records": [
+              [
+                "first",
+                null,
+                "nested"
+              ],
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodLiteral",
+            "case": "dispose",
+            "action": "Stop",
+            "records": [
+              [
+                "first",
+                null,
+                "nested"
+              ],
+              "after",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "empty",
+            "action": "Continue",
+            "records": [
+              "finally"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "empty",
+            "action": "Stop",
+            "records": [
+              "finally"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "one",
+            "action": "Continue",
+            "records": [
+              "first",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "one",
+            "action": "Stop",
+            "records": [
+              "first",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "two",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "two",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "null",
+            "action": "Continue",
+            "records": [
+              "caught:InvokeMethodOnNull",
+              "finally",
+              "done"
+            ],
+            "trace": "",
+            "outer": null,
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "null",
+            "action": "Stop",
+            "records": [
+              "caught:InvokeMethodOnNull",
+              "finally",
+              "done"
+            ],
+            "trace": "",
+            "outer": null,
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "method",
+            "action": "Continue",
+            "records": [
+              "caught:InvalidOperationException",
+              "finally",
+              "done"
+            ],
+            "trace": "method;",
+            "outer": null,
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "method",
+            "action": "Stop",
+            "records": [
+              "caught:InvalidOperationException",
+              "finally",
+              "done"
+            ],
+            "trace": "method;",
+            "outer": null,
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "get",
+            "action": "Continue",
+            "records": [
+              "caught:ExceptionInGetEnumerator",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;",
+            "outer": null,
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "get",
+            "action": "Stop",
+            "records": [
+              "caught:ExceptionInGetEnumerator",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;",
+            "outer": null,
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "move",
+            "action": "Continue",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "move",
+            "action": "Stop",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "current",
+            "action": "Continue",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "current",
+            "action": "Stop",
+            "records": [
+              "first",
+              "caught:BadEnumeration",
+              "finally",
+              "done"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": null,
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "dispose",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodReturn",
+            "case": "dispose",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "empty",
+            "action": "Continue",
+            "records": [],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "empty",
+            "action": "Stop",
+            "records": [],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "one",
+            "action": "Continue",
+            "records": [
+              "first"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "one",
+            "action": "Stop",
+            "records": [
+              "first"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "two",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "two",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "null",
+            "action": "Continue",
+            "records": [],
+            "trace": "",
+            "outer": "InvokeMethodOnNull,Read-MethodUncaught",
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "null",
+            "action": "Stop",
+            "records": [],
+            "trace": "",
+            "outer": "InvokeMethodOnNull,Read-MethodUncaught",
+            "errors": [
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "method",
+            "action": "Continue",
+            "records": [],
+            "trace": "method;",
+            "outer": "InvalidOperationException,Read-MethodUncaught",
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "method",
+            "action": "Stop",
+            "records": [],
+            "trace": "method;",
+            "outer": "InvalidOperationException,Read-MethodUncaught",
+            "errors": [
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "get",
+            "action": "Continue",
+            "records": [],
+            "trace": "method;get;",
+            "outer": "ExceptionInGetEnumerator,Read-MethodUncaught",
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "get",
+            "action": "Stop",
+            "records": [],
+            "trace": "method;get;",
+            "outer": "ExceptionInGetEnumerator,Read-MethodUncaught",
+            "errors": [
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "move",
+            "action": "Continue",
+            "records": [],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": "BadEnumeration,Read-MethodUncaught",
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "move",
+            "action": "Stop",
+            "records": [],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": "BadEnumeration,Read-MethodUncaught",
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "current",
+            "action": "Continue",
+            "records": [],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": "BadEnumeration,Read-MethodUncaught",
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "current",
+            "action": "Stop",
+            "records": [],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": "BadEnumeration,Read-MethodUncaught",
+            "errors": [
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "dispose",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodUncaught",
+            "case": "dispose",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "empty",
+            "action": "Continue",
+            "records": [
+              "finally"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "empty",
+            "action": "Stop",
+            "records": [
+              "finally"
+            ],
+            "trace": "method;get;move0;",
+            "outer": null,
+            "errors": [],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "one",
+            "action": "Continue",
+            "records": [
+              "first",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "one",
+            "action": "Stop",
+            "records": [
+              "first",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "two",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "two",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "null",
+            "action": "Continue",
+            "records": [],
+            "trace": "",
+            "outer": "InvokeMethodOnNull,Read-MethodFinally",
+            "errors": [
+              "InvokeMethodOnNull",
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "null",
+            "action": "Stop",
+            "records": [],
+            "trace": "",
+            "outer": "InvokeMethodOnNull,Read-MethodFinally",
+            "errors": [
+              "InvokeMethodOnNull",
+              "InvokeMethodOnNull"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "method",
+            "action": "Continue",
+            "records": [],
+            "trace": "method;",
+            "outer": "InvalidOperationException,Read-MethodFinally",
+            "errors": [
+              "InvalidOperationException",
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "method",
+            "action": "Stop",
+            "records": [],
+            "trace": "method;",
+            "outer": "InvalidOperationException,Read-MethodFinally",
+            "errors": [
+              "InvalidOperationException",
+              "InvalidOperationException"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "get",
+            "action": "Continue",
+            "records": [],
+            "trace": "method;get;",
+            "outer": "ExceptionInGetEnumerator,Read-MethodFinally",
+            "errors": [
+              "ExceptionInGetEnumerator",
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "get",
+            "action": "Stop",
+            "records": [],
+            "trace": "method;get;",
+            "outer": "ExceptionInGetEnumerator,Read-MethodFinally",
+            "errors": [
+              "ExceptionInGetEnumerator",
+              "ExceptionInGetEnumerator"
+            ],
+            "warnings": []
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "move",
+            "action": "Continue",
+            "records": [],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": "BadEnumeration,Read-MethodFinally",
+            "errors": [
+              "BadEnumeration",
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "move",
+            "action": "Stop",
+            "records": [],
+            "trace": "method;get;move0;current0;move1;",
+            "outer": "BadEnumeration,Read-MethodFinally",
+            "errors": [
+              "BadEnumeration",
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "current",
+            "action": "Continue",
+            "records": [],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": "BadEnumeration,Read-MethodFinally",
+            "errors": [
+              "BadEnumeration",
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "current",
+            "action": "Stop",
+            "records": [],
+            "trace": "method;get;move0;current0;move1;current1;",
+            "outer": "BadEnumeration,Read-MethodFinally",
+            "errors": [
+              "BadEnumeration",
+              "BadEnumeration"
+            ],
+            "warnings": [
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "dispose",
+            "action": "Continue",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Read-MethodFinally",
+            "case": "dispose",
+            "action": "Stop",
+            "records": [
+              "first",
+              null,
+              "nested",
+              "finally"
+            ],
+            "trace": "method;get;move0;current0;move1;current1;move2;",
+            "outer": null,
+            "errors": [],
+            "warnings": [
+              "item",
+              "item"
+            ]
+          },
+          {
+            "name": "Get-ObjectEnumValues",
+            "input": "System.DayOfWeek",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "pairs": [
+                  "System.DayOfWeek:Friday:5",
+                  "System.DayOfWeek:Monday:1",
+                  "System.DayOfWeek:Saturday:6",
+                  "System.DayOfWeek:Sunday:0",
+                  "System.DayOfWeek:Thursday:4",
+                  "System.DayOfWeek:Tuesday:2",
+                  "System.DayOfWeek:Wednesday:3"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Get-ObjectEnumValues",
+            "input": "System.ConsoleColor",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "pairs": [
+                  "System.ConsoleColor:Black:0",
+                  "System.ConsoleColor:Blue:9",
+                  "System.ConsoleColor:Cyan:11",
+                  "System.ConsoleColor:DarkBlue:1",
+                  "System.ConsoleColor:DarkCyan:3",
+                  "System.ConsoleColor:DarkGray:8",
+                  "System.ConsoleColor:DarkGreen:2",
+                  "System.ConsoleColor:DarkMagenta:5",
+                  "System.ConsoleColor:DarkRed:4",
+                  "System.ConsoleColor:DarkYellow:6",
+                  "System.ConsoleColor:Gray:7",
+                  "System.ConsoleColor:Green:10",
+                  "System.ConsoleColor:Magenta:13",
+                  "System.ConsoleColor:Red:12",
+                  "System.ConsoleColor:White:15",
+                  "System.ConsoleColor:Yellow:14"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "Get-ObjectEnumValues",
+            "input": "System.String",
+            "records": [
+              "error:ArgumentException",
+              {
+                "type": "System.Collections.Hashtable",
+                "pairs": []
+              }
+            ]
+          },
+          {
+            "name": "Get-ObjectEnumValues",
+            "input": "Missing.Type",
+            "records": [
+              "error:InvalidCastFromStringToType",
+              {
+                "type": "System.Collections.Hashtable",
+                "pairs": []
+              }
+            ]
+          },
+          {
+            "name": "Get-ObjectEnumValues",
+            "input": "",
+            "records": [
+              "error:InvalidCastFromStringToType",
+              {
+                "type": "System.Collections.Hashtable",
+                "pairs": []
+              }
+            ]
+          }
+        ],
+        "mismatches": [],
+        "strict": {
+          "canProceed": false,
+          "typedUnits": 0,
+          "rejectedUnits": 7
+        },
+        "version": "5.1.26100.9444",
+        "matchingOriginalGenerated": true,
+        "originalOutputSha256": "8ce73147c2984da0d0a8af4649ec49227dcab254b8854a72199cc271f2e1089f",
+        "generatedOutputSha256": "8ce73147c2984da0d0a8af4649ec49227dcab254b8854a72199cc271f2e1089f"
+      }
+    }
+  },
+  "validation": [
+    {
+      "file": "method-pipelines-adjacent.trx",
+      "sha256": "855b451be28863f2f59c11559fc7e4619ff2d0c9dc63fbaee15c1c7891293505",
+      "counts": {
+        "total": "17",
+        "executed": "17",
+        "passed": "17",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "file": "method-pipelines-contracts.trx",
+      "sha256": "ae3c6a9d7191adba2e89e8324efe5a781dc12e3825834072f89c2fbd0fb2576f",
+      "counts": {
+        "total": "12",
+        "executed": "12",
+        "passed": "10",
+        "failed": "2",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "file": "method-pipelines-corrected.trx",
+      "sha256": "3907a64ec1ea0255ebcc8f131211e0e9ec0003e57a623862adc72034ebdb38a4",
+      "counts": {
+        "total": "21",
+        "executed": "21",
+        "passed": "19",
+        "failed": "2",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "file": "method-pipelines-first.trx",
+      "sha256": "06f1dc44fc95aef9d11920ee33deb4cebacc3d1ea01dca4b8e9ee2f1a098b7a1",
+      "counts": {
+        "total": "7",
+        "executed": "7",
+        "passed": "7",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "file": "method-pipelines-owner.trx",
+      "sha256": "7a507c69205a923712bc859c6a4de06c3a7d39b5205ab1326f393cc2814b3c3b",
+      "counts": {
+        "total": "21",
+        "executed": "21",
+        "passed": "19",
+        "failed": "2",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "file": "method-pipelines-record-owner.trx",
+      "sha256": "8f8e0936272ca35ce68a7965272fb568e88f7d6360ca4b72123fffcb4a9de75a",
+      "counts": {
+        "total": "4",
+        "executed": "4",
+        "passed": "4",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "file": "method-pipelines-runtime-free.trx",
+      "sha256": "7edc785b389adf99525c0dbbc3866fb5aae085a290ce6d4518bd18a4caf58e12",
+      "counts": {
+        "total": "220",
+        "executed": "220",
+        "passed": "220",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "kind": "net472 owner build",
+      "warnings": 0,
+      "errors": 0,
+      "elapsedSeconds": 11.64
+    }
+  ],
+  "review": {
+    "result": "One independent read-only pass found no actionable issue",
+    "scope": "Three changed production files plus pipeline binding, native source selection, implicit-output/error rewriting, lowering/emission and runtime lifetime siblings",
+    "runtimeEvidence": "Separately established by parent original/generated artifact probes"
+  },
+  "workflow": {
+    "source": "ExternalWorkflows/PSSharedGoods/FullModule/Private/Deprecated/Objects/Get-ObjectEnumValues.ps1",
+    "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+    "license": "MIT",
+    "qualification": "Unchanged complete native-bound function on both claimed Windows targets; its authored pipeline remains PowerShell-owned",
+    "effects": "Offline CLR enum lookup only; no AD/network/admin/installer activity"
+  },
+  "failedStages": {
+    "method-pipelines-contracts.trx": "Returned native pipeline errors appended twice to ErrorVariable; 10/12 passed",
+    "method-pipelines-corrected.trx": "Binder-only suppression was incomplete; 19/21 passed",
+    "method-pipelines-owner.trx": "Policy did not yet recognize implicit-output stream-write form; 19/21 passed",
+    "resolution": "The binder and statement-error pass share a predicate recognizing direct returned records and their rewritten native success-stream form; scalarized captures retain their outer error boundary"
+  },
+  "limits": [
+    "Whole method-led pipeline executes through the existing PowerShell SDK semantic owner, not runtime-free CLR translation of the producer or ForEach-Object",
+    "Explicit terminal Out-Null suppression keeps its guard",
+    "Strict seven-function packet rejects all seven units on both targets",
+    "Only net10.0 full five-packet census refreshed; focused artifacts execute net472",
+    "No general source-position/failure-message or performance claim from normalized observations",
+    "No non-Windows, reviewed dependency lock, PR, merge or release claim"
+  ]
+}

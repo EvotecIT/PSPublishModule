@@ -28,7 +28,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Theory]
-    [InlineData("net8.0", "pwsh")]
+    [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
     public void Build_StrictBinaryModuleMatchesPowerShellForWideningNumericComparisons(string targetFramework, string host)
     {
@@ -143,7 +143,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Theory]
-    [InlineData("net8.0", "pwsh")]
+    [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
     public void Build_StrictBinaryModuleMatchesPowerShellForNullableNumericOrdering(string targetFramework, string host)
     {

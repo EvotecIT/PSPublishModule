@@ -6,8 +6,6 @@ namespace PowerForge;
 /// <summary>Compiles one entry script and its contained dot-source closure through the shared semantic pipeline.</summary>
 internal static class PowerShellTypedExecutableCompiler
 {
-    private const PowerShellCompilationCapability Capabilities = PowerShellCompilationCapabilities.TypedExecutable;
-
     internal static PowerShellTypedExecutableCompilation Compile(
         string entryPointPath,
         IEnumerable<string> sourcePaths,
@@ -15,6 +13,59 @@ internal static class PowerShellTypedExecutableCompiler
         string targetFramework,
         string semanticProfileId,
         IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders = null)
+        => CompileCore(entryPointPath, sourcePaths, plan, targetFramework, semanticProfileId,
+            commandProviders, PowerShellCompilationCapabilities.TypedExecutable, parametersAlreadyBound: false);
+
+    internal static PowerShellTypedExecutableCompilation CompileHybridPreboundEntry(
+        string entryPointPath,
+        IEnumerable<string> sourcePaths,
+        PowerShellCompilationPlan plan,
+        string targetFramework,
+        string semanticProfileId,
+        IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders = null)
+    {
+        if (plan.Mode != PowerShellCompilationMode.Hybrid)
+            throw new InvalidOperationException("A prebound executable entry requires a Hybrid compilation plan.");
+        var entryPoint = Path.GetFullPath(entryPointPath);
+        var rootUnit = plan.Files.FirstOrDefault(file =>
+                PowerShellCompilationPathSafety.PathEquals(file.FullPath, entryPoint))?
+            .Units.SingleOrDefault(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
+        if (rootUnit?.IsCompilable != true)
+            throw new InvalidOperationException("A prebound executable entry requires an eligible authored script root.");
+        // The authored script has already bound its parameters. Its private entry consumes
+        // that frame directly; ordinary native-function binding would create a different
+        // invocation ABI and variable owner. Retain the other Hybrid host capabilities.
+        var entryCapabilities = PowerShellCompilationCapabilities.HybridExecutable &
+                                ~PowerShellCompilationCapability.NativeFunctionBinding;
+        return CompileCore(entryPointPath, sourcePaths, plan, targetFramework, semanticProfileId,
+            commandProviders, entryCapabilities, parametersAlreadyBound: true);
+    }
+
+    /// <summary>Compiles an end-only authored script body for the native script invocation owner.</summary>
+    /// <remarks>This internal lowering route does not admit or package an executable root.</remarks>
+    internal static PowerShellTypedExecutableCompilation CompileHybridNativeEntry(
+        string entryPointPath,
+        PowerShellCompilationPlan plan,
+        string targetFramework,
+        string semanticProfileId)
+    {
+        if (plan.Mode != PowerShellCompilationMode.Hybrid)
+            throw new InvalidOperationException("A native script entry requires a Hybrid compilation plan.");
+        return CompileCore(entryPointPath, new[] { entryPointPath }, plan, targetFramework,
+            semanticProfileId, null, PowerShellCompilationCapabilities.HybridExecutable,
+            parametersAlreadyBound: false, nativeScriptEntry: true);
+    }
+
+    private static PowerShellTypedExecutableCompilation CompileCore(
+        string entryPointPath,
+        IEnumerable<string> sourcePaths,
+        PowerShellCompilationPlan plan,
+        string targetFramework,
+        string semanticProfileId,
+        IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders,
+        PowerShellCompilationCapability capabilities,
+        bool parametersAlreadyBound,
+        bool nativeScriptEntry = false)
     {
         if (!plan.CanProceed) throw CreatePlanFailure(plan);
 
@@ -33,20 +84,31 @@ internal static class PowerShellTypedExecutableCompiler
             .SelectMany(source => GetTopLevelFunctions(source)
                 .Select(function => new LocalDefinition(source.Path, function, GetUnit(plan, source.Path, function.Name))))
             .ToArray();
-        ValidateDefinitions(definitions);
+        ValidateDefinitions(definitions, emitTopLevelMethods: !nativeScriptEntry);
         ValidateDependencyTopLevels(parsed.Values, entryPoint);
         ValidateEntryPointDeclarationOrder(entrySource);
+        if (nativeScriptEntry && (requestedSources.Length != 1 ||
+            PowerShellSourceParser.HasUsingStatements(entrySource.Ast) || entrySource.Ast.ScriptRequirements is not null ||
+            entrySource.Ast.EndBlock?.Statements.Any(static statement => statement is TypeDefinitionAst) == true ||
+            entrySource.Ast.BeginBlock is not null || entrySource.Ast.ProcessBlock is not null ||
+            entrySource.Ast.DynamicParamBlock is not null ||
+            entrySource.Ast.GetType().GetProperty("CleanBlock")?.GetValue(entrySource.Ast) is not null))
+            throw new InvalidOperationException("Native script-root lowering currently requires a single end-only source without types, requirements or dependencies.");
 
         var statements = entrySource.Ast.EndBlock?.Statements
             .Where(static statement => statement is not FunctionDefinitionAst && !IsTopLevelDotSource(statement))
             .ToArray() ?? Array.Empty<StatementAst>();
 
-        var entryDocument = CreateEntryDocument(entrySource, statements, identityRoot);
+        var entryDocument = nativeScriptEntry
+            ? CreateNativeEntryDocument(entrySource)
+            : CreateEntryDocument(entrySource, statements, identityRoot, parametersAlreadyBound);
         var registry = PowerShellCommandSemanticRegistry.Create(commandProviders);
         var semantic = new PowerShellSemanticCompilationPipeline(registry, semanticProfileId).Compile(
-            parsed.Values.Select(static source => source.Document).Append(entryDocument.Document),
+            parsed.Values.Where(source => !nativeScriptEntry ||
+                    !PowerShellCompilationPathSafety.PathEquals(source.Path, entryPoint))
+                .Select(static source => source.Document).Append(entryDocument.Document),
             targetFramework,
-            Capabilities);
+            capabilities);
         var emissions = semantic.Lowered.Functions
             .Zip(semantic.Emitted.Methods, static (function, emission) => new SemanticEmission(function, emission))
             .ToArray();
@@ -54,15 +116,24 @@ internal static class PowerShellTypedExecutableCompiler
             item.Function.Symbol.DocumentId == entryDocument.Document.DocumentId &&
             item.Function.Symbol.Name.Equals("Invoke", StringComparison.Ordinal));
         if (entry is null) throw CreateSemanticFailure(semantic, "entrypoint");
-        entry.Emission.RegionGraph = PowerShellLoweredRegionGraphBuilder.Remap(
-            entry.Emission.RegionGraph,
-            entrySource.Document.DocumentId,
-            entrySource.Document.Text,
-            entryDocument.SourceMappings);
+        if (!nativeScriptEntry)
+        {
+            entry.Emission.RegionGraph = PowerShellLoweredRegionGraphBuilder.Remap(
+                entry.Emission.RegionGraph,
+                entrySource.Document.DocumentId,
+                entrySource.Document.Text,
+                entryDocument.SourceMappings);
+            PowerShellTypedExecutableEntrySourceMapper.Remap(
+                entry.Emission,
+                entryDocument.Document,
+                entrySource.Document,
+                entryDocument.SourceMappings);
+        }
 
         var localMethods = new List<PowerShellCSharpMethodEmission>();
         var descriptions = new List<PowerShellCompiledMethod>();
-        foreach (var definition in definitions.OrderBy(static definition => definition.Path, PowerShellCompilationPathSafety.PathComparer)
+        foreach (var definition in (nativeScriptEntry ? Array.Empty<LocalDefinition>() : definitions)
+                     .OrderBy(static definition => definition.Path, PowerShellCompilationPathSafety.PathComparer)
                      .ThenBy(static definition => definition.Function.Extent.StartOffset))
         {
             var documentId = parsed[definition.Path].Document.DocumentId;
@@ -136,12 +207,13 @@ internal static class PowerShellTypedExecutableCompiler
         throw new InvalidOperationException($"The typed executable compilation source set must exactly match the entrypoint's contained dot-source closure; {details}.");
     }
 
-    private static void ValidateDefinitions(LocalDefinition[] definitions)
+    private static void ValidateDefinitions(LocalDefinition[] definitions, bool emitTopLevelMethods)
     {
         var duplicate = definitions.GroupBy(static definition => definition.Function.Name, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault(static group => group.Count() > 1);
         if (duplicate is not null)
             throw new InvalidOperationException($"Typed executable local function '{duplicate.Key}' is declared more than once in the source closure.");
+        if (!emitTopLevelMethods) return;
         var generatedCollision = definitions.GroupBy(static definition => PowerShellClrSymbolMapper.MapIdentifier(definition.Function.Name), StringComparer.Ordinal)
             .FirstOrDefault(static group => group.Count() > 1);
         if (generatedCollision is not null)
@@ -165,9 +237,15 @@ internal static class PowerShellTypedExecutableCompiler
         }
     }
 
-    private static ExecutableEntryDocument CreateEntryDocument(ParsedSource entrySource, IEnumerable<StatementAst> statements, string identityRoot)
+    private static ExecutableEntryDocument CreateEntryDocument(
+        ParsedSource entrySource,
+        IEnumerable<StatementAst> statements,
+        string identityRoot,
+        bool parametersAlreadyBound)
     {
-        var parameterBlock = PowerShellSourceParser.GetParameterBlockSource(entrySource.Ast.ParamBlock);
+        var parameterBlock = parametersAlreadyBound
+            ? GetAlreadyBoundParameterBlock(entrySource.Ast.ParamBlock)
+            : PowerShellSourceParser.GetParameterBlockSource(entrySource.Ast.ParamBlock);
         var builder = new StringBuilder().AppendLine("function Invoke {").AppendLine(parameterBlock);
         var mappings = new List<PowerShellRegionSourceRemap>();
         foreach (var statement in statements)
@@ -182,9 +260,39 @@ internal static class PowerShellTypedExecutableCompiler
             builder.AppendLine();
         }
         builder.Append('}');
+        var parsed = PowerShellSourceParser.Parse(builder.ToString(), entrySource.Path + ".powerforge-entry.ps1", identityRoot);
+        var remaps = mappings.ToArray();
         return new ExecutableEntryDocument(
-            PowerShellSourceParser.Parse(builder.ToString(), entrySource.Path + ".powerforge-entry.ps1", identityRoot),
-            mappings.ToArray());
+            new ParsedSourceDocument(parsed.DocumentId, parsed.Path, parsed.Text, parsed.SyntaxRoot,
+                parsed.Tokens, parsed.Errors, new PowerShellAuthoredSourceProjection(entrySource.Document, remaps)),
+            remaps);
+    }
+
+    private static ExecutableEntryDocument CreateNativeEntryDocument(ParsedSource source)
+    {
+        // Adapt the authored AST rather than reparsing an inserted function header. All
+        // variable/error/command extents keep the authored document, lines and columns.
+        var body = (ScriptBlockAst)source.Ast.Copy();
+        var function = new FunctionDefinitionAst(source.Ast.Extent, false, false, "Invoke", null, body);
+        var block = new StatementBlockAst(source.Ast.Extent, new[] { function }, null);
+        var root = new ScriptBlockAst(source.Ast.Extent, null, block, false);
+        var document = new ParsedSourceDocument(source.Document.DocumentId, source.Path,
+            source.Document.Text, root, source.Document.Tokens, source.Document.Errors,
+            nativeScriptRootName: "Invoke");
+        return new ExecutableEntryDocument(document, Array.Empty<PowerShellRegionSourceRemap>());
+    }
+
+    private static string GetAlreadyBoundParameterBlock(ParamBlockAst? parameterBlock)
+    {
+        if (parameterBlock is null) return string.Empty;
+        var parameters = parameterBlock.Parameters.Select(parameter =>
+        {
+            var typeConstraints = parameter.Attributes.OfType<TypeConstraintAst>()
+                .Select(static constraint => constraint.Extent.Text);
+            return string.Join(" ", typeConstraints.Append(parameter.Name.Extent.Text));
+        });
+        return string.Join(Environment.NewLine, parameterBlock.Attributes.Select(static attribute => attribute.Extent.Text)
+            .Append("param(" + string.Join(", ", parameters) + ")"));
     }
 
     private static InvalidOperationException CreateSemanticFailure(PowerShellSemanticCompilationResult result, string owner)
@@ -212,7 +320,7 @@ internal static class PowerShellTypedExecutableCompiler
             method.SourceSpan.StartLine,
             sourcePath,
             requiresPowerShellStreams: method.RequiresPowerShellStreams,
-            requiresPowerShellCommandRegions: false,
+            requiresPowerShellCommandRegions: method.RequiresPowerShellCommandRegions,
             aliases: function.Aliases.ToArray(),
             requiresPowerShellBoundParameters: method.RequiresPowerShellBoundParameters,
             isAdvancedFunction: function.CommandBinding.IsAdvancedFunction,
@@ -230,11 +338,15 @@ internal static class PowerShellTypedExecutableCompiler
             outputScalarization: method.OutputScalarization,
             hostedRegionSiteCount: method.HostedRegionSiteCount,
             requiresProviderCancellation: method.RequiresProviderCancellation);
-        description.DocumentId = function.Symbol.DocumentId;
+        description.DocumentId = method.SourceSpan.DocumentId;
+        description.NativeFunctionBinding = method.NativeFunctionBinding;
         description.DeclaredOutputTypeIsSemanticContract = method.DeclaredOutputType is not null;
+        description.SuccessOutputType = method.SuccessOutputType?.FullName ?? string.Empty;
         description.RequiresPowerShellModuleState = method.RequiresPowerShellModuleState;
         description.RequiresPowerShellModuleStateRead = method.RequiresPowerShellModuleStateRead;
         description.RequiresPowerShellModuleStateWrite = method.RequiresPowerShellModuleStateWrite;
+        description.RequiresPowerShellStatementErrors = method.RequiresPowerShellStatementErrors;
+        description.RequiresPowerShellStopping = method.RequiresPowerShellStopping;
         description.RequiredPowerShellModuleVariables = method.ModuleStateVariableNames;
         description.PowerShellModuleStateReadSiteCount = method.ModuleStateReadSiteCount;
         description.WrittenPowerShellModuleVariables = method.WrittenModuleStateVariableNames;

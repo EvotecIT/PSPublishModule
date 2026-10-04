@@ -16,7 +16,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 foreach (var key in functions.Keys.OrderBy(static key => key, StringComparer.Ordinal).ToArray())
                 {
                     var current = functions[key];
-                    var next = AnalyzeReturnType(current, functions);
+                    var next = AnalyzeReturnType(current, functions, program.TargetCapabilities);
                     if (next.ReturnType.ClrType != current.ReturnType.ClrType ||
                         next.ReturnType.Provenance != current.ReturnType.Provenance ||
                         next.Disposition.Kind != current.Disposition.Kind ||
@@ -33,7 +33,8 @@ internal sealed partial class PowerShellSemanticAnalyzer
 
         private static PowerShellBoundFunction AnalyzeReturnType(
             PowerShellBoundFunction function,
-            IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
+            IReadOnlyDictionary<string, PowerShellBoundFunction> functions,
+            PowerShellCompilationCapability targetCapabilities)
         {
             var expressions = EnumerateStatements(function.Body).Select(GetCallableReturnExpression).Where(static expression => expression is not null).Cast<PowerShellBoundExpression>().ToArray();
             if (expressions.Length == 0)
@@ -45,9 +46,21 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 fact.Provenance != PowerShellTypeFactProvenance.Unknown &&
                 fact.ClrType != typeof(void)).ToArray();
             if (known.Length == 0) return function;
+            if (known.Any(static fact => fact.Provenance == PowerShellTypeFactProvenance.Int32OrDouble) &&
+                known.All(PowerShellNumericUnionPolicy.IsNumeric))
+                return function.WithAnalysis(returnType: PowerShellNumericUnionPolicy.Int32OrDouble);
             var first = known[0];
             if (known.All(fact => fact.ClrType == first.ClrType))
                 return function.WithAnalysis(returnType: new PowerShellTypeFact(first.ClrType, PowerShellTypeFactProvenance.Inferred, "All reachable success outputs have the same CLR type after call-graph propagation."));
+            if (targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects) &&
+                targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
+                known.Length == facts.Length &&
+                known.All(static fact => fact.ClrType == typeof(string) ||
+                    PowerShellClrTypeSemantics.IsNonNullableValueType(fact.ClrType)) &&
+                expressions.All(static expression => expression.Cardinality == PowerShellOutputCardinality.Scalar))
+                return function.WithAnalysis(returnType: new PowerShellTypeFact(typeof(object),
+                    PowerShellTypeFactProvenance.Inferred,
+                    "The PowerShell host preserves distinct scalar record types through an Object return ABI."));
             return function.WithAnalysis(
                 returnType: PowerShellTypeFact.Unknown,
                 disposition: new PowerShellExecutionDisposition(
@@ -75,13 +88,16 @@ internal sealed partial class PowerShellSemanticAnalyzer
             PowerShellBoundFunction function,
             IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
         {
-            var statements = EnumerateStatements(function.Body).ToArray();
+            var statements = EnumerateStatements(function.Body, descendIntoCaptures: false).ToArray();
             var outputs = statements
                 .Select(GetSuccessOutputExpression)
                 .Where(static expression => expression is not null)
                 .Select(expression => Resolve(expression!, functions))
                 .ToArray();
-            if (outputs.Length == 0) return PowerShellOutputCardinality.None;
+            if (outputs.Length == 0)
+                return statements.LastOrDefault() is PowerShellBoundRegionTransferStatement
+                    ? PowerShellOutputCardinality.Scalar
+                    : PowerShellOutputCardinality.None;
             if (outputs.Any(static cardinality => cardinality == PowerShellOutputCardinality.Unknown))
                 return PowerShellOutputCardinality.Unknown;
             if (outputs.Any(static cardinality => cardinality == PowerShellOutputCardinality.Collection))
@@ -98,7 +114,9 @@ internal sealed partial class PowerShellSemanticAnalyzer
         {
             if (expression is PowerShellBoundInvocationExpression invocation &&
                 functions.TryGetValue(invocation.Target.StableKey, out var target))
-                return target.OutputCardinality;
+                return invocation.ResultProjection == PowerShellLocalCallResultProjection.ClosedCollectionFactory
+                    ? PowerShellOutputCardinality.Scalar
+                    : target.OutputCardinality;
             return expression.Type.ClrType.IsArray ? PowerShellOutputCardinality.Collection : expression.Cardinality;
         }
     }

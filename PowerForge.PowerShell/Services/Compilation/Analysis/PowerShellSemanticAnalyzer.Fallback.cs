@@ -1,0 +1,237 @@
+namespace PowerForge;
+
+internal sealed partial class PowerShellSemanticAnalyzer
+{
+    private sealed class FallbackPass : IPowerShellSemanticPass
+    {
+        public string Id => "60-fallback-fixed-point";
+
+        public PowerShellBoundProgram Run(PowerShellBoundProgram program)
+        {
+            var functions = program.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
+            RunFixedPoint(functions, (function, lookup) =>
+            {
+                if (function.Disposition.Kind != PowerShellExecutionDispositionKind.Typed) return function;
+                var blockingDiagnostic = GetBlockingDiagnostic(function, program.Diagnostics);
+                if (blockingDiagnostic is not null)
+                {
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        blockingDiagnostic.Code,
+                        blockingDiagnostic.Message));
+                }
+                if (EnumerateStatements(function.Body).OfType<PowerShellBoundExpressionStatement>().Any(statement =>
+                        statement.RequiresOutputContinuation && ResolveType(statement.Expression, lookup).ClrType != typeof(void)))
+                {
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        "control.output.continuation",
+                        "Non-terminal success output requires a continuation-preserving output contract; it cannot become an early CLR return."));
+                }
+                if (EnumerateStatements(function.Body).OfType<PowerShellBoundStreamWriteStatement>().Any(statement =>
+                        statement.Provider is null && !statement.UsesNativeInvocation && !statement.UsesCommandHostEnumeration &&
+                        statement.Message is not PowerShellBoundArrayExpression &&
+                        ResolveType(statement.Message, lookup).ClrType != typeof(void) &&
+                        !PowerShellStableScalarTypePolicy.IsSupported(ResolveType(statement.Message, lookup))))
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        "control.output.enumeration",
+                        "Implicit streamed output currently requires stable scalar records; wider enumeration and failure continuation remain on the PowerShell path."));
+                if (program.SemanticHostFamily == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51 &&
+                    EnumerateStatements(function.Body).OfType<PowerShellBoundStreamWriteStatement>().Any(statement =>
+                        statement.Provider is null && !statement.UsesNativeInvocation && !statement.UsesCommandHostEnumeration && statement.Message is PowerShellBoundArrayExpression array &&
+                        array.Elements.Any(element => element is not PowerShellBoundLiteralExpression { Value: null } &&
+                            !PowerShellStableScalarTypePolicy.IsSupported(element.Type))))
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        "control.output.ps51-record-wrapper",
+                        "Windows PowerShell collection-valued command records require the original wrapper identity to preserve serialization."));
+                if (EnumerateStatements(function.Body).OfType<PowerShellBoundOutputCaptureStatement>().Any(capture =>
+                    EnumerateStatements(capture.Body).SelectMany(EnumerateDirectExpressions).SelectMany(EnumerateInvocations)
+                        .Any(invocation => lookup.TryGetValue(invocation.Target.StableKey, out var target) &&
+                            (target.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion) ||
+                             target.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors)))))
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        "control.capture.hosted-call",
+                        "A captured local call requires qualified hosted-region routing and statement-error continuation."));
+                if (EnumerateStatements(function.Body).OfType<PowerShellBoundTryStatement>().Any(statement =>
+                        statement.FinallyBlock is not null &&
+                        HasNonSuccessStreamWrites(statement.FinallyBlock, lookup) &&
+                        (BlockHasEffect(statement.Body, PowerShellSemanticEffect.SuccessOutput, lookup) ||
+                         statement.Catches.Any(clause => BlockHasEffect(clause.Body, PowerShellSemanticEffect.SuccessOutput, lookup)))))
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        "control.finally.stream-stop",
+                        "Non-success streams from finally during downstream stop require PowerShell preference and variable-capture handling that the generated command host cannot yet preserve."));
+                if (ReturnsCompilerDictionary(function) && !HasQualifiedNativeDictionaryOutput(function))
+                {
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        PowerShellCompilationFeatureIds.ForSyntax("VariableExpressionAst"),
+                        "Typed dictionary literals are lookup-only locals; escaping through a return, streamed record, or output capture requires separate construction and record-identity qualification."));
+                }
+                if (IsMutuallyRecursive(function.Symbol, program.CallGraph))
+                {
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        PowerShellCompilationFeatureIds.FunctionGraph,
+                        $"Function '{function.Symbol.Name}' participates in a mutually recursive local-call cycle, which is not supported by the typed ABI."));
+                }
+                var isRecursive = IsRecursive(function.Symbol, program.CallGraph);
+                if (isRecursive && (function.DeclaredOutputType is null || function.DeclaredOutputType == typeof(void)))
+                {
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        PowerShellCompilationFeatureIds.FunctionGraph,
+                        $"Function '{function.Symbol.Name}' participates in a recursive local-call cycle without a declared return contract; OutputType(void) is advisory metadata, not a value contract."));
+                }
+                if (function.ReturnType.Provenance == PowerShellTypeFactProvenance.Unknown)
+                    return function.WithAnalysis(disposition: isRecursive
+                        ? new PowerShellExecutionDisposition(
+                            PowerShellExecutionDispositionKind.Fallback,
+                            PowerShellCompilationFeatureIds.FunctionGraph,
+                            $"Function '{function.Symbol.Name}' participates in a recursive local-call cycle without a declared return contract.")
+                        : new PowerShellExecutionDisposition(PowerShellExecutionDispositionKind.Fallback, "type.return.unknown", "The function return type is not statically known."));
+                if (function.ReturnType.ClrType != typeof(void) && !BlockReturnsValue(function.Body))
+                {
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        "control.return.fallthrough",
+                        $"Typed non-void unit '{function.Symbol.Name}' must end with an explicit return statement on every reachable path."));
+                }
+                var shouldProcessTarget = GetCallees(function, lookup).FirstOrDefault(ContainsShouldProcess);
+                var nativeBindingTarget = GetNativeBindingTargetRequiringClrCall(function, lookup);
+                if (nativeBindingTarget is not null)
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        "call.native-function.binding",
+                        $"Local function '{nativeBindingTarget.Symbol.Name}' requires its native parameter binder and cannot use the direct CLR argument ABI."));
+                if (shouldProcessTarget is not null)
+                {
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        "call.should-process.command-identity",
+                        $"Local function '{shouldProcessTarget.Symbol.Name}' uses ShouldProcess and must remain on the PowerShell command path so its command identity and ConfirmImpact are preserved."));
+                }
+                var validationTarget = GetValidationCallInsideTypeDiscriminatingTry(function, lookup);
+                if (validationTarget is not null)
+                {
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        "call.validation.binding-exception",
+                        $"Local function '{validationTarget.Symbol.Name}' performs parameter validation inside a typed try/catch, whose PowerShell binding-exception identity must remain on the PowerShell command path."));
+                }
+                var consumedTarget = GetConsumedCollectionOrHostedCall(function, lookup);
+                if (consumedTarget is not null)
+                {
+                    var hosted = consumedTarget.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion);
+                    var streamed = HasSuccessStreamOutput(consumedTarget, lookup);
+                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
+                        PowerShellExecutionDispositionKind.Fallback,
+                        hosted ? "call.command-region.cardinality" : streamed ? "call.stream.cardinality" : "call.collection.cardinality",
+                        hosted
+                            ? $"Local function '{consumedTarget.Symbol.Name}' emits PowerShell command-region success output whose pipeline cardinality cannot be preserved when the call result is consumed."
+                            : streamed
+                            ? $"Local function '{consumedTarget.Symbol.Name}' writes success records through its command host; consuming its CLR return alone would lose or misroute those records."
+                            : $"Local function '{consumedTarget.Symbol.Name}' returns an array whose PowerShell pipeline cardinality cannot be preserved when the result is consumed."));
+                }
+                return ApplyFallbackCallDisposition(function, lookup, program.Diagnostics);
+            }, static (left, right) => left.Disposition.Kind == right.Disposition.Kind && left.Disposition.ReasonCode == right.Disposition.ReasonCode);
+            return program.WithFunctions(functions.Values.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray());
+        }
+
+        private static PowerShellBoundFunction? GetNativeBindingTargetRequiringClrCall(
+            PowerShellBoundFunction function,
+            IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
+        {
+            foreach (var statement in EnumerateStatements(function.Body))
+            foreach (var invocation in EnumerateDirectExpressions(statement).SelectMany(EnumerateInvocations))
+            {
+                if (statement is PowerShellBoundNativeAssignmentStatement
+                    {
+                        ClosesNativeLocalCallBinding: true,
+                        Value: var assignedValue
+                    } && ReferenceEquals(assignedValue, invocation))
+                    continue;
+                if (functions.TryGetValue(invocation.Target.StableKey, out var callee) &&
+                    callee.NativeFunctionBinding is not null)
+                    return callee;
+            }
+            return null;
+        }
+
+        // Qualified statement errors use the native error bridge. Their conservative
+        // NonSuccessStream effect is not an unqualified direct warning/error sink.
+        private static bool HasNonSuccessStreamWrites(PowerShellBoundBlock block,
+            IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
+        {
+            var pending = new Stack<PowerShellBoundBlock>();
+            var visited = new HashSet<string>(StringComparer.Ordinal);
+            pending.Push(block);
+            while (pending.Count > 0)
+            {
+                foreach (var statement in EnumerateStatements(pending.Pop()))
+                {
+                    // An authored native pipeline retains the invocation's preference, capture,
+                    // and downstream-stop owner. Direct generated sinks remain unqualified.
+                    if (statement is PowerShellBoundCommandRegionStatement { NativeSourcePath: not null })
+                        continue;
+                    if (statement is PowerShellBoundStreamWriteStatement { Kind: not PowerShellStreamCommandKind.Success } or
+                        PowerShellBoundCommandRegionStatement or PowerShellBoundCommandCaptureStatement)
+                        return true;
+                    foreach (var expression in EnumerateDirectExpressions(statement))
+                    {
+                        // A native command value uses the same invocation-owned preferences,
+                        // captures and stopping scope as an authored native pipeline statement.
+                        if (HasQualifiedFinallyCommandValue(statement, expression)) continue;
+                        if (expression.Effects.HasFlag(PowerShellSemanticEffect.NonSuccessStream)) return true;
+                        foreach (var invocation in EnumerateInvocations(expression))
+                            if (visited.Add(invocation.Target.StableKey) && functions.TryGetValue(invocation.Target.StableKey, out var target))
+                                pending.Push(target.Body);
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>Keeps the finally exemption attached to its qualified value and storage owner.</summary>
+        private static bool HasQualifiedFinallyCommandValue(PowerShellBoundStatement statement, PowerShellBoundExpression expression)
+            => expression switch
+            {
+                PowerShellBoundConversionExpression { UsePowerShellTruthiness: true,
+                    Operand: PowerShellBoundNativeCommandExpression } => true,
+                PowerShellBoundNativeCommandExpression => statement is PowerShellBoundNativeAssignmentStatement
+                    { Operation: PowerShellBoundMutationOperator.Assign, Target.MutatesReceiver: false } assignment &&
+                    IsOrdinaryNativeLocalName(assignment.Name),
+                PowerShellBoundMutationExpression { NativeTargetRead.DirectLocal: true,
+                    Operation: PowerShellBoundMutationOperator.Assign, NativeAssignmentTarget.MutatesReceiver: false,
+                    Value: PowerShellBoundNativeCommandExpression } mutation => IsOrdinaryNativeLocalName(mutation.Target.Name),
+                _ => false
+            };
+
+        private static bool IsOrdinaryNativeLocalName(string name)
+            => (name.IndexOf(':') < 0 || name.StartsWith("local:", StringComparison.OrdinalIgnoreCase)) &&
+               !PowerShellAssignmentTargetPolicy.IsAutomaticVariable(name) &&
+               !PowerShellRuntimeStateIntrinsicPolicy.IsActionPreference(PowerShellAssignmentTargetPolicy.GetUnscopedVariableName(name));
+
+        private static bool BlockReturnsValue(PowerShellBoundBlock block)
+            => block.Statements.LastOrDefault() switch
+            {
+                PowerShellBoundReturnStatement { EmitsValue: true } => true,
+                PowerShellBoundExpressionStatement { EmitsOutput: true } => true,
+                PowerShellBoundThrowStatement => true,
+                PowerShellBoundIfStatement conditional => conditional.ElseBlock is not null &&
+                    conditional.Clauses.All(static clause => BlockReturnsValue(clause.Body)) &&
+                    BlockReturnsValue(conditional.ElseBlock),
+                PowerShellBoundSwitchStatement switchStatement => switchStatement.InputKind == PowerShellBoundSwitchInputKind.Scalar && switchStatement.DefaultBlock is not null &&
+                    switchStatement.Clauses.All(static clause => BlockReturnsValue(clause.Body)) &&
+                    BlockReturnsValue(switchStatement.DefaultBlock),
+                PowerShellBoundTryStatement tryStatement =>
+                    BlockReturnsValue(tryStatement.Body) &&
+                    tryStatement.Catches.All(static clause => BlockReturnsValue(clause.Body)),
+                _ => false
+            };
+
+    }
+}

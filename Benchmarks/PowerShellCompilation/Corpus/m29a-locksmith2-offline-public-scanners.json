@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "recordedOn": "2026-09-28",
+  "source": {
+    "workload": "locksmith2",
+    "revision": "f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639",
+    "archiveSha256": "d4f511b16ed95d15bfa37ba06ddfc92709f0412e8669004cb70e3407ae9fc8b9",
+    "sourceFingerprint": "b1e65521a013471cfc80589f0edd062a714f4b498a347685a06d7dce97b1b4ef",
+    "license": "Commons Clause License Condition v1.0",
+    "unchangedFunctionSha256": {
+      "Public/Find-LS2VulnerableCA.ps1": "1927e348aa6b14328a64cd76bdfe998ef742a87e7c7cf2200640255291d81930",
+      "Public/Find-LS2VulnerableObject.ps1": "1f79940e3ef1bdbb8463907cb49903afa36c5fe0e865e9ea2002c15c95c8fd01",
+      "Public/Find-LS2VulnerableTemplate.ps1": "56d47d2fd68bc4958041af49f4022ef4b108c6860c294ec0ada75f07329a57bc",
+      "Private/Test/Test-IssueExists.ps1": "88242f6cc6d52632a167da36fc4daecc4fd4a7e6f0ea8d96a137245f452f0e64",
+      "Private/Utility/Get-ForestNameFromDN.ps1": "ebfeb5704ea457959ec2dc4411dc732376dd0e7b871f37f1aa31e84b2a1a15a9",
+      "Private/Utility/Get-IssueTextOverride.ps1": "1fa6d629302de7d1061556018a1ce88dac1aa3ae6c05c9ab203c088dfb6139f4"
+    },
+    "unchangedEscDefinitionsSha256": "04e3bc65c7b5056d70b62eb77544df844c86fceea01da108c878a3c626ade625",
+    "unchangedManifestClassSha256": {
+      "Classes/LS2Principal.ps1": "5b8542654843f25be0218a346780cdd40ec6f236bc73004e228eb960cb49fca1",
+      "Classes/LS2AdcsObject.ps1": "abb27b68cdfe94c111013009ab453aa96a7f67748e2b33abd1e703640a9c93a5",
+      "Classes/LS2Issue.ps1": "736d4440eace31299822b2d8e20863b1c26a7cb9186da235c478910226202e38"
+    }
+  },
+  "fixture": {
+    "allSevenFunctionExtentsVerbatim": true,
+    "escDefinitionsTextVerbatim": true,
+    "bothThreeClassCopiesHashIdentical": true,
+    "caModuleSha256": "b1bd1fbdb5cd9e473aea13ba1fc9ff79e72f6b63b4084040663be9502564f7bc",
+    "caManifestSha256": "056e8ab487f78d5bef793c5a90d73ecd1f7b6cd2a24a2c64af9a207c402c34a2",
+    "caObserverSha256": "e2931b0fa199cc507ded612a91c25631f883efb38cf225bb10c0f2cc0b89b348",
+    "objectTemplateModuleSha256": "b4f8bca779383cc01e62b244ce4ae2670eee381e6bfb6843c5e86abc628b50f3",
+    "objectTemplateManifestSha256": "7a5d119f1b9b95fb6d8229580a2c3079952c8312acb2c6ec3d17371a92f798c9",
+    "objectTemplateObserverSha256": "c66c39932ee742a8d195dfc8b26aeccab2e312a806e39fbdbe529c41e495208b",
+    "externalBoundary": "Owned Initialize-LS2Scan returns true; prefilled in-memory LS2AdcsObject and IssueStore state; GC, LDAP, directory-entry and group expansion commands throw if reached. The object/template observer also forbids live identity translation. No AD or CA operation is executed."
+  },
+  "generated": {
+    "mode": "Hybrid",
+    "caManifestSha256": { "net10": "ebf6ff6281a001b3c3de92490a03edd5aeecfed8e251720ee0b5c356418af510", "net472": "1503ace5dbe98620605a55ada96039234b0365f9eac41e67399d5c8643d8e6a0" },
+    "objectTemplateManifestSha256": { "net10": "d4e80fc38f6bf5d4780beb942d1516a60322db4daca9d85190ff9e1d2cfa8f3c", "net472": "f39c0267c0da41cf974559128dfcd38ee4e3c2126bba4ee809a5c20fad8a38f6" },
+    "nativeBoundCompleteMethodsOnBothTargets": ["Find-LS2VulnerableCA", "Find-LS2VulnerableObject", "Find-LS2VulnerableTemplate"],
+    "runtimeCommandRegions": { "Find-LS2VulnerableCA": 25, "Find-LS2VulnerableObject": 29, "Find-LS2VulnerableTemplate": 45 },
+    "strict": {
+      "canProceedOnEitherTarget": false,
+      "caTypedAndRejectedUnitsPerTarget": [0, 3],
+      "objectTemplateTypedAndRejectedUnitsPerTarget": [0, 6],
+      "caExplainSha256": { "net10": "964abc0da8b5267041105fe6766cd60c8c37eb732ed119b00dbbf1aa20828f21", "net472": "bf77d31ef2e353f9ba9ff26ae77b5a62bbdee6b7ac2cd511a6cd502ad103f6b4" },
+      "objectTemplateExplainSha256": { "net10": "85bce18feb71e0462915b259273a99a3099631bc27af30227fba627bc24fede7", "net472": "b306ed9b4ff3a6235cb98999b1a32dbadfc76f4ebe804727797132fd56e41761" }
+    }
+  },
+  "execution": {
+    "allEightChildExitCodesZero": true,
+    "allEightStderrEmpty": true,
+    "originalGeneratedRawJsonEqualAcrossBothHosts": true,
+    "caRawOutputSha256EachRun": "a750443fe2d850296da6e2f1cbc711c3fd281f82b0ef238da9e8b7e6dc4a13ac",
+    "objectTemplateRawOutputSha256EachRun": "cf3b9fe967d623ba19241ca612d2fb0ebdc9403f5fa02f2fa4083115bcd171c7",
+    "caEsc8": "Two LS2Issue objects per call for vulnerable HTTP and HTTPS-NTLM endpoints; safe HTTPS and non-CA are excluded. Forest, endpoint URLs, attack vectors and nonempty fix/revert match. Two repeated calls leave URL-keyed IssueStore counts at one then two each.",
+    "objectEsc5o": "One LS2Issue per call for nonstandard owner OFFLINE\\Operator; safe owner and certificate templates are excluded. IssueStore count stays one on repeat.",
+    "templateSchemaV1": "One LS2Issue per call for enabled, non-authentication-EKU schema-v1 template; schema-v2 and non-template objects are excluded. IssueStore count stays one on repeat."
+  },
+  "sameInputAssessment": {
+    "evidenceSha256": "4e5050c94478fff133acb14259bdc7569a80532c21b90b231cb103e5e3d20d49",
+    "completeEmittedFunctions": "75/100",
+    "regressions": 0,
+    "substantiveBothHostProof": "33/37",
+    "additionalHostLimitedPositiveOnWindowsPowerShell51": 4
+  },
+  "limits": [
+    "Three public scanner entry methods execute real authored issue construction and filtering only for selected ESC8, ESC5o and SchemaV1 paths. Other technique branches and full module orchestration remain unqualified.",
+    "Pinned source ESC8 stores issues under ESC8:<URL> but Test-IssueExists checks plain ESC8, so repeated scans append duplicates. Original and generated agree; this is not a compiler regression or deduplication proof.",
+    "Initialize-LS2Scan and real AD/CA enumeration are substituted, the AD-backed constructor is bypassed, and fix/revert text is inspected but never executed.",
+    "These are Hybrid native-bound lifecycles with hosted PowerShell command regions, not runtime-free or Strict translations.",
+    "The Commons Clause source and task-local observers are not checked into this repository."
+  ]
+}

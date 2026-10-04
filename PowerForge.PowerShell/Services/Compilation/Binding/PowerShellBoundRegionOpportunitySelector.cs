@@ -78,6 +78,9 @@ internal static class PowerShellBoundRegionOpportunitySelector
                 case PowerShellBoundCommandCaptureStatement capture:
                     yield return capture.Target;
                     break;
+                case PowerShellBoundOutputCaptureStatement { Target: not null } capture:
+                    yield return capture.Target;
+                    break;
                 case PowerShellBoundForEachStatement loop:
                     yield return loop.Variable;
                     break;
@@ -114,7 +117,7 @@ internal static class PowerShellBoundRegionOpportunitySelector
             PowerShellBoundIfStatement conditional => conditional.ElseBlock is null ||
                 conditional.Clauses.Any(static clause => BlockCanFallThrough(clause.Body)) ||
                 BlockCanFallThrough(conditional.ElseBlock),
-            PowerShellBoundSwitchStatement switchStatement => switchStatement.DefaultBlock is null ||
+            PowerShellBoundSwitchStatement switchStatement => switchStatement.InputKind != PowerShellBoundSwitchInputKind.Scalar || switchStatement.DefaultBlock is null ||
                 switchStatement.Clauses.Any(static clause => BlockCanFallThrough(clause.Body)) ||
                 BlockCanFallThrough(switchStatement.DefaultBlock),
             PowerShellBoundTryStatement tryStatement when tryStatement.FinallyBlock is not null &&

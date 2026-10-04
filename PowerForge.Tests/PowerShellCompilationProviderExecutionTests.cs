@@ -23,7 +23,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
             artifactFixture.ScriptPath,
             "PowerForge.Compiled",
             "CancellationCollisionMethods",
-            "net8.0");
+            "net10.0");
 
         Assert.Empty(typed.Methods);
         Assert.Contains(typed.Diagnostics, static diagnostic =>
@@ -53,12 +53,12 @@ public sealed partial class PowerShellCompilationProviderPackageTests
                 new[] { artifactFixture.ScriptPath },
                 "PowerForge.Compiled",
                 "CancellationMemberCollisionMethods",
-                "net8.0");
+                "net10.0");
 
         var prepared = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(
             typed,
             new[] { "Invoke-Collision" },
-            "net8.0");
+            "net10.0");
 
         Assert.Empty(prepared.Methods);
         Assert.Contains(prepared.Diagnostics, diagnostic =>
@@ -84,7 +84,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
                 new[] { artifactFixture.ScriptPath },
                 "PowerForge.Compiled",
                 "CooperativeProviderMethods",
-                "net8.0");
+                "net10.0");
 
         Assert.Empty(typed.Diagnostics);
         var wrapper = Assert.Single(typed.Methods, static method =>
@@ -101,7 +101,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         var source = PowerShellBinaryCmdletSourceGenerator.Generate(
             typed,
             new[] { "Invoke-PackageCancellation" },
-            "net8.0");
+            "net10.0");
 
         Assert.Contains(
             "private readonly global::System.Threading.CancellationTokenSource _providerCancellation = new();",
@@ -142,7 +142,8 @@ public sealed partial class PowerShellCompilationProviderPackageTests
             SearchOption.AllDirectories).Single();
         var moduleAssembly = Assembly.LoadFrom(moduleAssemblyPath);
         var commandType = moduleAssembly.GetTypes().Single(static type =>
-            type.Name == "InvokePackageCancellationCommand");
+            type.GetCustomAttribute<System.Management.Automation.CmdletAttribute>() is
+                { VerbName: "Invoke", NounName: "PackageCancellation" });
         var command = Activator.CreateInstance(commandType)!;
         var cancellationSource = Assert.IsType<CancellationTokenSource>(commandType
             .GetField("_providerCancellation", BindingFlags.Instance | BindingFlags.NonPublic)!
@@ -198,6 +199,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
     [Theory]
     [InlineData(PowerShellCompilationMode.Strict)]
     [InlineData(PowerShellCompilationMode.Hybrid)]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void ArtifactBuildRequiresReviewedProviderLockAndExecutesAdapter(PowerShellCompilationMode mode)
     {
         using var providerFixture = ProviderFixture.Create();
@@ -237,7 +239,8 @@ public sealed partial class PowerShellCompilationProviderPackageTests
                 AllowedProviderIds = new[] { "generic.command.stream.notice" },
                 AllowedPublishers = new[] { "Generic Publisher" },
                 AllowedLicenseExpressions = new[] { "MIT" }
-            }
+            },
+            EmitSource = mode == PowerShellCompilationMode.Strict
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
@@ -278,11 +281,14 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         {
             loadContext.Unload();
         }
+        if (mode == PowerShellCompilationMode.Strict)
+            VerifyProviderFromLocalFeed(artifactFixture.RootPath, result);
     }
 
     [Theory]
     [InlineData(PowerShellCompilationMode.Strict)]
     [InlineData(PowerShellCompilationMode.Hybrid)]
+    [Trait("Category", "PowerShellCompilerGate")]
     public async Task ExecutableProviderMatrixRoutesValuesCardinalityStreamsAndErrors(PowerShellCompilationMode mode)
     {
         using var providerFixture = ProviderFixture.Create();
@@ -343,8 +349,12 @@ public sealed partial class PowerShellCompilationProviderPackageTests
             provider.ProviderId == "generic.command.cleanup.file.failure").Adapter.Cleanup = PowerShellCompilationProviderCleanup.Deterministic;
         var packagePath = providerFixture.PackagePath("matrix.nupkg");
         var resolution = providerFixture.BuildPackage("matrix.nupkg");
-        var cleanupPath = Path.Combine(providerFixture.RootPath, "owned-resource.bin");
-        var cancellationPath = Path.Combine(providerFixture.RootPath, "cancellation.started");
+        var providerOperationRoot = Path.Combine(Path.GetTempPath(), "PowerForgeProviderMatrixM27");
+        Directory.CreateDirectory(providerOperationRoot);
+        var cleanupPath = Path.Combine(providerOperationRoot, "owned-resource.bin");
+        var cancellationPath = Path.Combine(providerOperationRoot, "cancellation.started");
+        foreach (var stale in new[] { cleanupPath, cleanupPath + ".failure", cancellationPath })
+            if (File.Exists(stale)) File.Delete(stale);
         using var artifactFixture = ScriptFixture.Create("""
 function Invoke-ProviderMatrix {
     Write-PackageOutputCore 'value'
@@ -408,7 +418,8 @@ function Invoke-ProviderCleanupFailure {
                 AllowedProviderIds = providerIds,
                 AllowedPublishers = new[] { "Generic Publisher" },
                 AllowedLicenseExpressions = new[] { "MIT" }
-            }
+            },
+            EmitSource = mode == PowerShellCompilationMode.Strict
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
@@ -533,6 +544,8 @@ function Invoke-ProviderCleanupFailure {
         {
             loadContext.Unload();
         }
+        if (mode == PowerShellCompilationMode.Strict)
+            await VerifyProviderMatrixFromLocalFeed(artifactFixture.RootPath, result, cleanupPath, cancellationPath);
 
         static object[] EmptySinks() => new object[]
         {
@@ -549,6 +562,7 @@ function Invoke-ProviderCleanupFailure {
     [Theory]
     [InlineData(PowerShellCompilationMode.Strict)]
     [InlineData(PowerShellCompilationMode.Hybrid)]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void ExecutableProviderCarriesAndInvokesItsLockedManagedDependencyClosure(PowerShellCompilationMode mode)
     {
         using var providerFixture = ProviderFixture.Create();
@@ -558,7 +572,7 @@ function Invoke-ProviderCleanupFailure {
             "Information",
             "Transform");
         provider.Adapter.Dependencies = new[] { "Generic.Semantic.Provider.Dependency" };
-        provider.Adapter.EntryPoint!.AssemblyPath = "lib/net8.0/Generic.Semantic.Provider.WithDependency.dll";
+        provider.Adapter.EntryPoint!.AssemblyPath = "lib/net10.0/Generic.Semantic.Provider.WithDependency.dll";
         provider.Adapter.EntryPoint.TypeName = "Generic.Semantic.Provider.DependencyAdapter";
         providerFixture.Manifest.Providers = new[] { provider };
         var runtimeAssembly = typeof(Generic.Semantic.Provider.DependencyAdapter).Assembly.Location;
@@ -572,8 +586,8 @@ function Invoke-ProviderCleanupFailure {
             {
                 Assemblies = new[]
                 {
-                    new PowerShellCompilationProviderAssemblyInput(runtimeAssembly, "lib/net8.0/Generic.Semantic.Provider.WithDependency.dll"),
-                    new PowerShellCompilationProviderAssemblyInput(dependencyAssembly, "lib/net8.0/Generic.Semantic.Provider.Dependency.dll")
+                    new PowerShellCompilationProviderAssemblyInput(runtimeAssembly, "lib/net10.0/Generic.Semantic.Provider.WithDependency.dll"),
+                    new PowerShellCompilationProviderAssemblyInput(dependencyAssembly, "lib/net10.0/Generic.Semantic.Provider.Dependency.dll")
                 }
             });
         using var artifactFixture = ScriptFixture.Create(
@@ -594,12 +608,18 @@ function Invoke-ProviderCleanupFailure {
                 AllowedProviderIds = new[] { provider.ProviderId },
                 AllowedPublishers = new[] { "Generic Publisher" },
                 AllowedLicenseExpressions = new[] { "MIT" }
-            }
+            },
+            EmitSource = mode == PowerShellCompilationMode.Strict
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(2, result.Manifest!.Files.Count(static file => file.Role == "CompilerProviderRuntime"));
         Assert.Equal(2, Assert.Single(result.Manifest.ProviderLock!.Packages).Assemblies.Length);
+        if (mode == PowerShellCompilationMode.Strict)
+        {
+            VerifyDependencyProviderFromLocalFeed(artifactFixture.RootPath, result);
+            VerifyDependencyProviderProjectPackage(packagePath);
+        }
         var loadContext = new ArtifactLoadContext(Path.GetDirectoryName(result.ArtifactPath!)!);
         try
         {

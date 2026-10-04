@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "recordedOn": "2026-09-28",
+  "source": {
+    "workload": "scoop-install-script",
+    "repository": "https://github.com/ScoopInstaller/Install",
+    "revision": "1e2f334083d609986d8c8bc9e31ae8e87c39fab4",
+    "installScriptSha256": "94f983b190438311e006b957db7c8422709e0ba62a6c2ac04e278164108f2512",
+    "sourceFingerprint": "c89d96591e31ba93656cd75ca2a3ff8c068222f38bbfe85f37916c8b7908655c",
+    "license": "Unlicense notice in the pinned source"
+  },
+  "assessment": {
+    "emittedFunctions": 23,
+    "totalFunctions": 24,
+    "retainedFunction": "Exit-Install",
+    "regressions": 0,
+    "evidenceSha256": "20c7d48beb48868f899ccc18316f0449f4d045bc827fde21a442ec65b20c801c"
+  },
+  "offlineQualification": {
+    "unchangedFunctions": ["Write-InstallInfo", "Test-CommandAvailable", "Write-DebugInfo", "Test-ShouldRunInstall"],
+    "functionSha256": {
+      "Write-InstallInfo": "ce545f1e47d665f75feeae53648234b31dccefcace45569565f06a3d946a1663",
+      "Test-CommandAvailable": "bd661f4566b7c2ea5e842a868b78210d2864ccb280ab25f8018c6fd70fde3998",
+      "Write-DebugInfo": "ea7c2a7df051487868710c578b7359d525ca6d80812c6f98d42780b4ca89935a",
+      "Test-ShouldRunInstall": "4eec4edcaaba84ce414fd8e0e8695cda0f6b202190358a6d7c4ab6e5b259e43a"
+    },
+    "hosts": ["PowerShell 7/net10.0 Windows x64", "Windows PowerShell 5.1/net472 Windows x64"],
+    "originalGeneratedTests": { "passed": 2, "failed": 0, "trxSha256": "c2a21a3696ce4bf14c7e3d5bf1bfc12c38c9c65a51a35a869a15a6a7b5ea6e25" },
+    "observed": ["install-entry selection under owned CI flags", "present and missing command discovery", "information output and console color restoration", "verbose diagnostic labels"],
+    "limits": ["No top-level installer execution", "No download, process, registry or filesystem mutation", "No Exit-Install execution", "No full installer or runtime-free qualification"]
+  },
+  "retainedBoundary": {
+    "function": "Exit-Install",
+    "functionSha256": "0b45d56c5be70a8da27bc44f1b0619a0532e34c8daa729189e4ddd30f5f9c239",
+    "reason": "The unchanged function uses break for dot-sourced IEX flow and exit for process flow; a normal compiled method cannot preserve both caller and process transfer contracts.",
+    "disposition": "Hosted and verified retained in the mixed mini module; never invoked"
+  }
+}

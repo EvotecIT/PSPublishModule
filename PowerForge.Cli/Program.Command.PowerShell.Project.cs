@@ -5,20 +5,26 @@ using System.Text.Json;
 internal static partial class Program
 {
     private const string PowerShellProjectUsage =
-        "Usage: powerforge powershell project <init|analyze|explain|recommend|lock|restore|build|test|pack|install|diagnose> <project-or-source> [--project <powerforge.psproject.json>] [--name <name>] [--kind <exe|dll|library>] [--mode <Package|Hybrid|Strict>] [--semantic-profile <id>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--target <name> ...] [--boundary-profile <profile.json>] [--offline] [--output json]";
+        "Usage: powerforge powershell project <init|analyze|explain|recommend|lock|restore|build|run|watch|test|pack|install|diagnose|debug-plan> <project-or-source> [--project <powerforge.psproject.json>] [--name <name>] [--kind <exe|dll|library>] [--mode <Package|Hybrid|Strict>] [--semantic-profile <id>] [--framework <tfm>] [--rid <rid>] [--self-contained] [--emit-source] [--optimization <None|Trimmed|NativeAot>] [--target <name> ...] [--boundary-profile <profile.json>] [--offline] [--output json]";
 
     private static int CommandPowerShellProject(string[] args, bool outputJson, ILogger logger)
     {
-        if (args.Length == 0 || args.Any(IsHelpArgument))
+        if (args.Length == 0 || args.TakeWhile(static argument => argument != "--").Any(IsHelpArgument))
         {
             WritePowerShellProjectHelp(outputJson);
             return 0;
         }
         var operation = args[0].ToLowerInvariant();
         var operationArgs = args.Skip(1).ToArray();
+        if (operation is "run" or "watch")
+            return CommandPowerShellProjectRun(operation, operationArgs, outputJson);
+        if (operation == "debug-plan")
+            return CommandPowerShellProjectDebugPlan(operationArgs, outputJson, logger);
+        if (operation == "pack")
+            return CommandPowerShellProjectPack(operationArgs, outputJson, logger);
         if (operation == "init")
             return CommandPowerShellProjectInit(operationArgs, outputJson, logger);
-        if (operation is not ("analyze" or "explain" or "recommend" or "lock" or "restore" or "build" or "test" or "pack" or "install" or "diagnose"))
+        if (operation is not ("analyze" or "explain" or "recommend" or "lock" or "restore" or "build" or "test" or "install" or "diagnose"))
             return WritePowerShellError(outputJson, 2, $"Unknown PowerShell project operation '{operation}'.", logger, "powershell.project");
         if (!TryValidatePowerShellArguments(
                 operationArgs,
@@ -43,7 +49,6 @@ internal static partial class Program
                 "restore" => service.Restore(projectPath, operationArgs.Any(static value => value.Equals("--offline", StringComparison.OrdinalIgnoreCase)), targets),
                 "build" => service.Build(projectPath, targets),
                 "test" => service.Test(projectPath, targets),
-                "pack" => service.Pack(projectPath, targets),
                 "install" => service.Install(projectPath, targets),
                 "diagnose" => service.Diagnose(projectPath, targets),
                 _ => throw new InvalidOperationException()
@@ -61,7 +66,7 @@ internal static partial class Program
         if (!TryValidatePowerShellArguments(
                 args,
                 new[] { "--project", "--name", "--kind", "--mode", "--semantic-profile", "--framework", "--rid", "--optimization", "--output" },
-                new[] { "--self-contained", "--no-single-file", "--json", "--output-json" },
+                new[] { "--self-contained", "--no-single-file", "--emit-source", "--json", "--output-json" },
                 out var sourcePath,
                 out var argumentError))
             return WritePowerShellError(outputJson, 2, argumentError, logger, "powershell.project.init");
@@ -89,7 +94,7 @@ internal static partial class Program
             var optimizationValue = TryGetOptionValue(args, "--optimization") ?? "None";
             if (!Enum.TryParse<PowerShellCompilationExecutableOptimization>(optimizationValue, true, out var optimization) || !Enum.IsDefined(typeof(PowerShellCompilationExecutableOptimization), optimization))
                 return WritePowerShellError(outputJson, 2, "Optimization must be None, Trimmed, or NativeAot.", logger, "powershell.project.init");
-            var framework = TryGetOptionValue(args, "--framework") ?? (kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Strict ? "net10.0" : "net8.0");
+            var framework = TryGetOptionValue(args, "--framework") ?? PowerShellCompilationTargetFrameworkPolicy.Default;
             var selfContained = args.Any(static value => value.Equals("--self-contained", StringComparison.OrdinalIgnoreCase)) || optimization != PowerShellCompilationExecutableOptimization.None;
             var semanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(
                 TryGetOptionValue(args, "--semantic-profile") ??
@@ -107,6 +112,7 @@ internal static partial class Program
             var projectName = TryGetOptionValue(args, "--name") ?? Path.GetFileNameWithoutExtension(Directory.Exists(fullSource) ? fullSource.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) : fullSource);
             var manifestService = new PowerShellCompilationProjectManifestService();
             var manifest = manifestService.Create(projectPath, fullSource, projectName, target);
+            manifest.Artifacts[0].EmitSource = args.Any(static value => value.Equals("--emit-source", StringComparison.OrdinalIgnoreCase));
             manifestService.Save(projectPath, manifest);
             var result = new PowerShellCompilationProjectResult
             {
@@ -150,6 +156,9 @@ internal static partial class Program
             var message = $"{target.Name}: {target.Message}";
             if (target.Succeeded) logger.Success(message); else logger.Error(message);
             if (!string.IsNullOrWhiteSpace(target.Path)) logger.Info(target.Path);
+            if (target.DiagnosticReport is not null)
+                foreach (var line in PowerShellCompilationDiagnosticReportFormatter.Format(target.DiagnosticReport))
+                    logger.Info(line);
         }
         return exitCode;
     }
@@ -164,9 +173,15 @@ internal static partial class Program
                 Command = "powershell.project",
                 Success = true,
                 ExitCode = 0,
-                Result = JsonSerializer.SerializeToElement(new { usage = PowerShellProjectUsage })
+                Result = JsonSerializer.SerializeToElement(new { usage = PowerShellProjectUsage, runUsage = PowerShellProjectRunUsage, packUsage = PowerShellProjectPackUsage, debugUsage = PowerShellProjectDebugUsage })
             });
         }
-        else Console.WriteLine(PowerShellProjectUsage);
+        else
+        {
+            Console.WriteLine(PowerShellProjectUsage);
+            Console.WriteLine(PowerShellProjectRunUsage);
+            Console.WriteLine(PowerShellProjectPackUsage);
+            Console.WriteLine(PowerShellProjectDebugUsage);
+        }
     }
 }

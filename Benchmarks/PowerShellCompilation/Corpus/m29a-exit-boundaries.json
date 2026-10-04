@@ -1,0 +1,830 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Explicit justified hosted boundaries for the two observed authored function exits; zero new emitted coverage.",
+  "compilerCommit": "ddfb7fcab94b6c268bb92b31d65befa15399a4c9",
+  "portfolio": {
+    "emitted": 532,
+    "functions": 565,
+    "retained": 33,
+    "stableUnits": 584,
+    "censusRepeated": false,
+    "reason": "Compiler and pinned source packets unchanged."
+  },
+  "sources": [
+    {
+      "workflow": "Availability",
+      "function": "Test-ModuleAvailability",
+      "module": "PSSharedGoods",
+      "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+      "relativePath": "Public/TestFunctionality/Test-ModuleAvailability.ps1",
+      "sourceSha256": "176d4b89d8ac442c23783cfe4321e1bfb5f87cecd942d2aaeac6448bfe13711d"
+    },
+    {
+      "workflow": "Inventory",
+      "function": "Invoke-ADComputerInventoryChildProcess",
+      "module": "CleanupMonster",
+      "revision": "f215b32ca86b38d9150629c08f6c0c232bfafb27",
+      "relativePath": "Private/Invoke-ADComputerInventoryChildProcess.ps1",
+      "sourceSha256": "8ba232f42b924b81480f8f8c9da928535cce7603b1d7a344f2742d7960708112"
+    }
+  ],
+  "driver": "ExternalWorkflows/Exit/Observe.ps1",
+  "driverSha256": "5400597addbee0d6fcbe56c673be46beacbb13d5ed74ca14f5d731080b5ba6c4",
+  "retainedInventorySha256": "90e241be14a9cfe759b5fa10ea50068916f42bd5db38f312f3874c2d3870bc18",
+  "cases": [
+    {
+      "framework": "net10.0",
+      "case": "available",
+      "workflow": "Availability",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "records": [
+        {
+          "case": "available",
+          "events": [
+            "before-call",
+            "after-call"
+          ],
+          "warnings": [],
+          "errors": [
+            null
+          ],
+          "files": []
+        },
+        {
+          "case": "available",
+          "complete": [
+            "before-call",
+            "after-call",
+            "after-finally"
+          ]
+        }
+      ],
+      "originalOutputSha256": "8bf6c05a27624826968594967c1d8759ed543f3460a58ff1b31c95575f65b1c6",
+      "generatedOutputSha256": "8bf6c05a27624826968594967c1d8759ed543f3460a58ff1b31c95575f65b1c6"
+    },
+    {
+      "framework": "net10.0",
+      "case": "missing",
+      "workflow": "Availability",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "records": [
+        {
+          "case": "missing",
+          "events": [
+            "before-call"
+          ],
+          "warnings": [
+            "Modules required to run not found."
+          ],
+          "errors": [
+            null
+          ],
+          "files": []
+        }
+      ],
+      "originalOutputSha256": "122d74f274332a84c24d3304b2f3e7a1ce043a7e39d094cf1ad6391690b1fedf",
+      "generatedOutputSha256": "122d74f274332a84c24d3304b2f3e7a1ce043a7e39d094cf1ad6391690b1fedf"
+    },
+    {
+      "framework": "net10.0",
+      "case": "config-failure",
+      "workflow": "Inventory",
+      "originalExitCode": 1,
+      "generatedExitCode": 1,
+      "records": [
+        {
+          "case": "config-failure",
+          "events": [
+            "before-call"
+          ],
+          "warnings": [
+            null
+          ],
+          "errors": [
+            "Offline configuration failure",
+            "Offline configuration failure",
+            "Offline configuration failure",
+            "Offline configuration failure,Invoke-ADComputerInventoryChildProcess"
+          ],
+          "files": []
+        }
+      ],
+      "originalOutputSha256": "8825a65836c31172b5b88bb9ba2bc12913c9e482bae25299171d0edf6adc58f2",
+      "generatedOutputSha256": "8825a65836c31172b5b88bb9ba2bc12913c9e482bae25299171d0edf6adc58f2"
+    },
+    {
+      "framework": "net10.0",
+      "case": "readiness-failure",
+      "workflow": "Inventory",
+      "originalExitCode": 1,
+      "generatedExitCode": 1,
+      "records": [
+        {
+          "case": "readiness-failure",
+          "events": [
+            "before-call"
+          ],
+          "warnings": [
+            null
+          ],
+          "errors": [
+            "Offline readiness failure"
+          ],
+          "files": [
+            {
+              "name": "error.txt",
+              "content": "Offline readiness failure"
+            },
+            {
+              "name": "initialization.txt",
+              "content": "Initialized"
+            }
+          ]
+        }
+      ],
+      "originalOutputSha256": "0c1b8738add695b83a5e3e492efcbb768ee81e3095e5756a3b11fbc36280d36f",
+      "generatedOutputSha256": "0c1b8738add695b83a5e3e492efcbb768ee81e3095e5756a3b11fbc36280d36f"
+    },
+    {
+      "framework": "net10.0",
+      "case": "query-failure",
+      "workflow": "Inventory",
+      "originalExitCode": 1,
+      "generatedExitCode": 1,
+      "records": [
+        {
+          "case": "query-failure",
+          "events": [
+            "before-call"
+          ],
+          "warnings": [
+            null
+          ],
+          "errors": [
+            "Offline query failure"
+          ],
+          "files": [
+            {
+              "name": "data.csv",
+              "content": ""
+            },
+            {
+              "name": "error.txt",
+              "content": "Offline query failure"
+            },
+            {
+              "name": "initialization.txt",
+              "content": "Initialized"
+            },
+            {
+              "name": "progress.txt",
+              "content": "0"
+            },
+            {
+              "name": "ready.txt",
+              "content": "Ready"
+            }
+          ]
+        }
+      ],
+      "originalOutputSha256": "dda5736d78549617d14d1686a759550f2490452157c6c8a65b1a86ace4f50518",
+      "generatedOutputSha256": "dda5736d78549617d14d1686a759550f2490452157c6c8a65b1a86ace4f50518"
+    },
+    {
+      "framework": "net10.0",
+      "case": "query-empty",
+      "workflow": "Inventory",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "records": [
+        {
+          "case": "query-empty",
+          "events": [
+            "before-call",
+            "after-call"
+          ],
+          "warnings": [
+            null
+          ],
+          "errors": [],
+          "files": [
+            {
+              "name": "data.csv",
+              "content": ""
+            },
+            {
+              "name": "initialization.txt",
+              "content": "Initialized"
+            },
+            {
+              "name": "progress.txt",
+              "content": "0"
+            },
+            {
+              "name": "ready.txt",
+              "content": "Ready"
+            },
+            {
+              "name": "success.txt",
+              "content": "0"
+            }
+          ]
+        },
+        {
+          "case": "query-empty",
+          "complete": [
+            "before-call",
+            "after-call",
+            "after-finally"
+          ]
+        }
+      ],
+      "originalOutputSha256": "0cb428e2ddd723dca3c7efd766737517658ba7f229f32c88bf50afcd3d1251ce",
+      "generatedOutputSha256": "0cb428e2ddd723dca3c7efd766737517658ba7f229f32c88bf50afcd3d1251ce"
+    },
+    {
+      "framework": "net10.0",
+      "case": "query-one",
+      "workflow": "Inventory",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "records": [
+        {
+          "case": "query-one",
+          "events": [
+            "before-call",
+            "after-call"
+          ],
+          "warnings": [
+            null
+          ],
+          "errors": [],
+          "files": [
+            {
+              "name": "data.csv",
+              "content": "\"Name\",\"DNSHostName\",\"SamAccountName\",\"DistinguishedName\",\"Enabled\",\"OperatingSystem\",\"OperatingSystemVersion\",\"LastLogonDateBinary\",\"PasswordLastSetBinary\",\"PasswordExpired\",\"ServicePrincipalNameJson\",\"LogonCount\",\"ManagedBy\",\"Description\",\"WhenCreatedBinary\",\"WhenChangedBinary\",\"ProtectedFromAccidentalDeletion\"\r\n\"owned\",\"owned.invalid\",\"owned$\",\"CN=owned\",\"True\",\"offline\",\"1\",\"638397614450000000\",,\"False\",\"[\"\"offline/owned\"\"]\",\"1\",,\"owned record\",\"638082254450000000\",,\"False\"\r\n"
+            },
+            {
+              "name": "initialization.txt",
+              "content": "Initialized"
+            },
+            {
+              "name": "progress.txt",
+              "content": "1"
+            },
+            {
+              "name": "ready.txt",
+              "content": "Ready"
+            },
+            {
+              "name": "success.txt",
+              "content": "1"
+            }
+          ]
+        },
+        {
+          "case": "query-one",
+          "complete": [
+            "before-call",
+            "after-call",
+            "after-finally"
+          ]
+        }
+      ],
+      "originalOutputSha256": "3f1b7551fd347f92b220045b925013767317c1b6c9365d68d536112fe1e8e9ed",
+      "generatedOutputSha256": "3f1b7551fd347f92b220045b925013767317c1b6c9365d68d536112fe1e8e9ed"
+    },
+    {
+      "framework": "net472",
+      "case": "available",
+      "workflow": "Availability",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "records": [
+        {
+          "case": "available",
+          "events": [
+            "before-call",
+            "after-call"
+          ],
+          "warnings": [],
+          "errors": [
+            null
+          ],
+          "files": []
+        },
+        {
+          "case": "available",
+          "complete": [
+            "before-call",
+            "after-call",
+            "after-finally"
+          ]
+        }
+      ],
+      "originalOutputSha256": "8bf6c05a27624826968594967c1d8759ed543f3460a58ff1b31c95575f65b1c6",
+      "generatedOutputSha256": "8bf6c05a27624826968594967c1d8759ed543f3460a58ff1b31c95575f65b1c6"
+    },
+    {
+      "framework": "net472",
+      "case": "missing",
+      "workflow": "Availability",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "records": [
+        {
+          "case": "missing",
+          "events": [
+            "before-call"
+          ],
+          "warnings": [
+            "Modules required to run not found."
+          ],
+          "errors": [
+            null
+          ],
+          "files": []
+        }
+      ],
+      "originalOutputSha256": "122d74f274332a84c24d3304b2f3e7a1ce043a7e39d094cf1ad6391690b1fedf",
+      "generatedOutputSha256": "122d74f274332a84c24d3304b2f3e7a1ce043a7e39d094cf1ad6391690b1fedf"
+    },
+    {
+      "framework": "net472",
+      "case": "config-failure",
+      "workflow": "Inventory",
+      "originalExitCode": 1,
+      "generatedExitCode": 1,
+      "records": [
+        {
+          "case": "config-failure",
+          "events": [
+            "before-call"
+          ],
+          "warnings": [
+            null
+          ],
+          "errors": [
+            "Offline configuration failure",
+            "Offline configuration failure",
+            "Offline configuration failure",
+            "Offline configuration failure,Invoke-ADComputerInventoryChildProcess"
+          ],
+          "files": []
+        }
+      ],
+      "originalOutputSha256": "8825a65836c31172b5b88bb9ba2bc12913c9e482bae25299171d0edf6adc58f2",
+      "generatedOutputSha256": "8825a65836c31172b5b88bb9ba2bc12913c9e482bae25299171d0edf6adc58f2"
+    },
+    {
+      "framework": "net472",
+      "case": "readiness-failure",
+      "workflow": "Inventory",
+      "originalExitCode": 1,
+      "generatedExitCode": 1,
+      "records": [
+        {
+          "case": "readiness-failure",
+          "events": [
+            "before-call"
+          ],
+          "warnings": [
+            null
+          ],
+          "errors": [
+            "Offline readiness failure"
+          ],
+          "files": [
+            {
+              "name": "error.txt",
+              "content": "Offline readiness failure"
+            },
+            {
+              "name": "initialization.txt",
+              "content": "Initialized"
+            }
+          ]
+        }
+      ],
+      "originalOutputSha256": "0c1b8738add695b83a5e3e492efcbb768ee81e3095e5756a3b11fbc36280d36f",
+      "generatedOutputSha256": "0c1b8738add695b83a5e3e492efcbb768ee81e3095e5756a3b11fbc36280d36f"
+    },
+    {
+      "framework": "net472",
+      "case": "query-failure",
+      "workflow": "Inventory",
+      "originalExitCode": 1,
+      "generatedExitCode": 1,
+      "records": [
+        {
+          "case": "query-failure",
+          "events": [
+            "before-call"
+          ],
+          "warnings": [
+            null
+          ],
+          "errors": [
+            "Offline query failure"
+          ],
+          "files": [
+            {
+              "name": "data.csv",
+              "content": ""
+            },
+            {
+              "name": "error.txt",
+              "content": "Offline query failure"
+            },
+            {
+              "name": "initialization.txt",
+              "content": "Initialized"
+            },
+            {
+              "name": "progress.txt",
+              "content": "0"
+            },
+            {
+              "name": "ready.txt",
+              "content": "Ready"
+            }
+          ]
+        }
+      ],
+      "originalOutputSha256": "dda5736d78549617d14d1686a759550f2490452157c6c8a65b1a86ace4f50518",
+      "generatedOutputSha256": "dda5736d78549617d14d1686a759550f2490452157c6c8a65b1a86ace4f50518"
+    },
+    {
+      "framework": "net472",
+      "case": "query-empty",
+      "workflow": "Inventory",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "records": [
+        {
+          "case": "query-empty",
+          "events": [
+            "before-call",
+            "after-call"
+          ],
+          "warnings": [
+            null
+          ],
+          "errors": [],
+          "files": [
+            {
+              "name": "data.csv",
+              "content": ""
+            },
+            {
+              "name": "initialization.txt",
+              "content": "Initialized"
+            },
+            {
+              "name": "progress.txt",
+              "content": "0"
+            },
+            {
+              "name": "ready.txt",
+              "content": "Ready"
+            },
+            {
+              "name": "success.txt",
+              "content": "0"
+            }
+          ]
+        },
+        {
+          "case": "query-empty",
+          "complete": [
+            "before-call",
+            "after-call",
+            "after-finally"
+          ]
+        }
+      ],
+      "originalOutputSha256": "0cb428e2ddd723dca3c7efd766737517658ba7f229f32c88bf50afcd3d1251ce",
+      "generatedOutputSha256": "0cb428e2ddd723dca3c7efd766737517658ba7f229f32c88bf50afcd3d1251ce"
+    },
+    {
+      "framework": "net472",
+      "case": "query-one",
+      "workflow": "Inventory",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "records": [
+        {
+          "case": "query-one",
+          "events": [
+            "before-call",
+            "after-call"
+          ],
+          "warnings": [
+            null
+          ],
+          "errors": [],
+          "files": [
+            {
+              "name": "data.csv",
+              "content": "\"Name\",\"DNSHostName\",\"SamAccountName\",\"DistinguishedName\",\"Enabled\",\"OperatingSystem\",\"OperatingSystemVersion\",\"LastLogonDateBinary\",\"PasswordLastSetBinary\",\"PasswordExpired\",\"ServicePrincipalNameJson\",\"LogonCount\",\"ManagedBy\",\"Description\",\"WhenCreatedBinary\",\"WhenChangedBinary\",\"ProtectedFromAccidentalDeletion\"\r\n\"owned\",\"owned.invalid\",\"owned$\",\"CN=owned\",\"True\",\"offline\",\"1\",\"638397614450000000\",,\"False\",\"[\"\"offline/owned\"\"]\",\"1\",,\"owned record\",\"638082254450000000\",,\"False\"\r\n"
+            },
+            {
+              "name": "initialization.txt",
+              "content": "Initialized"
+            },
+            {
+              "name": "progress.txt",
+              "content": "1"
+            },
+            {
+              "name": "ready.txt",
+              "content": "Ready"
+            },
+            {
+              "name": "success.txt",
+              "content": "1"
+            }
+          ]
+        },
+        {
+          "case": "query-one",
+          "complete": [
+            "before-call",
+            "after-call",
+            "after-finally"
+          ]
+        }
+      ],
+      "originalOutputSha256": "3f1b7551fd347f92b220045b925013767317c1b6c9365d68d536112fe1e8e9ed",
+      "generatedOutputSha256": "3f1b7551fd347f92b220045b925013767317c1b6c9365d68d536112fe1e8e9ed"
+    }
+  ],
+  "builds": [
+    {
+      "workflow": "Availability",
+      "framework": "net10.0",
+      "succeeded": true,
+      "compiledMethods": 0,
+      "buildEvidenceSha256": "3dc8ada59e564ae16df4ecd13eee8f780e3022917212972fd9b137a2f91ed3f6",
+      "manifestSha256": "6a060a370d05c6777d1682624aab10aa040594a47819d53dcb9a5844be6b68b7",
+      "dependencyLockReviewed": false,
+      "diagnostics": [
+        {
+          "code": "UnsupportedSyntax",
+          "message": "Statement 'ExitStatementAst' is not yet represented by the bound pipeline.",
+          "filePath": "Availability.psm1",
+          "line": 22,
+          "column": 9,
+          "featureId": "syntax.exitstatement"
+        }
+      ],
+      "warningCodes": [
+        "NU1510"
+      ]
+    },
+    {
+      "workflow": "Inventory",
+      "framework": "net10.0",
+      "succeeded": true,
+      "compiledMethods": 0,
+      "buildEvidenceSha256": "2c41b03cf95de110db3842f09dfdec2619569807ad3615d45d2db8c6a2586f1a",
+      "manifestSha256": "e4cb64c5948f85601b2fc45336c91de2a6c33ce9de2b9a2930952f507dc47219",
+      "dependencyLockReviewed": false,
+      "diagnostics": [
+        {
+          "code": "UnsupportedSyntax",
+          "message": "Statement 'ExitStatementAst' is not yet represented by the bound pipeline.",
+          "filePath": "Inventory.psm1",
+          "line": 74,
+          "column": 9,
+          "featureId": "syntax.exitstatement"
+        }
+      ],
+      "warningCodes": [
+        "NU1510"
+      ]
+    },
+    {
+      "workflow": "Availability",
+      "framework": "net472",
+      "succeeded": true,
+      "compiledMethods": 0,
+      "buildEvidenceSha256": "ddf7db9494954eb7b69df3986506151111d22a7dc561f6b62f4c20278b215973",
+      "manifestSha256": "31d9254775cc180faf915d19589449154ab03645019cc6893d599c3d37af2c14",
+      "dependencyLockReviewed": false,
+      "diagnostics": [
+        {
+          "code": "UnsupportedSyntax",
+          "message": "Statement 'ExitStatementAst' is not yet represented by the bound pipeline.",
+          "filePath": "Availability.psm1",
+          "line": 22,
+          "column": 9,
+          "featureId": "syntax.exitstatement"
+        }
+      ],
+      "warningCodes": []
+    },
+    {
+      "workflow": "Inventory",
+      "framework": "net472",
+      "succeeded": true,
+      "compiledMethods": 0,
+      "buildEvidenceSha256": "48fe2a21f17dac16bd776f60175645708365e5eb198997ff7fb9fd2b255867f0",
+      "manifestSha256": "0e2c2756bef7cb694a2a90e67b7695215284b30d2a351afb7c1d7c9e8f63565d",
+      "dependencyLockReviewed": false,
+      "diagnostics": [
+        {
+          "code": "UnsupportedSyntax",
+          "message": "Statement 'ExitStatementAst' is not yet represented by the bound pipeline.",
+          "filePath": "Inventory.psm1",
+          "line": 74,
+          "column": 9,
+          "featureId": "syntax.exitstatement"
+        }
+      ],
+      "warningCodes": []
+    }
+  ],
+  "strict": [
+    {
+      "workflow": "Availability",
+      "framework": "net10.0",
+      "emitted": true,
+      "route": "BoundClr+PowerShellRuntime",
+      "runtimeCommandRegions": 1,
+      "evidenceSha256": "04d68b62cfa389b8991e494df40f8725017c65840e897445d8acf3bf08faefbf",
+      "causes": []
+    },
+    {
+      "workflow": "Inventory",
+      "framework": "net10.0",
+      "emitted": false,
+      "route": "Rejected",
+      "runtimeCommandRegions": 0,
+      "evidenceSha256": "543cb05e8633e097914d284c52d9b4f616fcb0f56d4685dd923741152577ce41",
+      "causes": [
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.import-clixml",
+          "message": "Command invocation 'Import-Clixml' requires a registered semantic provider or a hosted PowerShell command region.",
+          "line": 13,
+          "column": 26
+        }
+      ]
+    },
+    {
+      "workflow": "Availability",
+      "framework": "net472",
+      "emitted": true,
+      "route": "BoundClr+PowerShellRuntime",
+      "runtimeCommandRegions": 1,
+      "evidenceSha256": "8322b921c806d3a634a13c13e2c2f52323a58451109bddb9da65111a619f6a58",
+      "causes": []
+    },
+    {
+      "workflow": "Inventory",
+      "framework": "net472",
+      "emitted": false,
+      "route": "Rejected",
+      "runtimeCommandRegions": 0,
+      "evidenceSha256": "e98f5494044225188322b257f403e8ef98f5eb41b58771b1a28a55cb0470cfe1",
+      "causes": [
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.import-clixml",
+          "message": "Command invocation 'Import-Clixml' requires a registered semantic provider or a hosted PowerShell command region.",
+          "line": 13,
+          "column": 26
+        }
+      ]
+    }
+  ],
+  "strictHostedRegionCases": [
+    {
+      "framework": "net10.0",
+      "case": "available",
+      "exitCode": 0,
+      "stdoutSha256": "8bf6c05a27624826968594967c1d8759ed543f3460a58ff1b31c95575f65b1c6",
+      "records": [
+        {
+          "case": "available",
+          "events": [
+            "before-call",
+            "after-call"
+          ],
+          "warnings": [],
+          "errors": [
+            null
+          ],
+          "files": []
+        },
+        {
+          "case": "available",
+          "complete": [
+            "before-call",
+            "after-call",
+            "after-finally"
+          ]
+        }
+      ]
+    },
+    {
+      "framework": "net10.0",
+      "case": "missing",
+      "exitCode": 0,
+      "stdoutSha256": "122d74f274332a84c24d3304b2f3e7a1ce043a7e39d094cf1ad6391690b1fedf",
+      "records": [
+        {
+          "case": "missing",
+          "events": [
+            "before-call"
+          ],
+          "warnings": [
+            "Modules required to run not found."
+          ],
+          "errors": [
+            null
+          ],
+          "files": []
+        }
+      ]
+    },
+    {
+      "framework": "net472",
+      "case": "available",
+      "exitCode": 0,
+      "stdoutSha256": "8bf6c05a27624826968594967c1d8759ed543f3460a58ff1b31c95575f65b1c6",
+      "records": [
+        {
+          "case": "available",
+          "events": [
+            "before-call",
+            "after-call"
+          ],
+          "warnings": [],
+          "errors": [
+            null
+          ],
+          "files": []
+        },
+        {
+          "case": "available",
+          "complete": [
+            "before-call",
+            "after-call",
+            "after-finally"
+          ]
+        }
+      ]
+    },
+    {
+      "framework": "net472",
+      "case": "missing",
+      "exitCode": 0,
+      "stdoutSha256": "122d74f274332a84c24d3304b2f3e7a1ce043a7e39d094cf1ad6391690b1fedf",
+      "records": [
+        {
+          "case": "missing",
+          "events": [
+            "before-call"
+          ],
+          "warnings": [
+            "Modules required to run not found."
+          ],
+          "errors": [
+            null
+          ],
+          "files": []
+        }
+      ]
+    }
+  ],
+  "strictAvailabilityBuilds": [
+    {
+      "framework": "net10.0",
+      "compiledMethods": 1,
+      "buildEvidenceSha256": "4f14d68fc9079aab1a50516b5ee46ebc087b62db5cfa98a9575bca2049d187f8"
+    },
+    {
+      "framework": "net472",
+      "compiledMethods": 1,
+      "buildEvidenceSha256": "3d524c09855a9553aeb95ee204e2733f11384ffc83026630e18038f750ed598b"
+    }
+  ],
+  "guardTest": {
+    "passed": 1,
+    "total": 1,
+    "elapsedSeconds": 16,
+    "trxSha256": "2e827026b045f301f35e710eca7922c9384c84000cd9bfeb3a34348b3a0287c0"
+  },
+  "boundary": "Keep these Hybrid native function bodies hosted; the existing Strict Availability method delegates its entire if statement to PowerShell. New native exit lowering must preserve authored exit codes, caller finally/unwind, terminating preferences and catch behavior. Do not convert exit to CLR return or weaken packaged nested/catch exit guards.",
+  "limits": [
+    "Zero complete emitted methods in four Hybrid artifacts; fourteen matched original/generated case/host comparisons are hosted-fidelity proof. Existing Strict Availability emits one method with an SDK command region on each host; four additional cases qualify that bounded route.",
+    "Availability discovery and inventory configuration/module/AD operations use offline module-owned providers; no directory query or ActiveDirectory import executes.",
+    "Original inventory body performs real CSV and status writes only under exact task-owned directories.",
+    "Only the listed success/failure paths and caller arrangement are qualified. General exit expressions, nested callbacks, traps, warning Stop, other hosts, full modules and runtime-free exits are unqualified.",
+    "No reviewed dependency locks, PR, merge or release. No aggregate gate or census repeated."
+  ]
+}

@@ -9,7 +9,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
 {
     private static ValidatedProjectBuild ValidateBuildReceipt(
         PowerShellCompilationProjectManifestService.ProjectContext context,
-        PowerShellCompilationProjectArtifact artifact)
+        PowerShellCompilationProjectArtifact artifact,
+        bool development = false)
     {
         var receipt = ReadBuildReceipt(context, artifact);
         if (!receipt.Succeeded || receipt.Manifest is null || string.IsNullOrWhiteSpace(receipt.ArtifactPath))
@@ -42,7 +43,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
 
         var dependencyLock = ReadJson<PowerShellCompilationDependencyGraph>(context.Resolve(artifact.DependencyLock));
         PowerShellCompilationDependencyLockHasher.EnsureValid(dependencyLock, artifact.Name);
-        if (!dependencyLock.LockSha256.Equals(manifest.DependencyGraph?.LockSha256, StringComparison.OrdinalIgnoreCase))
+        if (!development && !dependencyLock.LockSha256.Equals(manifest.DependencyGraph?.LockSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Built artifact dependency identity differs from the reviewed project lock.");
         var resolvedLock = environment.ResolvedLocks.Single(item =>
             item.TargetName.Equals(artifact.Name, StringComparison.Ordinal));
@@ -51,8 +52,11 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         var currentProviders = ResolveProviders(context, artifact);
         var currentInput = ResolveInput(context, artifact);
         var currentPlan = CreatePlan(context, artifact, currentInput, currentProviders.Providers, environment.PackageRoot);
+        if (development && currentPlan.DependencyGraph is not null)
+            EnsureDevelopmentLockMatches(dependencyLock, currentPlan.DependencyGraph, currentInput.ModuleRoot, context.Root);
         if (!currentPlan.CanProceed ||
-            !string.Equals(currentPlan.DependencyGraph?.LockSha256, dependencyLock.LockSha256, StringComparison.OrdinalIgnoreCase))
+            !string.Equals(currentPlan.DependencyGraph?.LockSha256,
+                development ? manifest.DependencyGraph?.LockSha256 : dependencyLock.LockSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("Current project sources or resources differ from the reviewed build dependency lock.");
         if (!string.IsNullOrWhiteSpace(artifact.ProviderLock))
         {

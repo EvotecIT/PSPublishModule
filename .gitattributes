@@ -1,7 +1,18 @@
 Module/PSPublishModule.Tests.ps1 text eol=crlf
 Benchmarks/PowerShellCompilation/Corpus/*.json text eol=lf
+# The Windows assessment runner writes this pinned baseline with CRLF.
+Benchmarks/PowerShellCompilation/Corpus/external-assessment-baseline.net10.json -text -eol whitespace=cr-at-eol
 Benchmarks/PowerShellCompilation/Corpus/**/*.ps1 text eol=lf
+Benchmarks/PowerShellCompilation/Corpus/**/*.psm1 text eol=lf
+# Preserve the pinned upstream module snapshot, including its original whitespace.
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSSharedGoods/FullModule/** -text -whitespace
+# Preserve these licensed upstream regression sources byte for byte.
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/RuntimeSwitch/*.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/RuntimeSwitch/license.txt -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/SamErde/Format-Timespan.ps1 -text whitespace=cr-at-eol
 Benchmarks/PowerShellCompilation/Corpus/**/*.txt text eol=lf
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/CommandProxy/*.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/CommandProxy/license.txt -text -eol -whitespace
 Module/PSPublishModule.psd1 -text whitespace=cr-at-eol
 Module/PSPublishModule.psm1 -text whitespace=cr-at-eol
 Module/Docs/Import-BenchmarkResult.md -text whitespace=cr-at-eol
@@ -18,3 +29,31 @@ Module/Docs/Sync-AppStoreConnectScreenshots.md -text whitespace=cr-at-eol
 Module/Docs/Test-AppStoreConnectScreenshotSyncConfig.md -text whitespace=cr-at-eol
 Module/Docs/Update-BenchmarkEvidenceCatalog.md -text whitespace=cr-at-eol
 Module/en-US/PSPublishModule-help.xml -text whitespace=cr-at-eol
+# Preserve the pinned folder-inspection source and its license byte for byte.
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/FolderInspection/*.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/FolderInspection/license.txt -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/FileSelection/*.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/FileSelection/license.txt -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/TraceMessage/*.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/TraceMessage/license.txt -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Culture/*.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Culture/license.txt -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/MemberInspection/*.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/MemberInspection/license.txt -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Parser/*.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Parser/license.txt -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/WhoIs/*.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/WhoIs/license.txt -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/LocalRunspace/*.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/LocalRunspace/license.txt -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/SessionCopy/Copy-PSFunction.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/SessionCopy/license.txt -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Coordinates/Write-AnsiProgress.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/Coordinates/license.txt -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/DynamicParameters/Copy-HelpExample.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/DynamicParameters/ShowTree.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/DynamicParameters/license.txt -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/EventRecord/Convert-EventLogRecord.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/EventRecord/license.txt -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/ControlFlow/Format-Stream.ps1 -text -eol -whitespace
+Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/ControlFlow/Out-More.ps1 -text -eol -whitespace

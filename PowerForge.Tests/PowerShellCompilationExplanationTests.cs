@@ -8,6 +8,37 @@ namespace PowerForge.Tests;
 public sealed class PowerShellCompilationExplanationTests
 {
     [Fact]
+    public void HybridExecutableExplainAttributesHostedScriptRootToArtifactShaping()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Explain", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var source = Path.Combine(root, "Date.ps1");
+            File.WriteAllText(source, "param([string] $Pattern)\nGet-Date -Format $Pattern\nWrite-Output $Pattern\n");
+            var input = new PowerShellCompilationInputResolver().Resolve(source,
+                PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
+            var plan = new PowerShellCompilationAnalyzer().Analyze(input, PowerShellCompilationMode.Hybrid, "net10.0");
+            var explanation = PowerShellCompilationExplainShaper.CreateFinalExplanation(input, plan, "net10.0");
+
+            var script = Assert.Single(Assert.Single(explanation.Files).Units);
+            Assert.True(script.SemanticEligible);
+            Assert.False(script.Emitted);
+            Assert.True(script.RetainedHostedSource);
+            Assert.True(script.ShapingFallback);
+            Assert.Equal("PowerShellRuntime", script.LoweringRoute);
+            var cause = Assert.Single(script.Causes, static item =>
+                item.FeatureId == PowerShellCompilationFeatureIds.ExecutableScriptRoot);
+            Assert.Equal(PowerShellCompilationDiagnosticCode.ArtifactShaping, cause.Code);
+            Assert.Contains("hosted entry point", cause.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ExplanationIncludesFileAndDependencyCausesAndRedactsAuthoredAbsolutePaths()
     {
         const string privatePath = @"C:\Users\Alice\Private\Module.psd1";
@@ -117,7 +148,7 @@ public sealed class PowerShellCompilationExplanationTests
         var plan = new PowerShellCompilationPlan(
             PowerShellCompilationMode.Strict,
             new[] { file },
-            "net8.0",
+            "net10.0",
             new[] { dependency });
         var regionGraph = new PowerShellCompilationRegionGraph(new[]
         {
@@ -176,8 +207,8 @@ public sealed class PowerShellCompilationExplanationTests
         Assert.Equal(PowerShellCompilationDecisionKind.Typed, tracedUnit.Decision);
         Assert.Equal("BoundClr", tracedUnit.LoweringRoute);
         Assert.Equal("TypedArtifact", tracedUnit.ArtifactDisposition);
-        Assert.Equal(5, explanation.SchemaVersion);
-        Assert.Equal(4, explanation.SemanticCompatibilityVersion);
+        Assert.Equal(6, explanation.SchemaVersion);
+        Assert.Equal(5, explanation.SemanticCompatibilityVersion);
         Assert.Single(Assert.IsType<PowerShellCompilationRegionGraph>(tracedUnit.RegionGraph).Regions);
         Assert.Equal(PowerShellCompilationDependencyDisposition.Embedded, Assert.Single(explanation.Dependencies).Disposition);
 
@@ -299,7 +330,7 @@ public sealed class PowerShellCompilationExplanationTests
         var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(
             JsonSerializer.Deserialize<PowerShellCompilationUnitDispositionLedger>(json));
 
-        Assert.Equal(4, ledger.SchemaVersion);
+        Assert.Equal(5, ledger.SchemaVersion);
         Assert.Null(Assert.Single(ledger.Entries).RegionGraph);
     }
 
@@ -318,7 +349,7 @@ public sealed class PowerShellCompilationExplanationTests
             File.WriteAllText(secondPath, "function Get-Second { 2 }; function Get-First { param([int] $Left, [string] $Right) $Left }");
 
             string Fingerprint(string path) => PowerShellCompilationExplanationService.Create(
-                new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(path, PowerShellCompilationMode.Strict, targetFramework: "net8.0")))
+                new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(path, PowerShellCompilationMode.Strict, targetFramework: "net10.0")))
                 .SemanticFingerprintSha256;
 
             Assert.Equal(Fingerprint(firstPath), Fingerprint(secondPath));

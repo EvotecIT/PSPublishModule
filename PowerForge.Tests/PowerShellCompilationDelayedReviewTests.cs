@@ -8,7 +8,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Theory]
     [InlineData("param([int[]] $Values); [int[]] $copy = @($Values); return $copy.Length")]
-    [InlineData("[string[]] $copy = @($null); return $copy.Length")]
+    [InlineData("[int[]] $copy = @($null); return $copy.Length")]
     public void Analyze_RoutesArraySubexpressionPipelineSemanticsToFallback(string body)
     {
         using var fixture = ArtifactFixture.Create("function Get-Copy { " + body + " }");
@@ -18,7 +18,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var unit = Assert.Single(Assert.Single(plan.Files).Units);
         Assert.False(unit.IsCompilable);
         Assert.Contains(unit.Diagnostics, diagnostic =>
-            diagnostic.Message.Contains("pipeline output", StringComparison.OrdinalIgnoreCase));
+            diagnostic.Code == PowerShellCompilationDiagnosticCode.UnsupportedSyntax);
     }
 
     [Fact]

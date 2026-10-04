@@ -7,7 +7,10 @@ internal enum PowerShellSymbolKind
     Parameter,
     Local,
     PipelineVariable,
-    GeneratedCommand
+    GeneratedCommand,
+    ModuleState,
+    ModuleInitializer,
+    NativeScriptBlock
 }
 
 /// <summary>
@@ -45,9 +48,10 @@ internal enum PowerShellTypeFactProvenance
     CommandContract,
     Widened,
     Unknown,
-    // Internal numeric value representation. The authored Int32-or-Double identity
-    // must be unobservable, and every consumer is checked before semantic emission.
-    NumericValueProjection
+    // A closed numeric union keeps the authored boxed CLR type through promotion.
+    Int32OrDouble,
+    // A command's consumed success stream collapses to empty, one record, or an array.
+    CapturedCommandOutput
 }
 
 internal enum PowerShellDictionaryValueKind
@@ -66,7 +70,8 @@ internal sealed class PowerShellTypeFact
         string explanation,
         IReadOnlyDictionary<string, PowerShellTypeFact>? knownProperties = null,
         PowerShellDictionaryValueKind dictionaryValueKind = PowerShellDictionaryValueKind.None,
-        PowerShellInt32Range? int32Range = null)
+        PowerShellInt32Range? int32Range = null,
+        IReadOnlyList<Type>? closedAlternativeTypes = null)
     {
         ClrType = clrType ?? throw new ArgumentNullException(nameof(clrType));
         Provenance = provenance;
@@ -74,6 +79,7 @@ internal sealed class PowerShellTypeFact
         KnownProperties = CopyKnownProperties(knownProperties);
         DictionaryValueKind = dictionaryValueKind;
         Int32Range = clrType == typeof(int) ? int32Range : null;
+        ClosedAlternativeTypes = Array.AsReadOnly((closedAlternativeTypes ?? Array.Empty<Type>()).ToArray());
     }
 
     internal Type ClrType { get; }
@@ -82,9 +88,14 @@ internal sealed class PowerShellTypeFact
     internal IReadOnlyDictionary<string, PowerShellTypeFact> KnownProperties { get; }
     internal PowerShellDictionaryValueKind DictionaryValueKind { get; }
     internal PowerShellInt32Range? Int32Range { get; }
+    /// <summary>
+    /// Exact authored CLR alternatives carried by a compiler-owned envelope. Empty for ordinary
+    /// PowerShell values; the general object/ETS path never acquires this evidence.
+    /// </summary>
+    internal IReadOnlyList<Type> ClosedAlternativeTypes { get; }
 
     internal PowerShellTypeFact WithInt32Range(PowerShellInt32Range range)
-        => new(ClrType, Provenance, Explanation, KnownProperties, DictionaryValueKind, range);
+        => new(ClrType, Provenance, Explanation, KnownProperties, DictionaryValueKind, range, ClosedAlternativeTypes);
 
     internal bool TryGetKnownProperty(string name, out PowerShellTypeFact property)
         => KnownProperties.TryGetValue(name, out property!);
@@ -93,7 +104,7 @@ internal sealed class PowerShellTypeFact
     {
         var properties = CopyKnownProperties(KnownProperties);
         properties[name] = property;
-        return new PowerShellTypeFact(ClrType, Provenance, Explanation, properties, DictionaryValueKind, Int32Range);
+        return new PowerShellTypeFact(ClrType, Provenance, Explanation, properties, DictionaryValueKind, Int32Range, ClosedAlternativeTypes);
     }
 
     private static Dictionary<string, PowerShellTypeFact> CopyKnownProperties(
@@ -158,7 +169,10 @@ internal enum PowerShellRequiredCapability
     RuntimeFreeProviderOperations = 4096,
     PowerShellModuleState = 8192,
     PowerShellModuleStateRead = 16384,
-    PowerShellModuleStateWrite = 32768
+    PowerShellModuleStateWrite = 32768,
+    PowerShellStatementErrors = 65536,
+    PowerShellStopping = 131072,
+    NativeFunctionBinding = 262144
 }
 
 internal enum PowerShellExecutionDispositionKind
@@ -257,15 +271,18 @@ internal sealed class PowerShellBoundVariableExpression : PowerShellBoundExpress
         PowerShellSymbolId symbol,
         PowerShellTypeFact type,
         PowerShellValueState valueState = PowerShellValueState.Unknown,
-        bool isModuleStateDerived = false)
+        bool isModuleStateDerived = false,
+        bool isBraceFreeString = false)
         : base(span, type, valueState)
     {
         Symbol = symbol;
         IsModuleStateDerived = isModuleStateDerived;
+        IsBraceFreeString = type.ClrType == typeof(string) && isBraceFreeString;
     }
 
     internal PowerShellSymbolId Symbol { get; }
     internal bool IsModuleStateDerived { get; }
+    internal bool IsBraceFreeString { get; }
 }
 
 internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpression
@@ -275,24 +292,59 @@ internal sealed class PowerShellBoundConversionExpression : PowerShellBoundExpre
         PowerShellTypeFact targetType,
         PowerShellBoundExpression operand,
         bool usePowerShellLanguageRuntime = false,
-        bool usePowerShellTruthiness = false)
+        bool usePowerShellTruthiness = false,
+        bool normalizeNullString = false,
+        string? nativeSourcePath = null,
+        string nativeSourceText = "", bool nativePostTestCondition = false, bool useNativeConversion = false,
+        bool useNativeCustomObjectConversion = false, string? nativeRuntimeTypeName = null, SourceSpan? nativeRuntimeTypeSpan = null)
         : base(
             span,
             targetType,
-            operand.ValueState,
-            operand.Effects,
-            operand.Capabilities | (usePowerShellLanguageRuntime || usePowerShellTruthiness ? PowerShellRequiredCapability.PowerShellLanguageConversions : PowerShellRequiredCapability.None))
+            normalizeNullString ? PowerShellValueState.Known : operand.ValueState,
+            operand.Effects | (nativeSourcePath is null && !useNativeConversion ? PowerShellSemanticEffect.None : PowerShellSemanticEffect.Host | PowerShellSemanticEffect.TerminatingError),
+            operand.Capabilities | (usePowerShellLanguageRuntime || usePowerShellTruthiness ? PowerShellRequiredCapability.PowerShellLanguageConversions : PowerShellRequiredCapability.None) |
+                (nativeSourcePath is null && !useNativeConversion ? PowerShellRequiredCapability.None : PowerShellRequiredCapability.NativeFunctionBinding |
+                    PowerShellRequiredCapability.PowerShellHost | PowerShellRequiredCapability.PowerShellStatementErrors))
     {
         if (usePowerShellLanguageRuntime && usePowerShellTruthiness)
             throw new ArgumentException("A bound conversion cannot select two PowerShell language conversion operations.");
+        if (useNativeCustomObjectConversion && (!useNativeConversion || targetType.ClrType != typeof(object)))
+            throw new ArgumentException("Custom-object conversion requires the native binder and an object result contract.");
+        if (nativeRuntimeTypeName is not null && (!useNativeConversion || targetType.ClrType != typeof(object)))
+            throw new ArgumentException("A runtime-resolved conversion target requires the native binder and an object result contract.");
+        if (normalizeNullString && (usePowerShellLanguageRuntime || usePowerShellTruthiness ||
+            targetType.ClrType != typeof(string) || operand.Type.ClrType != typeof(string)))
+            throw new ArgumentException("Null-string normalization requires one CLR string operand and destination.");
         Operand = operand;
         UsePowerShellLanguageRuntime = usePowerShellLanguageRuntime;
         UsePowerShellTruthiness = usePowerShellTruthiness;
+        NormalizeNullString = normalizeNullString;
+        NativeSourcePath = nativeSourcePath;
+        NativeSourceText = nativeSourceText;
+        NativePostTestCondition = nativePostTestCondition;
+        UseNativeConversion = useNativeConversion;
+        UseNativeCustomObjectConversion = useNativeCustomObjectConversion;
+        NativeRuntimeTypeName = nativeRuntimeTypeName;
+        NativeRuntimeTypeSpan = nativeRuntimeTypeSpan;
     }
 
     internal PowerShellBoundExpression Operand { get; }
     internal bool UsePowerShellLanguageRuntime { get; }
     internal bool UsePowerShellTruthiness { get; }
+    internal bool NormalizeNullString { get; }
+    internal string? NativeSourcePath { get; }
+    internal string NativeSourceText { get; }
+    internal bool NativePostTestCondition { get; }
+    internal bool UseNativeConversion { get; }
+    internal bool UseNativeCustomObjectConversion { get; }
+    internal string? NativeRuntimeTypeName { get; }
+    internal SourceSpan? NativeRuntimeTypeSpan { get; }
+}
+
+internal enum PowerShellLocalCallResultProjection
+{
+    None,
+    ClosedCollectionFactory
 }
 
 internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpression
@@ -304,19 +356,26 @@ internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpre
         PowerShellTypeFact returnType,
         int[]? authoredEvaluationOrder = null,
         string[]? boundParameterNames = null,
-        bool returnsModuleStateDerived = false)
+        bool returnsModuleStateDerived = false,
+        bool capturesSuccessOutput = false,
+        PowerShellLocalCallResultProjection resultProjection = PowerShellLocalCallResultProjection.None,
+        PowerShellCompiledRegionLocalCall? closedCollectionFactory = null)
         : base(
             span,
             returnType,
             PowerShellValueState.Unknown,
             arguments.Aggregate(PowerShellSemanticEffect.None, static (effects, argument) => effects | argument.Effects),
-            arguments.Aggregate(PowerShellRequiredCapability.None, static (capabilities, argument) => capabilities | argument.Capabilities))
+            arguments.Aggregate(capturesSuccessOutput ? PowerShellRequiredCapability.PowerShellStatementErrors | PowerShellRequiredCapability.PowerShellStreams :
+                PowerShellRequiredCapability.None, static (capabilities, argument) => capabilities | argument.Capabilities))
     {
         Target = target;
         Arguments = arguments ?? Array.Empty<PowerShellBoundExpression>();
         AuthoredEvaluationOrder = authoredEvaluationOrder ?? Enumerable.Range(0, Arguments.Length).ToArray();
         BoundParameterNames = boundParameterNames ?? Array.Empty<string>();
         ReturnsModuleStateDerived = returnsModuleStateDerived;
+        CapturesSuccessOutput = capturesSuccessOutput;
+        ResultProjection = resultProjection;
+        ClosedCollectionFactory = closedCollectionFactory;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -324,23 +383,43 @@ internal sealed class PowerShellBoundInvocationExpression : PowerShellBoundExpre
     internal PowerShellImmutableArray<int> AuthoredEvaluationOrder { get; }
     internal PowerShellImmutableArray<string> BoundParameterNames { get; }
     internal bool ReturnsModuleStateDerived { get; }
+    internal bool CapturesSuccessOutput { get; }
+    internal PowerShellLocalCallResultProjection ResultProjection { get; }
+    internal PowerShellCompiledRegionLocalCall? ClosedCollectionFactory { get; }
 }
 
-internal sealed class PowerShellBoundReturnStatement : PowerShellBoundStatement
+/// <summary>One proved non-enumerated record returned by a closed local collection factory.</summary>
+internal sealed class PowerShellBoundClosedCollectionFactoryResultExpression : PowerShellBoundExpression
+{
+    internal PowerShellBoundClosedCollectionFactoryResultExpression(PowerShellBoundVariableExpression value)
+        : base(value.Span, value.Type, value.ValueState, value.Effects, value.Capabilities)
+    {
+        Value = value;
+    }
+
+    internal PowerShellBoundVariableExpression Value { get; }
+}
+
+internal class PowerShellBoundReturnStatement : PowerShellBoundStatement
 {
     internal PowerShellBoundReturnStatement(SourceSpan span, PowerShellBoundExpression? expression, bool emitsValue = true)
+        : this(span, expression, emitsValue, emitsSuccessOutput: true) { }
+
+    protected PowerShellBoundReturnStatement(SourceSpan span, PowerShellBoundExpression? expression, bool emitsValue, bool emitsSuccessOutput)
         : base(span,
             (expression?.Effects ?? PowerShellSemanticEffect.None) |
-            (expression is null || !emitsValue ? PowerShellSemanticEffect.None : PowerShellSemanticEffect.SuccessOutput) |
+            (expression is null || !emitsValue || !emitsSuccessOutput ? PowerShellSemanticEffect.None : PowerShellSemanticEffect.SuccessOutput) |
             (expression is PowerShellBoundMutationExpression ? PowerShellSemanticEffect.Mutation : PowerShellSemanticEffect.None),
             expression?.Capabilities ?? PowerShellRequiredCapability.None)
     {
         Expression = expression;
         EmitsValue = expression is not null && emitsValue;
+        EmitsSuccessOutput = EmitsValue && emitsSuccessOutput;
     }
 
     internal PowerShellBoundExpression? Expression { get; }
     internal bool EmitsValue { get; }
+    internal bool EmitsSuccessOutput { get; }
 }
 
 internal sealed class PowerShellBoundExpressionStatement : PowerShellBoundStatement
@@ -371,14 +450,18 @@ internal sealed class PowerShellBoundAssignmentStatement : PowerShellBoundStatem
         PowerShellBoundExpression value,
         PowerShellBoundMutationOperator operation = PowerShellBoundMutationOperator.Assign,
         bool normalizeNullString = false,
-        PowerShellIntegralMutationSemantics integralSemantics = PowerShellIntegralMutationSemantics.None)
-        : base(span, PowerShellSemanticEffect.Mutation | value.Effects, value.Capabilities)
+        PowerShellIntegralMutationSemantics integralSemantics = PowerShellIntegralMutationSemantics.None,
+        bool preserveStatementErrors = false)
+        : base(span, PowerShellSemanticEffect.Mutation | value.Effects |
+                (preserveStatementErrors ? PowerShellSemanticEffect.TerminatingError : PowerShellSemanticEffect.None),
+            value.Capabilities | (preserveStatementErrors ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None))
     {
         Target = target;
         Value = value;
         Operation = operation;
         NormalizeNullString = normalizeNullString;
         IntegralSemantics = integralSemantics;
+        PreserveStatementErrors = preserveStatementErrors;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -386,6 +469,7 @@ internal sealed class PowerShellBoundAssignmentStatement : PowerShellBoundStatem
     internal PowerShellBoundMutationOperator Operation { get; }
     internal bool NormalizeNullString { get; }
     internal PowerShellIntegralMutationSemantics IntegralSemantics { get; }
+    internal bool PreserveStatementErrors { get; }
 }
 
 internal sealed class PowerShellBoundParameter
@@ -506,7 +590,9 @@ internal sealed class PowerShellBoundFunction
         PowerShellOutputCardinality outputCardinality,
         PowerShellSemanticEffect effects,
         PowerShellRequiredCapability capabilities,
-        PowerShellExecutionDisposition disposition)
+        PowerShellExecutionDisposition disposition,
+        PowerShellNativeFunctionBinding? nativeFunctionBinding = null,
+        PowerShellOutputTypeDeclaration[]? outputTypeDeclarations = null)
     {
         Symbol = symbol;
         Parameters = parameters ?? Array.Empty<PowerShellBoundParameter>();
@@ -517,12 +603,14 @@ internal sealed class PowerShellBoundFunction
         CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding();
         DeclaredOutputType = declaredOutputType;
         DeclaredOutputTypeName = declaredOutputTypeName ?? string.Empty;
+        OutputTypeDeclarations = outputTypeDeclarations ?? Array.Empty<PowerShellOutputTypeDeclaration>();
         Body = body;
         ReturnType = returnType;
         OutputCardinality = outputCardinality;
         Effects = effects;
         Capabilities = capabilities;
         Disposition = disposition;
+        NativeFunctionBinding = nativeFunctionBinding;
     }
 
     internal PowerShellSymbolId Symbol { get; }
@@ -534,6 +622,7 @@ internal sealed class PowerShellBoundFunction
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
     internal Type? DeclaredOutputType { get; }
     internal string DeclaredOutputTypeName { get; }
+    internal PowerShellOutputTypeDeclaration[] OutputTypeDeclarations { get; }
     internal PowerShellBoundBlock Body { get; }
     internal PowerShellTypeFact ReturnType { get; }
     internal PowerShellOutputCardinality OutputCardinality { get; }
@@ -541,32 +630,36 @@ internal sealed class PowerShellBoundFunction
     internal PowerShellRequiredCapability Capabilities { get; }
     internal PowerShellExecutionDisposition Disposition { get; }
 
+    internal PowerShellNativeFunctionBinding? NativeFunctionBinding { get; }
+
     internal PowerShellBoundFunction WithAnalysis(
         PowerShellTypeFact? returnType = null,
         PowerShellOutputCardinality? outputCardinality = null,
         PowerShellSemanticEffect? effects = null,
         PowerShellRequiredCapability? capabilities = null,
         PowerShellExecutionDisposition? disposition = null)
-        => new(Symbol, Parameters.ToArray(), Locals.ToArray(), Scope, Help, Aliases.ToArray(), CommandBinding, DeclaredOutputType, DeclaredOutputTypeName, Body, returnType ?? ReturnType, outputCardinality ?? OutputCardinality, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition);
+        => new(Symbol, Parameters.ToArray(), Locals.ToArray(), Scope, Help, Aliases.ToArray(), CommandBinding, DeclaredOutputType, DeclaredOutputTypeName, Body, returnType ?? ReturnType, outputCardinality ?? OutputCardinality, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition, NativeFunctionBinding, OutputTypeDeclarations);
 
     internal PowerShellBoundFunction WithBody(PowerShellBoundBlock body)
-        => new(Symbol, Parameters.ToArray(), Locals.ToArray(), Scope, Help, Aliases.ToArray(), CommandBinding, DeclaredOutputType, DeclaredOutputTypeName, body, ReturnType, OutputCardinality, body.Effects, body.Capabilities, Disposition);
+        => new(Symbol, Parameters.ToArray(), Locals.ToArray(), Scope, Help, Aliases.ToArray(), CommandBinding, DeclaredOutputType, DeclaredOutputTypeName, body, ReturnType, OutputCardinality, body.Effects, body.Capabilities, Disposition, NativeFunctionBinding, OutputTypeDeclarations);
 }
 
 internal sealed class PowerShellBoundSourceDocument
 {
-    internal PowerShellBoundSourceDocument(string documentId, string path, SourceSpan span, PowerShellSymbolId[] functions)
+    internal PowerShellBoundSourceDocument(string documentId, string path, SourceSpan span, PowerShellSymbolId[] functions, string sourceText = "")
     {
         DocumentId = documentId;
         Path = path;
         Span = span;
         Functions = functions ?? Array.Empty<PowerShellSymbolId>();
+        SourceText = sourceText;
     }
 
     internal string DocumentId { get; }
     internal string Path { get; }
     internal SourceSpan Span { get; }
     internal PowerShellImmutableArray<PowerShellSymbolId> Functions { get; }
+    internal string SourceText { get; }
 }
 
 internal sealed class PowerShellBoundProgram
@@ -575,23 +668,30 @@ internal sealed class PowerShellBoundProgram
         PowerShellBoundSourceDocument[] documents,
         PowerShellBoundFunction[] functions,
         PowerShellSemanticDiagnostic[] diagnostics,
-        PowerShellCallGraphEdge[]? callGraph = null)
+        PowerShellCallGraphEdge[]? callGraph = null,
+        PowerShellCompilationCapability targetCapabilities = PowerShellCompilationCapability.None,
+        PowerShellCompilationSemanticHostFamily semanticHostFamily = PowerShellCompilationSemanticHostFamily.PowerShell7)
     {
         Documents = documents ?? Array.Empty<PowerShellBoundSourceDocument>();
         Functions = functions ?? Array.Empty<PowerShellBoundFunction>();
         Diagnostics = diagnostics ?? Array.Empty<PowerShellSemanticDiagnostic>();
         CallGraph = callGraph ?? Array.Empty<PowerShellCallGraphEdge>();
+        TargetCapabilities = targetCapabilities;
+        SemanticHostFamily = semanticHostFamily;
     }
 
     internal PowerShellImmutableArray<PowerShellBoundSourceDocument> Documents { get; }
     internal PowerShellImmutableArray<PowerShellBoundFunction> Functions { get; }
     internal PowerShellImmutableArray<PowerShellSemanticDiagnostic> Diagnostics { get; }
     internal PowerShellImmutableArray<PowerShellCallGraphEdge> CallGraph { get; }
-    internal PowerShellBoundProgram WithFunctions(PowerShellBoundFunction[] functions) => new(Documents.ToArray(), functions, Diagnostics.ToArray(), CallGraph.ToArray());
-    internal PowerShellBoundProgram WithDiagnostics(PowerShellSemanticDiagnostic[] diagnostics) => new(Documents.ToArray(), Functions.ToArray(), diagnostics, CallGraph.ToArray());
-    internal PowerShellBoundProgram WithCallGraph(PowerShellCallGraphEdge[] callGraph) => new(Documents.ToArray(), Functions.ToArray(), Diagnostics.ToArray(), callGraph);
+    /// <summary>The selected artifact host contract, separate from capabilities required by authored operations.</summary>
+    internal PowerShellCompilationCapability TargetCapabilities { get; }
+    internal PowerShellCompilationSemanticHostFamily SemanticHostFamily { get; }
+    internal PowerShellBoundProgram WithFunctions(PowerShellBoundFunction[] functions) => new(Documents.ToArray(), functions, Diagnostics.ToArray(), CallGraph.ToArray(), TargetCapabilities, SemanticHostFamily);
+    internal PowerShellBoundProgram WithDiagnostics(PowerShellSemanticDiagnostic[] diagnostics) => new(Documents.ToArray(), Functions.ToArray(), diagnostics, CallGraph.ToArray(), TargetCapabilities, SemanticHostFamily);
+    internal PowerShellBoundProgram WithCallGraph(PowerShellCallGraphEdge[] callGraph) => new(Documents.ToArray(), Functions.ToArray(), Diagnostics.ToArray(), callGraph, TargetCapabilities, SemanticHostFamily);
     internal PowerShellBoundProgram WithAnalysis(PowerShellBoundFunction[] functions, PowerShellSemanticDiagnostic[] diagnostics)
-        => new(Documents.ToArray(), functions, diagnostics, CallGraph.ToArray());
+        => new(Documents.ToArray(), functions, diagnostics, CallGraph.ToArray(), TargetCapabilities, SemanticHostFamily);
 }
 
 internal sealed class PowerShellCallGraphEdge

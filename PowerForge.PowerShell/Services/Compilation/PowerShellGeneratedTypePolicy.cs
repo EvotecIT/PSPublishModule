@@ -29,21 +29,26 @@ internal static class PowerShellGeneratedTypePolicy
     internal static bool IsSupported(Type type, string? targetFramework = null)
     {
         if (type.IsArray)
-            return type.GetArrayRank() == 1 && IsSupported(type.GetElementType()!, targetFramework);
+            return type.GetArrayRank() == 1 && PowerShellGeneratedElementTypePolicy.IsRepresentable(type.GetElementType()!, targetFramework) &&
+                   IsSupported(type.GetElementType()!, targetFramework);
         if (type.IsGenericType)
         {
             var definition = type.GetGenericTypeDefinition();
-            if (definition != typeof(Dictionary<,>) &&
-                definition != typeof(List<>) &&
-                definition != typeof(Nullable<>))
-                return false;
-            return type.GetGenericArguments().All(argument => IsSupported(argument, targetFramework)) &&
-                   IsSupportedNonGeneric(definition, targetFramework);
+            if (!IsSupportedContainerDefinition(definition, targetFramework)) return false;
+            return type.GetGenericArguments().All(argument => PowerShellGeneratedElementTypePolicy.IsRepresentable(argument, targetFramework) &&
+                   IsSupported(argument, targetFramework)) &&
+                   !type.ContainsGenericParameters;
         }
         if (type.IsByRef || type.IsPointer)
             return false;
         return IsSupportedNonGeneric(type, targetFramework);
     }
+
+    /// <summary>Shares the target-qualified container boundary without admitting its element types.</summary>
+    internal static bool IsSupportedContainerDefinition(Type definition, string? targetFramework)
+        => (definition == typeof(Dictionary<,>) || definition == typeof(List<>) ||
+            definition == typeof(HashSet<>) || definition == typeof(Nullable<>)) &&
+           IsSupportedNonGeneric(definition, targetFramework);
 
     internal static bool IsSupportedDelegateSignature(Type type, string? targetFramework = null)
     {
@@ -84,13 +89,39 @@ internal static class PowerShellGeneratedTypePolicy
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         if (!PowerShellCompilationPathSafety.PathStartsWith(
                 Path.GetFullPath(location),
-                runtimeDirectory))
+                runtimeDirectory) && !IsFrameworkRuntimeAssembly(type.Assembly, location))
             return false;
         if (string.IsNullOrWhiteSpace(targetFramework))
             return true;
 
         var fullName = type.FullName;
         return !string.IsNullOrWhiteSpace(fullName) && GetTargetTypes(targetFramework!).Contains(fullName!);
+    }
+
+    private static bool IsFrameworkRuntimeAssembly(Assembly assembly, string location)
+    {
+#if NETFRAMEWORK
+        // Desktop hosts load framework assemblies from the GAC as well as Framework64.
+        // Match an implicit approved reference identity rather than trusting arbitrary GAC types.
+        if (!assembly.GlobalAssemblyCache ||
+            !PowerShellCompilationPathSafety.PathStartsWith(Path.GetFullPath(location),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                    "Microsoft.NET", "assembly") + Path.DirectorySeparatorChar) ||
+            !Net472ImplicitReferenceAssemblies.Contains(Path.GetFileName(location), StringComparer.OrdinalIgnoreCase))
+            return false;
+        var referenceRoot = ResolveNet472ReferenceDirectory();
+        if (referenceRoot is null) return false;
+        var referencePath = Path.Combine(referenceRoot, Path.GetFileName(location));
+        if (!File.Exists(referencePath)) return false;
+        var expected = AssemblyName.GetAssemblyName(referencePath);
+        var actual = assembly.GetName();
+        var expectedToken = expected.GetPublicKeyToken();
+        return string.Equals(actual.Name, expected.Name, StringComparison.OrdinalIgnoreCase) &&
+               actual.Version == expected.Version && expectedToken is { Length: > 0 } &&
+               expectedToken.SequenceEqual(actual.GetPublicKeyToken() ?? Array.Empty<byte>());
+#else
+        return false;
+#endif
     }
 
     private static HashSet<string> GetTargetTypes(string targetFramework)
@@ -256,8 +287,7 @@ internal static class PowerShellGeneratedTypePolicy
     {
         if (targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase))
             return ResolveNet472ReferenceDirectory();
-        if (!targetFramework.Equals("net8.0", StringComparison.OrdinalIgnoreCase) &&
-            !targetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase))
+        if (!PowerShellCompilationTargetFrameworkPolicy.IsModern(targetFramework))
             return null;
 
         var dotnetRoot = ResolveDotNetRoot();

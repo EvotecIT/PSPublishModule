@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Hybrid native-bound use of a runspace-created type after an authored literal Add-Type guard",
+  "mode": "Hybrid",
+  "source": {
+    "packet": "PSSharedGoods",
+    "relativePath": "Public/Computers/Get-ComputerDiskLogical.ps1",
+    "sha256": "d18b86d9406e900a411641cc69e842bcde2e449e9b8eeb11bc25e5a654ebe3f1",
+    "unitId": "60f819cc0a9a0c963f4cb294",
+    "unchanged": true
+  },
+  "qualification": {
+    "guard": "A static member receiver follows an earlier direct function statement that tests the exact unqualified type name with -as [type] and conditionally invokes literal Add-Type -TypeDefinition.",
+    "emission": "The complete function emits as a Hybrid native-bound method; Add-Type, PowerShell type lookup and QueryDosDevice stay with the PowerShell host.",
+    "typedClrInteropTranslation": false,
+    "strictAdmission": false
+  },
+  "sameInputNet10": {
+    "baseline": "m29a-management-sdk-data.net10.json at 64d8fc795492ebaa2d993edbf3ca816987c933a0",
+    "baselineFunctions": 282,
+    "baselineEmitted": 272,
+    "candidateFunctions": 282,
+    "candidateEmitted": 273,
+    "stableFunctionIds": 282,
+    "gains": ["Get-ComputerDiskLogical"],
+    "lostEmittedMethods": [],
+    "lostStillRetainedRegions": [],
+    "candidateTargetRuntimeCommandRegions": 3,
+    "finalExplanationSha256": "b2498745ccb71b83bee8785dc23c4449b3d7bf34890b6ad8ee34710e6c5fc8bc"
+  },
+  "offlineWorkflow": {
+    "fixture": "ExternalWorkflows/PSSharedGoods/DiskLogical",
+    "methodCountPerArtifact": 2,
+    "compiledWorkloadFunctionCountPerArtifact": 1,
+    "childRuns": 8,
+    "allExitZeroWithEmptyStderr": true,
+    "originalGeneratedRawJsonSha256": {
+      "PowerShell7_net10_real": "fa56683bdbd0b248b541ec9b241e2f53288122d6cba39804ce825096ad05dec4",
+      "PowerShell7_net10_typeFailure": "cd92c99c1f678edc68d8f07324d51eb0e67dd657f437946f9856d8c605c41ce2",
+      "WindowsPowerShell51_net472_real": "68a2cfd80203debdab21181d7eab4878b41651e27b2e35b800c68b7ddbbb2aaf",
+      "WindowsPowerShell51_net472_typeFailure": "b3e66dce0eccbad1dcef0234d7b36a60bfedc4c8a011a1044f268d42525e3f3c"
+    },
+    "net10ManifestSha256": "3de94e6709d741398c8dc5f62efe0baaa231878d5271eb2793085e54f79a9766",
+    "net472ManifestSha256": "31e186d49a80a6a6bb649021b502407aab3ab2e6856bd274d0421d74534806b7",
+    "dependencyClosureVerified": false
+  },
+  "validation": {
+    "guardedAdmissionTests": "2/2 pass; later exact static type receiver admitted, use before guard, wrong name, wrong Add-Type parameter, assembly-qualified name, bare type value and Strict rejected",
+    "focusedTrxSha256": "7dcbd94183c644ced70d00a374337ab7540eb0507d13161c4d01d27a62b6eaa2",
+    "net472PowerShellBuild": "0 warnings, 0 errors",
+    "strictNet10": {"exitCode": 1, "typedUnits": 0, "rejectedUnits": 2, "sha256": "03e7825c9a6e7458de4475502d26b36f88d7ab09a769b552332e7c8967540cca"},
+    "strictNet472": {"exitCode": 1, "typedUnits": 0, "rejectedUnits": 2, "sha256": "450b3c4c636a01d6b56de9d3c45ddfcd08997c3f58bd8ffe737b2bccd6c7cf61"},
+    "independentReview": "One read-only review; initial assembly-identity mechanism was not reproduced because TypeName.FullName includes the assembly name. The policy now explicitly rejects assembly-qualified names; targeted confirmation found no remaining actionable issue."
+  },
+  "limits": [
+    "Only the PSSharedGoods packet was refreshed for this compiler change; the four other pinned packets and the full net472 portfolio were not rescanned.",
+    "The real case queries the local system-drive mapping; remote rows use an in-memory provider and no remote CIM request is made.",
+    "The authored C# P/Invoke declaration and Add-Type command execute in PowerShell; this is not runtime-free type, ABI or dependency closure.",
+    "Builds used unreviewed dependency resolution and do not qualify package distribution or other platforms.",
+    "SMB cross-file type creation, arbitrary Add-Type source, bare type values, assembly-qualified names and native deployment remain outside the rule."
+  ]
+}

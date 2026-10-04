@@ -3,9 +3,10 @@ using System.Management.Automation.Language;
 namespace PowerForge;
 
 /// <summary>Binds the conservative direct-CLR operator subset once, before lowering.</summary>
-internal static class PowerShellOperatorSemanticBinder
+internal static partial class PowerShellOperatorSemanticBinder
 {
     internal static PowerShellBoundExpression? BindBinary(
+        ParsedSourceDocument document,
         BinaryExpressionAst syntax,
         SourceSpan span,
         Func<Ast, PowerShellBoundExpression?> bindOperand,
@@ -14,8 +15,21 @@ internal static class PowerShellOperatorSemanticBinder
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
     {
         var operation = syntax.Operator.ToString();
+        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+            operation is "Ilike" or "Clike" or "Inotlike" or "Cnotlike" or
+                "Match" or "Imatch" or "Cmatch" or "Notmatch" or "Inotmatch" or "Cnotmatch" or
+                "Isplit" or "Csplit" or "Ireplace" or "Creplace" or "DotDot" or "As" or "Ias")
+        {
+            var nativeLeft = bindOperand(syntax.Left);
+            var nativeRight = bindOperand(syntax.Right);
+            var operatorSpan = operation == "DotDot"
+                ? span
+                : PowerShellSourceParser.GetSpan(document, syntax.ErrorPosition);
+            return nativeLeft is null || nativeRight is null ? null : BindNativeBinary(span, operation, nativeLeft, nativeRight, capabilities,
+                operatorSpan, PowerShellSourceParser.GetSourceLines(document, operatorSpan));
+        }
         if (operation is "Is" or "IsNot")
-            return BindTypeTest(syntax, span, operation == "IsNot", bindOperand, diagnostics, targetFramework, capabilities);
+            return BindTypeTest(document, syntax, span, operation == "IsNot", bindOperand, diagnostics, targetFramework, capabilities);
         if (operation is "Match" or "Imatch" or "Cmatch" or "Notmatch" or "Inotmatch" or "Cnotmatch")
             return BindRegexMatch(syntax, span, operation, bindOperand, diagnostics);
         if (operation is "Replace" or "Ireplace" or "Creplace")
@@ -24,11 +38,11 @@ internal static class PowerShellOperatorSemanticBinder
             return BindWildcard(syntax, span, operation, bindOperand, diagnostics);
         if (operation is "Icontains" or "Ccontains" or "Inotcontains" or "Cnotcontains" or
             "Iin" or "Cin" or "Inotin" or "Cnotin")
-            return BindMembership(syntax, span, operation, bindOperand, diagnostics);
+            return BindMembership(syntax, span, operation, bindOperand, diagnostics, capabilities);
         if (operation is "Isplit" or "Csplit")
             return BindStringSplit(syntax, span, operation, bindOperand, diagnostics);
         if (operation == "Join")
-            return BindStringJoin(syntax, span, bindOperand, diagnostics);
+            return BindStringJoin(document, syntax, span, bindOperand, diagnostics, capabilities);
         if (operation is "As" or "Ias")
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
@@ -43,6 +57,14 @@ internal static class PowerShellOperatorSemanticBinder
         if (left is null || right is null) return null;
         var leftType = left.Type.ClrType;
         var rightType = right.Type.ClrType;
+        if (operation == "Plus" && leftType == typeof(string) && left.ValueState == PowerShellValueState.Known &&
+            rightType != typeof(void) && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+            return Binary(span, PowerShellBoundBinaryOperator.NativeStringConcatenate, left, right, typeof(string));
+        if (BindNativeBinary(span, operation, left, right, capabilities) is { } nativeBinary) return nativeBinary;
+        if (operation == "Format")
+            return PowerShellFormatSemanticBinder.Bind(span, left, right, capabilities, diagnostics);
+        if (PowerShellNumericUnionPolicy.BindBinary(span, operation, left, right) is { } numericUnion)
+            return numericUnion;
 
         if (operation == "Plus" && leftType.IsArray)
         {
@@ -91,15 +113,16 @@ internal static class PowerShellOperatorSemanticBinder
                 return Reject(diagnostics, span, "PSB2204", $"Arithmetic operator '{syntax.Operator}' requires two numeric operands of known compatible types.");
             if ((leftType == typeof(decimal)) != (rightType == typeof(decimal)))
                 return Reject(diagnostics, span, "PSB2205", "Mixed decimal and non-decimal arithmetic relies on PowerShell coercion and is not supported.");
-            if (leftType == typeof(decimal) && PowerShellRuntimeExceptionCatchPolicy.Contains(syntax))
+            var preserveArithmeticErrors = capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors);
+            if (leftType == typeof(decimal) && !preserveArithmeticErrors && PowerShellRuntimeExceptionCatchPolicy.Contains(syntax))
                 return Reject(diagnostics, span, "PSB2216", "Decimal arithmetic inside a RuntimeException catch requires PowerShell arithmetic-error wrapping.");
             if (operation == "Rem" && PowerShellClrTypeSemantics.IsIntegral(leftType) && leftType == rightType)
             {
-                if (PowerShellRuntimeExceptionCatchPolicy.Contains(syntax))
+                if (!preserveArithmeticErrors && PowerShellRuntimeExceptionCatchPolicy.Contains(syntax))
                     return Reject(diagnostics, span, "PSB2216", "Integral remainder inside a RuntimeException catch requires PowerShell divide-by-zero error wrapping.");
                 var integralType = PowerShellClrTypeSemantics.PromoteIntegral(leftType);
                 return Binary(span, PowerShellBoundBinaryOperator.IntegralRemainder,
-                    WidenArithmeticOperand(left, integralType), WidenArithmeticOperand(right, integralType), integralType);
+                    WidenArithmeticOperand(left, integralType), WidenArithmeticOperand(right, integralType), integralType, preserveArithmeticErrors);
             }
             if (operation == "Divide" && PowerShellClrTypeSemantics.IsIntegral(leftType) && PowerShellClrTypeSemantics.IsIntegral(rightType))
                 return Reject(diagnostics, span, "PSB2206", "PowerShell integral division changes runtime result type based on the quotient and is not supported by one static CLR return type.");
@@ -107,6 +130,8 @@ internal static class PowerShellOperatorSemanticBinder
             {
                 if (PowerShellInt32RangePolicy.TryBindArithmetic(span, operation, left, right, out var boundedArithmetic))
                     return boundedArithmetic;
+                if (PowerShellNumericUnionPolicy.BindBinary(span, operation, left, right, allowInt32Operands: true) is { } promotedArithmetic)
+                    return promotedArithmetic;
                 return Reject(diagnostics, span, "PSB2207", "Unconstrained integral arithmetic can promote on overflow in PowerShell; use an explicitly typed accumulator with compound assignment.");
             }
             // PowerShell evaluates floating arithmetic in Double, including two Single
@@ -122,16 +147,17 @@ internal static class PowerShellOperatorSemanticBinder
                 "Divide" => PowerShellBoundBinaryOperator.Divide,
                 _ => PowerShellBoundBinaryOperator.Remainder
             };
-            return Binary(span, bound, left, right, resultType);
+            return Binary(span, bound, left, right, resultType, preserveArithmeticErrors && resultType == typeof(decimal));
         }
 
         if (operation is "Ieq" or "Ceq" or "Ine" or "Cne" or "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge")
         {
-            if ((left.ValueState == PowerShellValueState.Null && Nullable.GetUnderlyingType(leftType) is null && PowerShellClrTypeSemantics.IsNonNullableValueType(rightType)) ||
-                (right.ValueState == PowerShellValueState.Null && Nullable.GetUnderlyingType(rightType) is null && PowerShellClrTypeSemantics.IsNonNullableValueType(leftType)))
-                return Reject(diagnostics, span, "PSB2209", "Comparing a non-nullable CLR value to $null requires PowerShell runtime semantics.");
             var equality = operation is "Ieq" or "Ceq" or "Ine" or "Cne";
             var relational = operation is "Ilt" or "Clt" or "Ile" or "Cle" or "Igt" or "Cgt" or "Ige" or "Cge";
+            if (!equality &&
+                ((left.ValueState == PowerShellValueState.Null && Nullable.GetUnderlyingType(leftType) is null && PowerShellClrTypeSemantics.IsNonNullableValueType(rightType)) ||
+                 (right.ValueState == PowerShellValueState.Null && Nullable.GetUnderlyingType(rightType) is null && PowerShellClrTypeSemantics.IsNonNullableValueType(leftType))))
+                return Reject(diagnostics, span, "PSB2209", "Relational comparison of a non-nullable CLR value with $null requires PowerShell runtime semantics.");
             if (equality && (left.ValueState == PowerShellValueState.Null || right.ValueState == PowerShellValueState.Null))
             {
                 var comparedValue = left.ValueState == PowerShellValueState.Null ? right : left;
@@ -282,6 +308,7 @@ internal static class PowerShellOperatorSemanticBinder
             operand);
 
     private static PowerShellBoundExpression? BindTypeTest(
+        ParsedSourceDocument document,
         BinaryExpressionAst syntax,
         SourceSpan span,
         bool negate,
@@ -293,9 +320,19 @@ internal static class PowerShellOperatorSemanticBinder
         if (syntax.Right is not TypeExpressionAst typeExpression ||
             typeExpression.TypeName.GetReflectionType() is not { } targetType ||
             !PowerShellCompilationParameterTypePolicy.CanUseInMethod(targetType, targetFramework, capabilities))
-            return Reject(diagnostics, span, "PSB2220", "The right operand of '-is' or '-isnot' must be one statically resolvable CLR type on the target surface.");
+        {
+            if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+                return Reject(diagnostics, span, "PSB2220", "The right operand of '-is' or '-isnot' must be one statically resolvable CLR type on the target surface.");
+            var value = bindOperand(syntax.Left);
+            if (value is null) return null;
+            var target = syntax.Right is TypeExpressionAst ? null : bindOperand(syntax.Right);
+            if (syntax.Right is not TypeExpressionAst && target is null) return null;
+            return new PowerShellBoundNativeTypeTestExpression(span, value, target,
+                (syntax.Right as TypeExpressionAst)?.TypeName.FullName,
+                PowerShellSourceParser.GetSpan(document, syntax.Right.Extent), negate);
+        }
         var operand = bindOperand(syntax.Left);
-        return operand is null ? null : new PowerShellBoundTypeTestExpression(span, operand, targetType, negate);
+        return operand is null ? null : new PowerShellBoundTypeTestExpression(span, operand, targetType, negate, capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors));
     }
 
     private static PowerShellBoundExpression? BindRegexMatch(
@@ -382,14 +419,23 @@ internal static class PowerShellOperatorSemanticBinder
         SourceSpan span,
         string operation,
         Func<Ast, PowerShellBoundExpression?> bindOperand,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        PowerShellCompilationCapability capabilities)
     {
-        var left = bindOperand(syntax.Left);
-        var right = bindOperand(syntax.Right);
-        if (left is null || right is null) return null;
         var collectionOnRight = operation.EndsWith("in", StringComparison.OrdinalIgnoreCase);
-        var collection = collectionOnRight ? right : left;
-        var candidate = collectionOnRight ? left : right;
+        var collection = bindOperand(collectionOnRight ? syntax.Right : syntax.Left);
+        var candidate = bindOperand(collectionOnRight ? syntax.Left : syntax.Right);
+        if (collection is null || candidate is null) return null;
+        var left = collectionOnRight ? candidate : collection;
+        var right = collectionOnRight ? collection : candidate;
+        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+            return new PowerShellBoundMembershipExpression(span, left, right, typeof(object), collectionOnRight,
+                operation.StartsWith("I", StringComparison.Ordinal), operation.Contains("not", StringComparison.OrdinalIgnoreCase),
+                usesNativeInvocation: true);
+        if (capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors))
+            return new PowerShellBoundMembershipExpression(span, left, right, typeof(object), collectionOnRight,
+                operation.StartsWith("I", StringComparison.Ordinal), operation.Contains("not", StringComparison.OrdinalIgnoreCase),
+                usesCommandHostInvocation: true);
         var collectionType = collection.Type.ClrType;
         if (!collectionType.IsArray || collectionType.GetArrayRank() != 1)
             return Reject(diagnostics, span, "PSB2226", $"Operator '-{operation.ToLowerInvariant()}' requires a statically typed one-dimensional array on its collection side.");
@@ -422,20 +468,26 @@ internal static class PowerShellOperatorSemanticBinder
     }
 
     private static PowerShellBoundExpression? BindStringJoin(
+        ParsedSourceDocument document,
         BinaryExpressionAst syntax,
         SourceSpan span,
         Func<Ast, PowerShellBoundExpression?> bindOperand,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        PowerShellCompilationCapability capabilities)
     {
         var values = bindOperand(syntax.Left);
         var separator = bindOperand(syntax.Right);
         if (values is null || separator is null) return null;
+        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+            return new PowerShellBoundStringJoinExpression(span, values, separator, document.Path,
+                PowerShellSourceParser.GetSourceLines(document, span));
         if (values.Type.ClrType != typeof(string[]) || separator.Type.ClrType != typeof(string))
             return Reject(diagnostics, span, "PSB2229", "Operator '-join' requires a String array and scalar String separator.");
         return new PowerShellBoundStringJoinExpression(span, values, separator);
     }
 
     internal static PowerShellBoundExpression? BindUnary(
+        ParsedSourceDocument document,
         UnaryExpressionAst syntax,
         SourceSpan span,
         Func<Ast, PowerShellBoundExpression?> bindOperand,
@@ -447,6 +499,17 @@ internal static class PowerShellOperatorSemanticBinder
         var operand = bindOperand(syntax.Child);
         if (operand is null) return null;
         var type = operand.Type.ClrType;
+        if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && operation is "Plus" or "Minus" or "Bnot")
+            return Unary(span, operation switch {
+                "Plus" => PowerShellBoundUnaryOperator.NativeIdentity,
+                "Minus" => PowerShellBoundUnaryOperator.NativeNegate,
+                _ => PowerShellBoundUnaryOperator.NativeBitwiseNot
+            }, operand, typeof(object));
+        if (operation == "Join" && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+            return new PowerShellBoundStringJoinExpression(span, operand,
+                new PowerShellBoundLiteralExpression(span, string.Empty,
+                    new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Literal, "Unary join has no separator operand."),
+                    PowerShellValueState.Known), document.Path, PowerShellSourceParser.GetSourceLines(document, span), isUnary: true);
         if (operation is "Not" or "Exclaim")
         {
             operand = BindTruthiness(operand, capabilities, diagnostics, span, "PSB2213", "Typed logical negation requires a Boolean operand.");
@@ -484,7 +547,8 @@ internal static class PowerShellOperatorSemanticBinder
         PowerShellBoundBinaryOperator operation,
         PowerShellBoundExpression left,
         PowerShellBoundExpression right,
-        Type type)
+        Type type,
+        bool preserveStatementErrors = false)
         => new PowerShellBoundBinaryExpression(
             span,
             operation,
@@ -494,7 +558,7 @@ internal static class PowerShellOperatorSemanticBinder
                 type,
                 PowerShellBoundBinaryExpression.RequiresPowerShellLanguageRuntime(operation)
                     ? $"Operator '{operation}' selects the public PowerShell language-operator runtime."
-                    : $"Operator '{operation}' selects a direct CLR operation."));
+                    : $"Operator '{operation}' selects a direct CLR operation."), preserveStatementErrors);
 
     private static PowerShellBoundExpression Unary(SourceSpan span, PowerShellBoundUnaryOperator operation, PowerShellBoundExpression operand, Type type)
         => new PowerShellBoundUnaryExpression(span, operation, operand, Fact(type, $"Operator '{operation}' selects a direct CLR operation."));

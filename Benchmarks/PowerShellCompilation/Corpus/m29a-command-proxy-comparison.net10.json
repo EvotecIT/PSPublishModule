@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Exact SDK command metadata and proxy source generation through native host binding",
+  "baselineCompilerCommit": "2e787da907d00691b07a7f04061404e9eeebd79a",
+  "baselineDispositionLedger": "m29a-command-conditions-comparison.net10.json",
+  "verifiedFunctionIdentities": 565,
+  "observedStableUnits": 584,
+  "baselineEmitted": 519,
+  "packets": [
+    {
+      "packet": "pssg",
+      "resourceMode": "CompleteModule",
+      "functions": 282,
+      "emitted": 270,
+      "retained": 12,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "53bca594b302f074a789892171bf6155aff9450107d1b97e3e927bcea35242b3"
+    },
+    {
+      "packet": "cleanup",
+      "resourceMode": "CompleteModule",
+      "functions": 68,
+      "emitted": 63,
+      "retained": 5,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1"
+    },
+    {
+      "packet": "pinf",
+      "resourceMode": "Declared",
+      "functions": 66,
+      "emitted": 65,
+      "retained": 1,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "35f6919cdd439a762a9284cc3a90d32d6f984621307cafd753e71f40c9bc3d53"
+    },
+    {
+      "packet": "pst",
+      "resourceMode": "CompleteModule",
+      "functions": 109,
+      "emitted": 95,
+      "retained": 14,
+      "gains": [
+        {
+          "name": "Copy-Command",
+          "unitId": "68839a83a07125affe4b1ef8"
+        }
+      ],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "752bfd55d5d829d42b1fdd6674f04d78e7576eca0f1dec833520f4f6c7fe3412"
+    },
+    {
+      "packet": "platyps",
+      "resourceMode": "Declared",
+      "functions": 40,
+      "emitted": 27,
+      "retained": 13,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "f3a8acb7feecc018adfe9d5daf63170ea3af30eed2b718cb1426d9e2346c005f"
+    }
+  ],
+  "changedDispositions": [
+    {
+      "packet": "pst",
+      "unitId": "68839a83a07125affe4b1ef8",
+      "name": "Copy-Command",
+      "baselineEmitted": false,
+      "candidateEmitted": true,
+      "retainedHostedSource": false,
+      "baselineNativeFunctionBinding": false,
+      "usesNativeFunctionBinding": true,
+      "baselineRegionMembers": [],
+      "candidateRegionMembers": []
+    }
+  ],
+  "candidateEmitted": 520,
+  "candidateRetained": 45,
+  "retainedInventorySha256": "f19e504c92fce28b95243fab0f85bb4ed0040c269219732648518dc5c607438f",
+  "dispositionContract": "Apply this single delta through the linked comparison chain to the complete web-session ledger. All 565 function identities and 584 units match; no complete method or still-retained region is lost.",
+  "workflowProof": {
+    "module": "PSScriptTools",
+    "revision": "549fa3e3d769532320054fc0b3c8f42df0452361",
+    "sourcePath": "functions/Copy-Command.ps1",
+    "sourceSha256": "9fe8dae88fac427c5950685a3ca33f13cbaeb0df9b0a3df8e8968f0848831728",
+    "license": "MIT; unchanged upstream license included",
+    "testSource": "PowerForge.Tests/PowerShellCompilationCommandProxyTests.cs",
+    "testSourceSha256": "51da66f3811b98d444d481be5dab82e2415c61996cf5e8ee5093521752778efb",
+    "executedNewCompleteWorkloadFunctions": [
+      "Copy-Command"
+    ],
+    "observationsPerHost": 7,
+    "hosts": [
+      "PowerShell 7/net10.0 Windows",
+      "Windows PowerShell 5.1/net472"
+    ],
+    "contracts": [
+      "caller-owned metadata identity and PSBoundParameters consistency",
+      "proxy source equality and parseability",
+      "proxy execution defaults/parameter aliases/pipeline input/errors",
+      "command alias resolution",
+      "active-host command rebinding",
+      "missing command warnings and empty success output"
+    ],
+    "syntheticIdentityProbe": "Read-CommandMetadata adds no workload coverage"
+  },
+  "validation": {
+    "focused": {
+      "passed": 4,
+      "total": 4,
+      "trxSha256": "0c3270b3374465e41ddabb8b2ec0e521a08696ce52eaa0aefd8a880babe9c337"
+    },
+    "focusedAdjacent": {
+      "passed": 16,
+      "total": 16,
+      "trxSha256": "20f53c66d789833d6a403224b80185a57901a6195ca8e2cc6bc74f4ca20c943d"
+    },
+    "net472Build": {
+      "succeeded": true,
+      "warnings": 0,
+      "errors": 0,
+      "elapsedSeconds": 4.85
+    }
+  },
+  "review": {
+    "status": "no-actionable-findings",
+    "task": "command_proxy_review",
+    "scope": "One independent read-only exact SDK identity/native selection/parameter/container/member/invocation/reference review at frozen four-line production candidate. No production change afterward."
+  },
+  "failureAccounting": [
+    "First census helper omitted three historic delta records and stopped at its baseline consistency assertion before any explains. Corrected ledger replay passed; this was an evidence-script defect, not a compiler failure."
+  ],
+  "boundaries": [
+    "SDK operations remain active-PowerShell-host owned; no runtime-free cmdlet translation claim.",
+    "Forward-help/console-host path qualified. Dynamic parameters, alternate help comments, ISE and VS Code editor integration remain unexecuted.",
+    "Two private source helpers and metadata array/List runtime identity are not additional executed workload claims.",
+    "Runtime-free TypedLibrary and disabled native/host capabilities remain guarded; PSSession stays unavailable.",
+    "Five-module census is net10.0 only; focused generated artifacts execute on both Windows hosts.",
+    "Builds allow unreviewed dependency resolution; no reviewed dependency lock, performance, full-module execution, full-suite gate, non-Windows, PR, merge or release claim."
+  ],
+  "inventoryMaintenance": "Refresh aggregate totals, current comparison link and known source/test hashes from staged blobs; historical comparisons retain their original evidence."
+}

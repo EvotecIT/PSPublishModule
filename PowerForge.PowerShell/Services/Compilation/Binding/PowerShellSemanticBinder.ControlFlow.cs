@@ -23,7 +23,7 @@ internal sealed partial class PowerShellSemanticBinder
             var clauseSymbols = CloneSymbols(baselineSymbols);
             var condition = BindExpression(document, clause.Item1, clauseSymbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
             if (condition is null) return null;
-            condition = BindConditionTruthiness(condition, capabilities, diagnostics);
+            condition = BindConditionTruthiness(condition, capabilities, diagnostics, document, clause.Item1);
             if (condition is null) return null;
             var body = BindBlock(
                 document,
@@ -77,12 +77,13 @@ internal sealed partial class PowerShellSemanticBinder
         var baselineSymbols = CloneSymbols(symbols);
         var loopSymbols = CloneSymbols(baselineSymbols);
         PowerShellBoundExpression? condition;
+        PrepareLoopFlowState(loopSymbols, functions, capabilities, statement.Condition, statement.Body);
         PowerShellBoundBlock? body;
         if (kind == PowerShellBoundLoopKind.While)
         {
             condition = BindExpression(document, statement.Condition, loopSymbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
             if (condition is null) return null;
-            condition = BindConditionTruthiness(condition, capabilities, diagnostics);
+            condition = BindConditionTruthiness(condition, capabilities, diagnostics, document, statement.Condition);
             if (condition is null) return null;
             body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities);
         }
@@ -92,10 +93,13 @@ internal sealed partial class PowerShellSemanticBinder
             if (body is null) return null;
             var conditionSymbols = CloneSymbols(loopSymbols);
             if (HasPostTestFlowTransfer(statement.Body))
+            {
                 MergeSymbolValueStates(conditionSymbols, baselineSymbols, loopSymbols);
+                PrepareLoopFlowState(conditionSymbols, functions, capabilities, statement.Condition, statement.Body);
+            }
             condition = BindExpression(document, statement.Condition, conditionSymbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
             if (condition is null) return null;
-            condition = BindConditionTruthiness(condition, capabilities, diagnostics);
+            condition = BindConditionTruthiness(condition, capabilities, diagnostics, document, statement.Condition, nativePostTestCondition: true);
         }
         if (condition is null) return null;
         if (body is null) return null;
@@ -103,7 +107,9 @@ internal sealed partial class PowerShellSemanticBinder
             MergeSymbolValueStates(symbols, baselineSymbols, loopSymbols);
         else
             MergeSymbolValueStates(symbols, loopSymbols);
-        return new PowerShellBoundWhileStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), kind, condition, body);
+        PrepareLoopFlowState(symbols, functions, capabilities, statement.Condition, statement.Body);
+        return new PowerShellBoundWhileStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), kind, condition, body,
+            PowerShellLoopInterruptContract.IsAvailable(capabilities));
     }
 
     private static bool HasPostTestFlowTransfer(StatementBlockAst body)
@@ -127,20 +133,25 @@ internal sealed partial class PowerShellSemanticBinder
         if (statement.Initializer is not null && initializer is null) return null;
         var baselineSymbols = CloneSymbols(symbols);
         var loopSymbols = CloneSymbols(baselineSymbols);
+        PrepareLoopFlowState(loopSymbols, functions, capabilities, statement.Condition, statement.Body, statement.Iterator);
         var condition = statement.Condition is null
             ? null
             : BindExpression(document, statement.Condition, loopSymbols, functions, diagnostics, typeof(bool), targetFramework, capabilities);
-        if (condition is not null) condition = BindConditionTruthiness(condition, capabilities, diagnostics);
+        if (condition is not null) condition = BindConditionTruthiness(condition, capabilities, diagnostics, document, statement.Condition!);
         if (statement.Condition is not null && condition is null) return null;
         PowerShellInt32RangePolicy.RefineDescendingCounter(statement, initializer, loopSymbols);
         var body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities);
         if (body is null) return null;
+        if (HasPostTestFlowTransfer(statement.Body))
+            PrepareLoopFlowState(loopSymbols, functions, capabilities, statement.Condition, statement.Body, statement.Iterator);
         var iterator = statement.Iterator is null
             ? null
             : BindExpression(document, statement.Iterator, loopSymbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities) as PowerShellBoundMutationExpression;
         if (statement.Iterator is not null && iterator is null) return null;
         MergeSymbolValueStates(symbols, baselineSymbols, loopSymbols);
-        return new PowerShellBoundForStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), initializer, condition, iterator, body);
+        PrepareLoopFlowState(symbols, functions, capabilities, statement.Condition, statement.Body, statement.Iterator);
+        return new PowerShellBoundForStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), initializer, condition, iterator, body,
+            PowerShellLoopInterruptContract.IsAvailable(capabilities));
     }
 
     private PowerShellBoundStatement? BindForEachStatement(
@@ -153,14 +164,21 @@ internal sealed partial class PowerShellSemanticBinder
         PowerShellCompilationCapability capabilities)
     {
         var variableSpan = PowerShellSourceParser.GetSpan(document, statement.Variable.Extent);
+        var nativeInvocation = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding);
         if (!symbols.TryGetValue(statement.Variable.VariablePath.UserPath, out var target))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2302", $"foreach variable '${statement.Variable.VariablePath.UserPath}' has no function-scope semantic symbol.", variableSpan));
             return null;
         }
+        if (!nativeInvocation && target.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2305",
+                "A foreach target cannot overwrite a closed numeric local without preserving its Int32/Double element contract.", variableSpan));
+            return null;
+        }
         var collection = BindExpression(document, statement.Condition, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
         if (collection is null) return null;
-        if (PowerShellModuleStateOriginPolicy.IsDerived(collection))
+        if (!nativeInvocation && PowerShellModuleStateOriginPolicy.IsDerived(collection))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2304",
@@ -169,34 +187,37 @@ internal sealed partial class PowerShellSemanticBinder
             return null;
         }
         var collectionType = collection.Type.ClrType;
-        var scalarString = collectionType == typeof(string) && collection.Type.Provenance is PowerShellTypeFactProvenance.Explicit or PowerShellTypeFactProvenance.Literal;
-        var systemArray = collectionType == typeof(Array) &&
-                          PowerShellCompilationParameterTypePolicy.CanUseUntypedObject(capabilities);
-        var elementType = collectionType.IsArray && collectionType.GetArrayRank() == 1
-            ? collectionType.GetElementType()
-            : scalarString
-                ? typeof(string)
-                : systemArray ? typeof(object) : null;
-        if (elementType is null || elementType != target.Type.ClrType)
+        var elementType = PowerShellForEachCollectionPolicy.GetElementType(collectionType, capabilities, out var enumerationKind);
+        if (elementType is null || !nativeInvocation && elementType != target.Type.ClrType)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2303",
-                "foreach collection enumeration requires a statically typed one-dimensional array, an explicitly typed scalar string, or a generated PowerShell host that preserves System.Array items as objects.",
+                "foreach requires a typed vector, scalar string, or a qualified PowerShell host for System.Array and IEnumerable/IEnumerator object elements.",
                 collection.Span));
             return null;
         }
         var baselineSymbols = CloneSymbols(symbols);
         var loopSymbols = CloneSymbols(baselineSymbols);
+        PrepareLoopFlowState(loopSymbols, functions, capabilities, statement.Body);
+        loopSymbols[statement.Variable.VariablePath.UserPath].ForgetValueState();
         var body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities);
         if (body is null) return null;
         MergeSymbolValueStates(symbols, baselineSymbols, loopSymbols);
+        PrepareLoopFlowState(symbols, functions, capabilities, statement.Body);
+        symbols[statement.Variable.VariablePath.UserPath].ForgetValueState();
         return new PowerShellBoundForEachStatement(
             PowerShellSourceParser.GetSpan(document, statement.Extent),
             target.Symbol,
             elementType,
             collection,
-            scalarString,
+            enumerationKind,
             body,
-            systemArray: systemArray);
+            checkHostInterrupts: PowerShellLoopInterruptContract.IsAvailable(capabilities),
+            nativeBinding: nativeInvocation ? new PowerShellNativeForEachBinding(
+                new PowerShellNativeAssignmentTarget(statement.Variable.Extent.Text, document.Path, document.Text,
+                    variableSpan, statement.Variable.Extent.StartOffset, statement.Variable.Extent.EndOffset),
+                PowerShellSourceParser.GetSpan(document, statement.Condition.Extent),
+                PowerShellSourceParser.GetSourceLines(document, PowerShellSourceParser.GetSpan(document, statement.Condition.Extent)),
+                PowerShellSourceParser.GetSourceLines(document, variableSpan)) : null);
     }
 }

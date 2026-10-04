@@ -1,0 +1,102 @@
+{
+  "sourceRevision": "33067f88cbd8afae2f35ee0436475f7087ad65cf",
+  "compilerCommit": "83ecab5cbb58610524722c278b455c860d4f66ee",
+  "sourceHashes": [
+    {
+      "path": "Public/Add-InfobloxNetwork.ps1",
+      "sha256": "a150902c24c60cd87947d4b17b494efb776c62841a3bd2dbdd2e8d3d6f5b7d2f"
+    },
+    {
+      "path": "Public/Add-InfobloxDHCPRange.ps1",
+      "sha256": "0ab509a63bca1af50bee85a1f3028361f821e48f137ffcc0f9b28ee21c98c3e2"
+    },
+    {
+      "path": "Public/Set-InfobloxDHCPRange.ps1",
+      "sha256": "0b0f124840628ccb032519e75ed61f18bc813dee7510639e04fdf41b1c540d84"
+    },
+    {
+      "path": "Private/ConvertTo-InfobloxComment.ps1",
+      "sha256": "2a169af8d0740cdfb766cff08377bdea3abe3941ba52fdc27d9802c5b7e64ea0"
+    },
+    {
+      "path": "Private/ConvertTo-InfobloxMicrosoftDHCPServer.ps1",
+      "sha256": "8b05fe4ff0ca15ada3492920394fe802c5372c529d7e5c7292f66a172c8d2d17"
+    },
+    {
+      "path": "Private/ConvertTo-InfobloxExtattrs.ps1",
+      "sha256": "c35bdded02030ed20ba06ef597aa62e604f04098c304d2536de74da7c4d03a9e"
+    },
+    {
+      "path": "Private/ConvertTo-InfobloxDHCPRangeDDNSSetting.ps1",
+      "sha256": "0aaf6f22b516935441e541d89c91bbac1a612fca33b10fd7d9a2a193edd166ae"
+    },
+    {
+      "path": "Private/Resolve-InfobloxExtensibleAttributeValue.ps1",
+      "sha256": "5c27d30820f036a20703071b19550bb16b341e495d4eb0dd4615037179f8e500"
+    },
+    {
+      "path": "Private/Resolve-InfobloxExtensibleAttributeValueSingle.ps1",
+      "sha256": "90d75a9d04db8bc6bf7d5bc6303a926ec3d4cbb2f06e91a032e8efafbe688280"
+    },
+    {
+      "path": "PSSharedGoods/Remove-EmptyValue.ps1",
+      "sha256": "aa13fe23888586cc76b0cd32b01bf95ea1445f06e3385e08be134397fc0939b0"
+    }
+  ],
+  "packetSha256": "b078c0aff653babec01daef5bec7d63580882befd050269b36c1594bb9e38ee7",
+  "targets": [
+    {
+      "framework": "net10.0",
+      "host": "PowerShell7",
+      "observations": 78,
+      "requestsObserved": 30,
+      "buildManifestSha256": "3bc0bdc0288bee2360ac9943f4e876ea8708357b70dda195a6ccd365212c2a6b",
+      "originalSha256": "f0ab2835602484616db5887525f2e1c3b79bfe2f8f99f6f351048a1c47d81da1",
+      "generatedSha256": "b60f91652b987625ccd8ec0487748dd56fde533388123e27c8a34a8aaa571bf5",
+      "compiledFunctions": [
+        "Add-InfobloxNetwork",
+        "Add-InfobloxDHCPRange",
+        "Set-InfobloxDHCPRange"
+      ],
+      "hostVersion": "7.6.6"
+    },
+    {
+      "framework": "net472",
+      "host": "WindowsPowerShell5.1",
+      "observations": 78,
+      "requestsObserved": 30,
+      "buildManifestSha256": "ef36d68cec7f3f8288fdd4af8bbc49ba40d8d9687fecf5fffcff0ef10d58fc93",
+      "originalSha256": "3c6e546c78e8797d84a7b8ed23348c27150448817307bade94207de16627e9de",
+      "generatedSha256": "3c6e546c78e8797d84a7b8ed23348c27150448817307bade94207de16627e9de",
+      "compiledFunctions": [
+        "Add-InfobloxNetwork",
+        "Add-InfobloxDHCPRange",
+        "Set-InfobloxDHCPRange"
+      ],
+      "hostVersion": "5.1.26100.9444"
+    }
+  ],
+  "schemaVersion": 1,
+  "purpose": "Unchanged-source offline original/generated qualification of three newly emitted PowerInfoblox request builders; compilation counts remain in the access-capture comparison.",
+  "sourceRepository": "https://github.com/EvotecIT/PowerInfoblox",
+  "licenseEvidence": "Pinned source has no license file and remains external; implementation is not redistributed.",
+  "packetComposition": "Nine unchanged Infoblox functions plus unchanged PSSharedGoods Remove-EmptyValue; leading per-file UTF8 encoding BOMs removed for concatenation. Offline module configuration and its setter plus explicit exports form harness wiring, not coverage credit.",
+  "comparison": "Parsed JSON equality, preserving list and explicit request key order, types, cardinality, requests, success/verbose/warning records and exception ID/type/message; unordered dictionary key rendering is not treated as a semantic difference.",
+  "boundary": "Global in-memory Invoke-InfobloxQuery and Get-InfobloxExtensibleAttributeDefinition providers. Module autoloading disabled; only built-in Utility/Management and the explicit isolated artifact are imported. No full-module import, WAPI/network/admin call, credentials, install or runtime-free claim.",
+  "harnessHashes": [
+    {
+      "path": "Invoke-InfobloxRequestBuilderProbe.ps1",
+      "sha256": "00c1039d30849402642ad26193d236f1f98cd1cd69f149a536924a012beb4b0a"
+    },
+    {
+      "path": "qualify-infoblox-request-builders.py",
+      "sha256": "bd830035eb2f7ec0a7317c980dc5697d08a863a487d7649c344d845605a9fa91"
+    }
+  ],
+  "reproduction": {
+    "passed": true,
+    "observationsPerHost": 78,
+    "requestsPerHost": 30,
+    "summarySha256": "4c8179d23f63e08b53e820782c4e35d78e8044a41981492f0f198b42126fe0d8"
+  }
+}

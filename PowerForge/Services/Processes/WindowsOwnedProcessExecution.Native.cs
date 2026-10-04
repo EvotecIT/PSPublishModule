@@ -39,6 +39,13 @@ internal sealed partial class WindowsOwnedProcessExecution
         internal UIntPtr ProcessMemoryLimit, JobMemoryLimit, PeakProcessMemory, PeakJobMemory;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JobAccounting
+    {
+        internal long TotalUserTime, TotalKernelTime, PeriodUserTime, PeriodKernelTime;
+        internal uint TotalPageFaultCount, TotalProcesses, ActiveProcesses, TotalTerminatedProcesses;
+    }
+
     [DllImport("kernel32.dll", EntryPoint = "CreateJobObjectW", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern SafeFileHandle CreateJobObject(IntPtr attributes, string? name);
     [DllImport("kernel32.dll", SetLastError = true)]
@@ -50,6 +57,10 @@ internal sealed partial class WindowsOwnedProcessExecution
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool TerminateJobObject(SafeFileHandle job, uint exitCode);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool QueryInformationJobObject(SafeFileHandle job, uint informationClass,
+        out JobAccounting accounting, uint length, IntPtr returnLength);
     [DllImport("kernel32.dll", EntryPoint = "CreateProcessW", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool CreateProcess(string? application, StringBuilder commandLine, IntPtr processAttributes,

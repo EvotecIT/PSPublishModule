@@ -28,11 +28,27 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         Assert.Equal(1, result.Manifest.EmittedUnits);
         Assert.Equal(2, result.Manifest.RuntimeRoutedUnits);
         Assert.Equal(1, result.Manifest.FallbackUnits);
-        Assert.Equal(1, result.Manifest.ShapedFallbackUnits);
+        Assert.Equal(0, result.Manifest.ShapedFallbackUnits);
         Assert.Equal(50d, result.Manifest.CompilationCoveragePercentage);
         var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest.UnitDispositionLedger);
-        Assert.Equal(2, ledger.Entries.Count(static entry => entry.RetainedHostedSource));
-        Assert.Single(ledger.Entries, static entry => entry.EmittedClrMethod && entry.RetainedHostedSource);
+        Assert.Single(ledger.Entries, static entry => entry.RetainedHostedSource);
+        var native = Assert.Single(ledger.Entries, static entry => entry.EmittedClrMethod && entry.UsesNativeFunctionBinding);
+        Assert.False(native.RetainedHostedSource);
+        Assert.False(native.EmittedBinaryCmdlet);
+        Assert.True(native.RuntimeRouted);
+        Assert.Equal(0, native.ModuleStateBoundaryCrossings);
+        Assert.Equal(1, native.BoundaryCrossings);
+        var serialized = System.Text.Json.JsonSerializer.Serialize(ledger);
+        var restored = System.Text.Json.JsonSerializer.Deserialize<PowerShellCompilationUnitDispositionLedger>(serialized)!;
+        var restoredNative = Assert.Single(restored.Entries, static entry => entry.UsesNativeFunctionBinding);
+        Assert.True(restoredNative.RuntimeRouted);
+        Assert.False(restoredNative.RetainedHostedSource);
+        Assert.Equal(0, restoredNative.ModuleStateBoundaryCrossings);
+        var explanation = Assert.Single(result.Manifest.DecisionTrace!.Files.SelectMany(static file => file.Units),
+            static unit => unit.Name == "Invoke-Validated");
+        Assert.True(explanation.UsesNativeFunctionBinding);
+        Assert.Contains("NativeFunctionBinding", explanation.ArtifactDisposition);
+        Assert.False(explanation.RetainedHostedSource);
         Assert.Single(ledger.Entries, static entry => !entry.EmittedClrMethod && entry.RetainedHostedSource);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run(

@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "recordedOn": "2026-09-28",
+  "source": {
+    "workload": "locksmith2",
+    "revision": "f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639",
+    "archiveSha256": "d4f511b16ed95d15bfa37ba06ddfc92709f0412e8669004cb70e3407ae9fc8b9",
+    "sourceFingerprint": "b1e65521a013471cfc80589f0edd062a714f4b498a347685a06d7dce97b1b4ef",
+    "license": "Commons Clause License Condition v1.0",
+    "unchangedFunctionSha256": {
+      "Private/Test/Test-IsDangerousAce.ps1": "03b10d5011f4c7a16bd0922cbe115f9a3f1a5ce45b1344aa603949d65e38001a",
+      "Private/Test/Test-IsEnrollmentAce.ps1": "c4fb8a049fb70ad421e64c5653a2c9261132ede6769194aa0dfa6c4467633dde"
+    },
+    "unchangedDataSha256": {
+      "Private/Data/AceDefinitions.ps1": "2f9922a6646a950cba5fa18f314b64476ccb5b6f98c13d490b6b72d33ef6f8e8"
+    }
+  },
+  "fixture": {
+    "twoFunctionTextsVerbatim": true,
+    "moduleSourceSha256": "29b1dfdaad38ba486deaace46af83ebfed8e6baa99b4369dc51ad2f4c82d9fc5",
+    "moduleManifestSha256": "fe332f8ec389e2346bd223341e255662a1e67a40eb126f9fbc2ceed70470e767",
+    "observerSha256": "f63cac5e40de54ecfac6ebff1356a6ee395204b6fc664d63ad56416ed1968686",
+    "boundary": "The exact pinned AceDefinitions file is loaded into the test module. Five real ActiveDirectoryAccessRule values are constructed in memory. No directory, CA, network or administrator operation is invoked."
+  },
+  "generated": {
+    "mode": "Hybrid",
+    "targets": ["net10.0", "net472"],
+    "completeNativeBoundMethodsPerTarget": 2,
+    "newMethods": ["Test-IsDangerousAce", "Test-IsEnrollmentAce"],
+    "net10ManifestSha256": "c41b3084985e52ef7ba0ba78836bea41601a19b833d1784e8c85d9147ed18894",
+    "net472ManifestSha256": "abb43c06bed2925a6b5eb44b0abc49fc33b6a55fed5c69c6da56ce3721118d6a",
+    "strict": {
+      "canProceed": false,
+      "typedUnits": 0,
+      "rejectedUnits": 2,
+      "net10ExplainSha256": "a77e5073edf006716dbfc2793f04e689f23705803269dac6fbd77d6f0dc7bb30",
+      "net472ExplainSha256": "59fd9893663660c16fe09c443409d15511ab4135f6ec4a3878e4f60c2291bb14"
+    }
+  },
+  "execution": {
+    "originalGeneratedRawJsonEqualOnEachHost": true,
+    "allFourChildExitCodesZero": true,
+    "allFourStderrEmpty": true,
+    "powerShell7OriginalAndGeneratedSha256": "d9f89762c80a621111e1409c38b8c33d6d49632b774410812222fc986e88f00e",
+    "windowsPowerShell51OriginalAndGeneratedSha256": "d9f89762c80a621111e1409c38b8c33d6d49632b774410812222fc986e88f00e",
+    "realAceCount": 5,
+    "pipelineDangerousValues": [true, false, true, false, false],
+    "pipelineEnrollmentValues": [true, false, false, true, false],
+    "dangerousAceReferencesPreserved": true,
+    "directArrayBindingValuesForBothMethods": [true, false]
+  },
+  "sameInputAssessment": {
+    "target": "net10.0",
+    "before": "75/100",
+    "after": "77/100",
+    "all100FunctionIdentitiesMatch": true,
+    "onlyDispositionChanges": [
+      "Private/Test/Test-IsDangerousAce.ps1|Test-IsDangerousAce: retained to emitted",
+      "Private/Test/Test-IsEnrollmentAce.ps1|Test-IsEnrollmentAce: retained to emitted"
+    ],
+    "promotedRegionsBeforeAndAfter": 2,
+    "regressions": 0,
+    "beforeEvidenceSha256": "798ea28f4c3cee1587493f3f0608468f082919887df7283cdf07a160a5db737e",
+    "afterEvidenceSha256": "334b589be6da2b9deeb10d9d25485f14ed40d3c888ce28729aa3a6d0c1b2d72e"
+  },
+  "validation": {
+    "focusedBorrowedAceTestsPassed": "2/2",
+    "focusedBorrowedAceTrxSha256": "376c0968b666130e6c02e998708d441fc758aa0692bb47187be09ef2500da45b",
+    "existingBorrowedSiblingTestsPassed": "2/2",
+    "existingBorrowedSiblingTrxSha256": "6b607dd5ed96dfee6f807c8007c628cdfb0bfcfec443da35cdc24a94a465cb61",
+    "net10CliBuild": "passed with zero warnings and errors",
+    "net472PowerShellBuild": "passed with zero warnings and errors",
+    "independentReadOnlyReview": "no actionable findings"
+  },
+  "limits": [
+    "The two newly admitted helper methods have direct offline proof on PowerShell 7/net10 and Windows PowerShell 5.1/net472. They are separate from the earlier 37 newly emitted authored-class methods; this record does not change the 33/37 both-host proof count for that earlier wave.",
+    "The seven-workload 128/183 total is an older assessment and is not updated from this single-workload run.",
+    "Hybrid still routes hosted commands and other PowerShell operations. Strict remains closed, and no runtime-free translation is claimed.",
+    "No full Locksmith2 import, AD-backed constructor, directory or CA operation, ACL setter positive PowerShell 7 Access behavior, external deployment or additional host was qualified.",
+    "Pinned Commons Clause source and the task-local executable observer are not checked into this repository."
+  ]
+}

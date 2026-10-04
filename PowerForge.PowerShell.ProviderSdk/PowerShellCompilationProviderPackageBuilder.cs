@@ -306,7 +306,7 @@ public sealed class PowerShellCompilationProviderPackageBuilder
         var repository = hasRepositoryUrl
             ? $"<repository type=\"git\" url=\"{Xml(repositoryUrl!.Trim())}\" commit=\"{Xml(repositoryCommit!.Trim())}\" />"
             : string.Empty;
-        return $"<?xml version=\"1.0\" encoding=\"utf-8\"?><package><metadata><id>{Xml(manifest.PackageId)}</id><version>{Xml(manifest.PackageVersion)}</version><authors>{Xml(manifest.Publisher)}</authors><description>PowerForge PowerShell compilation provider metadata.</description><license type=\"expression\">{Xml(manifest.LicenseExpression)}</license><licenseUrl>{Xml(licenseUrl)}</licenseUrl>{repository}<dependencies><group targetFramework=\"net8.0\">{dependencies}</group></dependencies></metadata></package>";
+        return $"<?xml version=\"1.0\" encoding=\"utf-8\"?><package><metadata><id>{Xml(manifest.PackageId)}</id><version>{Xml(manifest.PackageVersion)}</version><authors>{Xml(manifest.Publisher)}</authors><description>PowerForge PowerShell compilation provider metadata.</description><license type=\"expression\">{Xml(manifest.LicenseExpression)}</license><licenseUrl>{Xml(licenseUrl)}</licenseUrl>{repository}<dependencies><group targetFramework=\"net10.0\">{dependencies}</group></dependencies></metadata></package>";
     }
 
     private static string Xml(string value) => System.Security.SecurityElement.Escape(value) ?? string.Empty;

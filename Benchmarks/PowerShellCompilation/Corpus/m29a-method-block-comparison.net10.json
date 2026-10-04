@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Direct literal method-argument native script blocks; same-input per-function no-loss comparison.",
+  "baselineCompilerCommit": "e6d209809f049b71a31d881d8e713190b4cce0e4",
+  "baselineComparison": "m29a-try-array-comparison.net10.json",
+  "baselineComparisonSha256": "f84593c7fc3405d4b6a87f7fda449f26f90d07f7034e2bf38bb544c3c71fb024",
+  "baselineRetainedInventory": "m29a-retained-functions.net10.json at baselineCompilerCommit",
+  "baselineRetainedInventorySha256": "88f07403eb4e2caf442aa6edd5dd05fbf382e949ce486a26a41b7fd149c13b8d",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 429,
+  "candidateEmitted": 440,
+  "lostEmittedMethods": 0,
+  "lostRetainedRegions": 0,
+  "compilerSourceHashes": [
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.ScriptBlocks.cs",
+      "sha256": "15354386f96cfb53b71719d2ba196ff1cd4b9223b9770901a2b3a19390b49b10"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
+      "sha256": "eac98e80f0374bea28b9dace1a727e332e8857006566a4f76e09b68014972f86"
+    }
+  ],
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "candidateEmitted": 237,
+      "candidateExplanationSha256": "9960df1795af959796d01312eb99a0672a170c94ffab54834dbe3e88ee44b970",
+      "changes": [
+        {
+          "unitId": "c34a025adf5d80af10ea49b4",
+          "name": "Get-ComputerSMB",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "candidateEmitted": 52,
+      "candidateExplanationSha256": "bc725ceeb886d787c8c6d1f5a136c17e32c75b001665e233538f28ebf9da5e07",
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "candidateEmitted": 55,
+      "candidateExplanationSha256": "e637f8c6bb2b52aaebab9f6cf4be7cac71c4bc71c92ac07b5c7725fdad87fe0d",
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "candidateEmitted": 74,
+      "candidateExplanationSha256": "040bb7fa6b86009b6e042c49708e3aa48b98435f1fe094ddc7289bd4d3a5374c",
+      "changes": [
+        {
+          "unitId": "4361af2379ba5bb91fb16d80",
+          "name": "ConvertTo-Markdown",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "e9d3ba4bffe92d67b728a6f3",
+          "name": "Get-CommandParameter",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "d8007e2f7aacb76b8aa1ce02",
+          "name": "Get-LastModifiedFile",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "7151e897e2f3e4ae77846e47",
+          "name": "Get-MyTimeInfo",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "f5733666b102fc3aaab50348",
+          "name": "Get-PSScriptTools",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "8dff2bf0ab81a2c8a2cef38c",
+          "name": "Get-PSUnique",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "503f22139fdbd3130f8b8b24",
+          "name": "New-PSDynamicParameter",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "7af2e236927fd158d4a26ae1",
+          "name": "New-PSFormatXML",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "c75273c1a15e96b97ab5645b",
+          "name": "Remove-PSAnsiFileEntry",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "802592d61be943a32f34f4a9",
+          "name": "Set-PSAnsiFileMap",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "candidateEmitted": 22,
+      "candidateExplanationSha256": "1f9db57e7ca2680c99fb3c944c4a13bb3ad826381169da53f7c7f279e84df078",
+      "changes": []
+    }
+  ]
+}

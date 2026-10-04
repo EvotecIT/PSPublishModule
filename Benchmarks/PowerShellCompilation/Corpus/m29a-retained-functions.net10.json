@@ -1,0 +1,711 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Final-source observed retained-function support inventory, Hybrid net10.0. Causes are diagnostic observations; execution qualification is recorded separately in Assessment.",
+  "sourceProvenance": "Same pinned five module packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
+  "stableUnits": 584,
+  "functions": 565,
+  "dispositionContract": "Every function identity matches the full baseline; no previously emitted method or still-retained region is lost.",
+  "compilerBaselineCommit": "28166e7fefee1943ac96f82119296ba03cc0d510",
+  "packets": [
+    {
+      "packet": "pssg",
+      "functions": 282,
+      "stableUnits": 286,
+      "emitted": 273,
+      "retained": 9,
+      "sourceExplanationSha256": "d27ce04bbcab8537253ab36d433fb103f49b0fd63a2678289a9de2eca582bcfd",
+      "gains": [],
+      "functionsRetained": [
+        {
+          "unitId": "bde03b869be356b032686101",
+          "name": "Get-ComputerSMBInfo",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [
+            "__PowerForgeRegion_19b64603b0c9128a0a41fe56"
+          ],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'Win32Share.NativeMethods' is not available in the generated project reference set for the requested target.",
+              "line": 46,
+              "column": 12
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.typeexpression",
+              "message": "CLR type literal 'Win32Share.NativeHelpers+SHARE_INFO_1' is not statically available in the generated project reference set for the requested target.",
+              "line": 75,
+              "column": 101
+            }
+          ],
+          "relativePath": "Private/Get-ComputerSMBInfo.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-smb-native-boundary.json",
+            "scope": "Local Windows enumeration with exact authored native declaration and SkipDiskSpace; remote/partial-buffer paths unqualified.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        },
+        {
+          "unitId": "c72f7b9fb7f89ad280e3bf0a",
+          "name": "Get-LocalComputerSid",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.DirectoryServices.AccountManagement.PrincipalContext' is not available in the generated project reference set for the requested target.",
+              "line": 19,
+              "column": 29
+            }
+          ],
+          "relativePath": "Private/Get-LocalComputerSid.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-local-sid-boundary.json",
+            "reason": "Windows AccountManagement local-SAM provider and active-host assembly boundary; real read and failure behavior match on both hosts. No compiled execution credit.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        },
+        {
+          "unitId": "a6e8a57a6342a4000f55ea16",
+          "name": "Convert-ADGuidToSchema",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [
+            "__PowerForgeRegion_fd2ab06468a87787468e03ca"
+          ],
+          "causes": [
+            {
+              "code": "UnsupportedParameterType",
+              "featureId": "parameter.type",
+              "message": "Parameter '$RootDSE' uses authored type 'Microsoft.ActiveDirectory.Management.ADEntity', which cannot be resolved in the selected compilation environment.",
+              "line": 39,
+              "column": 9
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "Typed indexed mutation requires a one-dimensional array, IList, or dictionary target.",
+              "line": 70,
+              "column": 13
+            }
+          ],
+          "relativePath": "Public/ActiveDirectory/Convert-ADGuidToSchema.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-ad-data-boundary.json",
+            "reason": "Installed RSAT/native host dependency outside declared portable closure; real AD data and offline schema providers preserve both-host behavior. No complete-method or region execution credit.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        },
+        {
+          "unitId": "0f2489a391dbc4681d9d696e",
+          "name": "Convert-ADSchemaToGuid",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [
+            "__PowerForgeRegion_5a22d65687cd8b7323b9b397"
+          ],
+          "causes": [
+            {
+              "code": "UnsupportedParameterType",
+              "featureId": "parameter.type",
+              "message": "Parameter '$RootDSE' uses authored type 'Microsoft.ActiveDirectory.Management.ADEntity', which cannot be resolved in the selected compilation environment.",
+              "line": 40,
+              "column": 9
+            }
+          ],
+          "relativePath": "Public/ActiveDirectory/Convert-ADSchemaToGuid.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-ad-data-boundary.json",
+            "reason": "Installed RSAT/native host dependency outside declared portable closure; real AD data and offline schema providers preserve both-host behavior. No complete-method or region execution credit.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        },
+        {
+          "unitId": "17f55553dcb9ef7cc5e3af7f",
+          "name": "Get-WinADForestDetails",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [
+            "__PowerForgeRegion_d713aad620217f4018cc0c47"
+          ],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "Typed catch 'Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException' is outside the generated project reference set.",
+              "line": 186,
+              "column": 25
+            }
+          ],
+          "relativePath": "Public/ActiveDirectory/Get-WinADForestDetails.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-forest-details-boundary.json",
+            "reason": "Installed RSAT typed exception and provider boundary; original/generated offline forest workflows match on both hosts. No complete-method or individually observed region execution credit.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        },
+        {
+          "unitId": "9d40f1b46649a4f52dafa735",
+          "name": "Set-PasswordRemotely",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.DirectoryServices.ActiveDirectory.DirectoryContext' is not available in the generated project reference set for the requested target.",
+              "line": 53,
+              "column": 28
+            }
+          ],
+          "relativePath": "Public/Connectivity/Set-PasswordRemotely.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-password-native-boundary.json",
+            "scope": "Owned native-call substitution and actual authored initialization/refusal; live password operation, discovery and erasure remain unqualified.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        },
+        {
+          "unitId": "975739889f75e147e751ffd4",
+          "name": "ConvertTo-ImmutableID",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [
+            "__PowerForgeRegion_b58361d4735dc46207e930a3"
+          ],
+          "causes": [
+            {
+              "code": "UnsupportedParameterType",
+              "featureId": "parameter.type",
+              "message": "Parameter '$User' uses authored type 'Microsoft.ActiveDirectory.Management.ADAccount', which cannot be resolved in the selected compilation environment.",
+              "line": 28,
+              "column": 9
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.memberexpression",
+              "message": "CLR member 'System.Object.ObjectGUID' was not found as one target-compatible readable field or property.",
+              "line": 35,
+              "column": 13
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.memberexpression",
+              "message": "CLR member 'System.Object.ObjectGUID' was not found as one target-compatible readable field or property.",
+              "line": 40,
+              "column": 58
+            }
+          ],
+          "relativePath": "Public/Converts/ConvertTo-ImmutableID.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-ad-data-boundary.json",
+            "reason": "Installed RSAT/native host dependency outside declared portable closure; real AD data and offline schema providers preserve both-host behavior. No complete-method or region execution credit.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        },
+        {
+          "unitId": "23f772789cacbab249c153b5",
+          "name": "Format-Stream",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "break must be inside a supported loop or scalar switch.",
+              "line": 125,
+              "column": 41
+            }
+          ],
+          "relativePath": "Public/Objects/Format-Stream.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-paging-transfer-boundaries.json",
+            "scope": "Previously accepted authored nonlocal transfer or function exit boundary; no new execution or compilation credit.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        },
+        {
+          "unitId": "c4dc1ae9c4c4b22e84d4c0a1",
+          "name": "Test-ModuleAvailability",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.exitstatement",
+              "message": "Statement 'ExitStatementAst' is not yet represented by the bound pipeline.",
+              "line": 22,
+              "column": 9
+            }
+          ],
+          "relativePath": "Public/TestFunctionality/Test-ModuleAvailability.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-exit-boundaries.json",
+            "scope": "Previously accepted authored nonlocal transfer or function exit boundary; no new execution or compilation credit.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "functions": 68,
+      "stableUnits": 69,
+      "emitted": 66,
+      "retained": 2,
+      "sourceExplanationSha256": "d27ce04bbcab8537253ab36d433fb103f49b0fd63a2678289a9de2eca582bcfd",
+      "gains": [],
+      "functionsRetained": [
+        {
+          "unitId": "2be0f84457750dd64ee0c5d1",
+          "name": "Get-ADServiceAccountsToProcess",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [
+            "__PowerForgeRegion_03e1c48f1041bacb51a94c1f"
+          ],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "A loop transfer leaving native captured output requires an explicit enclosing-control-flow transfer contract.",
+              "line": 19,
+              "column": 5
+            }
+          ],
+          "relativePath": "Private/Get-ADServiceAccountsToProcess.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-external-transfer-boundaries.json",
+            "scope": "Previously accepted authored nonlocal transfer or function exit boundary; no new execution or compilation credit.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        },
+        {
+          "unitId": "78cf08da8e4e3bfb47233a33",
+          "name": "Invoke-ADComputerInventoryChildProcess",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.exitstatement",
+              "message": "Statement 'ExitStatementAst' is not yet represented by the bound pipeline.",
+              "line": 74,
+              "column": 9
+            }
+          ],
+          "relativePath": "Private/Invoke-ADComputerInventoryChildProcess.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-exit-boundaries.json",
+            "scope": "Previously accepted authored nonlocal transfer or function exit boundary; no new execution or compilation credit.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        }
+      ]
+    },
+    {
+      "packet": "pinf",
+      "functions": 66,
+      "stableUnits": 67,
+      "emitted": 65,
+      "retained": 1,
+      "sourceExplanationSha256": "d27ce04bbcab8537253ab36d433fb103f49b0fd63a2678289a9de2eca582bcfd",
+      "gains": [],
+      "functionsRetained": [
+        {
+          "unitId": "fc33881d5a7752031137ea07",
+          "name": "Hide-SelfSignedCerts",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.memberexpression",
+              "message": "CLR member 'System.Net.ServicePointManager.CertificatePolicy' was not found as one target-compatible readable and writable member.",
+              "line": 24,
+              "column": 9
+            }
+          ],
+          "relativePath": "Private/Hide-SelfSignedCerts.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-certificate-policy-boundary.json",
+            "reason": "Runtime-created legacy certificate policy and host-version-specific module state; both-host preservation proven with no requests.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        }
+      ]
+    },
+    {
+      "packet": "pst",
+      "functions": 109,
+      "stableUnits": 121,
+      "emitted": 101,
+      "retained": 8,
+      "sourceExplanationSha256": "d27ce04bbcab8537253ab36d433fb103f49b0fd63a2678289a9de2eca582bcfd",
+      "gains": [
+        {
+          "unitId": "10ca22e8b6215064da37d706",
+          "name": "Find-CimClass"
+        }
+      ],
+      "functionsRetained": [
+        {
+          "unitId": "e2de8ba6ca35935ce36593b7",
+          "name": "ConvertTo-WPFGrid",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "break must be inside a supported loop or scalar switch.",
+              "line": 70,
+              "column": 17
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.SystemParameters' is not available in the generated project reference set for the requested target.",
+              "line": 127,
+              "column": 22
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.SizeToContent' is not available in the generated project reference set for the requested target.",
+              "line": 134,
+              "column": 39
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.SystemParameters' is not available in the generated project reference set for the requested target.",
+              "line": 154,
+              "column": 30
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.Input.Mouse' is not available in the generated project reference set for the requested target.",
+              "line": 184,
+              "column": 25
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.Input.Mouse' is not available in the generated project reference set for the requested target.",
+              "line": 216,
+              "column": 25
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.Controls.ScrollBarVisibility' is not available in the generated project reference set for the requested target.",
+              "line": 245,
+              "column": 57
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.Controls.ScrollBarVisibility' is not available in the generated project reference set for the requested target.",
+              "line": 246,
+              "column": 59
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.Input.Mouse' is not available in the generated project reference set for the requested target.",
+              "line": 324,
+              "column": 37
+            }
+          ],
+          "relativePath": "functions/ConvertTo-WPFGrid.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-wpf-grid-visual.json",
+            "scope": "PowerShell 7.6.6 Windows STA SoftwareOnly in-memory grid and Close callback have original/generated visual, data and runspace-cleanup proof. PowerShell 5.1 lacks Start-ThreadJob here; refresh, profile, alternate rendering and other paths remain unqualified. No complete grid-method credit.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        },
+        {
+          "unitId": "b669a68616829b343dc91676",
+          "name": "New-PSDynamicParameterForm",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'Windows.Markup.XamlReader' is not available in the generated project reference set for the requested target.",
+              "line": 272,
+              "column": 15
+            }
+          ],
+          "relativePath": "functions/New-DynamicParamCode.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-wpf-dynamic-form-visual.json",
+            "scope": "Simple Create/Close on both Windows hosts has original/generated visual and code-output proof with an in-memory module-local Set-Clipboard provider and global escape tripwire. Real clipboard and other form options remain unqualified. No complete form-method credit.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        },
+        {
+          "unitId": "8c5dbe10dcc7e3a2f13e92ce",
+          "name": "New-PSDriveHere",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "break must be inside a supported loop or scalar switch.",
+              "line": 55,
+              "column": 13
+            }
+          ],
+          "relativePath": "functions/New-PSDriveHere.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-external-transfer-boundaries.json",
+            "scope": "Previously accepted authored nonlocal transfer or function exit boundary; no new execution or compilation credit.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        },
+        {
+          "unitId": "0f49b0d93bead94178065edb",
+          "name": "New-WPFMessageBox",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.WindowStartupLocation' is not available in the generated project reference set for the requested target.",
+              "line": 48,
+              "column": 39
+            }
+          ],
+          "relativePath": "functions/New-WPFMessageBox.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-wpf-dialogs-visual.json",
+            "scope": "Default OK message path has both-host original/generated visual and callback proof; alternate/custom buttons, icons and backgrounds remain unqualified. No compiled method credit.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        },
+        {
+          "unitId": "bbc6f74ca8facf49fb1bb749",
+          "name": "Test-ExpressionForm",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'Windows.Markup.XamlReader' is not available in the generated project reference set for the requested target.",
+              "line": 209,
+              "column": 17
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "The script block requires a completely compiled native body and supported invocation metadata.",
+              "line": 261,
+              "column": 50
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.Input.Cursors' is not available in the generated project reference set for the requested target.",
+              "line": 288,
+              "column": 40
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.Input.Cursors' is not available in the generated project reference set for the requested target.",
+              "line": 300,
+              "column": 40
+            }
+          ],
+          "relativePath": "functions/Test-Expression.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-wpf-expression-form-visual.json",
+            "scope": "Static-interval Run/Quit on both Windows hosts has original/generated visual and result proof with an in-memory Test-Expression provider. Submitted code is never invoked; real evaluator, random and error paths remain unqualified. No complete form-method credit.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        },
+        {
+          "unitId": "6bf3b6db5fadf06390328270",
+          "name": "Trace-Message",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "The script block requires a completely compiled native body and supported invocation metadata.",
+              "line": 77,
+              "column": 60
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.TextWrapping' is not available in the generated project reference set for the requested target.",
+              "line": 104,
+              "column": 46
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.Forms.MessageBox' is not available in the generated project reference set for the requested target.",
+              "line": 143,
+              "column": 37
+            }
+          ],
+          "relativePath": "functions/Trace.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-trace-window-visual.json",
+            "scope": "Both Windows hosts match real owned WPF Init, one message and Quit with fixed offline clock/CIM providers and caller-owned runspace cleanup. The authored post-Quit PropertyNotFound is preserved; Save, real CIM and other paths remain unqualified. No complete Trace method credit.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        },
+        {
+          "unitId": "8b0f1352c5b4b677ba198384",
+          "name": "Out-More",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "break must be inside a supported loop or scalar switch.",
+              "line": 78,
+              "column": 13
+            }
+          ],
+          "relativePath": "functions/Utilities.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-paging-transfer-boundaries.json",
+            "scope": "Previously accepted authored nonlocal transfer or function exit boundary; no new execution or compilation credit.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        },
+        {
+          "unitId": "0f2509f48b1515bbeadae60b",
+          "name": "Invoke-InputBox",
+          "retainedHostedSource": true,
+          "semanticEligible": false,
+          "usesNativeFunctionBinding": false,
+          "generatedRegionMemberNames": [],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.WindowStartupLocation' is not available in the generated project reference set for the requested target.",
+              "line": 280,
+              "column": 39
+            }
+          ],
+          "relativePath": "functions/Utilities.ps1",
+          "qualificationBoundary": {
+            "disposition": "JustifiedHosted",
+            "evidence": "m29a-wpf-dialogs-visual.json",
+            "scope": "Plain input OK path has both-host original/generated visual and callback proof; cancellation and secure input remain unqualified. No compiled method credit.",
+            "followUpPriority": "ConsumerDriven: preserve the qualified hosted behavior; widen native admission only for a named consumer workflow and its dependency or control-transfer contract."
+          }
+        }
+      ]
+    },
+    {
+      "packet": "platyps",
+      "functions": 40,
+      "stableUnits": 41,
+      "emitted": 40,
+      "retained": 0,
+      "sourceExplanationSha256": "d27ce04bbcab8537253ab36d433fb103f49b0fd63a2678289a9de2eca582bcfd",
+      "gains": [],
+      "functionsRetained": []
+    }
+  ],
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "15bc17ef39e24128650eabb311f6ba38f1ded600f27074765dcddd663dd8675f",
+    "PowerForge.PowerShell/PowerForge.PowerShell.csproj": "d5a166f3326af71a7afa027cd917f1fdba51881fa9ce1120f047a33ca4662740",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationArtifactBuilder.Infrastructure.cs": "451178aa788af86d37e2a5afea447b49774b128e029297e2a206da209f851d5a",
+    "PowerForge.Tests/PowerShellCompilationManagementHostDataTests.cs": "bdb16d865145ff70ca7b8517c77e82c08b9a4fdba22344c925708285766991c1"
+  },
+  "dispositionComparison": "m29a-qualified-portfolio.net10-net472.json",
+  "baselineRetainedInventoryCommit": "28166e7fefee1943ac96f82119296ba03cc0d510",
+  "emitted": 545,
+  "retained": 20,
+  "hostedBoundaryEvidence": [
+    "m29a-paging-transfer-boundaries.json",
+    "m29a-external-transfer-boundaries.json",
+    "m29a-exit-boundaries.json",
+    "m29a-certificate-policy-boundary.json",
+    "m29a-disk-native-boundary.json",
+    "m29a-ad-data-boundary.json",
+    "m29a-local-sid-boundary.json",
+    "m29a-forest-details-boundary.json",
+    "m29a-smb-native-boundary.json",
+    "m29a-password-native-boundary.json",
+    "m29a-wpf-dialogs-visual.json",
+    "m29a-wpf-grid-visual.json",
+    "m29a-wpf-dynamic-form-visual.json",
+    "m29a-wpf-expression-form-visual.json",
+    "m29a-trace-window-visual.json"
+  ],
+  "updatedOn": "2026-10-03",
+  "currentCompilerBaseCommit": "7cc6b9fd55625f0671787f4b311f932d1de0b72a",
+  "currentPortfolioLedger": "m29a-qualified-portfolio.net10-net472.json"
+}

@@ -1,0 +1,1642 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Qualified hosted data-class construction through native lexical type resolution. Body emission is separate from class and command hosting.",
+  "baselineCompilerCommit": "068a505c7a108de1798d0e7ebfa363fe6dd03bca",
+  "baselineComparison": "m29a-hosted-enum-comparison.net10.json",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "baselineEmitted": 498,
+  "candidateEmitted": 499,
+  "candidateRetained": 66,
+  "packets": [
+    {
+      "packet": "pssg",
+      "functions": 282,
+      "baselineEmitted": 259,
+      "candidateEmitted": 259,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateExplanationSha256": "ec83e7c4dcc792ce267fd6efa08f1b054bc79518e951e6b3d7c8bbf7d6b39299",
+      "changes": []
+    },
+    {
+      "packet": "cleanup",
+      "functions": 68,
+      "baselineEmitted": 63,
+      "candidateEmitted": 63,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateExplanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1",
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "functions": 66,
+      "baselineEmitted": 61,
+      "candidateEmitted": 61,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateExplanationSha256": "73172aaac03d1c74782e361a0716d2c2d0c14b80abae98e870ef80c8253a8ee2",
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "functions": 109,
+      "baselineEmitted": 88,
+      "candidateEmitted": 89,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateExplanationSha256": "7f24946fcdbb2e8d0158e02ed4f8458b2935089d307dda66a7ea4a70fc2bb2e6",
+      "changes": [
+        {
+          "unitId": "88b51d45ea293800c40f480a",
+          "name": "Get-DirectoryInfo",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "platyps",
+      "functions": 40,
+      "baselineEmitted": 27,
+      "candidateEmitted": 27,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateExplanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea",
+      "changes": []
+    }
+  ],
+  "sourceAndTestHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedValueClassPolicy.cs": "e161dce7abde611d1ec26825f59d2a8218ebbabe239a3e199fdb8e509956cc73",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "c19955c21d54278d4d6201a8c48cc4afa588879d919bbb33cc1e875d272b8dcf",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "7e9e1c94253017527b71499ee1c9411cb7a4f2f22d986325ef9fdd7b8d2d431d",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "0f1fb1ff0990278b487444865098c4d6e4b4e2bd97280bfc5732e73a047c356e",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSourceSemanticValidator.cs": "3ce3549b7055933fae786599104270055a5f209154fdd37af40c03e49cab8ecd",
+    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeTypeExpression.cs": "33eed468f79993efecac2de58ea1241e077a6eccfc65924b46ef3954abf2c8de",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeTypeExpression.cs": "a0b77e29eb83c01bd67f4ae3cc8f0a3670cedb13d93822a49b2103ea61872227",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs": "9b635cf2c2c8cc64dc2adf2770eace52f06ccc07ccf193d055e2111a32f9b88f",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.cs": "f9655ac2bcf2b0972aa01e2c01ebe045f5cf20127850d05025710aa77f894095",
+    "PowerForge.Tests/PowerShellHostedValueClassTests.cs": "26e2d7f12fed15a11f0266dc8a4a83c7e2533567ed616d6359cfe790487f193e",
+    "PowerForge.Tests/PowerShellCompilationHostedValueClassTests.cs": "2a1480d25e9f2c043f63b6f79a6f40f257506cb3300f7f4b091c0937aeb00228"
+  },
+  "baselineComparisonSha256": "69416762eb91c9e5ed855d108d30b42d0385d600102b7c897e915dbd3b25452a",
+  "newlyExecutedFunctions": [
+    "Get-DirectoryInfo"
+  ],
+  "validation": {
+    "focusedRuns": [
+      {
+        "file": "value-class-closure.trx",
+        "sha256": "1424b9e57a67b954cc852d3841c3dd2d6614fb9feeb869d20531d49928d66f1b",
+        "counters": {
+          "total": "12",
+          "executed": "12",
+          "passed": "12",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "tests": [
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { [string]$Name=(Get-Date) }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0163519"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassConstructionUsesNativeLexicalTypeAndKeepsStrictClosed(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.1573679"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { static [string]$Name }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0939943"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0000432"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]$value=$null\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0023102"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]::new('argument')\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0003025"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]::Missing()\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0006215"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { [object]$Name }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0002417"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { [string]Method() { return 'valu\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0018282"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { OwnedValue() {} }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0090417"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue : Exception { [string]$Name }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0167437"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassConstructionUsesNativeLexicalTypeAndKeepsStrictClosed(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0023084"
+          }
+        ]
+      },
+      {
+        "file": "value-class-artifact.trx",
+        "sha256": "9219a14f4bc3364bde6c8b3fa4cc990d76b436679c584e721dbd830ace90015e",
+        "counters": {
+          "total": "14",
+          "executed": "14",
+          "passed": "14",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "tests": [
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { [object]$Name }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001499"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedDataClasses_PreserveConstructionMutationAndModuleIdentity(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:06.4500896"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]::new('argument')\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0002774"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { [string]Method() { return 'valu\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0009609"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue : Exception { [string]$Name }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0037478"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { OwnedValue() {} }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0077400"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0000402"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]$value=$null\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0011215"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassConstructionUsesNativeLexicalTypeAndKeepsStrictClosed(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0022426"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]::Missing()\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0007017"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedDataClasses_PreserveConstructionMutationAndModuleIdentity(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.9175025"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { static [string]$Name }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0877309"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassConstructionUsesNativeLexicalTypeAndKeepsStrictClosed(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.1652108"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { [string]$Name=(Get-Date) }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0761561"
+          }
+        ]
+      },
+      {
+        "file": "value-class-compatibility.trx",
+        "sha256": "31d20a5d906a5d6d4c7f4cefb2a97f81fbe469446d97b78f43bac628ec4df59e",
+        "counters": {
+          "total": "58",
+          "executed": "58",
+          "passed": "58",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "tests": [
+          {
+            "testName": "PowerForge.Tests.PowerShellSourceTypeClosureTests.ClassPropertiesAndOverloadedMethodsKeepSeparateConsumerIdentities",
+            "outcome": "Passed",
+            "duration": "00:00:00.0068039"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellSourceTypeClosureTests.AuthoredMetadataAndNestedTypeArgumentsRetainTheirSourceDependencies",
+            "outcome": "Passed",
+            "duration": "00:00:00.0018108"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0021890"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeRegistration_PreservesReadOnlyDeclarationFailures(framework: \"net472\", host: \"powershell.exe\", wholeFunction: False)",
+            "outcome": "Passed",
+            "duration": "00:00:02.9099677"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeDeclarations_PreserveAuthoredMetadataWithIndependentCompiledStorage(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:01.4046622"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"if($true) { enum NativeChoice { Zero } }; function\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0015793"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassConstructionUsesNativeLexicalTypeAndKeepsStrictClosed(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0024183"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedArgumentAttributes_PreserveModuleScopeEffectsAndRepeatedImports(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.1849371"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsUnownedOrNonAttributeConsumers(consumer: \"function Read-Value { param([AuthoredTransform(1)]\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0004376"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureKeepsNativeParameterMetadataAndStrictClosed(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0013669"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellSourceTypeClosureTests.DeclarationFactsDoNotAuthorizeDetachingMetadataOrRemovingSourceGuard",
+            "outcome": "Passed",
+            "duration": "00:00:00.0007686"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsUnownedOrNonAttributeConsumers(consumer: \"function Read-Value { param([AuthoredTransform()][\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0092593"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeRegistration_PreservesProtectedAuthoredBodyDeclarations(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.0463949"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeDeclarations_PreserveAuthoredMetadataWithIndependentCompiledStorage(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:01.4837599"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellSourceTypeClosureTests.AttributeNameAmbiguityKeepsEveryDeclarationCandidate",
+            "outcome": "Passed",
+            "duration": "00:00:00.0019779"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeLifecycle_PreservesDefaultsValidationParameterSetsAndCallbacks(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.6218798"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue : Exception { [string]$Name }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0114759"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeRegistration_PreservesProtectedAuthoredBodyDeclarations(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.9889172"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeRegistration_PreservesDeclarationPreferencesAliasesAndStatus(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.5505519"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { OwnedValue() {} }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0056207"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]$value=$null\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0000832"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.5233473"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsStateConstructorsAndUnclosedMemberTypes(member: \"\", body: \"[AuthoredTransform]::new();\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0002046"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsStateConstructorsAndUnclosedMemberTypes(member: \"[object]$State\", body: \"\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0004602"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.0330596"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumDeclarationDoesNotResolveUnrelatedUnknownParameterTypes",
+            "outcome": "Passed",
+            "duration": "00:00:00.0739210"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0838144"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureQualifiesStatelessValidationSignature",
+            "outcome": "Passed",
+            "duration": "00:00:00.0018658"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { static [string]$Name }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0601134"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]::Missing()\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0007718"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassConstructionUsesNativeLexicalTypeAndKeepsStrictClosed(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.1296680"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsStateConstructorsAndUnclosedMemberTypes(member: \"AuthoredTransform() { throw 'Constructor must not \"···, body: \"\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001647"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedDataClasses_PreserveConstructionMutationAndModuleIdentity(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.6081732"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0004356"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedArgumentAttributes_PreserveModuleScopeEffectsAndRepeatedImports(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.5995712"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeRegistration_PreservesReadOnlyDeclarationFailures(framework: \"net10.0\", host: \"pwsh\", wholeFunction: True)",
+            "outcome": "Passed",
+            "duration": "00:00:03.2798404"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsUnownedOrNonAttributeConsumers(consumer: \"function Read-Value { param() process { function R\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0006659"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedDataClasses_PreserveConstructionMutationAndModuleIdentity(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.0156166"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeLifecycle_PreservesDefaultsValidationParameterSetsAndCallbacks(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.0120486"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsAmbiguousSuffixLookupAndConditionalDeclarations",
+            "outcome": "Passed",
+            "duration": "00:00:00.0004228"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellSourceTypeClosureTests.FunctionHeaderParametersKeepAttributeAndNestedTypeDependencies",
+            "outcome": "Passed",
+            "duration": "00:00:00.0828064"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0002081"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { [string]$Name=(Get-Date) }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0162666"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0000626"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { [object]$Name }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001169"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0004533"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsUnownedOrNonAttributeConsumers(consumer: \"function Read-Value { param([AuthoredTransform]$Va\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001410"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]::new('argument')\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0002637"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeRegistration_PreservesReadOnlyDeclarationFailures(framework: \"net10.0\", host: \"pwsh\", wholeFunction: False)",
+            "outcome": "Passed",
+            "duration": "00:00:03.3138041"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsStateConstructorsAndUnclosedMemberTypes(member: \"\", body: \"[Missing.Authored.Type]$Unknown = $null;\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0036428"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0005722"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice : long { Zero }; function Read-C\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001662"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsUnownedOrNonAttributeConsumers(consumer: \"function Read-Value { param([AuthoredTransform()][\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0864275"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { [string]Method() { return 'valu\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0009375"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeRegistration_PreservesReadOnlyDeclarationFailures(framework: \"net472\", host: \"powershell.exe\", wholeFunction: True)",
+            "outcome": "Passed",
+            "duration": "00:00:03.1520438"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeRegistration_PreservesDeclarationPreferencesAliasesAndStatus(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.0548685"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureKeepsNativeParameterMetadataAndStrictClosed(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0015084"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0041069"
+          }
+        ]
+      }
+    ],
+    "net472OwnerBuild": {
+      "passed": true,
+      "seconds": 4.02,
+      "warnings": 0,
+      "errors": 0
+    },
+    "aggregateGateRun": false,
+    "independentReadOnlyReview": {
+      "findings": [],
+      "scope": "The11 intended production/test files and their declaration/consumer/source closure, native resolver/constructor, nested body, lowering and backend owners.",
+      "baselineCompilerCommit": "068a505c7a108de1798d0e7ebfa363fe6dd03bca",
+      "candidateContentFingerprint": "af39ee3c695ee073c4b02aed53e71cc4d4fa51066b0e1937982081c3ddd09547",
+      "limits": "Read-only static review; supplied runtime/TRX evidence inspected. Census not independently executed and unrelated runtime contracts not comprehensively reaudited."
+    }
+  },
+  "workflowProof": {
+    "sourceRevision": "549fa3e3d769532320054fc0b3c8f42df0452361",
+    "sourceRelativePath": "functions/Get-DirectoryInfo.ps1",
+    "sourceSha256": "e2666d58c45474ee1bf0a15cde09cd683c2d67acdf3f26b972cd003b7e1eed36",
+    "license": "MIT; unchanged source kept external",
+    "probe": "m29a-hosted-value-class-probe.ps1",
+    "probeSha256": "6c0ca41b9887369ef270e6f5634b9ee5d8557b936d2ee4b7edc0f28a0157ca0c",
+    "dataFixture": {
+      "directories": [
+        "Alpha",
+        "Alpha/Nested",
+        "Beta",
+        "Empty"
+      ],
+      "files": {
+        "root.txt": [
+          1,
+          2
+        ],
+        "Alpha/a.txt": [
+          1,
+          2,
+          3
+        ],
+        "Beta/b.txt": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "Alpha/Nested/n.txt": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    "hosts": [
+      {
+        "host": "pwsh",
+        "framework": "net10.0",
+        "version": "7.6.6",
+        "originalSha256": "4157f89e6f35f3fe679693b48c9e8d9a603863ce92afaaf4a55303c31a92090e",
+        "generatedSha256": "4157f89e6f35f3fe679693b48c9e8d9a603863ce92afaaf4a55303c31a92090e",
+        "observations": [
+          {
+            "id": "default-depth",
+            "records": [
+              {
+                "name": "Alpha",
+                "path": "<root>\\Alpha",
+                "count": 1,
+                "size": 3,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Alpha [1]",
+                "nameSize": "Alpha [3]"
+              },
+              {
+                "name": "Beta",
+                "path": "<root>\\Beta",
+                "count": 1,
+                "size": 4,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Beta [1]",
+                "nameSize": "Beta [4]"
+              },
+              {
+                "name": "Empty",
+                "path": "<root>\\Empty",
+                "count": 0,
+                "size": 0,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Empty [0]",
+                "nameSize": "Empty [0]"
+              }
+            ],
+            "warnings": [],
+            "caught": null
+          },
+          {
+            "id": "depth-zero",
+            "records": [
+              {
+                "name": "Alpha",
+                "path": "<root>\\Alpha",
+                "count": 1,
+                "size": 3,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Alpha [1]",
+                "nameSize": "Alpha [3]"
+              },
+              {
+                "name": "Beta",
+                "path": "<root>\\Beta",
+                "count": 1,
+                "size": 4,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Beta [1]",
+                "nameSize": "Beta [4]"
+              },
+              {
+                "name": "Empty",
+                "path": "<root>\\Empty",
+                "count": 0,
+                "size": 0,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Empty [0]",
+                "nameSize": "Empty [0]"
+              }
+            ],
+            "warnings": [],
+            "caught": null
+          },
+          {
+            "id": "depth-one",
+            "records": [
+              {
+                "name": "Alpha",
+                "path": "<root>\\Alpha",
+                "count": 1,
+                "size": 3,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Alpha [1]",
+                "nameSize": "Alpha [3]"
+              },
+              {
+                "name": "Beta",
+                "path": "<root>\\Beta",
+                "count": 1,
+                "size": 4,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Beta [1]",
+                "nameSize": "Beta [4]"
+              },
+              {
+                "name": "Empty",
+                "path": "<root>\\Empty",
+                "count": 0,
+                "size": 0,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Empty [0]",
+                "nameSize": "Empty [0]"
+              },
+              {
+                "name": "Nested",
+                "path": "<root>\\Alpha\\Nested",
+                "count": 1,
+                "size": 5,
+                "parent": "<root>\\Alpha",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Nested [1]",
+                "nameSize": "Nested [5]"
+              }
+            ],
+            "warnings": [],
+            "caught": null
+          },
+          {
+            "id": "depth-two",
+            "records": [
+              {
+                "name": "Alpha",
+                "path": "<root>\\Alpha",
+                "count": 1,
+                "size": 3,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Alpha [1]",
+                "nameSize": "Alpha [3]"
+              },
+              {
+                "name": "Beta",
+                "path": "<root>\\Beta",
+                "count": 1,
+                "size": 4,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Beta [1]",
+                "nameSize": "Beta [4]"
+              },
+              {
+                "name": "Empty",
+                "path": "<root>\\Empty",
+                "count": 0,
+                "size": 0,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Empty [0]",
+                "nameSize": "Empty [0]"
+              },
+              {
+                "name": "Nested",
+                "path": "<root>\\Alpha\\Nested",
+                "count": 1,
+                "size": 5,
+                "parent": "<root>\\Alpha",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Nested [1]",
+                "nameSize": "Nested [5]"
+              }
+            ],
+            "warnings": [],
+            "caught": null
+          },
+          {
+            "id": "empty",
+            "records": [],
+            "warnings": [],
+            "caught": null
+          },
+          {
+            "id": "leaf",
+            "records": [
+              {
+                "name": "Nested",
+                "path": "<root>\\Alpha\\Nested",
+                "count": 1,
+                "size": 5,
+                "parent": "<root>\\Alpha",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Nested [1]",
+                "nameSize": "Nested [5]"
+              }
+            ],
+            "warnings": [],
+            "caught": null
+          },
+          {
+            "id": "missing",
+            "records": [],
+            "warnings": [],
+            "caught": {
+              "error": "ParameterArgumentValidationError,Get-DirectoryInfo",
+              "exception": "System.Management.Automation.ParameterBindingValidationException",
+              "category": "InvalidData"
+            }
+          },
+          {
+            "id": "file",
+            "records": [
+              {
+                "name": "root.txt",
+                "path": "<root>\\root.txt",
+                "count": 1,
+                "size": 2,
+                "parent": "",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "root.txt [1]",
+                "nameSize": "root.txt [2]"
+              }
+            ],
+            "warnings": [],
+            "caught": null
+          }
+        ],
+        "buildEvidenceSha256": "c9673d0ca4f0c849871df340d4103947864304ba963c46bb5bc4692aca50eae6",
+        "artifactUnitDispositionLedger": {
+          "schemaVersion": 5,
+          "entries": [
+            {
+              "unitId": "12b77449696da83266b12657",
+              "relativePath": "Get-DirectoryInfo.ps1",
+              "name": "<script>",
+              "kind": "Script",
+              "startLine": 1,
+              "semanticEligible": false,
+              "emittedClrMethod": false,
+              "emittedBinaryCmdlet": false,
+              "retainedHostedSource": true,
+              "usesNativeFunctionBinding": false,
+              "runtimeCommandRegions": 0,
+              "boundaryCrossings": 0,
+              "shapingFallback": false,
+              "omitted": false,
+              "rejected": false,
+              "generatedMemberName": "",
+              "dependencyCauses": [],
+              "boundaryCauses": [
+                "Authored source remains on the hosted PowerShell path after artifact shaping."
+              ],
+              "diagnosticChain": [
+                {
+                  "code": "CommandInvocation",
+                  "featureId": "command.update-typedata",
+                  "message": "Command invocation 'Update-TypeData' requires a registered semantic provider or a hosted PowerShell command region.",
+                  "line": 1,
+                  "column": 1
+                },
+                {
+                  "code": "UnsupportedSyntax",
+                  "featureId": "syntax.typedefinition",
+                  "message": "Statement 'TypeDefinitionAst' is not yet represented by the bound pipeline.",
+                  "line": 1,
+                  "column": 1
+                }
+              ],
+              "moduleStateReadBoundaryCrossings": 0,
+              "moduleStateWriteBoundaryCrossings": 0,
+              "promotedTypedRegions": 0,
+              "generatedRegionMemberNames": []
+            },
+            {
+              "unitId": "855914f34fd6c7624638492b",
+              "relativePath": "Get-DirectoryInfo.ps1",
+              "name": "Get-DirectoryInfo",
+              "kind": "Function",
+              "startLine": 11,
+              "semanticEligible": true,
+              "emittedClrMethod": true,
+              "emittedBinaryCmdlet": false,
+              "retainedHostedSource": false,
+              "usesNativeFunctionBinding": true,
+              "runtimeCommandRegions": 12,
+              "boundaryCrossings": 13,
+              "shapingFallback": false,
+              "omitted": false,
+              "rejected": false,
+              "generatedMemberName": "Get_DirectoryInfo",
+              "dependencyCauses": [],
+              "boundaryCauses": [
+                "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+                "The emitted CLR method contains hosted PowerShell command regions.",
+                "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation."
+              ],
+              "diagnosticChain": [],
+              "moduleStateReadBoundaryCrossings": 0,
+              "moduleStateWriteBoundaryCrossings": 0,
+              "regionGraph": {
+                "schemaVersion": 2,
+                "regions": [
+                  {
+                    "regionId": "region:956df866bef49e9ec62b9b4092e78dab3d5cca9eb8df99811a1f2fcfa98e9b41:266:2886:Mixed",
+                    "ordinal": 0,
+                    "execution": "Mixed",
+                    "startOffset": 266,
+                    "endOffset": 2886,
+                    "startLine": 11,
+                    "startColumn": 28,
+                    "endLine": 86,
+                    "endColumn": 2,
+                    "inputs": [
+                      "PowerShellSessionState:*",
+                      "PowerShellSessionVariable:PATH",
+                      "PowerShellSessionVariable:PSBOUNDPARAMETERS"
+                    ],
+                    "outputs": [
+                      "stream:Success"
+                    ],
+                    "mutations": [
+                      "PowerShellSessionState:*",
+                      "PowerShellSessionVariable:DATA",
+                      "PowerShellSessionVariable:GCIPARAMS"
+                    ],
+                    "streams": [
+                      "Success",
+                      "Error",
+                      "Warning",
+                      "Verbose",
+                      "Debug",
+                      "Information",
+                      "Host"
+                    ],
+                    "errors": [
+                      "ClrException",
+                      "PowerShellErrorRecord",
+                      "PowerShellSessionStateError",
+                      "PowerShellStatementError"
+                    ],
+                    "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                    "hostedCommandBoundarySites": 8,
+                    "moduleStateReadBoundarySites": 0,
+                    "moduleStateWriteBoundarySites": 0,
+                    "staticBoundaryCrossings": 8,
+                    "staticBoundaryValueTransfers": 6,
+                    "staticBoundaryCostUnits": 14
+                  }
+                ],
+                "scriptBlocks": [
+                  {
+                    "generatedMemberName": "__PowerForgeNestedFunction_956df866bef49e9ec62b9b4092e78dab3d5cca9eb8df99811a1f2fcfa98e9b41_1085",
+                    "startOffset": 1085,
+                    "endOffset": 1845,
+                    "graph": {
+                      "schemaVersion": 1,
+                      "regions": [
+                        {
+                          "regionId": "region:956df866bef49e9ec62b9b4092e78dab3d5cca9eb8df99811a1f2fcfa98e9b41:1112:1845:Mixed",
+                          "ordinal": 0,
+                          "execution": "Mixed",
+                          "startOffset": 1112,
+                          "endOffset": 1845,
+                          "startLine": 33,
+                          "startColumn": 36,
+                          "endLine": 55,
+                          "endColumn": 10,
+                          "inputs": [
+                            "PowerShellSessionState:*"
+                          ],
+                          "outputs": [
+                            "stream:Success"
+                          ],
+                          "mutations": [
+                            "PowerShellSessionState:*",
+                            "PowerShellSessionVariable:DS",
+                            "PowerShellSessionVariable:DS.*",
+                            "PowerShellSessionVariable:NAME",
+                            "PowerShellSessionVariable:PATH",
+                            "PowerShellSessionVariable:STAT",
+                            "object.*"
+                          ],
+                          "streams": [
+                            "Success",
+                            "Error",
+                            "Warning",
+                            "Verbose",
+                            "Debug",
+                            "Information",
+                            "Host"
+                          ],
+                          "errors": [
+                            "ClrException",
+                            "PowerShellErrorRecord",
+                            "PowerShellSessionStateError",
+                            "PowerShellStatementError"
+                          ],
+                          "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                          "hostedCommandBoundarySites": 4,
+                          "moduleStateReadBoundarySites": 0,
+                          "moduleStateWriteBoundarySites": 0,
+                          "staticBoundaryCrossings": 4,
+                          "staticBoundaryValueTransfers": 8,
+                          "staticBoundaryCostUnits": 12
+                        }
+                      ],
+                      "scriptBlocks": [],
+                      "hostedCommandBoundarySites": 4,
+                      "moduleStateReadBoundarySites": 0,
+                      "moduleStateWriteBoundarySites": 0,
+                      "staticBoundaryCrossings": 4,
+                      "staticBoundaryCostUnits": 12
+                    }
+                  }
+                ],
+                "hostedCommandBoundarySites": 12,
+                "moduleStateReadBoundarySites": 0,
+                "moduleStateWriteBoundarySites": 0,
+                "staticBoundaryCrossings": 12,
+                "staticBoundaryCostUnits": 26
+              },
+              "promotedTypedRegions": 0,
+              "generatedRegionMemberNames": []
+            }
+          ],
+          "deliveryRuntimeCauses": [],
+          "analyzedUnits": 2,
+          "emittedUnits": 1,
+          "runtimeRoutedUnits": 2,
+          "fallbackUnits": 1,
+          "shapedFallbackUnits": 0,
+          "omittedUnits": 0,
+          "rejectedUnits": 0,
+          "runtimeCommandRegions": 12,
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "moduleStateBoundaryCrossings": 0,
+          "boundaryCrossings": 13,
+          "promotedTypedRegions": 0,
+          "usesPowerShellRuntimeFallback": true,
+          "compilationCoveragePercentage": 50
+        },
+        "compiledMethods": 1,
+        "artifactSha256": "48b8167b193fcc332bc597981eb68923628ed7108db9d80916e2188daccf06b7",
+        "generatedSourceSha256": "",
+        "strictEvidenceSha256": "210763d767f9530f5dde244420c065038426c111c942a17936271aadb53eab7b",
+        "strictExitCode": 1,
+        "strictTypedUnits": 0,
+        "strictRejectedUnits": 2
+      },
+      {
+        "host": "winps",
+        "framework": "net472",
+        "version": "5.1.26100.9444",
+        "originalSha256": "465b6df99a637f0aacbd3c305abf8d4e1bc61f393d3b89b4b1570c4d85d210b4",
+        "generatedSha256": "465b6df99a637f0aacbd3c305abf8d4e1bc61f393d3b89b4b1570c4d85d210b4",
+        "observations": [
+          {
+            "id": "default-depth",
+            "records": [
+              {
+                "name": "Alpha",
+                "path": "<root>\\Alpha",
+                "count": 1,
+                "size": 3,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Alpha [1]",
+                "nameSize": "Alpha [3]"
+              },
+              {
+                "name": "Beta",
+                "path": "<root>\\Beta",
+                "count": 1,
+                "size": 4,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Beta [1]",
+                "nameSize": "Beta [4]"
+              },
+              {
+                "name": "Empty",
+                "path": "<root>\\Empty",
+                "count": 0,
+                "size": 0,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Empty [0]",
+                "nameSize": "Empty [0]"
+              }
+            ],
+            "warnings": [],
+            "caught": null
+          },
+          {
+            "id": "depth-zero",
+            "records": [
+              {
+                "name": "Alpha",
+                "path": "<root>\\Alpha",
+                "count": 1,
+                "size": 3,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Alpha [1]",
+                "nameSize": "Alpha [3]"
+              },
+              {
+                "name": "Beta",
+                "path": "<root>\\Beta",
+                "count": 1,
+                "size": 4,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Beta [1]",
+                "nameSize": "Beta [4]"
+              },
+              {
+                "name": "Empty",
+                "path": "<root>\\Empty",
+                "count": 0,
+                "size": 0,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Empty [0]",
+                "nameSize": "Empty [0]"
+              }
+            ],
+            "warnings": [],
+            "caught": null
+          },
+          {
+            "id": "depth-one",
+            "records": [
+              {
+                "name": "Alpha",
+                "path": "<root>\\Alpha",
+                "count": 1,
+                "size": 3,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Alpha [1]",
+                "nameSize": "Alpha [3]"
+              },
+              {
+                "name": "Beta",
+                "path": "<root>\\Beta",
+                "count": 1,
+                "size": 4,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Beta [1]",
+                "nameSize": "Beta [4]"
+              },
+              {
+                "name": "Empty",
+                "path": "<root>\\Empty",
+                "count": 0,
+                "size": 0,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Empty [0]",
+                "nameSize": "Empty [0]"
+              },
+              {
+                "name": "Nested",
+                "path": "<root>\\Alpha\\Nested",
+                "count": 1,
+                "size": 5,
+                "parent": "<root>\\Alpha",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Nested [1]",
+                "nameSize": "Nested [5]"
+              }
+            ],
+            "warnings": [],
+            "caught": null
+          },
+          {
+            "id": "depth-two",
+            "records": [
+              {
+                "name": "Alpha",
+                "path": "<root>\\Alpha",
+                "count": 1,
+                "size": 3,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Alpha [1]",
+                "nameSize": "Alpha [3]"
+              },
+              {
+                "name": "Beta",
+                "path": "<root>\\Beta",
+                "count": 1,
+                "size": 4,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Beta [1]",
+                "nameSize": "Beta [4]"
+              },
+              {
+                "name": "Empty",
+                "path": "<root>\\Empty",
+                "count": 0,
+                "size": 0,
+                "parent": "<root>",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Empty [0]",
+                "nameSize": "Empty [0]"
+              },
+              {
+                "name": "Nested",
+                "path": "<root>\\Alpha\\Nested",
+                "count": 1,
+                "size": 5,
+                "parent": "<root>\\Alpha",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Nested [1]",
+                "nameSize": "Nested [5]"
+              }
+            ],
+            "warnings": [],
+            "caught": null
+          },
+          {
+            "id": "empty",
+            "records": [],
+            "warnings": [],
+            "caught": null
+          },
+          {
+            "id": "leaf",
+            "records": [
+              {
+                "name": "Nested",
+                "path": "<root>\\Alpha\\Nested",
+                "count": 1,
+                "size": 5,
+                "parent": "<root>\\Alpha",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "Nested [1]",
+                "nameSize": "Nested [5]"
+              }
+            ],
+            "warnings": [],
+            "caught": null
+          },
+          {
+            "id": "missing",
+            "records": [],
+            "warnings": [],
+            "caught": {
+              "error": "ParameterArgumentValidationError,Get-DirectoryInfo",
+              "exception": "System.Management.Automation.ParameterBindingValidationException",
+              "category": "InvalidData"
+            }
+          },
+          {
+            "id": "file",
+            "records": [
+              {
+                "name": "root.txt",
+                "path": "<root>\\root.txt",
+                "count": 1,
+                "size": 2,
+                "parent": "",
+                "computerMatches": true,
+                "type": "DirectoryStat",
+                "nameCount": "root.txt [1]",
+                "nameSize": "root.txt [2]"
+              }
+            ],
+            "warnings": [],
+            "caught": null
+          }
+        ],
+        "buildEvidenceSha256": "a6691e1f1a9398bc542ae5f2164347e7a4f7ab4fc49261eb02179c76dd9994ea",
+        "artifactUnitDispositionLedger": {
+          "schemaVersion": 5,
+          "entries": [
+            {
+              "unitId": "12b77449696da83266b12657",
+              "relativePath": "Get-DirectoryInfo.ps1",
+              "name": "<script>",
+              "kind": "Script",
+              "startLine": 1,
+              "semanticEligible": false,
+              "emittedClrMethod": false,
+              "emittedBinaryCmdlet": false,
+              "retainedHostedSource": true,
+              "usesNativeFunctionBinding": false,
+              "runtimeCommandRegions": 0,
+              "boundaryCrossings": 0,
+              "shapingFallback": false,
+              "omitted": false,
+              "rejected": false,
+              "generatedMemberName": "",
+              "dependencyCauses": [],
+              "boundaryCauses": [
+                "Authored source remains on the hosted PowerShell path after artifact shaping."
+              ],
+              "diagnosticChain": [
+                {
+                  "code": "CommandInvocation",
+                  "featureId": "command.update-typedata",
+                  "message": "Command invocation 'Update-TypeData' requires a registered semantic provider or a hosted PowerShell command region.",
+                  "line": 1,
+                  "column": 1
+                },
+                {
+                  "code": "UnsupportedSyntax",
+                  "featureId": "syntax.typedefinition",
+                  "message": "Statement 'TypeDefinitionAst' is not yet represented by the bound pipeline.",
+                  "line": 1,
+                  "column": 1
+                }
+              ],
+              "moduleStateReadBoundaryCrossings": 0,
+              "moduleStateWriteBoundaryCrossings": 0,
+              "promotedTypedRegions": 0,
+              "generatedRegionMemberNames": []
+            },
+            {
+              "unitId": "855914f34fd6c7624638492b",
+              "relativePath": "Get-DirectoryInfo.ps1",
+              "name": "Get-DirectoryInfo",
+              "kind": "Function",
+              "startLine": 11,
+              "semanticEligible": true,
+              "emittedClrMethod": true,
+              "emittedBinaryCmdlet": false,
+              "retainedHostedSource": false,
+              "usesNativeFunctionBinding": true,
+              "runtimeCommandRegions": 12,
+              "boundaryCrossings": 13,
+              "shapingFallback": false,
+              "omitted": false,
+              "rejected": false,
+              "generatedMemberName": "Get_DirectoryInfo",
+              "dependencyCauses": [],
+              "boundaryCauses": [
+                "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+                "The emitted CLR method contains hosted PowerShell command regions.",
+                "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation."
+              ],
+              "diagnosticChain": [],
+              "moduleStateReadBoundaryCrossings": 0,
+              "moduleStateWriteBoundaryCrossings": 0,
+              "regionGraph": {
+                "schemaVersion": 2,
+                "regions": [
+                  {
+                    "regionId": "region:956df866bef49e9ec62b9b4092e78dab3d5cca9eb8df99811a1f2fcfa98e9b41:266:2886:Mixed",
+                    "ordinal": 0,
+                    "execution": "Mixed",
+                    "startOffset": 266,
+                    "endOffset": 2886,
+                    "startLine": 11,
+                    "startColumn": 28,
+                    "endLine": 86,
+                    "endColumn": 2,
+                    "inputs": [
+                      "PowerShellSessionState:*",
+                      "PowerShellSessionVariable:PATH",
+                      "PowerShellSessionVariable:PSBOUNDPARAMETERS"
+                    ],
+                    "outputs": [
+                      "stream:Success"
+                    ],
+                    "mutations": [
+                      "PowerShellSessionState:*",
+                      "PowerShellSessionVariable:DATA",
+                      "PowerShellSessionVariable:GCIPARAMS"
+                    ],
+                    "streams": [
+                      "Success",
+                      "Error",
+                      "Warning",
+                      "Verbose",
+                      "Debug",
+                      "Information",
+                      "Host"
+                    ],
+                    "errors": [
+                      "ClrException",
+                      "PowerShellErrorRecord",
+                      "PowerShellSessionStateError",
+                      "PowerShellStatementError"
+                    ],
+                    "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                    "hostedCommandBoundarySites": 8,
+                    "moduleStateReadBoundarySites": 0,
+                    "moduleStateWriteBoundarySites": 0,
+                    "staticBoundaryCrossings": 8,
+                    "staticBoundaryValueTransfers": 6,
+                    "staticBoundaryCostUnits": 14
+                  }
+                ],
+                "scriptBlocks": [
+                  {
+                    "generatedMemberName": "__PowerForgeNestedFunction_956df866bef49e9ec62b9b4092e78dab3d5cca9eb8df99811a1f2fcfa98e9b41_1085",
+                    "startOffset": 1085,
+                    "endOffset": 1845,
+                    "graph": {
+                      "schemaVersion": 1,
+                      "regions": [
+                        {
+                          "regionId": "region:956df866bef49e9ec62b9b4092e78dab3d5cca9eb8df99811a1f2fcfa98e9b41:1112:1845:Mixed",
+                          "ordinal": 0,
+                          "execution": "Mixed",
+                          "startOffset": 1112,
+                          "endOffset": 1845,
+                          "startLine": 33,
+                          "startColumn": 36,
+                          "endLine": 55,
+                          "endColumn": 10,
+                          "inputs": [
+                            "PowerShellSessionState:*"
+                          ],
+                          "outputs": [
+                            "stream:Success"
+                          ],
+                          "mutations": [
+                            "PowerShellSessionState:*",
+                            "PowerShellSessionVariable:DS",
+                            "PowerShellSessionVariable:DS.*",
+                            "PowerShellSessionVariable:NAME",
+                            "PowerShellSessionVariable:PATH",
+                            "PowerShellSessionVariable:STAT",
+                            "object.*"
+                          ],
+                          "streams": [
+                            "Success",
+                            "Error",
+                            "Warning",
+                            "Verbose",
+                            "Debug",
+                            "Information",
+                            "Host"
+                          ],
+                          "errors": [
+                            "ClrException",
+                            "PowerShellErrorRecord",
+                            "PowerShellSessionStateError",
+                            "PowerShellStatementError"
+                          ],
+                          "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                          "hostedCommandBoundarySites": 4,
+                          "moduleStateReadBoundarySites": 0,
+                          "moduleStateWriteBoundarySites": 0,
+                          "staticBoundaryCrossings": 4,
+                          "staticBoundaryValueTransfers": 8,
+                          "staticBoundaryCostUnits": 12
+                        }
+                      ],
+                      "scriptBlocks": [],
+                      "hostedCommandBoundarySites": 4,
+                      "moduleStateReadBoundarySites": 0,
+                      "moduleStateWriteBoundarySites": 0,
+                      "staticBoundaryCrossings": 4,
+                      "staticBoundaryCostUnits": 12
+                    }
+                  }
+                ],
+                "hostedCommandBoundarySites": 12,
+                "moduleStateReadBoundarySites": 0,
+                "moduleStateWriteBoundarySites": 0,
+                "staticBoundaryCrossings": 12,
+                "staticBoundaryCostUnits": 26
+              },
+              "promotedTypedRegions": 0,
+              "generatedRegionMemberNames": []
+            }
+          ],
+          "deliveryRuntimeCauses": [],
+          "analyzedUnits": 2,
+          "emittedUnits": 1,
+          "runtimeRoutedUnits": 2,
+          "fallbackUnits": 1,
+          "shapedFallbackUnits": 0,
+          "omittedUnits": 0,
+          "rejectedUnits": 0,
+          "runtimeCommandRegions": 12,
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "moduleStateBoundaryCrossings": 0,
+          "boundaryCrossings": 13,
+          "promotedTypedRegions": 0,
+          "usesPowerShellRuntimeFallback": true,
+          "compilationCoveragePercentage": 50
+        },
+        "compiledMethods": 1,
+        "artifactSha256": "0e43e872414c001ea0c466c406467b016e261b893ccfec8a8cd1c69e2ee829c6",
+        "generatedSourceSha256": "",
+        "strictEvidenceSha256": "978250210a08e20adbc24a32a64a5a7ca882e6e7b6c480b4c0fb62695eebad39",
+        "strictExitCode": 1,
+        "strictTypedUnits": 0,
+        "strictRejectedUnits": 2
+      }
+    ],
+    "limits": [
+      "Hybrid binary-module builds use unreviewed offline dependency resolution, not a reviewed lock.",
+      "Class declarations, property initialization, construction, adapters, type-data registration and commands remain PowerShell-owned; root function and nested helper clauses emit C#.",
+      "Eight cases use disposable local files only; no remote filesystem, access-denied, race, verbose/debug or performance result claimed.",
+      "Five-packet census is net10.0 emission analysis only; no complete module execution or fresh net472 full census.",
+      "No compiled CLR classes, arbitrary initializer/constructor/method support, non-Windows or runtime-free authored type support claimed."
+    ]
+  },
+  "retainedFunctionFeatureCounts": {
+    "assignment.target": 1,
+    "binary-module.cmdlet-shape": 2,
+    "command.foreach-object": 2,
+    "command.get-help": 1,
+    "command.get-item": 1,
+    "command.get-location": 1,
+    "command.new-object": 2,
+    "command.out-gridview": 1,
+    "command.out-string": 1,
+    "command.read-host": 1,
+    "command.resolve-path": 1,
+    "command.select-object": 1,
+    "command.set-clipboard": 1,
+    "command.showcontainer": 1,
+    "command.test-connection": 1,
+    "command.write-verbose": 4,
+    "command.write-warning": 2,
+    "control.finally.stream-stop": 2,
+    "expression.conversion": 2,
+    "parameter.default": 1,
+    "parameter.metadata": 3,
+    "parameter.type": 22,
+    "pipeline.lifecycle": 2,
+    "runtime.scope": 2,
+    "scriptblock.typed": 1,
+    "semantic.lowering.missing": 2,
+    "syntax.exitstatement": 1,
+    "syntax.foreachstatement": 1,
+    "syntax.functiondefinition": 1,
+    "syntax.invokememberexpression": 3,
+    "syntax.memberexpression": 2,
+    "syntax.pipeline": 1,
+    "syntax.subexpression": 1,
+    "syntax.typedefinition": 1,
+    "syntax.typeexpression": 2,
+    "syntax.unsupported": 34
+  },
+  "yamlBoundaryRefresh": {
+    "moduleVersion": "0.4.12",
+    "sourceArchiveSha256": "d4602bc7a4a093766520422d53ca8b09acde162286fae11e2ee6c8edfea07810",
+    "sourceSha256": "415b0de1b4d5af6980ec50316d3267fa19663b7dbf809d219783b41ed39b2e5d",
+    "license": "Apache-2.0",
+    "execution": "None: read-only explain and source/loader inventory.",
+    "hosts": [
+      {
+        "framework": "net10.0",
+        "explanationSha256": "fdf46b8d2148d49b5039b595526cbd375bb388f212e47ef7d94dea68c4ca6aa3",
+        "functions": 14,
+        "emitted": 0
+      },
+      {
+        "framework": "net472",
+        "explanationSha256": "e5c0c21ca3e2334981b87d86d292fd266841ea78748a4b27b5b3baaa356edfae",
+        "functions": 14,
+        "emitted": 0
+      }
+    ],
+    "remainingContracts": [
+      "Authored enum static member values consumed by HasFlag and parameter defaults.",
+      "Bundled net47/netstandard2.1 YAML assemblies and temporary AssemblyResolve registration, with preserved module-relative loader paths and dependency identities."
+    ]
+  }
+}

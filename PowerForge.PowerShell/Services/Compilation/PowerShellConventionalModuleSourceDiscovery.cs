@@ -36,7 +36,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                 !TryReadPathPattern(command, out var relativePattern, out var isLiteralPath, out var pathElementIndex) ||
                 !Path.GetExtension(relativePattern).Equals(".ps1", StringComparison.OrdinalIgnoreCase))
                 continue;
-            var recurse = ReadLoaderOptions(command, rootPath, pathElementIndex);
+            var (recurse, excludes) = ReadLoaderOptions(command, rootPath, pathElementIndex);
             foreach (var loader in acceptedLoaders)
                 loaders[loader.StartOffset] = loader;
 
@@ -49,6 +49,8 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             var filePattern = Path.GetFileName(normalized);
             if (WildcardPattern.ContainsWildcardCharacters(directoryPart) || string.IsNullOrWhiteSpace(filePattern))
                 throw new InvalidOperationException($"Conventional module source pattern '{relativePattern}' at {rootPath}:{command.Extent.StartLineNumber} may use wildcards only in its file name.");
+            if (excludes.Length > 0 && !WildcardPattern.ContainsWildcardCharacters(filePattern))
+                throw new InvalidOperationException($"Conventional module source -Exclude at {rootPath}:{command.Extent.StartLineNumber} requires a wildcard file pattern.");
 
             var searchRoot = Path.GetFullPath(Path.Combine(sourceRoot, directoryPart));
             if (!PowerShellCompilationPathSafety.PathEquals(sourceRoot, searchRoot))
@@ -60,8 +62,10 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             if (recurse)
                 recursiveDirectories.Add(searchRoot);
             var wildcard = new WildcardPattern(filePattern, WildcardOptions.IgnoreCase | WildcardOptions.Compiled);
+            var excluded = excludes.Select(pattern => new WildcardPattern(pattern, WildcardOptions.IgnoreCase | WildcardOptions.Compiled)).ToArray();
             foreach (var file in EnumerateAccessibleFiles(searchRoot, recurse)
-                         .Where(path => wildcard.IsMatch(Path.GetFileName(path))))
+                         .Where(path => wildcard.IsMatch(Path.GetFileName(path)) &&
+                                        !excluded.Any(pattern => pattern.IsMatch(Path.GetFileName(path)))))
             {
                 var fullPath = Path.GetFullPath(file);
                 PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, fullPath, $"Conventional module source '{fullPath}' traverses a symbolic link or junction.");
@@ -181,9 +185,10 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         return true;
     }
 
-    private static bool ReadLoaderOptions(CommandAst command, string sourcePath, int pathElementIndex)
+    private static (bool Recurse, string[] Excludes) ReadLoaderOptions(CommandAst command, string sourcePath, int pathElementIndex)
     {
         var recurse = false;
+        var excludes = new List<string>();
         for (var index = 1; index < command.CommandElements.Count; index++)
         {
             if (index == pathElementIndex && command.CommandElements[index] is ExpressionAst)
@@ -217,9 +222,25 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             }
             if (name.Equals("File", StringComparison.OrdinalIgnoreCase) && parameter.Argument is null)
                 continue;
+            if (name.Equals("Exclude", StringComparison.OrdinalIgnoreCase))
+            {
+                var argument = parameter.Argument;
+                if (argument is null && index + 1 < command.CommandElements.Count)
+                    argument = command.CommandElements[++index] as ExpressionAst;
+                IReadOnlyList<ExpressionAst>? values = argument is ArrayLiteralAst array
+                    ? array.Elements
+                    : argument is null ? null : new[] { argument };
+                if (values is null || values.Count == 0 ||
+                    values.Any(static value => value is not StringConstantExpressionAst text ||
+                        string.IsNullOrWhiteSpace(text.Value) ||
+                        text.Value.IndexOfAny(new[] { '/', '\\' }) >= 0))
+                    throw UnsupportedLoaderOption(command, sourcePath, parameter);
+                excludes.AddRange(values.Cast<StringConstantExpressionAst>().Select(static value => value.Value));
+                continue;
+            }
             throw UnsupportedLoaderOption(command, sourcePath, parameter);
         }
-        return recurse;
+        return (recurse, excludes.ToArray());
     }
 
     private static InvalidOperationException UnsupportedLoaderOption(
@@ -227,7 +248,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         string sourcePath,
         CommandParameterAst parameter)
         => new(
-            $"Conventional module source discovery does not support loader option '{parameter.Extent.Text}' at {sourcePath}:{command.Extent.StartLineNumber}; use -Path/-LiteralPath, bare -Recurse, optional -File, and optional -ErrorAction SilentlyContinue only.");
+            $"Conventional module source discovery does not support loader option '{parameter.Extent.Text}' at {sourcePath}:{command.Extent.StartLineNumber}; use -Path/-LiteralPath, bare -Recurse, literal -Exclude names, optional -File, and optional -ErrorAction SilentlyContinue only.");
 
     private static bool IsTopLevel(Ast node, ScriptBlockAst root)
     {
@@ -247,6 +268,9 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         ScriptBlockAst root,
         string sourcePath)
     {
+        foreach (var dotSource in GetPipelineDotSourceLoaders(command, root))
+            yield return new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset);
+
         var assignment = FindAncestor<AssignmentStatementAst>(command, root);
         var assignedVariable = assignment is null ? null : FindAssignedVariable(assignment.Left);
         foreach (var loader in root.FindAll(
@@ -276,6 +300,81 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             }
         }
     }
+
+    private static IEnumerable<CommandAst> GetPipelineDotSourceLoaders(CommandAst producer, ScriptBlockAst root)
+    {
+        if (producer.Parent is not PipelineAst { PipelineElements.Count: 2 } pipeline ||
+            !ReferenceEquals(pipeline.Parent, root.EndBlock) ||
+            !ReferenceEquals(pipeline.PipelineElements[0], producer) ||
+            !string.Equals(producer.GetCommandName(), "Get-ChildItem", StringComparison.OrdinalIgnoreCase) ||
+            pipeline.PipelineElements[1] is not CommandAst consumer ||
+            !string.Equals(consumer.GetCommandName(), "ForEach-Object", StringComparison.OrdinalIgnoreCase) ||
+            HasUnsafePrecedingModuleAction(root, pipeline) ||
+            consumer.CommandElements.Count != 3 ||
+            consumer.CommandElements[1] is not CommandParameterAst parameter ||
+            !parameter.ParameterName.Equals("Process", StringComparison.OrdinalIgnoreCase) ||
+            consumer.CommandElements[2] is not ScriptBlockExpressionAst block ||
+            block.ScriptBlock.EndBlock is not { } endBlock)
+            yield break;
+
+        var statements = endBlock.Statements;
+        if (statements.Count is < 1 or > 2 ||
+            statements.Count == 2 && !IsLoaderVerboseStatement(statements[0]) ||
+            statements[statements.Count - 1] is not PipelineAst { PipelineElements.Count: 1 } dotPipeline ||
+            dotPipeline.PipelineElements[0] is not CommandAst { InvocationOperator: TokenKind.Dot, CommandElements.Count: 1 } dotSource ||
+            dotSource.CommandElements[0] is not MemberExpressionAst
+            {
+                Expression: VariableExpressionAst variable,
+                Member: StringConstantExpressionAst member
+            } ||
+            !variable.VariablePath.UserPath.Equals("_", StringComparison.OrdinalIgnoreCase) &&
+            !variable.VariablePath.UserPath.Equals("PSItem", StringComparison.OrdinalIgnoreCase) ||
+            !member.Value.Equals("FullName", StringComparison.OrdinalIgnoreCase))
+            yield break;
+
+        yield return dotSource;
+    }
+
+    private static bool HasUnsafePrecedingModuleAction(ScriptBlockAst root, PipelineAst pipeline)
+    {
+        return root.FindAll(node =>
+                node.Extent.StartOffset < pipeline.Extent.StartOffset &&
+                IsInModuleScope(node, root) &&
+                (node is FunctionDefinitionAst or ReturnStatementAst or ThrowStatementAst or ExitStatementAst or BreakStatementAst or ContinueStatementAst ||
+                 node is CommandAst command && !IsHarmlessLoaderPrelude(command)),
+                searchNestedScriptBlocks: true).Any();
+    }
+
+    private static bool IsInModuleScope(Ast node, ScriptBlockAst root)
+    {
+        for (var parent = node.Parent; parent is not null && !ReferenceEquals(parent, root); parent = parent.Parent)
+        {
+            if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst ||
+                parent is ScriptBlockAst nested && !ReferenceEquals(nested, root))
+                return false;
+        }
+        return true;
+    }
+
+    private static bool IsHarmlessLoaderPrelude(CommandAst command)
+        => command.InvocationOperator == TokenKind.Unknown &&
+           string.Equals(command.GetCommandName(), "Write-Verbose", StringComparison.OrdinalIgnoreCase) &&
+           command.CommandElements.Count == 2 &&
+           command.CommandElements[1] is StringConstantExpressionAst;
+
+    private static bool IsLoaderVerboseStatement(StatementAst statement)
+        => statement is PipelineAst { PipelineElements.Count: 1 } pipeline &&
+           pipeline.PipelineElements[0] is CommandAst command &&
+           string.Equals(command.GetCommandName(), "Write-Verbose", StringComparison.OrdinalIgnoreCase) &&
+           command.CommandElements.Count == 2 &&
+           command.CommandElements[1] is MemberExpressionAst
+           {
+               Expression: VariableExpressionAst variable,
+               Member: StringConstantExpressionAst member
+           } &&
+           (variable.VariablePath.UserPath.Equals("_", StringComparison.OrdinalIgnoreCase) ||
+            variable.VariablePath.UserPath.Equals("PSItem", StringComparison.OrdinalIgnoreCase)) &&
+           member.Value.Equals("FullName", StringComparison.OrdinalIgnoreCase);
 
     private static IEnumerable<CommandAst> GetDirectDotSourceLoaders(ForEachStatementAst loader)
     {

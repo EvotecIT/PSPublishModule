@@ -159,7 +159,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         Assert.Empty(typed.PromotedRegions);
         Assert.Contains(typed.Methods, method => method.GeneratedName == helperName);
-        var candidate = Assert.Single(typed.RegionCandidates);
+        var candidate = Assert.Single(typed.RegionCandidates, item => item.SourceName == "Get-RegionalValue");
         Assert.False(candidate.Promoted);
         Assert.Equal("region.generated-name-collision", candidate.DecisionCode);
         Assert.Empty(candidate.GeneratedName);
@@ -224,7 +224,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void Transpile_HybridDiscoversNonTerminalTypedOpportunitiesWithoutEmittingThem()
+    public void Transpile_HybridPromotesClosedRegionsAndRetainsOpportunityEvidence()
     {
         using var fixture = ArtifactFixture.Create(
             """
@@ -257,7 +257,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationCapabilities.BinaryModule);
 
         Assert.Empty(hybrid.Methods);
-        Assert.Empty(hybrid.PromotedRegions);
+        Assert.Equal(new[] { 3, 10 }, hybrid.PromotedRegions.OrderBy(static region => region.StartLine)
+            .Select(static region => region.StartLine));
+        var guarded = Assert.Single(hybrid.PromotedRegions, static region => region.RequiresLocalOwnershipGuard);
+        Assert.Equal("Seed", Assert.Single(guarded.ContinuationLocals).Name, ignoreCase: true);
+        var terminal = Assert.Single(hybrid.PromotedRegions, static region => !region.RequiresLocalOwnershipGuard);
+        Assert.Empty(terminal.ContinuationLocals);
         Assert.DoesNotContain("__PowerForgeOpportunity_", hybrid.SourceCode, StringComparison.Ordinal);
         var opportunities = hybrid.RegionOpportunities.OrderBy(static item => item.StartOffset).ToArray();
         Assert.Equal(2, opportunities.Length);
@@ -269,6 +274,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.False(prefix.LiveOutputConsumerAnalysisComplete);
         Assert.False(prefix.InsideTerminalCandidate);
         Assert.Contains(prefix.LiveInputs, static input => input.Identity == "Parameter:VALUE" && input.StableScalar);
+        var parameterTransfer = Assert.Single(prefix.LiveInputs, static input => input.Identity == "Parameter:VALUE");
+        Assert.Equal(PowerShellRegionTransferOwnership.ParameterBorrowed,
+            Assert.IsType<PowerShellRegionTransferContract>(parameterTransfer.Contract).Ownership);
         Assert.Equal(2, prefix.LiveOutputs.Count);
         Assert.Contains(prefix.LiveOutputs, static output => output.Identity == "Local:SEED" && output.StableScalar);
         Assert.Contains(prefix.LiveOutputs, static output => output.Identity == "Local:SCALED" && output.StableScalar);
@@ -295,6 +303,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var json = JsonSerializer.Serialize(census);
         var roundTripped = JsonSerializer.Deserialize<PowerShellCompilationCensusResult>(json);
         Assert.Equal(2, Assert.Single(roundTripped!.Products).RegionOpportunities.Length);
+        Assert.Equal(PowerShellRegionTransferDirection.LiveIn,
+            Assert.IsType<PowerShellRegionTransferContract>(Assert.Single(
+                Assert.Single(roundTripped.Products).RegionOpportunities[0].LiveInputs,
+                static input => input.Identity == "Parameter:VALUE").Contract).Direction);
         var legacyJson = JsonNode.Parse(json)!.AsObject();
         Assert.True(legacyJson["Products"]!.AsArray()[0]!.AsObject().Remove("RegionOpportunities"));
         var legacyRoundTrip = JsonSerializer.Deserialize<PowerShellCompilationCensusResult>(legacyJson.ToJsonString());
@@ -358,7 +370,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationCapabilities.HybridModule);
 
         Assert.Empty(typed.RegionOpportunities);
-        Assert.Empty(typed.RegionCandidates);
+        Assert.DoesNotContain(typed.RegionCandidates, static candidate => candidate.SourceName == "Get-StateAccess");
         Assert.DoesNotContain(typed.Methods, static method => method.SourceName == "Get-StateAccess");
     }
 
@@ -548,7 +560,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(1, result.Manifest.Boundaries.PromotedTypedRegions);
         Assert.Equal(1, result.Manifest.Boundaries.StaticBoundarySites);
         var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest.UnitDispositionLedger);
-        Assert.Equal(4, ledger.SchemaVersion);
+        Assert.Equal(5, ledger.SchemaVersion);
         Assert.Equal(1, ledger.PromotedTypedRegions);
         var entry = Assert.Single(ledger.Entries, static candidate => candidate.Name == "Get-RegionalValue");
         Assert.False(entry.EmittedClrMethod);
@@ -564,8 +576,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains("HostedSource", entry.ArtifactDisposition, StringComparison.Ordinal);
         Assert.Single(entry.GeneratedRegionMemberNames);
         var trace = Assert.IsType<PowerShellCompilationExplanation>(result.Manifest.DecisionTrace);
-        Assert.Equal(5, trace.SchemaVersion);
-        Assert.Equal(4, trace.SemanticCompatibilityVersion);
+        Assert.Equal(6, trace.SchemaVersion);
+        Assert.Equal(5, trace.SemanticCompatibilityVersion);
         Assert.Equal(1, trace.PromotedTypedRegions);
         var unit = Assert.Single(Assert.Single(trace.Files).Units, static candidate => candidate.Name == "Get-RegionalValue");
         Assert.Equal(PowerShellCompilationDecisionKind.RuntimeFallback, unit.Decision);

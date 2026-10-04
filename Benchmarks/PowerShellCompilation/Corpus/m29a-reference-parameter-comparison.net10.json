@@ -1,0 +1,214 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Native reference parameters and actual reference-valued variable cells, qualified through offline child deletion",
+  "baselineCompilerCommit": "367a3d15d94fbeeaf801c99f6aef5bb17626f0c2",
+  "baselineDispositionLedger": "m29a-type-factory-comparison.net10.json",
+  "dispositionContract": "Apply this delta to the Type-factory comparison, which links the complete web-session baseline ledger. All other function dispositions remain unchanged; current retained causes and regions are in the inventory.",
+  "verifiedFunctionIdentities": 565,
+  "observedStableUnits": 584,
+  "baselineEmitted": 508,
+  "candidateEmitted": 509,
+  "candidateRetained": 56,
+  "packets": [
+    {
+      "packet": "pssg",
+      "resourceMode": "CompleteModule",
+      "functions": 282,
+      "emitted": 265,
+      "retained": 17,
+      "gains": [
+        {
+          "name": "Remove-ChildItems",
+          "unitId": "9191ed8710d7173dc2ac36bb"
+        }
+      ],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "c300a698846ad8fb7598f53497f3d8aef4171302788ea3a59c435838dd889efb"
+    },
+    {
+      "packet": "cleanup",
+      "resourceMode": "CompleteModule",
+      "functions": 68,
+      "emitted": 63,
+      "retained": 5,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1"
+    },
+    {
+      "packet": "pinf",
+      "resourceMode": "Declared",
+      "functions": 66,
+      "emitted": 64,
+      "retained": 2,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "dc4ead723c754d3554c2707baea55372489caa746ba3f56a6b6322d7e358f95d"
+    },
+    {
+      "packet": "pst",
+      "resourceMode": "CompleteModule",
+      "functions": 109,
+      "emitted": 90,
+      "retained": 19,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "58f9421a20c0f866af3b63740ecfd6679f2f92004ba59f7f267e50533d715e70"
+    },
+    {
+      "packet": "platyps",
+      "resourceMode": "Declared",
+      "functions": 40,
+      "emitted": 27,
+      "retained": 13,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "f3a8acb7feecc018adfe9d5daf63170ea3af30eed2b718cb1426d9e2346c005f"
+    }
+  ],
+  "changedDispositions": [
+    {
+      "packet": "pssg",
+      "unitId": "9191ed8710d7173dc2ac36bb",
+      "name": "Remove-ChildItems",
+      "baselineEmitted": false,
+      "candidateEmitted": true,
+      "retainedHostedSource": false,
+      "usesNativeFunctionBinding": true,
+      "baselineRegionMembers": [],
+      "candidateRegionMembers": []
+    }
+  ],
+  "lostCompleteMethods": [],
+  "lostRegionsOfRetainedFunctions": [],
+  "retainedInventory": "m29a-retained-functions.net10.json",
+  "retainedInventorySha256": "bb0a217a76f254e4895804f05d29e1da8dd00df9049f727c52a275c1f47666b0",
+  "changedSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "7ef04e5849dc474314f43e36130df2bc7c77337c0425e43c52fa4f5245626014",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellConversionSemanticBinder.cs": "47af6f40ed25b941e60eec76f6aa45e9af823360a9a7848309b712465b6bda62",
+    "PowerForge.Tests/PowerShellCompilationReferenceParameterTests.cs": "c1dab2a79ad981884b2f11c50bfa1e78c01649dc67badf5d2b43d98c5ff05621"
+  },
+  "workflow": {
+    "source": "https://github.com/EvotecIT/PSSharedGoods",
+    "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+    "license": "MIT, unchanged tracked fixtures",
+    "sourceHashes": {
+      "Public/Objects/Remove-EmptyValue.ps1": "aa13fe23888586cc76b0cd32b01bf95ea1445f06e3385e08be134397fc0939b0",
+      "Private/Remove-ChildItems.ps1": "b368fba68b2315f9c2a9e0a16504349e71bdae2bca210f8a74f06bc27a2b6193",
+      "Public/FilesFolders/Remove-FileItem.ps1": "e1ce8d334214a50e92f269312b597a32b62726a26f4d0bd0ed7810671426feef"
+    },
+    "completeMethodsInArtifact": 9,
+    "jsonObservationsPerHost": 22,
+    "hosts": [
+      "PowerShell 7 / net10.0 Windows",
+      "Windows PowerShell 5.1 / net472"
+    ],
+    "executedChildCases": [
+      "files",
+      "nonempty-directory failure",
+      "recursive",
+      "WhatIf",
+      "Include",
+      "Exclude",
+      "zero retries"
+    ],
+    "contract": [
+      "caller cell identity",
+      "forwarding through PSBoundParameters",
+      "constrained writes",
+      "retention after return",
+      "ref arrays and List containers",
+      "local reference values",
+      "missing-variable lookup",
+      "positioned errors and finally",
+      "original/generated output and owned filesystem state"
+    ]
+  },
+  "validation": {
+    "runs": [
+      {
+        "file": "reference-parameter-capability-final.trx",
+        "sha256": "2c504a4af52f8ac310cb9d789b53c45ff07d37fdb37a954bde99ff149de0a953",
+        "total": 18,
+        "passed": 18,
+        "failed": 0
+      },
+      {
+        "file": "reference-parameter-cell-owner.trx",
+        "sha256": "7f1d9e0b8575eb32a76d6f1126c57c3e708f3dc02e34e22a1c39ef21769af679",
+        "total": 4,
+        "passed": 4,
+        "failed": 0
+      },
+      {
+        "file": "reference-parameter-compatibility.trx",
+        "sha256": "9673de7ad4667990101175497a24d962445f6b10469028ace301fe6e9d35bd76",
+        "total": 26,
+        "passed": 24,
+        "failed": 2
+      },
+      {
+        "file": "reference-parameter-connected.trx",
+        "sha256": "ff215296560aec8535c0d3551dc612c53a896af218ce674269d62b0712b78f9c",
+        "total": 4,
+        "passed": 2,
+        "failed": 2
+      },
+      {
+        "file": "reference-parameter-final.trx",
+        "sha256": "56bd0fa9f084e5918ef790d50bc4f5735fe56edb890af17603b375be10cd33d9",
+        "total": 18,
+        "passed": 18,
+        "failed": 0
+      },
+      {
+        "file": "reference-parameter-host-types-reproduction.trx",
+        "sha256": "c584d4a19eaaf1169769d2318b502a35862d595e7a16586884cc7f1ac2086a81",
+        "total": 2,
+        "passed": 2,
+        "failed": 0
+      },
+      {
+        "file": "reference-parameter-local-scope.trx",
+        "sha256": "2a2e39d29ec020c33d2c80120812b4b3b9feaf04bc9ba1d32543dca83ba84cfa",
+        "total": 4,
+        "passed": 4,
+        "failed": 0
+      }
+    ],
+    "acceptedFinalRun": "reference-parameter-capability-final.trx",
+    "durationSeconds": 51,
+    "net472OwnerBuild": {
+      "passed": true,
+      "warnings": 0,
+      "errors": 0,
+      "seconds": 6.34
+    },
+    "finalSourceCensus": {
+      "sha256": "f66b98ec27e315951c92a9c3e78a10ca2d04e4ec328a6f6df7dd13df9a7b10ac",
+      "passed": true
+    },
+    "aggregateGateRun": false
+  },
+  "failureAccounting": [
+    "Initial parameter admission exposed a real detached-cell cast defect: generated SkipTopFolder returned true after child deletion failed; connected run passed 2/4. Fixed by reusing actual variable-cell acquisition.",
+    "Compatibility run passed 24/26; two new missing-variable assertions used a name also present in caller scope. Native lookup correctly found that variable. Unique-name correction passed 4/4.",
+    "Reviewer proposed host-types admission bypass did not reproduce: direct Get-Cell test passed 2/2 with zero emitted methods when host types were disabled. Reviewer retracted P2 classification; explicit binder guard and independent capability tests were retained."
+  ],
+  "review": {
+    "scope": "One strictly read-only independent review of type policy, reference binder, existing cell runtime/lowering/emission and tests, plus one targeted confirmation",
+    "result": "No remaining actionable issue; proposed bypass reclassified as source consistency concern after unsuccessful reproduction",
+    "independentlyExecuted": false
+  },
+  "boundaries": [
+    "Exact SDK PSReference identity requires host types and native function binding, including qualified existing containers.",
+    "Variable-valued reference acquisition supports ordinary direct/unoptimized locals; explicit scoped storage remains hosted.",
+    "Strict remains closed. Existing CLR reference argument guards are unchanged.",
+    "No COM/RecycleBin, RemoveItem, arbitrary deletion, full-module execution, non-Windows proof, full net472 portfolio refresh, performance result, reviewed dependency lock, PR, merge or release."
+  ]
+}

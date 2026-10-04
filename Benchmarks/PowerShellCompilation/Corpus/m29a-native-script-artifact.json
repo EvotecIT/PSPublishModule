@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "a0ceaf17a7320ff356e7b8a726eb155a3a0e51d5",
+  "purpose": "Bounded native script-root artifact admission and unchanged offline external application proof on explicit Windows x64/net10 Hybrid target.",
+  "sourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCommandHostRuntimeSource.cs": "53dc8ec3460c86ba81bb4dec47b37ca96eb03a1e6e2acecef9303e55ef5b77aa",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationArtifactBuilder.CommandHost.cs": "5bcc0d6b70d6e141bbccc20252a771660cbb701826c7126b7befbce5b54026db",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationArtifactBuilder.HybridExecutable.cs": "d564853dc831fe77a03aab65d3bbad7aaf5820356c158688c17fa8fc66d6426a",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationArtifactBuilder.cs": "93cd4c5852342c5260e5e94a806ad623fb1d1ed804c96025a0cbdf2adaa277e4",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellHybridExecutableEntryPlanner.cs": "bf9b50af609e320ca0f021e6bce2356aca708f77dc8094af83ac867291f46924",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellHybridNativeEntryEmitter.cs": "215e62bd469e22ef78a20d79bf8f2f82ca9c6a4a5566f0409a71c0d2af83e497",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellHybridNativeEntryPlanner.cs": "7fdbac35f4f2fa9aa7a21e3afc95e9f09db4fabd370929c036fe70a204fed90a",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellPackagedEntryInvocationSource.cs": "729d1f179936b92e2455f55e4d6a636c083e783d56693c9f8529313194df1941",
+    "PowerForge.PowerShell/Templates/Compilation/PackagedProgram.cs.template": "8257040c537e31bd0a6e4ffae7abbb7f4395c000087a3b112a5f52bb1939048b",
+    "PowerForge.Tests/Fixtures/PowerShellCompilationExternalBaklava/Baklava.ps1": "912d242c32e10f6fb4ccac5300847df8eb5c5a6b86bd101bb084840225c9cfca",
+    "PowerForge.Tests/Fixtures/PowerShellCompilationExternalBaklava/LICENSE": "2dd977f0232372b5d597126ccb2fe0d1a10f540a97f758708b950a64cd6052d9",
+    "PowerForge.Tests/PowerShellCompilationNativeScriptArtifactTests.cs": "bf972dbc49deeafb537e216d46e9a0979ade2161581ebd2e2ecc97ee0e07b85e"
+  },
+  "validation": [
+    {
+      "file": "native-entry-qualified.trx",
+      "sha256": "3e720eff443da6f2fe02d31536d2ddb7f919f4986ad052236d2b16e77b04bced",
+      "total": 13,
+      "passed": 13,
+      "failed": 0,
+      "results": [
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Explain_HybridNativeScriptRootRetainsUnqualifiedOwners(source: \"Get-ChildItem\", runtimeIdentifier: \"win-x64\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_PackagedExecutableRunsEmbeddedScriptAndDeclaresRuntimeFallback",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Explain_HybridNativeScriptRootRetainsUnqualifiedOwners(source: \"& 'Write-Output' 'x'\", runtimeIdentifier: \"win-x64\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridNativeScriptRootPreservesBindingStorageAndOutput",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Explain_HybridNativeScriptRootRetainsUnqualifiedOwners(source: \"param([int]$Count = 3) $Count + 1\", runtimeIdentifier: \"linux-x64\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Explain_HybridNativeScriptRootRetainsUnqualifiedOwners(source: \"param([int]$Count = $(Get-Variable Count -Scope 1)\"···, runtimeIdentifier: \"win-x64\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Explain_HybridNativeScriptRootRetainsUnqualifiedOwners(source: \"Write-Output 'x' > output.txt\", runtimeIdentifier: \"win-x64\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Explain_HybridNativeScriptRootRetainsUnqualifiedOwners(source: \"$MyInvocation.MyCommand.Name\", runtimeIdentifier: \"win-x64\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridExecutableRunsCompiledPreboundScriptRoot",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_StrictExecutableExecutesOptimizedAuthoredConstants",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Explain_HybridNativeScriptRootRetainsUnqualifiedOwners(source: \"Get-Variable -Scope 1\", runtimeIdentifier: \"win-x64\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridNativeScriptRootRunsUnchangedOfflineBaklava",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridSequentialEntryRetainsLaterParameterRead",
+          "outcome": "Passed"
+        }
+      ]
+    },
+    {
+      "file": "native-entry-artifacts-final.trx",
+      "sha256": "ec979f1dff7e09c99712dc8dc5a2c48ecb0988b5e27699546aa672553ba10bdc",
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "results": [
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridNativeScriptRootRunsUnchangedOfflineBaklava",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridNativeScriptRootPreservesBindingStorageAndOutput",
+          "outcome": "Passed"
+        }
+      ]
+    }
+  ],
+  "net472OwnerBuild": {
+    "result": "Succeeded with zero warnings and zero errors",
+    "logSha256": "b673e7d4f089dcede0b543838816d57dc9ec6a1f889280b393ebbb32a6c99d55"
+  },
+  "application": {
+    "name": "Baklava",
+    "source": "PowerForge.Tests/Fixtures/PowerShellCompilationExternalBaklava/Baklava.ps1",
+    "origin": "Pinned third-party sample-programs archive/p/powershell/Baklava.ps1, blob 830fe541d8366cf1824c064eff4b5d106cac1d0a",
+    "sourceSha256": "912d242c32e10f6fb4ccac5300847df8eb5c5a6b86bd101bb084840225c9cfca",
+    "license": "MIT; PowerForge.Tests/Fixtures/PowerShellCompilationExternalBaklava/LICENSE",
+    "licenseSha256": "2dd977f0232372b5d597126ccb2fe0d1a10f540a97f758708b950a64cd6052d9",
+    "claimedHost": "Windows x64, PowerShell 7 SDK, .NET 10 Hybrid executable",
+    "observed": "Source bytes preserved; reviewed dependency lock; one emitted root with native binding and one hosted Write-Output site; generated executable launched through compiled factory; original/generated exit code, stderr and all 21 stdout lines matched."
+  },
+  "design": [
+    "Shared Hybrid entry planner attempts the existing scalar route first, then bounded native script-root lowering for an explicit win-x64/net10 target.",
+    "Build and explain use the same final planner. The build analysis plan receives the resolved artifact target contract.",
+    "Native admission excludes authored declarations, named lifecycle clauses, requirements, dot-source closure, caller-frame variables, metadata commands, parent runtime/module state and provider cancellation. Hosted body commands are limited to ordinary, nonredirected Write-Output sites.",
+    "Native artifact stores exact authored decoded text as Source.ps1 and emits a source-hashed factory. The generated launcher invokes its ExternalScriptInfo through ordinary PowerShell call-operator dispatch.",
+    "Unsupported entries retain the existing scalar route or authored hosted source. Package launcher keeps its original AddScript path; Strict remains unchanged."
+  ],
+  "initialFailures": [
+    "First artifact test: explain emitted but build retained the root because builder analysis did not carry the resolved target contract. Shared plan construction now carries it; the corrected focused artifact run passed.",
+    "The first test compilation attempted to set a nonexistent PowerShellCompilationSpec.TargetContract property. The test now uses the analyzer overload with the explicit target; this was test setup, not product behavior."
+  ],
+  "limits": [
+    "First native artifact route only: explicit Windows x64/net10 Hybrid target; no net472 executable or non-Windows artifact execution claim.",
+    "Only one end-only authored script source; top-level functions/types, using, requirements, script dependencies and named lifecycle owners remain hosted.",
+    "Only the observed Write-Output command family is admitted as a hosted command region; other command resolution, redirection and dynamic invocation stay on scalar or hosted fallback.",
+    "Caller-frame observations and full return/exit/stream/stopping/cleanup, resource/dependency ordering and wider system policy need separate qualification.",
+    "One external standalone workflow and one synthetic binding/error workflow are qualified; no module-method inventory gain. 544/565 emitted functions, 21 retained, fifteen justified hosted, six WPF unqualified.",
+    "No 40-minute aggregate gate or module census, PR, merge or release."
+  ],
+  "independentReview": {
+    "patchSha256": "cf3119b34dd38456caf9e9a730f24af44afcb6a82ed484cf7c3673ea03e4b72d",
+    "result": "No actionable findings",
+    "scope": "Twelve staged source/test/fixture files against a0ceaf17a; read-only source and supplied evidence review, no independent tests or Windows execution-policy exercise"
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "status": "BoundedHostedQualification",
+  "purpose": "Unchanged PSScriptTools Test-ExpressionForm static-interval Run/Quit path with an owned in-memory expression provider on both Windows PowerShell hosts. No CLR form-method gain or execution of submitted code.",
+  "compilerBaselineCommit": "a16dcd4bcdcb5b213baa4472dad95e7420677c2e",
+  "sourceRevision": "549fa3e3d769532320054fc0b3c8f42df0452361",
+  "sourceSha256": {
+    "functions/Test-Expression.ps1": "82dfd6ed313f17dc9122f3f058e21db1d67742fc3ac3cf910e6003bb82636cf3",
+    "functions/form.xaml": "2253fa8f1c00b66dbe8dfcbe42b28b5884ad4ded00afa3b3361ddbe734c6bd4d",
+    "Test-ExpressionForm.extent": "6346c69df7c89e95b695e2e60c93c83ec8240260f8a0ae271144e01c2131211e"
+  },
+  "fixtureScriptsSha256": {
+    "Prepare.ps1": "9a18f00b60394b2195b9a3b25bf863f42b5f08cf214f284e307da579f3d0b95c",
+    "Observe.ps1": "9f3b1f5f4d1e5d8880a1138bb190305d9d89f85532be0d173fbe2cf41745dde0",
+    "OperateVisual.ps1": "4839e710cbe8425f9e7ed2a0c47f7afb7422111bdb657d9d98631cd453ac625d"
+  },
+  "hosts": [
+    {
+      "targetFramework": "net10.0",
+      "hostVersion": "7.6.6",
+      "wpfAssembly": "PresentationFramework, Version=10.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+      "dependencyLockFileSha256": "aa9e457cd82f38baa264089e9ea6a4139977093343a1deca8c529f07bcbe1d9b",
+      "artifactManifestSha256": "6f67ad526f63c1555351f6a7a8f9ff3636df03e368e0aabb68ecb904aff97a8d",
+      "artifactSha256": "3f86a26ecf09730061460f743b72dcee68a601363e1031deb31d4f2e35fd9b63",
+      "strictExplanationSha256": "2855fdf046399d030dac0e195bc76e074fcbe2a1792c9b1e40c53077b70d33cc",
+      "originalAndGenerated": {
+        "beforeScreenshotSha256": "bf7947f04852fbf88dd0bb9493b45ce0d310dd55b9108ddaa4e3821c9cad7067",
+        "afterScreenshotSha256": "acb3380154dc8580a061405e29d13ee1faa50c96cb6bc34133656ae7ed0bcc56",
+        "contentControlsSha256": "793fd35b2357782b53ee255ffc029f33f2ed86b9365db31b45195d8d260ea2e3",
+        "resultSha256": "29e5d5107ef5fe216ca61a6738bd412016a37c96732fbe7970726060b058b7a1",
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "exitCode": 0
+      }
+    },
+    {
+      "targetFramework": "net472",
+      "hostVersion": "5.1.26100.9444",
+      "wpfAssembly": "PresentationFramework, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+      "dependencyLockFileSha256": "70520b21f39597fb3ddd804638bf66344eeb4c3089e53f00d02a4f4590704f90",
+      "artifactManifestSha256": "f054af5b2da96b9b143fd43c17888c5f2dd14a41f15f00e5e791fafaf9a46e31",
+      "artifactSha256": "3ecb68b63142b083891de1b112fbe02aa4fb6405a4f7409b8059c3041331e172",
+      "strictExplanationSha256": "18ea3974deb47979299c88d6f587046d795e2352355f641159ce90320ef59e6f",
+      "originalAndGenerated": {
+        "beforeScreenshotSha256": "d305baf5871f8355b39b54f011e1dc788483aae4d5b61a2af4b9ab18b3407d01",
+        "afterScreenshotSha256": "55e8935a62f594655e87a2856696a9a8522c0dcbb8662a9f8d34efcb5729fe7c",
+        "contentControlsSha256": "e79e74635b1bebf1bc70f008e4550de219a485956634e1cc81554a45a609238d",
+        "resultSha256": "b83f032cfce23cd0229f851c297ba5b6ad2e76986b782797117a588fd0dc17a2",
+        "stdoutBytes": 0,
+        "stderrBytes": 0,
+        "exitCode": 0
+      }
+    }
+  ],
+  "observedContract": [
+    "Both final original/generated STA pairs displayed the unchanged form and fixed provider result. The before and after PNG, content-control list, and result JSON bytes match within each host. All four final rendered states were visually inspected.",
+    "Run supplied one inert 40+2 ScriptBlock, Count 1, IncludeExpression true, zero arguments and static Interval 0.5 to the verified in-memory provider. The provider did not invoke the ScriptBlock. Quit closed every owned child with exit zero and empty stdout/stderr.",
+    "Reviewed-lock Hybrid artifacts copy the pinned XAML and retain Test-ExpressionForm hosted. Two emitted methods belong to fixture providers, not the pinned portfolio. Strict cannot proceed and rejects five fixture units on each target."
+  ],
+  "limits": [
+    "The real Test-Expression evaluator, submitted-code execution, random interval, argument list, validation/error and repeat-Run paths remain unqualified. This is an offline provider-substituted callback, not proof of general form behavior.",
+    "Content controls omit variable operating-system titlebar nodes. WPF SoftwareOnly rendering was requested. Default hardware rendering, other desktops/versions, headless sessions, full-module GUI behavior and runtime-free WPF translation are not established."
+  ],
+  "portfolio": {
+    "emitted": 544,
+    "retained": 21,
+    "sourceFunctions": 565,
+    "justifiedHosted": 20,
+    "unresolved": 1,
+    "censusRepeated": false,
+    "reason": "Compiler and pinned portfolio inputs are unchanged; one retained form gains bounded both-host visual/Run/Quit proof."
+  }
+}

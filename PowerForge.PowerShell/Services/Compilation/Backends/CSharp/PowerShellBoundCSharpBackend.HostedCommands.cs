@@ -4,6 +4,42 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellBoundCSharpBackend
 {
+    private void EmitCommandRegion(StringBuilder builder, PowerShellLoweredCommandRegionStatement region, string prefix)
+    {
+        if (region.NativeSourcePath is not null)
+        {
+            builder.Append(prefix).Append("__nativeFunction.InvokeCommandRegion(")
+                .Append(PowerShellCSharpLiteral.QuoteString(region.HostedFallbackSource)).Append(", ")
+                .Append(QuotePortableSourcePath(region.NativeSourcePath)).Append(", ")
+                .Append(region.Span.StartLine).Append(", ").Append(region.Span.StartColumn).Append(", ")
+                .Append(PowerShellCSharpLiteral.QuoteString(region.NativeSourceDocument!)).Append(", ")
+                .Append(region.Span.StartOffset).Append(", ").Append(region.Span.EndOffset)
+                .AppendLine(", __statementErrors.AdoptNativeSequencePoint);");
+            return;
+        }
+        builder.Append(prefix).Append("__invokePowerShellRegion(__statementErrors, ")
+            .Append(PowerShellCSharpLiteral.QuoteString(region.HostedFallbackSource))
+            .Append(", ").Append(EmitCommandRegionArguments(region.Arguments))
+            .Append(", ").Append(EmitRegionSource(region.SourceSelection)).AppendLine(");");
+    }
+
+    private static string EmitRegionSource(PowerShellCommandRegionSourceSelection? selection)
+        => selection is null ? "null" : "new global::PowerForge.Generated.Runtime.PowerShellHostedRegionSource(" +
+            PowerShellCSharpLiteral.QuoteString(selection.Path) + ", " + PowerShellCSharpLiteral.QuoteString(selection.Document) +
+            ", new int[] { " + string.Join(", ", selection.Statements.SelectMany(span => new[] { span.StartOffset, span.EndOffset })) + " })";
+
+    private string EmitNativeCommandRecords(PowerShellLoweredNativeCommandExpression command, string sink)
+        => $"__nativeFunction.InvokeCommandRegion({PowerShellCSharpLiteral.QuoteString(command.Source)}, " +
+           $"{QuotePortableSourcePath(command.SourcePath)}, {command.Span.StartLine}, {command.Span.StartColumn}, " +
+           $"{sink}, {PowerShellCSharpLiteral.QuoteString(command.SourceDocument)}, {command.Span.StartOffset}, {command.Span.EndOffset}, __statementErrors.AdoptNativeSequencePoint)";
+
+    private string EmitNativeCommandCapture(PowerShellLoweredNativeCommandExpression command)
+        => $"__nativeFunction.CaptureCommandRegion({PowerShellCSharpLiteral.QuoteString(command.Source)}, " +
+           $"{QuotePortableSourcePath(command.SourcePath)}, {command.Span.StartLine}, {command.Span.StartColumn}, " +
+           $"{(command.PreservePartialOutput ? "true" : "false")}" +
+           (_nativeRegionPartialOutputSink is null ? "" : ", " + _nativeRegionPartialOutputSink) +
+           $", {PowerShellCSharpLiteral.QuoteString(command.SourceDocument)}, {command.Span.StartOffset}, {command.Span.EndOffset})";
+
     private string EmitHostedBooleanCommand(PowerShellLoweredHostedBooleanCommandExpression command)
     {
         var module = command.Provider.ModuleNames.FirstOrDefault();
@@ -27,8 +63,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         }
         script.Append(')');
 
-        return "global::System.Management.Automation.LanguagePrimitives.IsTrue(__invokePowerShellCapture(" +
+        return "global::System.Management.Automation.LanguagePrimitives.IsTrue(__invokePowerShellCapture(__statementErrors, " +
                PowerShellCSharpLiteral.QuoteString(script.ToString()) + ", new object?[] { " +
-               string.Join(", ", values.Select(argument => EmitExpression(argument.Value!))) + " }))";
+               string.Join(", ", values.Select(argument => EmitExpression(argument.Value!))) + " }, null))";
     }
 }
