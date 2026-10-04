@@ -131,6 +131,15 @@ internal sealed class WingetSubmissionService
         };
     }
 
+    /// <summary>Runs the installed WinGet schema validator before a catalog submission.</summary>
+    public void ValidateManifestDirectory(string directory)
+    {
+        var result = _processRunner.RunAsync(new ProcessRunRequest("winget", directory,
+            new[] { "validate", "--manifest", directory }, TimeSpan.FromMinutes(2), captureOutput: true, captureError: true)).GetAwaiter().GetResult();
+        if (!result.Succeeded)
+            throw new InvalidOperationException("WinGet manifest validation failed. Run winget validate on the prepared directory for details.");
+    }
+
     private static PowerForgeWingetSubmissionEntryPlan BuildEntry(
         PowerForgeReleaseWingetOptions winget,
         PowerForgeReleaseWingetSubmissionOptions submission,

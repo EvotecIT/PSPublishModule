@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PowerForge MSI catalog update profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["SchemaVersion", "ReleaseConfigPath", "StoreInstallerUrlTemplate", "StoreArtifactKeys"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "SchemaVersion": { "const": 1 },
+    "ReleaseConfigPath": { "type": "string", "minLength": 1 },
+    "StoreConfigPath": { "type": "string", "minLength": 1 },
+    "StoreTargetName": { "type": "string", "minLength": 1 },
+    "StoreInstallerUrlTemplate": { "type": "string", "pattern": "^https://" },
+    "StoreArtifactKeys": {
+      "type": "object", "minProperties": 1,
+      "propertyNames": { "enum": ["x86", "x64", "arm64"] },
+      "additionalProperties": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$" }
+    }
+  }
+}

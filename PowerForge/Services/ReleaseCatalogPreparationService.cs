@@ -41,6 +41,7 @@ internal sealed class ReleaseCatalogPreparationService
             ?? throw new InvalidOperationException("The release manifest has no asset entries.");
         var entries = new List<WingetManifestInstallerEntry>();
         var desktopPackages = new List<StoreSubmissionDesktopPackage>();
+        var catalogArtifacts = new List<CatalogInstaller>();
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var installer in package.Installers)
         {
@@ -77,6 +78,12 @@ internal sealed class ReleaseCatalogPreparationService
             entry.MsiMetadata = metadata;
             entry.Scope = metadata.Scope;
             entries.Add(entry);
+            catalogArtifacts.Add(new CatalogInstaller
+            {
+                FileName = fileName, Architecture = entry.Architecture,
+                Sha256 = DotNetPublishReleaseArtifactVerifier.ComputeSha256(localPath),
+                Length = new FileInfo(localPath).Length, WingetUrl = entry.InstallerUrl
+            });
             desktopPackages.Add(new StoreSubmissionDesktopPackage
             {
                 PackageUrl = entry.InstallerUrl,
@@ -108,6 +115,8 @@ internal sealed class ReleaseCatalogPreparationService
         File.WriteAllText(desktopPath, desktopJson, new UTF8Encoding(false));
         return new ReleaseCatalogPreparationResult
         {
+            PackageIdentifier = package.PackageIdentifier, PackageVersion = version,
+            Artifacts = catalogArtifacts.ToArray(),
             WingetManifestPaths = rendered.Keys.ToArray(), DesktopPackagesPath = desktopPath,
             Installers = entries.Select(entry => entry.MsiMetadata!).ToArray()
         };
