@@ -297,6 +297,14 @@ jobs:
         timeout-minutes: 10
         run: .\Build\Build-Project.ps1 -ModuleOnly
 
+      - name: Test benchmark history contracts
+        shell: pwsh
+        timeout-minutes: 5
+        run: >
+          dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
+          -c Release --nologo
+          --filter 'FullyQualifiedName~BenchmarkServicesTests.History'
+
       - name: Test with Windows PowerShell 5.1
         shell: pwsh
         timeout-minutes: 10
@@ -443,6 +451,14 @@ jobs:
         timeout-minutes: 10
         run: .\Build\Build-Project.ps1 -ModuleOnly
 
+      - name: Test benchmark history contracts
+        shell: pwsh
+        timeout-minutes: 5
+        run: >
+          dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
+          -c Release --nologo
+          --filter 'FullyQualifiedName~BenchmarkServicesTests.History'
+
       - name: Test cross-platform website and agent plugin contracts
         shell: pwsh
         timeout-minutes: 10
@@ -510,6 +526,14 @@ jobs:
         shell: pwsh
         timeout-minutes: 10
         run: .\Build\Build-Project.ps1 -ModuleOnly
+
+      - name: Test benchmark history contracts
+        shell: pwsh
+        timeout-minutes: 5
+        run: >
+          dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
+          -c Release --nologo
+          --filter 'FullyQualifiedName~BenchmarkServicesTests.History'
 
       - name: Test with Pester
         shell: pwsh
