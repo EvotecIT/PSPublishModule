@@ -56,7 +56,7 @@ if ($Action -eq 'Prepare') {
         }
     } finally { if (Test-Path -LiteralPath $restoreRoot) { Remove-Item -LiteralPath $restoreRoot -Recurse } }
     $preflight = @('submit', '--channel', $Channel)
-    if ($env:CATALOG_EXECUTE -eq 'true') { $preflight += '--require-authentication' }
+    if ($env:CATALOG_EXECUTE -eq 'true' -or $env:CATALOG_VERIFY_AUTHENTICATION -eq 'true') { $preflight += '--require-authentication' }
     Invoke-Catalog -Arguments $preflight
     "artifact-prefix=$artifactPrefix" | Out-File -LiteralPath $env:GITHUB_OUTPUT -Append -Encoding utf8
 } elseif ($Action -eq 'Reserve') {

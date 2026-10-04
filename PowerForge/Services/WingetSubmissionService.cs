@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 
 namespace PowerForge;
@@ -8,11 +11,15 @@ internal sealed class WingetSubmissionService
 
     private readonly ILogger _logger;
     private readonly IProcessRunner _processRunner;
+    private readonly HttpClient _httpClient;
+    private static readonly HttpClient SharedClient = new(new HttpClientHandler { AllowAutoRedirect = false })
+    { Timeout = TimeSpan.FromSeconds(30) };
 
-    public WingetSubmissionService(ILogger? logger = null, IProcessRunner? processRunner = null)
+    public WingetSubmissionService(ILogger? logger = null, IProcessRunner? processRunner = null, HttpClient? httpClient = null)
     {
         _logger = logger ?? new NullLogger();
         _processRunner = processRunner ?? new ProcessRunner();
+        _httpClient = httpClient ?? SharedClient;
     }
 
     public PowerForgeWingetSubmissionPlan Plan(
@@ -20,6 +27,35 @@ internal sealed class WingetSubmissionService
         IReadOnlyList<PowerForgeWingetManifestArtifact> manifests,
         string configDirectory,
         PowerForgeReleaseRequest request)
+        => CreatePlan(winget, manifests, configDirectory, request, out _);
+
+    /// <summary>Checks GitHub authentication using the exact token retained in the submission plan, without submitting.</summary>
+    public async Task<PowerForgeWingetSubmissionPlan> PlanAuthenticatedAsync(
+        PowerForgeReleaseWingetOptions winget, IReadOnlyList<PowerForgeWingetManifestArtifact> manifests,
+        string configDirectory, PowerForgeReleaseRequest request, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var plan = CreatePlan(winget, manifests, configDirectory, request, out var token);
+        if (!plan.Enabled) return plan;
+        if (string.IsNullOrWhiteSpace(token))
+            throw new InvalidOperationException("Automated WinGet authentication requires a publishing token; interactive authentication cannot be preflighted.");
+        using var message = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/user");
+        try { message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token); }
+        catch (FormatException) { throw new InvalidOperationException("WinGet publishing token has an invalid format."); }
+        message.Headers.UserAgent.ParseAdd("PowerForge-Catalog/1.0");
+        message.Headers.Accept.ParseAdd("application/vnd.github+json");
+        message.Headers.Add("X-GitHub-Api-Version", "2026-03-10");
+        using var response = await _httpClient.SendAsync(message, HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (response.StatusCode != HttpStatusCode.OK)
+            throw new InvalidOperationException($"WinGet publishing-token authentication failed (GitHub HTTP {(int)response.StatusCode}). No submission was started.");
+        return plan;
+    }
+
+    private PowerForgeWingetSubmissionPlan CreatePlan(
+        PowerForgeReleaseWingetOptions winget, IReadOnlyList<PowerForgeWingetManifestArtifact> manifests,
+        string configDirectory, PowerForgeReleaseRequest request, out string? token)
     {
         if (winget is null)
             throw new ArgumentNullException(nameof(winget));
@@ -35,7 +71,7 @@ internal sealed class WingetSubmissionService
         if (timeoutSeconds <= 0)
             throw new InvalidOperationException("Winget submission timeout must be greater than zero seconds.");
 
-        string? token = null;
+        token = null;
         var allowInteractive = request.WingetSubmitAllowInteractiveAuthentication ?? submission.AllowInteractiveAuthentication;
         if (enabled)
         {
@@ -49,8 +85,9 @@ internal sealed class WingetSubmissionService
 
         var usesToken = enabled && !string.IsNullOrWhiteSpace(token);
         var usesInteractiveAuthentication = enabled && !usesToken && allowInteractive;
+        var resolvedToken = token;
         var entries = enabled
-            ? manifests.Select(manifest => BuildEntry(winget, submission, request, manifest, mode, token)).ToArray()
+            ? manifests.Select(manifest => BuildEntry(winget, submission, request, manifest, mode, resolvedToken)).ToArray()
             : Array.Empty<PowerForgeWingetSubmissionEntryPlan>();
 
         if (enabled && entries.Length == 0)

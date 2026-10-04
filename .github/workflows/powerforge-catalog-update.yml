@@ -27,6 +27,9 @@ on:
       execute:
         type: boolean
         default: false
+      verify-authentication:
+        type: boolean
+        default: false
       confirm-no-prior-submission:
         type: boolean
         default: false
@@ -68,6 +71,7 @@ jobs:
       CATALOG_MANIFEST: ${{ inputs.manifest-name }}
       CATALOG_CHECKSUMS: ${{ inputs.checksums-name }}
       CATALOG_EXECUTE: ${{ inputs.execute }}
+      CATALOG_VERIFY_AUTHENTICATION: ${{ inputs.verify-authentication }}
       CATALOG_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       CATALOG_CONFIRM_NO_PRIOR_SUBMISSION: ${{ inputs.confirm-no-prior-submission }}
     steps:
@@ -93,9 +97,15 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          Get-Command gh, winget, wingetcreate | Out-Null
           if (!(Test-Path -LiteralPath $env:RUNNER_TEMP -PathType Container)) { throw 'Runner scratch root is unavailable.' }
           "output=$env:RUNNER_TEMP/catalog-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT" | Out-File -LiteralPath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "tools=$env:RUNNER_TEMP/catalog-tools-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT" | Out-File -LiteralPath $env:GITHUB_OUTPUT -Append -Encoding utf8
+      - name: Install verified catalog tools in task scratch
+        id: tools
+        shell: pwsh
+        env:
+          CATALOG_TOOLS: ${{ steps.paths.outputs.tools }}
+        run: catalog-owner/.github/scripts/install-catalog-tools.ps1 -ToolsPath $env:CATALOG_TOOLS
       - name: Prepare or restore and preflight catalog update
         id: prepare
         shell: pwsh
@@ -138,3 +148,9 @@ jobs:
           path: ${{ steps.paths.outputs.output }}/
           if-no-files-found: error
           retention-days: 90
+      - name: Remove task catalog tools
+        if: ${{ always() && steps.tools.outcome == 'success' }}
+        shell: pwsh
+        env:
+          CATALOG_TOOLS: ${{ steps.paths.outputs.tools }}
+        run: Remove-Item -LiteralPath $env:CATALOG_TOOLS -Recurse

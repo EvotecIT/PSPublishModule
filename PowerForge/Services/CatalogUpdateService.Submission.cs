@@ -24,13 +24,18 @@ internal sealed partial class CatalogUpdateService
         {
             RequirePrepared(receipt.Winget, "WinGet", reservationKey);
             var manifest = receipt.Files.Keys.Single(path => path.EndsWith(".installer.yaml", StringComparison.Ordinal));
-            wingetPlan = _winget.Plan(release.Winget!, new[] { new PowerForgeWingetManifestArtifact
+            var manifests = new[] { new PowerForgeWingetManifestArtifact
             {
                 PackageIdentifier = receipt.PackageIdentifier, PackageVersion = receipt.PackageVersion,
                 ManifestPath = ContainedFile(output, manifest), ManifestDirectory = Path.GetDirectoryName(ContainedFile(output, manifest)),
                 InstallerUrls = receipt.Artifacts.Select(artifact => artifact.WingetUrl).ToArray()
-            } }, Path.GetDirectoryName(Path.GetFullPath(releaseConfigPath))!, new PowerForgeReleaseRequest
-            { SubmitWinget = submit || requireAuthentication, WingetSubmitMode = PowerForgeWingetSubmissionMode.Manifest });
+            } };
+            var configDirectory = Path.GetDirectoryName(Path.GetFullPath(releaseConfigPath))!;
+            var request = new PowerForgeReleaseRequest
+            { SubmitWinget = submit || requireAuthentication, WingetSubmitMode = PowerForgeWingetSubmissionMode.Manifest };
+            wingetPlan = submit || requireAuthentication
+                ? await _winget.PlanAuthenticatedAsync(release.Winget!, manifests, configDirectory, request, cancellationToken).ConfigureAwait(false)
+                : _winget.Plan(release.Winget!, manifests, configDirectory, request);
             _winget.ValidateManifestDirectory(Path.GetDirectoryName(ContainedFile(output, manifest))!);
         }
         if (doStore && receipt.Store.State != "Submitted")
@@ -57,6 +62,7 @@ internal sealed partial class CatalogUpdateService
             if (storePlan is not null) await _verifyDownload(artifact, true, cancellationToken).ConfigureAwait(false);
         }
         if (!submit) return receipt;
+        cancellationToken.ThrowIfCancellationRequested();
         if (wingetPlan is not null)
         {
             Begin(output, receipt, receipt.Winget, null);
