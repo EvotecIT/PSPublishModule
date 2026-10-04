@@ -98,8 +98,12 @@ live command it reserves the selected channels and uploads that intent as a
 separate artifact; final receipts never overwrite it. Concurrency queues updates
 for the same product/tag and automatic replay is disabled after an interrupted
 reservation. A reservation key is consumed before each channel mutation.
-Use explicit reconciliation for an interrupted run, then retain the reconciled
-receipt as the latest workflow artifact before rerunning the workflow.
+For an interrupted run, download the latest trusted receipt artifact and use
+the local `reconcile`, `submit` and `status` commands against that directory.
+Keep the reconciled receipt as the release record. The dispatch workflow stops
+on an uncertain archived receipt; downloading and changing a local copy does
+not update GitHub's immutable artifact. Complete that release through the local
+commands rather than starting another workflow attempt with stale progress.
 
 Receipt artifacts are retained for 90 days. Download and retain them durably
 for long-term recovery. Expired or missing receipts require checking remote
