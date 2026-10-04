@@ -122,4 +122,42 @@ public sealed class LineEndingsNormalizerTests
             File.Delete(path);
         }
     }
+
+    [Theory]
+    [InlineData("first\r\nlast\r", LineEnding.CRLF, "first\r\nlast\r\n")]
+    [InlineData("first\r\nlast\n", LineEnding.CRLF, "first\r\nlast\r\n")]
+    [InlineData("first\r\nlast\r\r\n", LineEnding.CRLF, "first\r\nlast\r\n\r\n")]
+    [InlineData("first\nlast\r", LineEnding.LF, "first\nlast\n")]
+    [InlineData("first\nlast\r\n", LineEnding.LF, "first\nlast\n")]
+    public void NormalizeFile_TrailingNonconformingNewline_StillNormalizes(string input, LineEnding ending, string expected)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"powerforge-lineendings-{Guid.NewGuid():N}.ps1");
+        try
+        {
+            File.WriteAllText(path, input, new UTF8Encoding(false));
+            var result = new LineEndingsNormalizer().NormalizeFile(path, new NormalizationOptions(ending, false));
+
+            Assert.True(result.Changed);
+            Assert.Equal(Encoding.UTF8.GetBytes(expected), File.ReadAllBytes(path));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Theory]
+    [InlineData("one\r\ntwo\n", "one\r\ntwo\r\n")]
+    [InlineData("one\ntwo\nthree\r\n", "one\ntwo\nthree\n")]
+    [InlineData("one\r\ntwo\r", "one\r\ntwo\r\n")]
+    public void NormalizeFile_Auto_PreservesDominantStyleAndCrLfTieBreak(string input, string expected)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"powerforge-lineendings-{Guid.NewGuid():N}.ps1");
+        try
+        {
+            File.WriteAllText(path, input, new UTF8Encoding(true));
+            var result = new LineEndingsNormalizer().NormalizeFile(path, new NormalizationOptions(LineEnding.Auto));
+
+            Assert.True(result.Changed);
+            Assert.Equal(new UTF8Encoding(true).GetPreamble().Concat(Encoding.UTF8.GetBytes(expected)), File.ReadAllBytes(path));
+        }
+        finally { File.Delete(path); }
+    }
 }

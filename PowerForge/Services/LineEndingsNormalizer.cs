@@ -10,6 +10,7 @@ namespace PowerForge;
 public sealed class LineEndingsNormalizer : ILineEndingsNormalizer
 {
     private static readonly Encoding Utf8Bom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+    private static readonly char[] NewlineCharacters = { '\r', '\n' };
 
     /// <inheritdoc />
     public NormalizationResult NormalizeFile(string path, NormalizationOptions? options = null)
@@ -74,10 +75,26 @@ public sealed class LineEndingsNormalizer : ILineEndingsNormalizer
     {
         if (target == "\r\n")
         {
+            // Keep the original text when every newline is already a CRLF pair.
+            // Replacing CRLF with LF and back otherwise creates two full-size copies.
+            if (HasOnlyCrLf(text)) return text;
             return text.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
         }
 
+        if (text.IndexOf('\r') < 0) return text;
         return text.Replace("\r\n", "\n").Replace("\r", "\n");
+    }
+
+    private static bool HasOnlyCrLf(string text)
+    {
+        var position = text.IndexOfAny(NewlineCharacters);
+        while (position >= 0)
+        {
+            if (text[position] != '\r' || position + 1 >= text.Length || text[position + 1] != '\n')
+                return false;
+            position = text.IndexOfAny(NewlineCharacters, position + 2);
+        }
+        return true;
     }
 
     /// <summary>
