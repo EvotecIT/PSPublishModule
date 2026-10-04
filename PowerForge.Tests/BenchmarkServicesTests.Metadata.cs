@@ -6,6 +6,30 @@ namespace PowerForge.Tests;
 
 public sealed partial class BenchmarkServicesTests
 {
+    [Theory]
+    [InlineData(" 10.0.303\r\n", "10.0.303")]
+    [InlineData("10.0.100-preview.7.25380.108", "10.0.100-preview.7.25380.108")]
+    [InlineData(null, "")]
+    [InlineData("The command could not be loaded.", "")]
+    [InlineData("10.0.303\n8.0.100", "")]
+    public void BenchmarkEnvironmentMetadata_OnlyAcceptsAnSdkVersion(string? output, string expected)
+        => Assert.Equal(expected, PowerShellBenchmarkEnvironmentMetadata.NormalizeDotNetSdkVersion(output));
+
+    [Fact]
+    public void BenchmarkEnvironmentMetadata_RespectsSourceSdkSelectionWithoutRequiringAnSdk()
+    {
+        string root = CreateTempRoot();
+        try
+        {
+            var current = PowerShellBenchmarkEnvironmentMetadata.BuildEnvironment(RepoRootLocator.Find());
+            Assert.False(string.IsNullOrWhiteSpace(current.DotNetSdkVersion));
+            File.WriteAllText(Path.Combine(root, "global.json"),
+                """{"sdk":{"version":"99.0.999","rollForward":"disable"}}""");
+            Assert.Equal(string.Empty, PowerShellBenchmarkEnvironmentMetadata.BuildEnvironment(root).DotNetSdkVersion);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public void BenchmarkEnvironmentMetadata_RecordsThePowerShellHostVersion()
     {
@@ -71,5 +95,6 @@ New-BenchmarkSuite 'metadata' -OutputRoot '{{escapedRoot}}' {
         Assert.False(string.IsNullOrWhiteSpace(result.Environment.RuntimeVersion));
         Assert.False(string.IsNullOrWhiteSpace(result.Environment.Runner));
         Assert.False(string.IsNullOrWhiteSpace(result.Environment.ProcessorName));
+        Assert.False(string.IsNullOrWhiteSpace(result.Environment.DotNetSdkVersion));
     }
 }
