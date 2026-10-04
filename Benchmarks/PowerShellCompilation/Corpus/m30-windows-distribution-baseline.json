@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedAtUtc": "2026-10-04T01:49:31Z",
+  "recordedAtUtc": "2026-10-04T03:55:00Z",
   "state": "InProgress",
   "finalReleaseVersion": "3.0.155",
   "versionSelection": {
@@ -997,7 +997,25 @@
       "coldCacheTrxSha256": "72B83293E71F8D11905ABE9E06086FDB28EE10BF23EB0347A0F380EA26E47C24",
       "observersTrxSha256": "DE5AB8CAA918EAA4B7E9EBB5EB922B950F06CDF55C3C7A4DED48E4CC33D0A510",
       "net472TrxSha256": "BBDA4B8815E511801FBBBCA3EECCE29B34B0E976D91115B036ECC72FC31EB221",
-      "scope": "Test setup and observer repairs; focused and Full CI must pass on the new head"
+      "scope": "Test setup and observer repairs; focused CI subsequently passes at f7fdae19a, while Full CI remains in progress"
+    },
+    "repairedCandidateCheckpoint": {
+      "sourceCommit": "f7fdae19aa55736839b421e03a2c1e22b9de6393",
+      "recordedAtUtc": "2026-10-04T03:55:00Z",
+      "focusedRun": 37169315455,
+      "focusedJob": 111338839955,
+      "focusedTestsPassed": 296,
+      "focusedStrictProgramsPassed": 6,
+      "focusedStepSeconds": 961,
+      "focusedStepBudgetSeconds": 1200,
+      "regularWindowsLinuxMacOsPassed": true,
+      "dotNetPublishTestsPassed": true,
+      "manualWindowsLinuxMacOsPassed": true,
+      "delayedReviewThreads": 0,
+      "fullRun": 37169338544,
+      "fullState": "Complete compiler gate in progress at checkpoint",
+      "latestFetchedDefaultBranch": "c97e6855ca9eaa53c2411ac11d8cf2a91dbb7182",
+      "defaultBranchChange": "Website listing SEO; no compiler production-owner changes"
     }
   },
   "pending": [

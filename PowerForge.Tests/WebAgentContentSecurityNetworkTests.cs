@@ -224,9 +224,10 @@ public sealed partial class WebAgentContentSecurityScannerTests
     [Fact]
     public void Scan_ReportsWholeNetworkBudgetBeforeSkippingConfiguredHostChecks()
     {
-        using var handler = new DelayedRegistryHandler(
-            TimeSpan.FromMilliseconds(1100),
-            JsonResponse("""{"versions":["1.0.0"]}"""));
+        using var handler = new RegistryHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StreamContent(new StalledReadStream())
+        });
         using var client = new HttpClient(handler);
         using var scanner = new WebAgentContentSecurityScanner(client);
         var root = CreateArtifact("llms.txt",
@@ -247,6 +248,7 @@ public sealed partial class WebAgentContentSecurityScannerTests
             Assert.Contains(result.Findings, issue => issue.Code == "PFAGENT.NETWORK.TIME_BUDGET");
             Assert.DoesNotContain(result.Findings, issue => issue.Code == "PFAGENT.HOST.NON_PUBLIC");
             Assert.Equal(0, result.ExternalHostCount);
+            Assert.Equal(1, handler.RequestCount);
         }
         finally
         {
