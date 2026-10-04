@@ -1190,6 +1190,8 @@ Runs `dotnet publish` and (optionally) applies Blazor fixes.
 
 Notes:
 - Blazor publish fixes are enabled by default.
+  - Local stylesheet links in the published `index.html` receive a content-based `v` query. A changed scoped CSS entry point requests a fresh copy and imports the current component bundle after an upgrade.
+  - Existing query parameters and fragments are preserved. Remote, root-relative and missing stylesheet links are left unchanged; stylesheet and SDK JavaScript bytes are preserved.
   - Disable via `blazorFixes: false` (alias: `blazor-fixes: false`) or `noBlazorFixes: true` (alias: `no-blazor-fixes: true`).
 - If you specify both `blazorFixes` and `noBlazorFixes`, they must be logically consistent; conflicting values fail the step.
 - `defineConstants` maps to `-p:DefineConstants=...` for multi-variant Blazor publishes.

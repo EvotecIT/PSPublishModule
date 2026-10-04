@@ -15,12 +15,12 @@ public sealed class WebBlazorPublishFixOptions
     public bool UpdateBootIntegrity { get; set; } = true;
     /// <summary>When true, copy fingerprinted blazor.webassembly.*.js to stable name.</summary>
     public bool CopyFingerprintBlazorJs { get; set; } = true;
-    /// <summary>When true, append cache-busting query to blazor JS.</summary>
+    /// <summary>When true, version stable Blazor JS and local stylesheet references.</summary>
     public bool AddCacheBuster { get; set; } = true;
 }
 
 /// <summary>Applies fixes to Blazor static publish output.</summary>
-public static class WebBlazorPublishFixer
+public static partial class WebBlazorPublishFixer
 {
     /// <summary>Applies configured fixes to the publish output.</summary>
     /// <param name="options">Fix options.</param>
@@ -52,7 +52,10 @@ public static class WebBlazorPublishFixer
         }
 
         if (options.AddCacheBuster)
+        {
             AddCacheBuster(Path.Combine(siteRoot, "index.html"));
+            VersionStylesheets(Path.Combine(siteRoot, "index.html"), siteRoot);
+        }
     }
 
     private static void UpdateBaseHref(string htmlPath, string baseHref)
