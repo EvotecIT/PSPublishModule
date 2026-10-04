@@ -1,5 +1,6 @@
 ﻿param([string]$FlagsB64,[Parameter(ValueFromRemainingArguments=$true)][string[]]$Files)
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
 try {
   $flags = $null

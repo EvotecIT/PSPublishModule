@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 
 namespace PowerForge;
 
@@ -28,6 +29,20 @@ public sealed class PssaFormatter : IFormatter
 
     /// <inheritdoc />
     public IReadOnlyList<FormatterResult> FormatFilesWithSettings(IEnumerable<string> files, string? settingsJson, TimeSpan? timeout = null)
+        => RunFormatter(files, settingsJson, batches: null, timeout);
+
+    internal IReadOnlyList<FormatterResult> FormatBatches(IReadOnlyList<FormattingBatch> batches)
+        => RunFormatter(
+            batches.SelectMany(batch => batch.Files),
+            settingsJson: null,
+            batches,
+            TimeSpan.FromSeconds(batches.Sum(batch => Math.Max(1, batch.Options.TimeoutSeconds))));
+
+    private IReadOnlyList<FormatterResult> RunFormatter(
+        IEnumerable<string> files,
+        string? settingsJson,
+        IReadOnlyList<FormattingBatch>? batches,
+        TimeSpan? timeout)
     {
         var list = files.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();  
         if (list.Length == 0) return Array.Empty<FormatterResult>();
@@ -47,9 +62,30 @@ public sealed class PssaFormatter : IFormatter
 
         var args = new List<string>(list.Length + 1) { settingsB64 };
         args.AddRange(list);
-        var result = _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout ?? TimeSpan.FromMinutes(2)));
-
-        try { File.Delete(scriptPath); } catch { /* ignore */ }
+        string? batchPath = null;
+        if (batches is not null)
+        {
+            batchPath = Path.Combine(tempDir, $"batch_{Guid.NewGuid():N}.json");
+            File.WriteAllText(batchPath, JsonSerializer.Serialize(batches.Select(batch => new
+            {
+                batch.Files,
+                SettingsJson = batch.Options.PssaSettingsJson
+            })), new UTF8Encoding(false));
+            args = new List<string> { "-BatchPath", batchPath };
+        }
+        PowerShellRunResult result;
+        try
+        {
+            result = _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout ?? TimeSpan.FromMinutes(2)));
+        }
+        finally
+        {
+            try { File.Delete(scriptPath); } catch { /* ignore */ }
+            if (batchPath is not null)
+            {
+                try { File.Delete(batchPath); } catch { /* ignore */ }
+            }
+        }
 
         if (result.ExitCode == 127)
         {

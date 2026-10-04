@@ -332,6 +332,60 @@ public sealed class PssaFormatterIsolationTests
         File.WriteAllText(Path.Combine(versionRoot, "PSScriptAnalyzer.psm1"), moduleScript);
     }
 
+    [Fact]
+    public void FormatBatches_PreservesDifferentSettingsAndPerFileErrorsInOneIsolatedProcess()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var moduleRoot = Path.Combine(root, "modules", "PSScriptAnalyzer", "999.0.0");
+            Directory.CreateDirectory(moduleRoot);
+            WriteTestModule(moduleRoot, "999.0.0", """
+                function Invoke-Formatter {
+                    [CmdletBinding()]
+                    param([string] $ScriptDefinition, [hashtable] $Settings)
+                    if ($Settings.Reject) { Write-Error 'Rejected first group'; return $ScriptDefinition }
+                    return $ScriptDefinition + "`n# " + $Settings.Marker
+                }
+                Export-ModuleMember -Function Invoke-Formatter
+                """);
+            var first = Path.Combine(root, "first ü.psd1");
+            var second = Path.Combine(root, "second.psm1");
+            File.WriteAllText(first, "@{}");
+            File.WriteAllText(second, "'module'");
+            var formatter = new PssaFormatter(
+                new EnvironmentPowerShellRunner(new Dictionary<string, string?>
+                {
+                    ["PSModulePath"] = Path.Combine(root, "modules")
+                }), new NullLogger());
+
+            var results = formatter.FormatBatches(new[]
+            {
+                new FormattingBatch(new[] { first }, new FormatOptions
+                {
+                    PssaSettingsJson = "{\"Reject\":true,\"Marker\":\"first\"}"
+                }),
+                new FormattingBatch(new[] { second }, new FormatOptions
+                {
+                    PssaSettingsJson = "{\"Marker\":\"second\"}"
+                })
+            });
+
+            Assert.Equal(new[] { Path.GetFileName(first), Path.GetFileName(second) }, results.Select(result => Path.GetFileName(result.Path)));
+            Assert.Equal(first, results[0].Path);
+            Assert.StartsWith("Error: Rejected first group", results[0].Message);
+            Assert.Equal("@{}", File.ReadAllText(first));
+            Assert.Equal(second, results[1].Path);
+            Assert.True(results[1].Changed);
+            Assert.Contains("# second", File.ReadAllText(second));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private sealed class StubRunner : IPowerShellRunner
     {
         private readonly PowerShellRunResult _result;

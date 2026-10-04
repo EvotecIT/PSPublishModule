@@ -1,5 +1,11 @@
-﻿param([string]$SettingsB64,[Parameter(ValueFromRemainingArguments=$true)][string[]]$Files)
+﻿[CmdletBinding(PositionalBinding=$false)]
+param(
+    [Parameter(Position=0)][string]$SettingsB64,
+    [Parameter(Position=1,ValueFromRemainingArguments=$true)][string[]]$Files,
+    [string]$BatchPath
+)
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 try {
     $ModuleRoots = @($env:PSModulePath -split [System.IO.Path]::PathSeparator |
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
@@ -99,9 +105,18 @@ function ConvertTo-Hashtable {
   }
   return $InputObject
 }
-if ($null -ne $settings) { $settings = ConvertTo-Hashtable $settings }
+$batches = @([pscustomobject]@{ Files = $Files; Settings = $settings })
+if ($BatchPath) {
+    $batches = @(Get-Content -LiteralPath $BatchPath -Raw -ErrorAction Stop | ConvertFrom-Json | ForEach-Object {
+        $batchSettings = $null
+        if ($_.SettingsJson) { $batchSettings = ConvertFrom-Json -InputObject $_.SettingsJson }
+        [pscustomobject]@{ Files = $_.Files; Settings = $batchSettings }
+    })
+}
 
-foreach ($f in $Files) {
+foreach ($batch in $batches) {
+$settings = ConvertTo-Hashtable $batch.Settings
+foreach ($f in $batch.Files) {
   try {
     $text = Get-Content -LiteralPath $f -Raw -ErrorAction Stop
     $formatterErrors = @()
@@ -144,5 +159,6 @@ foreach ($f in $Files) {
   } catch {
     Write-Output ("ERROR::" + $f + "::" + $_.Exception.Message)
   }
+}
 }
 exit 0
