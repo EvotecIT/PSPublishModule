@@ -219,14 +219,28 @@ public static partial class WebApiDocsGenerator
     private static string BuildPropertySignature(PropertyInfo property)
     {
         var accessors = new List<string>();
-        if (property.GetMethod is not null) accessors.Add("get;");
-        if (property.SetMethod is not null) accessors.Add("set;");
+        var visibleAccessor = GetMostVisibleAccessor(property.GetMethod, property.SetMethod);
+        var propertyAccess = visibleAccessor is null ? string.Empty : GetAccessModifier(visibleAccessor);
+        if (property.GetMethod is not null)
+            accessors.Add(BuildPropertyAccessorSignature(property.GetMethod, "get", propertyAccess));
+        if (property.SetMethod is not null)
+        {
+            var isInitOnly = property.SetMethod.ReturnParameter.GetRequiredCustomModifiers()
+                .Any(type => type.FullName == "System.Runtime.CompilerServices.IsExternalInit");
+            accessors.Add(BuildPropertyAccessorSignature(property.SetMethod, isInitOnly ? "init" : "set", propertyAccess));
+        }
         var prefix = BuildPropertyPrefix(property);
         var parameters = property.GetIndexParameters();
         var displayName = parameters.Length == 0
             ? property.Name
             : $"this[{string.Join(", ", parameters.Select(BuildParameterSignature))}]";
         return $"{prefix}{GetReadableTypeName(property.PropertyType)} {displayName} {{ {string.Join(" ", accessors)} }}".Trim();
+    }
+
+    private static string BuildPropertyAccessorSignature(MethodInfo accessor, string name, string propertyAccess)
+    {
+        var access = GetAccessModifier(accessor);
+        return access == propertyAccess ? $"{name};" : $"{access} {name};";
     }
 
     private static string BuildFieldSignature(FieldInfo field)
