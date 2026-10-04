@@ -202,6 +202,15 @@ Scaffolded CI workflow:
 - It includes workflow concurrency cancelation and NuGet cache reuse by default.
 - Optional canary override via GitHub variables `POWERFORGE_REPOSITORY` / `POWERFORGE_REF`.
 
+Pull-request builds with public GitHub data, such as a release hub, can set
+`authenticate_public_github_data: true` in the reusable CI workflow's `with`
+block. This opt-in is disabled by default and applies only to verified public
+repositories. It supplies the read-only job token for GitHub API requests while
+keeping package, repository PAT, IndexNow and Cloudflare credentials unavailable
+and Git checkout credentials unpersisted. Private repositories retain the
+credential-free pull-request path. Direct callers of the runner workflow using
+`credential_mode: public-github` must also declare read-only job permissions.
+
 Scaffolded maintenance workflow:
 - `./.github/workflows/website-maintenance.yml` runs weekly (`cron`) and on manual dispatch.
 - It is a thin wrapper around `EvotecIT/PSPublishModule/.github/workflows/powerforge-website-maintenance.yml`.
