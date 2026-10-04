@@ -100,7 +100,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             $start.UseShellExecute = $false
             $start.CreateNoWindow = $true
             $child = [Diagnostics.Process]::Start($start)
-            [IO.File]::WriteAllText($args[0], "$PID,$($child.Id)")
+            [IO.File]::WriteAllText($args[0], "$PID,$($child.Id)" + [Environment]::NewLine)
             while ($true) { Start-Sleep -Milliseconds 50 }
             """;
         using var fixture = ArtifactFixture.Create(source, compactPath: true);
@@ -142,8 +142,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             while (true)
             {
                 if (errors.TryDequeue(out var error)) Assert.Fail(error);
-                var content = File.ReadAllText(marker);
-                if (content.Length > 0 && content != previous)
+                // The running application can still be publishing its marker.
+                // Share with that writer and wait for its complete record.
+                using var stream = new FileStream(marker, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var reader = new StreamReader(stream);
+                var content = reader.ReadToEnd();
+                if (content.EndsWith(Environment.NewLine, StringComparison.Ordinal) && content != previous)
                     return (content, content.Split(',').Select(value => Process.GetProcessById(int.Parse(value))).ToArray());
                 await Task.Delay(50, cancellation.Token);
             }
