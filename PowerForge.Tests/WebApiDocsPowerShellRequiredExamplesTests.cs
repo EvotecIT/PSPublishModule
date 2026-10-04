@@ -4,8 +4,10 @@ using System.Xml.Linq;
 
 public class WebApiDocsPowerShellRequiredExamplesTests
 {
-    [Fact]
-    public void GeneratedExampleIncludesEveryRequiredArgument()
+    [Theory]
+    [InlineData("String", "'Value'")]
+    [InlineData("PSCredential", "(Get-Credential)")]
+    public void GeneratedExampleIncludesEveryRequiredArgument(string finalParameterType, string finalSample)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-required-example-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -17,7 +19,7 @@ public class WebApiDocsPowerShellRequiredExamplesTests
             XElement Parameter(string name) => new(command + "parameter", new XAttribute("required", "true"),
                 new XElement(maml + "name", name),
                 new XElement(maml + "description", new XElement(maml + "para", "Required value.")),
-                new XElement(command + "parameterValue", new XAttribute("required", "true"), "String"));
+                new XElement(command + "parameterValue", new XAttribute("required", "true"), name == "Sixth" ? finalParameterType : "String"));
             var helpPath = Path.Combine(root, "Sample-help.xml");
             new XDocument(new XElement("helpItems", new XAttribute("schema", "maml"),
                 new XElement(command + "command",
@@ -40,7 +42,7 @@ public class WebApiDocsPowerShellRequiredExamplesTests
             using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(output, "types", "invoke-thing.json")));
             var code = Assert.Single(json.RootElement.GetProperty("examples").EnumerateArray(),
                 example => example.GetProperty("kind").GetString() == "code");
-            Assert.Equal("Invoke-Thing " + string.Join(" ", names.Select(name => $"-{name} 'Value'")),
+            Assert.Equal("Invoke-Thing " + string.Join(" ", names.Select(name => $"-{name} {(name == "Sixth" ? finalSample : "'Value'")}")),
                 code.GetProperty("text").GetString());
             Assert.Equal("GeneratedFallback", code.GetProperty("origin").GetString());
             Assert.Contains("-Sixth", File.ReadAllText(Path.Combine(output, "invoke-thing.html")), StringComparison.Ordinal);

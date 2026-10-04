@@ -1157,6 +1157,8 @@ public static partial class WebApiDocsGenerator
             return "{ }";
         if (type.Equals("Hashtable", StringComparison.OrdinalIgnoreCase) || type.Equals("IDictionary", StringComparison.OrdinalIgnoreCase))
             return "@{}";
+        if (type.Equals("PSCredential", StringComparison.OrdinalIgnoreCase) || type.EndsWith(".PSCredential", StringComparison.OrdinalIgnoreCase))
+            return "(Get-Credential)";
 
         if (name.Equals("Path", StringComparison.OrdinalIgnoreCase) || name.EndsWith("Path", StringComparison.OrdinalIgnoreCase))
             return "'C:\\Path'";

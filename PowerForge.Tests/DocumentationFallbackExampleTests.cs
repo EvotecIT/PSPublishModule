@@ -62,6 +62,17 @@ public class DocumentationFallbackExampleTests
     }
 
     [Fact]
+    public void FallbackEvaluatesTheRequiredCredentialExpression()
+    {
+        var command = CreateCommand("Invoke-Thing -Credential <PSCredential> [<CommonParameters>]");
+        command.Parameters.Add(new() { Name = "Credential", Type = "PSCredential", Required = true });
+
+        Enrich(command);
+
+        Assert.Equal("Invoke-Thing -Credential (Get-Credential)", Assert.Single(command.Examples).Code);
+    }
+
+    [Fact]
     public void FallbackPreservesAuthoredExamples()
     {
         var command = CreateCommand("Invoke-Thing [-TargetPath] <String> [<CommonParameters>]");

@@ -229,7 +229,8 @@ internal static class DocumentationFallbackEnricher
             return "@{}";
 
         if (type.Equals("ScriptBlock", StringComparison.OrdinalIgnoreCase)) return "{ }";
-        if (type.Equals("PSCredential", StringComparison.OrdinalIgnoreCase)) return "Get-Credential";
+        if (type.Equals("PSCredential", StringComparison.OrdinalIgnoreCase) ||
+            type.EndsWith(".PSCredential", StringComparison.OrdinalIgnoreCase)) return "(Get-Credential)";
         if (type.Equals("SecureString", StringComparison.OrdinalIgnoreCase)) return "(Read-Host -AsSecureString)";
 
         return "'Value'";
