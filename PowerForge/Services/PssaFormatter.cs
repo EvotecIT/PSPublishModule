@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 
 namespace PowerForge;
 
@@ -10,6 +11,7 @@ public sealed class PssaFormatter : IFormatter
 {
     private readonly IPowerShellRunner _runner;
     private readonly ILogger _logger;
+    private PssaFormatterSession? _session;
 
     /// <summary>
     /// Creates a new formatter that uses the provided runner and logger.
@@ -28,6 +30,29 @@ public sealed class PssaFormatter : IFormatter
 
     /// <inheritdoc />
     public IReadOnlyList<FormatterResult> FormatFilesWithSettings(IEnumerable<string> files, string? settingsJson, TimeSpan? timeout = null)
+        => RunFormatter(files, settingsJson, batches: null, timeout);
+
+    internal IReadOnlyList<FormatterResult> FormatBatches(IReadOnlyList<FormattingBatch> batches)
+        => RunFormatter(
+            batches.SelectMany(batch => batch.Files),
+            settingsJson: null,
+            batches,
+            TimeSpan.FromSeconds(batches.Sum(batch => Math.Max(1, batch.Options.TimeoutSeconds))));
+
+    /// <summary>Reuses a formatter host only within an explicitly owned build-phase scope.</summary>
+    internal IDisposable? BeginSession()
+    {
+        if (_runner is not ICancellablePowerShellRunner runner) return null;
+        if (_session is not null) throw new InvalidOperationException("A formatter session is already active.");
+        _session = new PssaFormatterSession(runner, () => _session = null);
+        return _session;
+    }
+
+    private IReadOnlyList<FormatterResult> RunFormatter(
+        IEnumerable<string> files,
+        string? settingsJson,
+        IReadOnlyList<FormattingBatch>? batches,
+        TimeSpan? timeout)
     {
         var list = files.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();  
         if (list.Length == 0) return Array.Empty<FormatterResult>();
@@ -47,9 +72,32 @@ public sealed class PssaFormatter : IFormatter
 
         var args = new List<string>(list.Length + 1) { settingsB64 };
         args.AddRange(list);
-        var result = _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout ?? TimeSpan.FromMinutes(2)));
-
-        try { File.Delete(scriptPath); } catch { /* ignore */ }
+        string? batchPath = null;
+        if (batches is not null)
+        {
+            batchPath = Path.Combine(tempDir, $"batch_{Guid.NewGuid():N}.json");
+            File.WriteAllText(batchPath, JsonSerializer.Serialize(batches.Select(batch => new
+            {
+                batch.Files,
+                SettingsJson = batch.Options.PssaSettingsJson
+            })), new UTF8Encoding(false));
+            args = new List<string> { "-BatchPath", batchPath };
+        }
+        PowerShellRunResult result;
+        try
+        {
+            result = _session is not null && batchPath is not null
+                ? _session.Run(script, batchPath, timeout ?? TimeSpan.FromMinutes(2))
+                : _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout ?? TimeSpan.FromMinutes(2)));
+        }
+        finally
+        {
+            try { File.Delete(scriptPath); } catch { /* ignore */ }
+            if (batchPath is not null)
+            {
+                try { File.Delete(batchPath); } catch { /* ignore */ }
+            }
+        }
 
         if (result.ExitCode == 127)
         {
@@ -58,8 +106,7 @@ public sealed class PssaFormatter : IFormatter
         }
         if (result.ExitCode == 124)
         {
-            _logger.Warn("PSSA: Formatting timed out; skipping.");
-            return list.Select(p => new FormatterResult(p, false, "Skipped: Timeout")).ToArray();
+            _logger.Warn("PSSA: Formatting timed out; skipping unfinished files.");
         }
         if (result.ExitCode == 3 || (result.StdOut ?? string.Empty).Contains("PSSA_NOT_FOUND", StringComparison.Ordinal))
         {
@@ -111,7 +158,9 @@ public sealed class PssaFormatter : IFormatter
         {
             if (!outputs.Any(o => string.Equals(o.Path, p, StringComparison.OrdinalIgnoreCase)))
             {
-                if (result.ExitCode != 0)
+                if (result.ExitCode == 124)
+                    outputs.Add(new FormatterResult(p, false, "Skipped: Timeout"));
+                else if (result.ExitCode != 0)
                     outputs.Add(new FormatterResult(p, false, $"Skipped: PSSA failed (exit {result.ExitCode})"));
                 else
                     outputs.Add(new FormatterResult(p, false, "Error: PSSA returned no result"));

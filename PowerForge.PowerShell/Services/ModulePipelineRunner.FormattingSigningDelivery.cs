@@ -60,29 +60,29 @@ public sealed partial class ModulePipelineRunner
                 psd1Files = psd1Files.Where(p => !string.Equals(p, manifestPath, StringComparison.OrdinalIgnoreCase)).ToArray();
         }
 
-        var results = new List<FormatterResult>(all.Length + 4);
+        var batches = new List<FormattingBatch>();
 
         // Legacy PSPublishModule defaults did not format standalone PS1 files unless explicitly configured.
         var standardPs1 = cfg.Standard.FormatCodePS1;
         if (standardPs1?.Enabled == true && ps1Files.Length > 0)
-            results.AddRange(pipeline.Run(ps1Files, BuildFormatOptions(standardPs1)));
+            batches.Add(new FormattingBatch(ps1Files, BuildFormatOptions(standardPs1)));
 
         if (cfg.Standard.FormatCodePSM1?.Enabled == true && psm1Files.Length > 0)
-            results.AddRange(pipeline.Run(psm1Files, BuildFormatOptions(cfg.Standard.FormatCodePSM1)));
+            batches.Add(new FormattingBatch(psm1Files, BuildFormatOptions(cfg.Standard.FormatCodePSM1)));
 
         if (standardPsd1?.Enabled == true && psd1Files.Length > 0)
-            results.AddRange(pipeline.Run(psd1Files, BuildFormatOptions(standardPsd1)));
+            batches.Add(new FormattingBatch(psd1Files, BuildFormatOptions(standardPsd1)));
 
         if (includeMergeFormatting)
         {
             if (cfg.Merge.FormatCodePSM1?.Enabled == true && File.Exists(rootPsm1))
-                results.AddRange(pipeline.Run(new[] { rootPsm1 }, BuildFormatOptions(cfg.Merge.FormatCodePSM1)));
+                batches.Add(new FormattingBatch(new[] { rootPsm1 }, BuildFormatOptions(cfg.Merge.FormatCodePSM1)));
 
             if (mergePsd1?.Enabled == true && File.Exists(manifestPath))
-                results.AddRange(pipeline.Run(new[] { manifestPath }, BuildFormatOptions(mergePsd1)));
+                batches.Add(new FormattingBatch(new[] { manifestPath }, BuildFormatOptions(mergePsd1)));
         }
 
-        return results.ToArray();
+        return pipeline.RunBatches(batches).ToArray();
 
         static bool IsPowerShellSourceFile(string path)
             => HasExtension(path, ".ps1", ".psm1", ".psd1");

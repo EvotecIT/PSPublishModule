@@ -111,7 +111,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             NormalizeInvocationName(rawConsumerName));
     }
 
-    private static bool IsFunctionLookupCommand(CommandAst command, string functionName)
+    private bool IsFunctionLookupCommand(CommandAst command, string functionName)
     {
         var commandName = NormalizeInvocationName(command.GetCommandName());
         if (string.Equals(commandName, "Get-Command", StringComparison.OrdinalIgnoreCase) ||
@@ -151,11 +151,11 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             "LiteralPath");
     }
 
-    private static bool GetCommandCanReturnFunction(CommandAst command)
+    private bool GetCommandCanReturnFunction(CommandAst command)
     {
         try
         {
-            var binding = StaticParameterBinder.BindCommand(command);
+            var binding = BindCommandCached(command);
             if (!binding.BoundParameters.TryGetValue("CommandType", out var result))
                 return true;
 
@@ -177,7 +177,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         }
     }
 
-    private static bool BoundLookupCanMatchFunction(
+    private bool BoundLookupCanMatchFunction(
         CommandAst command,
         string functionName,
         bool providerPath,
@@ -186,7 +186,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
     {
         try
         {
-            var binding = StaticParameterBinder.BindCommand(command);
+            var binding = BindCommandCached(command);
             foreach (var parameterName in parameterNames)
             {
                 if (binding.BoundParameters.TryGetValue(parameterName, out var result))

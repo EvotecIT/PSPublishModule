@@ -153,7 +153,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         }
     }
 
-    private static bool IsKnownSynchronousScriptBlockConsumer(
+    private bool IsKnownSynchronousScriptBlockConsumer(
         string invocationName,
         CommandAst invocation,
         ScriptBlockExpressionAst scriptBlockExpression)
@@ -189,14 +189,14 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return false;
     }
 
-    private static bool IsScriptBlockBoundToAnyParameter(
+    private bool IsScriptBlockBoundToAnyParameter(
         CommandAst invocation,
         ScriptBlockExpressionAst scriptBlockExpression,
         params string[] parameterNames)
     {
         try
         {
-            var binding = StaticParameterBinder.BindCommand(invocation);
+            var binding = BindCommandCached(invocation);
             foreach (var parameterName in parameterNames)
             {
                 if (binding.BoundParameters.TryGetValue(parameterName, out var result) &&
@@ -296,7 +296,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                !IsPotentiallyShadowedByScriptFunction(command, rawCommandName, commandName);
     }
 
-    private static string? TryGetAuthoredAliasName(CommandAst command)
+    private string? TryGetAuthoredAliasName(CommandAst command)
     {
         var commandName = NormalizeInvocationName(command.GetCommandName());
         var aliasCommand = string.Equals(commandName, "Set-Alias", StringComparison.OrdinalIgnoreCase) ||
@@ -312,7 +312,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
         try
         {
-            var binding = StaticParameterBinder.BindCommand(command);
+            var binding = BindCommandCached(command);
             if (aliasCommand && binding.BoundParameters.TryGetValue("Name", out var result))
             {
                 return TryGetLiteralText(result.Value);
@@ -334,7 +334,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return null;
     }
 
-    private static bool IsPotentialDynamicAliasDeclaration(CommandAst command)
+    private bool IsPotentialDynamicAliasDeclaration(CommandAst command)
     {
         var commandName = NormalizeInvocationName(command.GetCommandName());
         var aliasCommand = string.Equals(commandName, "Set-Alias", StringComparison.OrdinalIgnoreCase) ||
@@ -353,7 +353,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
         try
         {
-            var binding = StaticParameterBinder.BindCommand(command);
+            var binding = BindCommandCached(command);
             if (binding.BoundParameters.TryGetValue("Path", out var result) ||
                 binding.BoundParameters.TryGetValue("LiteralPath", out result))
             {
@@ -404,11 +404,11 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return aliasName.Length > 0;
     }
 
-    private static string? TryGetAuthoredAliasTarget(CommandAst command)
+    private string? TryGetAuthoredAliasTarget(CommandAst command)
     {
         try
         {
-            var binding = StaticParameterBinder.BindCommand(command);
+            var binding = BindCommandCached(command);
             if (binding.BoundParameters.TryGetValue("Value", out var result))
                 return TryGetLiteralText(result.Value);
         }
@@ -501,7 +501,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             : null;
     }
 
-    private static bool HasRootAliasScope(CommandAst command)
+    private bool HasRootAliasScope(CommandAst command)
     {
         var authoredScope = TryGetAuthoredAliasScope(command);
         return string.Equals(authoredScope, "Script", StringComparison.OrdinalIgnoreCase) ||
@@ -586,11 +586,11 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
             .All(statement => statement is FunctionDefinitionAst || statement is TrapStatementAst);
     }
 
-    private static string? TryGetAuthoredAliasScope(CommandAst command)
+    private string? TryGetAuthoredAliasScope(CommandAst command)
     {
         try
         {
-            var binding = StaticParameterBinder.BindCommand(command);
+            var binding = BindCommandCached(command);
             return binding.BoundParameters.TryGetValue("Scope", out var result)
                 ? TryGetLiteralText(result.Value)
                 : null;
@@ -733,11 +733,11 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return false;
     }
 
-    private static bool? TryHasAnyBoundParameter(CommandAst invocation, params string[] parameterNames)
+    private bool? TryHasAnyBoundParameter(CommandAst invocation, params string[] parameterNames)
     {
         try
         {
-            var binding = StaticParameterBinder.BindCommand(invocation);
+            var binding = BindCommandCached(invocation);
             if (binding.BoundParameters.Keys.Any(
                     key => parameterNames.Any(name => string.Equals(name, key, StringComparison.OrdinalIgnoreCase))))
             {
