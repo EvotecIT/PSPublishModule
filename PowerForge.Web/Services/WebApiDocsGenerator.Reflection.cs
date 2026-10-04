@@ -41,7 +41,8 @@ public static partial class WebApiDocsGenerator
                 }
             }
 
-            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            foreach (var method in SelectVisibleAssemblyMembers(type,
+                type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static), BuildDocumentationMethodSignature))
             {
                 if (!ShouldIncludeReflectedMethod(method)) continue;
                 model.Methods.Add(new ApiMemberModel
@@ -73,7 +74,8 @@ public static partial class WebApiDocsGenerator
                 });
             }
 
-            foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            foreach (var property in SelectVisibleAssemblyMembers(type,
+                type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static), BuildDocumentationPropertySignature))
             {
                 model.Properties.Add(new ApiMemberModel
                 {
@@ -86,7 +88,8 @@ public static partial class WebApiDocsGenerator
                 });
             }
 
-            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            foreach (var field in SelectVisibleAssemblyMembers(type,
+                type.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static), static member => member.Name))
             {
                 if (field.IsSpecialName) continue;
                 model.Fields.Add(new ApiMemberModel
@@ -96,7 +99,8 @@ public static partial class WebApiDocsGenerator
                 });
             }
 
-            foreach (var evt in type.GetEvents(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            foreach (var evt in SelectVisibleAssemblyMembers(type,
+                type.GetEvents(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static), static member => member.Name))
             {
                 model.Events.Add(new ApiMemberModel
                 {
@@ -121,6 +125,7 @@ public static partial class WebApiDocsGenerator
             var fullName = rawFullName.Replace('+', '.');
             if (!doc.Types.TryGetValue(fullName, out var model)) continue;
 
+            RestrictToDeclaredXmlSurface(model, type);
             model.Kind = GetTypeKind(type);
             model.Assembly = type.Assembly.GetName().Name;
             model.IsAbstract = type.IsAbstract;
@@ -143,7 +148,8 @@ public static partial class WebApiDocsGenerator
                 MergeTypeParameters(model.TypeParameters, type.GetGenericArguments().Select(a => a.Name));
             }
 
-            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            foreach (var method in SelectVisibleAssemblyMembers(type,
+                type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static), BuildDocumentationMethodSignature))
             {
                 if (!ShouldIncludeReflectedMethod(method)) continue;
                 var member = FindMethodModel(model.Methods, method);
@@ -202,7 +208,8 @@ public static partial class WebApiDocsGenerator
                     member.Source = sourceLinks.TryGetSource(ctor);
             }
 
-            foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            foreach (var property in SelectVisibleAssemblyMembers(type,
+                type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static), BuildDocumentationPropertySignature))
             {
                 var member = FindPropertyModel(model.Properties, property);
                 if (member is null)
@@ -221,7 +228,8 @@ public static partial class WebApiDocsGenerator
                     member.Source = sourceLinks.TryGetSource(property);
             }
 
-            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            foreach (var field in SelectVisibleAssemblyMembers(type,
+                type.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static), static member => member.Name))
             {
                 if (field.IsSpecialName || field.Name == "value__") continue;
                 var member = FindNamedMember(model.Fields, field.Name);
@@ -241,7 +249,8 @@ public static partial class WebApiDocsGenerator
                     member.Source = sourceLinks.TryGetSource(field);
             }
 
-            foreach (var evt in type.GetEvents(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            foreach (var evt in SelectVisibleAssemblyMembers(type,
+                type.GetEvents(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static), static member => member.Name))
             {
                 var member = FindNamedMember(model.Events, evt.Name);
                 if (member is null)
