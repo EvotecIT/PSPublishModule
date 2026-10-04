@@ -1407,7 +1407,8 @@ internal static partial class WebPipelineRunner
             else
                 File.WriteAllText(outPath, existingOutputContent);
             throw new InvalidOperationException(
-                $"Release hub refresh for '{outPath}' was incomplete or returned no releases with warnings; publication requires a complete source.");
+                $"Release hub refresh for '{outPath}' was incomplete or returned no releases with warnings; publication requires a complete source. " +
+                string.Join(" ", result.Warnings));
         }
 
         var note = result.Source != WebChangelogSource.Auto ? $" ({result.Source.ToString().ToLowerInvariant()})" : string.Empty;

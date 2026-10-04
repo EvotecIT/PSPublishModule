@@ -103,13 +103,14 @@ jobs:
             '.github/workflows/powerforge-website-deploy.yml'
             '.github/workflows/powerforge-website-maintenance.yml'
             '.github/workflows/powerforge-website-run.yml'
+            '.github/workflows/powerforge-catalog-update.yml'
           )
 
           # GitHub added job.workflow_* identity fields after actionlint's current schema.
           # Lint copies with only those five documented fields normalized to another string field.
           readonly workflow_identity_expression='\$\{\{[[:space:]]*job\.workflow_(repository|sha|ref|file_path)[[:space:]]*\}\}'
           readonly replacement_expression='$'"{{ job.status }}"
-          readonly expected_workflow_identity_count=5
+          readonly expected_workflow_identity_count=7
           workflow_identity_count="$({ grep --no-filename --only-matching --extended-regexp "$workflow_identity_expression" "${website_workflows[@]}" || true; } | wc --lines | tr --delete '[:space:]')"
           if [[ "$workflow_identity_count" != "$expected_workflow_identity_count" ]]; then
             printf 'Expected %s documented job.workflow_* expressions, found %s.\n' "$expected_workflow_identity_count" "$workflow_identity_count" >&2
@@ -361,12 +362,16 @@ jobs:
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --no-restore --no-build --nologo
-          --filter 'FullyQualifiedName~DotNetPublishPipelineRunnerCancellationTests|FullyQualifiedName~GitHubReleasePublisherTests|FullyQualifiedName~RepositoryPublisherTests|FullyQualifiedName~AgentPluginPackageServiceTests|FullyQualifiedName~AgentPluginReleaseVersionBindingTests|FullyQualifiedName~ModulePipelinePackageBuild'
+          --filter 'FullyQualifiedName~DotNetPublishPipelineRunnerCancellationTests|FullyQualifiedName~GitHubReleasePublisherTests|FullyQualifiedName~RepositoryPublisherTests|FullyQualifiedName~AgentPluginPackageServiceTests|FullyQualifiedName~AgentPluginReleaseVersionBindingTests|FullyQualifiedName~ModulePipelinePackageBuild|FullyQualifiedName~CatalogUpdateServiceTests|FullyQualifiedName~CatalogDownloadVerifierTests|FullyQualifiedName~ReleaseCatalogPreparationServiceTests|FullyQualifiedName~StoreSubmissionServiceTests|FullyQualifiedName~WingetSubmissionServiceTests'
 
       - name: Run no-publish core product build smoke
         shell: pwsh
         timeout-minutes: 30
         run: .\Build\Test-ProductBuild.ps1 -Runtime win-x64
+
+      - name: Test catalog workflow receipt recovery
+        shell: pwsh
+        run: ./.github/scripts/test-catalog-update-workflow.ps1 -ScratchRoot $env:RUNNER_TEMP
 
       - name: Prepare pinned PowerShell compiler host
         shell: pwsh

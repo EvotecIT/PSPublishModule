@@ -13,7 +13,9 @@
       "properties": {
         "SellerId": { "type": [ "string", "null" ] },
         "TenantId": { "type": [ "string", "null" ] },
+        "TenantIdEnvVar": { "type": [ "string", "null" ] },
         "ClientId": { "type": [ "string", "null" ] },
+        "ClientIdEnvVar": { "type": [ "string", "null" ] },
         "ClientSecret": { "type": [ "string", "null" ] },
         "ClientSecretEnvVar": { "type": [ "string", "null" ] },
         "AccessToken": { "type": [ "string", "null" ] },
