@@ -22,17 +22,21 @@ public sealed class PowerShellBenchmarkMemoryTests
             "param($case, $run) $run.ValidationBuffer = [byte[]]::new(32MB); "
             + (failure == "Validation" ? "throw 'validation failed'" : ""));
 
-        var result = new PowerForge.PowerShellBenchmarkRunner().Run(suite);
-        var sample = Assert.Single(result.Samples);
-        Assert.Equal(failure.Length == 0 ? PowerForge.BenchmarkSampleStatus.Succeeded
-            : PowerForge.BenchmarkSampleStatus.Failed, sample.Status);
-        // An operation allocation counter must observe the actual array, while the
-        // deliberately much larger setup/validation arrays lie outside its interval.
-        Assert.InRange(sample.AllocatedBytes!.Value, 1L << 20, 16L << 20);
-        Assert.NotNull(sample.WorkingSetDeltaBytes);
-        if (failure.Length == 0)
-            Assert.Equal((double)sample.AllocatedBytes.Value, Assert.Single(result.Summary).Metrics["AllocatedBytes"]);
-        else Assert.Contains(failure, sample.Reason, StringComparison.OrdinalIgnoreCase);
+        try
+        {
+            var result = new PowerForge.PowerShellBenchmarkRunner().Run(suite);
+            var sample = Assert.Single(result.Samples);
+            Assert.Equal(failure.Length == 0 ? PowerForge.BenchmarkSampleStatus.Succeeded
+                : PowerForge.BenchmarkSampleStatus.Failed, sample.Status);
+            // An operation allocation counter must observe the actual array, while the
+            // deliberately much larger setup/validation arrays lie outside its interval.
+            Assert.InRange(sample.AllocatedBytes!.Value, 1L << 20, 16L << 20);
+            Assert.NotNull(sample.WorkingSetDeltaBytes);
+            if (failure.Length == 0)
+                Assert.Equal((double)sample.AllocatedBytes.Value, Assert.Single(result.Summary).Metrics["AllocatedBytes"]);
+            else Assert.Contains(failure, sample.Reason, StringComparison.OrdinalIgnoreCase);
+        }
+        finally { Directory.Delete(suite.OutputRoot, recursive: true); }
     }
 
     private static PowerForge.PowerShellBenchmarkSuite CreateMemorySuite()

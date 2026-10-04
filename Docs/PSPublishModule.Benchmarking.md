@@ -480,6 +480,34 @@ AllocatedBytes` can compare allocation summaries with a declared baseline; its
 absolute tolerance is expressed in the selected metric's units. Keep these
 machine-dependent gates in opt-in evidence runs.
 
+### Sampled operation memory
+
+Use `Set-BenchmarkPolicy -MemorySamplingIntervalMilliseconds 5` or the same
+`Invoke-BenchmarkSuite` override for opt-in memory observations. Zero disables
+sampling by default; valid enabled intervals are 1 through 1000 milliseconds.
+The runner observes managed-heap estimates and process resident pages at the
+operation boundaries and on a background thread during the operation. Startup,
+shutdown, setup, configured collection and validation stay outside elapsed timing.
+The observer itself allocates and perturbs scheduling; keep these runs separate
+from uninstrumented timing comparisons.
+
+Raw sample metrics retain `BaselineManagedHeapBytes`, `SampledMaxManagedHeapBytes`,
+`SampledManagedHeapDeltaBytes`, `MemorySampleCount` and `MemorySamplingIntervalMs`.
+`GC.GetTotalMemory(false)` estimates managed heap bytes without forcing collection;
+it can include objects awaiting collection. Available resident observations add
+`BaselineWorkingSetBytes`, `SampledMaxWorkingSetBytes`, `SampledWorkingSetDeltaBytes`
+and `WorkingSetSampleCount`. Missing resident observations remain absent rather
+than zero. Failed operations retain their observations. An unexpected observer
+failure fails the sample and records `MemorySamplingFailed`.
+
+The maxima are the largest observed values, not guaranteed peaks. Short operations
+may have only the two boundary observations, and scheduler delays can miss
+transients between samples. Resident values include managed and native pages;
+they do not isolate native allocations or prove retained native memory. Read the
+sample counts and raw values, retain slower cases, and qualify any budget on its
+actual host/workload. Summary values are means of per-operation observations.
+The sampling metric names are reserved only when sampling is enabled.
+
 ### Collected managed-heap observations
 
 `PowerForge.BenchmarkManagedMemoryProbe` supports explicit retained-memory evidence.

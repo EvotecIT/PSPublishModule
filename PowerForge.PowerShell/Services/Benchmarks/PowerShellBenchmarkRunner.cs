@@ -44,6 +44,8 @@ public sealed partial class PowerShellBenchmarkRunner
         ValidateUniqueEngineNames(suite);
         ValidateUniqueAxisNames(suite);
         ValidateSupportedAxes(suite);
+        if (suite.MemorySamplingIntervalMilliseconds < 0 || suite.MemorySamplingIntervalMilliseconds > 1000)
+            throw new ArgumentOutOfRangeException(nameof(suite.MemorySamplingIntervalMilliseconds), "Use zero to disable sampling or an interval from 1 through 1000 milliseconds.");
         var cases = suite.Cases.Count == 0
             ? new[] { new PowerShellBenchmarkCase { Name = "Default" } }
             : suite.Cases.ToArray();
@@ -236,6 +238,7 @@ public sealed partial class PowerShellBenchmarkRunner
         OperationMemorySnapshot memoryBefore = default;
         long? allocatedBytes = null;
         long? workingSetDeltaBytes = null;
+        OperationMemorySampler? memorySampler = null;
 
         try
         {
@@ -247,6 +250,9 @@ public sealed partial class PowerShellBenchmarkRunner
 
             stage = "Memory cleanup";
             ApplyMemoryCleanup(suite);
+            stage = "Memory sampling setup";
+            if (suite.MemorySamplingIntervalMilliseconds > 0)
+                memorySampler = new OperationMemorySampler(suite.MemorySamplingIntervalMilliseconds);
             stage = iteration < 0 ? "Warmup operation" : "Operation";
             memoryBefore = CaptureOperationMemory();
             operationStopwatch = Stopwatch.StartNew();
@@ -254,6 +260,9 @@ public sealed partial class PowerShellBenchmarkRunner
             operationStopwatch.Stop();
             durationMs = operationStopwatch.Elapsed.TotalMilliseconds;
             CaptureOperationMemoryDifference(memoryBefore, out allocatedBytes, out workingSetDeltaBytes);
+            memorySampler?.Stop();
+            stage = "Memory sampling";
+            memorySampler?.ThrowIfFailed();
             SetProperty(runObject, "DurationMs", durationMs);
             SetProperty(runObject, "AllocatedBytes", allocatedBytes);
             SetProperty(runObject, "WorkingSetDeltaBytes", workingSetDeltaBytes);
@@ -266,6 +275,7 @@ public sealed partial class PowerShellBenchmarkRunner
             InvokeOptional(suite.Validate, caseObject, runObject);
             stage = "Metrics";
             var metrics = CaptureMetrics(suite, caseObject, runObject);
+            if (memorySampler is not null) metrics = memorySampler.AddMetrics(metrics);
             return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Succeeded, durationMs, string.Empty, metrics,
                 allocatedBytes, workingSetDeltaBytes);
         }
@@ -279,8 +289,12 @@ public sealed partial class PowerShellBenchmarkRunner
                 SetProperty(runObject, "DurationMs", durationMs);
             }
 
-            return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Failed, durationMs, FormatFailureReason(stage, ex), null,
+            return CreateSample(runId, suite, item, iteration, BenchmarkSampleStatus.Failed, durationMs, FormatFailureReason(stage, ex), memorySampler?.AddMetrics(null),
                 allocatedBytes, workingSetDeltaBytes);
+        }
+        finally
+        {
+            memorySampler?.Dispose();
         }
     }
 
@@ -436,6 +450,8 @@ public sealed partial class PowerShellBenchmarkRunner
                 throw new NotSupportedException($"Benchmark suite '{suite.Name}' defines duplicate metric '{metric.Name}'. Metric names must be unique ignoring case.");
             if (IsBenchmarkColumn(metric.Name) || ReservedMatrixAxisNames.Contains(metric.Name))
                 throw new NotSupportedException($"Benchmark suite '{suite.Name}' metric '{metric.Name}' conflicts with a built-in benchmark artifact column. Use a different metric name.");
+            if (suite.MemorySamplingIntervalMilliseconds > 0 && MemorySamplingMetricNames.Contains(metric.Name, StringComparer.OrdinalIgnoreCase))
+                throw new NotSupportedException($"Benchmark suite '{suite.Name}' metric '{metric.Name}' is reserved for operation memory sampling.");
         }
     }
 
@@ -459,7 +475,7 @@ public sealed partial class PowerShellBenchmarkRunner
 
     private static void ValidateMetricVariableCollisions(PowerShellBenchmarkSuite suite, IEnumerable<PowerShellBenchmarkCase> cases)
     {
-        if (suite.Metrics.Count == 0)
+        if (suite.Metrics.Count == 0 && suite.MemorySamplingIntervalMilliseconds == 0)
             return;
 
         var variableNames = suite.Axes
@@ -468,10 +484,12 @@ public sealed partial class PowerShellBenchmarkRunner
             .Concat(cases.SelectMany(benchmarkCase => benchmarkCase.Values.Keys))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var metric in suite.Metrics)
+        var metricNames = suite.Metrics.Select(metric => metric.Name)
+            .Concat(suite.MemorySamplingIntervalMilliseconds > 0 ? MemorySamplingMetricNames : Array.Empty<string>());
+        foreach (var metricName in metricNames)
         {
-            if (variableNames.Contains(metric.Name))
-                throw new NotSupportedException($"Benchmark suite '{suite.Name}' metric '{metric.Name}' conflicts with a matrix or case variable of the same name. Use distinct names so CSV artifacts can round-trip.");
+            if (variableNames.Contains(metricName))
+                throw new NotSupportedException($"Benchmark suite '{suite.Name}' metric '{metricName}' conflicts with a matrix or case variable of the same name. Use distinct names so CSV artifacts can round-trip.");
         }
     }
 

@@ -59,7 +59,21 @@ internal static class BenchmarkFileUpdateLock
                     Options = FileOptions.None,
                     UnixCreateMode = requestedMode
                 });
-            return stream;
+            try
+            {
+                // UnixCreateMode is filtered by umask. Restore the directory's
+                // intended writer access on the opened file, without following a
+                // path that could have been replaced after opening it.
+                UnixFileMode actualMode = File.GetUnixFileMode(stream.SafeFileHandle);
+                if ((actualMode & requestedMode) != requestedMode)
+                    File.SetUnixFileMode(stream.SafeFileHandle, actualMode | requestedMode);
+                return stream;
+            }
+            catch
+            {
+                stream.Dispose();
+                throw;
+            }
         }
 #endif
         return new FileStream(

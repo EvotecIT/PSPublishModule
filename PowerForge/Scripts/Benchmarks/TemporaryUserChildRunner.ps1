@@ -56,6 +56,7 @@ $suite.OutputRoot = $request.OutputRoot
 $suite.WarmupCount = [Math]::Max(0, [int]$request.WarmupCount)
 $suite.IterationCount = [Math]::Max(1, [int]$request.IterationCount)
 $suite.CooldownMilliseconds = [Math]::Max(0, [int]$request.CooldownMilliseconds)
+$suite.MemorySamplingIntervalMilliseconds = [int]$request.MemorySamplingIntervalMilliseconds
 if (-not [string]::IsNullOrWhiteSpace($request.RunMode)) {
     $suite.RunMode = $request.RunMode
 }
