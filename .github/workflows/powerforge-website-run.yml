@@ -103,7 +103,7 @@ on:
         type: string
         default: "ci"
       credential_mode:
-        description: Credential exposure policy for the caller-controlled website pipeline. Use none for untrusted pull requests.
+        description: Credential policy (none, standard, public-github). Public-github exposes only the job token in public repositories; callers must restrict its permissions to read-only.
         required: false
         type: string
         default: "standard"
@@ -199,16 +199,20 @@ jobs:
         shell: pwsh
         env:
           POWERFORGE_CREDENTIAL_MODE: ${{ inputs.credential_mode }}
+          POWERFORGE_PUBLIC_REPOSITORY: ${{ github.event.repository.private == false && github.event.repository.visibility == 'public' }}
         run: |
-          if ($env:POWERFORGE_CREDENTIAL_MODE -notin @('none', 'standard')) {
-            throw "Unsupported credential_mode '$env:POWERFORGE_CREDENTIAL_MODE'. Expected none or standard."
+          if ($env:POWERFORGE_CREDENTIAL_MODE -notin @('none', 'standard', 'public-github')) {
+            throw "Unsupported credential_mode '$env:POWERFORGE_CREDENTIAL_MODE'. Expected none, standard or public-github."
+          }
+          if ($env:POWERFORGE_CREDENTIAL_MODE -eq 'public-github' -and $env:POWERFORGE_PUBLIC_REPOSITORY -ne 'true') {
+            throw 'public-github credentials require a verified public repository.'
           }
 
       - name: Checkout website
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           token: ${{ github.token }}
-          persist-credentials: ${{ inputs.credential_mode != 'none' }}
+          persist-credentials: ${{ inputs.credential_mode == 'standard' }}
           # workflow_call can otherwise default to refs/pull/<n>/merge, which is not available in some repos.
           ref: ${{ inputs.source_ref || github.event.pull_request.head.sha || github.sha }}
 
@@ -260,7 +264,7 @@ jobs:
           ref: ${{ steps.workflow_source.outputs.ref }}
           path: ./.powerforge-runner
           token: ${{ github.token }}
-          persist-credentials: ${{ inputs.credential_mode != 'none' }}
+          persist-credentials: ${{ inputs.credential_mode == 'standard' }}
           fetch-depth: 1
 
       - name: Setup .NET
@@ -334,14 +338,16 @@ jobs:
         shell: pwsh
         env:
           NUGET_PACKAGES: ${{ runner.temp }}/powerforge-website-nuget-packages
-          GITHUB_TOKEN: ${{ inputs.credential_mode != 'none' && github.token || '' }}
-          GITHUB_PACKAGES_TOKEN: ${{ inputs.credential_mode != 'none' && (secrets.repository_read_token || github.token) || '' }}
-          LICENSING_PACKAGES_TOKEN: ${{ inputs.credential_mode != 'none' && (secrets.repository_read_token || github.token) || '' }}
-          LICENSING_PACKAGES_USERNAME: ${{ inputs.credential_mode != 'none' && github.repository_owner || '' }}
-          INDEXNOW_KEY: ${{ inputs.credential_mode != 'none' && secrets.indexnow_key || '' }}
-          POWERFORGE_REPOSITORY_TOKEN: ${{ inputs.credential_mode != 'none' && secrets.repository_read_token || '' }}
-          CLOUDFLARE_API_TOKEN: ${{ inputs.credential_mode != 'none' && secrets.cloudflare_api_token || '' }}
-          CLOUDFLARE_ZONE_ID: ${{ inputs.credential_mode != 'none' && secrets.cloudflare_zone_id || '' }}
+          GITHUB_TOKEN: ${{ (inputs.credential_mode == 'standard' || (inputs.credential_mode == 'public-github' && github.event.repository.private == false && github.event.repository.visibility == 'public')) && github.token || '' }}
+          # Prevent an ambient runner CLI credential from overriding this policy.
+          GH_TOKEN: ''
+          GITHUB_PACKAGES_TOKEN: ${{ inputs.credential_mode == 'standard' && (secrets.repository_read_token || github.token) || '' }}
+          LICENSING_PACKAGES_TOKEN: ${{ inputs.credential_mode == 'standard' && (secrets.repository_read_token || github.token) || '' }}
+          LICENSING_PACKAGES_USERNAME: ${{ inputs.credential_mode == 'standard' && github.repository_owner || '' }}
+          INDEXNOW_KEY: ${{ inputs.credential_mode == 'standard' && secrets.indexnow_key || '' }}
+          POWERFORGE_REPOSITORY_TOKEN: ${{ inputs.credential_mode == 'standard' && secrets.repository_read_token || '' }}
+          CLOUDFLARE_API_TOKEN: ${{ inputs.credential_mode == 'standard' && secrets.cloudflare_api_token || '' }}
+          CLOUDFLARE_ZONE_ID: ${{ inputs.credential_mode == 'standard' && secrets.cloudflare_zone_id || '' }}
           POWERFORGE_DEPLOYMENT_MANIFEST: ${{ runner.temp }}/powerforge-deployment-manifest/manifest.json
           POWERFORGE_RUNNER_RESULT_PATH: ${{ runner.temp }}/powerforge-website-runner-result.json
         run: |
