@@ -311,11 +311,10 @@ public sealed partial class ModulePipelinePackageBuildTests
     }
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, true)]
-    public void Run_GateBuild_PreservesPackageCertificateOnlyForReleaseCheckpoint(
-        bool releaseCheckpoint,
-        bool expectCertificate)
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Run_GateBuild_PreservesExplicitPackageSigningWithOrWithoutReleaseCheckpoint(
+        bool releaseCheckpoint)
     {
         var root = Directory.CreateDirectory(Path.Combine(
             Path.GetTempPath(),
@@ -396,11 +395,9 @@ public sealed partial class ModulePipelinePackageBuildTests
             runner.Run(spec);
 
             Assert.NotNull(capturedConfiguration);
-            Assert.Equal(
-                expectCertificate ? "ABC123" : null,
-                capturedConfiguration!.CertificateThumbprint);
-            Assert.Equal(expectCertificate, capturedConfiguration.SignAssemblies);
-            Assert.Equal(expectCertificate, capturedConfiguration.SignPackages);
+            Assert.Equal("ABC123", capturedConfiguration!.CertificateThumbprint);
+            Assert.True(capturedConfiguration.SignAssemblies);
+            Assert.True(capturedConfiguration.SignPackages);
         }
         finally
         {

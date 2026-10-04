@@ -886,7 +886,9 @@ public sealed partial class ModulePipelinePackageBuildTests
             Assert.True(call.Request.Build);
             Assert.False(call.Request.PublishNuget);
             Assert.False(call.Request.PublishGitHub);
-            Assert.Null(call.Configuration?.CertificateThumbprint);
+            Assert.Equal("ABC123", call.Configuration?.CertificateThumbprint);
+            Assert.True(call.Configuration?.SignAssemblies);
+            Assert.True(call.Configuration?.SignPackages);
         }
         finally
         {

@@ -893,7 +893,9 @@ public sealed partial class ModulePipelineRunner
         if (gateMode == ConfigurationGateMode.Build &&
             mode is PackageBuildExecutionMode.DependencyBuild or PackageBuildExecutionMode.BuildOnly)
         {
-            if (!releaseCheckpoint)
+            // A certificate alone does not opt an ordinary build into signing.
+            // Explicit assembly/package signing requests still apply without a release checkpoint.
+            if (!releaseCheckpoint && target.SignAssemblies != true && target.SignPackages != true)
             {
                 target.CertificateThumbprint = null;
                 target.SignAssemblies = false;
