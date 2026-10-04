@@ -17,6 +17,15 @@ The script runs as a dedicated, unprivileged site account. It archives the pinne
 
 The timer compares the fetched branch SHA, configured engine SHA, site pull configuration hash, and optional public GitHub release digest with the active release marker. It rebuilds a release-backed site when a release or its assets change without a source commit. Unchanged sites do no build work. Public source uses a fresh clone and refuses a branch that moves between the initial check and clone. Private source is archived from the root-owned checkout after its fetch. The engine build uses a fresh per-run NuGet package directory so website code cannot poison a later engine build. A failed build leaves the active release alone. The scratch directory and staging archive are removed after each attempt.
 
+Sites can declare additional `Microsoft.NETCore.App` runtimes in the same root-owned site file:
+
+```bash
+DOTNET_RUNTIME_CHANNELS="8.0"
+DOTNET_RUNTIME_VERSIONS="10.0.12"
+```
+
+`DOTNET_RUNTIME_CHANNELS` accepts `8.0` and `10.0` and requires any installed patch in each channel. `DOTNET_RUNTIME_VERSIONS` accepts exact stable `8.0.x` and `10.0.x` versions, separated by spaces. A different patch does not satisfy an exact declaration. The installer adds missing runtimes alongside existing versions, preserves the SDK's host executable, and verifies the installed inventory before succeeding. Omit either setting when the site does not need that requirement.
+
 ## Backup and SSH boundary
 
 Keep encrypted server recovery capture initiated from a fixed-egress runner outside the website host. Its GitHub backup-repository write credential stays off the production server. The restricted capture account remains reachable from that runner's fixed address. Once every deployment and backup account has been observed using only that address, restrict the host's SSH firewall rule to the address and verify a fresh login plus each scheduled job.
