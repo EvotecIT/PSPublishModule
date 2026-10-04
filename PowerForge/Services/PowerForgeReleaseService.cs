@@ -5473,7 +5473,7 @@ internal sealed partial class PowerForgeReleaseService
         return string.IsNullOrWhiteSpace(trimmed) ? fallback : trimmed;
     }
 
-    private static WingetManifestInstallerEntry ResolveWingetInstallerEntry(
+    internal static WingetManifestInstallerEntry ResolveWingetInstallerEntry(
         PowerForgeReleaseWingetInstaller installer,
         PowerForgeReleaseWingetOptions winget,
         PowerForgeReleaseWingetPackage package,

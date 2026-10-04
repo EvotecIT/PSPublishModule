@@ -96,7 +96,7 @@ internal sealed partial class StoreSubmissionService : IDisposable
             ? ResolvePackagedAppFiles(target, baseDirectory, request)
             : Array.Empty<string>();
         var desktopPackages = provider == StoreSubmissionProviderKind.DesktopInstaller
-            ? ResolveDesktopPackages(target)
+            ? ResolveDesktopPackages(target, baseDirectory)
             : Array.Empty<StoreSubmissionDesktopPackage>();
 
         var submissionId = string.IsNullOrWhiteSpace(request?.SubmissionId)
@@ -379,9 +379,18 @@ internal sealed partial class StoreSubmissionService : IDisposable
         return resolved;
     }
 
-    private static StoreSubmissionDesktopPackage[] ResolveDesktopPackages(StoreSubmissionTarget target)
+    private static StoreSubmissionDesktopPackage[] ResolveDesktopPackages(StoreSubmissionTarget target, string baseDirectory)
     {
-        var packages = (target.DesktopPackages ?? Array.Empty<StoreSubmissionDesktopPackage>())
+        var configured = target.DesktopPackages ?? Array.Empty<StoreSubmissionDesktopPackage>();
+        if (!string.IsNullOrWhiteSpace(target.DesktopPackagesPath))
+        {
+            if (configured.Length > 0)
+                throw new InvalidOperationException("Define DesktopPackages or DesktopPackagesPath, not both.");
+            var path = Path.GetFullPath(Path.Combine(baseDirectory, target.DesktopPackagesPath!));
+            configured = JsonSerializer.Deserialize(File.ReadAllText(path), ReleaseCatalogJsonContext.Default.StoreSubmissionDesktopPackageArray)
+                ?? throw new InvalidOperationException("DesktopPackagesPath must contain a JSON package array.");
+        }
+        var packages = configured
             .Select(CloneDesktopPackage)
             .ToArray();
 

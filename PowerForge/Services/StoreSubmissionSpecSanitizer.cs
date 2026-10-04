@@ -61,7 +61,8 @@ internal static class StoreSubmissionSpecSanitizer
             MinimumSystemRam = target.MinimumSystemRam,
             DesktopPackages = (target.DesktopPackages ?? Array.Empty<StoreSubmissionDesktopPackage>())
                 .Select(CloneDesktopPackage)
-                .ToArray()
+                .ToArray(),
+            DesktopPackagesPath = target.DesktopPackagesPath
         };
     }
 

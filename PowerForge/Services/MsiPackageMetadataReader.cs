@@ -10,7 +10,8 @@ internal sealed class MsiPackageMetadataReader
         "ProductName",
         "ProductVersion",
         "Manufacturer",
-        "UpgradeCode"
+        "UpgradeCode",
+        "ALLUSERS"
     };
 
     public DotNetPublishMsiPackageMetadata Read(string path)
@@ -28,8 +29,45 @@ internal sealed class MsiPackageMetadataReader
             ProductName = GetValue(values, "ProductName"),
             ProductVersion = GetValue(values, "ProductVersion"),
             Manufacturer = GetValue(values, "Manufacturer"),
-            UpgradeCode = GetValue(values, "UpgradeCode")
+            UpgradeCode = GetValue(values, "UpgradeCode"),
+            Scope = GetValue(values, "ALLUSERS") == "1" ? "machine" : null,
+            Architecture = ReadArchitecture(fullPath)
         };
+    }
+
+    private static string? ReadArchitecture(string path)
+    {
+#if !NET472
+        if (!OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("Windows Installer automation is only available on Windows.");
+#endif
+        object? installer = null;
+        object? database = null;
+        object? summary = null;
+        try
+        {
+            var type = Type.GetTypeFromProgID("WindowsInstaller.Installer")
+                ?? throw new PlatformNotSupportedException("Windows Installer automation is not available.");
+            installer = Activator.CreateInstance(type)!;
+            database = InvokeComMethod(installer, "OpenDatabase", path, 0)!;
+            summary = database.GetType().InvokeMember("SummaryInformation",
+                System.Reflection.BindingFlags.GetProperty, null, database, new object[] { 0 })!;
+            var template = summary.GetType().InvokeMember("Property",
+                System.Reflection.BindingFlags.GetProperty, null, summary, new object[] { 7 }) as string;
+            return template?.Split(';')[0].ToLowerInvariant() switch
+            {
+                "intel" => "x86",
+                "x64" => "x64",
+                "arm64" => "arm64",
+                _ => null
+            };
+        }
+        finally
+        {
+            ReleaseComObject(summary);
+            ReleaseComObject(database);
+            ReleaseComObject(installer);
+        }
     }
 
     internal static IReadOnlyDictionary<string, string> ReadProperties(string path, IEnumerable<string> propertyNames)

@@ -52,6 +52,7 @@ internal static partial class Program
                         [--key-path <AuthKey.p8> --key-id <id> --issuer-id <id>] [--receipt <path>]
                         [--reviewed-plan <path> --confirm] [--output json]
       powerforge store submit [--config <powerforge.store.submit.json>] [--list] [--list-assets] [--target <Name>] [--submission-id <id>] [--plan] [--validate] [--no-commit] [--no-wait] [--output json]
+      powerforge release prepare-catalog --config <release.json> --manifest <release-manifest.json> --checksums <SHA256SUMS.txt> --asset-root <downloads> --out <new-directory> [--output json]
       powerforge run [--config <run.profiles.json>] [--list] [--target <Name>] [--configuration <Release|Debug>] [--framework <tfm>] [--no-build] [--no-restore]
                      [--allow-root <path[,path...]>] [--include-private-tool-packs] [--testimox-root <path>] [--extra-arg <value>] [--output json]
       powerforge workspace validate [--config <workspace.validation.json>] [--list] [--profile <name>] [--configuration <Release|Debug>] [--enable-feature <name[,name...]>] [--disable-feature <name[,name...]>]

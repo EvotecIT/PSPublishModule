@@ -52,6 +52,20 @@ internal static class WingetManifestWriter
             {
                 writer.WriteScalar("InstallerUrl", installer.InstallerUrl);
                 writer.WriteScalar("InstallerSha256", installer.InstallerSha256);
+                writer.WriteOptionalScalar("Scope", installer.Scope);
+                if (installer.MsiMetadata is { } metadata)
+                {
+                    writer.WriteOptionalScalar("ProductCode", metadata.ProductCode);
+                    writer.WriteKey("AppsAndFeaturesEntries");
+                    writer.WriteSequenceItem("DisplayName", metadata.ProductName!);
+                    using (writer.Indent())
+                    {
+                        writer.WriteScalar("Publisher", metadata.Manufacturer!);
+                        writer.WriteScalar("DisplayVersion", metadata.ProductVersion!);
+                        writer.WriteScalar("ProductCode", metadata.ProductCode!);
+                        writer.WriteScalar("UpgradeCode", metadata.UpgradeCode!);
+                    }
+                }
                 writer.WriteOptionalScalar("NestedInstallerType", installer.NestedInstallerType);
                 if (!string.IsNullOrWhiteSpace(installer.RelativeFilePath))
                 {
@@ -126,4 +140,8 @@ internal sealed class WingetManifestInstallerEntry
     public string InstallerUrl { get; set; } = string.Empty;
 
     public string InstallerSha256 { get; set; } = string.Empty;
+
+    public string? Scope { get; set; }
+
+    public DotNetPublishMsiPackageMetadata? MsiMetadata { get; set; }
 }
