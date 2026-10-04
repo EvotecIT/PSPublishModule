@@ -11,6 +11,7 @@ public sealed class PssaFormatter : IFormatter
 {
     private readonly IPowerShellRunner _runner;
     private readonly ILogger _logger;
+    private PssaFormatterSession? _session;
 
     /// <summary>
     /// Creates a new formatter that uses the provided runner and logger.
@@ -37,6 +38,15 @@ public sealed class PssaFormatter : IFormatter
             settingsJson: null,
             batches,
             TimeSpan.FromSeconds(batches.Sum(batch => Math.Max(1, batch.Options.TimeoutSeconds))));
+
+    /// <summary>Reuses a formatter host only within an explicitly owned build-phase scope.</summary>
+    internal IDisposable? BeginSession()
+    {
+        if (_runner is not ICancellablePowerShellRunner runner) return null;
+        if (_session is not null) throw new InvalidOperationException("A formatter session is already active.");
+        _session = new PssaFormatterSession(runner, () => _session = null);
+        return _session;
+    }
 
     private IReadOnlyList<FormatterResult> RunFormatter(
         IEnumerable<string> files,
@@ -76,7 +86,9 @@ public sealed class PssaFormatter : IFormatter
         PowerShellRunResult result;
         try
         {
-            result = _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout ?? TimeSpan.FromMinutes(2)));
+            result = _session is not null && batchPath is not null
+                ? _session.Run(script, batchPath, timeout ?? TimeSpan.FromMinutes(2))
+                : _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout ?? TimeSpan.FromMinutes(2)));
         }
         finally
         {

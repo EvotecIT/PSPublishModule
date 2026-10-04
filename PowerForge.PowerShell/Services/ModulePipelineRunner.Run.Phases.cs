@@ -240,6 +240,7 @@ public sealed partial class ModulePipelineRunner
         if (plan.Formatting is not null && !IsReusingCompiledPowerShellModule(plan))
         {
             var formattingPipeline = new FormattingPipeline(_logger);
+            using var formatterSession = formattingPipeline.BeginSession();
 
             session.Start(session.FormatStagingStep);
             try

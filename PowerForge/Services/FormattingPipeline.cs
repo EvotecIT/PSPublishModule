@@ -34,6 +34,9 @@ public sealed class FormattingPipeline
     public IReadOnlyList<FormatterResult> Run(IEnumerable<string> files, FormatOptions options)
         => RunBatches(new[] { new FormattingBatch(files, options) });
 
+    /// <summary>Owns the isolated PSSA host across sequential formatting phases.</summary>
+    internal IDisposable? BeginSession() => _pssa.BeginSession();
+
     internal IReadOnlyList<FormatterResult> RunBatches(IReadOnlyList<FormattingBatch> batches)
     {
         var prepared = new List<(FormattingBatch Batch, List<NormalizationResult> Normalized, IReadOnlyList<FormatterResult> Preprocessed)>();

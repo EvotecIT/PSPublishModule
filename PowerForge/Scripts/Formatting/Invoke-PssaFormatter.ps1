@@ -2,7 +2,9 @@
 param(
     [Parameter(Position=0)][string]$SettingsB64,
     [Parameter(Position=1,ValueFromRemainingArguments=$true)][string[]]$Files,
-    [string]$BatchPath
+    [string]$BatchPath,
+    [string]$SessionDirectory,
+    [int]$ParentProcessId
 )
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
@@ -77,6 +79,8 @@ try {
     exit 3
 }
 
+function Invoke-PssaFormattingBatch {
+param([string]$BatchPath, [string]$SettingsB64, [string[]]$Files)
 $settings = $null
 if ($SettingsB64) {
   try {
@@ -161,5 +165,29 @@ foreach ($f in $batch.Files) {
     Write-Output ("ERROR::" + $f + "::" + $_.Exception.Message)
   }
 }
+}
+}
+
+if ($SessionDirectory) {
+    $RequestPath = [System.IO.Path]::Combine($SessionDirectory, 'request.json')
+    $StopPath = [System.IO.Path]::Combine($SessionDirectory, 'stop')
+    while (-not [System.IO.File]::Exists($StopPath)) {
+        if ([System.IO.File]::Exists($RequestPath)) {
+            $request = [System.IO.File]::ReadAllText($RequestPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+            [System.IO.File]::Delete($RequestPath)
+            Set-Location -LiteralPath $request.WorkingDirectory -ErrorAction Stop
+            [System.Environment]::CurrentDirectory = $request.WorkingDirectory
+            Invoke-PssaFormattingBatch -BatchPath $request.BatchPath
+            Write-Output ('PSSA_PHASE_DONE::' + $request.Id)
+            continue
+        }
+        try {
+            $parentProcess = [System.Diagnostics.Process]::GetProcessById($ParentProcessId)
+            $parentProcess.Dispose()
+        } catch { break }
+        Start-Sleep -Milliseconds 25
+    }
+} else {
+    Invoke-PssaFormattingBatch -BatchPath $BatchPath -SettingsB64 $SettingsB64 -Files $Files
 }
 exit 0
