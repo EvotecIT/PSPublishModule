@@ -72,6 +72,11 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
     [Parameter]
     public PowerShellBenchmarkMemoryCleanupMode? MemoryCleanup { get; set; }
 
+    /// <summary>Optional operation memory sampling interval override; zero disables sampling.</summary>
+    [Parameter]
+    [ValidateRange(0, 1000)]
+    public int? MemorySamplingIntervalMilliseconds { get; set; }
+
     /// <summary>
     /// Optional delay between measured samples, in milliseconds.
     /// </summary>
@@ -219,6 +224,7 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
                     RunMode = suite.RunMode,
                     RunOrder = suite.RunOrder,
                     MemoryCleanup = suite.MemoryCleanup,
+                    MemorySamplingIntervalMilliseconds = suite.MemorySamplingIntervalMilliseconds,
                     CooldownMilliseconds = suite.CooldownMilliseconds,
                     OutlierMode = suite.OutlierMode,
                     ProcessorAffinityMask = suite.ProcessorAffinityMask,
@@ -251,6 +257,7 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
                     RunMode = suite.RunMode,
                     RunOrder = suite.RunOrder,
                     MemoryCleanup = suite.MemoryCleanup,
+                    MemorySamplingIntervalMilliseconds = suite.MemorySamplingIntervalMilliseconds,
                     CooldownMilliseconds = suite.CooldownMilliseconds,
                     OutlierMode = suite.OutlierMode,
                     ProcessorAffinityMask = suite.ProcessorAffinityMask,
@@ -279,6 +286,7 @@ public sealed class InvokeBenchmarkSuiteCommand : PSCmdlet
         if (!string.IsNullOrWhiteSpace(RunMode)) suite.RunMode = RunMode!;
         if (RunOrder.HasValue) suite.RunOrder = RunOrder.Value;
         if (MemoryCleanup.HasValue) suite.MemoryCleanup = MemoryCleanup.Value;
+        if (MemorySamplingIntervalMilliseconds.HasValue) suite.MemorySamplingIntervalMilliseconds = MemorySamplingIntervalMilliseconds.Value;
         if (CooldownMilliseconds.HasValue) suite.CooldownMilliseconds = Math.Max(0, CooldownMilliseconds.Value);
         if (OutlierMode.HasValue) suite.OutlierMode = OutlierMode.Value;
         if (ProcessorAffinityMask.HasValue) suite.ProcessorAffinityMask = ProcessorAffinityMask.Value;

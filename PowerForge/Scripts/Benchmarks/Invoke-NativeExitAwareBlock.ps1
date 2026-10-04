@@ -31,6 +31,7 @@ try {
     }
     if ($StrictMode) {
         Set-StrictMode -Version Latest
+        $ErrorActionPreference = 'Stop'
     }
     & $Block @Arguments
     $nativeExitCode = $nativeExitTracker.FirstFailureExitCode

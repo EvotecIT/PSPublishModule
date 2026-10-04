@@ -181,11 +181,8 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
-    public void EvidenceCatalog_PreservesCaseSensitiveArtifactDestinations()
+    public void EvidenceCatalog_UsesDestinationVolumeCaseSensitivity()
     {
-        if (OperatingSystem.IsWindows())
-            return;
-
         string root = CreateTempRoot();
         string catalogPath = Path.Combine(root, "index.json");
         var service = new BenchmarkEvidenceCatalogService();
@@ -198,7 +195,7 @@ public sealed partial class BenchmarkServicesTests
             publish: false,
             resultArtifactPath: Path.Combine(root, "result.json"));
 
-        BenchmarkEvidenceCatalog catalog = service.UpdateFile(
+        BenchmarkEvidenceCatalog UpdateSecond() => service.UpdateFile(
             catalogPath,
             Result("Linux", "fixture-a", 11),
             "comparison-b",
@@ -207,7 +204,10 @@ public sealed partial class BenchmarkServicesTests
             publish: false,
             resultArtifactPath: Path.Combine(root, "RESULT.json"));
 
-        Assert.Equal(2, catalog.Entries.Length);
+        if (BenchmarkFileUpdateLock.IsCaseInsensitivePath(catalogPath))
+            Assert.Throws<InvalidOperationException>(() => UpdateSecond());
+        else
+            Assert.Equal(2, UpdateSecond().Entries.Length);
     }
 
     [Fact]

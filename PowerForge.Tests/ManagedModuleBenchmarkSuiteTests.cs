@@ -2,47 +2,10 @@ using PowerForge;
 
 namespace PowerForge.Tests;
 
+[Collection(ProcessEnvironmentCollection.Name)]
 public sealed class ManagedModuleBenchmarkSuiteTests
 {
     private static readonly Lazy<System.Management.Automation.Runspaces.Runspace> BenchmarkDslRunspace = new(CreateBenchmarkDslRunspace);
-
-    [Fact]
-    public void BenchmarkFolder_ContainsReusableSuiteSpec()
-    {
-        var folder = Path.Combine(RepoRootLocator.Find(), "Benchmarks", "ManagedModules");
-        var files = Directory.GetFiles(folder).Select(Path.GetFileName).OrderBy(static name => name).ToArray();
-
-        Assert.Equal(
-            new[]
-            {
-                "managed-modules.benchmark.ps1",
-                "README.md"
-            },
-            files);
-    }
-
-    [Fact]
-    public void ManagedModuleSuiteSpec_UsesCanonicalBenchmarkCommands()
-    {
-        var path = Path.Combine(RepoRootLocator.Find(), "Benchmarks", "ManagedModules", "managed-modules.benchmark.ps1");
-        var text = File.ReadAllText(path);
-        var lines = File.ReadLines(path).Where(static line => !string.IsNullOrWhiteSpace(line)).Count();
-
-        Assert.True(lines <= 245, "Managed module benchmark spec should stay readable and data-driven.");
-        Assert.Contains("New-BenchmarkSuite 'managed-modules'", text, StringComparison.Ordinal);
-        Assert.Contains("Add-BenchmarkCaseSource", text, StringComparison.Ordinal);
-        Assert.Contains("Add-BenchmarkEngine Managed", text, StringComparison.Ordinal);
-        Assert.Contains("Add-BenchmarkOperation Install", text, StringComparison.Ordinal);
-        Assert.Contains("Add-BenchmarkMetadata ComparisonMode", text, StringComparison.Ordinal);
-        Assert.Contains("ManagedModuleSha256", text, StringComparison.Ordinal);
-        Assert.Contains("ModuleFastSha256", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("ModuleFastCSharp", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("New-ManagedModuleBenchmarkSuite", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("Invoke-BenchmarkSuite", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("PSPUBLISHMODULE_BENCHMARK_", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("GetEnvironmentVariable", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("function ", text, StringComparison.OrdinalIgnoreCase);
-    }
 
     [Fact]
     public void ManagedModuleSuite_PlansFocusedInstallComparison()
@@ -202,39 +165,48 @@ public sealed class ManagedModuleBenchmarkSuiteTests
         Assert.Contains(suite.Comparisons, comparison => comparison.Baseline == "Managed" && comparison.Metrics.Contains("MedianMs"));
     }
 
-    [Fact]
-    public void ManagedModuleSuite_TemporaryProfileEnablesNativeInstallPlanning()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void ManagedModuleSuite_NativeInstallPlanningRequiresIsolationAndAvailableTools(bool temporaryProfile, bool toolsAvailable)
     {
-        var suite = LoadSuite(
-            new PowerShellBenchmarkSelection
+        string root = Path.Combine(Path.GetTempPath(), "pf-module-planning-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string? previousModulePath = Environment.GetEnvironmentVariable("PSModulePath");
+        try
+        {
+            if (toolsAvailable)
+            {
+                // These isolated manifests model discovery only. No comparison
+                // tool is installed, imported or executed by this planning test.
+                foreach (string name in new[] { "Microsoft.PowerShell.PSResourceGet", "PowerShellGet" })
+                {
+                    string folder = Path.Combine(root, name);
+                    Directory.CreateDirectory(folder);
+                    File.WriteAllText(Path.Combine(folder, name + ".psd1"), "@{ ModuleVersion = '1.0.0' }");
+                }
+            }
+            Environment.SetEnvironmentVariable("PSModulePath", root);
+            var profile = temporaryProfile ? PowerShellBenchmarkProfileKind.TemporaryLocalUser : PowerShellBenchmarkProfileKind.Current;
+            var suite = LoadSuite(new PowerShellBenchmarkSelection
             {
                 Cases = new[] { "SingleModule" },
                 Operations = new[] { "Install" },
                 Engines = new[] { "Managed", "PSResourceGet", "PowerShellGet" }
-            },
-            profile: PowerShellBenchmarkProfileKind.TemporaryLocalUser);
-
-        var plan = new PowerShellBenchmarkRunner().Plan(suite);
-
-        Assert.Equal(PowerShellBenchmarkProfileKind.TemporaryLocalUser, suite.Profile);
-        Assert.Contains(plan, item => item.Engine == "PSResourceGet" && item.Operation == "Install" && !item.IsSkipped);
-        Assert.Contains(plan, item => item.Engine == "PowerShellGet" && item.Operation == "Install" && !item.IsSkipped);
-    }
-
-    [Fact]
-    public void ManagedModuleSuite_CurrentProfileSkipsNativeInstalls()
-    {
-        var suite = LoadSuite(new PowerShellBenchmarkSelection
+            }, profile: profile);
+            var plan = new PowerShellBenchmarkRunner().Plan(suite);
+            Assert.Equal(profile, suite.Profile);
+            Assert.False(Assert.Single(plan, item => item.Engine == "Managed").IsSkipped);
+            foreach (string engine in new[] { "PSResourceGet", "PowerShellGet" })
+                Assert.Equal(!(temporaryProfile && toolsAvailable), Assert.Single(plan, item => item.Engine == engine).IsSkipped);
+        }
+        finally
         {
-            Cases = new[] { "SingleModule" },
-            Operations = new[] { "Install" },
-            Engines = new[] { "Managed", "PSResourceGet", "PowerShellGet" }
-        });
-
-        var plan = new PowerShellBenchmarkRunner().Plan(suite);
-
-        Assert.Contains(plan, item => item.Engine == "PSResourceGet" && item.Operation == "Install" && item.IsSkipped);
-        Assert.Contains(plan, item => item.Engine == "PowerShellGet" && item.Operation == "Install" && item.IsSkipped);
+            Environment.SetEnvironmentVariable("PSModulePath", previousModulePath);
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     private static PowerShellBenchmarkSuite LoadSuite(

@@ -61,6 +61,7 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
             ["iterationCount"] = suite.IterationCount.ToString(CultureInfo.InvariantCulture),
             ["runOrder"] = suite.RunOrder.ToString(),
             ["memoryCleanup"] = suite.MemoryCleanup.ToString(),
+            ["memorySamplingIntervalMilliseconds"] = suite.MemorySamplingIntervalMilliseconds.ToString(CultureInfo.InvariantCulture),
             ["cooldownMilliseconds"] = suite.CooldownMilliseconds.ToString(CultureInfo.InvariantCulture),
             ["outlierMode"] = suite.OutlierMode.ToString(),
             ["runMode"] = suite.RunMode

@@ -37,6 +37,9 @@ public sealed class PowerShellBenchmarkHostRunRequest
     /// <summary>Managed-memory cleanup after caller-side overrides.</summary>
     public PowerShellBenchmarkMemoryCleanupMode MemoryCleanup { get; set; } = PowerShellBenchmarkMemoryCleanupMode.None;
 
+    /// <summary>Opt-in operation memory sampling interval inherited by the child host.</summary>
+    public int MemorySamplingIntervalMilliseconds { get; set; }
+
     /// <summary>Delay between measured samples, in milliseconds.</summary>
     public int CooldownMilliseconds { get; set; }
 
@@ -217,6 +220,7 @@ public sealed class PowerShellBenchmarkHostExecutor
             RunMode = request.RunMode ?? string.Empty,
             RunOrder = request.RunOrder.ToString(),
             MemoryCleanup = request.MemoryCleanup.ToString(),
+            MemorySamplingIntervalMilliseconds = request.MemorySamplingIntervalMilliseconds,
             CooldownMilliseconds = request.CooldownMilliseconds,
             OutlierMode = request.OutlierMode.ToString(),
             ProcessorAffinityMask = request.ProcessorAffinityMask?.ToString("X", CultureInfo.InvariantCulture),

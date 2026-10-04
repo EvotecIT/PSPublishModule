@@ -261,11 +261,14 @@ internal static class PowerShellBenchmarkHostRuntime
     {
         if (string.IsNullOrWhiteSpace(path))
             return false;
-        var fileName = Path.GetFileName(path);
+        var fileName = GetExecutableName(path!);
         return names.Any(name => string.Equals(fileName, name, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool IsWindowsAppsPath(string? path)
+    internal static string GetExecutableName(string path)
+        => path.Substring(Math.Max(path.LastIndexOf('/'), path.LastIndexOf('\\')) + 1);
+
+    internal static bool IsWindowsAppsPath(string? path)
         => !string.IsNullOrWhiteSpace(path)
-           && path.Contains(@"\WindowsApps\", StringComparison.OrdinalIgnoreCase);
+           && path!.Replace('\\', '/').Contains("/WindowsApps/", StringComparison.OrdinalIgnoreCase);
 }

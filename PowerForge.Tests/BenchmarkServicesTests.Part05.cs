@@ -55,12 +55,7 @@ public sealed partial class BenchmarkServicesTests
     public void EnvironmentMetadataRejectsSourceProvenanceThatChangedDuringRun()
     {
         PowerShellBenchmarkSuite suite = CreateRunnableSuite();
-        suite.SourceRoot = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory,
-            "..",
-            "..",
-            "..",
-            ".."));
+        suite.SourceRoot = RepoRootLocator.Find();
         PowerShellBenchmarkEnvironmentMetadata.SourceProvenance captured =
             PowerShellBenchmarkEnvironmentMetadata.CaptureSourceProvenance(suite);
         Assert.False(string.IsNullOrWhiteSpace(captured.GitSha));
@@ -351,7 +346,7 @@ New-BenchmarkSuite 'temp-user' {
     {
         var script = ScriptBlock.Create(@"
 New-BenchmarkSuite 'policy-suite' {
-    Set-BenchmarkPolicy -Warmup 2 -Iterations 5 -RunMode publish -Order Sequential -MemoryCleanup BeforeIteration -CooldownMilliseconds 10 -OutlierMode ExcludeMinMax
+    Set-BenchmarkPolicy -Warmup 2 -Iterations 5 -RunMode publish -Order Sequential -MemoryCleanup BeforeIteration -CooldownMilliseconds 10 -OutlierMode ExcludeMinMax -MemorySamplingIntervalMilliseconds 5
     Add-BenchmarkAxis Operation Run
     Add-BenchmarkAxis Engine Managed
     Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { param($case, $run) } }
@@ -365,6 +360,7 @@ New-BenchmarkSuite 'policy-suite' {
         Assert.Equal("publish", suite.RunMode);
         Assert.Equal(PowerShellBenchmarkRunOrder.Sequential, suite.RunOrder);
         Assert.Equal(PowerShellBenchmarkMemoryCleanupMode.BeforeIteration, suite.MemoryCleanup);
+        Assert.Equal(5, suite.MemorySamplingIntervalMilliseconds);
         Assert.Equal(10, suite.CooldownMilliseconds);
         Assert.Equal(PowerShellBenchmarkOutlierMode.ExcludeMinMax, suite.OutlierMode);
     }
@@ -1004,7 +1000,10 @@ New-BenchmarkSuite 'bad' {
     private static PowerShellBenchmarkSuite[] EvaluateBenchmarkDslWithoutImportedCommands(ScriptBlock scriptBlock)
     {
         var previousRunspace = Runspace.DefaultRunspace;
-        using var runspace = RunspaceFactory.CreateRunspace(InitialSessionState.CreateDefault2());
+        var initialState = InitialSessionState.CreateDefault();
+        initialState.Variables.Add(new SessionStateVariableEntry(
+            "PSModuleAutoLoadingPreference", "None", "Keep fallback DSL tests independent of installed modules."));
+        using var runspace = RunspaceFactory.CreateRunspace(initialState);
         runspace.Open();
         Runspace.DefaultRunspace = runspace;
         try

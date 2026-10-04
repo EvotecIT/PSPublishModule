@@ -96,6 +96,10 @@ public sealed class PowerShellBenchmarkSuite
     /// <summary>Managed-memory cleanup performed outside timed operations.</summary>
     public PowerShellBenchmarkMemoryCleanupMode MemoryCleanup { get; set; } = PowerShellBenchmarkMemoryCleanupMode.None;
 
+    /// <summary>Opt-in operation memory sampling interval in milliseconds; zero disables sampling.</summary>
+    /// <remarks>Valid values are zero through 1000. Sampled maxima can miss transient peaks and include observer/host effects.</remarks>
+    public int MemorySamplingIntervalMilliseconds { get; set; }
+
     /// <summary>Delay between measured samples, in milliseconds.</summary>
     public int CooldownMilliseconds { get; set; }
 

@@ -37,6 +37,9 @@ public sealed class PowerShellBenchmarkTemporaryUserRequest
     /// <summary>Managed-memory cleanup after caller-side overrides.</summary>
     public PowerShellBenchmarkMemoryCleanupMode MemoryCleanup { get; set; } = PowerShellBenchmarkMemoryCleanupMode.None;
 
+    /// <summary>Opt-in operation memory sampling interval inherited by the child host.</summary>
+    public int MemorySamplingIntervalMilliseconds { get; set; }
+
     /// <summary>Delay between measured samples, in milliseconds.</summary>
     public int CooldownMilliseconds { get; set; }
 
@@ -148,6 +151,7 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
                 RunMode = request.RunMode ?? string.Empty,
                 RunOrder = request.RunOrder.ToString(),
                 MemoryCleanup = request.MemoryCleanup.ToString(),
+                MemorySamplingIntervalMilliseconds = request.MemorySamplingIntervalMilliseconds,
                 CooldownMilliseconds = request.CooldownMilliseconds,
                 OutlierMode = request.OutlierMode.ToString(),
                 ProcessorAffinityMask = request.ProcessorAffinityMask?.ToString("X", System.Globalization.CultureInfo.InvariantCulture),
@@ -255,18 +259,17 @@ public sealed class PowerShellBenchmarkTemporaryUserExecutor
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             return false;
-        var fileName = Path.GetFileName(path);
+        var fileName = PowerShellBenchmarkHostRuntime.GetExecutableName(path!);
         return string.Equals(fileName, "pwsh.exe", StringComparison.OrdinalIgnoreCase)
                || string.Equals(fileName, "powershell.exe", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsPwshExecutable(string? path)
         => !string.IsNullOrWhiteSpace(path)
-           && string.Equals(Path.GetFileName(path), "pwsh.exe", StringComparison.OrdinalIgnoreCase);
+           && string.Equals(PowerShellBenchmarkHostRuntime.GetExecutableName(path!), "pwsh.exe", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsWindowsAppsPath(string? path)
-        => !string.IsNullOrWhiteSpace(path)
-           && path.Contains(@"\WindowsApps\", StringComparison.OrdinalIgnoreCase);
+        => PowerShellBenchmarkHostRuntime.IsWindowsAppsPath(path);
 
     private static string GetPowerForgeAssemblyPath()
         => typeof(BenchmarkRunResult).Assembly.Location;
