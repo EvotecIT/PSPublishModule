@@ -19,6 +19,53 @@ metadata with any table that is committed or shared.
 | `Update-BenchmarkEvidenceCatalog` | Records an independent Windows, Linux, or macOS result lane and exposes missing or incompatible platform evidence. |
 | `Update-BenchmarkDocument` | Replaces one marker-delimited Markdown block from a normalized summary or comparison file. |
 | `Test-BenchmarkGate` | Verifies benchmark summary metrics against a JSON baseline with tolerance rules. |
+| `Test-BenchmarkHistory` | Calibrates and verifies duration limits from accepted independent runs on the same runner environment. |
+
+## Runner-Specific Timing History
+
+Use timing history in a manual, scheduled, or explicitly enabled performance job.
+Keep ordinary correctness checks independent of shared-runner timing variation.
+`Test-BenchmarkHistory` consumes `run-report.json`, including raw samples, from
+the benchmark runner. It does not accept a summary as proof of a complete run.
+
+Accept a known healthy run explicitly:
+
+```powershell
+Test-BenchmarkHistory -ResultPath ./run-report.json -HistoryPath ./history.json `
+    -WorkloadId topology-fixture-v1 -RunnerIdentity dedicated-renderer -Update
+```
+
+Repeat acceptance for at least five independent runs, each with at least five
+successful measured iterations per lane. Then verify a new run without `-Update`:
+
+```powershell
+Test-BenchmarkHistory -ResultPath ./run-report.json -HistoryPath ./history.json `
+    -WorkloadId topology-fixture-v1 -RunnerIdentity dedicated-renderer
+```
+
+Choose a workload version or fixture hash that changes when the measured work
+changes. Choose a stable runner identity for a dedicated machine or comparable
+pool. OS, architecture, CPU, runtime, SDK, runner version, placement and measurement
+policy split calibration automatically. Windows, Linux and macOS histories may
+share one file; they do not share duration thresholds. Missing placement metadata
+cannot establish that processor placement was controlled.
+
+Each lane uses the median of the most recent twenty accepted run medians. Its
+upper limit adds the largest of `-RelativeTolerance` (default ten percent),
+`-AbsoluteToleranceMs` (default zero), or three times the median absolute deviation
+of those run medians. This is an observable noise allowance, not a statistical
+confidence bound or a portable performance guarantee. Adjust tolerances only from
+representative retained runs. The service retains all raw timings when deriving
+a run median, including outliers, and keeps at most five hundred accepted runs.
+
+Insufficient history returns `Calibrating = true` and `Passed = false`.
+`-AllowCalibration` permits that initial state without a terminating error; a
+regression or missing established lane still fails. Failed, skipped, duplicated
+or incomplete measured iterations cannot enter history. Verification never writes
+the file. `-Update` reports acceptance rather than a passing verification, supports
+`-WhatIf`, and uses the shared lock and atomic writer. Do not automatically accept a
+run after a failed gate. Keep the history file as a local or CI artifact alongside
+the complete run reports used to calibrate it.
 
 ## Benchmark Specs
 

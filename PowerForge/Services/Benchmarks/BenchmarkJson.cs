@@ -166,7 +166,7 @@ public static class BenchmarkJson
             .ToLowerInvariant();
     }
 
-    private static byte[] SerializeCanonicalBytes<T>(T value)
+    internal static byte[] SerializeCanonicalBytes<T>(T value)
     {
         string json = JsonSerializer.Serialize(value, Options)
             .Replace("\r\n", "\n")
