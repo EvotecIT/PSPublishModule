@@ -109,9 +109,9 @@ public static partial class WebApiDocsGenerator
         }
     }
 
-    private static void EnrichFromAssembly(ApiDocModel doc, Assembly assembly, WebApiDocsOptions options, List<string> warnings)
+    private static void EnrichFromAssembly(ApiDocModel doc, Assembly assembly, WebApiDocsOptions options, List<string> warnings, string assemblyPath)
     {
-        using var sourceLinks = SourceLinkContext.Create(options, assembly, warnings);
+        using var sourceLinks = SourceLinkContext.Create(options, assembly, warnings, assemblyPath);
         var extensionTargets = new Dictionary<string, List<ApiMemberModel>>(StringComparer.OrdinalIgnoreCase);
         foreach (var type in GetExportedTypesSafe(assembly))
         {
@@ -272,9 +272,9 @@ public static partial class WebApiDocsGenerator
         }
     }
 
-    private static void RestrictToPublicAssemblySurface(ApiDocModel doc, Assembly assembly)
+    private static void RestrictToPublicAssemblySurface(ApiDocModel doc, IReadOnlyList<Assembly> assemblies)
     {
-        var exportedTypes = GetExportedTypesSafe(assembly)
+        var exportedTypes = assemblies.SelectMany(GetExportedTypesSafe)
             .Where(static type => type is not null)
             .Select(static type => (type!.FullName ?? type.Name).Replace('+', '.'))
             .ToHashSet(StringComparer.Ordinal);

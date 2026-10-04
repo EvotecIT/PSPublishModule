@@ -813,6 +813,47 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
     }
 
     [Fact]
+    public void RunPipeline_ProjectDocsSync_UsesPublishedVersionInApiArtifactUrl()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-versioned-api-artifact-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var artifactZip = Path.Combine(root, "Library.ApiDocs.1.8.2.zip");
+            using (var archive = ZipFile.Open(artifactZip, ZipArchiveMode.Create))
+            {
+                var entry = archive.CreateEntry("WebsiteArtifacts/apidocs/dotnet/Library.xml");
+                using var writer = new StreamWriter(entry.Open());
+                writer.Write("<doc />");
+            }
+
+            var catalogPath = Path.Combine(root, "data", "projects", "catalog.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(catalogPath)!);
+            var artifactTemplate = artifactZip.Replace("1.8.2", "{version}", StringComparison.Ordinal);
+            File.WriteAllText(catalogPath, JsonSerializer.Serialize(new
+            {
+                projects = new[]
+                {
+                    new { slug = "library", version = "1.8.2", surfaces = new { apiDotNet = true }, artifacts = new { api = artifactTemplate } }
+                }
+            }));
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {"steps":[{"task":"project-docs-sync","catalog":"./data/projects/catalog.json","sourcesRoot":"./projects-sources","contentRoot":"./content/docs","syncDocs":false,"syncApi":true,"sourceApiPaths":["WebsiteArtifacts/apidocs"],"apiRoot":"./data/apidocs","syncExamples":false,"hydrateFromArtifacts":true,"failOnMissingApiSource":true,"strict":true}]}
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(result.Success, result.Steps[0].Message);
+            Assert.True(File.Exists(Path.Combine(root, "data", "apidocs", "library", "dotnet", "Library.xml")));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public void RunPipeline_ProjectDocsSync_HydratesDocsApiAndExamplesFromZipArtifact()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-docs-sync-artifact-" + Guid.NewGuid().ToString("N"));

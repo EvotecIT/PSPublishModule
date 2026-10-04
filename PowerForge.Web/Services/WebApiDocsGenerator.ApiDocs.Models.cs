@@ -185,12 +185,12 @@ public static partial class WebApiDocsGenerator
             _sourceUrlMappings = sourceUrlMappings ?? Array.Empty<SourceUrlMappingRule>();
         }
 
-        public static SourceLinkContext? Create(WebApiDocsOptions options, Assembly assembly, List<string> warnings)
+        public static SourceLinkContext? Create(WebApiDocsOptions options, Assembly assembly, List<string> warnings, string? assemblyPathOverride = null)
         {
             if (string.IsNullOrWhiteSpace(options.SourceUrlPattern) && string.IsNullOrWhiteSpace(options.SourceRootPath))
                 return null;
 
-            var assemblyPath = options.AssemblyPath;
+            var assemblyPath = assemblyPathOverride ?? options.AssemblyPath;
             if (string.IsNullOrWhiteSpace(assemblyPath))
                 assemblyPath = assembly.Location;
             if (string.IsNullOrWhiteSpace(assemblyPath))
