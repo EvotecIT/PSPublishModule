@@ -5,7 +5,7 @@ $fixtureRoot = Join-Path $ScratchRoot ('catalog-workflow-test-' + [Guid]::NewGui
 New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
 $savedEnvironment = @{}
 foreach ($name in @('GITHUB_REPOSITORY', 'GITHUB_OUTPUT', 'GITHUB_REF', 'GITHUB_WORKFLOW_REF', 'GITHUB_EVENT_NAME',
-    'CATALOG_EXECUTE', 'CATALOG_DEFAULT_BRANCH', 'CATALOG_CONFIRM_NO_PRIOR_SUBMISSION', 'CATALOG_RESERVATION_KEY')) {
+    'CATALOG_EXECUTE', 'CATALOG_VERIFY_AUTHENTICATION', 'CATALOG_DEFAULT_BRANCH', 'CATALOG_CONFIRM_NO_PRIOR_SUBMISSION', 'CATALOG_RESERVATION_KEY')) {
     $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name)
 }
 try {
@@ -15,7 +15,7 @@ try {
     $env:GITHUB_EVENT_NAME = 'workflow_dispatch'
     $env:CATALOG_DEFAULT_BRANCH = 'main'
     $env:GITHUB_OUTPUT = Join-Path $fixtureRoot 'outputs.txt'
-    $env:CATALOG_EXECUTE = 'false'; $env:CATALOG_CONFIRM_NO_PRIOR_SUBMISSION = 'false'
+    $env:CATALOG_EXECUTE = 'false'; $env:CATALOG_VERIFY_AUTHENTICATION = 'false'; $env:CATALOG_CONFIRM_NO_PRIOR_SUBMISSION = 'false'
     $profilePath = Join-Path $fixtureRoot 'catalog.json'
     Set-Content -LiteralPath $profilePath -Value '{"ReleaseConfigPath":"release.json"}'
     $identity = "$env:GITHUB_REPOSITORY`n$profilePath`nApp-v1.2.3"
@@ -85,6 +85,12 @@ try {
     $parameters.OutputPath = Join-Path $fixtureRoot 'confirmed-first-attempt'
     & "$PSScriptRoot/catalog-update-workflow.ps1" -Action Prepare @parameters
     if (!(Get-Content -LiteralPath (Join-Path $parameters.OutputPath 'workflow-history.json') -Raw | ConvertFrom-Json).Confirmed) { throw 'Explicit confirmation was not retained.' }
+    $env:CATALOG_EXECUTE = 'false'; $env:CATALOG_VERIFY_AUTHENTICATION = 'true'; $env:CATALOG_CONFIRM_NO_PRIOR_SUBMISSION = 'false'
+    $parameters.OutputPath = Join-Path $fixtureRoot 'authenticated-preflight'
+    & "$PSScriptRoot/catalog-update-workflow.ps1" -Action Prepare @parameters
+    $authenticatedPreflight = $global:CatalogWorkflowTestState.Calls[-1]
+    if ($authenticatedPreflight -notcontains '--require-authentication' -or $authenticatedPreflight -contains '--execute') { throw 'Authentication verification must remain a non-mutating preflight.' }
+    if ((Get-Content -LiteralPath (Join-Path $parameters.OutputPath 'workflow-history.json') -Raw | ConvertFrom-Json).Confirmed) { throw 'Authentication verification manufactured confirmed submission history.' }
     Write-Host 'Catalog producer trust, release requalification, reservation and lost-history reconciliation contracts passed.'
 } finally {
     foreach ($name in $savedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name]) }
