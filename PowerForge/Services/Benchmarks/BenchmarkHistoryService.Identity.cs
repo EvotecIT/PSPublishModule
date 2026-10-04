@@ -3,7 +3,7 @@ namespace PowerForge;
 public sealed partial class BenchmarkHistoryService
 {
     private static readonly string[] PolicyKeys = { "warmupCount", "iterationCount", "runOrder", "outlierMode", "memoryCleanup",
-        "processAffinityMask", "processPriority", "benchmark.PowerPlan" };
+        "profile", "cooldownMilliseconds", "processAffinityMask", "processPriority", "benchmark.PowerPlan" };
 
     private static BenchmarkHistoryEntry CreateEntry(BenchmarkRunResult result, BenchmarkHistoryRequest request)
     {
@@ -28,6 +28,13 @@ public sealed partial class BenchmarkHistoryService
         if (identity.Any(string.IsNullOrWhiteSpace))
             throw new InvalidOperationException("Runner environment requires OS, architecture, CPU, runtime and runner version identity.");
         var policy = PolicyKeys.ToDictionary(key => key, key => Metadata(result, key), StringComparer.Ordinal);
+        // External PowerShell hosts report their actual placement under execution-path keys.
+        // Requested settings alone cannot establish that different child processes ran alike.
+        var hostPlacement = (result.Metadata ?? new Dictionary<string, string>())
+            .Where(item => item.Key.StartsWith("host.", StringComparison.OrdinalIgnoreCase)
+                && (item.Key.EndsWith(".processAffinityMask", StringComparison.OrdinalIgnoreCase)
+                    || item.Key.EndsWith(".processPriority", StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(item => item.Key, StringComparer.Ordinal).ToArray();
         if (!int.TryParse(policy["iterationCount"], out int iterations) || iterations < request.MinimumSamples
             || string.IsNullOrWhiteSpace(policy["outlierMode"]))
             throw new InvalidOperationException("History requires measured iteration and outlier policies.");
@@ -48,7 +55,8 @@ public sealed partial class BenchmarkHistoryService
         {
             RunId = result.RunId, FinishedUtc = result.FinishedUtc, WorkloadId = request.WorkloadId.Trim(),
             EnvironmentSha256 = BenchmarkJson.ComputeSha256(new { Identity = identity, environment.DotNetSdkVersion,
-                environment.OsDescription, environment.LogicalCoreCount, environment.PhysicalCoreCount, Policy = policy }),
+                environment.OsDescription, environment.LogicalCoreCount, environment.PhysicalCoreCount,
+                environment.PhysicalProcessorCount, Policy = policy, HostPlacement = hostPlacement }),
             ResultSha256 = BenchmarkJson.ComputeSha256(result), SourceCommit = Metadata(result, "benchmark.SourceCandidateCommit"),
             Lanes = lanes
         };

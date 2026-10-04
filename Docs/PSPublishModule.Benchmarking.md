@@ -46,7 +46,8 @@ Test-BenchmarkHistory -ResultPath ./run-report.json -HistoryPath ./history.json 
 Choose a workload version or fixture hash that changes when the measured work
 changes. Choose a stable runner identity for a dedicated machine or comparable
 pool. OS, architecture, CPU, runtime, SDK, runner version, placement and measurement
-policy split calibration automatically. Windows, Linux and macOS histories may
+policy, profile, cooldown, and each external host's actual affinity and priority
+split calibration automatically. Windows, Linux and macOS histories may
 share one file; they do not share duration thresholds. Missing placement metadata
 cannot establish that processor placement was controlled.
 
@@ -62,7 +63,8 @@ Insufficient history returns `Calibrating = true` and `Passed = false`.
 `-AllowCalibration` permits that initial state without a terminating error; a
 regression or missing established lane still fails. Failed, skipped, duplicated
 or incomplete measured iterations cannot enter history. Verification never writes
-the file. `-Update` reports acceptance rather than a passing verification, supports
+the file and can read a complete snapshot while an accepted update replaces it.
+`-Update` reports acceptance rather than a passing verification, supports
 `-WhatIf`, and uses the shared lock and atomic writer. Do not automatically accept a
 run after a failed gate. Keep the history file as a local or CI artifact alongside
 the complete run reports used to calibrate it.

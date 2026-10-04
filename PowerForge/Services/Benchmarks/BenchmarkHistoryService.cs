@@ -99,9 +99,7 @@ public sealed partial class BenchmarkHistoryService
         if (string.IsNullOrWhiteSpace(historyPath)) throw new ArgumentException("History path is required.", nameof(historyPath));
         string path = BenchmarkJson.ResolveWritePath(historyPath);
         using var lease = update ? BenchmarkFileUpdateLock.Acquire(path) : null;
-        if (File.Exists(path) && new FileInfo(path).Length > 32 * 1024 * 1024)
-            throw new InvalidOperationException("Timing history exceeds the 32 MiB file limit.");
-        BenchmarkHistory? history = File.Exists(path) ? BenchmarkJson.Read<BenchmarkHistory>(path) : null;
+        var history = ReadHistory(path);
         if (!update) return Evaluate(history, result, request);
         var recorded = Record(history, result, request);
         var payload = BenchmarkJson.SerializeCanonicalBytes(recorded);
@@ -109,6 +107,27 @@ public sealed partial class BenchmarkHistoryService
             throw new InvalidOperationException("Timing history exceeds the 32 MiB file limit.");
         BenchmarkJson.WriteBytes(path, payload);
         return new BenchmarkHistoryResult { Updated = true, EnvironmentSha256 = CreateEntry(result, request).EnvironmentSha256 };
+    }
+
+    private static BenchmarkHistory? ReadHistory(string path)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                if (new FileInfo(path).Length > 32 * 1024 * 1024)
+                    throw new InvalidOperationException("Timing history exceeds the 32 MiB file limit.");
+                return BenchmarkJson.Read<BenchmarkHistory>(path);
+            }
+            catch (FileNotFoundException) when (attempt < 20)
+            {
+                // Windows replacement can briefly make attribute queries report a missing entry.
+                // Confirm sustained absence before treating a runner as uncalibrated.
+                System.Threading.Thread.Sleep(10);
+            }
+            catch (FileNotFoundException) { return null; }
+            catch (DirectoryNotFoundException) { return null; }
+        }
     }
 
     private static double Median(double[] values)

@@ -247,7 +247,7 @@ public static class BenchmarkJson
 #endif
 
     /// <summary>
-    /// Reads a JSON artifact.
+    /// Reads a complete JSON artifact snapshot while allowing atomic replacement by a writer.
     /// </summary>
     /// <typeparam name="T">Payload type.</typeparam>
     /// <param name="path">Input path.</param>
@@ -255,7 +255,9 @@ public static class BenchmarkJson
     public static T Read<T>(string path)
     {
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Input path is required.", nameof(path));
-        var json = File.ReadAllText(path);
+        using var stream = OpenSnapshot(path);
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        var json = reader.ReadToEnd();
         return JsonSerializer.Deserialize<T>(json, Options)
                ?? throw new InvalidOperationException($"Unable to deserialize benchmark JSON: {path}");
     }
@@ -268,6 +270,26 @@ public static class BenchmarkJson
                    $"Unable to deserialize benchmark JSON: {sourceDescription}");
     }
 
+    // Deny in-place mutation but let the atomic writer replace the directory entry.
+    // An already opened stream keeps its complete old snapshot until disposal.
+    private static FileStream OpenSnapshot(string path)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete,
+                    bufferSize: 64 * 1024, FileOptions.SequentialScan);
+            }
+            catch (IOException error) when (attempt < 20 && ((error.HResult & 0xFFFF) == 32 || (error.HResult & 0xFFFF) == 33))
+            {
+                // ReplaceFile briefly holds the new directory entry without sharing until completion.
+                // Retry only native sharing/lock violations; malformed JSON, absence and access errors stay visible.
+                System.Threading.Thread.Sleep(10);
+            }
+        }
+    }
+
     /// <summary>
     /// Reads a benchmark summary from either a full run result or a summary array.
     /// </summary>
@@ -275,7 +297,7 @@ public static class BenchmarkJson
     /// <returns>Summary rows.</returns>
     public static BenchmarkSummaryRow[] ReadSummary(string path)
     {
-        using var stream = File.OpenRead(path);
+        using var stream = OpenSnapshot(path);
         using var doc = JsonDocument.Parse(stream);
         var root = doc.RootElement;
         if (root.ValueKind == JsonValueKind.Array)
