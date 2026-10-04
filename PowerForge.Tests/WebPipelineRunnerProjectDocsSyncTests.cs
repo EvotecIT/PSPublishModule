@@ -846,6 +846,17 @@ public sealed class WebPipelineRunnerProjectDocsSyncTests
             var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
             Assert.True(result.Success, result.Steps[0].Message);
             Assert.True(File.Exists(Path.Combine(root, "data", "apidocs", "library", "dotnet", "Library.xml")));
+
+            File.WriteAllText(catalogPath, JsonSerializer.Serialize(new
+            {
+                projects = new[]
+                {
+                    new { slug = "library", version = "1.8.3", surfaces = new { apiDotNet = true }, artifacts = new { api = artifactTemplate } }
+                }
+            }));
+            var missingVersionResult = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.False(missingVersionResult.Success);
+            Assert.Contains("Required API artifact could not be hydrated", missingVersionResult.Steps[0].Message, StringComparison.Ordinal);
         }
         finally
         {

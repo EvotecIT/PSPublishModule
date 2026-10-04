@@ -422,6 +422,7 @@ public static partial class WebApiDocsGenerator
         ApiDocsAssemblyLoadContext? assemblyContext = null;
         var assemblies = new List<Assembly>();
         var assembliesByName = new Dictionary<string, Assembly>(StringComparer.OrdinalIgnoreCase);
+        var assemblyPathsByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (assemblyPaths.Length > 0)
         {
             var requestedAssemblyPath = assemblyPaths[0];
@@ -436,6 +437,7 @@ public static partial class WebApiDocsGenerator
                     $"Configured API documentation assembly could not be inspected: {requestedAssemblyPath}");
             assemblies.Add(assembly);
             assembliesByName.Add(assembly.GetName().Name!, assembly);
+            assemblyPathsByName.Add(assembly.GetName().Name!, requestedAssemblyPath);
         }
 
         using var assemblyContextScope = assemblyContext;
@@ -451,6 +453,7 @@ public static partial class WebApiDocsGenerator
                 if (!assembliesByName.TryAdd(additional.GetName().Name!, additional))
                     throw new InvalidOperationException($"Duplicate API documentation assembly: {additional.GetName().Name}");
                 assemblies.Add(additional);
+                assemblyPathsByName.Add(additional.GetName().Name!, additionalPath);
             }
         }
 
@@ -478,7 +481,7 @@ public static partial class WebApiDocsGenerator
         {
             foreach (var current in assemblies)
                 EnrichFromAssembly(apiDoc, current, options, warnings,
-                    assemblyPaths.First(path => Path.GetFileNameWithoutExtension(path).Equals(current.GetName().Name, StringComparison.OrdinalIgnoreCase)));
+                    assemblyPathsByName[current.GetName().Name!]);
             RestrictToPublicAssemblySurface(apiDoc, assemblies);
         }
         var assemblyName = apiDoc.AssemblyName;

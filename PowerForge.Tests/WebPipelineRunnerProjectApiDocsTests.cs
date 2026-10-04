@@ -321,9 +321,10 @@ public class WebPipelineRunnerProjectApiDocsTests
             Assert.Contains("PowerForge.Web.WebApiDocsGenerator", names);
             Assert.DoesNotContain("PowerForge.FakeInternalType", names);
 
+            File.Copy(Path.Combine(dotNetRoot, "PowerForge.dll"), Path.Combine(dotNetRoot, "RenamedCore.dll"));
             File.WriteAllText(pipelinePath,
                 """
-                {"steps":[{"task":"apidocs","type":"csharp","xmls":["./data/project-api/multi/dotnet/PowerForge.xml","./data/project-api/multi/dotnet/PowerForge.Web.xml"],"assemblies":["./data/project-api/multi/dotnet/PowerForge.dll","./data/project-api/multi/dotnet/PowerForge.Web.dll"],"out":"./_site/array-api","template":"docs","format":"html"}]}
+                {"steps":[{"task":"apidocs","type":"csharp","xmls":["./data/project-api/multi/dotnet/PowerForge.xml","./data/project-api/multi/dotnet/PowerForge.Web.xml"],"assemblies":["./data/project-api/multi/dotnet/RenamedCore.dll","./data/project-api/multi/dotnet/PowerForge.Web.dll"],"out":"./_site/array-api","template":"docs","format":"html"}]}
                 """);
             var arraysOnlyResult = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
             Assert.True(arraysOnlyResult.Success);

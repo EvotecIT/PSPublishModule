@@ -257,6 +257,7 @@ internal static partial class WebPipelineRunner
                 apiSourceCandidates,
                 examplesSourceCandidates,
                 syncApi,
+                failOnMissingApiSource,
                 syncExamples,
                 artifactWorkRoot,
                 artifactTimeoutSeconds,
@@ -1137,6 +1138,7 @@ internal static partial class WebPipelineRunner
         IReadOnlyList<string> apiSourceCandidates,
         IReadOnlyList<string> examplesSourceCandidates,
         bool syncApi,
+        bool failOnMissingApiSource,
         bool syncExamples,
         string artifactWorkRoot,
         int timeoutSeconds,
@@ -1160,6 +1162,7 @@ internal static partial class WebPipelineRunner
                 HydrateProjectArtifactSurface(
                     project,
                     ProjectDocsSurfaceType.Docs,
+                    requireArtifact: false,
                     slug,
                     sourcesRoot,
                     projectDocsSourceCandidates,
@@ -1177,6 +1180,7 @@ internal static partial class WebPipelineRunner
                 HydrateProjectArtifactSurface(
                     project,
                     ProjectDocsSurfaceType.Api,
+                    requireArtifact: failOnMissingApiSource,
                     slug,
                     sourcesRoot,
                     projectApiSourceCandidates,
@@ -1194,6 +1198,7 @@ internal static partial class WebPipelineRunner
                 HydrateProjectArtifactSurface(
                     project,
                     ProjectDocsSurfaceType.Examples,
+                    requireArtifact: false,
                     slug,
                     sourcesRoot,
                     projectExamplesSourceCandidates,
@@ -1210,6 +1215,7 @@ internal static partial class WebPipelineRunner
     private static void HydrateProjectArtifactSurface(
         ProjectDocsCatalogItem project,
         ProjectDocsSurfaceType surface,
+        bool requireArtifact,
         string slug,
         string sourcesRoot,
         IReadOnlyList<string> sourceCandidates,
@@ -1243,6 +1249,8 @@ internal static partial class WebPipelineRunner
                 stats,
                 out var extractedRoot))
         {
+            if (requireArtifact)
+                throw new InvalidOperationException($"Required API artifact could not be hydrated for '{slug}'.");
             return;
         }
 
@@ -1250,6 +1258,8 @@ internal static partial class WebPipelineRunner
         if (string.IsNullOrWhiteSpace(extractedSurfaceRoot))
         {
             stats.Failures++;
+            if (requireArtifact)
+                throw new InvalidOperationException($"Required API artifact has no API directory for '{slug}'.");
             return;
         }
 
