@@ -17,6 +17,11 @@ Contract status:
 - Theme inherits from a base theme for common layouts + components.
 - Works with simple tokens and Scriban without code changes.
 
+Use `<title>{{ title_html }}</title>` in Scriban layouts, or
+`<title>{{TITLE_HTML}}</title>` with the simple engine. This value is HTML-encoded
+and includes resolved SEO templates, page overrides, taxonomy context, and pagination.
+Keep `page.title` (Scriban) or `TITLE` (simple) for the visible page heading.
+
 ## Theme package layout
 ```
 themes/

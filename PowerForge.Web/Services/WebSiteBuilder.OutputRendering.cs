@@ -176,6 +176,7 @@ public static partial class WebSiteBuilder
             PreloadsHtml = preloads,
             CriticalCssHtml = criticalCss,
             CanonicalHtml = canonical,
+            TitleHtml = System.Web.HttpUtility.HtmlEncode(pageTitle),
             DescriptionMetaHtml = descriptionMeta,
             HeadHtml = string.Join(
                 Environment.NewLine,
