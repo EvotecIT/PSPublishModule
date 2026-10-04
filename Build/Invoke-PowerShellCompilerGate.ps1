@@ -49,7 +49,8 @@ $filter = if ($Lane -eq 'Full') {
     ($fastPatterns | ForEach-Object { "FullyQualifiedName~$_" }) -join '|'
 }
 $testArguments = @('test', (Join-Path $repositoryRoot 'PowerForge.Tests/PowerForge.Tests.csproj'),
-    '-c', 'Release', '--filter', $filter, '--logger', 'trx;LogFileName=compiler-gate.trx', '--results-directory', $EvidencePath)
+    '-c', 'Release', '--filter', $filter, '--logger', 'console;verbosity=normal',
+    '--logger', 'trx;LogFileName=compiler-gate.trx', '--results-directory', $EvidencePath)
 if ($NoBuild) { $testArguments += @('--no-build', '--no-restore') }
 $testArguments += @('--', "xUnit.MaxParallelThreads=$MaxParallelThreads")
 Push-Location $repositoryRoot
