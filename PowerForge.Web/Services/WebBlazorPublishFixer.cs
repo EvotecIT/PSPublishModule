@@ -15,7 +15,7 @@ public sealed class WebBlazorPublishFixOptions
     public bool UpdateBootIntegrity { get; set; } = true;
     /// <summary>When true, copy fingerprinted blazor.webassembly.*.js to stable name.</summary>
     public bool CopyFingerprintBlazorJs { get; set; } = true;
-    /// <summary>When true, version stable Blazor JS and local stylesheet references.</summary>
+    /// <summary>When true, reference content-versioned copies of stable Blazor JS and local stylesheets.</summary>
     public bool AddCacheBuster { get; set; } = true;
 }
 
@@ -38,6 +38,8 @@ public static partial class WebBlazorPublishFixer
         var wwwroot = Path.Combine(root, "wwwroot");
         if (Directory.Exists(wwwroot) && File.Exists(Path.Combine(wwwroot, "index.html")))
             siteRoot = wwwroot;
+        var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
+        var affected = new HashSet<string>(StringComparer.Ordinal) { "index.html" };
 
         if (!string.IsNullOrWhiteSpace(options.BaseHref))
             UpdateBaseHref(Path.Combine(siteRoot, "index.html"), options.BaseHref);
@@ -46,16 +48,30 @@ public static partial class WebBlazorPublishFixer
         if (Directory.Exists(frameworkPath))
         {
             if (options.CopyFingerprintBlazorJs)
+            {
                 CopyFingerprintBlazorJs(frameworkPath);
+                affected.Add("_framework/blazor.webassembly.js");
+            }
             if (options.UpdateBootIntegrity)
+            {
                 UpdateBootIntegrity(frameworkPath);
+                affected.Add("_framework/blazor.boot.json");
+            }
         }
 
         if (options.AddCacheBuster)
         {
-            AddCacheBuster(Path.Combine(siteRoot, "index.html"));
-            VersionStylesheets(Path.Combine(siteRoot, "index.html"), siteRoot);
+            AddCacheBuster(Path.Combine(siteRoot, "index.html"), siteRoot, aliases);
+            VersionStylesheets(Path.Combine(siteRoot, "index.html"), siteRoot, aliases);
         }
+        foreach (var alias in aliases)
+        {
+            affected.Add(alias.Key);
+            affected.Add(alias.Value);
+        }
+        UpdateOfflineAssets(siteRoot, aliases, affected);
+        foreach (var path in affected) RefreshCompressedAssets(siteRoot, path, aliases);
+        UpdateEndpointManifests(root, siteRoot, aliases, affected);
     }
 
     private static void UpdateBaseHref(string htmlPath, string baseHref)
@@ -97,7 +113,7 @@ public static partial class WebBlazorPublishFixer
         }
 
         updated["resources"] = resources;
-        File.WriteAllText(bootPath, JsonSerializer.Serialize(updated, new JsonSerializerOptions { WriteIndented = true }));
+        WriteChangedBytes(bootPath, System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(updated, new JsonSerializerOptions { WriteIndented = true })));
     }
 
     private static string ComputeHash(string filePath)
@@ -115,17 +131,16 @@ public static partial class WebBlazorPublishFixer
         if (string.IsNullOrWhiteSpace(file)) return;
 
         var target = Path.Combine(frameworkPath, "blazor.webassembly.js");
-        File.Copy(file, target, overwrite: true);
+        WriteChangedBytes(target, File.ReadAllBytes(file));
     }
 
-    private static void AddCacheBuster(string htmlPath)
+    private static void AddCacheBuster(string htmlPath, string siteRoot, Dictionary<string, string> aliases)
     {
         if (!File.Exists(htmlPath)) return;
         var content = File.ReadAllText(htmlPath);
-        var version = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var pattern = "src=\"_framework/blazor\\.webassembly\\.js\"";
-        var replacement = $"src=\"_framework/blazor.webassembly.js?v={version}\"";
-        var updated = Regex.Replace(content, pattern, replacement, RegexOptions.IgnoreCase);
+        var pattern = "src=\"(?<url>_framework/blazor\\.webassembly(?:\\.pf-[a-f0-9]{64})?\\.js(?:\\?[^\"]*)?)\"";
+        var updated = Regex.Replace(content, pattern,
+            match => $"src=\"{VersionAssetUrl(match.Groups["url"].Value, siteRoot, aliases)}\"", RegexOptions.IgnoreCase);
         if (!string.Equals(updated, content, StringComparison.Ordinal))
             File.WriteAllText(htmlPath, updated);
     }

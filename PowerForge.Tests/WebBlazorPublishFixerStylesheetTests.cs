@@ -19,11 +19,11 @@ public sealed class WebBlazorPublishFixerStylesheetTests : IDisposable
         File.WriteAllText(css, "@import '_content/Component/old.bundle.scp.css';");
         Apply();
         var before = File.ReadAllText(Path.Combine(site, "index.html"));
-        Assert.Contains("App.styles.css?v=" + Hash(css), before);
+        Assert.Contains("App.styles.pf-" + Hash(css) + ".css", before);
         File.WriteAllText(css, "@import '_content/Component/new.bundle.scp.css';");
         Apply();
         var after = File.ReadAllText(Path.Combine(site, "index.html"));
-        Assert.Contains("App.styles.css?v=" + Hash(css), after);
+        Assert.Contains("App.styles.pf-" + Hash(css) + ".css", after);
         Assert.NotEqual(before, after);
         Assert.Contains("src=\"_framework/dotnet.hash.js\"", after);
     }
@@ -40,7 +40,7 @@ public sealed class WebBlazorPublishFixerStylesheetTests : IDisposable
         var once = File.ReadAllText(Path.Combine(_root, "index.html"));
         Apply();
         Assert.Equal(once, File.ReadAllText(Path.Combine(_root, "index.html")));
-        Assert.Contains("language=en&amp;v=" + Hash(css) + "#theme", once);
+        Assert.Contains("theme.pf-" + Hash(css) + ".css?language=en&amp;v=old#theme", once);
         Assert.Equal(bytes, File.ReadAllBytes(css));
     }
 
