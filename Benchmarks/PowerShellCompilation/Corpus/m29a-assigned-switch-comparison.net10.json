@@ -1,0 +1,216 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Qualify native assigned-switch success-output capture through existing switch and collector owners, Hybrid net10.0; execution is separate from emission.",
+  "baselineCompilerCommit": "5fc55056e09d3d41833b194c5f4d9ff5faaf43a1",
+  "baselineComparison": "m29a-parser-references-comparison.net10.json",
+  "baselineComparisonSha256": "27e57781bdceb62f773ad069670c10f4d1ffe214753280ca71d8918e7a46c47f",
+  "baselineRetainedInventorySha256": "fff10198a512480e4a34cfa0954b025e07c57e4713abd0c0740cbdd6e0beaaae",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 486,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "baselineEmitted": 253,
+      "candidateEmitted": 254,
+      "candidateExplanationSha256": "54af0d402988af686f275b3b5d1e5287921d6d0f1bfab82b2a7e55e7b55c19b6",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": [
+        {
+          "unitId": "311f07ae1e97efe66a5d9ee2",
+          "name": "Copy-DictionaryManual",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [
+            "__PowerForgeRegion_6925ab718a387b8767d2bb6c",
+            "__PowerForgeRegion_ce72041b06f9b4a10c01e549"
+          ],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "baselineEmitted": 63,
+      "candidateEmitted": 63,
+      "candidateExplanationSha256": "0fe9323878dbf15bc173231b8ad447afc5ddf1d9833e9b2cd631e66cc998bee3",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "baselineEmitted": 60,
+      "candidateEmitted": 61,
+      "candidateExplanationSha256": "73172aaac03d1c74782e361a0716d2c2d0c14b80abae98e870ef80c8253a8ee2",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": [
+        {
+          "unitId": "89c71c2ce0be7d5be018cc80",
+          "name": "Get-InfobloxDNSRecord",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [
+            "__PowerForgeRegion_bca1ecf2e885b76af3a9155e"
+          ],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "baselineEmitted": 83,
+      "candidateEmitted": 83,
+      "candidateExplanationSha256": "e7535d0f82ec88abba570b995969fa36c7dfc9dc6571589a91eb525b94b75d3a",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "baselineEmitted": 27,
+      "candidateEmitted": 27,
+      "candidateExplanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    }
+  ],
+  "candidateEmitted": 488,
+  "candidateRetained": 77,
+  "retainedFeatureImpact": {
+    "assignment.target": 1,
+    "binary-module.cmdlet-shape": 2,
+    "command.foreach-object": 2,
+    "command.get-help": 1,
+    "command.get-item": 1,
+    "command.get-location": 1,
+    "command.new-object": 2,
+    "command.out-gridview": 1,
+    "command.out-string": 1,
+    "command.read-host": 1,
+    "command.resolve-path": 1,
+    "command.select-object": 1,
+    "command.set-clipboard": 1,
+    "command.showcontainer": 1,
+    "command.test-connection": 1,
+    "command.write-verbose": 4,
+    "command.write-warning": 2,
+    "control.finally.stream-stop": 2,
+    "expression.conversion": 4,
+    "parameter.default": 1,
+    "parameter.metadata": 3,
+    "parameter.type": 23,
+    "pipeline.lifecycle": 2,
+    "psb2611": 1,
+    "psb2961": 1,
+    "runtime.scope": 2,
+    "scriptblock.typed": 1,
+    "semantic.lowering.missing": 2,
+    "source.type-definition": 5,
+    "syntax.foreachstatement": 1,
+    "syntax.functiondefinition": 1,
+    "syntax.invokememberexpression": 5,
+    "syntax.memberexpression": 3,
+    "syntax.pipeline": 1,
+    "syntax.subexpression": 1,
+    "syntax.trystatement": 1,
+    "syntax.typedefinition": 1,
+    "syntax.typeexpression": 2,
+    "syntax.unsupported": 35
+  },
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "c93f56b2667b5b40f519db5ff5b3956ffb6ae9e96e988e85c792ed9fdda12812",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs": "2d8efb3f9c5faf182beca983156561f0aa09a06fcbb8778f1e5817f8cc28cca7"
+  },
+  "workflowSourceHashes": {
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSSharedGoods/FullModule/Public/Objects/Copy-DictionaryManual.ps1": "755c5f8be375ce49029ebb04571e53082bd7f1e36e27620d76f53a1d15fe3625"
+  },
+  "externalDnsWorkflow": {
+    "source": "https://github.com/EvotecIT/PowerInfoblox",
+    "revisionKind": "GitCommit",
+    "revision": "33067f88cbd8afae2f35ee0436475f7087ad65cf",
+    "redistributionDisposition": "Pinned source remains external; only the offline qualification harness and fingerprints are tracked.",
+    "qualification": {
+      "compilerCommit": "5fc55056e09d3d41833b194c5f4d9ff5faaf43a1",
+      "sourceHashes": {
+        "Public/Get-InfobloxDNSRecord.ps1": "b63f1b44e4df8b488c2e957867423e79436016ae18c76aabbd86266949602c47",
+        "Private/Resolve-InfobloxDNSRecordType.ps1": "35c8c6676c01b80d77e003086b944e0f782c6bf0e289052ea29ce7a20c493cfd",
+        "Private/Get-InfobloxDNSRecordPreferredField.ps1": "47366dca0d1c44380b58f751aee54f0b589ea151ad97808807c58653ec0a978e"
+      },
+      "packetSha256": "60a6c5957d999c68c066550c3b5892e1808f6c075ade908b6c1ccc667c81a2d0",
+      "targets": [
+        {
+          "framework": "net10.0",
+          "observations": 41,
+          "originalSha256": "e80ec08ee6fd63a7bc523b191a67b4b9c9f56cc188040711867a5cae9b7ff379",
+          "generatedSha256": "e80ec08ee6fd63a7bc523b191a67b4b9c9f56cc188040711867a5cae9b7ff379"
+        },
+        {
+          "framework": "net472",
+          "observations": 41,
+          "originalSha256": "603b1aeda64cd9a9d78be7267faee43bc82acacc731ecc0ed618aa4218668701",
+          "generatedSha256": "603b1aeda64cd9a9d78be7267faee43bc82acacc731ecc0ed618aa4218668701"
+        }
+      ],
+      "compilerSourceHashes": {
+        "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "c93f56b2667b5b40f519db5ff5b3956ffb6ae9e96e988e85c792ed9fdda12812",
+        "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs": "2d8efb3f9c5faf182beca983156561f0aa09a06fcbb8778f1e5817f8cc28cca7"
+      },
+      "compilerBinaryHashes": {
+        "PowerForge.Cli.dll": "af0f2c70bb1ddceecb434acb749aec49169bbb4812931a3145feb721a7e56cff",
+        "PowerForge.PowerShell.dll": "f1446298f2f201c19e5b404e55271276c929c7b48ad13e4d5a6456fafb12ece6",
+        "PowerForge.dll": "0ff7a46136d7f3ab243de0f2815fe63a9beee5d8b8bc91c9267cbc0e60805c45"
+      }
+    },
+    "harnessSourceHashes": {
+      "Benchmarks/PowerShellCompilation/qualify-infoblox-dns-record.py": "2fe9315445775f013ad4637ec7328c0f75cb4913e6f2db1e1eb7f98316b80cfd",
+      "Benchmarks/PowerShellCompilation/Invoke-InfobloxDnsRecordProbe.ps1": "83a7db0bd4a03ad74d327b7be580feef860f23055cc68882793d9b075d7f6c84"
+    }
+  },
+  "validation": {
+    "focusedTests": 9,
+    "focusedDurationSeconds": 26,
+    "focusedTrxSha256": "18e24feb69abd64afcfd1196b8a77d3bfe9c0a5ac0a6dc6c9480424b99adaf10",
+    "testSourceHashes": {
+      "PowerForge.Tests/PowerShellCompilationAssignedSwitchCaptureTests.cs": "454cddb433744096dbca6e21856f8a8bd4ff6c859250d1ba9fa4f5a798e4d2e5"
+    },
+    "net472BuildWarnings": 0,
+    "net472BuildErrors": 0,
+    "net472BuildDurationSeconds": 4.15,
+    "cliBuildWarnings": 0,
+    "cliBuildErrors": 0,
+    "cliBuildDurationSeconds": 10.63,
+    "independentReview": "One fresh read-only owner pass, assigned_switch_capture_review: no actionable production P0-P3 findings. Suggested scalar-string Strict negative adopted and passed; no production change followed review. Reviewer inspected selection/routing, collector, matcher/state/transfer/assignment/error owners, tests and offline scripts; no tests run by reviewer.",
+    "copyWorkflowObservationsPerHost": 6,
+    "syntheticCaptureObservationsPerHost": 8,
+    "externalDnsObservationsPerHost": 41,
+    "newlyExecutedCompleteFunctions": [
+      "Copy-DictionaryManual",
+      "Get-InfobloxDNSRecord"
+    ],
+    "limits": [
+      "Hybrid assigned switches reuse active native matching/state, record collection and assignment; this does not qualify runtime-free capture or new matching flags/command condition shapes.",
+      "Dictionary proof matches original values and output container types, preserves input data and shows root/nested identity separation for the six pinned cases; this is not arbitrary object cloning.",
+      "Nested assigned switches combined with inner-loop transfers, typed/access switch destinations and predicate-body failures have no new dedicated execution cases. Existing owner compatibility tests and inspection are separate evidence.",
+      "DNS query/schema/property-selection providers are in-memory stand-ins with autoload disabled. Actual WAPI, Get-FieldsFromSchema and Select-ObjectByProperty implementation behavior are not qualified.",
+      "The original no-match field argument is null; its serialized trace is null on PowerShell 5.1 and [null] on PowerShell 7. Each generated result preserves its own host observation.",
+      "Full five-packet census is net10.0 only; focused artifacts qualify both Windows hosts. No full module administration, other host/platform, performance, package or release proof."
+    ]
+  }
+}

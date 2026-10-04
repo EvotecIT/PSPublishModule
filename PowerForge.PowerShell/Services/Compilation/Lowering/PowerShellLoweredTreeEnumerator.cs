@@ -6,12 +6,25 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellLoweredTreeEnumerator
 {
+    private static IEnumerable<IEnumerable<PowerShellLoweredStatement>> EnumerateStatementValueBlocks(PowerShellLoweredExpression expression)
+    {
+        if (expression is PowerShellLoweredNativeStatementValueExpression value)
+        {
+            yield return value.Statements;
+            yield break;
+        }
+        foreach (var child in EnumerateChildExpressions(expression))
+        foreach (var body in EnumerateStatementValueBlocks(child)) yield return body;
+    }
+
     internal static IEnumerable<PowerShellLoweredStatement> EnumerateStatements(
         IEnumerable<PowerShellLoweredStatement> statements)
     {
         foreach (var statement in statements)
         {
             yield return statement;
+            foreach (var body in EnumerateDirectExpressions(statement).SelectMany(EnumerateStatementValueBlocks))
+            foreach (var embedded in EnumerateStatements(body)) yield return embedded;
             foreach (var nested in EnumerateNestedStatements(statement))
                 yield return nested;
         }
@@ -20,10 +33,11 @@ internal static class PowerShellLoweredTreeEnumerator
     internal static IEnumerable<PowerShellLoweredExpression> EnumerateExpressions(
         IEnumerable<PowerShellLoweredStatement> statements)
     {
+        var visited = new HashSet<PowerShellLoweredExpression>();
         foreach (var statement in EnumerateStatements(statements))
         foreach (var expression in EnumerateDirectExpressions(statement))
         foreach (var descendant in EnumerateExpressionTree(expression))
-            yield return descendant;
+            if (visited.Add(descendant)) yield return descendant;
     }
 
     private static IEnumerable<PowerShellLoweredStatement> EnumerateNestedStatements(
@@ -31,6 +45,8 @@ internal static class PowerShellLoweredTreeEnumerator
     {
         IEnumerable<PowerShellLoweredStatement> nested = statement switch
         {
+            PowerShellLoweredOutputCaptureStatement capture => capture.Statements,
+            PowerShellLoweredStatementErrorBoundary boundary => boundary.Statements,
             PowerShellLoweredIfStatement conditional => conditional.Clauses
                 .SelectMany(static clause => clause.Statements)
                 .Concat(conditional.ElseStatements is null
@@ -63,6 +79,9 @@ internal static class PowerShellLoweredTreeEnumerator
                 yield return assignment.Value;
                 break;
             case PowerShellLoweredModuleVariableAssignmentStatement assignment:
+                yield return assignment.Value;
+                break;
+            case PowerShellLoweredNativeAssignmentStatement assignment:
                 yield return assignment.Value;
                 break;
             case PowerShellLoweredIndexAssignmentStatement assignment:
@@ -135,12 +154,22 @@ internal static class PowerShellLoweredTreeEnumerator
             case PowerShellLoweredConversionExpression conversion:
                 yield return conversion.Operand;
                 break;
+            case PowerShellLoweredRegionValueAlternativeExpression alternative:
+                yield return alternative.Value;
+                break;
+            case PowerShellLoweredRegionControlFlowExpression { Value: not null } controlFlow:
+                yield return controlFlow.Value;
+                break;
             case PowerShellLoweredBinaryExpression binary:
                 yield return binary.Left;
                 yield return binary.Right;
                 break;
             case PowerShellLoweredUnaryExpression unary:
                 yield return unary.Operand;
+                break;
+            case PowerShellLoweredNativeTypeTestExpression nativeTest:
+                yield return nativeTest.Operand;
+                if (nativeTest.Target is not null) yield return nativeTest.Target;
                 break;
             case PowerShellLoweredTypeTestExpression typeTest:
                 yield return typeTest.Operand;
@@ -170,11 +199,43 @@ internal static class PowerShellLoweredTreeEnumerator
                 foreach (var part in interpolated.Parts)
                     if (part.Expression is not null) yield return part.Expression;
                 break;
-            case PowerShellLoweredMutationExpression { Value: not null } mutation:
-                yield return mutation.Value;
+            case PowerShellLoweredMutationExpression mutation:
+                if (mutation.NativeTargetRead is not null && mutation.Operation != PowerShellBoundMutationOperator.Assign)
+                    yield return mutation.NativeTargetRead;
+                if (mutation.Value is not null) yield return mutation.Value;
                 break;
             case PowerShellLoweredArrayExpression array:
                 foreach (var element in array.Elements) yield return element;
+                break;
+            case PowerShellLoweredNativeMemberExpression memberRead:
+                if (memberRead.Receiver is not null) yield return memberRead.Receiver;
+                if (memberRead.NameExpression is not null) yield return memberRead.NameExpression;
+                break;
+            case PowerShellLoweredNativeInvocationExpression nativeInvocation:
+                if (nativeInvocation.Receiver is not null) yield return nativeInvocation.Receiver;
+                foreach (var argument in nativeInvocation.Arguments) yield return argument;
+                break;
+            case PowerShellLoweredNativeIndexExpression nativeIndex:
+                yield return nativeIndex.Receiver;
+                foreach (var argument in nativeIndex.Arguments) yield return argument;
+                break;
+            case PowerShellLoweredNativeCollectionExpression collection:
+                foreach (var item in collection.Items) yield return item.Value;
+                break;
+            case PowerShellLoweredNativeStatementValueExpression statementValue:
+                foreach (var value in EnumerateStatements(statementValue.Statements).SelectMany(EnumerateDirectExpressions))
+                    yield return value;
+                break;
+            case PowerShellLoweredNativeConditionalValueExpression conditionalValue:
+                foreach (var clause in conditionalValue.Clauses)
+                {
+                    yield return clause.Condition;
+                    yield return clause.Value;
+                }
+                yield return conditionalValue.Otherwise;
+                break;
+            case PowerShellLoweredArrayCopyExpression copy:
+                yield return copy.Source;
                 break;
             case PowerShellLoweredArrayConcatenationExpression concatenation:
                 yield return concatenation.Left;

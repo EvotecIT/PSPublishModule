@@ -360,7 +360,11 @@ public sealed partial class ProcessRunner : IProcessRunner
         }
         catch (Exception ex)
         {
-            if (started) TryKill(process);
+            if (started)
+            {
+                TryKill(process);
+                if (_ownProcessTree) await process.WaitForTreeExitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            }
             stopwatch.Stop();
             var boundaryTimedOut = started && ex is TimeoutException;
             var failedStart = new ProcessRunResult(
@@ -450,7 +454,14 @@ public sealed partial class ProcessRunner : IProcessRunner
             if (!readyForResult) TryKill(process);
             try
             {
-                await Task.WhenAll(stdoutCapture.StopAsync(), stderrCapture.StopAsync()).ConfigureAwait(false);
+                try
+                {
+                    await Task.WhenAll(stdoutCapture.StopAsync(), stderrCapture.StopAsync()).ConfigureAwait(false);
+                }
+                finally
+                {
+                    if (_ownProcessTree) await process.WaitForTreeExitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                }
             }
             catch when (!readyForResult)
             {

@@ -1,0 +1,197 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Ordinary named commands in branches and loop conditions through existing native success capture and control-flow owners",
+  "baselineCompilerCommit": "3d245f195ba755b64222f184f0a8fb87fced463c",
+  "baselineDispositionLedger": "m29a-runspace-cleanup-comparison.net10.json",
+  "dispositionContract": "Apply these disposition changes to the linked full baseline/delta chain. All 565 identities match; no complete method or still-retained region is lost.",
+  "verifiedFunctionIdentities": 565,
+  "observedStableUnits": 584,
+  "baselineEmitted": 518,
+  "candidateEmitted": 519,
+  "candidateRetained": 46,
+  "packets": [
+    {
+      "packet": "pssg",
+      "resourceMode": "CompleteModule",
+      "functions": 282,
+      "emitted": 270,
+      "retained": 12,
+      "gains": [
+        {
+          "name": "Set-DnsServerIpAddress",
+          "unitId": "5afce79b3913c8184f5e3fa2"
+        }
+      ],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "10813e86b5035f79c818fd58921c591a2acd33e51660fa1fae28695379b24039"
+    },
+    {
+      "packet": "cleanup",
+      "resourceMode": "CompleteModule",
+      "functions": 68,
+      "emitted": 63,
+      "retained": 5,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "51277db657806711a57853e04fa18848f05040d5c4343f18f3aad8e7627472d3"
+    },
+    {
+      "packet": "pinf",
+      "resourceMode": "Declared",
+      "functions": 66,
+      "emitted": 65,
+      "retained": 1,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "0be6c42dae3f50456d294f128e9377a5d9ce3f3b0dc00f3f4fad31a8b9c71c47"
+    },
+    {
+      "packet": "pst",
+      "resourceMode": "CompleteModule",
+      "functions": 109,
+      "emitted": 94,
+      "retained": 15,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "a89dcee275cac8031619aea7c5316f9390273ba09e5bc5f8ad3691059fff13ba"
+    },
+    {
+      "packet": "platyps",
+      "resourceMode": "Declared",
+      "functions": 40,
+      "emitted": 27,
+      "retained": 13,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "c1693d9d13ef6349b1f21099dbcd22b8c2899388fe8e8f5df928c5867bea2144"
+    }
+  ],
+  "changedDispositions": [
+    {
+      "packet": "pssg",
+      "unitId": "5afce79b3913c8184f5e3fa2",
+      "name": "Set-DnsServerIpAddress",
+      "baselineEmitted": false,
+      "candidateEmitted": true,
+      "retainedHostedSource": false,
+      "baselineNativeFunctionBinding": false,
+      "usesNativeFunctionBinding": true,
+      "baselineRegionMembers": [],
+      "candidateRegionMembers": []
+    }
+  ],
+  "lostCompleteMethods": [],
+  "lostRegionsOfRetainedFunctions": [],
+  "retainedInventory": "m29a-retained-functions.net10.json",
+  "retainedInventorySha256": "ae251aa89dcc020d2d08abe75566c5a7f67e5e0a53e85807dfac26a0bc2bf6f2",
+  "changedSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "b933e2b2768fddb44c8594b009d0048795909961a75a4503bd182bb4de388042",
+    "PowerForge.Tests/PowerShellCompilationCommandConditionTests.cs": "0ddcebbc98b5cd957b8dfd8210470dcf85f3a9a4ce28239cde4a606eb0638836",
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSSharedGoods/FullModule/Public/DNS/Set-DNSServerIPAddress.ps1": "989857f0fb658042f9f64b1d37f6b0f994b6ea5bbf34e57d9f088c9577d7af85"
+  },
+  "workflow": {
+    "source": "https://github.com/EvotecIT/PSSharedGoods",
+    "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+    "authoredPath": "Public/DNS/Set-DNSServerIPAddress.ps1",
+    "sourceSha256": "989857f0fb658042f9f64b1d37f6b0f994b6ea5bbf34e57d9f088c9577d7af85",
+    "license": "MIT",
+    "compiledFunctions": [
+      "Set-DnsServerIpAddress"
+    ],
+    "hosts": [
+      "PowerShell 7/net10.0 Windows",
+      "Windows PowerShell 5.1/net472"
+    ],
+    "observationsPerHost": 14,
+    "offlineProviders": [
+      "Test-Connection",
+      "Invoke-Command",
+      "Set-DnsClientServerAddress",
+      "Write-Host"
+    ],
+    "cases": [
+      "false",
+      "true",
+      "null",
+      "zero",
+      "one",
+      "empty string",
+      "text",
+      "empty array",
+      "one false record",
+      "two false records",
+      "nonterminating error/false",
+      "nonterminating error/true",
+      "terminating failure",
+      "module-session rebinding"
+    ],
+    "actualNetworkRemotingDnsOperations": 0
+  },
+  "syntheticProof": {
+    "observationsPerHost": 4,
+    "owners": [
+      "if",
+      "elseif",
+      "while",
+      "do while",
+      "do until",
+      "for",
+      "foreach"
+    ],
+    "cases": [
+      "normal",
+      "zero records",
+      "multiple false records",
+      "terminating failure"
+    ],
+    "contracts": [
+      "record cardinality and native truthiness",
+      "repeat evaluation order",
+      "foreach collection cardinality",
+      "failure source positions",
+      "finally"
+    ]
+  },
+  "validation": {
+    "priorFocused": {
+      "passed": 13,
+      "total": 13,
+      "durationSeconds": 21,
+      "trxSha256": "557d3990579d14b98fb64658f883ff462309bb9c2d4b6ad0a37ff6044d7f20b0"
+    },
+    "finalFocused": {
+      "passed": 13,
+      "total": 13,
+      "trxSha256": "19eb18aecde1572574a57d5dda68def7bb88e89c9c5d758b4baea9c24760d1b0",
+      "filter": "CommandCondition_|HostedBooleanCommands|LocalExecution_",
+      "durationSeconds": 23
+    },
+    "net472Build": {
+      "succeeded": true,
+      "warnings": 0,
+      "errors": 0,
+      "elapsedSeconds": 3.89
+    }
+  },
+  "failureAccounting": [
+    "Initial test build rejected xunit Assert.Single filtering usage; corrected before execution.",
+    "Second run:4/6 passed; third run:7/9 passed. Negative assertions incorrectly expected all compilation to disappear when disabling native binding. Existing hosted command-region routes are legitimate; the corrected contract requires no native ABI and runtime-free Strict rejection. Runtime artifact observations passed in both runs."
+  ],
+  "review": {
+    "status": "candidate-reviewed",
+    "findings": [],
+    "scope": "One independent read-only policy/native binder/capture/truthiness/loop owner review. Following test-only additions qualify foreach and do-until reach already present in the reviewed selector; production change afterward is XML description only."
+  },
+  "boundaries": [
+    "The named-command operation remains PowerShell-owned; surrounding control flow is compiled. This is not runtime-free command translation.",
+    "Direct single ordinary named-command conditions only; compound/parenthesized/dynamic invocation forms require their own selection contract. Existing redirection/background owners are unchanged.",
+    "Runtime-free Strict stays closed. Missing native/host capabilities disable this native route; pre-existing hosted routes may still emit.",
+    "No live ping, DNS mutation, remoting, full-module execution, external-executable conditions or alias-specific runtime proof.",
+    "Five-packet census is net10.0 only; actual focused generated artifacts execute on both claimed Windows hosts."
+  ]
+}

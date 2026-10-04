@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
-    [string] $PacketPath = (Join-Path $PSScriptRoot 'public-corpus.net8.json'),
-    [string] $BaselinePath = (Join-Path $PSScriptRoot 'public-corpus-baseline.net8.json'),
+    [string] $PacketPath = (Join-Path $PSScriptRoot 'public-corpus.net10.json'),
+    [string] $BaselinePath = (Join-Path $PSScriptRoot 'public-corpus-baseline.net10.json'),
     [string] $CliAssemblyPath,
     [string] $WorkspacePath,
     [string] $EvidencePath,

@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 namespace PowerForge;
 
 /// <summary>Loads, validates, normalizes, and scaffolds the single portable PowerShell compilation project model.</summary>
-public sealed class PowerShellCompilationProjectManifestService
+public sealed partial class PowerShellCompilationProjectManifestService
 {
     internal static JsonSerializerOptions JsonOptions { get; } = CreateJsonOptions();
 
@@ -48,12 +48,16 @@ public sealed class PowerShellCompilationProjectManifestService
 
     /// <summary>Loads and validates a project manifest.</summary>
     public PowerShellCompilationProjectManifest Load(string projectPath, bool requireInputs = true)
+        => LoadCore(projectPath, requireInputs, null);
+
+    private static PowerShellCompilationProjectManifest LoadCore(string projectPath, bool requireInputs,
+        Action<PowerShellCompilationDiagnosticStage, string>? onStage)
     {
         var fullPath = Path.GetFullPath(projectPath.Trim().Trim('"'));
         if (!File.Exists(fullPath)) throw new FileNotFoundException("PowerShell compilation project was not found.", fullPath);
         var manifest = JsonSerializer.Deserialize<PowerShellCompilationProjectManifest>(File.ReadAllText(fullPath), JsonOptions)
                        ?? throw new InvalidDataException($"PowerShell compilation project '{fullPath}' is empty.");
-        return Normalize(fullPath, manifest, requireInputs);
+        return Normalize(fullPath, manifest, requireInputs, onStage);
     }
 
     /// <summary>Writes a normalized project manifest with portable relative paths.</summary>
@@ -84,13 +88,16 @@ public sealed class PowerShellCompilationProjectManifestService
     private static PowerShellCompilationProjectManifest Normalize(
         string projectPath,
         PowerShellCompilationProjectManifest manifest,
-        bool requireInputs)
+        bool requireInputs,
+        Action<PowerShellCompilationDiagnosticStage, string>? onStage = null)
     {
         if (manifest.SchemaVersion != 1)
             throw new InvalidDataException($"Unsupported PowerShell compilation project schema {manifest.SchemaVersion}.");
         manifest.Name = NormalizeName(manifest.Name, "project name");
+        onStage?.Invoke(PowerShellCompilationDiagnosticStage.Target, string.Empty);
         manifest.SemanticProfileId = manifest.SemanticProfileId?.Trim() ?? string.Empty;
         _ = PowerShellCompilationSemanticOracleCatalog.Get(manifest.SemanticProfileId);
+        onStage?.Invoke(PowerShellCompilationDiagnosticStage.Input, string.Empty);
         var root = Path.GetDirectoryName(Path.GetFullPath(projectPath)) ?? Directory.GetCurrentDirectory();
         PowerShellCompilationPathSafety.EnsureNoLinksInExistingAncestors(projectPath, "Project manifest path traverses a symbolic link or junction.");
         PowerShellCompilationPathSafety.EnsureNoLinksInExistingAncestors(root, "Project root traverses a symbolic link or junction.");
@@ -103,15 +110,21 @@ public sealed class PowerShellCompilationProjectManifestService
             throw new InvalidDataException("The project resource mode is invalid.");
         manifest.Resources.Include ??= Array.Empty<string>();
         manifest.Resources.Exclude ??= Array.Empty<string>();
+        onStage?.Invoke(PowerShellCompilationDiagnosticStage.Dependency, string.Empty);
         manifest.ProviderPackages = NormalizeRelativePaths(root, manifest.ProviderPackages, requireInputs, "provider package");
+        onStage?.Invoke(PowerShellCompilationDiagnosticStage.Input, string.Empty);
         manifest.ProviderTrust ??= new PowerShellCompilationProviderTrustPolicy();
         manifest.Diagnostics ??= new PowerShellCompilationDiagnosticsPolicy();
+        if (!string.IsNullOrWhiteSpace(manifest.NuGet?.CompatibilityBaseline))
+            manifest.NuGet!.CompatibilityBaseline = NormalizeRelativePath(root,
+                manifest.NuGet.CompatibilityBaseline!, requireInputs, "NuGet compatibility baseline");
         manifest.Artifacts ??= Array.Empty<PowerShellCompilationProjectArtifact>();
         if (manifest.Artifacts.Length == 0) throw new InvalidDataException("A PowerShell compilation project requires at least one artifact target.");
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var identities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var artifact in manifest.Artifacts)
         {
+            onStage?.Invoke(PowerShellCompilationDiagnosticStage.Target, artifact.Name);
             artifact.Name = NormalizeName(artifact.Name, "artifact target name");
             if (!names.Add(artifact.Name)) throw new InvalidDataException($"Duplicate project target name '{artifact.Name}'.");
             var target = artifact.Target ?? throw new InvalidDataException($"Project target '{artifact.Name}' has no target contract.");
@@ -122,6 +135,7 @@ public sealed class PowerShellCompilationProjectManifestService
                 throw new InvalidDataException($"Project target '{artifact.Name}' semantic profile '{artifact.Target.SemanticProfileId}' differs from project profile '{manifest.SemanticProfileId}'.");
             PowerShellCompilationBuildSpec.EnsureModeSupported(artifact.Target.ArtifactKind, artifact.Target.Mode);
             if (!identities.Add(artifact.Target.ContractSha256)) throw new InvalidDataException($"Project target '{artifact.Name}' duplicates another exact artifact variant.");
+            onStage?.Invoke(PowerShellCompilationDiagnosticStage.Input, artifact.Name);
             artifact.OutputDirectory = NormalizeRelativePath(root, artifact.OutputDirectory, requireExists: false, "output directory");
             artifact.DependencyLock = NormalizeRelativePath(root, artifact.DependencyLock, requireExists: false, "dependency lock");
             if (!string.IsNullOrWhiteSpace(artifact.ProviderLock))
@@ -167,8 +181,24 @@ public sealed class PowerShellCompilationProjectManifestService
 
     private static string CreateTargetName(PowerShellCompilationTargetContract target)
     {
-        var rid = string.IsNullOrWhiteSpace(target.RuntimeIdentifier) ? "portable" : target.RuntimeIdentifier;
-        return $"{target.ArtifactKind}-{target.Mode}-{target.TargetFramework}-{rid}-{target.Deployment}".ToLowerInvariant();
+        var kind = target.ArtifactKind switch
+        {
+            PowerShellCompilationArtifactKind.BinaryModule => "module",
+            PowerShellCompilationArtifactKind.Library => "library",
+            PowerShellCompilationArtifactKind.Executable => "exe",
+            _ => throw new ArgumentOutOfRangeException(nameof(target))
+        };
+        var rid = string.IsNullOrWhiteSpace(target.RuntimeIdentifier) ? string.Empty : "-" + target.RuntimeIdentifier;
+        var deployment = target.Deployment switch
+        {
+            PowerShellCompilationDeploymentModel.FrameworkDependent => string.Empty,
+            PowerShellCompilationDeploymentModel.SelfContained => "-self",
+            PowerShellCompilationDeploymentModel.Trimmed => "-trimmed",
+            PowerShellCompilationDeploymentModel.ReadyToRun => "-r2r",
+            PowerShellCompilationDeploymentModel.NativeAot => "-aot",
+            _ => throw new ArgumentOutOfRangeException(nameof(target))
+        };
+        return $"{kind}-{target.Mode}-{target.TargetFramework}{rid}{deployment}".ToLowerInvariant();
     }
 
     private static bool IsSha256(string value)

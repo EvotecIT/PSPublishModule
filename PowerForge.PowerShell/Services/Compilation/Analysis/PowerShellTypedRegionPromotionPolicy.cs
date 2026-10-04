@@ -1,7 +1,7 @@
 namespace PowerForge;
 
 /// <summary>
-/// Fail-closed promotion policy for terminal scalar returns and prefixes transferring scalar locals.
+/// Fail-closed promotion policy for terminal returns and prefixes transferring supported local values.
 /// Both contracts require parameter inputs, local mutations, and no modeled failure route.
 /// </summary>
 internal static class PowerShellTypedRegionPromotionPolicy
@@ -14,13 +14,68 @@ internal static class PowerShellTypedRegionPromotionPolicy
         if (candidate is null) throw new ArgumentNullException(nameof(candidate));
         if (lowered is null) throw new ArgumentNullException(nameof(lowered));
         if (emitted is null) throw new ArgumentNullException(nameof(emitted));
+        // The error host changes CLR returns into stream writes. Report the missing
+        // host contract before the resulting void return obscures that dependency.
+        if (lowered.RequiresPowerShellStatementErrors)
+            return Reject("region.statement-errors", "The candidate requires a PowerShell statement-error host not represented by the helper ABI.");
         if (candidate.ContinuationLocals.Length > 0 && !HasCompleteContinuationResult(candidate))
-            return Reject("region.continuation-result", "The helper does not return the exact ordered scalar local transfer contract.");
+            return Reject("region.continuation-result", "The helper does not return the exact ordered local transfer contract.");
+        if (!HasCompleteInputLocalContract(candidate))
+            return Reject("region.input-local-contract", "The helper local inputs are not exact authored or guarded-prefix transfers.");
+        if (candidate.ContinuationLocals.Length > 0 && !candidate.RequiresLocalOwnershipGuard &&
+            !UpdatesEstablishedInputLocals(candidate))
+            return Reject("region.local-ownership", "Local output requires either fresh invocation-local ownership or exact established input-local targets.");
+        if (candidate.ControlFlowContract is not null && !HasCompleteControlFlowResult(candidate, lowered))
+            return Reject("region.control-flow-envelope", "The helper does not carry a complete return-or-fallthrough envelope contract.");
         var transfersMultipleLocals = candidate.ContinuationLocals.Length > 1;
-        if (!transfersMultipleLocals && lowered.OutputCardinality != PowerShellOutputCardinality.Scalar)
-            return Reject("region.return-cardinality", "The candidate does not return exactly one scalar value on every accepted path.");
-        if (transfersMultipleLocals ? lowered.ReturnType != typeof(object[]) : !PowerShellStableScalarTypePolicy.IsSupported(lowered.ReturnType))
-            return Reject("region.return-type", $"The candidate return type '{lowered.ReturnType.FullName ?? lowered.ReturnType.Name}' is not a stable scalar transfer type.");
+        var returnContract = transfersMultipleLocals
+            ? null
+            : candidate.ControlFlowContract?.ReturnValue ?? candidate.TerminalTransferContract ??
+              candidate.ContinuationLocals.SingleOrDefault()?.Contract ??
+              PowerShellRegionTransferTypePolicy.Describe(lowered.ReturnType);
+        // The analyzer can prove compile-time array enumeration. System.Array and list-like
+        // references are enumerated by the retained PowerShell invocation boundary instead.
+        var expectedCardinality = candidate.ControlFlowContract is not null
+            ? PowerShellOutputCardinality.None
+            : candidate.ContinuationLocals.Length > 0
+            ? PowerShellOutputCardinality.Scalar
+            : returnContract?.OutputBehavior == PowerShellRegionTransferOutputBehavior.None
+            ? PowerShellOutputCardinality.None
+            : candidate.ContinuationLocals.Length == 0 &&
+                                  returnContract?.OutputBehavior == PowerShellRegionTransferOutputBehavior.EnumerateOneLevel &&
+                                  lowered.ReturnType.IsArray
+            ? PowerShellOutputCardinality.Collection
+            : PowerShellOutputCardinality.Scalar;
+        if (!transfersMultipleLocals && lowered.OutputCardinality != expectedCardinality)
+            return Reject("region.return-cardinality",
+                $"The candidate return cardinality '{lowered.OutputCardinality}' does not match its '{returnContract?.OutputBehavior}' transfer contract.");
+        var supportedReturnType = candidate.ControlFlowContract is not null
+            ? lowered.ReturnType == typeof(PowerForge.Generated.Runtime.PowerShellRegionControlFlowEnvelope)
+            : lowered.ReturnType == typeof(void)
+                ? returnContract is
+                {
+                    Shape: PowerShellRegionTransferShape.NoValue,
+                    ElementContract: PowerShellRegionTransferElementContract.None,
+                    OutputBehavior: PowerShellRegionTransferOutputBehavior.None,
+                    Supported: true
+                }
+                : (lowered.ReturnType == typeof(object) && returnContract is
+                  {
+                      Shape: PowerShellRegionTransferShape.NullValue,
+                      ElementContract: PowerShellRegionTransferElementContract.None,
+                      OutputBehavior: PowerShellRegionTransferOutputBehavior.Atomic,
+                      Supported: true
+                  }) ||
+                  (lowered.ReturnType == typeof(PowerForge.Generated.Runtime.PowerShellRegionValueAlternative) &&
+                   returnContract is
+                   {
+                       Shape: PowerShellRegionTransferShape.ClosedValueAlternative,
+                       ElementContract: PowerShellRegionTransferElementContract.StableScalar,
+                       Supported: true
+                   }) ||
+                  PowerShellRegionTransferTypePolicy.IsSupported(lowered.ReturnType);
+        if (transfersMultipleLocals ? lowered.ReturnType != typeof(object[]) : !supportedReturnType)
+            return Reject("region.return-type", $"The candidate return type '{lowered.ReturnType.FullName ?? lowered.ReturnType.Name}' is not a supported region transfer type.");
         if (lowered.RequiresPowerShellStreams)
             return Reject("region.stream-contract", "The candidate requires PowerShell stream semantics beyond the single scalar Success result contract.");
         if (lowered.RequiresProviderCancellation)
@@ -36,7 +91,7 @@ internal static class PowerShellTypedRegionPromotionPolicy
             return Reject("region.source-span", "The emitted method span does not match the exact authored candidate span.");
 
         var graph = emitted.RegionGraph;
-        if (graph.Regions.Count != 1)
+        if (graph.ScriptBlocks.Count != 0 || graph.Regions.Count != 1)
             return Reject("region.graph-shape", "The candidate did not lower to exactly one canonical region.");
         var region = graph.Regions[0];
         if (region.Execution != PowerShellCompilationRegionExecution.Typed)
@@ -47,22 +102,37 @@ internal static class PowerShellTypedRegionPromotionPolicy
             return Reject("region.static-boundary", "The candidate contains a hosted command or module-state boundary.");
         if (region.Errors.Count != 0)
             return Reject("region.error-route", $"The candidate has modeled error route(s): {string.Join(", ", region.Errors)}.");
-        if (!region.Streams.SequenceEqual(new[] { "Success" }, StringComparer.Ordinal))
-            return Reject("region.stream-contract", $"The candidate stream set [{string.Join(", ", region.Streams)}] is outside the single Success result contract.");
-        if (!region.Inputs.All(static input => input.StartsWith("Parameter:", StringComparison.Ordinal)))
-            return Reject("region.input-transfer", "The candidate reads a live value that is not a retained-function parameter.");
+        var expectedStreams = candidate.ContinuationLocals.Length > 0 || candidate.ControlFlowContract is not null ||
+                              returnContract?.OutputBehavior == PowerShellRegionTransferOutputBehavior.None
+            ? Array.Empty<string>()
+            : new[] { "Success" };
+        if (!region.Streams.SequenceEqual(expectedStreams, StringComparer.Ordinal))
+            return Reject("region.stream-contract", $"The candidate stream set [{string.Join(", ", region.Streams)}] does not match its terminal-output or local-transfer contract.");
+        if (candidate.ContinuationLocals.Length > 0 && !region.Outputs.SequenceEqual(
+                candidate.ContinuationLocals.Select(static local => "transfer:Local:" + local.Name).OrderBy(static name => name, StringComparer.Ordinal),
+                StringComparer.Ordinal))
+            return Reject("region.continuation-outputs", "The canonical region graph does not expose exactly the returned local-storage targets.");
+        var allowedInputs = candidate.InputParameters.Select(static parameter => "Parameter:" + parameter.Name)
+            .Concat(candidate.InputLocals.Select(static local => "Local:" + local.Name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!region.Inputs.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(allowedInputs))
+            return Reject("region.input-transfer", "The candidate live inputs do not exactly match its function-parameter and local transfer contract.");
         if (!region.Mutations.All(static mutation => mutation.StartsWith("Local:", StringComparison.Ordinal)))
             return Reject("region.mutation", "The candidate mutates state outside its region-local values.");
         if (candidate.ContinuationLocals.Length > 0 &&
             region.Mutations.Any(mutation => !candidate.ContinuationLocals.Any(local =>
                 mutation.Equals("Local:" + local.Name, StringComparison.OrdinalIgnoreCase))))
-            return Reject("region.continuation-transfer", "The prefix mutates a local outside its scalar continuation transfer.");
+            return Reject("region.continuation-transfer", "The prefix mutates a local outside its continuation transfer.");
         return new PowerShellTypedRegionPromotionDecision(
             isSafe: true,
             "region.promoted",
-            candidate.ContinuationLocals.Length == 0
-                ? "The candidate satisfies the bounded terminal scalar promotion contract."
-                : "The candidate satisfies the bounded prefix scalar continuation contract.");
+            candidate.ControlFlowContract is not null
+                ? "The candidate satisfies the closed return-or-fallthrough envelope and retained enumeration contract."
+                : candidate.ContinuationLocals.Length == 0
+                ? "The candidate satisfies the bounded terminal region-transfer contract."
+                : candidate.RequiresLocalOwnershipGuard
+                    ? "The candidate satisfies the bounded prefix continuation contract when its invocation-local targets are fresh; otherwise its original statements execute in place."
+                    : "The candidate satisfies complete live-in and live-out transfer contracts for established invocation-local targets.");
     }
 
     private static PowerShellTypedRegionPromotionDecision Reject(string code, string reason)
@@ -70,17 +140,78 @@ internal static class PowerShellTypedRegionPromotionPolicy
 
     private static bool HasCompleteContinuationResult(PowerShellBoundRegionCandidate candidate)
     {
-        if (candidate.RegionFunction.Body.Statements.LastOrDefault() is not PowerShellBoundReturnStatement tail)
+        if (candidate.RegionFunction.Body.Statements.LastOrDefault() is not PowerShellBoundRegionTransferStatement tail)
             return false;
-        var values = tail.Expression is PowerShellBoundArrayExpression array
-            ? array.Elements.ToArray()
-            : tail.Expression is not null ? new[] { tail.Expression } : Array.Empty<PowerShellBoundExpression>();
+        var values = tail.Locals.ToArray();
         return values.Length == candidate.ContinuationLocals.Length && values.Select((value, index) =>
             value is PowerShellBoundVariableExpression variable && variable.Symbol.Kind == PowerShellSymbolKind.Local &&
             variable.Symbol.Name.Equals(candidate.ContinuationLocals[index].Name, StringComparison.OrdinalIgnoreCase) &&
-            PowerShellStableScalarTypePolicy.IsSupported(variable.Type.ClrType) &&
+            PowerShellRegionTransferTypePolicy.IsSupported(variable.Type) &&
             (variable.Type.ClrType.FullName ?? variable.Type.ClrType.Name) == candidate.ContinuationLocals[index].TypeName).All(static valid => valid);
     }
+
+    private static bool HasCompleteControlFlowResult(
+        PowerShellBoundRegionCandidate candidate,
+        PowerShellLoweredFunction lowered)
+    {
+        if (candidate.ControlFlowContract?.Behavior != PowerShellRegionControlFlowBehavior.ReturnOrFallThrough ||
+            candidate.ContinuationLocals.Length != 0 ||
+            candidate.InputLocals.Length != 0 ||
+            candidate.TerminalTransferContract is null ||
+            !SameTransferContract(candidate.ControlFlowContract.ReturnValue, candidate.TerminalTransferContract))
+            return false;
+        var returns = PowerShellLoweredTreeEnumerator.EnumerateStatements(lowered.Statements)
+            .OfType<PowerShellLoweredRegionControlFlowReturnStatement>()
+            .Select(static statement => (PowerShellLoweredRegionControlFlowExpression)statement.Expression!)
+            .ToArray();
+        var expectsNoValue = candidate.ControlFlowContract.ReturnValue is
+        {
+            Shape: PowerShellRegionTransferShape.NoValue,
+            ElementContract: PowerShellRegionTransferElementContract.None,
+            OutputBehavior: PowerShellRegionTransferOutputBehavior.None,
+            Supported: true
+        };
+        return returns.Count(static expression => expression.Kind == PowerShellRegionControlFlowKind.FallThrough && expression.Value is null) == 1 &&
+               returns.Any(expression => expression.Kind == PowerShellRegionControlFlowKind.Return &&
+                   (expectsNoValue ? expression.Value is null : expression.Value is not null)) &&
+               PowerShellLoweredTreeEnumerator.EnumerateStatements(lowered.Statements)
+                   .OfType<PowerShellLoweredReturnStatement>()
+                   .All(static statement => statement is PowerShellLoweredRegionControlFlowReturnStatement);
+    }
+
+    private static bool SameTransferContract(
+        PowerShellRegionTransferContract left,
+        PowerShellRegionTransferContract right)
+        => left.Shape == right.Shape &&
+           left.ElementContract == right.ElementContract &&
+           left.Direction == right.Direction &&
+           left.Ownership == right.Ownership &&
+           left.OutputBehavior == right.OutputBehavior &&
+           left.Mutation == right.Mutation &&
+           left.MutationLifetime == right.MutationLifetime &&
+           left.Supported == right.Supported;
+
+    private static bool HasCompleteInputLocalContract(PowerShellBoundRegionCandidate candidate)
+        => candidate.InputLocals.All(local =>
+            !string.IsNullOrWhiteSpace(local.Name) &&
+            ((local.HasTypeConstraint && !string.IsNullOrWhiteSpace(local.TypeConstraintSyntax)) ||
+             (!local.HasTypeConstraint && string.IsNullOrWhiteSpace(local.TypeConstraintSyntax) &&
+              candidate.AllowsPrefixOwnedInputLocals)) &&
+            candidate.RegionFunction.Parameters.Any(parameter =>
+                parameter.Symbol.Kind == PowerShellSymbolKind.Local &&
+                parameter.Symbol.Name.Equals(local.Name, StringComparison.OrdinalIgnoreCase) &&
+                (parameter.Type.ClrType.FullName ?? parameter.Type.ClrType.Name).Equals(local.TypeName, StringComparison.Ordinal) &&
+                PowerShellRegionTransferTypePolicy.IsSupported(parameter.Type.ClrType))) &&
+           candidate.InputLocals.Select(static local => local.Name)
+               .Distinct(StringComparer.OrdinalIgnoreCase).Count() == candidate.InputLocals.Length;
+
+    private static bool UpdatesEstablishedInputLocals(PowerShellBoundRegionCandidate candidate)
+        => candidate.InputLocals.Length > 0 && candidate.ContinuationLocals.All(output =>
+            candidate.InputLocals.Any(input =>
+                input.Name.Equals(output.Name, StringComparison.OrdinalIgnoreCase) &&
+                input.TypeName.Equals(output.TypeName, StringComparison.Ordinal) &&
+                input.HasTypeConstraint && output.HasTypeConstraint &&
+                input.TypeConstraintSyntax.Equals(output.TypeConstraintSyntax, StringComparison.Ordinal)));
 }
 
 internal sealed class PowerShellTypedRegionPromotionDecision

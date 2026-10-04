@@ -295,9 +295,16 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         startInfo.ArgumentList.Add("-Command");
         startInfo.ArgumentList.Add($"Import-Module -Name '{modulePath.Replace("'", "''", StringComparison.Ordinal)}' -Force; {command}");
         using var process = Process.Start(startInfo)!;
-        var rawOutput = process.StandardOutput.ReadToEnd();
-        var error = process.StandardError.ReadToEnd();
-        Assert.True(process.WaitForExit(60_000), "Module rebuild proof did not exit within 60 seconds.");
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(60_000))
+        {
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit();
+            Assert.Fail("Module rebuild proof did not exit within 60 seconds.");
+        }
+        var rawOutput = outputTask.GetAwaiter().GetResult();
+        var error = errorTask.GetAwaiter().GetResult();
         Assert.True(process.ExitCode == 0, error + Environment.NewLine + rawOutput);
         Assert.True(string.IsNullOrWhiteSpace(error), error);
         return string.Join(

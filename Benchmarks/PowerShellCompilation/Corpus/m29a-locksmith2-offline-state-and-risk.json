@@ -1,0 +1,281 @@
+{
+  "schemaVersion": 1,
+  "recordedOn": "2026-09-28",
+  "source": {
+    "workload": "locksmith2",
+    "revision": "f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639",
+    "archiveSha256": "d4f511b16ed95d15bfa37ba06ddfc92709f0412e8669004cb70e3407ae9fc8b9",
+    "sourceFingerprint": "b1e65521a013471cfc80589f0edd062a714f4b498a347685a06d7dce97b1b4ef",
+    "license": "Commons Clause License Condition v1.0",
+    "unchangedTextHashes": {
+      "Private/Test/Test-IsStandardOwner.ps1": "4efb889f6f2d769c578c1a650fc871361fbecfecb322461895c5d9d119506f94",
+      "Private/Set/Set-HasNonStandardOwner.ps1": "0e5ea3d113c61c3525656946b72530c105f5ca8b6620d296ae0c011f16f07fb1",
+      "Private/Set/Set-LinkedGroupOIDPolicy.ps1": "e5eaf93d6bbff4d9dd54741d8ad4f9fe2e1e4963f2fcdc4238178d6aadd59687",
+      "Private/Set/Set-TemplateEnabled.ps1": "49ca0bb31db72d9ae66f9d9b079ed50d5ff91a4cd2cbf7b50c2af4b9f147f465",
+      "Private/Set/Get-PrincipalRiskBonus.ps1": "597d3055d0b2ea1afaf72e3847d33596ee185296fb615ab7ecdb942509f165a8",
+      "Private/Set/Set-LS2RiskRating.ps1": "788c80f196dbab23768e9edad3effc0f51748589dadcf240ebe13f9f4759de0e",
+      "Private/Data/PrincipalDefinitions.ps1": "d91e0ea54f81c56c79026f45d615ffcfa94a012f68cf41afc8a62e8a667d9986",
+      "Private/Data/ESCDefinitions.ps1": "04e3bc65c7b5056d70b62eb77544df844c86fceea01da108c878a3c626ade625"
+    },
+    "classHashes": {
+      "Classes/LS2Principal.ps1": "5b8542654843f25be0218a346780cdd40ec6f236bc73004e228eb960cb49fca1",
+      "Classes/LS2AdcsObject.ps1": "abb27b68cdfe94c111013009ab453aa96a7f67748e2b33abd1e703640a9c93a5",
+      "Classes/LS2Issue.ps1": "736d4440eace31299822b2d8e20863b1c26a7cb9186da235c478910226202e38"
+    }
+  },
+  "fixtures": {
+    "state": {
+      "manifestSha256": "f5477d7b04d9d3a5c8a268386aa3943ec8f8dbdb7f4220eb92a8950d1d7fe6dd",
+      "moduleSourceSha256": "dd3ce226e706e00a9f53c0b884a9bf49e98278c57925b72bf48900f79ac0f485",
+      "observerSha256": "68c166c0a59575b8de6af6a93cf974a1f8ebd311b0214c07c5507dc59566c9c8",
+      "unchangedFunctions": [
+        "Test-IsStandardOwner",
+        "Set-HasNonStandardOwner",
+        "Set-LinkedGroupOIDPolicy",
+        "Set-TemplateEnabled"
+      ]
+    },
+    "risk": {
+      "manifestSha256": "45762a008443d98d9bd95285fddd96eb5c3f6a5d8c3e602cdb7e942bca07eae7",
+      "moduleSourceSha256": "212abeafe8855e9762f060c8a9fdcc1b95096eb5fab680c40efff57ea18583c1",
+      "observerSha256": "a63889bca70518f4667a004c17ee1ff3b90cb5a360352387db2824845e938e16",
+      "unchangedFunctions": [
+        "Get-PrincipalRiskBonus",
+        "Set-LS2RiskRating"
+      ],
+      "unchangedDataFiles": [
+        "Private/Data/PrincipalDefinitions.ps1",
+        "Private/Data/ESCDefinitions.ps1"
+      ]
+    },
+    "classesCopiedHashIdentical": 3
+  },
+  "generated": {
+    "mode": "Hybrid",
+    "state": {
+      "net10ManifestSha256": "8c7e1bc0f478f24df69c42ba419220e7e1e6d6b21b5d3a5d3963670d28fade81",
+      "net472ManifestSha256": "195884f081fd7e0cfeb58dc50b78a10ccf5731eccf987eddcbb6e093878321e9",
+      "compiledCallbacksPerTarget": 4,
+      "strict": {
+        "targets": [
+          "net10.0",
+          "net472"
+        ],
+        "canProceed": false,
+        "typedUnits": 0,
+        "rejectedUnits": 4
+      }
+    },
+    "risk": {
+      "net10ManifestSha256": "2f514bc453459304a8bc43db61980eb22a3dfb7044b78ae368023e3b7d191fd6",
+      "net472ManifestSha256": "924756757de04bc484a508f951923916becc1e56450461136ad6f07a250c310e",
+      "compiledCallbacksPerTarget": 2,
+      "hostedModuleRootLoadsAuthoredData": true,
+      "strict": {
+        "targets": [
+          "net10.0",
+          "net472"
+        ],
+        "canProceed": false,
+        "typedUnits": 0,
+        "rejectedUnits": 3
+      }
+    },
+    "uninstalledNativeCallbackStubsThrow": true
+  },
+  "execution": {
+    "hosts": [
+      "PowerShell 7/net10.0 Windows x64",
+      "Windows PowerShell 5.1/net472 Windows x64"
+    ],
+    "originalGeneratedAndCrossHostRawJsonEqual": true,
+    "allChildExitCodesZero": true,
+    "stderrEmpty": true,
+    "newlyExecutedMethods": [
+      "Set-HasNonStandardOwner",
+      "Set-LinkedGroupOIDPolicy",
+      "Set-TemplateEnabled",
+      "Set-LS2RiskRating"
+    ],
+    "previouslyEmittedHelpersExecuted": [
+      "Test-IsStandardOwner",
+      "Get-PrincipalRiskBonus"
+    ],
+    "stateResult": {
+      "type": "LS2AdcsObject",
+      "enabledCount": 3,
+      "enabledSame": [
+        true,
+        true,
+        true
+      ],
+      "enabled": [
+        true,
+        true,
+        false
+      ],
+      "enabledOn": [
+        [
+          "East",
+          "West"
+        ],
+        [
+          "East"
+        ],
+        []
+      ],
+      "linkedCount": 4,
+      "linkedSame": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "linked": [
+        true,
+        false,
+        false,
+        null
+      ],
+      "linkedNames": [
+        [
+          "CN=Group,DC=offline,DC=invalid"
+        ],
+        [],
+        []
+      ],
+      "ownerCount": 3,
+      "ownerSame": [
+        true,
+        true,
+        true
+      ],
+      "nonStandardOwner": [
+        false,
+        true,
+        null
+      ]
+    },
+    "riskResult": {
+      "type": "LS2Issue",
+      "definitions": {
+        "esc": 19,
+        "safePrincipals": 19
+      },
+      "outputCount": 0,
+      "issueCount": 8,
+      "risks": [
+        {
+          "technique": "ESC1",
+          "name": "one",
+          "riskValue": 5,
+          "riskName": "Critical",
+          "trail": [
+            "BaseScore: 0",
+            "TechniqueBonus: +1",
+            "Enabled: +1",
+            "UnsafePrincipal: +1",
+            "DangerousPrincipal: +2"
+          ]
+        },
+        {
+          "technique": "ESC2",
+          "name": "two",
+          "riskValue": 2,
+          "riskName": "Low",
+          "trail": [
+            "BaseScore: 0",
+            "Disabled: -2",
+            "UnsafePrincipal: +1",
+            "UnsafeGroup: +1",
+            "CrossESC(ESC5a,ESC5o): +2"
+          ]
+        },
+        {
+          "technique": "ESC5a",
+          "name": "related-ca",
+          "riskValue": 5,
+          "riskName": "Critical",
+          "trail": [
+            "BaseScore: 0",
+            "UnsafePrincipal: +1",
+            "DangerousPrincipal: +2",
+            "ObjectClass(pKIEnrollmentService): +2"
+          ]
+        },
+        {
+          "technique": "ESC6",
+          "name": "six",
+          "riskValue": 5,
+          "riskName": "Critical",
+          "trail": [
+            "BaseScore: 3",
+            "CrossESC(ESC9,ESC16): +2"
+          ]
+        },
+        {
+          "technique": "ESC9",
+          "name": "nine",
+          "riskValue": 4,
+          "riskName": "High",
+          "trail": [
+            "BaseScore: 0",
+            "Enabled: +1",
+            "UnsafePrincipal: +1",
+            "CrossESC(ESC6): +2"
+          ]
+        },
+        {
+          "technique": "ESC8",
+          "name": "endpoint",
+          "riskValue": 5,
+          "riskName": "Critical",
+          "trail": [
+            "BaseScore: 3",
+            "EndpointBonus(HTTPS-NTLM): +2"
+          ]
+        },
+        {
+          "technique": "UNKNOWN",
+          "name": "unknown",
+          "riskValue": null,
+          "riskName": "",
+          "trail": [
+            null
+          ]
+        },
+        {
+          "technique": "ESC9",
+          "name": "other-forest",
+          "riskValue": 2,
+          "riskName": "Low",
+          "trail": [
+            "BaseScore: 0",
+            "Enabled: +1",
+            "UnsafePrincipal: +1"
+          ]
+        }
+      ]
+    }
+  },
+  "disposition": {
+    "locksmith2EmittedFunctions": 75,
+    "locksmith2TotalFunctions": 100,
+    "gainedSincePriorBaseline": 37,
+    "gainedExecutedOffline": 16,
+    "gainedAnalysisOnly": 21,
+    "newlyExecutedThisRecord": 4,
+    "regressions": 0,
+    "sameInputAssessmentSha256": "23595d91625c94eae54c7b22df78a84732a4625089289bf2237d0939148e536c"
+  },
+  "limits": [
+    "State fixture uses ordered in-memory AD CS objects and raw SID owner values; it bypasses the AD-backed LS2AdcsObject constructor",
+    "No NTAccount translation, ObjectSecurity.Owner fallback, live CA publication or directory-backed OID lookup",
+    "Risk fixture uses the unchanged LS2Issue hashtable constructor and full authored data definitions, but only eight selected in-memory issue records",
+    "Hybrid risk module executes authored data initialization in a hosted module root; this is not runtime-free translation",
+    "No full Locksmith2 import, AD query, CA/web provider, principal resolution, remediation or live scan",
+    "Mini-module builds used unreviewed dependency resolution",
+    "No broad compiler gate rerun because production compiler source and tracked test fixtures were unchanged",
+    "PowerShell 7/net10 and Windows PowerShell 5.1/net472 on Windows x64 only"
+  ]
+}

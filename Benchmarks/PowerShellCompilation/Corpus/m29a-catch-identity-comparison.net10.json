@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 2,
+  "purpose": "Same-input M29a catch-identity and typed-array conversion comparison, Hybrid net10.0; execution is separate from emission.",
+  "baselineCommit": "9e9387058a50fa13eba0c837fc8ca35157afbaa0",
+  "baselineLedger": "m29a-typed-array-comparison.net10.json",
+  "sourceProvenance": "Same immutable packets as m29-portfolio-ledger.net10-net472.json; CompleteModule for PSSharedGoods, PSScriptTools and CleanupMonster.",
+  "newlyExecutedFunctions": [],
+  "otherNewMethodsAreEmissionOnly": true,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "baselineEmitted": 234,
+      "candidateEmitted": 234,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "baselineSha256": "bf193bd6545b6c162db25342568a8ff3aeb4c94e87237e37adf2ded933678773",
+      "candidateSha256": "bf193bd6545b6c162db25342568a8ff3aeb4c94e87237e37adf2ded933678773",
+      "identicalExplanation": true
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "baselineEmitted": 51,
+      "candidateEmitted": 51,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "baselineSha256": "62027135a7eb0bfd3be0b234cd387243de944ca035455dc3e7524bae7e0e3354",
+      "candidateSha256": "62027135a7eb0bfd3be0b234cd387243de944ca035455dc3e7524bae7e0e3354",
+      "identicalExplanation": true
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "baselineEmitted": 55,
+      "candidateEmitted": 55,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "baselineSha256": "eeda66ded0b2a18edcb08eba5f3191ea968f7f67b3069f21ce083286aa4523ce",
+      "candidateSha256": "eeda66ded0b2a18edcb08eba5f3191ea968f7f67b3069f21ce083286aa4523ce",
+      "identicalExplanation": true
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "baselineEmitted": 63,
+      "candidateEmitted": 63,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "baselineSha256": "3a605d96feb844c2e9038d4b680aec6b14b1c0eeabe4abf4c51628334124625f",
+      "candidateSha256": "3a605d96feb844c2e9038d4b680aec6b14b1c0eeabe4abf4c51628334124625f",
+      "identicalExplanation": true
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "baselineEmitted": 22,
+      "candidateEmitted": 22,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "baselineSha256": "e4022ae103d47fca6f109bc75063d18a57dd38c8838b456782915681337b6d95",
+      "candidateSha256": "e4022ae103d47fca6f109bc75063d18a57dd38c8838b456782915681337b6d95",
+      "identicalExplanation": true
+    }
+  ],
+  "comparisonContract": "All five explanations are byte-identical to the accepted baseline, whose ledger supplies the complete per-function records. IDs, dispositions, causes, and region members are unchanged.",
+  "baselineLedgerSha256": "496c02a4c531e771de1e0343b3edfd4a7591ab8213768932a3f202cdaf6093ae"
+}

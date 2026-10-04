@@ -5,7 +5,14 @@ namespace PowerForge;
 /// <summary>Owns file-wide source contracts that must be preserved before bound-function analysis.</summary>
 internal static class PowerShellSourceSemanticValidator
 {
-    internal static PowerShellSemanticDiagnostic[] Validate(ParsedSourceDocument document, string semanticProfileId)
+    /// <summary>Whether a function's metadata can be detached without recreating hosted type identities or imports.</summary>
+    internal static bool SupportsDetachedFunctionMetadata(ParsedSourceDocument document)
+        => document.TypeClosure.Declarations.Length == 0 &&
+           !document.SyntaxRoot.FindAll(static node => node is UsingStatementAst { UsingStatementKind: not UsingStatementKind.Namespace },
+               searchNestedScriptBlocks: false).Any();
+
+    internal static PowerShellSemanticDiagnostic[] Validate(ParsedSourceDocument document, string semanticProfileId,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None, string? targetFramework = null)
     {
         var diagnostics = document.SyntaxRoot
             .FindAll(static node => node is UsingStatementAst, searchNestedScriptBlocks: false)
@@ -24,16 +31,16 @@ internal static class PowerShellSourceSemanticValidator
                 requirementFailure,
                 PowerShellSourceParser.GetSpan(document, document.SyntaxRoot.Extent)));
         }
-        var typeDefinition = document.SyntaxRoot
-            .FindAll(static node => node is TypeDefinitionAst, searchNestedScriptBlocks: false)
-            .OfType<TypeDefinitionAst>()
-            .FirstOrDefault();
-        if (typeDefinition is not null)
+        var typeDefinition = document.TypeClosure.Declarations.FirstOrDefault();
+        if (typeDefinition is not null &&
+            !PowerShellHostedAttributeDeclarationPolicy.IsQualified(document, targetFramework, capabilities) &&
+            !PowerShellHostedEnumDeclarationPolicy.IsQualified(document, targetFramework, capabilities) &&
+            !PowerShellHostedValueClassPolicy.IsQualified(document, targetFramework, capabilities))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 PowerShellCompilationFeatureIds.TypeDefinition,
                 "PowerShell class and enum declarations define hosted runtime type identities; functions in this file remain on the PowerShell path until the canonical type-definition contract can lower them together.",
-                PowerShellSourceParser.GetSpan(document, typeDefinition.Extent)));
+                typeDefinition.Span));
         }
         return diagnostics.ToArray();
     }

@@ -1,0 +1,257 @@
+{
+  "SchemaVersion": 1,
+  "Purpose": "Static class-member dependencies and consumer identity; no new generated support or type resolution.",
+  "BaselineCommit": "8fcd79f9eca00ba6f49298f198093395cc94b832",
+  "SourceAndTestHashes": [
+    {
+      "Path": "PowerForge.PowerShell/Services/Compilation/FrontEnd/PowerShellSourceTypeClosure.cs",
+      "Sha256": "272a1e6846fa6d1fc9e8cd1703fee9f7c5cb2529d7a5b1774c7edbcecd899c1a"
+    },
+    {
+      "Path": "PowerForge.Tests/PowerShellSourceTypeClosureTests.cs",
+      "Sha256": "205daf2e14316dc8373cb37673e38b7e464a1644c144e1358faef5e5c523cfc9"
+    }
+  ],
+  "PinnedSourceFacts": [
+    {
+      "File": "Get-TypeMember.ps1",
+      "SourceSha256": "cd1e4af714de527ff54216ecbcee22bfcff96a49cc8d6c527b4a2e36969d8011",
+      "Declarations": [
+        "ResolveType"
+      ],
+      "Members": [
+        {
+          "Consumer": "ResolveType",
+          "Member": "Transform",
+          "Type": "object",
+          "Kind": "Constraint",
+          "Line": 7,
+          "CandidateCount": 0
+        },
+        {
+          "Consumer": "ResolveType",
+          "Member": "Transform",
+          "Type": "System.Management.Automation.EngineIntrinsics",
+          "Kind": "Constraint",
+          "Line": 7,
+          "CandidateCount": 0
+        },
+        {
+          "Consumer": "ResolveType",
+          "Member": "Transform",
+          "Type": "object",
+          "Kind": "Constraint",
+          "Line": 7,
+          "CandidateCount": 0
+        },
+        {
+          "Consumer": "ResolveType",
+          "Member": "Transform",
+          "Type": "regex",
+          "Kind": "Constraint",
+          "Line": 7,
+          "CandidateCount": 0
+        },
+        {
+          "Consumer": "ResolveType",
+          "Member": "Transform",
+          "Type": "Type",
+          "Kind": "Value",
+          "Line": 7,
+          "CandidateCount": 0
+        }
+      ]
+    },
+    {
+      "File": "Get-DirectoryInfo.ps1",
+      "SourceSha256": "e2666d58c45474ee1bf0a15cde09cd683c2d67acdf3f26b972cd003b7e1eed36",
+      "Declarations": [
+        "DirectoryStat"
+      ],
+      "Members": [
+        {
+          "Consumer": "DirectoryStat",
+          "Member": "Name",
+          "Type": "string",
+          "Kind": "Constraint",
+          "Line": 2,
+          "CandidateCount": 0
+        },
+        {
+          "Consumer": "DirectoryStat",
+          "Member": "Path",
+          "Type": "string",
+          "Kind": "Constraint",
+          "Line": 3,
+          "CandidateCount": 0
+        },
+        {
+          "Consumer": "DirectoryStat",
+          "Member": "FileCount",
+          "Type": "int64",
+          "Kind": "Constraint",
+          "Line": 4,
+          "CandidateCount": 0
+        },
+        {
+          "Consumer": "DirectoryStat",
+          "Member": "FileSize",
+          "Type": "int64",
+          "Kind": "Constraint",
+          "Line": 5,
+          "CandidateCount": 0
+        },
+        {
+          "Consumer": "DirectoryStat",
+          "Member": "Parent",
+          "Type": "string",
+          "Kind": "Constraint",
+          "Line": 6,
+          "CandidateCount": 0
+        },
+        {
+          "Consumer": "DirectoryStat",
+          "Member": "Computername",
+          "Type": "string",
+          "Kind": "Constraint",
+          "Line": 7,
+          "CandidateCount": 0
+        },
+        {
+          "Consumer": "DirectoryStat",
+          "Member": "Computername",
+          "Type": "System.Environment",
+          "Kind": "Value",
+          "Line": 7,
+          "CandidateCount": 0
+        }
+      ]
+    },
+    {
+      "File": "Write-PSHorizontalRule.ps1",
+      "SourceSha256": "a3a596d8765ce73998708acf2d471b34732f192ad6ac512d2560edb24a5c2691",
+      "Declarations": [
+        "psRuleTextStyle",
+        "psRuleWeight",
+        "psRuleAlignment"
+      ],
+      "Members": []
+    }
+  ],
+  "FocusedTests": {
+    "Passed": 6,
+    "Failed": 0,
+    "TrxSha256": "fe3bce61c53295d2c1fc847e5077c6712358f0882410f8120a621382a0cc5930"
+  },
+  "GuardProof": [
+    {
+      "Target": "net10.0",
+      "Mode": "Hybrid",
+      "File": "Get-TypeMember.ps1",
+      "Functions": 3,
+      "Emitted": 0,
+      "Sha256": "9201dcf9b020c936fd48b234cd639671288c6db5db3e086154329353a408b779"
+    },
+    {
+      "Target": "net10.0",
+      "Mode": "Hybrid",
+      "File": "Get-DirectoryInfo.ps1",
+      "Functions": 1,
+      "Emitted": 0,
+      "Sha256": "88940f248a990d5e8aa214d44b722a7631e5d18800c5f2ac7860a108f46312ff"
+    },
+    {
+      "Target": "net10.0",
+      "Mode": "Hybrid",
+      "File": "Write-PSHorizontalRule.ps1",
+      "Functions": 1,
+      "Emitted": 0,
+      "Sha256": "e7f42f375beee8bb8d185f37e3b8bc19ceacc1c066549519df22342e17a50961"
+    },
+    {
+      "Target": "net10.0",
+      "Mode": "Strict",
+      "File": "Get-TypeMember.ps1",
+      "Functions": 3,
+      "Emitted": 0,
+      "Sha256": "a1dc3ac525c980de957d68075c14e9f2a3d4f79e4c3dfc91a955cef8edec9b88"
+    },
+    {
+      "Target": "net10.0",
+      "Mode": "Strict",
+      "File": "Get-DirectoryInfo.ps1",
+      "Functions": 1,
+      "Emitted": 0,
+      "Sha256": "210763d767f9530f5dde244420c065038426c111c942a17936271aadb53eab7b"
+    },
+    {
+      "Target": "net10.0",
+      "Mode": "Strict",
+      "File": "Write-PSHorizontalRule.ps1",
+      "Functions": 1,
+      "Emitted": 0,
+      "Sha256": "2a77f7c4f0156a1c197530e295d99e98b26e3c37f4acd9b4163d135d2466c984"
+    },
+    {
+      "Target": "net472",
+      "Mode": "Hybrid",
+      "File": "Get-TypeMember.ps1",
+      "Functions": 3,
+      "Emitted": 0,
+      "Sha256": "7b9970fc6c04f975285f5bc34784a5be046ecfeb95d517d6ded6cf194cb5b84f"
+    },
+    {
+      "Target": "net472",
+      "Mode": "Hybrid",
+      "File": "Get-DirectoryInfo.ps1",
+      "Functions": 1,
+      "Emitted": 0,
+      "Sha256": "5cff62369cd2b4845093f4d25efcf96e57a9bad7d31f008e8239b34d8c0fb893"
+    },
+    {
+      "Target": "net472",
+      "Mode": "Hybrid",
+      "File": "Write-PSHorizontalRule.ps1",
+      "Functions": 1,
+      "Emitted": 0,
+      "Sha256": "b9b6659e0be6ebd6f298559316e7f169f321add41ede5e1935e35dc7a42dbb06"
+    },
+    {
+      "Target": "net472",
+      "Mode": "Strict",
+      "File": "Get-TypeMember.ps1",
+      "Functions": 3,
+      "Emitted": 0,
+      "Sha256": "394c260d843527d6ab89ac345877a29e483d28d3dd0750eb3bd584066caeca60"
+    },
+    {
+      "Target": "net472",
+      "Mode": "Strict",
+      "File": "Get-DirectoryInfo.ps1",
+      "Functions": 1,
+      "Emitted": 0,
+      "Sha256": "978250210a08e20adbc24a32a64a5a7ca882e6e7b6c480b4c0fb62695eebad39"
+    },
+    {
+      "Target": "net472",
+      "Mode": "Strict",
+      "File": "Write-PSHorizontalRule.ps1",
+      "Functions": 1,
+      "Emitted": 0,
+      "Sha256": "9705ff7c1f9e8acc0be5282e5da5d5f52ba555dfc7bef404242364bf7da18211"
+    }
+  ],
+  "Limits": [
+    "Class declaration candidates do not resolve lexical scope or runtime identity.",
+    "Reference candidates with no authored match may still denote ordinary CLR/SDK types.",
+    "The static probe parses source only; it invokes no authored class or function.",
+    "No generated authored-type execution, full portfolio census, non-Windows qualification or new independent review is claimed.",
+    "The previously accepted full portfolio remains 494/565 with 71 retained."
+  ],
+  "OwnerBuild": {
+    "Framework": "net472",
+    "Warnings": 0,
+    "Errors": 0,
+    "Seconds": 6.74
+  }
+}

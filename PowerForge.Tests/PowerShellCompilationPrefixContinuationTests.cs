@@ -15,7 +15,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 param()
                 $First = 'hello'
                 $Second = 'world'
-                Write-Output "$First $Second"
+                Write-Output "$First $($Second.ToUpperInvariant())"
             }
             """, ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
@@ -32,23 +32,22 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var run = RunProcess("pwsh", "-NoProfile", "-NonInteractive", "-Command",
             "Import-Module '" + result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal) + "'; Get-WholePrefix");
         Assert.Equal(0, run.ExitCode);
-        Assert.Equal("hello world", run.StandardOutput.Trim());
+        Assert.Equal("hello WORLD", run.StandardOutput.Trim());
         Assert.Empty(run.StandardError);
     }
 
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("net10.0", "pwsh")]
-    [InlineData("net472", "powershell.exe")]
+    [MemberData(nameof(StatementErrorHosts))]
     public void Build_HybridPrefixPreservesNullableConstraintAndNullTransfer(string framework, string host)
     {
-        if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("""
             function Get-NullablePrefix {
                 [CmdletBinding()]
                 param([Nullable[int]] $Number)
                 [Nullable[int]] $Value = $Number
                 $Count = 1
+                data NullablePrefixBarrier { }
                 & { if ($null -eq $Value) { 'null' } else { $Value } }
                 $Value = '9'
                 $Value.GetType().Name
@@ -74,11 +73,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("net10.0", "pwsh")]
-    [InlineData("net472", "powershell.exe")]
+    [MemberData(nameof(StatementErrorHosts))]
     public void Build_HybridPrefixTransfersEveryScalarLocalInOrder(string framework, string host)
     {
-        if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("""
             function Get-PrefixReport {
                 [CmdletBinding()]
@@ -88,6 +85,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 [bool] $Flag = $false
                 if ($Selected) { $Count = 7; $Flag = $true }
                 [string] $Tail = 'end'
+                data MultiLocalPrefixBarrier { }
                 & { "$Count|$Label|$Flag|$Tail" }
                 $Count = '9'
                 $Label = 3
@@ -97,6 +95,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath }, "PowerForge.Compiled", "MultiLocalMethods", framework,
             PowerShellCompilationCapabilities.HybridModule);
+        Assert.True(typed.PromotedRegions.Any(candidate => candidate.ContinuationLocals.Count > 0),
+            "Methods: " + string.Join(", ", typed.Methods.Select(method => method.SourceName)) + Environment.NewLine +
+            string.Join(Environment.NewLine, typed.Diagnostics.Select(diagnostic => diagnostic.Code + ": " + diagnostic.Message)) + Environment.NewLine +
+            string.Join(Environment.NewLine, typed.RegionCandidates.Select(candidate => candidate.DecisionCode + ": " + candidate.Reason)));
         var region = Assert.Single(typed.PromotedRegions, candidate => candidate.ContinuationLocals.Count > 0);
         Assert.Equal(new[] { "Count", "Label", "Flag", "Tail" }, region.ContinuationLocals.Select(local => local.Name));
         Assert.Equal(new[] { true, false, true, true }, region.ContinuationLocals.Select(local => local.HasTypeConstraint));
@@ -108,7 +110,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.True(result.Manifest!.PromotedTypedRegions > 0);
+        Assert.True(result.Manifest!.PromotedTypedRegions > 0,
+            string.Join(Environment.NewLine, result.Manifest.Diagnostics.Select(diagnostic => diagnostic.Code + ": " + diagnostic.Message)));
         const string probe = "@(Get-PrefixReport -Title '' -Selected $false; Get-PrefixReport -Title 'Sample' -Selected $true) -join '~'";
         var original = RunProcess(host, "-NoProfile", "-NonInteractive", "-Command",
             "Import-Module '" + fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal) + "'; " + probe);
@@ -135,7 +138,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationCapabilities.HybridModule);
         Assert.Empty(typed.PromotedRegions);
         var candidate = Assert.Single(typed.RegionCandidates);
-        Assert.Equal("region.error-route", candidate.DecisionCode);
+        Assert.Equal("region.statement-errors", candidate.DecisionCode);
+        Assert.Contains("PowerShellStatementError", Assert.Single(candidate.RegionGraph!.Regions).Errors);
         Assert.Contains("ClrException", Assert.Single(candidate.RegionGraph!.Regions).Errors);
     }
 
@@ -154,6 +158,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 param([bool] $Enabled)
                 CONSTRAINT $result = 0
                 if ($Enabled) { $result = 7 }
+                data PrefixContinuationBarrier { }
                 & { "hosted:$result" }
                 $result = '9'
                 "after:$($result.GetType().FullName):$result"
@@ -165,7 +170,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.True(result.Manifest!.PromotedTypedRegions > 0);
+        Assert.True(result.Manifest!.PromotedTypedRegions > 0,
+            string.Join(Environment.NewLine, result.Manifest.Diagnostics.Select(diagnostic => diagnostic.Code + ": " + diagnostic.Message)));
         const string probe = "@(Get-PrefixValue $false; Get-PrefixValue $true) -join '|'";
         var original = RunProcess(host, "-NoProfile", "-NonInteractive", "-Command",
             "Import-Module '" + fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal) + "'; " + probe);
@@ -179,18 +185,53 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("[int]$result = 0; $result += $Number; & { $result }")]
-    [InlineData("[int]$result = 0; $Number = 7; & { $result; $Number }")]
-    [InlineData("[int]$result = 0; Write-Warning 'before'; $result = 7; & { $result }")]
-    [InlineData("& { 'before' }; [int]$result = 0; $result = 7; & { $result }")]
-    public void Transpile_HybridPrefixRejectsUnrepresentedFailuresAndSideEffects(string body)
+    [InlineData("[int]$result = 0; $result += $Number; & { $result }", 1)]
+    [InlineData("[int]$result = 0; $Number = 7; & { $result; $Number }", 1)]
+    [InlineData("[int]$result = 0; Write-Warning 'before'; $result = 7; & { $result }", 1)]
+    [InlineData("& { 'before' }; [int]$result = 0; $result = 7; & { $result }", 2)]
+    public void Transpile_HybridPrefixSelectsOnlyClosedInitializationRunAroundHostedEffects(
+        string body,
+        int expectedStatementCount)
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-PrefixValue { [CmdletBinding()] param([int]$Number); " + body + " }", ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath }, "PowerForge.Compiled", "PrefixMethods", "net10.0",
             PowerShellCompilationCapabilities.HybridModule);
-        Assert.DoesNotContain(typed.PromotedRegions, region => region.ContinuationLocals.Count != 0);
+        var prefixes = typed.PromotedRegions.Where(region => region.ContinuationLocals.Count != 0).ToArray();
+        var prefix = Assert.Single(prefixes);
+        var selected = File.ReadAllText(fixture.ScriptPath)
+            .Substring(prefix.StartOffset, prefix.EndOffset - prefix.StartOffset);
+        Assert.Contains("[int]$result = 0", selected, StringComparison.Ordinal);
+        Assert.Equal(expectedStatementCount == 2, selected.Contains("$result = 7", StringComparison.Ordinal));
+        Assert.DoesNotContain("& {", selected, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Transpile_LaterFreshRegionDoesNotCompeteWithWholeMethodOwnership()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-WholeValue { param([int]$Number); $Number = 7; [int]$result = 0; return $result }", ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "WholeMethods", "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.Single(typed.Methods);
+        Assert.Empty(typed.PromotedRegions);
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Transpile_LaterFreshRegionDoesNotDetachFromAssignedNativeScriptBlock()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-WorkerValue { $worker = { & { 'hosted' }; [int]$result = 0; $result = 7 }; & $worker }", ".psm1");
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "WorkerMethods", "net10.0",
+            PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.Empty(typed.PromotedRegions);
     }
 
     [Fact]
@@ -203,6 +244,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 param([bool] $Enabled)
                 [int] $result = 0
                 if ($Enabled) { $result = 7 }
+                data ScalarPrefixBarrier { }
                 & { "hosted:$result" }
                 return $result
             }

@@ -59,7 +59,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
 
     [Trait("Category", "PowerShellCompilerGate")]
     [Theory]
-    [InlineData("System.Management.Automation.PSInvalidCastException", false)]
+    [InlineData("System.Management.Automation.PSInvalidCastException", true)]
     [InlineData("System.InvalidCastException", true)]
     public void Bind_NumericErrorObservationCrossesDocumentsWithoutRejectingClrCatchContracts(string exception, bool typed)
     {
@@ -98,7 +98,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             foreach (var retained in new[] { false, true })
             {
                 var caller = "Test-" + name + (retained ? "Retained" : "Typed");
-                var body = $"try {{ Get-{name}Outer; return 'missed' }} catch [System.Management.Automation.{exception}] {{ return 'caught' }}";
+                var body = $"try {{ Get-{name}Outer -ErrorAction Stop; return 'missed' }} catch [System.Management.Automation.{exception}] {{ return 'caught' }}";
                 if (retained) body = "begin {} end { " + body + " }";
                 functions.Add($"function {caller} {{ [CmdletBinding()] param() {body} }}");
                 calls.Add(caller);

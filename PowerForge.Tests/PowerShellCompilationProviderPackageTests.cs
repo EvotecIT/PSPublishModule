@@ -31,7 +31,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
                 {
                     new PowerShellCompilationProviderAssemblyInput(
                         typeof(Generic.Semantic.Provider.NoticeAdapter).Assembly.Location,
-                        "lib/net8.0/Generic.Semantic.Provider.dll")
+                        "lib/net10.0/Generic.Semantic.Provider.dll")
                 }
             });
 
@@ -369,7 +369,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         using var fixture = ProviderFixture.Create();
         var provider = Assert.Single(fixture.Manifest.Providers);
         provider.Adapter.Cancellation = PowerShellCompilationProviderCancellation.Cooperative;
-        provider.Adapter.EntryPoint!.AssemblyPath = "lib/net8.0/Generic.Semantic.ForgedCancellationProvider.dll";
+        provider.Adapter.EntryPoint!.AssemblyPath = "lib/net10.0/Generic.Semantic.ForgedCancellationProvider.dll";
         provider.Adapter.EntryPoint.TypeName = "Generic.Semantic.ForgedCancellationProvider.ForgedAdapter";
         var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
         var forgedAssemblyPath = Path.GetFullPath(Path.Combine(
@@ -379,7 +379,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
             "PowerShellCompilationForgedCancellationProviderFixture",
             "bin",
             configuration,
-            "net8.0",
+            "net10.0",
             "Generic.Semantic.ForgedCancellationProvider.dll"));
         Assert.True(File.Exists(forgedAssemblyPath), forgedAssemblyPath);
 
@@ -406,7 +406,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         using var fixture = ProviderFixture.Create();
         var provider = Assert.Single(fixture.Manifest.Providers);
         provider.Adapter.Cancellation = PowerShellCompilationProviderCancellation.Cooperative;
-        provider.Adapter.EntryPoint!.AssemblyPath = "lib/net8.0/Generic.Semantic.ForgedCancellationReferenceProvider.dll";
+        provider.Adapter.EntryPoint!.AssemblyPath = "lib/net10.0/Generic.Semantic.ForgedCancellationReferenceProvider.dll";
         provider.Adapter.EntryPoint.TypeName = "Generic.Semantic.ForgedCancellationReferenceProvider.ForgedReferenceAdapter";
         var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
         var fixturesRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Fixtures"));
@@ -415,14 +415,14 @@ public sealed partial class PowerShellCompilationProviderPackageTests
             "PowerShellCompilationForgedCancellationReferenceProviderFixture",
             "bin",
             configuration,
-            "net8.0",
+            "net10.0",
             "Generic.Semantic.ForgedCancellationReferenceProvider.dll");
         var forgedContractPath = Path.Combine(
             fixturesRoot,
             "PowerShellCompilationForgedCancellationContractFixture",
             "bin",
             configuration,
-            "net8.0",
+            "net10.0",
             "Generic.Semantic.ForgedCancellationContract.dll");
         Assert.True(File.Exists(forgedProviderPath), forgedProviderPath);
         Assert.True(File.Exists(forgedContractPath), forgedContractPath);
@@ -440,7 +440,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
                             provider.Adapter.EntryPoint.AssemblyPath),
                         new PowerShellCompilationProviderAssemblyInput(
                             forgedContractPath,
-                            "lib/net8.0/Generic.Semantic.ForgedCancellationContract.dll")
+                            "lib/net10.0/Generic.Semantic.ForgedCancellationContract.dll")
                     }
                 }));
 
@@ -635,7 +635,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
                 AotCompatible = true,
                 EntryPoint = new PowerShellCompilationProviderAdapterEntryPoint
                 {
-                    AssemblyPath = "lib/net8.0/Generic.Semantic.Provider.dll",
+                    AssemblyPath = "lib/net10.0/Generic.Semantic.Provider.dll",
                     TypeName = "Generic.Semantic.Provider.NoticeAdapter",
                     MethodName = methodName,
                     ResultType = resultType
@@ -699,7 +699,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
                             AotCompatible = true,
                             EntryPoint = new PowerShellCompilationProviderAdapterEntryPoint
                             {
-                                AssemblyPath = "lib/net8.0/Generic.Semantic.Provider.dll",
+                                AssemblyPath = "lib/net10.0/Generic.Semantic.Provider.dll",
                                 TypeName = "Generic.Semantic.Provider.NoticeAdapter",
                                 MethodName = "Transform"
                             }
@@ -720,7 +720,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
                 {
                     new PowerShellCompilationProviderAssemblyInput(
                         typeof(Generic.Semantic.Provider.NoticeAdapter).Assembly.Location,
-                        "lib/net8.0/Generic.Semantic.Provider.dll")
+                        "lib/net10.0/Generic.Semantic.Provider.dll")
                 }
             });
 
@@ -745,9 +745,11 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         public string ScriptPath { get; }
         public string OutputPath { get; }
 
-        public static ScriptFixture Create(string source)
+        public static ScriptFixture Create(string source, bool compactPath = false)
         {
-            var root = Path.Combine(Path.GetTempPath(), "PowerForgeProviderArtifactTests", Guid.NewGuid().ToString("N"));
+            var root = compactPath
+                ? Path.Combine(Path.GetTempPath(), "PFC", Guid.NewGuid().ToString("N")[..12])
+                : Path.Combine(Path.GetTempPath(), "PowerForgeProviderArtifactTests", Guid.NewGuid().ToString("N"));
             var output = Path.Combine(root, "out");
             Directory.CreateDirectory(output);
             var script = Path.Combine(root, "input.ps1");

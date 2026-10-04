@@ -15,7 +15,8 @@ internal static class PowerShellLoweredRegionGraphBuilder
         "Error", "Warning", "Verbose", "Debug", "Information", "Host"
     };
 
-    internal static PowerShellCompilationRegionGraph Create(PowerShellLoweredFunction function)
+    internal static PowerShellCompilationRegionGraph Create(PowerShellLoweredFunction function,
+        IReadOnlyDictionary<string, PowerShellLoweredFunction> functions)
     {
         if (function is null) throw new ArgumentNullException(nameof(function));
         var accumulators = new List<RegionAccumulator>();
@@ -42,6 +43,7 @@ internal static class PowerShellLoweredRegionGraphBuilder
                 .SelectMany(static later => later.Inputs)
                 .ToHashSet(StringComparer.Ordinal);
             var outputs = fact.Mutations.Where(laterInputs.Contains).ToList();
+            outputs.AddRange(fact.Transfers);
             if (fact.Streams.Contains("Success", StringComparer.Ordinal)) outputs.Add("stream:Success");
             regions[index] = new PowerShellCompilationRegion(
                 CreateRegionId(fact.Span, fact.Execution),
@@ -65,7 +67,12 @@ internal static class PowerShellLoweredRegionGraphBuilder
                 fact.ModuleStateReadBoundarySites,
                 fact.ModuleStateWriteBoundarySites);
         }
-        return new PowerShellCompilationRegionGraph(regions);
+        var blocks = PowerShellLoweredScriptBlockClosure.DirectBlocks(function).Select(block =>
+        {
+            var child = functions[block.Target.StableKey];
+            return new PowerShellCompilationScriptBlockRegion(child.GeneratedName, block.Span.StartOffset, block.Span.EndOffset, Create(child, functions));
+        }).ToArray();
+        return new PowerShellCompilationRegionGraph(regions, blocks);
     }
 
     internal static PowerShellCompilationRegionGraph Remap(
@@ -111,14 +118,16 @@ internal static class PowerShellLoweredRegionGraphBuilder
                 region.ModuleStateReadBoundarySites,
                 region.ModuleStateWriteBoundarySites);
         }).ToArray();
-        return new PowerShellCompilationRegionGraph(regions);
+        return new PowerShellCompilationRegionGraph(regions, graph.ScriptBlocks.Select(block => new PowerShellCompilationScriptBlockRegion(
+            block.GeneratedMemberName, MapOffset(block.StartOffset, mappings), MapOffset(block.EndOffset, mappings),
+            Remap(block.Graph, authoredDocumentId, authoredText, mappings))).ToArray());
     }
 
     internal static int CountHostedCommandBoundarySites(IEnumerable<PowerShellLoweredStatement> statements)
         => PowerShellLoweredTreeEnumerator.EnumerateStatements(statements).Count(static statement =>
                statement is PowerShellLoweredCommandRegionStatement or PowerShellLoweredCommandCaptureStatement) +
            PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements).Count(static expression =>
-               expression is PowerShellLoweredCommandAvailabilityExpression or PowerShellLoweredHostedBooleanCommandExpression ||
+               expression is PowerShellLoweredCommandAvailabilityExpression or PowerShellLoweredHostedBooleanCommandExpression or PowerShellLoweredNativeCommandExpression ||
                expression is PowerShellLoweredInvocationExpression { RequiresPowerShellCommandRegions: true });
 
     private static PowerShellCompilationRegionExecution Classify(PowerShellLoweredStatement statement)
@@ -137,12 +146,44 @@ internal static class PowerShellLoweredRegionGraphBuilder
         var writeOffsets = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var expression in PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements))
         {
+            if (expression is PowerShellLoweredNativeCommandExpression)
+            {
+                RecordFirst(readOffsets, "PowerShellSessionState:*", expression.Span.StartOffset);
+                RecordFirst(writeOffsets, "PowerShellSessionState:*", expression.Span.EndOffset);
+            }
             if (expression is PowerShellLoweredVariableExpression variable)
                 RecordFirst(readOffsets, Symbol(variable.Symbol), expression.Span.StartOffset);
+            if (expression is PowerShellLoweredNativeVariableExpression nativeVariable)
+            {
+                RecordFirst(readOffsets, "PowerShellSessionState:*", expression.Span.StartOffset);
+                RecordFirst(readOffsets, "PowerShellSessionVariable:" + nativeVariable.Name.ToUpperInvariant(), expression.Span.StartOffset);
+            }
+            if (expression is PowerShellLoweredNativeReferenceExpression nativeReference)
+            {
+                RecordFirst(readOffsets, "PowerShellSessionState:*", expression.Span.StartOffset);
+                RecordFirst(readOffsets, "PowerShellSessionVariable:" + nativeReference.Name.ToUpperInvariant(), expression.Span.StartOffset);
+            }
+            if (expression is PowerShellLoweredNativeInvocationExpression referenceInvocation)
+                foreach (var reference in referenceInvocation.References)
+                {
+                    RecordFirst(writeOffsets, "PowerShellSessionState:*", expression.Span.EndOffset);
+                    RecordFirst(writeOffsets, "PowerShellSessionVariable:" + reference.VariableName.ToUpperInvariant(), expression.Span.EndOffset);
+                }
             if (expression is PowerShellLoweredMutationExpression mutation)
             {
-                RecordFirst(writeOffsets, Symbol(mutation.Target), expression.Span.EndOffset);
-                RecordFirst(readOffsets, Symbol(mutation.Target), expression.Span.StartOffset);
+                var target = mutation.NativeTargetRead is { } nativeTarget
+                    ? "PowerShellSessionVariable:" + nativeTarget.Name.ToUpperInvariant() : Symbol(mutation.Target);
+                if (mutation.NativeAssignmentTarget?.MutatesReceiver is true) target += ".*";
+                RecordFirst(writeOffsets, target, expression.Span.EndOffset);
+                if (mutation.Operation != PowerShellBoundMutationOperator.Assign)
+                    RecordFirst(readOffsets, target, expression.Span.StartOffset);
+                if (mutation.NativeTargetRead is not null)
+                {
+                    RecordFirst(readOffsets, "PowerShellSessionState:*", expression.Span.StartOffset);
+                    RecordFirst(writeOffsets, "PowerShellSessionState:*", expression.Span.EndOffset);
+                    foreach (var name in mutation.NativeAssignmentTarget?.ReadVariables ?? Array.Empty<string>())
+                        RecordFirst(readOffsets, "PowerShellSessionVariable:" + name.ToUpperInvariant(), expression.Span.StartOffset);
+                }
             }
             if (expression is PowerShellLoweredInvocationExpression invocation)
             {
@@ -158,11 +199,30 @@ internal static class PowerShellLoweredRegionGraphBuilder
                     Receiver: not null
                 } clrInvocation)
                 RecordFirst(writeOffsets, MutationTarget(clrInvocation.Receiver, ".*"), expression.Span.EndOffset);
+            if (expression is PowerShellLoweredNativeInvocationExpression { Receiver: not null } nativeInvocation)
+            {
+                // An invocation-owned receiver can alias state observed by later hosted code.
+                RecordFirst(writeOffsets, "PowerShellSessionState:*", expression.Span.EndOffset);
+                RecordFirst(writeOffsets, MutationTarget(nativeInvocation.Receiver, ".*"), expression.Span.EndOffset);
+            }
         }
         foreach (var statement in PowerShellLoweredTreeEnumerator.EnumerateStatements(statements))
         {
             switch (statement)
             {
+                case PowerShellLoweredNativeAssignmentStatement assignment:
+                    // Native assignment observes invocation-owned constraints and can invoke transformations.
+                    RecordFirst(readOffsets, "PowerShellSessionState:*", statement.Span.StartOffset);
+                    RecordFirst(writeOffsets, "PowerShellSessionState:*", statement.Span.EndOffset);
+                    var assignmentRoot = assignment.Target.StaticReceiverTypeName is { } staticType
+                        ? "ClrStaticReceiver:" + staticType : "PowerShellSessionVariable:" + assignment.Name.ToUpperInvariant();
+                    RecordFirst(writeOffsets, assignmentRoot +
+                        (assignment.Target.MutatesReceiver ? ".*" : ""), statement.Span.EndOffset);
+                    if (assignment.Target.MutatesReceiver || assignment.Operation != PowerShellBoundMutationOperator.Assign)
+                        RecordFirst(readOffsets, assignmentRoot, statement.Span.StartOffset);
+                    foreach (var name in assignment.Target.ReadVariables ?? Array.Empty<string>())
+                        RecordFirst(readOffsets, "PowerShellSessionVariable:" + name.ToUpperInvariant(), statement.Span.StartOffset);
+                    break;
                 case PowerShellLoweredAssignmentStatement assignment:
                     RecordFirst(writeOffsets, Symbol(assignment.Target), statement.Span.EndOffset);
                     if (assignment.Operation != PowerShellBoundMutationOperator.Assign)
@@ -176,7 +236,24 @@ internal static class PowerShellLoweredRegionGraphBuilder
                     foreach (var argument in capture.Arguments)
                         RecordFirst(readOffsets, Symbol(argument.Symbol), statement.Span.StartOffset);
                     break;
+                case PowerShellLoweredOutputCaptureStatement capture:
+                    if (capture.Target is not null) RecordFirst(writeOffsets, Symbol(capture.Target), statement.Span.EndOffset);
+                    if (capture.NativeTarget is { } nativeCapture)
+                    {
+                        RecordFirst(readOffsets, "PowerShellSessionState:*", statement.Span.StartOffset);
+                        RecordFirst(writeOffsets, "PowerShellSessionState:*", statement.Span.EndOffset);
+                        if (nativeCapture.ReceiverVariableName is { } receiver)
+                            RecordFirst(writeOffsets, "PowerShellSessionVariable:" + receiver.ToUpperInvariant() + ".*", statement.Span.EndOffset);
+                        foreach (var name in nativeCapture.ReadVariables ?? Array.Empty<string>())
+                            RecordFirst(readOffsets, "PowerShellSessionVariable:" + name.ToUpperInvariant(), statement.Span.StartOffset);
+                    }
+                    break;
                 case PowerShellLoweredCommandRegionStatement region:
+                    if (region.NativeSourcePath is not null)
+                    {
+                        RecordFirst(readOffsets, "PowerShellSessionState:*", statement.Span.StartOffset);
+                        RecordFirst(writeOffsets, "PowerShellSessionState:*", statement.Span.EndOffset);
+                    }
                     foreach (var argument in region.Arguments)
                         RecordFirst(readOffsets, Symbol(argument.Symbol), statement.Span.StartOffset);
                     break;
@@ -216,6 +293,10 @@ internal static class PowerShellLoweredRegionGraphBuilder
             accumulator.Span,
             inputs,
             mutations,
+            PowerShellLoweredTreeEnumerator.EnumerateStatements(statements)
+                .OfType<PowerShellLoweredRegionTransferStatement>()
+                .SelectMany(static transfer => transfer.Locals)
+                .Select(static local => "transfer:Local:" + local.Name).ToArray(),
             streams,
             errors,
             CountHostedCommandBoundarySites(statements),
@@ -229,11 +310,14 @@ internal static class PowerShellLoweredRegionGraphBuilder
         if (CountHostedCommandBoundarySites(statements) > 0) result.UnionWith(NonSuccessPowerShellStreams);
         foreach (var statement in PowerShellLoweredTreeEnumerator.EnumerateStatements(statements))
         {
+            if (statement is PowerShellLoweredStatementErrorBoundary) result.Add("Error");
             if (statement is PowerShellLoweredCommandRegionStatement) result.Add("Success");
-            if (statement is PowerShellLoweredReturnStatement { EmitsValue: true } ||
-                statement is PowerShellLoweredExpressionStatement { DiscardValue: false })
+            if (statement is PowerShellLoweredReturnStatement { EmitsSuccessOutput: true } ||
+                statement is PowerShellLoweredExpressionStatement { DiscardValue: false } valueStatement &&
+                valueStatement.Expression.ClrType != typeof(void))
                 result.Add("Success");
-            if (statement is PowerShellLoweredStreamWriteStatement stream)
+            if (statement is PowerShellLoweredStreamWriteStatement stream &&
+                !IsOwnedStableVectorWrite(statements, stream))
                 result.Add(stream.Kind.ToString());
         }
         if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements)
@@ -243,9 +327,21 @@ internal static class PowerShellLoweredRegionGraphBuilder
         return AllPowerShellStreams.Where(result.Contains).ToArray();
     }
 
+    private static bool IsOwnedStableVectorWrite(
+        IEnumerable<PowerShellLoweredStatement> statements,
+        PowerShellLoweredStreamWriteStatement stream)
+        => PowerShellLoweredTreeEnumerator.EnumerateStatements(statements)
+            .OfType<PowerShellLoweredOutputCaptureStatement>()
+            .Where(static capture => capture.CapturesStableScalarVector)
+            .Any(capture => PowerShellLoweredTreeEnumerator.EnumerateStatements(capture.Statements)
+                .Any(candidate => ReferenceEquals(candidate, stream)));
+
     private static string[] GetErrors(PowerShellLoweredStatement[] statements)
     {
         var result = new List<string>();
+        if (PowerShellLoweredTreeEnumerator.EnumerateStatements(statements)
+            .Any(static statement => statement is PowerShellLoweredStatementErrorBoundary))
+            result.Add("PowerShellStatementError");
         if (CountHostedCommandBoundarySites(statements) > 0) result.Add("PowerShellErrorRecord");
         if (CountModuleStateReadBoundarySites(statements) + CountModuleStateWriteBoundarySites(statements) > 0)
             result.Add("PowerShellModuleStateErrorRecord");
@@ -254,13 +350,19 @@ internal static class PowerShellLoweredRegionGraphBuilder
             result.Add("TypedThrow");
         if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements)
             .OfType<PowerShellLoweredConversionExpression>()
-            .Any(static conversion => conversion.UsePowerShellLanguageRuntime))
+            .Any(static conversion => conversion.UsePowerShellLanguageRuntime || conversion.UseNativeConversion))
             result.Add("PowerShellLanguageRuntimeError");
+        if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements).Any(static expression => expression is PowerShellLoweredNativeVariableExpression
+                or PowerShellLoweredNativeReferenceExpression
+                or PowerShellLoweredMutationExpression { NativeTargetRead: not null }) ||
+            PowerShellLoweredTreeEnumerator.EnumerateStatements(statements).Any(static statement => statement is PowerShellLoweredNativeAssignmentStatement))
+            result.Add("PowerShellSessionStateError");
         if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(statements).Any(CanThrowClr) ||
             PowerShellLoweredTreeEnumerator.EnumerateStatements(statements).Any(static statement =>
-                statement is PowerShellLoweredIndexAssignmentStatement or PowerShellLoweredClrMemberAssignmentStatement ||
+                statement is PowerShellLoweredIndexAssignmentStatement or PowerShellLoweredClrMemberAssignmentStatement or
+                    PowerShellLoweredForEachStatement { EnumerationKind: PowerShellForEachEnumerationKind.PowerShellEnumerable or PowerShellForEachEnumerationKind.NativeInvocation } ||
                 statement is PowerShellLoweredAssignmentStatement { Operation: not PowerShellBoundMutationOperator.Assign } assignment &&
-                    assignment.ClrType != typeof(double)))
+                    !PowerShellLoweredPrimitiveErrorPolicy.IsNonThrowingNumericMutation(assignment.ClrType, assignment.IntegralSemantics)))
             result.Add("ClrException");
         return result.Distinct(StringComparer.Ordinal).OrderBy(static item => item, StringComparer.Ordinal).ToArray();
     }
@@ -278,6 +380,9 @@ internal static class PowerShellLoweredRegionGraphBuilder
             or PowerShellLoweredArrayConcatenationExpression
             or PowerShellLoweredDictionaryExpression
             or PowerShellLoweredIndexExpression
+            or PowerShellLoweredNativeMemberExpression
+            or PowerShellLoweredNativeIndexExpression
+            or PowerShellLoweredNativeInvocationExpression
             or PowerShellLoweredClrMemberExpression
             or PowerShellLoweredClrInvocationExpression;
 
@@ -299,9 +404,12 @@ internal static class PowerShellLoweredRegionGraphBuilder
            CountModuleStateWriteBoundarySites(statements);
 
     private static string MutationTarget(PowerShellLoweredExpression expression, string suffix)
-        => expression is PowerShellLoweredVariableExpression variable
-            ? Symbol(variable.Symbol)
-            : "object" + suffix;
+        => expression switch
+        {
+            PowerShellLoweredVariableExpression variable => Symbol(variable.Symbol),
+            PowerShellLoweredNativeVariableExpression variable => "PowerShellSessionVariable:" + variable.Name.ToUpperInvariant(),
+            _ => "object" + suffix
+        };
 
     private static string Symbol(PowerShellSymbolId symbol) => symbol.Kind + ":" + symbol.Name.ToUpperInvariant();
     private static string ModuleState(string name) => "ModuleState:" + name.ToUpperInvariant();
@@ -383,6 +491,7 @@ internal static class PowerShellLoweredRegionGraphBuilder
         SourceSpan Span,
         string[] Inputs,
         string[] Mutations,
+        string[] Transfers,
         string[] Streams,
         string[] Errors,
         int HostedCommandBoundarySites,

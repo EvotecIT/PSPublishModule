@@ -1,0 +1,546 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Explicit justified hosted boundaries for nonlocal loop transfers; no new emitted compiler coverage.",
+  "compilerCommit": "c82d3326722061fa9c9e2bbea06ca78a00b7babf",
+  "portfolio": {
+    "emitted": 532,
+    "functions": 565,
+    "retained": 33,
+    "stableUnits": 584,
+    "censusRepeated": false,
+    "reason": "Compiler and pinned packets unchanged; accepted coordinate-data comparison remains authoritative."
+  },
+  "sources": [
+    {
+      "workflow": "Accounts",
+      "function": "Get-ADServiceAccountsToProcess",
+      "module": "CleanupMonster",
+      "revision": "f215b32ca86b38d9150629c08f6c0c232bfafb27",
+      "relativePath": "Private/Get-ADServiceAccountsToProcess.ps1",
+      "sourceSha256": "ed2af8204bb5bb48b55dfdbd0e04be46bf7444081dd0d87c2625dfcf98f0cd9b"
+    },
+    {
+      "workflow": "Drive",
+      "function": "New-PSDriveHere",
+      "module": "PSScriptTools",
+      "revision": "549fa3e3d769532320054fc0b3c8f42df0452361",
+      "relativePath": "functions/New-PSDriveHere.ps1",
+      "sourceSha256": "c64257986c8ff469fcb279eaee322767e2fd71bc1eaf7c1b7a5bda7f4b714212"
+    }
+  ],
+  "driver": "ExternalWorkflows/ControlFlow/Observe.ps1",
+  "builds": [
+    {
+      "workflow": "Accounts",
+      "framework": "net10.0",
+      "succeeded": true,
+      "compiledMethods": 0,
+      "buildEvidenceSha256": "74a5f841444f519600e3693f17138e723112264c7891af9cb7dac9fdbafacd4b",
+      "manifestSha256": "506d6a401eb9f6bed31f26d8c554e7da991c2b59f93cb5654a569dcef0bd4227",
+      "dependencyLockReviewed": false,
+      "diagnostics": [
+        {
+          "code": "UnsupportedSyntax",
+          "message": "A loop transfer leaving native captured output requires an explicit enclosing-control-flow transfer contract.",
+          "filePath": "Accounts.psm1",
+          "line": 19,
+          "column": 5,
+          "featureId": "syntax.unsupported"
+        }
+      ],
+      "warnings": "Generated projects reported NU1510 package-pruning and CS8321 unused-helper warnings; build success is not a zero-warning claim."
+    },
+    {
+      "workflow": "Drive",
+      "framework": "net10.0",
+      "succeeded": true,
+      "compiledMethods": 0,
+      "buildEvidenceSha256": "6276c3e1dfa458b59ad73c20ec1cdfa281308545013f80e785c8dcd60cc81fd9",
+      "manifestSha256": "a110958844c29f0cbea4968895b5c065787ce71eff92f532bd4f4d37a3390941",
+      "dependencyLockReviewed": false,
+      "diagnostics": [
+        {
+          "code": "UnsupportedSyntax",
+          "message": "break must be inside a supported loop or scalar switch.",
+          "filePath": "Drive.psm1",
+          "line": 55,
+          "column": 13,
+          "featureId": "syntax.unsupported"
+        }
+      ],
+      "warnings": "Generated projects reported NU1510 package-pruning and CS8321 unused-helper warnings; build success is not a zero-warning claim."
+    },
+    {
+      "workflow": "Accounts",
+      "framework": "net472",
+      "succeeded": true,
+      "compiledMethods": 0,
+      "buildEvidenceSha256": "ac0865cbf77635b45dd991bb81b6a6ac2d7387adf16869133c2a0878a90feb44",
+      "manifestSha256": "d16b94b37ef0fbf22e02de5509eaf4eba940b21c104f41285740f60fea9d4a49",
+      "dependencyLockReviewed": false,
+      "diagnostics": [
+        {
+          "code": "UnsupportedSyntax",
+          "message": "A loop transfer leaving native captured output requires an explicit enclosing-control-flow transfer contract.",
+          "filePath": "Accounts.psm1",
+          "line": 19,
+          "column": 5,
+          "featureId": "syntax.unsupported"
+        }
+      ],
+      "warnings": "Generated projects reported NU1510 package-pruning and CS8321 unused-helper warnings; build success is not a zero-warning claim."
+    },
+    {
+      "workflow": "Drive",
+      "framework": "net472",
+      "succeeded": true,
+      "compiledMethods": 0,
+      "buildEvidenceSha256": "8cc27229082261d88a41ea7ec6cd90930d1fb6a4ff70318fea38e8abd29c9e0b",
+      "manifestSha256": "339127388380eba79ea1cc024dc6d497d24fcb3dc43b6618df77670eb0b58d0c",
+      "dependencyLockReviewed": false,
+      "diagnostics": [
+        {
+          "code": "UnsupportedSyntax",
+          "message": "break must be inside a supported loop or scalar switch.",
+          "filePath": "Drive.psm1",
+          "line": 55,
+          "column": 13,
+          "featureId": "syntax.unsupported"
+        }
+      ],
+      "warnings": "Generated projects reported NU1510 package-pruning and CS8321 unused-helper warnings; build success is not a zero-warning claim."
+    }
+  ],
+  "strict": [
+    {
+      "workflow": "Accounts",
+      "framework": "net10.0",
+      "emitted": false,
+      "evidenceSha256": "3dc8b1064e594e1faaa2a883b19a2d93eb40a9799e8ff6327f4de803719c94a6",
+      "causes": [
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.foreachstatement",
+          "message": "foreach variable '$Key' has no function-scope semantic symbol.",
+          "line": 10,
+          "column": 14
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.get-date",
+          "message": "Command invocation 'Get-Date' must preserve PowerShell runtime command resolution because the source does not identify one canonical module-qualified provider command.",
+          "line": 18,
+          "column": 14
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.unsupported",
+          "message": "Captured statement output requires a qualified command success-stream host and either a native variable target or an unconstrained local.",
+          "line": 19,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "workflow": "Drive",
+      "framework": "net10.0",
+      "emitted": false,
+      "evidenceSha256": "95c7ab0fab74a218ec6c3112f35bbd3feed10af54e5a8afc55f94047da158b27",
+      "causes": [
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "parameter.metadata",
+          "message": "Parameter metadata syntax node 'AttributeAst' for '[ValidateScript]' is not supported by this typed target.",
+          "line": 8,
+          "column": 9
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime command resolution because the source does not identify one canonical module-qualified provider command.",
+          "line": 27,
+          "column": 5
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime command resolution because the source does not identify one canonical module-qualified provider command.",
+          "line": 28,
+          "column": 5
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime command resolution because the source does not identify one canonical module-qualified provider command.",
+          "line": 30,
+          "column": 5
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.get-item",
+          "message": "Command invocation 'Get-Item' requires a registered semantic provider or a hosted PowerShell command region.",
+          "line": 32,
+          "column": 17
+        },
+        {
+          "code": "RuntimeScope",
+          "featureId": "runtime.scope",
+          "message": "Variable '$PSCmdlet' requires dynamic PowerShell scope or runtime-owned automatic state.",
+          "line": 35,
+          "column": 9
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime command resolution because the source does not identify one canonical module-qualified provider command.",
+          "line": 61,
+          "column": 5
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.test-path",
+          "message": "Command invocation 'Test-Path' must preserve PowerShell runtime command resolution because the source does not identify one canonical module-qualified provider command.",
+          "line": 63,
+          "column": 15
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime command resolution because the source does not identify one canonical module-qualified provider command.",
+          "line": 94,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "workflow": "Accounts",
+      "framework": "net472",
+      "emitted": false,
+      "evidenceSha256": "40203ad8549480da01d359cdd421c17d84f9f5015cfebd5a44d144e77d7f8f2b",
+      "causes": [
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.foreachstatement",
+          "message": "foreach variable '$Key' has no function-scope semantic symbol.",
+          "line": 10,
+          "column": 14
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.get-date",
+          "message": "Command invocation 'Get-Date' must preserve PowerShell runtime command resolution because the source does not identify one canonical module-qualified provider command.",
+          "line": 18,
+          "column": 14
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.unsupported",
+          "message": "Captured statement output requires a qualified command success-stream host and either a native variable target or an unconstrained local.",
+          "line": 19,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "workflow": "Drive",
+      "framework": "net472",
+      "emitted": false,
+      "evidenceSha256": "149910bc7baddc5a0140e34f92612915b185d161add7998b70a08d286d5331a5",
+      "causes": [
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "parameter.metadata",
+          "message": "Parameter metadata syntax node 'AttributeAst' for '[ValidateScript]' is not supported by this typed target.",
+          "line": 8,
+          "column": 9
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime command resolution because the source does not identify one canonical module-qualified provider command.",
+          "line": 27,
+          "column": 5
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime command resolution because the source does not identify one canonical module-qualified provider command.",
+          "line": 28,
+          "column": 5
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime command resolution because the source does not identify one canonical module-qualified provider command.",
+          "line": 30,
+          "column": 5
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.get-item",
+          "message": "Command invocation 'Get-Item' requires a registered semantic provider or a hosted PowerShell command region.",
+          "line": 32,
+          "column": 17
+        },
+        {
+          "code": "RuntimeScope",
+          "featureId": "runtime.scope",
+          "message": "Variable '$PSCmdlet' requires dynamic PowerShell scope or runtime-owned automatic state.",
+          "line": 35,
+          "column": 9
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime command resolution because the source does not identify one canonical module-qualified provider command.",
+          "line": 61,
+          "column": 5
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.test-path",
+          "message": "Command invocation 'Test-Path' must preserve PowerShell runtime command resolution because the source does not identify one canonical module-qualified provider command.",
+          "line": 63,
+          "column": 15
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime command resolution because the source does not identify one canonical module-qualified provider command.",
+          "line": 94,
+          "column": 5
+        }
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "workflow": "Accounts",
+      "framework": "net10.0",
+      "mode": "plain",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "originalOutputSha256": "9ad686fe6ee2f14b5eb718eef65c518ca65bc2a94ef29bee50bbd3c1a415cbe0",
+      "generatedOutputSha256": "9ad686fe6ee2f14b5eb718eef65c518ca65bc2a94ef29bee50bbd3c1a415cbe0",
+      "records": [
+        {
+          "mode": "plain",
+          "events": [
+            "before-call"
+          ]
+        }
+      ]
+    },
+    {
+      "workflow": "Accounts",
+      "framework": "net10.0",
+      "mode": "loop",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "originalOutputSha256": "06e727fa735a7d4003b20007e924f1d60ad332ea30b00a97f010ecd3cfd22c92",
+      "generatedOutputSha256": "06e727fa735a7d4003b20007e924f1d60ad332ea30b00a97f010ecd3cfd22c92",
+      "records": [
+        {
+          "mode": "loop",
+          "events": [
+            "before-call:1"
+          ]
+        }
+      ]
+    },
+    {
+      "workflow": "Accounts",
+      "framework": "net10.0",
+      "mode": "none",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "originalOutputSha256": "eb8a709876dda3501c0a2375dc7690e0bb24b7aae7478fbd517d48f4c706f6eb",
+      "generatedOutputSha256": "eb8a709876dda3501c0a2375dc7690e0bb24b7aae7478fbd517d48f4c706f6eb",
+      "records": [
+        {
+          "mode": "none",
+          "events": [
+            "before-call",
+            "returned:excluded,included",
+            "after-call"
+          ]
+        },
+        {
+          "mode": "none",
+          "complete": [
+            "before-call",
+            "returned:excluded,included",
+            "after-call",
+            "after-finally"
+          ]
+        }
+      ]
+    },
+    {
+      "workflow": "Drive",
+      "framework": "net10.0",
+      "mode": "plain",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "originalOutputSha256": "9ad686fe6ee2f14b5eb718eef65c518ca65bc2a94ef29bee50bbd3c1a415cbe0",
+      "generatedOutputSha256": "9ad686fe6ee2f14b5eb718eef65c518ca65bc2a94ef29bee50bbd3c1a415cbe0",
+      "records": [
+        {
+          "mode": "plain",
+          "events": [
+            "before-call"
+          ]
+        }
+      ]
+    },
+    {
+      "workflow": "Drive",
+      "framework": "net10.0",
+      "mode": "loop",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "originalOutputSha256": "b477a138f2c46f96b76ba56a08fa2a17c84a3f8b8588050e346c86fc1065adc9",
+      "generatedOutputSha256": "b477a138f2c46f96b76ba56a08fa2a17c84a3f8b8588050e346c86fc1065adc9",
+      "records": [
+        {
+          "mode": "loop",
+          "events": [
+            "before-call:1",
+            "after-call"
+          ]
+        },
+        {
+          "mode": "loop",
+          "complete": [
+            "before-call:1",
+            "after-call",
+            "after-finally"
+          ]
+        }
+      ]
+    },
+    {
+      "workflow": "Accounts",
+      "framework": "net472",
+      "mode": "plain",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "originalOutputSha256": "9ad686fe6ee2f14b5eb718eef65c518ca65bc2a94ef29bee50bbd3c1a415cbe0",
+      "generatedOutputSha256": "9ad686fe6ee2f14b5eb718eef65c518ca65bc2a94ef29bee50bbd3c1a415cbe0",
+      "records": [
+        {
+          "mode": "plain",
+          "events": [
+            "before-call"
+          ]
+        }
+      ]
+    },
+    {
+      "workflow": "Accounts",
+      "framework": "net472",
+      "mode": "loop",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "originalOutputSha256": "06e727fa735a7d4003b20007e924f1d60ad332ea30b00a97f010ecd3cfd22c92",
+      "generatedOutputSha256": "06e727fa735a7d4003b20007e924f1d60ad332ea30b00a97f010ecd3cfd22c92",
+      "records": [
+        {
+          "mode": "loop",
+          "events": [
+            "before-call:1"
+          ]
+        }
+      ]
+    },
+    {
+      "workflow": "Accounts",
+      "framework": "net472",
+      "mode": "none",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "originalOutputSha256": "eb8a709876dda3501c0a2375dc7690e0bb24b7aae7478fbd517d48f4c706f6eb",
+      "generatedOutputSha256": "eb8a709876dda3501c0a2375dc7690e0bb24b7aae7478fbd517d48f4c706f6eb",
+      "records": [
+        {
+          "mode": "none",
+          "events": [
+            "before-call",
+            "returned:excluded,included",
+            "after-call"
+          ]
+        },
+        {
+          "mode": "none",
+          "complete": [
+            "before-call",
+            "returned:excluded,included",
+            "after-call",
+            "after-finally"
+          ]
+        }
+      ]
+    },
+    {
+      "workflow": "Drive",
+      "framework": "net472",
+      "mode": "plain",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "originalOutputSha256": "9ad686fe6ee2f14b5eb718eef65c518ca65bc2a94ef29bee50bbd3c1a415cbe0",
+      "generatedOutputSha256": "9ad686fe6ee2f14b5eb718eef65c518ca65bc2a94ef29bee50bbd3c1a415cbe0",
+      "records": [
+        {
+          "mode": "plain",
+          "events": [
+            "before-call"
+          ]
+        }
+      ]
+    },
+    {
+      "workflow": "Drive",
+      "framework": "net472",
+      "mode": "loop",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "originalOutputSha256": "b477a138f2c46f96b76ba56a08fa2a17c84a3f8b8588050e346c86fc1065adc9",
+      "generatedOutputSha256": "b477a138f2c46f96b76ba56a08fa2a17c84a3f8b8588050e346c86fc1065adc9",
+      "records": [
+        {
+          "mode": "loop",
+          "events": [
+            "before-call:1",
+            "after-call"
+          ]
+        },
+        {
+          "mode": "loop",
+          "complete": [
+            "before-call:1",
+            "after-call",
+            "after-finally"
+          ]
+        }
+      ]
+    }
+  ],
+  "guardTest": {
+    "passed": 4,
+    "total": 4,
+    "trxSha256": "ce5aafcc7dd1d02ef80c3de0c6d773a73a8493cea186fd61f9c6ae94d1291577"
+  },
+  "boundary": "Unresolved labeled continue and break without a local loop require PowerShell caller-stack control flow. They must remain hosted rather than becoming CLR return or an invented loop-depth transfer.",
+  "limits": [
+    "Original source is unchanged. Accounts are in-memory objects; clock and color helper are module-owned offline providers. No AD/admin/network operation executes.",
+    "Drive lookup returns an in-memory unusual folder name. Only ValidateScript Test-Path reads the driver directory. New-PSDrive/Set-Location providers refuse execution; no drive or location mutation occurs.",
+    "Two real functions, five cases per host, four hosted Hybrid artifacts; zero complete methods. These are hosted-fidelity observations, not compiled workflow gains.",
+    "No runtime-free, full-module, non-Windows, reviewed dependency-lock or performance qualification. No aggregate gate repeated."
+  ],
+  "candidateHistory": [
+    "Initial observer attempted numeric :2 declaration; both hosts rejected the observer at parse time. Those attempts are not runtime evidence. The corrected observer uses an ordinary caller loop.",
+    "First development build logged beside source, causing source-closure file access rejection. Final builds isolate each input directory and keep logs outside it; no admission rule was changed."
+  ],
+  "driverSha256": "b81a1099299498a710b6f8d392284b50d0d82a06c0eb3bdece34ff532dbe8048",
+  "retainedInventorySha256": "92797f7d38687097f9d3cb99e8ec2117f9a34a9eed1afd211dafb348cb2b9bc1"
+}

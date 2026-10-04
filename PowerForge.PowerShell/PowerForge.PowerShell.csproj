@@ -7,7 +7,7 @@
     <LangVersion>latest</LangVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>CS1591</WarningsAsErrors>
-    <VersionPrefix>3.0.153</VersionPrefix>
+    <VersionPrefix>3.0.155</VersionPrefix>
     <PackageId>PowerForge.PowerShell</PackageId>
     <Description>PowerForge PowerShell-hosted module pipeline services.</Description>
     <AssemblyName>PowerForge.PowerShell</AssemblyName>
@@ -41,11 +41,17 @@
 
   <ItemGroup Condition=" '$(TargetFramework)' == 'net472' ">
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.PowerShell.5.ReferenceAssemblies" Version="1.1.0" />
+    <PackageReference Include="Microsoft.PowerShell.5.ReferenceAssemblies" Version="1.1.0" GeneratePathProperty="true" />
+    <!-- The SDK ships MMI but its nuspec exposes only SMA. The active PowerShell host supplies the runtime assembly. -->
+    <Reference Include="Microsoft.Management.Infrastructure">
+      <HintPath>$(PkgMicrosoft_PowerShell_5_ReferenceAssemblies)/lib/net4/Microsoft.Management.Infrastructure.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <PackageReference Include="System.Text.Json" Version="10.0.12" />
     <!-- Explicit NU1903 override; NuGet resolves compatible net462 assets for net472. -->
     <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.12" />
     <Reference Include="System.Net.Http" />
+    <Reference Include="System.DirectoryServices" />
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
   </ItemGroup>
@@ -63,6 +69,20 @@
     <EmbeddedResource Include="Templates\Compilation\TypedExecutableProgram.cs.template" LogicalName="PowerForge.PowerShell.Compilation.TypedExecutableProgram.cs.template" WithCulture="false" />
     <EmbeddedResource Include="Templates\Compilation\ProviderProcessIsolation.cs.template" LogicalName="PowerForge.PowerShell.Compilation.ProviderProcessIsolation.cs.template" WithCulture="false" />
     <EmbeddedResource Include="Templates\Compilation\BinaryModule.csproj.template" LogicalName="PowerForge.PowerShell.Compilation.BinaryModule.csproj.template" WithCulture="false" />
+    <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellStatementErrorContext*.cs" LogicalName="PowerForge.PowerShell.Compilation.%(Filename)%(Extension)" WithCulture="false" />
+    <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellStringParameterAttribute.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellStringParameterAttribute.cs" WithCulture="false" />
+    <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellRegionLocalOwnership.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellRegionLocalOwnership.cs" WithCulture="false" />
+    <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellRegionControlFlowEnvelope.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellRegionControlFlowEnvelope.cs" WithCulture="false" />
+    <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellRegionValueAlternative.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellRegionValueAlternative.cs" WithCulture="false" />
+    <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellHybridRegionHost.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellHybridRegionHost.cs" WithCulture="false" />
+    <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellNativeFunction*.cs" LogicalName="PowerForge.PowerShell.Compilation.%(Filename)%(Extension)" WithCulture="false" />
+    <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellNativeOutput.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellNativeOutput.cs" WithCulture="false" />
+    <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellNativeLanguageOperations.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellNativeLanguageOperations.cs" WithCulture="false" />
+    <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellModuleSessionState.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellModuleSessionState.cs" WithCulture="false" />
+    <EmbeddedResource Include="Services\Compilation\Runtime\PowerShellSourceExtent.cs" LogicalName="PowerForge.PowerShell.Compilation.PowerShellSourceExtent.cs" WithCulture="false" />
+    <EmbeddedResource Include="Services\Compilation\Build\PowerShellCommandMetadataNames*.cs" LogicalName="PowerForge.PowerShell.Compilation.%(Filename)%(Extension)" WithCulture="false" />
+    <EmbeddedResource Include="Templates\Compilation\CommandMetadata.targets.template" LogicalName="PowerForge.PowerShell.Compilation.CommandMetadata.targets.template" WithCulture="false" />
+    <EmbeddedResource Include="Templates\Compilation\CommandMetadataTask.cs.template" LogicalName="PowerForge.PowerShell.Compilation.CommandMetadataTask.cs.template" WithCulture="false" />
     <EmbeddedResource Include="Templates\Compilation\CompilerPackages.json" LogicalName="PowerForge.PowerShell.Compilation.CompilerPackages.json" WithCulture="false" />
     <EmbeddedResource Include="Templates\Compilation\SemanticOracle.Observe.ps1" LogicalName="PowerForge.PowerShell.Compilation.SemanticOracle.Observe.ps1" WithCulture="false" />
   </ItemGroup>

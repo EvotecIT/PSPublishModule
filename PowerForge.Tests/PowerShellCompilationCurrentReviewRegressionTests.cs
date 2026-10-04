@@ -57,7 +57,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath,
             PowerShellCompilationMode.Strict,
-            targetFramework: "net8.0",
+            targetFramework: "net10.0",
             capabilities: PowerShellCompilationCapabilities.BinaryModule));
         var unit = Assert.Single(Assert.Single(plan.Files).Units);
 
@@ -129,7 +129,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     [InlineData("Dispose")]
     public void Build_HybridLifecycleRejectsGeneratedMemberNameCollisions(string parameterName)
     {
-        var source = $"function Invoke-Lifecycle {{ [CmdletBinding()] param([string] ${parameterName}) process {{ ${parameterName} }} }}";
+        var source = $"function Invoke-Lifecycle {{ [CmdletBinding()] param([int] ${parameterName}) process {{ ${parameterName} }} }}";
         using var fixture = ArtifactFixture.Create(source, ".psm1");
         var path = fixture.ScriptPath;
         var document = PowerShellSourceParser.Parse(
@@ -159,7 +159,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     [Fact]
     public void Build_HybridLifecycleAllowsFormerSyntheticPipelineParameterNameAsAuthoredInput()
     {
-        const string source = "function Invoke-Lifecycle { [CmdletBinding()] param([string] $__PowerForgeInputObject) process { $__PowerForgeInputObject } }";
+        const string source = "function Invoke-Lifecycle { [CmdletBinding()] param([int] $__PowerForgeInputObject) process { $__PowerForgeInputObject } }";
         using var fixture = ArtifactFixture.Create(source, ".psm1");
         var document = PowerShellSourceParser.Parse(source, fixture.ScriptPath);
         var empty = new PowerShellTypedCompilationResult(
@@ -200,8 +200,9 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         Assert.Empty(planned.Methods);
     }
 
-    [Fact]
-    public void Build_BinaryModuleMatchesValidateNotNullCollectionElementBinding()
+    [Theory]
+    [MemberData(nameof(PowerShellCompilationArtifactBuilderTests.StatementErrorHosts), MemberType = typeof(PowerShellCompilationArtifactBuilderTests))]
+    public void Build_BinaryModuleMatchesValidateNotNullCollectionElementBinding(string framework, string host)
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-StringElementCount { [CmdletBinding()] param([ValidateNotNull()] [string[]] $Values) return $Values.Length }; " +
@@ -213,23 +214,29 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             fixture.OutputPath,
             "PowerForge.ValidateNotNullElements",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true));
+            PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
-        var run = Run(
-            "pwsh",
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            $"Import-Module -Name '{escapedPath}' -Force; " +
-            "try { 'string=' + (Get-StringElementCount -Values @('ok', $null)) } catch { 'string-rejected=' + $_.Exception.Message }; " +
-            "try { Get-ObjectElementCount -Values @([object] 'ok', $null); 'unexpected-object' } catch { 'object-rejected=' + $_.Exception.Message }");
-
-        Assert.Equal(0, run.ExitCode);
-        Assert.Contains("string=2", run.StandardOutput, StringComparison.Ordinal);
-        Assert.Contains("object-rejected=", run.StandardOutput, StringComparison.Ordinal);
-        Assert.DoesNotContain("unexpected-object", run.StandardOutput, StringComparison.Ordinal);
+        const string probe = """
+            $typed=[string[]]::new(2); $typed[0]='ok'
+            foreach ($values in @(@('ok',$null),$typed,@(),$null,@('ok',''),@('ok','value'))) {
+                foreach ($command in 'Get-StringElementCount','Get-ObjectElementCount') {
+                    try { $result=& $command -Values $values; $command + ':accepted:' + $result }
+                    catch { $command + ':rejected' }
+                }
+            }
+            """;
+        var original = Run(host, "-NoProfile", "-NonInteractive", "-Command",
+            "Import-Module '" + fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal) + "'; " + probe);
+        var compiled = Run(host, "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force; " + probe);
+        Assert.Equal(0, original.ExitCode);
+        Assert.Empty(original.StandardError);
+        Assert.Contains("Get-StringElementCount:accepted:2", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("Get-StringElementCount:rejected", original.StandardOutput, StringComparison.Ordinal);
+        Assert.Equal((original.ExitCode, original.StandardOutput.Trim(), original.StandardError.Trim()),
+            (compiled.ExitCode, compiled.StandardOutput.Trim(), compiled.StandardError.Trim()));
     }
 
     [Fact]
@@ -374,7 +381,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     }
 
     [Fact]
-    public void Build_HybridBinaryModulePreservesConsumedCommandRegionOutputByRoutingCallerToFallback()
+    public void Build_HybridBinaryModuleCompilesConsumedCommandRegionOutputWithNativeStorage()
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-RegionHelper { [CmdletBinding()] param(); Get-Date -Date '2000-01-01T00:00:00Z'; return 7 } " +
@@ -389,10 +396,11 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Contains(result.Manifest!.Diagnostics, diagnostic =>
-            diagnostic.Message.Contains("command-region success output", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(2, result.Manifest!.CompiledMethods);
+        Assert.All(result.Manifest.UnitDispositionLedger!.Entries, unit => Assert.False(unit.RetainedHostedSource));
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", $"Import-Module -Name '{escapedPath}' -Force; Get-RegionConsumer");
+        Assert.True(run.ExitCode == 0, run.StandardError + Environment.NewLine + run.StandardOutput);
         Assert.Equal((0, "2", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
     }
 

@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Qualify resolved static field/property values separately from authored Type values; emission remains separate from execution.",
+  "baselineCompilerCommit": "64a40ddd59bfc8ddc721dc2a86756645ffae797b",
+  "baselineComparison": "m29a-object-parameter-comparison.net10.json",
+  "baselineComparisonSha256": "fdd8374882c67b303fdc9fdd13f9253578e83eaddbe9120fcc657c265c33ce0f",
+  "baselineRetainedInventorySha256": "47bc0822f7572bfbb35398bf94238aa9c7a2f4a28636ca9281c1cbf86e770001",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 492,
+  "packets": [
+    {
+      "packet": "pssg",
+      "functions": 282,
+      "stableUnits": 286,
+      "baselineEmitted": 257,
+      "candidateEmitted": 257,
+      "candidateExplanationSha256": "26e055e8e347fc96d2ee8453fa1bd40cdd65a72defe393456e355cb3c14173d2",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": [
+        {
+          "unitId": "7b30d755a00abec0255a9d6e",
+          "name": "Test-ComputerPort",
+          "baselineEmitted": false,
+          "candidateEmitted": false,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "Native reference arguments require trailing direct locals and an unambiguous static CLR by-reference overload.",
+              "line": 100,
+              "column": 30
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "functions": 68,
+      "stableUnits": 69,
+      "baselineEmitted": 63,
+      "candidateEmitted": 63,
+      "candidateExplanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": [
+        {
+          "unitId": "78cf08da8e4e3bfb47233a33",
+          "name": "Invoke-ADComputerInventoryChildProcess",
+          "baselineEmitted": false,
+          "candidateEmitted": false,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.exitstatement",
+              "message": "Statement 'ExitStatementAst' is not yet represented by the bound pipeline.",
+              "line": 74,
+              "column": 9
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "packet": "pinf",
+      "functions": 66,
+      "stableUnits": 67,
+      "baselineEmitted": 61,
+      "candidateEmitted": 61,
+      "candidateExplanationSha256": "73172aaac03d1c74782e361a0716d2c2d0c14b80abae98e870ef80c8253a8ee2",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "functions": 109,
+      "stableUnits": 121,
+      "baselineEmitted": 84,
+      "candidateEmitted": 84,
+      "candidateExplanationSha256": "bb7f462c3e2d95e8a13d75c4b0bef1d70fe6098c9821d5e99f709c70769ac6c3",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "platyps",
+      "functions": 40,
+      "stableUnits": 41,
+      "baselineEmitted": 27,
+      "candidateEmitted": 27,
+      "candidateExplanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    }
+  ],
+  "candidateEmitted": 492,
+  "candidateRetained": 73,
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeTypeArgumentPolicy.cs": "6f5f10bf4e5e0eb7e0ef763b427a72cc3ac7287a7bc0139cb9dd61dc54fa3c1e",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "b80da55a91e8b2909a235219689317096aa920fa5a1388605097738bef64f096"
+  },
+  "qualification": {
+    "hosts": [
+      "Windows net10.0 / PowerShell 7",
+      "Windows net472 / PowerShell 5.1"
+    ],
+    "mode": "Hybrid binary module",
+    "focusedTests": {
+      "passed": 20,
+      "total": 20,
+      "seconds": 46,
+      "trxSha256": "224bdd4ace25c33e38359490a7de57b575764d0196ad1b292a1e2ea1b6337269"
+    },
+    "ownerBuildNet472": {
+      "warnings": 0,
+      "errors": 0,
+      "seconds": 1.75
+    },
+    "observationsPerHost": 19,
+    "realHelperObservationsPerHost": 5,
+    "realHelper": "Convert-BinaryToString",
+    "realHelperSourceSha256": "8d237e02921013b114a7d0af851e8369e2693bbfad5a8d5a17b8ee30e48fa332",
+    "newCompletePortfolioMethods": 0,
+    "review": {
+      "task": "static_value_argument_review",
+      "finding": "Universal native static-member routing discarded scalar CLR facts; corrected by preserving scalar/vector field ownership and restricting new native reads to closed class values.",
+      "targetedConfirmation": "P2 fixed; no new actionable findings."
+    },
+    "testSourceHashes": {
+      "PowerForge.Tests/PowerShellCompilationStaticValueArgumentTests.cs": "aa3a205f41e908da9cf5408315c3e64a9f989cec175f16e5c4cdaad1d112922f"
+    },
+    "limits": [
+      "Metadata analysis never evaluates getters.",
+      "Deliberately failing or side-effecting getters have no new dedicated runtime proof; SDK member owner is reused.",
+      "Scalar property arguments retain the existing observed-Type guard.",
+      "Full census is net10.0 only; focused artifacts cover both claimed Windows hosts.",
+      "No AD, network, subprocess query, installer or administration workflow execution.",
+      "CleanupMonster child remains hosted for exit; parent remains hosted for Type-alias guard.",
+      "Test-ComputerPort remains hosted for instance by-reference invocation."
+    ]
+  }
+}

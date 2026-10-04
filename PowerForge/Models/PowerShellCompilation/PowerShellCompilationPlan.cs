@@ -65,7 +65,19 @@ public enum PowerShellCompilationCapability
     PowerShellModuleState = 8192,
 
     /// <summary>Hybrid binary modules may delegate independently proven bound regions from retained functions to CLR helpers.</summary>
-    HybridTypedRegions = 16384
+    HybridTypedRegions = 16384,
+
+    /// <summary>Generated commands may preserve statement errors through a qualified native PowerShell host.</summary>
+    PowerShellStatementErrors = 32768,
+
+    /// <summary>CLR-callable lifecycle methods accept typed collections with explicit CLR argument validation.</summary>
+    ClrPipelineCollectionBinding = 65536,
+
+    /// <summary>Hybrid modules may emit compiled function bodies with native parameter and variable ownership.</summary>
+    NativeFunctionBinding = 131072,
+
+    /// <summary>CLR libraries may own explicitly typed module state in independent managed instances.</summary>
+    RuntimeFreeModuleState = 262144
 }
 
 /// <summary>
@@ -107,6 +119,9 @@ public sealed class PowerShellCompilationUnitPlan
 
     /// <summary>Compilation blockers. An empty array means the unit is structurally eligible.</summary>
     public PowerShellCompilationDiagnostic[] Diagnostics { get; }
+
+    /// <summary>Direct local calls recorded by semantic analysis, without re-resolving authored commands.</summary>
+    public PowerShellCompilationLocalCall[] LocalCalls { get; set; } = Array.Empty<PowerShellCompilationLocalCall>();
 
     /// <summary>Whether the complete unit is structurally eligible for typed compilation.</summary>
     public bool IsCompilable => Diagnostics.Length == 0;
@@ -420,20 +435,24 @@ public sealed class PowerShellCompilationSpec
                               PowerShellCompilationCapability.PowerShellHostTypes |
                               PowerShellCompilationCapability.PowerShellLanguageConversions |
                               PowerShellCompilationCapability.PowerShellLanguageOperators |
+                              PowerShellCompilationCapability.PowerShellStatementErrors |
+                              PowerShellCompilationCapability.ClrPipelineCollectionBinding |
                               PowerShellCompilationCapability.RuntimeStateIntrinsics |
                               PowerShellCompilationCapability.RuntimeFreeProviderOperations |
                               PowerShellCompilationCapability.UntypedObjectParameters |
                               PowerShellCompilationCapability.AdvisoryOutputTypeMetadata |
                               PowerShellCompilationCapability.PowerShellModuleState |
+                              PowerShellCompilationCapability.NativeFunctionBinding |
+                              PowerShellCompilationCapability.RuntimeFreeModuleState |
                               PowerShellCompilationCapability.HybridTypedRegions)) != 0)
             throw new ArgumentOutOfRangeException(nameof(capabilities));
         var normalizedTargetFramework = targetFramework?.Trim();
         if (normalizedTargetFramework is not null && normalizedTargetFramework.Length > 0)
         {
-            if (!normalizedTargetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase) &&
-                !normalizedTargetFramework.Equals("net8.0", StringComparison.OrdinalIgnoreCase) &&
-                !normalizedTargetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase))
-                throw new ArgumentException("PowerShell compilation analysis currently targets net472, net8.0, or net10.0.", nameof(targetFramework));
+            if (!PowerShellCompilationTargetFrameworkPolicy.IsSupported(normalizedTargetFramework))
+                throw new ArgumentException(
+                    $"PowerShell compilation analysis currently targets {PowerShellCompilationTargetFrameworkPolicy.Legacy} or {PowerShellCompilationTargetFrameworkPolicy.Modern}.",
+                    nameof(targetFramework));
         }
 
         Path = System.IO.Path.GetFullPath(path.Trim().Trim('"'));

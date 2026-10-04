@@ -37,16 +37,21 @@ internal sealed partial class PowerShellSemanticAnalyzer
         var current = program ?? throw new ArgumentNullException(nameof(program));
         foreach (var pass in _passes.Where(static pass => pass is not FallbackPass))
             current = pass.Run(current);
-        return current;
+        // Whole-function eligibility is deliberately excluded here, but a region
+        // still needs every directly or transitively invoked function to survive.
+        return PropagateFallbackCalls(current);
     }
 
     private static IEnumerable<IPowerShellSemanticPass> CreateDefaultPasses()
     {
+        yield return new PowerShellStatementErrorCallPass();
+        yield return new PowerShellImplicitOutputPass();
         yield return new PowerShellDefiniteAssignmentPass();
         yield return new LocalTypePass();
         yield return new CallGraphPass();
         yield return new ReturnTypePass();
         yield return new CardinalityPass();
+        yield return new ValueConsumptionPass();
         yield return new EffectPass();
         yield return new CapabilityPass();
         yield return new FallbackPass();
@@ -61,7 +66,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
             var diagnostics = new List<PowerShellSemanticDiagnostic>(program.Diagnostics);
             foreach (var function in program.Functions)
             {
-                foreach (var local in function.Locals.Where(static local => local.Type.Provenance == PowerShellTypeFactProvenance.Unknown))
+                foreach (var local in function.Locals.Where(local => function.NativeFunctionBinding is null && local.Type.Provenance == PowerShellTypeFactProvenance.Unknown))
                 {
                     diagnostics.Add(new PowerShellSemanticDiagnostic(
                         "PST2001",
@@ -81,7 +86,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
         {
             var edges = program.Functions.SelectMany(function => EnumerateStatements(function.Body)
                     .SelectMany(EnumerateDirectExpressions)
-                    .SelectMany(EnumerateInvocations)
+                    .SelectMany(EnumerateFunctionReferences)
                     .Select(invocation => new PowerShellCallGraphEdge(function.Symbol, invocation.Target, invocation.Span)))
                 .OrderBy(static edge => edge.StableKey, StringComparer.Ordinal)
                 .ToArray();
@@ -107,145 +112,14 @@ internal sealed partial class PowerShellSemanticAnalyzer
             RunFixedPoint(functions, (function, lookup) =>
             {
                 var value = function.Body.Statements.Aggregate(PowerShellRequiredCapability.None, static (current, statement) => current | statement.Capabilities);
-                foreach (var callee in GetCallees(function, lookup)) value |= callee.Capabilities;
+                // Binding callbacks and their storage belong to the native invocation even when the body is constant.
+                if (function.NativeFunctionBinding is not null)
+                    value |= PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost;
+                foreach (var callee in GetDependencies(function, lookup)) value |= callee.Capabilities;
                 return function.WithAnalysis(capabilities: value);
             }, static (left, right) => left.Capabilities == right.Capabilities);
             return program.WithFunctions(functions.Values.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray());
         }
-    }
-
-    private sealed class FallbackPass : IPowerShellSemanticPass
-    {
-        public string Id => "60-fallback-fixed-point";
-
-        public PowerShellBoundProgram Run(PowerShellBoundProgram program)
-        {
-            var functions = program.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
-            RunFixedPoint(functions, (function, lookup) =>
-            {
-                if (function.Disposition.Kind != PowerShellExecutionDispositionKind.Typed) return function;
-                var blockingDiagnostic = program.Diagnostics.FirstOrDefault(diagnostic =>
-                    diagnostic.Span.DocumentId.Equals(function.Symbol.DocumentId, StringComparison.Ordinal) &&
-                    diagnostic.Span.StartOffset >= function.Symbol.Declaration.StartOffset &&
-                    diagnostic.Span.StartOffset <= function.Symbol.Declaration.EndOffset);
-                if (blockingDiagnostic is not null)
-                {
-                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
-                        PowerShellExecutionDispositionKind.Fallback,
-                        blockingDiagnostic.Code,
-                        blockingDiagnostic.Message));
-                }
-                if (EnumerateStatements(function.Body).OfType<PowerShellBoundExpressionStatement>().Any(statement =>
-                        statement.RequiresOutputContinuation && ResolveType(statement.Expression, lookup).ClrType != typeof(void)))
-                {
-                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
-                        PowerShellExecutionDispositionKind.Fallback,
-                        "control.output.continuation",
-                        "Non-terminal success output requires a continuation-preserving output contract; it cannot become an early CLR return."));
-                }
-                if ((function.ReturnType.ClrType == typeof(Dictionary<string, string>) ||
-                     function.ReturnType.ClrType == typeof(System.Collections.Hashtable) ||
-                     function.ReturnType.ClrType == typeof(System.Collections.Specialized.OrderedDictionary)) &&
-                    ReturnsCompilerDictionary(function))
-                {
-                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
-                        PowerShellExecutionDispositionKind.Fallback,
-                        PowerShellCompilationFeatureIds.ForSyntax("VariableExpressionAst"),
-                        "Typed dictionaries are lookup-only locals and cannot escape through the current public CLR return contract."));
-                }
-                if (IsMutuallyRecursive(function.Symbol, program.CallGraph))
-                {
-                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
-                        PowerShellExecutionDispositionKind.Fallback,
-                        PowerShellCompilationFeatureIds.FunctionGraph,
-                        $"Function '{function.Symbol.Name}' participates in a mutually recursive local-call cycle, which is not supported by the typed ABI."));
-                }
-                var isRecursive = IsRecursive(function.Symbol, program.CallGraph);
-                if (isRecursive && (function.DeclaredOutputType is null || function.DeclaredOutputType == typeof(void)))
-                {
-                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
-                        PowerShellExecutionDispositionKind.Fallback,
-                        PowerShellCompilationFeatureIds.FunctionGraph,
-                        $"Function '{function.Symbol.Name}' participates in a recursive local-call cycle without a declared return contract; OutputType(void) is advisory metadata, not a value contract."));
-                }
-                if (function.ReturnType.Provenance == PowerShellTypeFactProvenance.Unknown)
-                    return function.WithAnalysis(disposition: isRecursive
-                        ? new PowerShellExecutionDisposition(
-                            PowerShellExecutionDispositionKind.Fallback,
-                            PowerShellCompilationFeatureIds.FunctionGraph,
-                            $"Function '{function.Symbol.Name}' participates in a recursive local-call cycle without a declared return contract.")
-                        : new PowerShellExecutionDisposition(PowerShellExecutionDispositionKind.Fallback, "type.return.unknown", "The function return type is not statically known."));
-                if (function.ReturnType.ClrType != typeof(void) && !BlockReturnsValue(function.Body))
-                {
-                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
-                        PowerShellExecutionDispositionKind.Fallback,
-                        "control.return.fallthrough",
-                        $"Typed non-void unit '{function.Symbol.Name}' must end with an explicit return statement on every reachable path."));
-                }
-                var unresolvedCall = EnumerateStatements(function.Body)
-                    .SelectMany(EnumerateDirectExpressions)
-                    .SelectMany(EnumerateInvocations)
-                    .FirstOrDefault(invocation => !lookup.ContainsKey(invocation.Target.StableKey));
-                if (unresolvedCall is not null)
-                {
-                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
-                        PowerShellExecutionDispositionKind.Fallback,
-                        "call.binding.unavailable",
-                        $"Local function '{unresolvedCall.Target.Name}' did not produce a bound function contract."));
-                }
-                var shouldProcessTarget = GetCallees(function, lookup).FirstOrDefault(ContainsShouldProcess);
-                if (shouldProcessTarget is not null)
-                {
-                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
-                        PowerShellExecutionDispositionKind.Fallback,
-                        "call.should-process.command-identity",
-                        $"Local function '{shouldProcessTarget.Symbol.Name}' uses ShouldProcess and must remain on the PowerShell command path so its command identity and ConfirmImpact are preserved."));
-                }
-                var validationTarget = GetValidationCallInsideTypeDiscriminatingTry(function, lookup);
-                if (validationTarget is not null)
-                {
-                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
-                        PowerShellExecutionDispositionKind.Fallback,
-                        "call.validation.binding-exception",
-                        $"Local function '{validationTarget.Symbol.Name}' performs parameter validation inside a typed try/catch, whose PowerShell binding-exception identity must remain on the PowerShell command path."));
-                }
-                var consumedTarget = GetConsumedCollectionOrHostedCall(function, lookup);
-                if (consumedTarget is not null)
-                {
-                    var hosted = consumedTarget.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion);
-                    return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
-                        PowerShellExecutionDispositionKind.Fallback,
-                        hosted ? "call.command-region.cardinality" : "call.collection.cardinality",
-                        hosted
-                            ? $"Local function '{consumedTarget.Symbol.Name}' emits PowerShell command-region success output whose pipeline cardinality cannot be preserved when the call result is consumed."
-                            : $"Local function '{consumedTarget.Symbol.Name}' returns an array whose PowerShell pipeline cardinality cannot be preserved when the result is consumed."));
-                }
-                var blocked = GetCallees(function, lookup).FirstOrDefault(static callee => callee.Disposition.Kind != PowerShellExecutionDispositionKind.Typed);
-                return blocked is null
-                    ? function
-                    : function.WithAnalysis(disposition: new PowerShellExecutionDisposition(PowerShellExecutionDispositionKind.Fallback, "call.fallback", $"Local function '{blocked.Symbol.Name}' requires fallback."));
-            }, static (left, right) => left.Disposition.Kind == right.Disposition.Kind && left.Disposition.ReasonCode == right.Disposition.ReasonCode);
-            return program.WithFunctions(functions.Values.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray());
-        }
-
-        private static bool BlockReturnsValue(PowerShellBoundBlock block)
-            => block.Statements.LastOrDefault() switch
-            {
-                PowerShellBoundReturnStatement { EmitsValue: true } => true,
-                PowerShellBoundExpressionStatement { EmitsOutput: true } => true,
-                PowerShellBoundThrowStatement => true,
-                PowerShellBoundIfStatement conditional => conditional.ElseBlock is not null &&
-                    conditional.Clauses.All(static clause => BlockReturnsValue(clause.Body)) &&
-                    BlockReturnsValue(conditional.ElseBlock),
-                PowerShellBoundSwitchStatement switchStatement => switchStatement.DefaultBlock is not null &&
-                    switchStatement.Clauses.All(static clause => BlockReturnsValue(clause.Body)) &&
-                    BlockReturnsValue(switchStatement.DefaultBlock),
-                PowerShellBoundTryStatement tryStatement =>
-                    BlockReturnsValue(tryStatement.Body) &&
-                    tryStatement.Catches.All(static clause => BlockReturnsValue(clause.Body)),
-                _ => false
-            };
-
     }
 
     private static PowerShellBoundProgram Propagate(
@@ -257,7 +131,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
         RunFixedPoint(functions, (function, lookup) =>
         {
             var value = function.Body.Statements.Aggregate(PowerShellSemanticEffect.None, static (current, statement) => current | statement.Effects);
-            foreach (var callee in GetCallees(function, lookup)) value |= selector(callee);
+            foreach (var callee in GetDependencies(function, lookup)) value |= selector(callee);
             return update(function, value);
         }, (left, right) => selector(left) == selector(right));
         return program.WithFunctions(functions.Values.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray());
@@ -293,6 +167,15 @@ internal sealed partial class PowerShellSemanticAnalyzer
             .Where(static callee => callee is not null)
             .Cast<PowerShellBoundFunction>();
 
+    private static IEnumerable<PowerShellBoundFunction> GetDependencies(
+        PowerShellBoundFunction function,
+        IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
+        => EnumerateStatements(function.Body).SelectMany(EnumerateDirectExpressions)
+            .SelectMany(EnumerateFunctionReferences)
+            .Select(invocation => functions.TryGetValue(invocation.Target.StableKey, out var callee) ? callee : null)
+            .Where(static callee => callee is not null)
+            .Cast<PowerShellBoundFunction>();
+
     private static PowerShellBoundFunction? GetValidationCallInsideTypeDiscriminatingTry(
         PowerShellBoundFunction function,
         IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
@@ -320,18 +203,59 @@ internal sealed partial class PowerShellSemanticAnalyzer
         {
             foreach (var root in EnumerateDirectExpressions(statement))
             {
-                foreach (var invocation in EnumerateInvocations(root))
-                {
-                    if (ReferenceEquals(root, invocation) && statement is PowerShellBoundReturnStatement or PowerShellBoundExpressionStatement { EmitsOutput: true })
-                        continue;
-                    if (functions.TryGetValue(invocation.Target.StableKey, out var target) &&
-                        (target.ReturnType.ClrType.IsArray || target.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion)))
-                        return target;
-                }
+                var consumesValue = statement is not (PowerShellBoundReturnStatement or
+                    PowerShellBoundExpressionStatement or PowerShellBoundStreamWriteStatement { Provider: null });
+                var target = FindConsumedCall(root, consumesValue);
+                if (target is not null) return target;
             }
         }
         return null;
+
+        PowerShellBoundFunction? FindConsumedCall(PowerShellBoundExpression expression, bool consumesValue)
+        {
+            if (consumesValue && expression is PowerShellBoundInvocationExpression
+                { CapturesSuccessOutput: false, ResultProjection: PowerShellLocalCallResultProjection.None } invocation &&
+                functions.TryGetValue(invocation.Target.StableKey, out var target) &&
+                (target.ReturnType.ClrType.IsArray || target.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion) ||
+                 HasSuccessStreamOutput(target, functions)))
+                return target;
+            // Native collection items are statement-output roots, not scalar operands.
+            // Their arguments still consume values and are checked recursively.
+            foreach (var child in EnumerateExpressionChildren(expression))
+            {
+                var consumed = FindConsumedCall(child, expression is not PowerShellBoundNativeCollectionExpression);
+                if (consumed is not null) return consumed;
+            }
+            return null;
+        }
     }
+
+    private static bool HasSuccessStreamOutput(
+        PowerShellBoundFunction function,
+        IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
+    {
+        var pending = new Stack<PowerShellBoundFunction>();
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        pending.Push(function);
+        while (pending.Count > 0)
+        {
+            var current = pending.Pop();
+            if (!visited.Add(current.Symbol.StableKey)) continue;
+            if (EnumerateStatements(current.Body).Any(static statement =>
+                    statement is PowerShellBoundStreamWriteStatement { Kind: PowerShellStreamCommandKind.Success }))
+                return true;
+            foreach (var callee in GetCallees(current, functions)) pending.Push(callee);
+        }
+        return false;
+    }
+
+    private static bool BlockHasEffect(
+        PowerShellBoundBlock block,
+        PowerShellSemanticEffect effect,
+        IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
+        => block.Effects.HasFlag(effect) || EnumerateStatements(block)
+            .SelectMany(EnumerateDirectExpressions).SelectMany(EnumerateInvocations)
+            .Any(invocation => functions.TryGetValue(invocation.Target.StableKey, out var target) && target.Effects.HasFlag(effect));
 
     private static bool ContainsShouldProcess(PowerShellBoundFunction function)
         => EnumerateStatements(function.Body)
@@ -340,34 +264,30 @@ internal sealed partial class PowerShellSemanticAnalyzer
             .OfType<PowerShellBoundRuntimeStateExpression>()
             .Any(static expression => expression.Kind is PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget or PowerShellRuntimeStateIntrinsicKind.ShouldProcessAction);
 
-    private static bool ReturnsCompilerDictionary(PowerShellBoundFunction function)
-    {
-        var dictionaryLocals = EnumerateStatements(function.Body)
-            .OfType<PowerShellBoundAssignmentStatement>()
-            .Where(static assignment => assignment.Value is PowerShellBoundDictionaryExpression)
-            .Select(static assignment => assignment.Target.StableKey)
-            .ToHashSet(StringComparer.Ordinal);
-        return EnumerateStatements(function.Body)
-            .Select(GetSuccessOutputExpression)
-            .Where(static expression => expression is not null)
-            .Any(expression => expression is PowerShellBoundDictionaryExpression ||
-                               expression is PowerShellBoundVariableExpression variable && dictionaryLocals.Contains(variable.Symbol.StableKey));
-    }
-
     internal static IEnumerable<PowerShellBoundExpression> EnumerateExpressions(PowerShellBoundExpression expression)
     {
         yield return expression;
-        IEnumerable<PowerShellBoundExpression> children = expression switch
+        foreach (var child in EnumerateExpressionChildren(expression))
+        foreach (var nested in EnumerateExpressions(child))
+            yield return nested;
+    }
+
+    internal static IEnumerable<PowerShellBoundExpression> EnumerateExpressionChildren(PowerShellBoundExpression expression)
+        => expression switch
         {
             PowerShellBoundRuntimeStateExpression runtime => runtime.Arguments,
             PowerShellBoundConversionExpression conversion => new[] { conversion.Operand },
+            PowerShellBoundRegionValueAlternativeExpression alternative => new[] { alternative.Value },
+            PowerShellBoundRegionControlFlowExpression { Value: not null } controlFlow => new[] { controlFlow.Value },
             PowerShellBoundCommandAvailabilityExpression discovery => new[] { discovery.Name },
             PowerShellBoundHostedBooleanCommandExpression hostedBoolean => hostedBoolean.Arguments
                 .Where(static argument => argument.Value is not null)
                 .Select(static argument => argument.Value!),
             PowerShellBoundInvocationExpression invocation => invocation.Arguments,
+            PowerShellBoundClosedCollectionFactoryResultExpression factoryResult => new[] { factoryResult.Value },
             PowerShellBoundBinaryExpression binary => new[] { binary.Left, binary.Right },
             PowerShellBoundUnaryExpression unary => new[] { unary.Operand },
+            PowerShellBoundNativeTypeTestExpression nativeTest => nativeTest.Target is null ? new[] { nativeTest.Operand } : new[] { nativeTest.Operand, nativeTest.Target },
             PowerShellBoundTypeTestExpression typeTest => new[] { typeTest.Operand },
             PowerShellBoundRegexExpression regex => new[] { regex.Input, regex.Pattern }.Concat(regex.Replacement is null ? Array.Empty<PowerShellBoundExpression>() : new[] { regex.Replacement }),
             PowerShellBoundWildcardExpression wildcard => new[] { wildcard.Input, wildcard.Pattern },
@@ -375,8 +295,24 @@ internal sealed partial class PowerShellSemanticAnalyzer
             PowerShellBoundStringSplitExpression split => new[] { split.Input, split.Pattern },
             PowerShellBoundStringJoinExpression join => new[] { join.Values, join.Separator },
             PowerShellBoundInterpolatedStringExpression interpolated => interpolated.Parts.Where(static part => part.Expression is not null).Select(static part => part.Expression!),
-            PowerShellBoundMutationExpression mutation when mutation.Value is not null => new[] { mutation.Value },
+            PowerShellBoundMutationExpression mutation =>
+                (mutation.Value is null ? Array.Empty<PowerShellBoundExpression>() : new[] { mutation.Value })
+                .Concat(mutation.NativeTargetRead is null || mutation.Operation == PowerShellBoundMutationOperator.Assign
+                    ? Array.Empty<PowerShellBoundExpression>() : new PowerShellBoundExpression[] { mutation.NativeTargetRead }),
             PowerShellBoundArrayExpression array => array.Elements,
+            PowerShellBoundNativeMemberExpression memberRead =>
+                (memberRead.Receiver is null ? Array.Empty<PowerShellBoundExpression>() : new[] { memberRead.Receiver })
+                .Concat(memberRead.NameExpression is null ? Array.Empty<PowerShellBoundExpression>() : new[] { memberRead.NameExpression }),
+            PowerShellBoundNativeInvocationExpression nativeInvocation =>
+                (nativeInvocation.Receiver is null ? Array.Empty<PowerShellBoundExpression>() : new[] { nativeInvocation.Receiver }).Concat(nativeInvocation.Arguments),
+            PowerShellBoundNativeIndexExpression nativeIndex => new[] { nativeIndex.Receiver }.Concat(nativeIndex.Arguments),
+            PowerShellBoundNativeCollectionExpression collection => collection.Items.Select(static item => item.Value),
+            PowerShellBoundNativeStatementValueExpression statementValue =>
+                EnumerateStatements(statementValue.Body, descendIntoCaptures: false).SelectMany(EnumerateDirectExpressions),
+            PowerShellBoundNativeConditionalValueExpression conditionalValue =>
+                conditionalValue.Clauses.SelectMany(static clause => new[] { clause.Condition, clause.Value })
+                    .Concat(new[] { conditionalValue.Otherwise }),
+            PowerShellBoundArrayCopyExpression copy => new[] { copy.Source },
             PowerShellBoundArrayConcatenationExpression concatenation => new[] { concatenation.Left, concatenation.Right },
             PowerShellBoundDictionaryExpression dictionary => dictionary.Entries.SelectMany(static entry => new[] { entry.Key, entry.Value }),
             PowerShellBoundPowerShellObjectExpression powerShellObject => powerShellObject.Properties.Select(static property => property.Value),
@@ -385,16 +321,14 @@ internal sealed partial class PowerShellSemanticAnalyzer
             PowerShellBoundClrInvocationExpression invocation => (invocation.Receiver is null ? Array.Empty<PowerShellBoundExpression>() : new[] { invocation.Receiver }).Concat(invocation.Arguments),
             _ => Array.Empty<PowerShellBoundExpression>()
         };
-        foreach (var child in children)
-        foreach (var nested in EnumerateExpressions(child))
-            yield return nested;
-    }
 
     private static PowerShellTypeFact ResolveType(
         PowerShellBoundExpression expression,
         IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
         => expression switch
         {
+            PowerShellBoundInvocationExpression { CapturesSuccessOutput: true } invocation => invocation.Type,
+            PowerShellBoundInvocationExpression { ResultProjection: not PowerShellLocalCallResultProjection.None } invocation => invocation.Type,
             PowerShellBoundInvocationExpression invocation when functions.TryGetValue(invocation.Target.StableKey, out var target) => target.ReturnType,
             _ => expression.Type
         };
@@ -403,6 +337,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
         => statement switch
         {
             PowerShellBoundAssignmentStatement assignment => assignment.Value,
+            PowerShellBoundNativeAssignmentStatement assignment => assignment.Value,
             PowerShellBoundModuleVariableAssignmentStatement assignment => assignment.Value,
             PowerShellBoundReturnStatement returned => returned.Expression,
             PowerShellBoundExpressionStatement expression => expression.Expression,
@@ -413,7 +348,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
     internal static PowerShellBoundExpression? GetSuccessOutputExpression(PowerShellBoundStatement statement)
         => statement switch
         {
-            PowerShellBoundReturnStatement { EmitsValue: true } returned => returned.Expression,
+            PowerShellBoundReturnStatement { EmitsSuccessOutput: true } returned => returned.Expression,
             PowerShellBoundExpressionStatement { EmitsOutput: true } expression => expression.Expression,
             PowerShellBoundStreamWriteStatement { Kind: PowerShellStreamCommandKind.Success } stream => stream.Message,
             _ => null
@@ -427,49 +362,74 @@ internal sealed partial class PowerShellSemanticAnalyzer
             _ => null
         };
 
+    private static IEnumerable<PowerShellBoundBlock> EnumerateStatementValueBlocks(PowerShellBoundExpression expression)
+    {
+        if (expression is PowerShellBoundNativeStatementValueExpression value)
+        {
+            yield return value.Body;
+            yield break; // Its own statement walk discovers nested value captures.
+        }
+        foreach (var child in EnumerateExpressionChildren(expression))
+        foreach (var body in EnumerateStatementValueBlocks(child)) yield return body;
+    }
+
     internal static IEnumerable<PowerShellBoundStatement> EnumerateStatements(PowerShellBoundBlock block)
+        => EnumerateStatements(block, descendIntoCaptures: true);
+
+    internal static IEnumerable<PowerShellBoundStatement> EnumerateStatements(PowerShellBoundBlock block, bool descendIntoCaptures)
     {
         foreach (var statement in block.Statements)
         {
             yield return statement;
-            if (statement is PowerShellBoundIfStatement conditional)
+            if (descendIntoCaptures)
+            foreach (var body in EnumerateDirectExpressions(statement).SelectMany(EnumerateStatementValueBlocks))
+            foreach (var nested in EnumerateStatements(body, descendIntoCaptures)) yield return nested;
+            if (descendIntoCaptures && statement is PowerShellBoundOutputCaptureStatement capture)
+            {
+                foreach (var nested in EnumerateStatements(capture.Body, descendIntoCaptures)) yield return nested;
+            }
+            if (statement is PowerShellBoundStatementErrorBoundary boundary)
+            {
+                foreach (var nested in EnumerateStatements(boundary.Body, descendIntoCaptures)) yield return nested;
+            }
+            else if (statement is PowerShellBoundIfStatement conditional)
             {
                 foreach (var clause in conditional.Clauses)
-                foreach (var nested in EnumerateStatements(clause.Body))
+                foreach (var nested in EnumerateStatements(clause.Body, descendIntoCaptures))
                     yield return nested;
                 if (conditional.ElseBlock is not null)
-                foreach (var nested in EnumerateStatements(conditional.ElseBlock))
+                foreach (var nested in EnumerateStatements(conditional.ElseBlock, descendIntoCaptures))
                     yield return nested;
             }
             else if (statement is PowerShellBoundWhileStatement loop)
             {
-                foreach (var nested in EnumerateStatements(loop.Body)) yield return nested;
+                foreach (var nested in EnumerateStatements(loop.Body, descendIntoCaptures)) yield return nested;
             }
             else if (statement is PowerShellBoundForStatement forLoop)
             {
-                foreach (var nested in EnumerateStatements(forLoop.Body)) yield return nested;
+                foreach (var nested in EnumerateStatements(forLoop.Body, descendIntoCaptures)) yield return nested;
             }
             else if (statement is PowerShellBoundForEachStatement forEachLoop)
             {
-                foreach (var nested in EnumerateStatements(forEachLoop.Body)) yield return nested;
+                foreach (var nested in EnumerateStatements(forEachLoop.Body, descendIntoCaptures)) yield return nested;
             }
             else if (statement is PowerShellBoundSwitchStatement switchStatement)
             {
                 foreach (var clause in switchStatement.Clauses)
-                foreach (var nested in EnumerateStatements(clause.Body))
+                foreach (var nested in EnumerateStatements(clause.Body, descendIntoCaptures))
                     yield return nested;
                 if (switchStatement.DefaultBlock is not null)
-                foreach (var nested in EnumerateStatements(switchStatement.DefaultBlock))
+                foreach (var nested in EnumerateStatements(switchStatement.DefaultBlock, descendIntoCaptures))
                     yield return nested;
             }
             else if (statement is PowerShellBoundTryStatement tryStatement)
             {
-                foreach (var nested in EnumerateStatements(tryStatement.Body)) yield return nested;
+                foreach (var nested in EnumerateStatements(tryStatement.Body, descendIntoCaptures)) yield return nested;
                 foreach (var clause in tryStatement.Catches)
-                foreach (var nested in EnumerateStatements(clause.Body))
+                foreach (var nested in EnumerateStatements(clause.Body, descendIntoCaptures))
                     yield return nested;
                 if (tryStatement.FinallyBlock is not null)
-                foreach (var nested in EnumerateStatements(tryStatement.FinallyBlock))
+                foreach (var nested in EnumerateStatements(tryStatement.FinallyBlock, descendIntoCaptures))
                     yield return nested;
             }
         }
@@ -549,6 +509,8 @@ internal sealed partial class PowerShellSemanticAnalyzer
             foreach (var read in EnumerateVariableReads(argument))
                 yield return read;
         }
+        if (expression is PowerShellBoundClosedCollectionFactoryResultExpression factoryResult)
+            foreach (var read in EnumerateVariableReads(factoryResult.Value)) yield return read;
         if (expression is PowerShellBoundBinaryExpression binary)
         {
             foreach (var read in EnumerateVariableReads(binary.Left)) yield return read;
@@ -557,6 +519,12 @@ internal sealed partial class PowerShellSemanticAnalyzer
         if (expression is PowerShellBoundUnaryExpression unary)
         {
             foreach (var read in EnumerateVariableReads(unary.Operand)) yield return read;
+        }
+        if (expression is PowerShellBoundNativeTypeTestExpression nativeTest)
+        {
+            foreach (var read in EnumerateVariableReads(nativeTest.Operand)) yield return read;
+            if (nativeTest.Target is not null)
+                foreach (var read in EnumerateVariableReads(nativeTest.Target)) yield return read;
         }
         if (expression is PowerShellBoundTypeTestExpression typeTest)
         {
@@ -598,7 +566,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
         }
         if (expression is PowerShellBoundMutationExpression mutation)
         {
-            if (mutation.Operation != PowerShellBoundMutationOperator.Assign)
+            if (!mutation.UsesNativeInvocation && mutation.Operation != PowerShellBoundMutationOperator.Assign)
                 yield return new PowerShellBoundVariableExpression(mutation.Span, mutation.Target, mutation.Type);
             if (mutation.Value is not null)
             foreach (var read in EnumerateVariableReads(mutation.Value))
@@ -609,6 +577,28 @@ internal sealed partial class PowerShellSemanticAnalyzer
             foreach (var element in array.Elements)
             foreach (var read in EnumerateVariableReads(element))
                 yield return read;
+        }
+        if (expression is PowerShellBoundNativeMemberExpression memberRead)
+        foreach (var child in EnumerateExpressionChildren(memberRead))
+        foreach (var read in EnumerateVariableReads(child)) yield return read;
+        if (expression is PowerShellBoundNativeIndexExpression or PowerShellBoundNativeInvocationExpression)
+        {
+            foreach (var child in EnumerateExpressionChildren(expression))
+            foreach (var read in EnumerateVariableReads(child)) yield return read;
+        }
+        if (expression is PowerShellBoundNativeCollectionExpression collection)
+        {
+            foreach (var item in collection.Items)
+            foreach (var read in EnumerateVariableReads(item.Value)) yield return read;
+        }
+        if (expression is PowerShellBoundNativeConditionalValueExpression or PowerShellBoundNativeStatementValueExpression)
+        {
+            foreach (var child in EnumerateExpressionChildren(expression))
+            foreach (var read in EnumerateVariableReads(child)) yield return read;
+        }
+        if (expression is PowerShellBoundArrayCopyExpression copy)
+        {
+            foreach (var read in EnumerateVariableReads(copy.Source)) yield return read;
         }
         if (expression is PowerShellBoundArrayConcatenationExpression concatenation)
         {
@@ -674,6 +664,8 @@ internal sealed partial class PowerShellSemanticAnalyzer
             foreach (var nested in EnumerateInvocations(argument))
                 yield return nested;
         }
+        if (expression is PowerShellBoundClosedCollectionFactoryResultExpression factoryResult)
+            foreach (var nested in EnumerateInvocations(factoryResult.Value)) yield return nested;
         if (expression is PowerShellBoundConversionExpression conversion)
         {
             foreach (var nested in EnumerateInvocations(conversion.Operand)) yield return nested;
@@ -686,6 +678,12 @@ internal sealed partial class PowerShellSemanticAnalyzer
         if (expression is PowerShellBoundUnaryExpression unary)
         {
             foreach (var nested in EnumerateInvocations(unary.Operand)) yield return nested;
+        }
+        if (expression is PowerShellBoundNativeTypeTestExpression nativeTest)
+        {
+            foreach (var nested in EnumerateInvocations(nativeTest.Operand)) yield return nested;
+            if (nativeTest.Target is not null)
+                foreach (var nested in EnumerateInvocations(nativeTest.Target)) yield return nested;
         }
         if (expression is PowerShellBoundTypeTestExpression typeTest)
         {
@@ -734,6 +732,28 @@ internal sealed partial class PowerShellSemanticAnalyzer
             foreach (var element in array.Elements)
             foreach (var nested in EnumerateInvocations(element))
                 yield return nested;
+        }
+        if (expression is PowerShellBoundArrayCopyExpression copy)
+        {
+            foreach (var nested in EnumerateInvocations(copy.Source)) yield return nested;
+        }
+        if (expression is PowerShellBoundNativeMemberExpression memberRead)
+        foreach (var child in EnumerateExpressionChildren(memberRead))
+        foreach (var nested in EnumerateInvocations(child)) yield return nested;
+        if (expression is PowerShellBoundNativeIndexExpression or PowerShellBoundNativeInvocationExpression)
+        {
+            foreach (var child in EnumerateExpressionChildren(expression))
+            foreach (var nested in EnumerateInvocations(child)) yield return nested;
+        }
+        if (expression is PowerShellBoundNativeCollectionExpression collection)
+        {
+            foreach (var item in collection.Items)
+            foreach (var nested in EnumerateInvocations(item.Value)) yield return nested;
+        }
+        if (expression is PowerShellBoundNativeConditionalValueExpression or PowerShellBoundNativeStatementValueExpression)
+        {
+            foreach (var child in EnumerateExpressionChildren(expression))
+            foreach (var nested in EnumerateInvocations(child)) yield return nested;
         }
         if (expression is PowerShellBoundArrayConcatenationExpression concatenation)
         {

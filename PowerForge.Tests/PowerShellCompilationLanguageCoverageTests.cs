@@ -128,7 +128,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Theory]
-    [InlineData("net8.0", "pwsh")]
+    [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
     public void Build_StrictBinaryModuleMatchesPowerShellLanguageOperatorsAndConversions(string targetFramework, string host)
     {
@@ -231,11 +231,11 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             "Export-ModuleMember -Function Test-OperatorOrder",
             ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
-            new[] { fixture.ScriptPath }, "PowerForge.OperatorOrder", "CompiledPowerShell", "net8.0");
+            new[] { fixture.ScriptPath }, "PowerForge.OperatorOrder", "CompiledPowerShell", "net10.0");
         Assert.True(typed.Diagnostics.Length == 0,
             string.Join(Environment.NewLine, typed.Diagnostics.Select(static diagnostic => diagnostic.Message)));
         var prepared = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(
-            typed, new[] { "Test-OperatorOrder" }, "net8.0");
+            typed, new[] { "Test-OperatorOrder" }, "net10.0");
         Assert.True(prepared.Diagnostics.Length == 0,
             string.Join(Environment.NewLine, prepared.Diagnostics.Select(static diagnostic => diagnostic.Message)));
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -245,7 +245,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Strict, allowUnreviewedDependencyResolution: true)
         {
-            TargetFramework = "net8.0",
+            TargetFramework = "net10.0",
             EmitSource = true
         });
 

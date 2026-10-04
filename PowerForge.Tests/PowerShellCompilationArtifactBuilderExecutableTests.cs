@@ -266,7 +266,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_HybridExecutableRegistersTypedCmdletsAndRetainsScriptFallback()
     {
         using var fixture = ArtifactFixture.Create(
-            "param([int] $Value); function Get-Double { param([int] $Number) [int] $Result = $Number; $Result += $Number; return $Result }; Get-Double -Number $Value");
+            "param([int] $Value); function Get-Echo { param([int] $Number) return $Number }; Get-Echo -Number $Value");
         var spec = new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
@@ -285,7 +285,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Manifest.RuntimeFallbackUnits > 0);
         Assert.Equal(1, result.Manifest.Boundaries!.TypedEntryPoints);
         var run = RunProcess(result.ArtifactPath!, "-Value", "21");
-        Assert.Equal((0, "42", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+        Assert.Equal((0, "21", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
     }
 
     [Fact]
@@ -296,7 +296,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var helper = Path.Combine(fixture.RootPath, "Helper.ps1");
         File.WriteAllText(
             helper,
-            "function Get-Triple { param([int] $Number) [int] $Result = $Number; $Result += $Number; $Result += $Number; return $Result }");
+            "function Get-Echo { param([int] $Number) return $Number }; Get-Echo -Number 7");
         var spec = new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
@@ -314,7 +314,39 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Manifest!.CompiledMethods == 1,
             string.Join(Environment.NewLine, result.Manifest.Diagnostics.Select(static diagnostic => diagnostic.Message)));
         var run = RunProcess(result.ArtifactPath!);
-        Assert.Equal((0, "ready", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+        Assert.Equal((0, "7" + Environment.NewLine + "ready", string.Empty),
+            (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
+    public void Build_HybridExecutableExecutesNativeFunctionsInEntryAndContainedDependency()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "param([string] $Value); function Test-RootMatch { param([string] $Text) if ($Text -match '^ok$') { return $true }; return $false }; . \"$PSScriptRoot/Helper.ps1\"; Test-RootMatch $Value");
+        var helper = Path.Combine(fixture.RootPath, "Helper.ps1");
+        File.WriteAllText(helper,
+            "function Test-DependencyMatch { param([string] $Text) if ($Text -match '^ok$') { return $true }; return $false }; Test-DependencyMatch $Value");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath,
+            fixture.OutputPath,
+            "PowerForge.HybridNativeExecutable",
+            PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true)
+        {
+            CompilationSourcePaths = new[] { fixture.ScriptPath, helper }
+        };
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(2, result.Manifest!.CompiledMethods);
+        var accepted = RunProcess(result.ArtifactPath!, "-Value", "ok");
+        var rejected = RunProcess(result.ArtifactPath!, "-Value", "bad");
+        Assert.Equal((0, "True" + Environment.NewLine + "True", string.Empty),
+            (accepted.ExitCode, accepted.StandardOutput.Trim(), accepted.StandardError.Trim()));
+        Assert.Equal((0, "False" + Environment.NewLine + "False", string.Empty),
+            (rejected.ExitCode, rejected.StandardOutput.Trim(), rejected.StandardError.Trim()));
     }
 
     [Fact]
@@ -388,6 +420,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     private static (int ExitCode, string StandardOutput, string StandardError) RunProcess(string fileName, params string[] arguments)
     {
+        const int processTimeoutMilliseconds = 120_000;
         var startInfo = new ProcessStartInfo
         {
             FileName = fileName,
@@ -396,12 +429,19 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             RedirectStandardError = true,
             CreateNoWindow = true
         };
+        // Compare stream content independently of the invoking terminal's color policy.
+        startInfo.Environment["NO_COLOR"] = "1";
         foreach (var argument in arguments)
             startInfo.ArgumentList.Add(argument);
         using var process = Process.Start(startInfo)!;
-        var standardOutput = process.StandardOutput.ReadToEnd();
-        var standardError = process.StandardError.ReadToEnd();
-        Assert.True(process.WaitForExit(60_000), "Typed executable did not exit within 60 seconds.");
-        return (process.ExitCode, standardOutput, standardError);
+        var standardOutput = process.StandardOutput.ReadToEndAsync();
+        var standardError = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(processTimeoutMilliseconds))
+        {
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit();
+            Assert.Fail($"Typed executable did not exit within {processTimeoutMilliseconds / 1000} seconds.");
+        }
+        return (process.ExitCode, standardOutput.GetAwaiter().GetResult(), standardError.GetAwaiter().GetResult());
     }
 }

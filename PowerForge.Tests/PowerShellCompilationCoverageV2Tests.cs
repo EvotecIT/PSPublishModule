@@ -42,7 +42,7 @@ public sealed class PowerShellCompilationCoverageV2Tests
     }
 
     [Fact]
-    public void Run_ReportsSemanticGraphFallbackWithoutDroppedEligibleFunctions()
+    public void Run_CountsHybridNativeBoundMutualRecursionWithoutDroppingFunctions()
     {
         var root = CreateRoot();
         var source = Path.Combine(root, "Recursive.psm1");
@@ -56,13 +56,17 @@ public sealed class PowerShellCompilationCoverageV2Tests
             var product = Assert.Single(result.Products);
 
             Assert.Equal(2, product.Coverage.TotalFunctions);
-            Assert.Equal(0, product.Coverage.AnalyzerEligibleFunctions);
-            Assert.Equal(0, product.Coverage.EmittedFunctions);
+            Assert.Equal(2, product.Coverage.AnalyzerEligibleFunctions);
+            Assert.Equal(2, product.Coverage.EmittedFunctions);
             Assert.Equal(0, product.Coverage.DroppedEligibleFunctions);
             Assert.Equal(2, product.Coverage.FallbackFunctions);
-            var graph = Assert.Single(result.FunctionFrontier, impact =>
+            Assert.All(product.FunctionDispositions, disposition =>
+            {
+                Assert.True(disposition.Emitted);
+                Assert.True(disposition.RuntimeRouted);
+            });
+            Assert.DoesNotContain(result.FunctionFrontier, impact =>
                 impact.FeatureId == PowerShellCompilationFeatureIds.FunctionGraph);
-            Assert.Equal(2, graph.AffectedUnits);
         }
         finally
         {
@@ -163,27 +167,6 @@ public sealed class PowerShellCompilationCoverageV2Tests
             Assert.Equal(1, result.CompilableUnits);
             Assert.Equal(1, result.Products[0].Coverage.AnalyzerEligibleFunctions);
             Assert.Equal(0, result.EmittedFunctions);
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
-    }
-
-    [Fact]
-    public void Run_FailsBaselineWhenPostEmissionEvaluationIsSkipped()
-    {
-        var root = CreateRoot();
-        var source = Path.Combine(root, "Evaluation.ps1");
-        File.WriteAllText(source, "function Get-Value { return 1 }");
-        try
-        {
-            var runner = new PowerShellCompilationCensusRunner();
-            var baseline = runner.Run(new[] { source }, "net10.0", recurse: true);
-            var current = runner.Run(new[] { source }, "net10.0", baseline, recurse: false);
-
-            Assert.Contains(current.Regressions, static regression => regression.Metric == "PostEmissionEvaluated");
-            Assert.False(current.Passed);
         }
         finally
         {

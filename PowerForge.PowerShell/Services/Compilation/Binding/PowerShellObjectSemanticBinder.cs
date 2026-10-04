@@ -12,6 +12,8 @@ internal static class PowerShellObjectSemanticBinder
             foreach (var pair in hashtable.KeyValuePairs)
             {
                 if (pair.Item1 is not StringConstantExpressionAst key ||
+                    PowerShellObjectConstructionPolicy.HasTypeNameMetadata(conversion) &&
+                    key.Value.Equals("PSTypeName", StringComparison.OrdinalIgnoreCase) ||
                     pair.Item2 is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
                     pipeline.PipelineElements[0] is not CommandExpressionAst command)
                     continue;
@@ -49,14 +51,45 @@ internal static class PowerShellObjectSemanticBinder
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2902", "Typed [pscustomobject] literals require non-empty literal string property names.", PowerShellSourceParser.GetSpan(document, pair.Item1.Extent)));
                 return null;
             }
-            if (pair.Item2 is not PipelineAst { PipelineElements.Count: 1 } pipeline || pipeline.PipelineElements[0] is not CommandExpressionAst command)
+            Ast? valueSyntax = pair.Item2 is PipelineAst { PipelineElements.Count: 1 } pipeline &&
+                               pipeline.PipelineElements[0] is CommandExpressionAst command
+                ? command.Expression
+                : capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && pair.Item2 is IfStatementAst or TryStatementAst
+                    ? pair.Item2
+                    : null;
+            if (valueSyntax is null && PowerShellCommandRegionSemanticBinder.IsNativeLiteralInvocationValue(pair.Item2, capabilities))
+                valueSyntax = pair.Item2;
+            if (valueSyntax is null)
             {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2903", "Typed [pscustomobject] note-property values must be one scalar expression.", PowerShellSourceParser.GetSpan(document, pair.Item2.Extent)));
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2903", "[pscustomobject] note-property values require one expression, a native-hosted conditional, or one qualified hosted command or local invocation value.", PowerShellSourceParser.GetSpan(document, pair.Item2.Extent)));
                 return null;
             }
-            var value = bindExpression(command.Expression, null);
+            var value = bindExpression(valueSyntax, null);
             if (value is null || value.Type.ClrType == typeof(void)) return null;
             properties.Add(new PowerShellBoundNoteProperty(key.Value, value));
+        }
+        if (PowerShellObjectConstructionPolicy.HasTypeNameMetadata(conversion))
+        {
+            if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2904",
+                    "PSTypeName metadata requires the native custom-object conversion contract.", span));
+                return null;
+            }
+            // Preserve authored value evaluation and property order, then let
+            // PowerShell consume PSTypeName as metadata rather than a property.
+            var entries = properties.Select(property => new PowerShellBoundDictionaryEntry(
+                new PowerShellBoundLiteralExpression(span, property.Name,
+                    new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Explicit, "Literal property name."),
+                    PowerShellValueState.Known), property.Value)).ToArray();
+            var dictionary = new PowerShellBoundDictionaryExpression(span,
+                new PowerShellTypeFact(typeof(System.Collections.Specialized.OrderedDictionary),
+                    PowerShellTypeFactProvenance.Explicit, "Ordered authored custom-object values."),
+                PowerShellBoundDictionaryKind.OrderedObjectDictionary, entries);
+            return new PowerShellBoundConversionExpression(span,
+                new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.Explicit,
+                    "PowerShell consumes the authored custom-object type-name metadata."), dictionary,
+                useNativeConversion: true, useNativeCustomObjectConversion: true);
         }
         return new PowerShellBoundPowerShellObjectExpression(span, properties.ToArray());
     }

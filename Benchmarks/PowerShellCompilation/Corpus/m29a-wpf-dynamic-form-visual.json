@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "status": "BoundedHostedQualification",
+  "purpose": "Unchanged PSScriptTools New-PSDynamicParameterForm Create/Close callback with an owned in-memory clipboard provider on both Windows PowerShell hosts. No CLR form-method gain or real clipboard mutation.",
+  "compilerBaselineCommit": "0967d083d3cd0b3ad98cc090406ffcb9346f5724",
+  "sourceRevision": "549fa3e3d769532320054fc0b3c8f42df0452361",
+  "sourceSha256": {
+    "functions/New-DynamicParamCode.ps1": "307660edcaa925e9fba6fe009d40b9f4695cf44d89c5f5e3c1012048e0964c60",
+    "New-PSDynamicParameter.extent": "c3c596a8094fba7cccf34935ecee7f83ab78c1b26a81e6d73383b3902f812b47",
+    "New-PSDynamicParameterForm.extent": "49292552a4692a46b042d67e55b1fd08960508bbb6f56636d2c14053c329c5a3"
+  },
+  "fixtureScriptsSha256": {
+    "Prepare.ps1": "cd9220f0c992b0fecc5a6549472c36c1052365c8da9694f85e31174cf17df141",
+    "Observe.ps1": "1dc3a568f3948d1ff3eb99cf5d0bc68ff2eab195d26b6c304e2bb5e8c7ff45c7",
+    "OperateVisual.ps1": "614999714eee9c4b192639405879c0e706d88439c66e8a0dda785196fba48aa6"
+  },
+  "codeOutput": {
+    "capturedCount": 1,
+    "characters": 796,
+    "sha256": "fccd89956c6e878ceda2285fb58ed66c25d7129d8344b3f78e9dd9aa85153a06",
+    "checkedFragments": ["If ($True)", "RuntimeDefinedParameter('CompilerProbe'"],
+    "clipboardProvider": "Module-local function, verified by Get-Command before UI invocation; process-global Set-Clipboard tripwire throws on unqualified escape."
+  },
+  "hosts": [
+    {
+      "targetFramework": "net10.0",
+      "hostVersion": "7.6.6",
+      "wpfAssembly": "PresentationFramework, Version=10.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+      "dependencyLockFileSha256": "92218b2417d16a2ef27c1252fbaf26c0e376f6741a39c7689810b28a21b9a411",
+      "artifactManifestSha256": "cb967bfd2baf69c2c2f10026efdb3796fc98c5b43f658383aa1474a001dd0dda",
+      "artifactSha256": "abc5363c2f239f87f6701441e3514e492dc63a789b033ed5b2d03afb530311b0",
+      "strictExplanationSha256": "5767ae3170a39871fe1326b7eec244169891fa245a3b3837415b29e7e9ecefc9",
+      "originalAndGenerated": {
+        "screenshotSha256": "cb5373ad48d3babe80a89b6215fd2a9aa8e54bac8d36093d99d48dcaf929758f",
+        "controlsSha256": "dd36233787178e59a18135ed3e371007f794440720642f1746ded362d7dac9ea",
+        "resultSha256": "4ef16551edb35c52a55460318a0efa8f50be7c95c66acf9605a5770fbd89ee05",
+        "stdoutSha256": "20e96202810b6e3a80c66b8043f1989aa1f9ef1376525e0456d4f2580b8cfd60",
+        "stderrBytes": 0,
+        "exitCode": 0
+      }
+    },
+    {
+      "targetFramework": "net472",
+      "hostVersion": "5.1.26100.9444",
+      "wpfAssembly": "PresentationFramework, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+      "dependencyLockFileSha256": "84221c940ae3a724f01d859cf58124cc7efa349db8e866f4be52dcfa270de9d6",
+      "artifactManifestSha256": "ff55f084dc5368c01ef8b955bf6e5c02e0a8d87af0033537cbc6e51cae09fd60",
+      "artifactSha256": "bfd1248095a43f05a0ed3f4c221ad8412db334b61fa7aeec94322858a532dcc3",
+      "strictExplanationSha256": "cdff63de0cfe44791abf75300ac2278011a16630cbc9eecd204b420ee5a26999",
+      "originalAndGenerated": {
+        "screenshotSha256": "270143138edf1b0a3ddd242ce82d0251856f0f7292e501e794fa0dfaf4adf5f5",
+        "controlsSha256": "14d3051c633ee76a47657d44f679569d5f10fde3f2e244463e7eef09544303cb",
+        "resultSha256": "af47f8078408c5bdeb43388ee37a1c0af8bbb5277a3d886ffa12ff10d22d59f4",
+        "stdoutSha256": "2e9afda7c6b64214935c13016ed17e7c9f6033d104f51fafc7be26aa48f5b581",
+        "stderrBytes": 0,
+        "exitCode": 0
+      }
+    }
+  ],
+  "observedContract": [
+    "On each host, original and generated STA windows had byte-identical PrintWindow PNGs and UI Automation control lists. All four screenshots were visually inspected for the form, populated name and condition fields, and Create/Close buttons.",
+    "The owned Create InvokePattern left the form open and sent one 796-character code string to the verified in-memory provider. Owned Close then exited the child; original and generated result JSON and authored Write-Host stdout match byte-for-byte within each host.",
+    "The generated artifact retains the form hosted while emitting the unchanged New-PSDynamicParameter helper. The fixture's provider/read helpers also emit; those are test infrastructure and do not change the five-packet module count. Both Strict explanations reject five units."
+  ],
+  "limits": [
+    "The real desktop clipboard was never the selected command. Real clipboard effects, other form fields/validations/types, multiple parameters, invalid input, alternate buttons, editor registration, and callback failures remain unqualified.",
+    "The observer requested WPF SoftwareOnly rendering. Default hardware rendering, other desktop/host/platform versions, headless sessions, full-module GUI behavior and runtime-free WPF translation are not established."
+  ],
+  "portfolio": {
+    "emitted": 544,
+    "retained": 21,
+    "sourceFunctions": 565,
+    "justifiedHosted": 19,
+    "unresolved": 2,
+    "censusRepeated": false,
+    "reason": "Compiler and pinned portfolio inputs are unchanged; one retained form gains bounded both-host visual/Create/Close proof."
+  }
+}

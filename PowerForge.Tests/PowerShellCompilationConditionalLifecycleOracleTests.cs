@@ -15,7 +15,6 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         "-1, 1, 2 | Select-Value";
 
     [Theory]
-    [InlineData("net8.0")]
     [InlineData("net10.0")]
     public void RuntimeFreeConditionalPipelineLifecyclePreservesOrderAndCardinality(string targetFramework)
     {
@@ -51,7 +50,6 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         var profiles = new[]
         {
             (PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId, (string?)null),
-            (PowerShellCompilationSemanticOracleCatalog.PowerShell74ProfileId, Environment.GetEnvironmentVariable("POWERFORGE_PWSH74_PATH")),
             (PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH"))
         };
         Assert.All(profiles.Skip(1), static profile => Assert.False(string.IsNullOrWhiteSpace(profile.Item2)));

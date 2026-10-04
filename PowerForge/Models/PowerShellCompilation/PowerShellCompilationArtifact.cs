@@ -126,11 +126,12 @@ public sealed class PowerShellCompilationBuildSpec
         EnsureModeSupported(kind, mode);
         return kind == PowerShellCompilationArtifactKind.BinaryModule && mode == PowerShellCompilationMode.Hybrid
             ? PowerShellCompilationCapabilities.HybridModule
-            : kind == PowerShellCompilationArtifactKind.BinaryModule ||
-              kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Hybrid
+            : kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Hybrid
+            ? PowerShellCompilationCapabilities.HybridExecutable
+            : kind == PowerShellCompilationArtifactKind.BinaryModule
             ? PowerShellCompilationCapabilities.BinaryModule
             : kind == PowerShellCompilationArtifactKind.Library
-                ? PowerShellCompilationCapabilities.StaticRuntimeFacts
+                ? PowerShellCompilationCapabilities.TypedLibrary
             : kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Strict
                 ? PowerShellCompilationCapabilities.TypedExecutable
                 : PowerShellCompilationCapability.None;
@@ -170,7 +171,7 @@ public sealed class PowerShellCompilationBuildSpec
     public PowerShellCompilationMode Mode { get; }
 
     /// <summary>Target framework used by the generated project.</summary>
-    public string TargetFramework { get; set; } = "net8.0";
+    public string TargetFramework { get; set; } = PowerShellCompilationTargetFrameworkPolicy.Default;
 
     /// <summary>Optional runtime identifier for executable publication.</summary>
     public string? RuntimeIdentifier { get; set; }
@@ -243,6 +244,9 @@ public sealed class PowerShellCompilationBuildSpec
     /// the newly resolved graph and every hashed local input exactly match this lock.
     /// </summary>
     public PowerShellCompilationDependencyGraph? ExpectedDependencyLock { get; set; }
+
+    // Only the project development workflow can admit source-only changes against this reviewed baseline.
+    internal string? DevelopmentBaselineLockSha256 { get; set; }
 
     /// <summary>Optional equivalent-workload runtime boundary profile to bind into manifest evidence.</summary>
     public PowerShellCompilationBoundaryRuntimeProfile? BoundaryRuntimeProfile { get; set; }
@@ -441,6 +445,9 @@ public sealed class PowerShellCompilationArtifactManifest
 
     /// <summary>Whether the build consumed a separately supplied and validated dependency lock.</summary>
     public bool DependencyLockReviewed { get; set; }
+
+    /// <summary>Reviewed baseline for development-only source/resource edits; the effective graph itself was not reviewed.</summary>
+    public string? DevelopmentBaselineLockSha256 { get; set; }
 
     /// <summary>Versioned command semantic providers used by compiled methods.</summary>
     public PowerShellCompilationCommandProviderContract[] CommandProviders { get; set; } = Array.Empty<PowerShellCompilationCommandProviderContract>();

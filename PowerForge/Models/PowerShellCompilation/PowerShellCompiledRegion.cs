@@ -8,7 +8,101 @@ namespace PowerForge;
 /// </summary>
 public sealed class PowerShellCompiledRegion
 {
-    /// <summary>Creates immutable promoted-region evidence.</summary>
+    /// <summary>Creates promoted-region evidence using the original public constructor contract.</summary>
+    public PowerShellCompiledRegion(
+        string regionId,
+        string sourceSha256,
+        string sourceDocumentSha256,
+        string sourceName,
+        int sourceLine,
+        string sourcePath,
+        string generatedName,
+        string returnType,
+        IReadOnlyList<PowerShellCompilationParameter>? inputParameters,
+        int startOffset,
+        int endOffset,
+        int startLine,
+        int startColumn,
+        int endLine,
+        int endColumn,
+        IReadOnlyList<PowerShellCompilationSourceMapEntry>? sourceMap,
+        PowerShellCompilationRegionGraph regionGraph,
+        string documentId,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals = null,
+        bool requiresPowerShellStopping = false,
+        bool requiresLocalOwnershipGuard = false)
+        : this(regionId, sourceSha256, sourceDocumentSha256, sourceName, sourceLine, sourcePath,
+            generatedName, returnType, inputParameters, startOffset, endOffset, startLine, startColumn,
+            endLine, endColumn, sourceMap, regionGraph, documentId, continuationLocals,
+            requiresPowerShellStopping, requiresLocalOwnershipGuard, inputLocals: null)
+    {
+    }
+
+    /// <summary>Creates immutable promoted-region evidence using the established local-transfer contract.</summary>
+    public PowerShellCompiledRegion(
+        string regionId,
+        string sourceSha256,
+        string sourceDocumentSha256,
+        string sourceName,
+        int sourceLine,
+        string sourcePath,
+        string generatedName,
+        string returnType,
+        IReadOnlyList<PowerShellCompilationParameter>? inputParameters,
+        int startOffset,
+        int endOffset,
+        int startLine,
+        int startColumn,
+        int endLine,
+        int endColumn,
+        IReadOnlyList<PowerShellCompilationSourceMapEntry>? sourceMap,
+        PowerShellCompilationRegionGraph regionGraph,
+        string documentId,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals,
+        bool requiresPowerShellStopping,
+        bool requiresLocalOwnershipGuard,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? inputLocals)
+        : this(regionId, sourceSha256, sourceDocumentSha256, sourceName, sourceLine, sourcePath,
+            generatedName, returnType, inputParameters, startOffset, endOffset, startLine, startColumn,
+            endLine, endColumn, sourceMap, regionGraph, documentId, continuationLocals,
+            requiresPowerShellStopping, requiresLocalOwnershipGuard, inputLocals, terminalTransferContract: null)
+    {
+    }
+
+    /// <summary>Creates immutable promoted-region evidence with its closed terminal transfer contract.</summary>
+    public PowerShellCompiledRegion(
+        string regionId,
+        string sourceSha256,
+        string sourceDocumentSha256,
+        string sourceName,
+        int sourceLine,
+        string sourcePath,
+        string generatedName,
+        string returnType,
+        IReadOnlyList<PowerShellCompilationParameter>? inputParameters,
+        int startOffset,
+        int endOffset,
+        int startLine,
+        int startColumn,
+        int endLine,
+        int endColumn,
+        IReadOnlyList<PowerShellCompilationSourceMapEntry>? sourceMap,
+        PowerShellCompilationRegionGraph regionGraph,
+        string documentId,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals,
+        bool requiresPowerShellStopping,
+        bool requiresLocalOwnershipGuard,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? inputLocals,
+        PowerShellRegionTransferContract? terminalTransferContract)
+        : this(regionId, sourceSha256, sourceDocumentSha256, sourceName, sourceLine, sourcePath,
+            generatedName, returnType, inputParameters, startOffset, endOffset, startLine, startColumn,
+            endLine, endColumn, sourceMap, regionGraph, documentId, continuationLocals,
+            requiresPowerShellStopping, requiresLocalOwnershipGuard, inputLocals,
+            terminalTransferContract, controlFlowContract: null)
+    {
+    }
+
+    /// <summary>Creates immutable promoted-region evidence with value-transfer and control-flow contracts.</summary>
     [JsonConstructor]
     public PowerShellCompiledRegion(
         string regionId,
@@ -29,7 +123,13 @@ public sealed class PowerShellCompiledRegion
         IReadOnlyList<PowerShellCompilationSourceMapEntry>? sourceMap,
         PowerShellCompilationRegionGraph regionGraph,
         string documentId,
-        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals = null)
+        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals,
+        bool requiresPowerShellStopping,
+        bool requiresLocalOwnershipGuard,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? inputLocals,
+        PowerShellRegionTransferContract? terminalTransferContract,
+        PowerShellRegionControlFlowContract? controlFlowContract,
+        IReadOnlyList<PowerShellCompiledRegionLocalCall>? localCalls = null)
     {
         RegionId = regionId ?? string.Empty;
         SourceSha256 = sourceSha256 ?? string.Empty;
@@ -50,6 +150,12 @@ public sealed class PowerShellCompiledRegion
         RegionGraph = regionGraph ?? new PowerShellCompilationRegionGraph(Array.Empty<PowerShellCompilationRegion>());
         DocumentId = documentId ?? string.Empty;
         ContinuationLocals = Array.AsReadOnly((continuationLocals ?? Array.Empty<PowerShellCompiledRegionLocal>()).ToArray());
+        InputLocals = Array.AsReadOnly((inputLocals ?? Array.Empty<PowerShellCompiledRegionLocal>()).ToArray());
+        RequiresPowerShellStopping = requiresPowerShellStopping;
+        RequiresLocalOwnershipGuard = requiresLocalOwnershipGuard;
+        TerminalTransferContract = terminalTransferContract;
+        ControlFlowContract = controlFlowContract;
+        LocalCalls = Array.AsReadOnly((localCalls ?? Array.Empty<PowerShellCompiledRegionLocalCall>()).ToArray());
     }
 
     /// <summary>Stable authored region identity.</summary>
@@ -66,7 +172,7 @@ public sealed class PowerShellCompiledRegion
     public string SourcePath { get; }
     /// <summary>Generated CLR helper member name.</summary>
     public string GeneratedName { get; }
-    /// <summary>Stable scalar CLR return type.</summary>
+    /// <summary>Supported CLR region-transfer return type.</summary>
     public string ReturnType { get; }
     /// <summary>Current retained-function parameter values transferred into the region.</summary>
     public IReadOnlyList<PowerShellCompilationParameter> InputParameters { get; }
@@ -89,8 +195,24 @@ public sealed class PowerShellCompiledRegion
     /// <summary>Relocation-safe authored document identity.</summary>
     public string DocumentId { get; }
 
-    /// <summary>Ordered scalar locals restored before PowerShell resumes; empty for a terminal return.</summary>
+    /// <summary>Ordered locals restored before PowerShell resumes; empty for a terminal return.</summary>
     public IReadOnlyList<PowerShellCompiledRegionLocal> ContinuationLocals { get; }
+
+    /// <summary>Ordered established locals transferred into this region.</summary>
+    public IReadOnlyList<PowerShellCompiledRegionLocal> InputLocals { get; }
+
+    /// <summary>Whether the helper requires the retained invocation's native loop-stopping callback.</summary>
+    public bool RequiresPowerShellStopping { get; }
+
+    /// <summary>Whether execution requires fresh invocation-local targets; otherwise the original region remains in execution.</summary>
+    public bool RequiresLocalOwnershipGuard { get; }
+
+    /// <summary>Closed terminal Success-output behavior, or null for local continuation transfers.</summary>
+    public PowerShellRegionTransferContract? TerminalTransferContract { get; }
+    /// <summary>Return-or-fallthrough behavior, or null for ordinary transfer regions.</summary>
+    public PowerShellRegionControlFlowContract? ControlFlowContract { get; }
+    /// <summary>Closed local-call results required by this promoted helper.</summary>
+    public IReadOnlyList<PowerShellCompiledRegionLocalCall> LocalCalls { get; }
 
     [JsonIgnore]
     internal string GeneratedSource { get; set; } = string.Empty;

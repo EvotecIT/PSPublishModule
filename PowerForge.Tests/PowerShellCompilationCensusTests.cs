@@ -20,7 +20,9 @@ public sealed partial class PowerShellCompilationCensusTests
             "function Get-Three { return 1 }");
         try
         {
-            var result = new PowerShellCompilationCensusRunner().Run(new[] { source }, "net10.0");
+            // Rank semantic counterfactuals before Strict's whole-artifact rejection. Hybrid supports -as.
+            var result = new PowerShellCompilationCensusRunner().RunWithOptions(new[] { source },
+                new PowerShellCompilationCensusOptions { TargetFramework = "net10.0", Mode = PowerShellCompilationMode.Strict, Recurse = false });
 
             var conversion = Assert.Single(result.Frontier, impact => impact.FeatureId == "operator.as");
             Assert.Equal(2, conversion.AffectedUnits);
@@ -62,7 +64,7 @@ public sealed partial class PowerShellCompilationCensusTests
     }
 
     [Fact]
-    public void Run_ReservesFunctionGraphFeatureForActualRecursiveGraphConstraint()
+    public void Run_CountsHybridNativeBoundSelfRecursionAsEmittedAndRuntimeRouted()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge Census Recursive Graph", Guid.NewGuid().ToString("N"));
         var source = Path.Combine(root, "Module.psm1");
@@ -72,8 +74,12 @@ public sealed partial class PowerShellCompilationCensusTests
         {
             var result = new PowerShellCompilationCensusRunner().Run(new[] { source }, "net10.0");
 
-            var graph = Assert.Single(result.FunctionFrontier, impact => impact.FeatureId == PowerShellCompilationFeatureIds.FunctionGraph);
-            Assert.Equal(1, graph.VisibleSoleBlockerUnits);
+            var product = Assert.Single(result.Products);
+            Assert.Equal(1, product.Coverage.EmittedFunctions);
+            var recursive = Assert.Single(product.FunctionDispositions);
+            Assert.True(recursive.Emitted);
+            Assert.True(recursive.RuntimeRouted);
+            Assert.DoesNotContain(result.FunctionFrontier, impact => impact.FeatureId == PowerShellCompilationFeatureIds.FunctionGraph);
         }
         finally
         {
@@ -97,10 +103,13 @@ public sealed partial class PowerShellCompilationCensusTests
 
             var variable = Assert.Single(result.FunctionFrontier, impact =>
                 impact.FeatureId == PowerShellCompilationFeatureIds.ForSyntax("VariableExpressionAst"));
-            var graph = Assert.Single(result.FunctionFrontier, impact =>
-                impact.FeatureId == PowerShellCompilationFeatureIds.FunctionGraph);
             Assert.Equal(1, variable.AffectedUnits);
-            Assert.Equal(1, graph.AffectedUnits);
+            var dispositions = Assert.Single(result.Products).FunctionDispositions;
+            Assert.Equal(2, dispositions.Length);
+            Assert.Contains(dispositions, disposition => disposition.Name == "Get-Map" && !disposition.Emitted);
+            Assert.Contains(dispositions, disposition => disposition.Name == "Get-Repeated" && disposition.Emitted && disposition.RuntimeRouted);
+            Assert.DoesNotContain(result.FunctionFrontier, impact =>
+                impact.FeatureId == PowerShellCompilationFeatureIds.FunctionGraph);
         }
         finally
         {
@@ -420,9 +429,24 @@ public sealed partial class PowerShellCompilationCensusTests
         try
         {
             var runner = new PowerShellCompilationCensusRunner();
-            var baseline = runner.Run(new[] { source }, "net8.0");
+            var baseline = runner.Run(new[] { source }, "net10.0");
+            var differentTargetBaseline = new PowerShellCompilationCensusResult(
+                "net472",
+                baseline.Products,
+                baseline.Regressions,
+                baseline.Frontier,
+                baseline.CoBlockers,
+                baseline.SourceDrifts,
+                baseline.FunctionFrontier,
+                baseline.FunctionCoBlockers)
+            {
+                ArtifactKind = baseline.ArtifactKind,
+                Mode = baseline.Mode,
+                SemanticProfileId = baseline.SemanticProfileId,
+                Recurse = baseline.Recurse
+            };
 
-            var exception = Assert.Throws<ArgumentException>(() => runner.Run(new[] { source }, "net10.0", baseline));
+            var exception = Assert.Throws<ArgumentException>(() => runner.Run(new[] { source }, "net10.0", differentTargetBaseline));
             Assert.Contains("target framework", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally

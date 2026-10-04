@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "compilerCommit": "e4d5299529c1750a1be17625871f3da5bbbbe512",
+  "purpose": "Qualify an unchanged offline third-party script with a function declaration and an executed compiled root.",
+  "source": {
+    "repository": "bayareaviking/PowerShellProjects",
+    "commit": "27227d3f75c77d47b7b61d22e64af70d4965562e",
+    "path": "codewars/fibonacci.ps1",
+    "gitBlob": "9a869bca0571080af5b862f71f8d256d158f3fa6",
+    "sha256": "08471589c0803a47e9623525c6e0efffb32fe8ac7c58575c331cb668ab112bcb",
+    "bytes": 241,
+    "redistribution": "No repository license identified in the pinned tree; source remains external and inspect-only."
+  },
+  "target": {
+    "kind": "Executable",
+    "mode": "Hybrid",
+    "framework": "net10.0",
+    "rid": "win-x64",
+    "explicitContractSha256": "33b7258a4fb10e819dd07c4b4d005f761aaa0f8d4a7cb670483b05f3bae0ce02",
+    "reviewedDependencyLockSha256": "5c61a7b723dbfc81f94289d0bf1bd62865a7fdaf0d4b1f41230d9add37cd26ef"
+  },
+  "selection": {
+    "explainSha256": "537e3f9ee5eb96259c3dd21324891d83dcc42ecee497a25de9a7994ac1bbc059",
+    "buildResultSha256": "5c590f14d722e661577947ecfa71bcd158dad6ccc61ba41c48937a13874d7159",
+    "units": [
+      { "name": "<script>", "emittedClrMethod": true, "retainedHostedSource": false, "nativeFunctionBinding": true, "hostedCommandRegions": 4 },
+      { "name": "Get-Fibonacci", "emittedClrMethod": true, "retainedHostedSource": false, "nativeFunctionBinding": true, "hostedCommandRegions": 2 }
+    ],
+    "generatedEntrySha256": "69b1dbe8ff1d47d2763ed3735426def81a0b1f32ce8d5053f850010e723a0f7a",
+    "generatedLauncherSha256": "b948baa6c1ee66c15f615d4cb7ecea4b6828b21f90fe6d1c0261cbcaac240c67",
+    "generatedExecutableSha256": "8803358f85abb7addd5a7124d54925ecc9eea9661fe30a522ae4e8a7c8b263e3",
+    "compiledRootEvidence": "Generated entry registers the authored helper through DeclareFunction, lowers the root foreach through the native iterator, and the launcher invokes the compiled root factory.",
+    "embeddedSource": "Decoded authored text matches exactly; generated UTF-8 Source.ps1 has a three-byte BOM absent from the original file."
+  },
+  "execution": {
+    "originalHost": "PowerShell 7.6.6 on Windows x64",
+    "generatedHost": ".NET 10 Windows x64 executable with PowerShell SDK",
+    "originalExitCode": 0,
+    "generatedExitCode": 0,
+    "stdoutBytesEqual": true,
+    "stdoutLength": 7,
+    "stdoutSha256": "797921c6b3560b462ce0548a326b4e9aa118a6661457f906df2cbb1a4ab1c2a9",
+    "stderrLengthBoth": 0,
+    "observedOriginalMilliseconds": 1044.1,
+    "observedGeneratedMilliseconds": 28604.6,
+    "measurement": "One launch per path, not a controlled benchmark; recursive hosted-command crossings remain a performance investigation."
+  },
+  "strict": {
+    "exactSourceExplainSha256": "bdd96452468694fcd8eb73e6b7b5c12b763989c72879a7c22d5b1bab5e0718a1",
+    "exitCode": 1,
+    "typedUnits": 0,
+    "rejectedUnits": 2
+  },
+  "limits": [
+    "Functional original/generated proof only on explicit Hybrid net10.0/win-x64; no speed, runtime-free, net472 generated-executable, or other-platform claim.",
+    "The final Get-Fibonacci call and recursive calls retain PowerShell command-host boundaries.",
+    "No source redistribution, named-module count change, compiler-source edit, broad gate, module census, PR, merge or release."
+  ]
+}

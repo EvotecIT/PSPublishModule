@@ -25,7 +25,8 @@ internal enum PowerShellRuntimeStateIntrinsicKind
     ModuleVariable,
     ShouldProcessTarget,
     ShouldProcessAction,
-    CurrentLocalDateTime
+    CurrentLocalDateTime,
+    FormattedCurrentLocalDateTime
 }
 
 internal static class PowerShellRuntimeStateIntrinsicPolicy
@@ -188,6 +189,7 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             PowerShellRuntimeStateIntrinsicKind.PSVersionMajor => typeof(int),
             PowerShellRuntimeStateIntrinsicKind.ProcessId => typeof(int),
             PowerShellRuntimeStateIntrinsicKind.CurrentLocalDateTime => typeof(DateTime),
+            PowerShellRuntimeStateIntrinsicKind.FormattedCurrentLocalDateTime => typeof(string),
             PowerShellRuntimeStateIntrinsicKind.HomeDirectory or
             PowerShellRuntimeStateIntrinsicKind.CurrentCulture or
             PowerShellRuntimeStateIntrinsicKind.CurrentUICulture => typeof(string),
@@ -196,12 +198,12 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             PowerShellRuntimeStateIntrinsicKind.ConfirmPreference => typeof(System.Management.Automation.ConfirmImpact),
             PowerShellRuntimeStateIntrinsicKind.ErrorCollection => typeof(System.Collections.ArrayList),
             PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable => typeof(string),
-            PowerShellRuntimeStateIntrinsicKind.ModuleVariable => typeof(object),
+            PowerShellRuntimeStateIntrinsicKind.ModuleVariable or
+            PowerShellRuntimeStateIntrinsicKind.WhatIfPreference => typeof(object),
             PowerShellRuntimeStateIntrinsicKind.IsCoreClr or
             PowerShellRuntimeStateIntrinsicKind.IsWindows or
             PowerShellRuntimeStateIntrinsicKind.IsLinux or
             PowerShellRuntimeStateIntrinsicKind.IsMacOS or
-            PowerShellRuntimeStateIntrinsicKind.WhatIfPreference or
             PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget or
             PowerShellRuntimeStateIntrinsicKind.ShouldProcessAction => typeof(bool),
             _ => typeof(object)
@@ -394,13 +396,13 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
         => targetFramework?.Equals("net472", StringComparison.OrdinalIgnoreCase) == true || IsCoreTarget(targetFramework);
 
     private static bool IsCoreTarget(string? targetFramework)
-        => targetFramework?.Equals("net8.0", StringComparison.OrdinalIgnoreCase) == true ||
-           targetFramework?.Equals("net10.0", StringComparison.OrdinalIgnoreCase) == true;
+        => PowerShellCompilationTargetFrameworkPolicy.IsModern(targetFramework);
 
     private static bool IsCoreProfile(PowerShellCompilationSemanticOracleProfile semanticProfile)
         => semanticProfile.Family == PowerShellCompilationSemanticHostFamily.PowerShell7;
 
-    private static bool IsActionPreference(string name)
+    /// <summary>Identifies action-preference slots that participate in native stream state.</summary>
+    internal static bool IsActionPreference(string name)
         => name.Equals("VerbosePreference", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("DebugPreference", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("WarningPreference", StringComparison.OrdinalIgnoreCase) ||

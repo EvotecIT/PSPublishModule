@@ -1,0 +1,462 @@
+{
+  "schemaVersion": 1,
+  "status": "PartialQualification",
+  "purpose": "Reviewed-lock WPF dialog builds and fourteen original/generated failure observations; real visual/callback qualification remains missing. No disposition or coverage gain.",
+  "compilerCommit": "f5de1297d08aca134508f0508cdc1cce2767e590",
+  "sourceRevision": "549fa3e3d769532320054fc0b3c8f42df0452361",
+  "sources": {
+    "functions/New-WPFMessageBox.ps1": "2f5407426984d6ecefa1e4b4a6ad871002e00cc287ad4575ed2c5c5cba92221d",
+    "functions/Utilities.ps1": "1625373211d326669795cdd8ff2b40381e57147fd07065ca69bbec50cec81592"
+  },
+  "inputFunctionExtentSha256": "0b2abe2596deb67deb953479558adcbbce6bc9292d4f74add75717675a4f2e59",
+  "informationIconSha256": "7a559f0efc4262e5d16f5c50e6a2f73faf6bb69a163437b891aeac478fdc375c",
+  "fixtureSourceHashes": {
+    "Observe.ps1": "97e59bacef623113241915ad4b0d7e1eaa7db75b10529f5bca42258a6947d443",
+    "ObserveFailures.ps1": "7e254bddb425b55a703372502b8b167422dcee959dd1ddedfc127cc3850ed1cb",
+    "Prepare.ps1": "d3835db7baffc8ed1e4910e0798ea9af7816d43be691c3c0a4a119514ed50d47",
+    "README.md": "d7ffb4e185c12a7456eade2de57ba12b47979d1cd2a662f25d8aa08944fcc801"
+  },
+  "portfolio": {
+    "emitted": 544,
+    "retained": 21,
+    "functions": 565,
+    "stableUnits": 584,
+    "justifiedHosted": 11,
+    "unresolved": 10,
+    "censusRepeated": false,
+    "reason": "Compiler/pinned inputs unchanged; no normal GUI execution evidence."
+  },
+  "hosts": [
+    {
+      "framework": "net10.0",
+      "artifactSha256": "3fbd843d233d29ed5f3b331dea0dc58899388299e8d8f67d06e62db38a930197",
+      "dependencyLockSha256": "ba61b995a343a8296263de1d0534516294f58f7e17619ccf977973f37b035744",
+      "workloadDispositions": [
+        {
+          "unitId": "b6ea9ee9ade70c92fa9054c5",
+          "relativePath": "functions/Invoke-InputBox.ps1",
+          "name": "Invoke-InputBox",
+          "kind": "Function",
+          "startLine": 1,
+          "semanticEligible": false,
+          "emittedClrMethod": false,
+          "emittedBinaryCmdlet": false,
+          "retainedHostedSource": true,
+          "usesNativeFunctionBinding": false,
+          "runtimeCommandRegions": 0,
+          "boundaryCrossings": 0,
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "generatedMemberName": "",
+          "dependencyCauses": [],
+          "boundaryCauses": [
+            "Authored source remains on the hosted PowerShell path after artifact shaping."
+          ],
+          "diagnosticChain": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.WindowStartupLocation' is not available in the generated project reference set for the requested target.",
+              "line": 111,
+              "column": 39
+            }
+          ],
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "regionGraph": null,
+          "promotedTypedRegions": 0,
+          "generatedRegionMemberNames": []
+        },
+        {
+          "unitId": "0f49b0d93bead94178065edb",
+          "relativePath": "functions/New-WPFMessageBox.ps1",
+          "name": "New-WPFMessageBox",
+          "kind": "Function",
+          "startLine": 6,
+          "semanticEligible": false,
+          "emittedClrMethod": false,
+          "emittedBinaryCmdlet": false,
+          "retainedHostedSource": true,
+          "usesNativeFunctionBinding": false,
+          "runtimeCommandRegions": 0,
+          "boundaryCrossings": 0,
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "generatedMemberName": "",
+          "dependencyCauses": [],
+          "boundaryCauses": [
+            "Authored source remains on the hosted PowerShell path after artifact shaping."
+          ],
+          "diagnosticChain": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.WindowStartupLocation' is not available in the generated project reference set for the requested target.",
+              "line": 48,
+              "column": 39
+            }
+          ],
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "regionGraph": null,
+          "promotedTypedRegions": 0,
+          "generatedRegionMemberNames": []
+        }
+      ],
+      "strictCanProceed": false,
+      "strictExplanationSha256": "49a2baa5202b45da3ee81d06ff97a7c44d60d50ddbbc3127a3bcacf5e79aad9c",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "originalSha256": "88cbcc1930565785f079953a2d1ed67ef4bb70b688a689d576c66e9b0c636bd2",
+      "generatedSha256": "88cbcc1930565785f079953a2d1ed67ef4bb70b688a689d576c66e9b0c636bd2",
+      "failureResult": {
+        "hostVersion": "7.6.6",
+        "apartment": "STA",
+        "observations": [
+          {
+            "case": "message-platform",
+            "records": [],
+            "warnings": [
+              "Sorry. This command requires a Windows platform."
+            ],
+            "caught": null
+          },
+          {
+            "case": "input-platform",
+            "records": [],
+            "warnings": [
+              "Sorry. This command requires a Windows platform."
+            ],
+            "caught": null
+          },
+          {
+            "case": "message-assembly",
+            "records": [],
+            "warnings": [],
+            "caught": {
+              "type": "System.Management.Automation.RuntimeException",
+              "id": "owned WPF assembly refusal",
+              "message": "owned WPF assembly refusal"
+            }
+          },
+          {
+            "case": "input-assembly",
+            "records": [],
+            "warnings": [],
+            "caught": {
+              "type": "System.Management.Automation.RuntimeException",
+              "id": "owned WPF assembly refusal",
+              "message": "owned WPF assembly refusal"
+            }
+          },
+          {
+            "case": "message-background",
+            "records": [],
+            "warnings": [],
+            "caught": {
+              "type": "System.Management.Automation.RuntimeException",
+              "id": "owned WPF assembly refusal",
+              "message": "owned WPF assembly refusal"
+            }
+          },
+          {
+            "case": "input-background",
+            "records": [],
+            "warnings": [],
+            "caught": {
+              "type": "System.Management.Automation.RuntimeException",
+              "id": "owned WPF assembly refusal",
+              "message": "owned WPF assembly refusal"
+            }
+          },
+          {
+            "case": "input-title",
+            "records": [],
+            "warnings": [],
+            "caught": {
+              "type": "System.Management.Automation.ParameterBindingValidationException",
+              "id": "ParameterArgumentValidationError,Invoke-InputBox",
+              "message": "Cannot validate argument on parameter 'Title'. The \" $_.length -le 25 \" validation script for the argument with value \"xxxxxxxxxxxxxxxxxxxxxxxxxx\" did not return a result of True. Determine why the validation script failed, and then try the command again."
+            }
+          }
+        ]
+      },
+      "copiedInformationIconSha256": "7a559f0efc4262e5d16f5c50e6a2f73faf6bb69a163437b891aeac478fdc375c",
+      "generatedSourceHashes": {
+        "238453e377f292d0d6915e5ddbe8fb5c17db45fa27ba5d9454fdc79b4f24bbc3": "0b2abe2596deb67deb953479558adcbbce6bc9292d4f74add75717675a4f2e59",
+        "2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a": "64b0ba8e2c378e2db234831b0a44a844d5b2cacc1de2476dbd5da977b6650426",
+        "58347c826d920d41aad5b70508e1c03042bf88563c6f3c71a35bf8df87cfa0cf": "2f5407426984d6ecefa1e4b4a6ad871002e00cc287ad4575ed2c5c5cba92221d",
+        "CompiledCmdlets.cs": "4ba0b7e03a0d07635c7883331a1902f1f1b7aaf4bb14a131bac1fc212ced18eb",
+        "CompiledPowerShell.cs": "ad92a32b647769b43ab2792b47a7e9a8a39b9962bb6e1e9a07433d4991007b71",
+        "Directory.Build.props": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Build.targets": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Packages.props": "a96e6b8834dbdb32e1410abfdb50d0483c028bba2edd5fed4b6e5cfc583c6e46",
+        "global.json": "1a9972198a8d91eb872d3b4d3f5d6603fa2b04620c9e5c6d057a59f0d0f32992",
+        "ModuleSessionState.g.cs": "c96e42f7ba20fe3819fbe69e936b44e8c8a8fd5141eefa148bff59743bd69981",
+        "NativeLanguageOperations.g.cs": "7f96f823b4489c97ddfcc8182e4828fba533bc986c8feb36263851ef8dbded55",
+        "NativeOutput.g.cs": "48100a5b25ca80ebdf62d8f5df0f4be7ae3ad8c951dec2e69a19d01c98ae10bd",
+        "NuGet.Config": "81afa9a2ee0dd27b21be56f5efed21aa8cf08c8b2d4db4763cbee5cf28fb402e",
+        "PowerForge.TargetContract.json": "90180f20d4060b1d15573552f333e59b81e8c77f1bdfb9e4b9a3da8bdc269c78",
+        "PowerShellNativeFunctionContext.AccessMutations.g.cs": "9aa4cbc51df123ce356de19afa73f94f08541955bfde3854ee77c33c5f9a52ca",
+        "PowerShellNativeFunctionContext.CommandRegions.g.cs": "96182f77be1aab8c9599412fcd6a89af1244cebeb97937ecf0a6cde68cb9136c",
+        "PowerShellNativeFunctionContext.Compilation.g.cs": "822e2ef82b3ccc4b7de4ad9eb6f44e915ec36c81abc4b9c2b5978230d3dd7a2a",
+        "PowerShellNativeFunctionContext.Conversions.g.cs": "fccc228c95b894808bf99cf6a0b570c5eef8c4367e85259fc9f631b2673043d6",
+        "PowerShellNativeFunctionContext.Declarations.g.cs": "c53589d78033200f4ae59a72baf67b741f59281dfc23ebe7c637ea16382eefb3",
+        "PowerShellNativeFunctionContext.Dictionaries.g.cs": "51f0138b4a97a58a092af7e6dc8b9a4dfdaf233a15b13f396c4f03197df45cc3",
+        "PowerShellNativeFunctionContext.Enumeration.g.cs": "bee5f9239a119cec47f2f392064d3096d0962ab2ce84a9c7758271e0c01c5485",
+        "PowerShellNativeFunctionContext.g.cs": "17cb966a966bab959cf8d58d87eb8c92c4733374cd6f5e944e9c65c00c96efc9",
+        "PowerShellNativeFunctionContext.Indexing.g.cs": "610bec93d533cd485bfa9f680930a6d90de7bc0734bafeca4450facd9f00204e",
+        "PowerShellNativeFunctionContext.Invocations.g.cs": "c96859c7f495a75dfae3504c43ad2e46952e2fe387d6b2595149e76463a529b2",
+        "PowerShellNativeFunctionContext.Members.g.cs": "baeb213b30012cbd52403668f0def2f647ccb1c0625a60369e98fb97aeac4ba7",
+        "PowerShellNativeFunctionContext.Membership.g.cs": "4fb699f522f312e6850daa25673426f0af1844ecb7a59522336aadb2efcea707",
+        "PowerShellNativeFunctionContext.NestedDeclarations.g.cs": "075a2fdcb76a93eddc62fd23ea7d9460b12d8232adcd60050ab824e6882fa7bf",
+        "PowerShellNativeFunctionContext.Operations.g.cs": "0c83401a614ade6a8b24868bcf929592ae16f9d2941cb8f8af03144c067f47e0",
+        "PowerShellNativeFunctionContext.Output.g.cs": "06b1c8e5bd77934f02247b5d0774ff8a2b8d7ca4275e9fd18f40afda1afab050",
+        "PowerShellNativeFunctionContext.Patterns.g.cs": "990a8056b63f05c7103aa627ea8681845e0c1eeab84311312cd3cb394c9f3f92",
+        "PowerShellNativeFunctionContext.ScriptBlocks.g.cs": "b576c61fb1a947d688eec0192be637ff6fa741c58948319770f2712e31685ae8",
+        "PowerShellNativeFunctionContext.StringJoin.g.cs": "1c1e1acedadee610fd3281d709cb09c1a85bc4bd61af5005e8a1f5fcb63f9542",
+        "PowerShellNativeFunctionContext.Switch.g.cs": "d7501e42167b4ad522a6f203398ab14ca3d4c1d36e8524541f1afa3c87288101",
+        "PowerShellNativeFunctionHost.Declared.g.cs": "1960ef3bdf465cd99336fc1f0415c291b7ae7515ef4eb64d159f15ed69c8dc22",
+        "PowerShellNativeFunctionHost.FunctionEnums.g.cs": "b3b4e9f2d5867986cfbbe26dbadf21a1a319b7ec14202fa80cde9637b2d7d5f5",
+        "PowerShellNativeFunctionHost.g.cs": "180e381ea4854f38001ec5fbea4a453c88a6606843c5ea915c5f8f8343c11ca4",
+        "PowerShellNativeFunctionHost.OwnedDeclaration.g.cs": "83ce60b1bc336bc19e589369de8a81a2858277b8216a6c0784ecda328a8d911a",
+        "source-map.json": "6d40ee4a90b3b179c452e6fedac4aceaf41f7d944256ae9efb82ae8dfa295759",
+        "SourceExtent.g.cs": "daf263e4d386070ca90530b6765d52d9f8e0141a63c6f1097eae4d00744472e5",
+        "StatementErrors.g.cs": "4f8430b1a911496884f666ca7a74cbfc9a740803868a1dcb7965309b17bd1a44",
+        "WpfDialogs.csproj": "c3b59f7b37f12c03c8f3b8db11167e5c8939e33b4e0c9e514eb83c10d6ef64e8"
+      }
+    },
+    {
+      "framework": "net472",
+      "artifactSha256": "0871981a47d3d876ded3c7a5c378b4c1dee7bf0430906f9f06c3c9d9367f46ab",
+      "dependencyLockSha256": "290952f0bbe9803089f99841bf18c6607a84a31345759a0736d8f857611d8b07",
+      "workloadDispositions": [
+        {
+          "unitId": "b6ea9ee9ade70c92fa9054c5",
+          "relativePath": "functions/Invoke-InputBox.ps1",
+          "name": "Invoke-InputBox",
+          "kind": "Function",
+          "startLine": 1,
+          "semanticEligible": false,
+          "emittedClrMethod": false,
+          "emittedBinaryCmdlet": false,
+          "retainedHostedSource": true,
+          "usesNativeFunctionBinding": false,
+          "runtimeCommandRegions": 0,
+          "boundaryCrossings": 0,
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "generatedMemberName": "",
+          "dependencyCauses": [],
+          "boundaryCauses": [
+            "Authored source remains on the hosted PowerShell path after artifact shaping."
+          ],
+          "diagnosticChain": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.WindowStartupLocation' is not available in the generated project reference set for the requested target.",
+              "line": 111,
+              "column": 39
+            }
+          ],
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "regionGraph": null,
+          "promotedTypedRegions": 0,
+          "generatedRegionMemberNames": []
+        },
+        {
+          "unitId": "0f49b0d93bead94178065edb",
+          "relativePath": "functions/New-WPFMessageBox.ps1",
+          "name": "New-WPFMessageBox",
+          "kind": "Function",
+          "startLine": 6,
+          "semanticEligible": false,
+          "emittedClrMethod": false,
+          "emittedBinaryCmdlet": false,
+          "retainedHostedSource": true,
+          "usesNativeFunctionBinding": false,
+          "runtimeCommandRegions": 0,
+          "boundaryCrossings": 0,
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "generatedMemberName": "",
+          "dependencyCauses": [],
+          "boundaryCauses": [
+            "Authored source remains on the hosted PowerShell path after artifact shaping."
+          ],
+          "diagnosticChain": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Windows.WindowStartupLocation' is not available in the generated project reference set for the requested target.",
+              "line": 48,
+              "column": 39
+            }
+          ],
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "regionGraph": null,
+          "promotedTypedRegions": 0,
+          "generatedRegionMemberNames": []
+        }
+      ],
+      "strictCanProceed": false,
+      "strictExplanationSha256": "6427c5e257dd090ab22e9af42ad0651377dc589ffd7061b6be22c3d6705d41a8",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "originalSha256": "bd9c165c1ee409823a9e9ade7d508b10a0262adc1f2a88661e7a1d283150016e",
+      "generatedSha256": "bd9c165c1ee409823a9e9ade7d508b10a0262adc1f2a88661e7a1d283150016e",
+      "failureResult": {
+        "hostVersion": "5.1.26100.9444",
+        "apartment": "STA",
+        "observations": [
+          {
+            "case": "message-platform",
+            "records": [],
+            "warnings": [
+              "Sorry. This command requires a Windows platform."
+            ],
+            "caught": null
+          },
+          {
+            "case": "input-platform",
+            "records": [],
+            "warnings": [
+              "Sorry. This command requires a Windows platform."
+            ],
+            "caught": null
+          },
+          {
+            "case": "message-assembly",
+            "records": [],
+            "warnings": [],
+            "caught": {
+              "type": "System.Management.Automation.RuntimeException",
+              "id": "owned WPF assembly refusal",
+              "message": "owned WPF assembly refusal"
+            }
+          },
+          {
+            "case": "input-assembly",
+            "records": [],
+            "warnings": [],
+            "caught": {
+              "type": "System.Management.Automation.RuntimeException",
+              "id": "owned WPF assembly refusal",
+              "message": "owned WPF assembly refusal"
+            }
+          },
+          {
+            "case": "message-background",
+            "records": [],
+            "warnings": [],
+            "caught": {
+              "type": "System.Management.Automation.RuntimeException",
+              "id": "owned WPF assembly refusal",
+              "message": "owned WPF assembly refusal"
+            }
+          },
+          {
+            "case": "input-background",
+            "records": [],
+            "warnings": [],
+            "caught": {
+              "type": "System.Management.Automation.RuntimeException",
+              "id": "owned WPF assembly refusal",
+              "message": "owned WPF assembly refusal"
+            }
+          },
+          {
+            "case": "input-title",
+            "records": [],
+            "warnings": [],
+            "caught": {
+              "type": "System.Management.Automation.ParameterBindingValidationException",
+              "id": "ParameterArgumentValidationError,Invoke-InputBox",
+              "message": "Cannot validate argument on parameter 'Title'. The \" $_.length -le 25 \" validation script for the argument with value \"xxxxxxxxxxxxxxxxxxxxxxxxxx\" did not return a result of True. Determine why the validation script failed, and then try the command again."
+            }
+          }
+        ]
+      },
+      "copiedInformationIconSha256": "7a559f0efc4262e5d16f5c50e6a2f73faf6bb69a163437b891aeac478fdc375c",
+      "generatedSourceHashes": {
+        "238453e377f292d0d6915e5ddbe8fb5c17db45fa27ba5d9454fdc79b4f24bbc3": "0b2abe2596deb67deb953479558adcbbce6bc9292d4f74add75717675a4f2e59",
+        "2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a": "64b0ba8e2c378e2db234831b0a44a844d5b2cacc1de2476dbd5da977b6650426",
+        "58347c826d920d41aad5b70508e1c03042bf88563c6f3c71a35bf8df87cfa0cf": "2f5407426984d6ecefa1e4b4a6ad871002e00cc287ad4575ed2c5c5cba92221d",
+        "CompiledCmdlets.cs": "4ba0b7e03a0d07635c7883331a1902f1f1b7aaf4bb14a131bac1fc212ced18eb",
+        "CompiledPowerShell.cs": "ad92a32b647769b43ab2792b47a7e9a8a39b9962bb6e1e9a07433d4991007b71",
+        "Directory.Build.props": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Build.targets": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Packages.props": "a96e6b8834dbdb32e1410abfdb50d0483c028bba2edd5fed4b6e5cfc583c6e46",
+        "global.json": "1a9972198a8d91eb872d3b4d3f5d6603fa2b04620c9e5c6d057a59f0d0f32992",
+        "ModuleSessionState.g.cs": "c96e42f7ba20fe3819fbe69e936b44e8c8a8fd5141eefa148bff59743bd69981",
+        "NativeLanguageOperations.g.cs": "7f96f823b4489c97ddfcc8182e4828fba533bc986c8feb36263851ef8dbded55",
+        "NativeOutput.g.cs": "48100a5b25ca80ebdf62d8f5df0f4be7ae3ad8c951dec2e69a19d01c98ae10bd",
+        "NuGet.Config": "81afa9a2ee0dd27b21be56f5efed21aa8cf08c8b2d4db4763cbee5cf28fb402e",
+        "PowerForge.TargetContract.json": "50340bf76aea78627ddc1f69c8b49badd286303bafef1aa02f98e1c16a1ab688",
+        "PowerShellNativeFunctionContext.AccessMutations.g.cs": "9aa4cbc51df123ce356de19afa73f94f08541955bfde3854ee77c33c5f9a52ca",
+        "PowerShellNativeFunctionContext.CommandRegions.g.cs": "96182f77be1aab8c9599412fcd6a89af1244cebeb97937ecf0a6cde68cb9136c",
+        "PowerShellNativeFunctionContext.Compilation.g.cs": "822e2ef82b3ccc4b7de4ad9eb6f44e915ec36c81abc4b9c2b5978230d3dd7a2a",
+        "PowerShellNativeFunctionContext.Conversions.g.cs": "fccc228c95b894808bf99cf6a0b570c5eef8c4367e85259fc9f631b2673043d6",
+        "PowerShellNativeFunctionContext.Declarations.g.cs": "c53589d78033200f4ae59a72baf67b741f59281dfc23ebe7c637ea16382eefb3",
+        "PowerShellNativeFunctionContext.Dictionaries.g.cs": "51f0138b4a97a58a092af7e6dc8b9a4dfdaf233a15b13f396c4f03197df45cc3",
+        "PowerShellNativeFunctionContext.Enumeration.g.cs": "bee5f9239a119cec47f2f392064d3096d0962ab2ce84a9c7758271e0c01c5485",
+        "PowerShellNativeFunctionContext.g.cs": "17cb966a966bab959cf8d58d87eb8c92c4733374cd6f5e944e9c65c00c96efc9",
+        "PowerShellNativeFunctionContext.Indexing.g.cs": "610bec93d533cd485bfa9f680930a6d90de7bc0734bafeca4450facd9f00204e",
+        "PowerShellNativeFunctionContext.Invocations.g.cs": "c96859c7f495a75dfae3504c43ad2e46952e2fe387d6b2595149e76463a529b2",
+        "PowerShellNativeFunctionContext.Members.g.cs": "baeb213b30012cbd52403668f0def2f647ccb1c0625a60369e98fb97aeac4ba7",
+        "PowerShellNativeFunctionContext.Membership.g.cs": "4fb699f522f312e6850daa25673426f0af1844ecb7a59522336aadb2efcea707",
+        "PowerShellNativeFunctionContext.NestedDeclarations.g.cs": "075a2fdcb76a93eddc62fd23ea7d9460b12d8232adcd60050ab824e6882fa7bf",
+        "PowerShellNativeFunctionContext.Operations.g.cs": "0c83401a614ade6a8b24868bcf929592ae16f9d2941cb8f8af03144c067f47e0",
+        "PowerShellNativeFunctionContext.Output.g.cs": "06b1c8e5bd77934f02247b5d0774ff8a2b8d7ca4275e9fd18f40afda1afab050",
+        "PowerShellNativeFunctionContext.Patterns.g.cs": "990a8056b63f05c7103aa627ea8681845e0c1eeab84311312cd3cb394c9f3f92",
+        "PowerShellNativeFunctionContext.ScriptBlocks.g.cs": "b576c61fb1a947d688eec0192be637ff6fa741c58948319770f2712e31685ae8",
+        "PowerShellNativeFunctionContext.StringJoin.g.cs": "1c1e1acedadee610fd3281d709cb09c1a85bc4bd61af5005e8a1f5fcb63f9542",
+        "PowerShellNativeFunctionContext.Switch.g.cs": "d7501e42167b4ad522a6f203398ab14ca3d4c1d36e8524541f1afa3c87288101",
+        "PowerShellNativeFunctionHost.Declared.g.cs": "1960ef3bdf465cd99336fc1f0415c291b7ae7515ef4eb64d159f15ed69c8dc22",
+        "PowerShellNativeFunctionHost.FunctionEnums.g.cs": "b3b4e9f2d5867986cfbbe26dbadf21a1a319b7ec14202fa80cde9637b2d7d5f5",
+        "PowerShellNativeFunctionHost.g.cs": "180e381ea4854f38001ec5fbea4a453c88a6606843c5ea915c5f8f8343c11ca4",
+        "PowerShellNativeFunctionHost.OwnedDeclaration.g.cs": "83ce60b1bc336bc19e589369de8a81a2858277b8216a6c0784ecda328a8d911a",
+        "source-map.json": "6d40ee4a90b3b179c452e6fedac4aceaf41f7d944256ae9efb82ae8dfa295759",
+        "SourceExtent.g.cs": "daf263e4d386070ca90530b6765d52d9f8e0141a63c6f1097eae4d00744472e5",
+        "StatementErrors.g.cs": "4f8430b1a911496884f666ca7a74cbfc9a740803868a1dcb7965309b17bd1a44",
+        "WpfDialogs.csproj": "f20de7e2435847e9884d3d41a4cbca30513ce92e720743abbc9930c8ab5aef10"
+      }
+    }
+  ],
+  "guiAttempt": {
+    "host": "PowerShell 7",
+    "case": "original New-WPFMessageBox",
+    "attempts": 2,
+    "windowsProcessReportedLive": true,
+    "mainWindowHandleObserved": 90315872,
+    "responding": true,
+    "expectedTitle": "PFC net10 orig message",
+    "supportedComputerUseMatchingWindows": 0,
+    "supportedComputerUseMatchingApps": 0,
+    "screenshotObserved": false,
+    "inputOrClickPerformed": false,
+    "callbackResultObserved": false,
+    "ownedChildPids": [
+      46892,
+      103436
+    ],
+    "ownedChildrenStoppedAndAbsenceVerified": true,
+    "initialLaunch": "Start-Process hidden",
+    "secondLaunch": "direct tool execution session 96620, terminal after exact child stop"
+  },
+  "limits": [
+    "No visual or modal/callback proof; all six retained WPF functions remain unresolved",
+    "Actual STA invalid-brush conversion exercised; platform/assembly refusal shadows are explicit boundary probes",
+    "No secure input, cancellation, custom buttons or other four WPF functions executed",
+    "No full-module or non-Windows qualification",
+    "The synthetic platform helper emits one method; workload functions remain hosted with no region in this mini-module",
+    "net10 generated build retains existing NU1510 warnings"
+  ]
+}

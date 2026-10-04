@@ -11,7 +11,8 @@ internal static class PowerShellHybridFunctionCollisionResolver
         PowerShellTypedCompilationResult typed,
         string? targetFramework,
         string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
-        PowerShellCompilationCapability capabilities = PowerShellCompilationCapabilities.BinaryModule)
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapabilities.BinaryModule,
+        PowerShellNativeDependencyTypes? nativeDependencyTypes = null)
     {
         var definitions = new List<(string Path, ScriptBlockAst Root, FunctionDefinitionAst Function)>();
         var sources = new List<(string Path, ScriptBlockAst Root, HashSet<string> InvokeCommandAliases)>();
@@ -53,7 +54,8 @@ internal static class PowerShellHybridFunctionCollisionResolver
         if (excludedMethods.Count == 0)
             return typed;
 
-        var filtered = new PowerShellTypedCompilationTranspiler(Array.Empty<PowerShellCompilationCommandProviderContract>(), semanticProfileId).TranspileExcluding(
+        var filtered = new PowerShellTypedCompilationTranspiler(Array.Empty<PowerShellCompilationCommandProviderContract>(), semanticProfileId,
+            nativeDependencyTypes ?? PowerShellNativeDependencyTypes.Empty).TranspileExcluding(
             typed.SourcePaths,
             typed.NamespaceName,
             typed.TypeName,

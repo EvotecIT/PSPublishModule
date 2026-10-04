@@ -11,7 +11,10 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
         foreach (var function in program.Functions)
         {
             var assigned = function.Parameters.Select(static parameter => parameter.Symbol.StableKey).ToHashSet(StringComparer.Ordinal);
-            var locals = function.Locals.Select(static local => local.Symbol.StableKey).ToHashSet(StringComparer.Ordinal);
+            if (function.Symbol.Kind != PowerShellSymbolKind.ModuleInitializer)
+                assigned.UnionWith(function.Locals.Where(static local => local.Symbol.Kind == PowerShellSymbolKind.ModuleState)
+                    .Select(static local => local.Symbol.StableKey));
+            var locals = function.Locals.ToDictionary(static local => local.Symbol.StableKey, static local => local.Type, StringComparer.Ordinal);
             Analyze(function.Body, assigned, locals, diagnostics);
         }
         return program.WithDiagnostics(PowerShellSemanticAnalyzer.OrderDiagnostics(diagnostics));
@@ -20,11 +23,59 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
     private static void Analyze(
         PowerShellBoundBlock block,
         ISet<string> assigned,
-        ISet<string> locals,
+        IReadOnlyDictionary<string, PowerShellTypeFact> locals,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         foreach (var statement in block.Statements)
         {
+            if (statement is PowerShellBoundOutputCaptureStatement captureOutput)
+            {
+                Analyze(captureOutput.Body, assigned, locals, diagnostics);
+                if (captureOutput.Target is not null) assigned.Add(captureOutput.Target.StableKey);
+                continue;
+            }
+            if (statement is PowerShellBoundStatementErrorBoundary boundary)
+            {
+                // A failed statement can skip its first assignment and still reach the next statement.
+                // A closed primitive call may need the host solely to unwrap Object
+                // arguments. That conversion cannot introduce a failed-assignment edge.
+                var preservesAssignment = boundary.Body.Statements.Length == 1 &&
+                    boundary.Body.Statements[0] is PowerShellBoundAssignmentStatement
+                    { Operation: PowerShellBoundMutationOperator.Assign, Value: PowerShellBoundClrInvocationExpression
+                        { InvocationKind: PowerShellClrInvocationKind.StaticMethod } primitive } &&
+                    primitive.Arguments.All(static argument => argument is PowerShellBoundLiteralExpression or PowerShellBoundVariableExpression) &&
+                    primitive.ArgumentConversions.All(static conversion => conversion.Kind is PowerShellClrArgumentConversionKind.None or
+                        PowerShellClrArgumentConversionKind.PowerShellObjectToClrObject) &&
+                    PowerShellClrPrimitiveInvocationPolicy.IsNonThrowing(primitive.DeclaringType, primitive.MemberName,
+                        primitive.InvocationKind, primitive.Type.ClrType, primitive.ParameterTypes);
+                Analyze(boundary.Body, preservesAssignment ? assigned : assigned.ToHashSet(StringComparer.Ordinal), locals, diagnostics);
+                if (boundary.Body.Statements.Length == 1 &&
+                    boundary.Body.Statements[0] is PowerShellBoundOutputCaptureStatement { Target: not null } capture &&
+                    locals.TryGetValue(capture.Target.StableKey, out var captureType) &&
+                    captureType.ClrType == typeof(object) &&
+                    captureType.Provenance != PowerShellTypeFactProvenance.Explicit)
+                    // A failed first capture leaves its unconstrained local slot null;
+                    // later failures preserve the value assigned before the capture.
+                    assigned.Add(capture.Target.StableKey);
+                if (boundary.Body.Statements.Length == 1 && boundary.Body.Statements[0] is PowerShellBoundAssignmentStatement
+                    { Operation: PowerShellBoundMutationOperator.Assign, Value: PowerShellBoundInvocationExpression
+                        { CapturesSuccessOutput: true } } commandCapture &&
+                    locals.TryGetValue(commandCapture.Target.StableKey, out var commandCaptureType) &&
+                    commandCaptureType.ClrType == typeof(object) &&
+                    commandCaptureType.Provenance != PowerShellTypeFactProvenance.Explicit)
+                    // A consumed command uses the same nullable initial slot as a
+                    // statement-output capture. Failure leaves the previous slot intact.
+                    assigned.Add(commandCapture.Target.StableKey);
+                if (boundary.Body.Statements.Length == 1 && boundary.Body.Statements[0] is PowerShellBoundAssignmentStatement
+                    { Operation: PowerShellBoundMutationOperator.Assign, Value: PowerShellBoundClrInvocationExpression } initialization &&
+                    locals.TryGetValue(initialization.Target.StableKey, out var targetType) &&
+                    !targetType.ClrType.IsValueType && targetType.ClrType != typeof(string) &&
+                    targetType.Provenance != PowerShellTypeFactProvenance.Int32OrDouble)
+                    // Direct reference-valued CLR calls use a null initial slot when
+                    // their first assignment fails. Later failures preserve that slot.
+                    assigned.Add(initialization.Target.StableKey);
+                continue;
+            }
             if (statement is PowerShellBoundIfStatement conditional)
             {
                 foreach (var clause in conditional.Clauses) ReportReads(clause.Condition, assigned, locals, diagnostics);
@@ -85,6 +136,10 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
                 var loopState = assigned.ToHashSet(StringComparer.Ordinal);
                 loopState.Add(forEachLoop.Variable.StableKey);
                 Analyze(forEachLoop.Body, loopState, locals, diagnostics);
+                if (forEachLoop.EnumerationKind == PowerShellForEachEnumerationKind.StableScalar &&
+                    forEachLoop.ElementType.IsValueType &&
+                    Nullable.GetUnderlyingType(forEachLoop.ElementType) is null)
+                    assigned.Add(forEachLoop.Variable.StableKey);
                 continue;
             }
             if (statement is PowerShellBoundSwitchStatement switchStatement)
@@ -97,9 +152,9 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
                     Analyze(clause.Body, state, locals, diagnostics);
                     return state;
                 }).ToList();
-                if (switchStatement.DefaultBlock is null)
+                if (switchStatement.DefaultBlock is null || switchStatement.InputKind != PowerShellBoundSwitchInputKind.Scalar)
                     branchStates.Add(assigned.ToHashSet(StringComparer.Ordinal));
-                else
+                if (switchStatement.DefaultBlock is not null)
                 {
                     var defaultState = assigned.ToHashSet(StringComparer.Ordinal);
                     Analyze(switchStatement.DefaultBlock, defaultState, locals, diagnostics);
@@ -133,7 +188,7 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
             if (statement is PowerShellBoundAssignmentStatement assignment)
             {
                 if (assignment.Operation != PowerShellBoundMutationOperator.Assign &&
-                    locals.Contains(assignment.Target.StableKey) &&
+                    locals.ContainsKey(assignment.Target.StableKey) &&
                     !assigned.Contains(assignment.Target.StableKey))
                 {
                     diagnostics.Add(new PowerShellSemanticDiagnostic(
@@ -166,10 +221,10 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
     private static void ReportReads(
         PowerShellBoundExpression expression,
         ISet<string> assigned,
-        ISet<string> locals,
+        IReadOnlyDictionary<string, PowerShellTypeFact> locals,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
-        foreach (var read in PowerShellSemanticAnalyzer.EnumerateVariableReads(expression).Where(read => locals.Contains(read.Symbol.StableKey)))
+        foreach (var read in PowerShellSemanticAnalyzer.EnumerateVariableReads(expression).Where(read => locals.ContainsKey(read.Symbol.StableKey)))
         {
             if (assigned.Contains(read.Symbol.StableKey)) continue;
             diagnostics.Add(new PowerShellSemanticDiagnostic(

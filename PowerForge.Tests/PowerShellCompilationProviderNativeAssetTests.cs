@@ -104,7 +104,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
         {
             Assemblies = new[]
             {
-                new PowerShellCompilationProviderAssemblyInput(providerAssembly, "lib/net8.0/Generic.Semantic.Provider.dll")
+                new PowerShellCompilationProviderAssemblyInput(providerAssembly, "lib/net10.0/Generic.Semantic.Provider.dll")
             },
             NativeAssets = new[]
             {
@@ -136,7 +136,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
                 {
                     new PowerShellCompilationProviderAssemblyInput(
                         typeof(Generic.Semantic.Provider.NoticeAdapter).Assembly.Location,
-                        "lib/net8.0/Generic.Semantic.Provider.dll")
+                        "lib/net10.0/Generic.Semantic.Provider.dll")
                 },
                 NativeAssets = new[]
                 {

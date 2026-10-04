@@ -1,0 +1,205 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Scalar-argument native Type factories at untyped catch-all boundaries, with unchanged offline file-removal qualification",
+  "baselineCompilerCommit": "558e669a2b75a33f475fa87ab7d7877ab7c345a2",
+  "baselineDispositionLedger": "m29a-web-session-comparison.net10.json",
+  "dispositionContract": "Apply the single changed disposition below to the linked complete baseline ledger. Every other function keeps its emitted/retained disposition; current retained regions and causes are recorded in the inventory.",
+  "verifiedFunctionIdentities": 565,
+  "observedStableUnits": 584,
+  "baselineEmitted": 507,
+  "candidateEmitted": 508,
+  "candidateRetained": 57,
+  "packets": [
+    {
+      "packet": "pssg",
+      "resourceMode": "CompleteModule",
+      "functions": 282,
+      "emitted": 264,
+      "retained": 18,
+      "gains": [
+        {
+          "name": "Remove-FileItem",
+          "unitId": "782548ce522fdeba9135d68c"
+        }
+      ],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "b400314a0a58e6a1f13435bc8c9d361cffdde9d165d7e26a5fcb8ef61b00991c"
+    },
+    {
+      "packet": "cleanup",
+      "resourceMode": "CompleteModule",
+      "functions": 68,
+      "emitted": 63,
+      "retained": 5,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1"
+    },
+    {
+      "packet": "pinf",
+      "resourceMode": "Declared",
+      "functions": 66,
+      "emitted": 64,
+      "retained": 2,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "dc4ead723c754d3554c2707baea55372489caa746ba3f56a6b6322d7e358f95d"
+    },
+    {
+      "packet": "pst",
+      "resourceMode": "CompleteModule",
+      "functions": 109,
+      "emitted": 90,
+      "retained": 19,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "58f9421a20c0f866af3b63740ecfd6679f2f92004ba59f7f267e50533d715e70"
+    },
+    {
+      "packet": "platyps",
+      "resourceMode": "Declared",
+      "functions": 40,
+      "emitted": 27,
+      "retained": 13,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "f3a8acb7feecc018adfe9d5daf63170ea3af30eed2b718cb1426d9e2346c005f"
+    }
+  ],
+  "changedDispositions": [
+    {
+      "packet": "pssg",
+      "unitId": "782548ce522fdeba9135d68c",
+      "name": "Remove-FileItem",
+      "baselineEmitted": false,
+      "candidateEmitted": true,
+      "retainedHostedSource": false,
+      "usesNativeFunctionBinding": true,
+      "baselineRegionMembers": [],
+      "candidateRegionMembers": []
+    }
+  ],
+  "lostCompleteMethods": [],
+  "lostRegionsOfRetainedFunctions": [],
+  "retainedInventory": "m29a-retained-functions.net10.json",
+  "retainedInventorySha256": "929fa422de6c3d623eb8707f17c6c2ef535386e9fc5f65a3c3c3b3e5c7753350",
+  "changedSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeTypeArgumentPolicy.cs": "ff940d7098ed93beefa02e16c65a99e7edab09bc2baf6de0fbb1c8805c493c2e",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "d0f79e157cfd945c6b67523786b90f37297a74f2b2c07be2301b8de7c4a56cbe",
+    "PowerForge.Tests/PowerShellCompilationTypeFactoryArgumentTests.cs": "b992c4cf7ee2445c11933d679c4ccd66593081fcc621b1be37205c7e6abb7315"
+  },
+  "workflow": {
+    "source": "https://github.com/EvotecIT/PSSharedGoods",
+    "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+    "relativePath": "Public/FilesFolders/Remove-FileItem.ps1",
+    "sourceSha256": "e1ce8d334214a50e92f269312b597a32b62726a26f4d0bd0ed7810671426feef",
+    "license": "MIT, existing pinned tracked fixture",
+    "executedBranches": [
+      "DotNetDelete file",
+      "DotNetDelete empty directory",
+      "DotNetDelete nonempty-directory failure",
+      "DotNetDelete recursive directory",
+      "WhatIf",
+      "missing path",
+      "zero retries"
+    ],
+    "unexecutedBranches": [
+      "RecycleBin/COM",
+      "RemoveItem",
+      "SkipTopFolder/Remove-ChildItems"
+    ]
+  },
+  "differentialProof": {
+    "hosts": [
+      "PowerShell 7/net10.0 Windows",
+      "Windows PowerShell 5.1/net472"
+    ],
+    "artifactKind": "Hybrid binary module",
+    "completeNativeBoundMethodsPerHost": 2,
+    "retainedFunctionBodies": 0,
+    "jsonObservationsPerHost": 25,
+    "factoryObservationsPerHost": 16,
+    "clrStringificationObservationsPerHost": 2,
+    "unchangedFileWorkflowObservationsPerHost": 7,
+    "compared": [
+      "stdout including WhatIf",
+      "JSON records",
+      "native error ID and type",
+      "authored error line and column",
+      "argument order and finally traces",
+      "prior assignment after failure",
+      "owned file/directory existence"
+    ],
+    "strictAndOtherGuards": [
+      "Strict zero emitted methods",
+      "typed catch hosted",
+      "instance GetType transform hosted",
+      "Type cast hosted",
+      "delegate-bearing factory overload hosted"
+    ]
+  },
+  "validation": [
+    {
+      "name": "type-factory-focused",
+      "sha256": "5d508c141a7645dc4ba27ba5e7b02b7b21308b05dbd77eefc1448926275d6b78",
+      "total": 4,
+      "passed": 4,
+      "failed": 0
+    },
+    {
+      "name": "type-factory-compatibility",
+      "sha256": "e0ac5a1cea95881c7b94dc77166d36c16e096bfddefc8bee8f77b1852bc27b3d",
+      "total": 14,
+      "passed": 14,
+      "failed": 0
+    },
+    {
+      "name": "type-factory-final",
+      "sha256": "57c585d5617d004e9105d01af8f1f0c2840098eed55dcfbe7388eb7267feef8b",
+      "total": 4,
+      "passed": 2,
+      "failed": 2
+    },
+    {
+      "name": "type-factory-clr-callback",
+      "sha256": "b0417fd1a0d010b9bcf53b6407dfaa7af8eb54f8e770e574f0370446bafacf6d",
+      "total": 4,
+      "passed": 4,
+      "failed": 0
+    }
+  ],
+  "failedStage": {
+    "name": "type-factory-final",
+    "status": "2/4 failed because scripted PSObject ToString was not invoked; not a compiler divergence",
+    "resolution": "Replace with a CLR ToString object that records success and throws on demand; require observable stringification and 25 JSON observations. Final 4/4 passed."
+  },
+  "net472OwnerBuild": {
+    "succeeded": true,
+    "warnings": 0,
+    "errors": 0,
+    "seconds": 5.56
+  },
+  "independentReview": {
+    "scope": "new Type-factory admission, native binder/error owner and tests",
+    "actionableFindings": 0,
+    "execution": "Strictly read-only; runtime evidence primary-owned",
+    "limits": [
+      "No COM factory execution",
+      "No additional scalar factory runtime proof"
+    ],
+    "laterChanges": "Test-only stronger delegate/observation assertions and real CLR callback replace an ineffective scripted probe; production source unchanged"
+  },
+  "limits": [
+    "Hybrid calls and argument conversion remain PowerShell-host backed",
+    "No general Type transformation or delegate/unknown-overload admission",
+    "Census is net10.0 only; both-host focused artifacts do not refresh full net472 portfolio",
+    "Only bounded owned-file paths qualify Remove-FileItem; no COM, arbitrary deletion or full module execution",
+    "Builds allow unreviewed dependency resolution; no reviewed lock claim",
+    "No aggregate compiler gate, non-Windows execution, performance result, PR, merge or release"
+  ]
+}

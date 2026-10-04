@@ -8,11 +8,21 @@ namespace PowerForge;
 /// </summary>
 internal sealed partial class PowerShellBoundCSharpBackend
 {
+    private PowerShellLoweredFunction? _sourceFunction;
+    private PowerShellCompilationSemanticHostFamily _semanticHostFamily;
+    private PowerShellCompilationCapability _targetCapabilities;
+    private IReadOnlyDictionary<string, PowerShellLoweredFunction> _functions = new Dictionary<string, PowerShellLoweredFunction>();
     internal PowerShellBoundCSharpResult Emit(PowerShellLoweredProgram program)
     {
         if (program is null) throw new ArgumentNullException(nameof(program));
         // Each function owns its temporary names and generated helper registry.
-        var methods = program.Functions.Select(function => new PowerShellBoundCSharpBackend().EmitFunction(function, program.TargetCapabilities)).ToArray();
+        var functions = program.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
+        var methods = program.Functions.Select(function => new PowerShellBoundCSharpBackend
+        {
+            _functions = functions,
+            _semanticHostFamily = program.SemanticHostFamily,
+            _targetCapabilities = program.TargetCapabilities
+        }.EmitFunction(function, program.TargetCapabilities)).ToArray();
         return new PowerShellBoundCSharpResult(methods, program.Diagnostics.ToArray());
     }
 
@@ -20,14 +30,21 @@ internal sealed partial class PowerShellBoundCSharpBackend
         PowerShellLoweredFunction function,
         PowerShellCompilationCapability targetCapabilities)
     {
+        _sourceFunction = function;
+        var transfersCapturedReturn = TransfersCapturedReturn(function);
+        if (transfersCapturedReturn && function.ReturnType != typeof(void))
+            throw new InvalidOperationException("A native captured return requires a void success-stream method.");
+        var managedInstance = targetCapabilities.HasFlag(PowerShellCompilationCapability.RuntimeFreeModuleState);
+        var initializer = function.Symbol.Kind == PowerShellSymbolKind.ModuleInitializer;
+        var bodyIndent = managedInstance ? 5 : 3;
         var builder = new StringBuilder();
         var sourceMap = new List<PowerShellCompilationSourceMapEntry>();
         var parameterParts = function.Parameters.Select(parameter =>
             $"{PowerShellCSharpSymbolRenderer.TypeName(parameter.ClrType)} {PowerShellCSharpSymbolRenderer.Identifier(parameter.Symbol.Name)}").ToList();
-        var requiresBoundParameters = function.RequiresPowerShellBoundParameters || function.Parameters.Any(parameter =>
-            parameter.Contract.DefaultValue is not null ||
-            !parameter.Contract.IsMandatory && parameter.Contract.Validations.Length > 0 &&
-            targetCapabilities.HasFlag(PowerShellCompilationCapability.BoundParameters));
+        if (function.NativeFunctionBinding is not null)
+            parameterParts = new List<string> { "global::PowerForge.Generated.Runtime.PowerShellNativeFunctionContext __nativeFunction" };
+        var requiresBoundParameters = function.NativeFunctionBinding is null && (function.RequiresPowerShellBoundParameters || function.Parameters.Any(parameter =>
+            PowerShellParameterValidationPolicy.RequiresBoundParameterSet(parameter.Contract, targetCapabilities)));
         AddHostParameters(parameterParts, function, requiresBoundParameters);
         var parameters = string.Join(", ", parameterParts);
         var usedIdentifiers = function.Parameters.Select(static parameter => PowerShellClrSymbolMapper.MapIdentifier(parameter.Symbol.Name))
@@ -41,19 +58,30 @@ internal sealed partial class PowerShellBoundCSharpBackend
             return candidate;
         }
         _getTemporaryIdentifier = GetTemporaryIdentifier;
+        InitializeLoopTransfers(function, GetTemporaryIdentifier);
         var discardHelper = ContainsDiscardValue(function.Statements)
             ? GetTemporaryIdentifier("discardValue")
             : null;
-        builder.Append("    public static ")
+        _statementValueDiscardHelper = discardHelper;
+        if (!initializer && function.Symbol.Kind != PowerShellSymbolKind.NativeScriptBlock)
+            AppendPublicMethodDocumentation(builder, function);
+        builder.Append(initializer ? "    private " : function.Symbol.Kind == PowerShellSymbolKind.NativeScriptBlock ? "    private static " : managedInstance ? "    public " : "    public static ")
             .Append(PowerShellCSharpSymbolRenderer.TypeName(function.ReturnType))
             .Append(' ')
             .Append(function.GeneratedName)
             .Append('(')
             .Append(parameters)
             .AppendLine(")")
-            .AppendLine("    {")
-            .AppendLine("        checked")
-            .AppendLine("        {");
+            .AppendLine("    {");
+        if (managedInstance)
+            builder.AppendLine("        lock (this.__moduleSync)")
+                .AppendLine("        {")
+                .AppendLine("            this.__ThrowIfDisposed();")
+                .AppendLine("            this.__moduleActiveCalls++;")
+                .AppendLine("            try")
+                .AppendLine("            {");
+        builder.AppendLine(managedInstance ? "                checked" : "        checked")
+            .AppendLine(managedInstance ? "                {" : "        {");
 
         if (targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions))
         {
@@ -67,7 +95,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         {
             builder.Append("            static void ").Append(discardHelper).AppendLine("<T>(T value) { }");
         }
-        var parameterContracts = function.Parameters.Select(static parameter => new PowerShellParameterEmissionContract(
+        var parameterContracts = function.Parameters.Where(_ => function.NativeFunctionBinding is null).Select(static parameter => new PowerShellParameterEmissionContract(
             parameter.Symbol.Name,
             parameter.ClrType,
             parameter.Contract)).ToArray();
@@ -78,21 +106,36 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (prologue.Length > 0)
         {
             foreach (var line in prologue.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
-                builder.Append("            ").AppendLine(line);
+                builder.Append(new string(' ', bodyIndent * 4)).AppendLine(line);
         }
 
+        if (function.NativeFunctionBinding is not null && function.RequiresPowerShellStatementErrors)
+            EmitNativeEntrySequencePoint(builder, function);
+        if (transfersCapturedReturn)
+            builder.Append(new string(' ', bodyIndent * 4)).AppendLine("try")
+                .Append(new string(' ', bodyIndent * 4)).AppendLine("{");
         foreach (var statement in function.Statements)
-            EmitStatement(builder, statement, 3, GetTemporaryIdentifier, discardHelper, sourceMap);
+            EmitStatement(builder, statement, bodyIndent + (transfersCapturedReturn ? 1 : 0), GetTemporaryIdentifier, discardHelper, sourceMap);
+        if (transfersCapturedReturn)
+            builder.Append(new string(' ', bodyIndent * 4)).AppendLine("}")
+                .Append(new string(' ', bodyIndent * 4)).AppendLine("catch (global::PowerForge.Generated.Runtime.PowerShellCapturedReturnSignal) { return; }");
 
         foreach (var helper in _numericHelpers.Values)
             builder.AppendLine(helper.Source);
+        EmitFormatHelper(builder);
 
-        builder.AppendLine("        }").Append("    }");
-        var regionGraph = PowerShellLoweredRegionGraphBuilder.Create(function);
-        var commandProviders = PowerShellLoweredCommandProviderCollector.Collect(function.Statements);
-        var moduleStateVariableNames = PowerShellLoweredModuleStateCollector.Collect(function.Statements);
+        builder.AppendLine(managedInstance ? "                }" : "        }");
+        if (managedInstance) builder.AppendLine("            }")
+            .AppendLine("            finally { this.__moduleActiveCalls--; }")
+            .AppendLine("        }");
+        builder.Append("    }");
+        AppendNativeScriptBlocks(builder, function, targetCapabilities, sourceMap);
+        var regionGraph = PowerShellLoweredRegionGraphBuilder.Create(function, _functions);
+        var closureStatements = PowerShellLoweredScriptBlockClosure.Enumerate(function, _functions).SelectMany(static body => body.Statements).ToArray();
+        var commandProviders = PowerShellLoweredCommandProviderCollector.Collect(closureStatements);
+        var moduleStateVariableNames = PowerShellLoweredModuleStateCollector.Collect(closureStatements);
         var moduleStateReadSiteCount = regionGraph.ModuleStateReadBoundarySites;
-        var writtenModuleStateVariableNames = PowerShellLoweredModuleStateCollector.CollectWrites(function.Statements);
+        var writtenModuleStateVariableNames = PowerShellLoweredModuleStateCollector.CollectWrites(closureStatements);
         var moduleStateWriteSiteCount = regionGraph.ModuleStateWriteBoundarySites;
         var hostedRegionSiteCount = regionGraph.HostedCommandBoundarySites;
         var supportsBasicCommandQuerySurface =
@@ -113,6 +156,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             requiresPowerShellRuntimeState: function.RequiresPowerShellRuntimeState,
             requiresPowerShellModuleStateRead: function.RequiresPowerShellModuleStateRead,
             requiresPowerShellModuleStateWrite: function.RequiresPowerShellModuleStateWrite,
+            requiresPowerShellStatementErrors: function.RequiresPowerShellStatementErrors,
+            requiresPowerShellStopping: function.RequiresPowerShellStopping,
             help: function.Help?.ToPublicModel(),
             declaredOutputType: function.DeclaredOutputType,
             declaredOutputTypeName: function.DeclaredOutputTypeName,
@@ -125,7 +170,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             collectionElementType: function.OutputCardinality == PowerShellOutputCardinality.Collection
                 ? function.CollectionElementType?.FullName ?? typeof(object).FullName!
                 : string.Empty,
-            outputScalarization: function.OutputCardinality switch
+            outputScalarization: function.Statements.LastOrDefault() is PowerShellLoweredRegionTransferStatement
+                ? "PreserveRegionTransfer" : function.OutputCardinality switch
             {
                 PowerShellOutputCardinality.None => "NoOutput",
                 PowerShellOutputCardinality.Collection => "EnumerateCollection",
@@ -138,7 +184,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
             moduleStateReadSiteCount: moduleStateReadSiteCount,
             writtenModuleStateVariableNames: writtenModuleStateVariableNames,
             moduleStateWriteSiteCount: moduleStateWriteSiteCount,
-            regionGraph: regionGraph);
+            regionGraph: regionGraph,
+            nativeFunctionBinding: function.NativeFunctionBinding,
+            successOutputType: function.SuccessOutputType,
+            outputTypeDeclarations: function.OutputTypeDeclarations);
     }
 
     private void EmitStatement(
@@ -147,14 +196,18 @@ internal sealed partial class PowerShellBoundCSharpBackend
         int indent,
         Func<string, string> getTemporaryIdentifier,
         string? discardHelper,
-        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap,
+        string? successOutputSink = null)
     {
         var prefix = new string(' ', indent * 4);
         builder.Append(prefix).Append("#line ")
             .Append(statement.Span.StartLine.ToString(CultureInfo.InvariantCulture))
             .Append(" \"").Append(statement.Span.DocumentId).AppendLine("\"");
         var start = PowerShellGeneratedSourcePosition.Get(builder);
-        EmitStatementCore(builder, statement, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+        var expressionMapStart = _statementValueMaps.Count;
+        var fragmentStart = builder.Length;
+        EmitStatementCore(builder, statement, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+        MapStatementValueFragments(builder, fragmentStart, expressionMapStart, sourceMap);
         var end = PowerShellGeneratedSourcePosition.Get(builder);
         builder.Append(prefix).AppendLine("#line default");
         sourceMap.Add(new PowerShellCompilationSourceMapEntry(
@@ -174,11 +227,15 @@ internal sealed partial class PowerShellBoundCSharpBackend
         int indent,
         Func<string, string> getTemporaryIdentifier,
         string? discardHelper,
-        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap,
+        string? successOutputSink)
     {
         var prefix = new string(' ', indent * 4);
         switch (statement)
         {
+            case PowerShellLoweredOutputCaptureStatement capture:
+                EmitOutputCapture(builder, capture, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                return;
             case PowerShellLoweredLocalDeclarationStatement declaration:
                 builder.Append(prefix).Append(PowerShellCSharpSymbolRenderer.TypeName(declaration.ClrType)).Append(' ')
                     .Append(PowerShellCSharpSymbolRenderer.Identifier(declaration.Symbol.Name)).AppendLine(" = default!;");
@@ -192,18 +249,25 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     assignment.Operation,
                     assignment.Value,
                     assignment.NormalizeNullString,
-                    assignment.IntegralSemantics)).AppendLine(";");
+                    assignment.IntegralSemantics, assignment.PreserveStatementErrors)).AppendLine(";");
                 return;
             case PowerShellLoweredModuleVariableAssignmentStatement assignment:
                 builder.Append(prefix).Append("__writePowerShellModuleVariable(")
                     .Append(PowerShellCSharpLiteral.QuoteString(assignment.Name)).Append(", ")
                     .Append(EmitExpression(assignment.Value)).AppendLine(");");
                 return;
+            case PowerShellLoweredNativeAssignmentStatement assignment:
+                builder.Append(prefix).Append(EmitNativeAssignmentTarget(assignment.Target,
+                    assignment.Operation, assignment.Value)).AppendLine(";");
+                return;
             case PowerShellLoweredIndexAssignmentStatement assignment:
                 builder.Append(prefix).Append(EmitIndexAssignment(assignment)).AppendLine(";");
                 return;
             case PowerShellLoweredClrMemberAssignmentStatement assignment:
                 builder.Append(prefix).Append(EmitClrMemberAssignment(assignment)).AppendLine(";");
+                return;
+            case PowerShellLoweredReturnStatement returned when _outputCaptureDepth > 0:
+                EmitCapturedReturn(builder, returned, prefix);
                 return;
             case PowerShellLoweredReturnStatement { Expression: null }:
                 builder.Append(prefix).AppendLine("return;");
@@ -228,12 +292,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 builder.Append(prefix).Append(EmitExpression(expression.Expression)).AppendLine(";");
                 return;
             case PowerShellLoweredStreamWriteStatement stream:
-                EmitProviderStreamWrite(builder, stream, prefix, getTemporaryIdentifier);
+                EmitProviderStreamWrite(builder, stream, prefix, getTemporaryIdentifier, successOutputSink);
                 return;
             case PowerShellLoweredCommandRegionStatement region:
-                builder.Append(prefix).Append("__invokePowerShellRegion(")
-                    .Append(PowerShellCSharpLiteral.QuoteString(region.HostedFallbackSource))
-                    .Append(", ").Append(EmitCommandRegionArguments(region.Arguments)).AppendLine(");");
+                EmitCommandRegion(builder, region, prefix);
                 return;
             case PowerShellLoweredCommandCaptureStatement capture:
                 EmitCommandCapture(builder, capture, prefix);
@@ -243,30 +305,35 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 {
                     var clause = conditional.Clauses[index];
                     builder.Append(prefix).Append(index == 0 ? "if (" : "else if (").Append(EmitExpression(clause.Condition)).AppendLine(")");
-                    EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                    EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                        successOutputSink: successOutputSink);
                 }
                 if (conditional.ElseStatements is not null)
                 {
                     builder.Append(prefix).AppendLine("else");
-                    EmitBlock(builder, conditional.ElseStatements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                    EmitBlock(builder, conditional.ElseStatements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                        successOutputSink: successOutputSink);
                 }
                 return;
             case PowerShellLoweredWhileStatement loop:
                 if (loop.Kind == PowerShellLoweredLoopKind.While)
                 {
                     builder.Append(prefix).Append("while (").Append(EmitExpression(loop.Condition)).AppendLine(")");
-                    EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                    EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                        loop.CheckHostInterrupts, successOutputSink, loop.Span);
                 }
                 else
                 {
                     builder.Append(prefix).AppendLine("do");
-                    EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                    EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                        loop.CheckHostInterrupts, successOutputSink, loop.Span);
                     builder.Append(prefix).Append("while (");
                     if (loop.Kind == PowerShellLoweredLoopKind.DoUntil) builder.Append("!(");
                     builder.Append(EmitExpression(loop.Condition));
                     if (loop.Kind == PowerShellLoweredLoopKind.DoUntil) builder.Append(')');
                     builder.AppendLine(");");
                 }
+                EmitLoopTransferTarget(builder, loop.Span, prefix, isContinue: false);
                 return;
             case PowerShellLoweredForStatement loop:
                 var initializer = loop.Initializer is null
@@ -275,29 +342,54 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 var condition = loop.Condition is null ? "true" : EmitExpression(loop.Condition);
                 var iterator = loop.Iterator is null ? string.Empty : EmitExpression(loop.Iterator);
                 builder.Append(prefix).Append("for (").Append(initializer).Append("; ").Append(condition).Append("; ").Append(iterator).AppendLine(")");
-                EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                    loop.CheckHostInterrupts, successOutputSink, loop.Span);
+                EmitLoopTransferTarget(builder, loop.Span, prefix, isContinue: false);
                 return;
             case PowerShellLoweredForEachStatement loop:
-                EmitForEach(builder, loop, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                EmitForEach(builder, loop, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+                EmitLoopTransferTarget(builder, loop.Span, prefix, isContinue: false);
                 return;
             case PowerShellLoweredSwitchStatement switchStatement:
-                EmitSwitch(builder, switchStatement, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                EmitSwitch(builder, switchStatement, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+                return;
+            case PowerShellLoweredThrowStatement { Expression: null, PreserveStatementErrors: true } thrown:
+                builder.Append(prefix).Append("throw __statementErrors.PrepareRethrow(")
+                    .Append(QuotePortableSourcePath(thrown.SourcePath))
+                    .Append(", ").Append(thrown.Span.StartLine).Append(", ").Append(thrown.Span.StartColumn)
+                    .Append(", ").Append(thrown.Span.EndLine).Append(", ").Append(thrown.Span.EndColumn)
+                    .Append(", ").Append(PowerShellCSharpLiteral.QuoteString(thrown.SourceText)).AppendLine(");");
                 return;
             case PowerShellLoweredThrowStatement { Expression: null }:
                 builder.Append(prefix).AppendLine("throw;");
                 return;
+            case PowerShellLoweredThrowStatement { PreserveStatementErrors: true } thrown:
+                builder.Append(prefix).Append("throw __statementErrors.PrepareThrow(").Append(EmitExpression(thrown.Expression!))
+                    .Append(", ").Append(QuotePortableSourcePath(thrown.SourcePath))
+                    .Append(", ").Append(thrown.Span.StartLine).Append(", ").Append(thrown.Span.StartColumn)
+                    .Append(", ").Append(thrown.Span.EndLine).Append(", ").Append(thrown.Span.EndColumn)
+                    .Append(", ").Append(PowerShellCSharpLiteral.QuoteString(thrown.SourceText)).AppendLine(");");
+                return;
             case PowerShellLoweredThrowStatement thrown:
                 builder.Append(prefix).Append("throw ").Append(EmitExpression(thrown.Expression!)).AppendLine(";");
                 return;
+            case PowerShellLoweredStatementErrorBoundary boundary:
+                EmitStatementErrorBoundary(builder, boundary, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+                return;
+            case PowerShellLoweredTryStatement { PreserveStatementErrors: true } attempted:
+                EmitNativeTry(builder, attempted, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+                return;
             case PowerShellLoweredTryStatement tryStatement:
                 builder.Append(prefix).AppendLine("try");
-                EmitBlock(builder, tryStatement.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                EmitBlock(builder, tryStatement.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                    successOutputSink: successOutputSink);
                 foreach (var clause in tryStatement.Catches)
                 {
-                    if (clause.ExceptionTypes.Length == 0)
+                    if (clause.ExceptionTypes.Length == 0 && !clause.ExcludePowerShellControlFlow)
                     {
                         builder.Append(prefix).AppendLine("catch (global::System.Exception)");
-                        EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                        EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                            successOutputSink: successOutputSink);
                         continue;
                     }
                     var effectiveException = clause.UnwrapPowerShellRuntimeException
@@ -306,25 +398,30 @@ internal sealed partial class PowerShellBoundCSharpBackend
                           $"((global::System.Management.Automation.RuntimeException){clause.ExceptionTemporary}).ErrorRecord.FullyQualifiedErrorId == \"System.ArgumentOutOfRangeException\") ? " +
                           $"((global::System.Management.Automation.RuntimeException){clause.ExceptionTemporary}).ErrorRecord.Exception : {clause.ExceptionTemporary})"
                         : clause.ExceptionTemporary;
-                    var filter = string.Join(
+                    var filter = clause.ExceptionTypes.Length == 0 ? "true" : string.Join(
                         " || ",
                         clause.ExceptionTypes.Select(type =>
                             $"{effectiveException} is {PowerShellCSharpSymbolRenderer.TypeName(type)}"));
+                    if (clause.ExcludePowerShellControlFlow)
+                        filter = $"{clause.ExceptionTemporary} is not global::System.Management.Automation.PipelineStoppedException && " +
+                            $"{clause.ExceptionTemporary} is not global::System.Management.Automation.FlowControlException && ({filter})";
                     builder.Append(prefix).Append("catch (global::System.Exception ")
                         .Append(clause.ExceptionTemporary).Append(") when (").Append(filter).AppendLine(")");
-                    EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                    EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                        successOutputSink: successOutputSink);
                 }
                 if (tryStatement.FinallyStatements is not null)
                 {
                     builder.Append(prefix).AppendLine("finally");
-                    EmitBlock(builder, tryStatement.FinallyStatements, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+                    EmitBlock(builder, tryStatement.FinallyStatements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                        successOutputSink: successOutputSink);
                 }
                 return;
-            case PowerShellLoweredBreakStatement:
-                builder.Append(prefix).AppendLine("break;");
+            case PowerShellLoweredBreakStatement transfer:
+                EmitLoopTransfer(builder, transfer.TargetLoop, prefix, isContinue: false);
                 return;
-            case PowerShellLoweredContinueStatement:
-                builder.Append(prefix).AppendLine("continue;");
+            case PowerShellLoweredContinueStatement transfer:
+                EmitLoopTransfer(builder, transfer.TargetLoop, prefix, isContinue: true);
                 return;
             default:
                 throw new InvalidOperationException($"Lowered statement '{statement.GetType().Name}' has no C# rendering owner.");
@@ -334,16 +431,33 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private string EmitExpression(PowerShellLoweredExpression expression)
         => expression switch
         {
+            PowerShellLoweredNativeReferenceExpression reference => "__nativeFunction.GetVariableReference(" + PowerShellCSharpLiteral.QuoteString(reference.Name) + ", " + (reference.DirectLocal ? "true" : "false") + ")",
             PowerShellLoweredLiteralExpression literal => EmitLiteral(literal),
-            PowerShellLoweredVariableExpression variable => PowerShellCSharpSymbolRenderer.Identifier(variable.Symbol.Name),
+            PowerShellLoweredNativeVariableExpression variable => EmitNativeVariableRead(variable),
+            PowerShellLoweredNativeScriptBlockExpression block => EmitNativeBlockValue(block),
+            PowerShellLoweredNativeLifecycleExpression lifecycle => "(__nativeFunction.LifecycleClause == " + lifecycle.Clause.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")",
+            PowerShellLoweredVariableExpression variable => RenderStorage(variable.Symbol),
             PowerShellLoweredConstantBooleanDelegateExpression booleanDelegate => EmitConstantBooleanDelegate(booleanDelegate),
             PowerShellLoweredRuntimeStateExpression runtime => EmitRuntimeState(runtime),
             PowerShellLoweredCommandAvailabilityExpression discovery => EmitCommandAvailability(discovery),
             PowerShellLoweredHostedBooleanCommandExpression hostedBoolean => EmitHostedBooleanCommand(hostedBoolean),
             PowerShellLoweredParameterPresenceExpression presence => $"__boundParameters.Contains({PowerShellCSharpLiteral.QuoteString(presence.ParameterName)})",
             PowerShellLoweredConversionExpression conversion => EmitConversion(conversion),
+            PowerShellLoweredRegionValueAlternativeExpression alternative =>
+                "global::PowerForge.Generated.Runtime.PowerShellRegionValueAlternative.Create(" +
+                alternative.AlternativeIndex.ToString(global::System.Globalization.CultureInfo.InvariantCulture) +
+                ", (object)(" + EmitExpression(alternative.Value) + "))",
+            PowerShellLoweredRegionControlFlowExpression controlFlow => controlFlow.Kind == PowerShellRegionControlFlowKind.FallThrough
+                ? "global::PowerForge.Generated.Runtime.PowerShellRegionControlFlowEnvelope.FallThrough()"
+                : controlFlow.Value is null
+                    ? "global::PowerForge.Generated.Runtime.PowerShellRegionControlFlowEnvelope.Return()"
+                : "global::PowerForge.Generated.Runtime.PowerShellRegionControlFlowEnvelope.Return((object?)(" + EmitExpression(controlFlow.Value!) + "))",
             PowerShellLoweredBinaryExpression binary => EmitBinary(binary),
             PowerShellLoweredUnaryExpression unary => EmitUnary(unary),
+            PowerShellLoweredNativeTypeExpression nativeType => "__nativeFunction.ResolveTypeName(" + PowerShellCSharpLiteral.QuoteString(nativeType.Name) + ", " + EmitSourceExtentArguments(nativeType.Span) + ")",
+            PowerShellLoweredNativeTypeTestExpression nativeTest => "__nativeFunction.EvaluateTypeTest(" + EmitExpression(nativeTest.Operand) + ", " +
+                (nativeTest.Target is null ? "__nativeFunction.ResolveTypeName(" + PowerShellCSharpLiteral.QuoteString(nativeTest.AuthoredTypeName!) + ", " + EmitSourceExtentArguments(nativeTest.TargetSpan) + ")" : EmitExpression(nativeTest.Target)) +
+                ", " + (nativeTest.Negate ? "true" : "false") + ")",
             PowerShellLoweredTypeTestExpression typeTest => EmitTypeTest(typeTest),
             PowerShellLoweredRegexExpression regex => EmitRegex(regex),
             PowerShellLoweredWildcardExpression wildcard => EmitWildcard(wildcard),
@@ -357,8 +471,16 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 mutation.Operation,
                 mutation.Value,
                 mutation.NormalizeNullString,
-                mutation.IntegralSemantics),
+                mutation.IntegralSemantics, mutation.PreserveStatementErrors, mutation.NativeTargetRead, mutation.Span, mutation.NativeSourceText, mutation.NativeSetSequencePoint, mutation.NativeAssignmentTarget),
             PowerShellLoweredArrayExpression array => EmitArray(array),
+            PowerShellLoweredNativeMemberExpression memberRead => EmitNativeMember(memberRead),
+            PowerShellLoweredNativeCommandExpression nativeCommand => EmitNativeCommandCapture(nativeCommand),
+            PowerShellLoweredNativeInvocationExpression nativeInvocation => EmitNativeInvocation(nativeInvocation),
+            PowerShellLoweredNativeIndexExpression nativeIndex => EmitNativeIndex(nativeIndex),
+            PowerShellLoweredNativeCollectionExpression collection => EmitNativeCollection(collection),
+            PowerShellLoweredNativeStatementValueExpression statementValue => EmitNativeStatementValue(statementValue),
+            PowerShellLoweredNativeConditionalValueExpression conditionalValue => EmitNativeConditionalValue(conditionalValue),
+            PowerShellLoweredArrayCopyExpression copy => EmitArrayCopy(copy),
             PowerShellLoweredArrayConcatenationExpression concatenation => EmitArrayConcatenation(concatenation),
             PowerShellLoweredDictionaryExpression dictionary => EmitDictionary(dictionary),
             PowerShellLoweredPowerShellObjectExpression powerShellObject => EmitPowerShellObject(powerShellObject),
@@ -384,24 +506,19 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellCommandDiscoveryErrorAction.SilentlyContinue => "SilentlyContinue",
             _ => throw new InvalidOperationException($"Unsupported command-discovery error action '{discovery.ErrorAction}'.")
         };
-        return "global::System.Management.Automation.LanguagePrimitives.IsTrue(__invokePowerShellCapture(" +
+        return "global::System.Management.Automation.LanguagePrimitives.IsTrue(__invokePowerShellCapture(__statementErrors, " +
                PowerShellCSharpLiteral.QuoteString(script) + ", new object?[] { " +
-               EmitExpression(discovery.Name) + ", " + PowerShellCSharpLiteral.QuoteString(errorAction) + " }))";
-    }
-
-    private string EmitConversion(PowerShellLoweredConversionExpression conversion)
-    {
-        var type = PowerShellCSharpSymbolRenderer.TypeName(conversion.ClrType);
-        if (conversion.UsePowerShellTruthiness)
-            return $"global::System.Management.Automation.LanguagePrimitives.IsTrue((object?)({EmitExpression(conversion.Operand)}))";
-        return conversion.UsePowerShellLanguageRuntime
-            ? $"__powerForgeConvertInvariant<{type}>((object?)({EmitExpression(conversion.Operand)}))"
-            : $"({type})({EmitExpression(conversion.Operand)})";
+               EmitExpression(discovery.Name) + ", " + PowerShellCSharpLiteral.QuoteString(errorAction) + " }, null))";
     }
 
     private string EmitTypeTest(PowerShellLoweredTypeTestExpression expression)
     {
         var operand = EmitExpression(expression.Operand);
+        if (expression.UsesPowerShellSemantics)
+        {
+            var nativeTest = $"global::PowerForge.Generated.Runtime.PowerShellNativeLanguageOperations.IsInstance({operand}, typeof({PowerShellCSharpSymbolRenderer.TypeName(expression.TargetType)}))";
+            return expression.Negate ? $"!{nativeTest}" : nativeTest;
+        }
         if (Nullable.GetUnderlyingType(expression.TargetType) is not null)
             return $"new global::System.Func<bool>(() => {{ _ = (object?)({operand}); return {(expression.Negate ? "true" : "false")}; }})()";
         var test = $"((object?)({operand}) is {PowerShellCSharpSymbolRenderer.TypeName(expression.TargetType)})";
@@ -436,22 +553,33 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
     private string EmitMembership(PowerShellLoweredMembershipExpression expression)
     {
+        if (expression.UsesNativeInvocation || expression.UsesCommandHostInvocation)
+            return $"{(expression.UsesNativeInvocation ? "__nativeFunction" : "__statementErrors")}.EvaluateMembership({(expression.IgnoreCase ? "true" : "false")}, {(expression.Negate ? "true" : "false")}, " +
+                $"(object?)({EmitExpression(expression.CollectionOnRight ? expression.Right : expression.Left)}), " +
+                $"(object?)({EmitExpression(expression.CollectionOnRight ? expression.Left : expression.Right)}))";
         var collection = expression.CollectionOnRight ? expression.RightTemporary : expression.LeftTemporary;
         var candidate = expression.CollectionOnRight ? expression.LeftTemporary : expression.RightTemporary;
         var comparison = $"global::System.Linq.Enumerable.Any(({collection} ?? global::System.Array.Empty<{PowerShellCSharpSymbolRenderer.TypeName(expression.ElementType)}>()), {expression.ItemTemporary} => global::System.Management.Automation.LanguagePrimitives.Equals((object?){expression.ItemTemporary}, (object?)({candidate}), {(expression.IgnoreCase ? "true" : "false")}, global::System.Globalization.CultureInfo.InvariantCulture))";
         if (expression.Negate) comparison = $"!({comparison})";
-        return $"new global::System.Func<bool>(() => {{ var {expression.LeftTemporary} = {EmitExpression(expression.Left)}; var {expression.RightTemporary} = {EmitExpression(expression.Right)}; return {comparison}; }})()";
+        var left = $"{PowerShellCSharpSymbolRenderer.TypeName(expression.Left.ClrType)} {expression.LeftTemporary} = {EmitExpression(expression.Left)}; ";
+        var right = $"{PowerShellCSharpSymbolRenderer.TypeName(expression.Right.ClrType)} {expression.RightTemporary} = {EmitExpression(expression.Right)}; ";
+        return $"new global::System.Func<bool>(() => {{ {(expression.CollectionOnRight ? right + left : left + right)}return {comparison}; }})()";
     }
 
     private string EmitDictionary(PowerShellLoweredDictionaryExpression dictionary)
     {
+        if (dictionary.Kind is PowerShellBoundDictionaryKind.NativeHashtable or PowerShellBoundDictionaryKind.NativeOrderedDictionary)
+            return EmitNativeDictionary(dictionary);
         var entries = string.Join(", ", dictionary.Entries.Select(entry => $"{{ {EmitExpression(entry.Key)}, {EmitExpression(entry.Value)} }}"));
+        var comparer = _semanticHostFamily == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51
+            ? "global::System.StringComparer.InvariantCultureIgnoreCase"
+            : "global::System.StringComparer.OrdinalIgnoreCase";
         return dictionary.Kind switch
         {
             PowerShellBoundDictionaryKind.OrderedStringDictionary or PowerShellBoundDictionaryKind.OrderedObjectDictionary =>
-                $"new global::System.Collections.Specialized.OrderedDictionary(global::System.StringComparer.OrdinalIgnoreCase) {{ {entries} }}",
-            PowerShellBoundDictionaryKind.ObjectDictionary =>
-                $"new global::System.Collections.Hashtable(global::System.StringComparer.OrdinalIgnoreCase) {{ {entries} }}",
+                $"new global::System.Collections.Specialized.OrderedDictionary({comparer}) {{ {entries} }}",
+            PowerShellBoundDictionaryKind.ObjectDictionary or PowerShellBoundDictionaryKind.StringHashtable =>
+                $"new global::System.Collections.Hashtable({comparer}) {{ {entries} }}",
             _ => $"new global::System.Collections.Generic.Dictionary<string, string>(global::System.StringComparer.OrdinalIgnoreCase) {{ {entries} }}"
         };
     }
@@ -474,24 +602,6 @@ internal sealed partial class PowerShellBoundCSharpBackend
             ? "global::System.Text.RegularExpressions.RegexOptions.IgnoreCase"
             : "global::System.Text.RegularExpressions.RegexOptions.None";
         return $"global::System.Text.RegularExpressions.Regex.Split(({EmitExpression(split.Input)} ?? string.Empty), ({EmitExpression(split.Pattern)} ?? string.Empty), {options})";
-    }
-
-    private string EmitStringJoin(PowerShellLoweredStringJoinExpression join)
-        => $"new global::System.Func<string>(() => {{ var {join.ValuesTemporary} = {EmitExpression(join.Values)}; var {join.SeparatorTemporary} = {EmitExpression(join.Separator)}; return global::System.String.Join(({join.SeparatorTemporary} ?? string.Empty), ({join.ValuesTemporary} ?? global::System.Array.Empty<string>())); }})()";
-
-    private string EmitInterpolatedString(PowerShellLoweredInterpolatedStringExpression interpolated)
-    {
-        var parts = interpolated.Parts.Select(part => part.Expression is null
-            ? PowerShellCSharpLiteral.QuoteString(part.Text ?? string.Empty)
-            : part.Expression.ClrType == typeof(string)
-                ? $"({EmitExpression(part.Expression)} ?? string.Empty)"
-                : $"(global::System.Convert.ToString((object?)({EmitExpression(part.Expression)}), global::System.Globalization.CultureInfo.CurrentCulture) ?? string.Empty)").ToArray();
-        return parts.Length switch
-        {
-            0 => "string.Empty",
-            1 => parts[0],
-            _ => $"global::System.String.Concat(new string[] {{ {string.Join(", ", parts)} }})"
-        };
     }
 
     private string EmitClrMemberAssignment(PowerShellLoweredClrMemberAssignmentStatement assignment)
@@ -568,6 +678,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
     private string EmitClrInvocation(PowerShellLoweredClrInvocationExpression invocation)
     {
+        if (invocation.PreserveStatementErrors) return EmitProtectedClrInvocation(invocation);
         var arguments = string.Join(", ", invocation.Arguments.Select(EmitExpression));
         if (invocation.InvocationKind == PowerShellClrInvocationKind.Constructor)
             return $"new {PowerShellCSharpSymbolRenderer.TypeName(invocation.DeclaringType)}({arguments})";
@@ -590,11 +701,19 @@ internal sealed partial class PowerShellBoundCSharpBackend
         PowerShellBoundMutationOperator operation,
         PowerShellLoweredExpression? value,
         bool normalizeNullString,
-        PowerShellIntegralMutationSemantics integralSemantics)
+        PowerShellIntegralMutationSemantics integralSemantics,
+        bool preserveStatementErrors,
+        PowerShellLoweredNativeVariableExpression? nativeTargetRead = null,
+        SourceSpan? nativeSpan = null,
+        string nativeSourceText = "", bool nativeSetSequencePoint = true, PowerShellNativeAssignmentTarget? nativeAssignmentTarget = null)
     {
-        var identifier = PowerShellCSharpSymbolRenderer.Identifier(target.Name);
-        if (integralSemantics != PowerShellIntegralMutationSemantics.None)
-            return EmitIntegralMutation(identifier, targetType, operation, value, integralSemantics);
+        if (nativeTargetRead is not null)
+            return nativeSetSequencePoint ? EmitNativeMutation(nativeTargetRead, operation, value,
+                nativeSpan ?? throw new InvalidOperationException("Native mutation source span is required."), nativeSourceText, nativeAssignmentTarget) :
+                EmitNativeMutationValue(nativeTargetRead, operation, value, nativeAssignmentTarget);
+        var identifier = RenderStorage(target);
+        if (integralSemantics != PowerShellIntegralMutationSemantics.None || preserveStatementErrors)
+            return EmitIntegralMutation(identifier, targetType, operation, value, integralSemantics, preserveStatementErrors);
         if (operation is PowerShellBoundMutationOperator.Increment or PowerShellBoundMutationOperator.Decrement or
             PowerShellBoundMutationOperator.PostIncrement or PowerShellBoundMutationOperator.PostDecrement)
         {
@@ -625,6 +744,28 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         var left = EmitExpression(expression.Left);
         var right = EmitExpression(expression.Right);
+        if (expression.PreserveStatementErrors)
+            return "__statementErrors.EvaluateArithmetic(" + left + ", " + right + ", (" +
+                expression.LeftTemporary + ", " + expression.RightTemporary + ") => " +
+                EmitBinaryOperation(expression, expression.LeftTemporary!, expression.RightTemporary!) + ")";
+        return EmitBinaryOperation(expression, left, right);
+    }
+
+    private string EmitBinaryOperation(PowerShellLoweredBinaryExpression expression, string left, string right)
+    {
+        if (expression.Operation == PowerShellBoundBinaryOperator.PowerShellScalarFormat)
+        {
+            var format = expression.Left.ClrType == typeof(string)
+                ? $"({left} ?? string.Empty)"
+                : $"__nativeFunction.Stringify(__statementErrors.UnwrapObjectArgument({left}))";
+            return $"__statementErrors.FormatScalar({format}, (object?)({right}))";
+        }
+        if (expression.UsesNativeInvocation) return EmitNativeBinary(expression, left, right);
+        if (expression.Operation == PowerShellBoundBinaryOperator.NativeStringConcatenate)
+            return $"global::System.String.Concat({left}, __nativeFunction.Stringify({right}))";
+        if (expression.Operation == PowerShellBoundBinaryOperator.RuntimeFreeScalarFormat)
+            return EmitSafeScalarFormat(left, right);
+        if (EmitNumericUnionBinary(expression, left, right) is { } numericUnion) return numericUnion;
         if (expression.Operation == PowerShellBoundBinaryOperator.IntegralRemainder)
         {
             var helper = GetIntegralArithmeticHelper(expression.ClrType, expression.ClrType,
@@ -723,18 +864,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellBoundBinaryOperator.NullOrderedGreaterThan or
             PowerShellBoundBinaryOperator.NullOrderedGreaterThanOrEqual;
 
-    private string EmitUnary(PowerShellLoweredUnaryExpression expression)
-    {
-        var symbol = expression.Operation switch
-        {
-            PowerShellBoundUnaryOperator.Identity => "+",
-            PowerShellBoundUnaryOperator.Negate => "-",
-            PowerShellBoundUnaryOperator.LogicalNot => "!",
-            PowerShellBoundUnaryOperator.BitwiseNot => "~",
-            _ => throw new InvalidOperationException($"Lowered unary operator '{expression.Operation}' has no C# rendering owner.")
-        };
-        return $"({symbol}{EmitExpression(expression.Operand)})";
-    }
+
 
 }
 

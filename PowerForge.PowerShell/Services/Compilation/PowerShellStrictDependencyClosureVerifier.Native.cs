@@ -3,6 +3,32 @@ namespace PowerForge;
 /// <summary>Owns native-library and native-executable closure checks for Strict artifacts.</summary>
 internal static partial class PowerShellStrictDependencyClosureVerifier
 {
+    private static bool TryInspectReviewedRuntimeExecutable(
+        PowerShellStrictDependencyClosureRequest request,
+        string path,
+        PowerShellCompilationDependencyClosure result,
+        ICollection<NativeLibraryInspection> nativeLibraries)
+    {
+        if (request.Files.Any(file => file.Role == "Primary" && PowerShellCompilationPathSafety.PathEquals(file.Path, path)))
+            return false;
+        var hash = ComputeSha256(path);
+        var reviewed = request.DependencyGraph.Nodes.Any(node =>
+            node.Kind == PowerShellCompilationDependencyNodeKind.NativeLibrary && node.Exists &&
+            node.Roles.HasFlag(PowerShellCompilationDependencyGraphRole.Deployment) &&
+            (node.Disposition is PowerShellCompilationDependencyGraphDisposition.Referenced or
+                PowerShellCompilationDependencyGraphDisposition.Bundled or PowerShellCompilationDependencyGraphDisposition.PrivateRestored) &&
+            node.Identity.Provenance.Equals("DotNetRuntimePack", StringComparison.Ordinal) &&
+            node.Identity.TargetFramework.Equals(request.TargetFramework, StringComparison.OrdinalIgnoreCase) &&
+            node.Identity.RuntimeIdentifier.Equals(request.RuntimeIdentifier, StringComparison.OrdinalIgnoreCase) &&
+            PowerShellNativeLibraryName.FileNamesEqual(request.RuntimeIdentifier, Path.GetFileName(path), node.Identity.Name) &&
+            hash.Equals(node.Identity.Sha256, StringComparison.OrdinalIgnoreCase));
+        if (!reviewed) return false;
+        nativeLibraries.Add(new NativeLibraryInspection(Path.GetFileName(path), path,
+            PowerShellNativeExecutableInspector.Inspect(path, request.RuntimeIdentifier)));
+        result.NativeLibraries++;
+        return true;
+    }
+
     private static bool IsNativeLibrary(string path)
     {
         var fileName = Path.GetFileName(path);

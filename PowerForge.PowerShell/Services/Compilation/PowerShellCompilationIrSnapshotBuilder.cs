@@ -36,6 +36,7 @@ internal static class PowerShellCompilationIrSnapshotBuilder
                     OutputCardinality = region.Analyzed.OutputCardinality.ToString(),
                     ValueStates = Array.Empty<string>(),
                     Capabilities = SplitFlags(region.Analyzed.Capabilities.ToString()),
+                    ExecutionConditions = region.Candidate.RequiresLocalOwnershipGuard ? new[] { "FreshInvocationLocalTargets" } : Array.Empty<string>(),
                     Effects = SplitFlags(region.Analyzed.Effects.ToString()),
                     Disposition = "PromotedTypedRegion",
                     Nodes = region.Analyzed.Body.Statements.Select(static statement => statement.GetType().Name).ToArray()
@@ -66,6 +67,7 @@ internal static class PowerShellCompilationIrSnapshotBuilder
                     OutputCardinality = region.Lowered.OutputCardinality.ToString(),
                     ValueStates = region.Lowered.OutputValueStates.Select(static state => state.ToString()).OrderBy(static state => state, StringComparer.Ordinal).ToArray(),
                     Capabilities = SplitFlags(GetLoweredCapabilities(region.Lowered).ToString()),
+                    ExecutionConditions = region.Candidate.RequiresLocalOwnershipGuard ? new[] { "FreshInvocationLocalTargets" } : Array.Empty<string>(),
                     Effects = Array.Empty<string>(),
                     Disposition = "PromotedTypedRegion",
                     Nodes = region.Lowered.Statements.Select(static statement => statement.GetType().Name).ToArray()
@@ -87,8 +89,14 @@ internal static class PowerShellCompilationIrSnapshotBuilder
     private static PowerShellRequiredCapability GetLoweredCapabilities(PowerShellLoweredFunction function)
     {
         var capabilities = PowerShellRequiredCapability.None;
+        if (function.NativeFunctionBinding is not null)
+            capabilities |= PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost;
         if (function.RequiresPowerShellBoundParameters) capabilities |= PowerShellRequiredCapability.PowerShellHost;
         if (function.RequiresPowerShellHostStreams) capabilities |= PowerShellRequiredCapability.PowerShellStreams;
+        if (function.RequiresPowerShellStatementErrors)
+            capabilities |= PowerShellRequiredCapability.PowerShellStatementErrors | PowerShellRequiredCapability.PowerShellHostTypes;
+        if (function.RequiresPowerShellStopping)
+            capabilities |= PowerShellRequiredCapability.PowerShellStopping | PowerShellRequiredCapability.PowerShellHostTypes;
         if (function.RequiresRuntimeFreeProviderOperations) capabilities |= PowerShellRequiredCapability.RuntimeFreeProviderOperations;
         if (function.RequiresPowerShellCommandRegions) capabilities |= PowerShellRequiredCapability.CommandRegion;
         if (function.RequiresPowerShellRuntimeState) capabilities |= PowerShellRequiredCapability.RuntimeStateIntrinsics;

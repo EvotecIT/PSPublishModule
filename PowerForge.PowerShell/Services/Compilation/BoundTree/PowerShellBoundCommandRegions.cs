@@ -67,19 +67,28 @@ internal sealed class PowerShellBoundCommandRegionStatement : PowerShellBoundSta
         string source,
         PowerShellBoundCommandRegionArgument[] arguments,
         PowerShellBoundCommandStage[]? stages = null,
-        int statementCount = 1)
-        : base(span, PowerShellSemanticEffect.Host | PowerShellSemanticEffect.SuccessOutput, PowerShellRequiredCapability.CommandRegion)
+        int statementCount = 1, string? nativeSourcePath = null, string? nativeSourceDocument = null, PowerShellCommandRegionSourceSelection? sourceSelection = null)
+        : base(span, PowerShellSemanticEffect.Host | PowerShellSemanticEffect.SuccessOutput | PowerShellSemanticEffect.NonSuccessStream |
+            (nativeSourcePath is null ? PowerShellSemanticEffect.None : PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError),
+            PowerShellRequiredCapability.CommandRegion | (nativeSourcePath is null ? PowerShellRequiredCapability.None :
+                PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost))
     {
         HostedFallbackSource = source;
         Arguments = arguments ?? Array.Empty<PowerShellBoundCommandRegionArgument>();
         Stages = stages ?? Array.Empty<PowerShellBoundCommandStage>();
         StatementCount = Math.Max(1, statementCount);
+        NativeSourcePath = nativeSourcePath;
+        NativeSourceDocument = nativeSourceDocument;
+        SourceSelection = sourceSelection;
     }
 
     internal string HostedFallbackSource { get; }
     internal PowerShellImmutableArray<PowerShellBoundCommandRegionArgument> Arguments { get; }
     internal PowerShellImmutableArray<PowerShellBoundCommandStage> Stages { get; }
     internal int StatementCount { get; }
+    internal string? NativeSourcePath { get; }
+    internal string? NativeSourceDocument { get; }
+    internal PowerShellCommandRegionSourceSelection? SourceSelection { get; }
 }
 
 internal sealed class PowerShellBoundCommandCaptureStatement : PowerShellBoundStatement
@@ -90,12 +99,13 @@ internal sealed class PowerShellBoundCommandCaptureStatement : PowerShellBoundSt
         Type targetType,
         string source,
         PowerShellBoundCommandRegionArgument[] arguments,
-        PowerShellBoundCommandStage[]? stages = null)
-        : base(span, PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation, PowerShellRequiredCapability.CommandRegion)
+        PowerShellBoundCommandStage[]? stages = null, PowerShellCommandRegionSourceSelection? sourceSelection = null)
+        : base(span, PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.NonSuccessStream, PowerShellRequiredCapability.CommandRegion)
     {
         Target = target;
         TargetType = targetType;
         HostedFallbackSource = source;
+        SourceSelection = sourceSelection;
         Arguments = arguments ?? Array.Empty<PowerShellBoundCommandRegionArgument>();
         Stages = stages ?? Array.Empty<PowerShellBoundCommandStage>();
     }
@@ -103,6 +113,7 @@ internal sealed class PowerShellBoundCommandCaptureStatement : PowerShellBoundSt
     internal PowerShellSymbolId Target { get; }
     internal Type TargetType { get; }
     internal string HostedFallbackSource { get; }
+    internal PowerShellCommandRegionSourceSelection? SourceSelection { get; }
     internal PowerShellImmutableArray<PowerShellBoundCommandRegionArgument> Arguments { get; }
     internal PowerShellImmutableArray<PowerShellBoundCommandStage> Stages { get; }
 }

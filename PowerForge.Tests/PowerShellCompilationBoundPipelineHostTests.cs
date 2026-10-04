@@ -11,7 +11,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(
             new[] { document },
-            "net8.0",
+            "net10.0",
             PowerShellCompilationCapabilities.BinaryModule);
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
@@ -39,7 +39,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(
             new[] { document },
-            "net8.0",
+            "net10.0",
             PowerShellCompilationCapabilities.BinaryModule);
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
@@ -58,7 +58,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.Contains("__invokePowerShellCapture", method.Source, StringComparison.Ordinal);
         Assert.Contains("string captured =", method.Source, StringComparison.Ordinal);
         Assert.Equal(PowerShellIntegralMutationSemantics.CheckedConversion,
-            Assert.Single(lowered.Statements.OfType<PowerShellLoweredAssignmentStatement>(),
+            Assert.Single(PowerShellLoweredTreeEnumerator.EnumerateStatements(lowered.Statements).OfType<PowerShellLoweredAssignmentStatement>(),
                 static assignment => assignment.Operation == PowerShellBoundMutationOperator.Add).IntegralSemantics);
     }
 }

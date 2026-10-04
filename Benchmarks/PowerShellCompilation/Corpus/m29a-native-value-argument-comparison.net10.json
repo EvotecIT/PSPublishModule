@@ -1,0 +1,274 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Bounded native scalar/vector argument catch-all qualification",
+  "baselineCompilerCommit": "c71531fe385c578daf0ba85cad2b476aa7857c09",
+  "baselineDispositionLedger": "m29a-command-proxy-comparison.net10.json",
+  "verifiedFunctionIdentities": 565,
+  "observedStableUnits": 584,
+  "baselineEmitted": 520,
+  "candidateEmitted": 521,
+  "candidateRetained": 44,
+  "packets": [
+    {
+      "packet": "pssg",
+      "resourceMode": "CompleteModule",
+      "functions": 282,
+      "emitted": 270,
+      "retained": 12,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "53bca594b302f074a789892171bf6155aff9450107d1b97e3e927bcea35242b3"
+    },
+    {
+      "packet": "cleanup",
+      "resourceMode": "CompleteModule",
+      "functions": 68,
+      "emitted": 64,
+      "retained": 4,
+      "gains": [
+        {
+          "name": "Invoke-ADComputerInventoryAttempt",
+          "unitId": "04397e2ebc4b9c24ce74a635"
+        }
+      ],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "f35d5bcf42a429124ba4a76ac96d35f3ec2a6a41354119fe72df9ba1677b18cc"
+    },
+    {
+      "packet": "pinf",
+      "resourceMode": "Declared",
+      "functions": 66,
+      "emitted": 65,
+      "retained": 1,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "35f6919cdd439a762a9284cc3a90d32d6f984621307cafd753e71f40c9bc3d53"
+    },
+    {
+      "packet": "pst",
+      "resourceMode": "CompleteModule",
+      "functions": 109,
+      "emitted": 95,
+      "retained": 14,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "752bfd55d5d829d42b1fdd6674f04d78e7576eca0f1dec833520f4f6c7fe3412"
+    },
+    {
+      "packet": "platyps",
+      "resourceMode": "Declared",
+      "functions": 40,
+      "emitted": 27,
+      "retained": 13,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "f3a8acb7feecc018adfe9d5daf63170ea3af30eed2b718cb1426d9e2346c005f"
+    }
+  ],
+  "changedDispositions": [
+    {
+      "packet": "cleanup",
+      "unitId": "04397e2ebc4b9c24ce74a635",
+      "name": "Invoke-ADComputerInventoryAttempt",
+      "baselineEmitted": false,
+      "candidateEmitted": true,
+      "retainedHostedSource": false,
+      "baselineNativeFunctionBinding": false,
+      "usesNativeFunctionBinding": true,
+      "baselineRegionMembers": [],
+      "candidateRegionMembers": []
+    }
+  ],
+  "retainedInventorySha256": "565657afd3e6721abeb87f5604c1afbd811e872e5298a61cd64182efdcbedcf2",
+  "dispositionContract": "Apply the single delta through the linked complete baseline chain. All 565 function IDs and 584 units match; no complete method or still-retained region is lost.",
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "c5ba50fdac850f24114bf4e0e61f46070a63ba254f6016a1cec426d7db444af4",
+    "PowerForge.Tests/PowerShellCompilationNativeValueArgumentTests.cs": "f792e86edc4edc5ece9b816164e795ee2c82893f0f6a8f553c3034eeb5a56f84"
+  },
+  "workflowProof": {
+    "module": "CleanupMonster",
+    "revision": "f215b32ca86b38d9150629c08f6c0c232bfafb27",
+    "sourcePath": "Private/Invoke-ADComputerInventoryAttempt.ps1",
+    "sourceSha256": "198b6ce84d8ef6c26d6a2e9e5fb3dd7db2b86cbf14aa9745c15a343aff9467dc",
+    "license": "No standalone license found at the pin; existing tracked snapshot only. No new third-party source redistributed.",
+    "testSource": "PowerForge.Tests/PowerShellCompilationNativeValueArgumentTests.cs",
+    "observationsPerHost": 23,
+    "executedNewCompleteWorkloadFunctions": [
+      "Invoke-ADComputerInventoryAttempt"
+    ],
+    "syntheticCompleteFunctions": [
+      "ConvertTo-InterpolatedEncoding",
+      "ConvertTo-OfflineByteEncoding",
+      "Get-OfflineFileStamp"
+    ],
+    "hosts": [
+      "PowerShell 7/net10.0 Windows",
+      "Windows PowerShell 5.1/net472"
+    ],
+    "contracts": [
+      "Encoding interpolation with Type/custom object/failing ToString and alternate branch",
+      "Byte vector/numeric string/Type/object/failing conversion; trace, caught ID/type/message/coordinates/finally",
+      "Owned file timestamp and borrowed SafeFileHandle remains caller owned; host-specific failure matches its original",
+      "Nine inventory attempt cases: empty/data success, error file, stderr, missing marker, start failure, initialization/connection/query timeout",
+      "Fake process cleanup/disposal and owned directory removal"
+    ]
+  },
+  "validation": {
+    "finalSourceFocused": {
+      "file": "native-value-argument-final-source.trx",
+      "passed": 4,
+      "failed": 0,
+      "total": 4,
+      "sha256": "f5b0d4955ca2dd41e91d6fd4bebb47ec5bb606ca48b7d5a6278b34e95dc0e29b"
+    },
+    "finalSourceAdjacent": {
+      "file": "native-value-argument-final-adjacent.trx",
+      "passed": 6,
+      "failed": 0,
+      "total": 6,
+      "sha256": "a76542670877bce24c9fbcc29194578489c685ce544b4a44cf62f8d1e12dda2a"
+    },
+    "precedingBroaderCandidate": {
+      "file": "native-value-argument-bounded-final.trx",
+      "passed": 50,
+      "failed": 0,
+      "total": 50,
+      "sha256": "7cb452ce2762c36181b3fd6bbe11b573afa520ab8b5346906311052c58266a62"
+    },
+    "net472Build": {
+      "succeeded": true,
+      "warnings": 0,
+      "errors": 0,
+      "elapsedSeconds": 2.21
+    }
+  },
+  "review": {
+    "task": "interpolation_origin_review",
+    "fullPass": "P2 assignment-only interpolation shortcut missed foreach/local aliases/reference-cell writes; reproduced all three on both targets.",
+    "resolution": "Remove shortcut and restore exact baseline Type origin scan. Qualify receiver/argument contracts instead.",
+    "targetedConfirmation": "Read-only confirmation found original writer defect closed and no concrete defect in bounded static/Encoding/base64 ingress. No independent test execution claim.",
+    "finalNarrowing": "After source-location differential failure, both new exemptions additionally reject If/Switch/Try/Loop statement-valued argument trees; no runtime/backend changes."
+  },
+  "failureAccounting": [
+    {
+      "file": "interpolation-origin-adjacent.trx",
+      "passed": 48,
+      "failed": 0,
+      "total": 48,
+      "sha256": "db9f3476c9f4b4732b9c59652403ac1d4f7faf2c14076f95ec7a7816c9552cbd"
+    },
+    {
+      "file": "interpolation-origin-applicable-overloads.trx",
+      "passed": 48,
+      "failed": 0,
+      "total": 48,
+      "sha256": "12980b35087fea57e2ccabc1af974444e3897d473abb9a2d149d87c768443de5"
+    },
+    {
+      "file": "interpolation-origin-corrected.trx",
+      "passed": 0,
+      "failed": 4,
+      "total": 4,
+      "sha256": "4872ae74c6559ed46ade53634dc309cb9f96e94f893160eb8d34bd3ed0d884b8"
+    },
+    {
+      "file": "interpolation-origin-filetime.trx",
+      "passed": 2,
+      "failed": 2,
+      "total": 4,
+      "sha256": "39ec1c96dc99d0286774453c145470524937179516fa5944528e802977c77287"
+    },
+    {
+      "file": "interpolation-origin-final-source.trx",
+      "passed": 48,
+      "failed": 0,
+      "total": 48,
+      "sha256": "aabdbf28ff94ba547de28bcec805685ecf485db6a05451f9fb6495005ba6ee0c"
+    },
+    {
+      "file": "interpolation-origin-final.trx",
+      "passed": 4,
+      "failed": 0,
+      "total": 4,
+      "sha256": "331e3cf1a55d3d2c1cbd1e9318da5a75d867dbca2ea8326884db6da18d670e5a"
+    },
+    {
+      "file": "interpolation-origin-frozen.trx",
+      "passed": 46,
+      "failed": 2,
+      "total": 48,
+      "sha256": "378a68e9bb2bd0dcfee9cc1b174d294e0ef18d4674ad04d3df9a1407ff3c5a8f"
+    },
+    {
+      "file": "interpolation-origin-qualified.trx",
+      "passed": 2,
+      "failed": 2,
+      "total": 4,
+      "sha256": "9792a5a4c807d78a2dee98ba021f874e609b0df73b6e6034c2ed79f02dfe60c3"
+    },
+    {
+      "file": "interpolation-origin-review-reproduction.trx",
+      "passed": 0,
+      "failed": 2,
+      "total": 2,
+      "sha256": "4f9fa08518ea0a3f98925f5e80092331dc5ae06dd2ead0977016f00162264c3e"
+    },
+    {
+      "file": "interpolation-origin-scalar.trx",
+      "passed": 2,
+      "failed": 2,
+      "total": 4,
+      "sha256": "2ced60acf006eea605114829e3b457d73d9c0c094274dc27c14a22610a4cfea4"
+    },
+    {
+      "file": "interpolation-origin.trx",
+      "passed": 0,
+      "failed": 4,
+      "total": 4,
+      "sha256": "c8d8243e153ba7e8b3c29c57b28b54faf22fae592678ef285e198755692e5ec6"
+    },
+    {
+      "file": "native-value-argument-base64.trx",
+      "passed": 2,
+      "failed": 2,
+      "total": 4,
+      "sha256": "bdd206f654d2f6e46254e65a6745c144cd33daa550d2b0f3b4825e8145c4985c"
+    },
+    {
+      "file": "native-value-argument-corrected.trx",
+      "passed": 46,
+      "failed": 4,
+      "total": 50,
+      "sha256": "d66d042a1192edb2e17e75a96320e332bd765692fc2338390a5eea1230a6e130"
+    },
+    {
+      "file": "native-value-argument-encoding.trx",
+      "passed": 46,
+      "failed": 4,
+      "total": 50,
+      "sha256": "ba2a9d13a902859edf3eeb1b592127dc89a65d27463ae8de3f2416fd11b04f2d"
+    }
+  ],
+  "designDispositions": [
+    "Interpolation origin exemption abandoned, not published. Assignment-only writer closure was unsafe.",
+    "Static qualifier retains all applicable arity overloads including optional/params. Unsupported overloads are not removed.",
+    "One-argument Convert.ToBase64String has a separate SDK vector contract because CLR reflection includes an optional Span overload.",
+    "Prototype nested statement argument produced original column 92/generated 63 on both hosts. No coordinate assertion was removed: that shape is guarded and recorded as capture/error-owner work.",
+    "One build attempt used FindAll.Count as a property; corrected to Any() before final validation.",
+    "Earlier malformed synthetic interpolation, unapproved verbs/import warnings, incorrect inner ToString-error expectation, incomplete overload/handle closure and conservative Span blocker were resolved or rejected. Earlier green runs do not prove final source."
+  ],
+  "boundaries": [
+    "Hybrid uses SDK native conversion/dispatch; no runtime-free or universal cmdlet translation claim.",
+    "Catch-all only; typed catches, variable/caller-owned encoding receivers and statement-valued argument trees stay guarded by these exemptions.",
+    "Strict TypedLibrary semantic test emits no methods for the qualification/negative packet.",
+    "AD/cloud/network/process lifecycle not executed. Fake process providers prove wrapper routing and cleanup only.",
+    "23 per-host observations: 6 interpolation, 6 byte conversion, 2 file-time, 9 wrapper. Synthetic functions add no workload coverage.",
+    "Five-module census net10.0 only; focused generated artifacts executed on both claimed Windows hosts.",
+    "Unreviewed dependency resolution allowed; no reviewed lock, full-module execution, performance, non-Windows, full-suite gate, PR, merge or release claim."
+  ]
+}

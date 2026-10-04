@@ -112,7 +112,7 @@ internal static class PowerShellCompiledModuleManifest
         var targetManifest = Path.Combine(moduleDirectory, artifactName + ".psd1");
         File.Copy(sourceManifest, targetManifest, overwrite: true);
         var allFunctions = ReadFunctionNames(typed.SourcePaths);
-        var compiled = typed.Methods.Select(static method => method.SourceName).ToArray();
+        var compiled = typed.Methods.Where(static method => method.NativeFunctionBinding is null).Select(static method => method.SourceName).ToArray();
         var compiledSet = compiled.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var fallback = allFunctions.Where(name => !compiledSet.Contains(name)).ToArray();
         var explicitExports = PowerShellModuleExportContract.TryRead(sourcePath);
@@ -291,9 +291,8 @@ internal static class PowerShellCompiledModuleManifest
     {
         var (powerShellVersion, edition) = targetFramework.ToLowerInvariant() switch
         {
-            "net472" => ("5.1", "Desktop"),
-            "net8.0" => ("7.4", "Core"),
-            "net10.0" => ("7.6", "Core"),
+            PowerShellCompilationTargetFrameworkPolicy.Legacy => ("5.1", "Desktop"),
+            PowerShellCompilationTargetFrameworkPolicy.Modern => ("7.6", "Core"),
             _ => throw new ArgumentException($"Unsupported compiled module target framework '{targetFramework}'.", nameof(targetFramework))
         };
 

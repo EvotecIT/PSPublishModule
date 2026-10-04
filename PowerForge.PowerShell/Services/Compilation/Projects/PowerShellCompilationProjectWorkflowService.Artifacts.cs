@@ -10,7 +10,16 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
 {
     /// <summary>Builds selected variants from reviewed locks and an isolated acquired environment.</summary>
     public PowerShellCompilationProjectResult Build(string projectPath, IEnumerable<string>? targetNames = null)
+        => Build(projectPath, targetNames, CancellationToken.None);
+
+    /// <summary>Builds selected locked variants with cancellation propagated to the generated build processes.</summary>
+    public PowerShellCompilationProjectResult Build(string projectPath, IEnumerable<string>? targetNames, CancellationToken cancellationToken)
+        => BuildCore(projectPath, targetNames, development: false, cancellationToken);
+
+    private static PowerShellCompilationProjectResult BuildCore(
+        string projectPath, IEnumerable<string>? targetNames, bool development, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var context = PowerShellCompilationProjectManifestService.Open(projectPath);
         var environment = ReadEnvironment(context);
         var results = new List<PowerShellCompilationProjectTargetResult>();
@@ -18,8 +27,10 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         {
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var lockPath = context.Resolve(artifact.DependencyLock);
                 var dependencyLock = ReadJson<PowerShellCompilationDependencyGraph>(lockPath);
+                var reviewedLockSha256 = dependencyLock.LockSha256;
                 PowerShellCompilationDependencyLockHasher.EnsureValid(dependencyLock, artifact.Name);
                 if (!environment.DependencyLockSha256.Contains(dependencyLock.LockSha256, StringComparer.OrdinalIgnoreCase))
                     throw new InvalidOperationException($"The isolated environment does not contain reviewed lock '{dependencyLock.LockSha256}' for target '{artifact.Name}'; run restore for this target.");
@@ -27,6 +38,15 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 if (!string.IsNullOrWhiteSpace(artifact.ProviderLock))
                     providerLock = ReadJson<PowerShellCompilationProviderLock>(context.Resolve(artifact.ProviderLock!));
                 var input = ResolveInput(context, artifact);
+                if (development)
+                {
+                    var providers = ResolveProviders(context, artifact);
+                    var plan = CreatePlan(context, artifact, input, providers.Providers, environment.PackageRoot);
+                    if (!plan.CanProceed || plan.DependencyGraph is null)
+                        throw new InvalidOperationException("Current source cannot be built; use project explain to inspect the rejected workflow.");
+                    EnsureDevelopmentLockMatches(dependencyLock, plan.DependencyGraph, input.ModuleRoot, context.Root);
+                    dependencyLock = plan.DependencyGraph;
+                }
                 var resolvedLock = environment.ResolvedLocks.Single(item =>
                     item.TargetName.Equals(artifact.Name, StringComparison.Ordinal));
                 var spec = new PowerShellCompilationBuildSpec(
@@ -45,6 +65,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                     TargetContract = artifact.Target,
                     SemanticProfileId = context.Manifest.SemanticProfileId,
                     ExpectedDependencyLock = dependencyLock,
+                    DevelopmentBaselineLockSha256 = development && !reviewedLockSha256.Equals(dependencyLock.LockSha256, StringComparison.OrdinalIgnoreCase)
+                        ? reviewedLockSha256 : null,
                     ProviderPackages = context.Manifest.ProviderPackages.Select(path => new PowerShellCompilationProviderPackageReference(context.Resolve(path))).ToArray(),
                     ExpectedProviderLock = providerLock,
                     ProviderTrustPolicy = context.Manifest.ProviderTrust,
@@ -56,9 +78,10 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                     NuGetLockFilePath = context.Resolve(resolvedLock.Path),
                     OfflineRestore = true,
                     GeneratedOutputDirectories = GetGeneratedOutputDirectories(context),
-                    UseBuildCache = false
+                    UseBuildCache = development,
+                    BuildCacheDirectory = development ? context.Resolve(".powerforge/cache") : null
                 };
-                var build = new PowerShellCompilationArtifactBuilder().Build(spec);
+                var build = new PowerShellCompilationArtifactBuilder().Build(spec, cancellationToken);
                 var receiptPath = context.Resolve($".powerforge/build/{artifact.Name}.json");
                 WriteJson(receiptPath, build);
                 if (!build.Succeeded) throw new InvalidOperationException(build.Error + Environment.NewLine + build.BuildOutput);
@@ -68,6 +91,10 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                     build.ArtifactPath,
                     build.Manifest?.DependencyGraph?.LockSha256,
                     build.Manifest?.ArtifactSha256));
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception exception)
             {
@@ -170,25 +197,9 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         return Complete("install", context.ProjectPath, results);
     }
 
-    /// <summary>Verifies build receipts, canonical reproduction evidence, locks, and primary artifact hashes.</summary>
+    /// <summary>Explains current source blockers and verifies existing build receipts, locks, and artifact integrity.</summary>
     public PowerShellCompilationProjectResult Diagnose(string projectPath, IEnumerable<string>? targetNames = null)
-    {
-        var context = PowerShellCompilationProjectManifestService.Open(projectPath);
-        var results = new List<PowerShellCompilationProjectTargetResult>();
-        foreach (var artifact in SelectArtifacts(context, targetNames))
-        {
-            try
-            {
-                var validated = ValidateBuildReceipt(context, artifact);
-                results.Add(Pass(artifact, "Target, locks, reproduction evidence, and complete artifact-set integrity are valid.", validated.ArtifactPath, validated.Manifest.DependencyGraph?.LockSha256, validated.Manifest.ArtifactSha256));
-            }
-            catch (Exception exception)
-            {
-                results.Add(Fail(artifact, exception));
-            }
-        }
-        return Complete("diagnose", context.ProjectPath, results);
-    }
+        => InspectDiagnostics(projectPath, targetNames, verifyArtifact: true);
 
     private static PowerShellCompilationProjectEnvironment ReadEnvironment(
         PowerShellCompilationProjectManifestService.ProjectContext context)
@@ -262,7 +273,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 RunExecutable(path);
                 break;
             case PowerShellCompilationArtifactKind.BinaryModule:
-                ImportModule(path);
+                ImportModule(path, artifact.Target.TargetFramework);
                 break;
             case PowerShellCompilationArtifactKind.Library:
                 _ = AssemblyName.GetAssemblyName(path);
@@ -298,16 +309,27 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 $"Target '{target.RuntimeIdentifier}' must be tested on its actual host; current host is '{currentOs}-{currentArchitecture}'.");
     }
 
-    private static void ImportModule(string manifestPath)
+    private static void ImportModule(string manifestPath, string targetFramework)
     {
-        var script = "& { $env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules'); " +
-                     "Import-Module -Name $args[0] -Force -ErrorAction Stop; 'ok' }";
+        var desktop = targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase);
+        if (desktop && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            throw new PlatformNotSupportedException("Testing a net472 binary module requires Windows PowerShell 5.1 on Windows.");
+        var host = desktop
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe")
+            : "pwsh";
+        const string script = "$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules'); " +
+                              "Import-Module -Name $env:POWERFORGE_MODULE_TEST_PATH -Force -ErrorAction Stop; 'ok'";
+        var encodedCommand = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
-            "pwsh",
+            host,
             Path.GetDirectoryName(manifestPath)!,
-            new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script, manifestPath },
+            new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encodedCommand },
             TimeSpan.FromMinutes(2),
-            new Dictionary<string, string?> { ["POWERSHELL_TELEMETRY_OPTOUT"] = "1" })).GetAwaiter().GetResult();
+            new Dictionary<string, string?>
+            {
+                ["POWERSHELL_TELEMETRY_OPTOUT"] = "1",
+                ["POWERFORGE_MODULE_TEST_PATH"] = manifestPath
+            })).GetAwaiter().GetResult();
         if (!run.Succeeded || !run.StdOut.Trim().Equals("ok", StringComparison.Ordinal))
             throw new InvalidOperationException($"Clean module import failed with exit {run.ExitCode}: {run.StdOut}{Environment.NewLine}{run.StdErr}".Trim());
     }

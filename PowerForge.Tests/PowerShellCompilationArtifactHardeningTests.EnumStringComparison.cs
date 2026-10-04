@@ -87,7 +87,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Theory]
-    [InlineData("net8.0", "pwsh")]
+    [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
     public void BinaryModulePreservesLiveEnumStringEquality(string targetFramework, string host)
     {
@@ -127,14 +127,11 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     [PinnedSemanticHostFact]
     public void Build_BinaryModuleLanguageModeMatchesConfiguredExactProfiles()
     {
-        var powerShell74Path = Environment.GetEnvironmentVariable("POWERFORGE_PWSH74_PATH");
         var powerShell76Path = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH");
-        Assert.False(string.IsNullOrWhiteSpace(powerShell74Path));
         Assert.False(string.IsNullOrWhiteSpace(powerShell76Path));
         var profiles = new[]
         {
             (PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId, "net472", "powershell.exe"),
-            (PowerShellCompilationSemanticOracleCatalog.PowerShell74ProfileId, "net8.0", powerShell74Path!),
             (PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, "net10.0", powerShell76Path!)
         };
         var semanticCase = PowerShellCompilationSemanticOracleCaseCatalog.Get(

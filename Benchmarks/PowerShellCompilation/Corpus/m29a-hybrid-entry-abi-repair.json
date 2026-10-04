@@ -1,0 +1,332 @@
+{
+  "sourceSha256": "9651a17bd0a3c00b9d050a2f5b0f3e3a24bee6e655ba13dc0bbf1a5e6a2f257f",
+  "artifactSha256": "916e31f982c0aee3ec0d9c3b81c176909aa668b3bad45e08eff5b0bb4be0d212",
+  "dependencyLockReviewed": true,
+  "dependencyLockSha256": "e3b9930f654ce8f707f43d6733635bcb2b6dc7e5b443d9d6aab0b0cc22f8deaa",
+  "compiledMethods": 1,
+  "rootDisposition": {
+    "unitId": "054f6343ff45ca39330ea1fb",
+    "relativePath": "entry.ps1",
+    "name": "<script>",
+    "kind": "Script",
+    "startLine": 1,
+    "semanticEligible": true,
+    "emittedClrMethod": true,
+    "emittedBinaryCmdlet": false,
+    "retainedHostedSource": false,
+    "usesNativeFunctionBinding": false,
+    "runtimeCommandRegions": 1,
+    "boundaryCrossings": 1,
+    "shapingFallback": false,
+    "omitted": false,
+    "rejected": false,
+    "generatedMemberName": "Invoke",
+    "dependencyCauses": [],
+    "boundaryCauses": [
+      "The emitted CLR method contains hosted PowerShell command regions.",
+      "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation."
+    ],
+    "diagnosticChain": [],
+    "moduleStateReadBoundaryCrossings": 0,
+    "moduleStateWriteBoundaryCrossings": 0,
+    "regionGraph": {
+      "schemaVersion": 1,
+      "regions": [
+        {
+          "regionId": "region:de107e2903f905333ad95674ce63a66d413e068040b8b805a8708f182bf6a19c:122:155:Hosted",
+          "ordinal": 0,
+          "execution": "Hosted",
+          "startOffset": 122,
+          "endOffset": 155,
+          "startLine": 2,
+          "startColumn": 1,
+          "endLine": 2,
+          "endColumn": 34,
+          "inputs": [
+            "Parameter:WHEN"
+          ],
+          "outputs": [
+            "stream:Success"
+          ],
+          "mutations": [],
+          "streams": [
+            "Success",
+            "Error",
+            "Warning",
+            "Verbose",
+            "Debug",
+            "Information",
+            "Host"
+          ],
+          "errors": [
+            "PowerShellErrorRecord"
+          ],
+          "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+          "hostedCommandBoundarySites": 1,
+          "moduleStateReadBoundarySites": 0,
+          "moduleStateWriteBoundarySites": 0,
+          "staticBoundaryCrossings": 1,
+          "staticBoundaryValueTransfers": 2,
+          "staticBoundaryCostUnits": 3
+        }
+      ],
+      "scriptBlocks": [],
+      "hostedCommandBoundarySites": 1,
+      "moduleStateReadBoundarySites": 0,
+      "moduleStateWriteBoundarySites": 0,
+      "staticBoundaryCrossings": 1,
+      "staticBoundaryCostUnits": 3
+    },
+    "promotedTypedRegions": 0,
+    "generatedRegionMemberNames": []
+  },
+  "buildSeconds": 6.914170400006697,
+  "cases": [
+    {
+      "case": "omitted",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "output": "2024",
+      "stderr": "",
+      "originalOutputSha256": "294f46389151b860e4d1f15fe730d1ff11046fe9332dde79c4979b25a082ced5",
+      "generatedOutputSha256": "294f46389151b860e4d1f15fe730d1ff11046fe9332dde79c4979b25a082ced5",
+      "originalSeconds": 0.3251232000038726,
+      "generatedSeconds": 2.1955910999968182
+    },
+    {
+      "case": "explicit",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "output": "2025",
+      "stderr": "",
+      "originalOutputSha256": "d9963fd3122fec93f26a2373f92f70a45038de8268029ffa57d8ff3ae2bc20e6",
+      "generatedOutputSha256": "d9963fd3122fec93f26a2373f92f70a45038de8268029ffa57d8ff3ae2bc20e6",
+      "originalSeconds": 0.3169192999921506,
+      "generatedSeconds": 0.723122900002636
+    }
+  ],
+  "generatedSourceHashes": {
+    "CompiledCmdlets.cs": "93c52ee9813388f12b305df28bc8402e17d164c0fc2fa987d857c6bd90000592",
+    "CompiledPowerShell.cs": "42b5236f7678d3a30f8dc911359e7d13e440cf298a2ad543338cc3529133c0f7",
+    "CompiledPowerShellEntry.cs": "5d6ef5e8e6b3787ca329d57b84e3eed4a24304cc2ce2024e7ade32be94fc19d8",
+    "ModuleSessionState.g.cs": "c96e42f7ba20fe3819fbe69e936b44e8c8a8fd5141eefa148bff59743bd69981",
+    "NativeLanguageOperations.g.cs": "7f96f823b4489c97ddfcc8182e4828fba533bc986c8feb36263851ef8dbded55",
+    "NativeOutput.g.cs": "48100a5b25ca80ebdf62d8f5df0f4be7ae3ad8c951dec2e69a19d01c98ae10bd",
+    "Program.cs": "5b9570e44401ae83555d35c9964b9d3022d1b5d8ae12e8fd8bb663405819a381",
+    "QualifiedAliasEntry.csproj": "aaf184db9bf1fe427a0938c2b2d1d8c9549e17e7a5190d5b156fe5ede013245e",
+    "SourceExtent.g.cs": "daf263e4d386070ca90530b6765d52d9f8e0141a63c6f1097eae4d00744472e5",
+    "StatementErrors.g.cs": "4f8430b1a911496884f666ca7a74cbfc9a740803868a1dcb7965309b17bd1a44"
+  },
+  "schemaVersion": 1,
+  "baseCommit": "8f2860148addbd961a1939d0655cc09cecc4ed4e",
+  "purpose": "Restore the bounded already-bound Hybrid script entry and publish its exact source owner without changing ordinary native-function or Strict admission.",
+  "host": "Windows x64 PowerShell 7 / net10.0",
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/PowerShellTypedExecutableCompiler.cs": "3f7851bd89f45d3d9aee66162c1517d4d2d0caa1b20ba236a62f1576e26ed163",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellHybridExecutableEntryEmitter.cs": "94e771a4da23a62110885d2387dad17eaff2df336c59270269fadedcfb5ee9db",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellGeneratedSourcePublisher.cs": "de85e49458b567593357805d0bd256e8ec0b341665b5853184cad8fa06a3cacc"
+  },
+  "tests": [
+    {
+      "file": "entry-owner-final.trx",
+      "sha256": "c9175498f02f0630bcde46031299f8897c4c1211f26ff25af151623a891e9f1f",
+      "counters": {
+        "total": "12",
+        "executed": "12",
+        "passed": "12",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "results": [
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridExecutablePreservesSequentialCommandOutput",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_StrictExecutableEntrySequencePointUsesAuthoredLinePastLocalFunction",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_HybridEntryRejectsChangedHostedStatement",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_EmitSourcePublishesHashedRebuildableProject",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_HybridPreboundEntryRejectsIneligibleRoot",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridSequentialEntryRetainsLaterParameterRead",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_EmittedPackagedExecutablePinsServicedSecurityXmlDependency",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridExecutableRunsCompiledPreboundScriptRoot",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridExecutablePreservesOmittedStringParameter",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridEntryPreservesAuthoredBridgeNameAlias",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_EmittedBinaryModulePinsServicedSecurityXmlDependency(targetFramework: \"net10.0\", expectedVersion: \"10.0.11\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_HybridPreboundEntryPreservesAuthoredRegionSource",
+          "outcome": "Passed"
+        }
+      ]
+    },
+    {
+      "file": "entry-strict-owner.trx",
+      "sha256": "6e1b64118e1c6ec002b34dd1fa15a4b0eb158de17980972bdaa3e4b575113361",
+      "counters": {
+        "total": "1",
+        "executed": "1",
+        "passed": "1",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "results": [
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_StrictMultiFileExecutableCompilesLocalFunctionCallsWithoutPowerShellRuntime",
+          "outcome": "Passed"
+        }
+      ]
+    }
+  ],
+  "builds": [
+    {
+      "targetFramework": "net472",
+      "outcome": "Passed",
+      "warnings": 0,
+      "errors": 0,
+      "logSha256": "d8b08bfd82cd92784d743ae35d2b50add3f9296d561c76c3fa0887b0ba331079"
+    },
+    {
+      "targetFramework": "net8.0",
+      "outcome": "Passed",
+      "warnings": 0,
+      "errors": 0,
+      "logSha256": "e68f01cee14f86e0239707416c431a48a1585c2de90848a43843712e86bac5a8"
+    }
+  ],
+  "sourceMap": {
+    "sha256": "21ea7a51ec4b778c4d7c927e89e6b9b24799700ebe1344587fdc0d43153c771f",
+    "methods": [
+      {
+        "powershellName": "<script>",
+        "generatedMethod": "Invoke",
+        "sourceFile": "entry.ps1",
+        "sourceLine": 1,
+        "sourceRange": {
+          "startLine": 1,
+          "startColumn": 1,
+          "endLine": 2,
+          "endColumn": 34
+        },
+        "generatedFile": "CompiledPowerShellEntry.cs",
+        "generatedMethodLine": 13,
+        "statements": [
+          {
+            "sourceRange": {
+              "startLine": 2,
+              "startColumn": 1,
+              "endLine": 2,
+              "endColumn": 34
+            },
+            "generatedRange": {
+              "startLine": 29,
+              "startColumn": 1,
+              "endLine": 30,
+              "endColumn": 1
+            }
+          }
+        ],
+        "returnType": "System.Void"
+      }
+    ]
+  },
+  "targetContract": {
+    "schemaVersion": 3,
+    "semanticProfileId": "PowerForge.Oracle.PowerShell/7.6",
+    "artifactKind": "Executable",
+    "mode": "Hybrid",
+    "targetFramework": "net10.0",
+    "runtimeIdentifier": "win-x64",
+    "operatingSystem": "win",
+    "architecture": "x64",
+    "runtimeRequirement": "DotNet",
+    "deployment": "FrameworkDependent",
+    "singleFile": true,
+    "allowsPowerShellRuntimeEvaluation": true,
+    "explicit": true,
+    "supportLevel": "Experimental",
+    "contractSha256": "85e143419f6489f1b01408cdb39b8032d399016a71d8c55b53538edcfe21bfc2"
+  },
+  "artifactWarnings": [],
+  "review": {
+    "initial": "Read-only entry ABI and compiler bridge inspection: no actionable findings.",
+    "followUp": "Targeted source-owner review found Strict executable filename mismatch in the candidate. Corrected to CompiledPowerShellScript.cs and validated by existing multi-file Strict artifact/source-map test.",
+    "limits": "No cross-platform execution or ordinary named-function ABI expansion reviewed."
+  },
+  "failedAndDiagnosticRuns": [
+    {
+      "file": "tests/entry-alias-repro.trx",
+      "sha256": "95d1397702aaec6d2b32c6d87e5326d78d9db3f8a2301b2b3a6584334015bfb3",
+      "disposition": "Reproduced unqualified bridge alias collision before CmdletInfo dispatch."
+    },
+    {
+      "file": "final-reviewed-build.stdout",
+      "sha256": "7510722ae3932e240d1a21e6091d0ac122d0a99e8342a9ac92f3505cb664823d",
+      "disposition": "Rejected exact lock: generic analysis was portable; default single-file build selected win-x64. Explicit same-target contract qualified; guard unchanged."
+    },
+    {
+      "file": "development-inspection-build.json",
+      "sha256": "ca9b86d1976dc9d9eb2bd96f61b5e1b4a8de87307404e2629e047acde9220820",
+      "disposition": "EmitSource failed because Invoke lookup searched unrelated generated host classes."
+    }
+  ],
+  "limits": [
+    "Only bounded prebound string roots admitted by the existing planner are restored.",
+    "Parameter defaults and script binding still execute through PowerShell; no second authored binder.",
+    "Get-Date executes through the admitted hosted command region, not a runtime-free replacement.",
+    "Authored source map tests pass; broader mutable variable/state/lifecycle entry contract remains open.",
+    "No new module function gain: pinned module counts remain 544/565 emitted, 21 retained; 15 justified hosted boundaries, 6 WPF unqualified.",
+    "No aggregate gate or module census repeated: named-function ABI and module shaping unchanged; source-map sibling artifact tests selected.",
+    "No PR, merge or release."
+  ]
+}

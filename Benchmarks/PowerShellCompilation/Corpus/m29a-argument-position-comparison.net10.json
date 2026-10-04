@@ -1,0 +1,191 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Final-source conditional/command argument position handoff",
+  "baselineCompilerCommit": "5b896e63dfd1798000c737a6e82ea4712f8623ef",
+  "baselineDispositionLedger": "m29a-native-value-argument-comparison.net10.json",
+  "verifiedFunctionIdentities": 565,
+  "observedStableUnits": 584,
+  "baselineEmitted": 521,
+  "candidateEmitted": 521,
+  "candidateRetained": 44,
+  "packets": [
+    {
+      "packet": "pssg",
+      "resourceMode": "CompleteModule",
+      "functions": 282,
+      "emitted": 270,
+      "retained": 12,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "53bca594b302f074a789892171bf6155aff9450107d1b97e3e927bcea35242b3"
+    },
+    {
+      "packet": "cleanup",
+      "resourceMode": "CompleteModule",
+      "functions": 68,
+      "emitted": 64,
+      "retained": 4,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "f35d5bcf42a429124ba4a76ac96d35f3ec2a6a41354119fe72df9ba1677b18cc"
+    },
+    {
+      "packet": "pinf",
+      "resourceMode": "Declared",
+      "functions": 66,
+      "emitted": 65,
+      "retained": 1,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "35f6919cdd439a762a9284cc3a90d32d6f984621307cafd753e71f40c9bc3d53"
+    },
+    {
+      "packet": "pst",
+      "resourceMode": "CompleteModule",
+      "functions": 109,
+      "emitted": 95,
+      "retained": 14,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "752bfd55d5d829d42b1fdd6674f04d78e7576eca0f1dec833520f4f6c7fe3412"
+    },
+    {
+      "packet": "platyps",
+      "resourceMode": "Declared",
+      "functions": 40,
+      "emitted": 27,
+      "retained": 13,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "f3a8acb7feecc018adfe9d5daf63170ea3af30eed2b718cb1426d9e2346c005f"
+    }
+  ],
+  "changedDispositions": [],
+  "retainedInventorySha256": "631fe4c6701a504e66bfadcb3db5c97704a8e72a77ab5573b3341df243cf47da",
+  "dispositionContract": "All 565 function IDs and 584 stable units match the linked complete baseline chain. No changed dispositions, method loss or still-retained region loss.",
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.HostedCommands.cs": "9891fd59b770ded495f00994474274c576b8d9bb833ed735efce0c8fd0fe13d8",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.NativeCollections.cs": "ca64701a0567557d4d2a0f5d9f6db72af6f5b31719eb3c82a19068a24ce464e5",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellArraySemanticBinder.cs": "2a8509a6003a759b84ae90b308081c0dd91a43ada8c9303c15f6674f000eacd3",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "08c0d5e0a958cf4421391c1c83f3f4ddb44907400f5a2542d08cee0558f2442c",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.CommandRegions.cs": "dd02dce782334b83ef65378c101388cd32278101f5792a172b7e819dafe0e35d",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Compilation.cs": "e2497bb9469202f9f841668911328a6c422c947d9568cf4c826b35a64da2fbe4",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.NativeFunction.cs": "5ff00e3c69f38b2e4d8696c07f98491edf0de7fa963ff744302b19d96112239e",
+    "PowerForge.Tests/PowerShellCompilationArgumentPositionTests.cs": "8c737e610664b3c175f9991760b83ee2be7415a389ac86a8feaf0909fb5c43c8",
+    "PowerForge.Tests/PowerShellCompilationNativeValueArgumentTests.cs": "069e599a367f43d1044468f1cf2542888d488e65a4eb8c5abfc449eb358764aa"
+  },
+  "executionProof": {
+    "testSource": "PowerForge.Tests/PowerShellCompilationArgumentPositionTests.cs",
+    "observationsPerHost": 39,
+    "syntheticCompiledFunctions": 4,
+    "executedNewCompleteWorkloadFunctions": [],
+    "hosts": [
+      "PowerShell 7/net10.0 Windows",
+      "Windows PowerShell 5.1/net472"
+    ],
+    "contracts": [
+      "Selected variable, comma-array, multi-statement, empty and nested conditional outputs",
+      "Command statements and command statements with a nested conditional argument",
+      "Selected branch failures and assignment effects",
+      "Authored Type/byte/string conversion errors and method multi-argument evaluation",
+      "Caught ID/exception type/message/line/column plus trace/finally equality"
+    ],
+    "realWorkflow": "Existing NativeValueArgument test still executes unchanged CleanupMonster inventory wrapper through offline providers; 23 observations per host."
+  },
+  "validation": {
+    "finalSourceFocusedCompatibility": {
+      "file": "argument-position-final-signatures.trx",
+      "passed": 29,
+      "failed": 0,
+      "total": 29,
+      "sha256": "63c74dcfabc64e7adbd9dbf70720535f10e2be57d5e00a973f01655d1afcafd2"
+    },
+    "net472Build": {
+      "succeeded": true,
+      "warnings": 0,
+      "errors": 0,
+      "elapsedSeconds": 3.05
+    },
+    "reviewedPatchGitBlob": "87119e6816d9d8da88684de3d979e74e0f05916f"
+  },
+  "failureAccounting": [
+    {
+      "file": "argument-position-baseline.trx",
+      "passed": 0,
+      "failed": 2,
+      "total": 2,
+      "sha256": "9571e5980e91b586f812bd4de30b44690d6ba3b58ba269c1830818f2317b8561"
+    },
+    {
+      "file": "argument-position-command-handoff-compiled.trx",
+      "passed": 2,
+      "failed": 0,
+      "total": 2,
+      "sha256": "73dca26a487215d5c044d07483da75cbf88af7fd96e382020b23c0099011593d"
+    },
+    {
+      "file": "argument-position-command.trx",
+      "passed": 0,
+      "failed": 2,
+      "total": 2,
+      "sha256": "7c813eb5b393a6b7f84e92ee1e75c3dd06cfd9c8d097ef357fd1ee085eb9cc2c"
+    },
+    {
+      "file": "argument-position-conditional.trx",
+      "passed": 2,
+      "failed": 0,
+      "total": 2,
+      "sha256": "84c981ab090b67029b9374cb1e875b73b9d7b5c44300607ddccbc6996b66603f"
+    },
+    {
+      "file": "argument-position-expanded.trx",
+      "passed": 13,
+      "failed": 2,
+      "total": 15,
+      "sha256": "50b132448a6dc79ea452feeccd2bbb4888c1d286ebfd47a406c8ba9cd12feaf7"
+    },
+    {
+      "file": "argument-position-final-source-compiled.trx",
+      "passed": 27,
+      "failed": 2,
+      "total": 29,
+      "sha256": "f848d05b9fd4211b3a5835c755700de14794e856e886e9b56299f919e58f02e7"
+    },
+    {
+      "file": "argument-position-statement-handoff.trx",
+      "passed": 29,
+      "failed": 0,
+      "total": 29,
+      "sha256": "b8d750467568ec8a302e10fe4adfade29869c44328ec60b487999f273127c28c"
+    }
+  ],
+  "designDispositions": [
+    "Baseline probe reproduced wrong selected-value position on both hosts: line6 column30 original versus16 generated.",
+    "First conditional fix passed19 observations per host. Expanding to command statements exposed line11 column34 versus20.",
+    "Command with nested argument exposed line14 column64 versus19; retain actual SDK position before restoring context.",
+    "Passing command completion position through expression captures caused a null-index regression: original line9 column109 versus generated116. Remove capture handoff; explicit statements only.",
+    "Existing InvokeCommandRegion signatures remain as forwarding overloads; no existing CaptureCommandRegion signature changes.",
+    "Two compilation attempts rejected nullable File assignment and incomplete XML param documentation. Corrected before final build/runtime proof. A multi-file patch failed atomically before edits.",
+    "No comparison assertions were weakened. Earlier green runs are not final-source proof."
+  ],
+  "boundaries": [
+    "Correctness/support fix with zero new complete workload functions; synthetic probes are not workload gains.",
+    "Only qualified conditional method arguments are added to conversion exemptions; switch/try/loop arguments stay guarded.",
+    "Native SDK still owns command execution, conversion and dispatch. No runtime-free translation claim.",
+    "Existing conditional/cardinality/stream/cleanup/reference-cell/command-capture tests passed in the29-test final cohort, including Strict admission checks.",
+    "Five-module disposition census net10.0 only. Focused artifacts execute on both claimed Windows hosts.",
+    "Builds allow unreviewed dependency resolution; no reviewed lock, full-module execution, performance, non-Windows, full-suite gate, PR, merge or release claim."
+  ],
+  "review": {
+    "status": "no-actionable-findings",
+    "task": "closed_value_receiver_review",
+    "scope": "One read-only pass limited to the staged capture/error-owner changes; previous receiver-array scope and unstaged docs excluded.",
+    "patchGitBlob": "87119e6816d9d8da88684de3d979e74e0f05916f",
+    "limits": "Source inspection only, no independent builds/tests. Fresh reviewer creation hit the agent limit; existing local reviewer context reused with an explicit independence limitation. No performance, runtime-free, universal syntax, CI or merge-readiness claim."
+  }
+}

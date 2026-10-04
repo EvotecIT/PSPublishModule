@@ -49,7 +49,6 @@ function Test-OrOppositePredicate {
 
     [Theory]
     [InlineData("net472")]
-    [InlineData("net8.0")]
     [InlineData("net10.0")]
     public void RuntimeFreeShortCircuitNullRefinementExecutesAcrossTargets(string targetFramework)
     {

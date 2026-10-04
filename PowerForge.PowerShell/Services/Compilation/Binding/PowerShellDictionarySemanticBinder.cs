@@ -13,22 +13,29 @@ internal static class PowerShellDictionarySemanticBinder
         bool ordered,
         Type? contextualType,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
+        PowerShellCompilationCapability capabilities,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
-        var objectValues = UsesObjectRepresentation(syntax, contextualType);
+        var nativeKeys = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && HasComputedKeys(syntax);
+        var objectValues = nativeKeys || UsesObjectRepresentation(syntax, contextualType);
         var entries = new List<PowerShellBoundDictionaryEntry>();
         foreach (var pair in syntax.KeyValuePairs)
         {
-            var valueSyntax = GetValueExpression(pair.Item2);
+            Ast? valueSyntax = GetValueExpression(pair.Item2);
+            if (valueSyntax is null && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                pair.Item2 is IfStatementAst or TryStatementAst)
+                valueSyntax = pair.Item2;
+            if (valueSyntax is null && PowerShellCommandRegionSemanticBinder.IsNativeLiteralInvocationValue(pair.Item2, capabilities))
+                valueSyntax = pair.Item2;
             if (valueSyntax is null)
             {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2701", "Typed dictionary values must be one side-effect-free scalar expression.", PowerShellSourceParser.GetSpan(document, pair.Item2.Extent)));
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2701", "Dictionary values require one expression, a native-hosted conditional, or one qualified hosted command or local invocation value.", PowerShellSourceParser.GetSpan(document, pair.Item2.Extent)));
                 return null;
             }
-            var key = bindExpression(pair.Item1, typeof(string));
+            var key = bindExpression(pair.Item1, nativeKeys ? null : typeof(string));
             var value = bindExpression(valueSyntax, objectValues ? null : typeof(string));
             if (key is null || value is null) return null;
-            if (key.Type.ClrType != typeof(string) || !objectValues && value.Type.ClrType != typeof(string))
+            if (!nativeKeys && key.Type.ClrType != typeof(string) || !objectValues && value.Type.ClrType != typeof(string))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2702", "Typed dictionary literals require String keys; the homogeneous String representation also requires String values.", PowerShellSourceParser.GetSpan(document, syntax.Extent)));
                 return null;
@@ -38,13 +45,13 @@ internal static class PowerShellDictionarySemanticBinder
 
         var type = ordered
             ? typeof(OrderedDictionary)
-            : objectValues ? typeof(Hashtable) : typeof(Dictionary<string, string>);
-        var kind = (ordered, objectValues) switch
+            : typeof(Hashtable);
+        var kind = nativeKeys ? (ordered ? PowerShellBoundDictionaryKind.NativeOrderedDictionary : PowerShellBoundDictionaryKind.NativeHashtable) : (ordered, objectValues) switch
         {
             (true, true) => PowerShellBoundDictionaryKind.OrderedObjectDictionary,
             (true, false) => PowerShellBoundDictionaryKind.OrderedStringDictionary,
             (false, true) => PowerShellBoundDictionaryKind.ObjectDictionary,
-            _ => PowerShellBoundDictionaryKind.StringDictionary
+            _ => PowerShellBoundDictionaryKind.StringHashtable
         };
         return new PowerShellBoundDictionaryExpression(
             PowerShellSourceParser.GetSpan(document, syntax.Extent),
@@ -182,7 +189,7 @@ internal static class PowerShellDictionarySemanticBinder
         var valueType = kind == PowerShellBoundIndexKind.Array
             ? target.Type.ClrType.GetElementType()!
             : kind == PowerShellBoundIndexKind.List ? typeof(object)
-            : kind is PowerShellBoundIndexKind.StringDictionary or PowerShellBoundIndexKind.OrderedStringDictionary ? typeof(string) : typeof(object);
+            : kind is PowerShellBoundIndexKind.StringDictionary or PowerShellBoundIndexKind.StringHashtable or PowerShellBoundIndexKind.OrderedStringDictionary ? typeof(string) : typeof(object);
         var value = bindExpression(syntax.Right, valueType);
         if (value is null || valueType != typeof(object) && !PowerShellClrTypeSemantics.CanAssign(valueType, value.Type.ClrType))
         {
@@ -206,19 +213,25 @@ internal static class PowerShellDictionarySemanticBinder
         Type? contextualType)
     {
         if (contextualType == typeof(Hashtable) || contextualType == typeof(IDictionary)) return true;
-        return syntax.KeyValuePairs.Any(static pair => GetValueExpression(pair.Item2) is not StringConstantExpressionAst);
+        return syntax.KeyValuePairs.Any(static pair => GetValueExpression(pair.Item2) is not StringConstantExpressionAst) ||
+            !PowerShellDictionaryShapePolicy.HasClosedStringValues(syntax);
     }
+
+    /// <summary>Identifies literal maps whose key values require invocation-owned binding rather than String coercion.</summary>
+    internal static bool HasComputedKeys(HashtableAst syntax)
+        => syntax.KeyValuePairs.Any(static pair => pair.Item1 is not StringConstantExpressionAst);
 
     internal static PowerShellTypeFact InferLiteralType(
         HashtableAst syntax,
         bool ordered,
         Type? contextualType,
-        PowerShellTypeFactProvenance provenance)
+        PowerShellTypeFactProvenance provenance,
+        bool nativeKeys = false)
     {
-        var objectValues = UsesObjectRepresentation(syntax, contextualType);
+        var objectValues = nativeKeys && HasComputedKeys(syntax) || UsesObjectRepresentation(syntax, contextualType);
         var dictionaryType = ordered
             ? typeof(OrderedDictionary)
-            : objectValues ? typeof(Hashtable) : typeof(Dictionary<string, string>);
+            : typeof(Hashtable);
         var properties = new Dictionary<string, PowerShellTypeFact>(StringComparer.OrdinalIgnoreCase);
         foreach (var pair in syntax.KeyValuePairs)
         {
@@ -230,7 +243,7 @@ internal static class PowerShellDictionarySemanticBinder
             provenance,
             objectValues
                 ? "A bounded dictionary literal selects a case-insensitive BCL object dictionary representation."
-                : "A homogeneous dictionary literal selects a case-insensitive CLR String dictionary representation.",
+                : "A homogeneous dictionary literal retains Hashtable identity with a bounded String value contract.",
             properties,
             objectValues ? PowerShellDictionaryValueKind.Object : PowerShellDictionaryValueKind.String);
     }
@@ -257,6 +270,11 @@ internal static class PowerShellDictionarySemanticBinder
         if (type == typeof(Dictionary<string, string>))
         {
             kind = PowerShellBoundIndexKind.StringDictionary; indexType = typeof(string); resultType = typeof(string); return true;
+        }
+        if (typeof(IDictionary).IsAssignableFrom(type) && type != typeof(OrderedDictionary) &&
+            typeFact.DictionaryValueKind == PowerShellDictionaryValueKind.String)
+        {
+            kind = PowerShellBoundIndexKind.StringHashtable; indexType = typeof(string); resultType = typeof(string); return true;
         }
         if (type == typeof(OrderedDictionary))
         {
@@ -293,7 +311,7 @@ internal static class PowerShellDictionarySemanticBinder
             PowerShellTypeFactProvenance.Inferred,
             objectValues
                 ? "A bounded dictionary literal selects a case-insensitive BCL object dictionary representation."
-                : "A homogeneous dictionary literal selects a case-insensitive CLR String dictionary representation.",
+                : "A homogeneous dictionary literal retains Hashtable identity with a bounded String value contract.",
             properties,
             objectValues ? PowerShellDictionaryValueKind.Object : PowerShellDictionaryValueKind.String);
     }

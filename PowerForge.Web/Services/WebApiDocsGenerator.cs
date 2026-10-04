@@ -36,6 +36,8 @@ public sealed class WebApiDocsOptions
     public int GitFreshnessUpdatedDays { get; set; } = 90;
     /// <summary>Optional assembly path for version metadata.</summary>
     public string? AssemblyPath { get; set; }
+    /// <summary>Additional assemblies whose public API is documented by <see cref="XmlPaths"/>.</summary>
+    public IReadOnlyList<string> AssemblyPaths { get; set; } = Array.Empty<string>();
     /// <summary>Output directory for generated docs.</summary>
     public string OutputPath { get; set; } = string.Empty;
     /// <summary>Documentation title.</summary>
@@ -413,11 +415,17 @@ public static partial class WebApiDocsGenerator
         if (options.Type == ApiDocsType.PowerShell && !File.Exists(helpPath) && !Directory.Exists(helpPath))
             warnings.Add($"PowerShell help not found: {helpPath}");
 
+        var assemblyPaths = options.Type == ApiDocsType.CSharp
+            ? ResolveCSharpAssemblyPaths(options)
+            : Array.Empty<string>();
         Assembly? assembly = null;
         ApiDocsAssemblyLoadContext? assemblyContext = null;
-        if (options.Type == ApiDocsType.CSharp && !string.IsNullOrWhiteSpace(options.AssemblyPath))
+        var assemblies = new List<Assembly>();
+        var assembliesByName = new Dictionary<string, Assembly>(StringComparer.OrdinalIgnoreCase);
+        var assemblyPathsByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (assemblyPaths.Length > 0)
         {
-            var requestedAssemblyPath = Path.GetFullPath(options.AssemblyPath);
+            var requestedAssemblyPath = assemblyPaths[0];
             if (!File.Exists(requestedAssemblyPath))
                 throw new FileNotFoundException(
                     $"Configured API documentation assembly was not found: {requestedAssemblyPath}",
@@ -427,19 +435,39 @@ public static partial class WebApiDocsGenerator
             if (assembly is null)
                 throw new InvalidOperationException(
                     $"Configured API documentation assembly could not be inspected: {requestedAssemblyPath}");
+            assemblies.Add(assembly);
+            assembliesByName.Add(assembly.GetName().Name!, assembly);
+            assemblyPathsByName.Add(assembly.GetName().Name!, requestedAssemblyPath);
         }
 
         using var assemblyContextScope = assemblyContext;
+        if (assemblyContext is not null)
+        {
+            foreach (var additionalPath in assemblyPaths.Skip(1))
+            {
+                if (!File.Exists(additionalPath))
+                    throw new FileNotFoundException(
+                        $"Configured API documentation assembly was not found: {additionalPath}",
+                        additionalPath);
+                var additional = assemblyContext!.LoadFromAssemblyPath(additionalPath);
+                if (!assembliesByName.TryAdd(additional.GetName().Name!, additional))
+                    throw new InvalidOperationException($"Duplicate API documentation assembly: {additional.GetName().Name}");
+                assemblies.Add(additional);
+                assemblyPathsByName.Add(additional.GetName().Name!, additionalPath);
+            }
+        }
+
         var apiDoc = options.Type == ApiDocsType.PowerShell
             ? ParsePowerShellHelp(helpPath, warnings, options)
-            : ParseXmlDocuments(xmlPaths, assembly, options, warnings);
+            : ParseXmlDocuments(xmlPaths, assembliesByName, options, warnings);
         if (options.Type == ApiDocsType.CSharp && assembly is null)
-            warnings.Add("XML-only API documentation does not verify public accessibility. Supply AssemblyPath to restrict the reference to the public assembly surface.");
+            warnings.Add("XML-only API documentation does not verify public accessibility. Supply AssemblyPath or AssemblyPaths to restrict the reference to the public assembly surface.");
         var usedReflectionFallback = false;
         if (options.Type == ApiDocsType.CSharp && assembly is not null && options.IncludeUndocumentedTypes)
         {
             var beforeCount = apiDoc.Types.Count;
-            PopulateFromAssembly(apiDoc, assembly);
+            foreach (var current in assemblies)
+                PopulateFromAssembly(apiDoc, current);
             usedReflectionFallback = apiDoc.Types.Count > beforeCount;
             if (apiDoc.Types.Count == 0)
                 warnings.Add("Reflection fallback produced 0 public types.");
@@ -451,17 +479,19 @@ public static partial class WebApiDocsGenerator
 
         if (options.Type == ApiDocsType.CSharp && assembly is not null)
         {
-            EnrichFromAssembly(apiDoc, assembly, options, warnings);
-            RestrictToPublicAssemblySurface(apiDoc, assembly);
+            foreach (var current in assemblies)
+                EnrichFromAssembly(apiDoc, current, options, warnings,
+                    assemblyPathsByName[current.GetName().Name!]);
+            RestrictToPublicAssemblySurface(apiDoc, assemblies);
         }
         var assemblyName = apiDoc.AssemblyName;
         var assemblyVersion = apiDoc.AssemblyVersion;
 
-        if (options.Type == ApiDocsType.CSharp && !string.IsNullOrWhiteSpace(options.AssemblyPath) && File.Exists(options.AssemblyPath))
+        if (options.Type == ApiDocsType.CSharp && assemblyPaths.Length > 0 && File.Exists(assemblyPaths[0]))
         {
             try
             {
-                var assemblyNameInfo = System.Reflection.AssemblyName.GetAssemblyName(options.AssemblyPath);
+                var assemblyNameInfo = System.Reflection.AssemblyName.GetAssemblyName(assemblyPaths[0]);
                 if (!string.IsNullOrWhiteSpace(assemblyNameInfo.Name))
                     assemblyName = assemblyNameInfo.Name;
                 if (assemblyNameInfo.Version is not null)
@@ -469,8 +499,8 @@ public static partial class WebApiDocsGenerator
             }
             catch (Exception ex)
             {
-                warnings.Add($"Assembly inspection failed: {Path.GetFileName(options.AssemblyPath)} ({ex.GetType().Name}: {ex.Message})");
-                Trace.TraceWarning($"Assembly inspection failed: {options.AssemblyPath} ({ex.GetType().Name}: {ex.Message})");
+                warnings.Add($"Assembly inspection failed: {Path.GetFileName(assemblyPaths[0])} ({ex.GetType().Name}: {ex.Message})");
+                Trace.TraceWarning($"Assembly inspection failed: {assemblyPaths[0]} ({ex.GetType().Name}: {ex.Message})");
             }
         }
 

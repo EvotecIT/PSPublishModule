@@ -1,0 +1,5276 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Original-only offline projections and host type identities for unresolved Management enum casts; no generated execution claim.",
+  "compilerCommit": "305dcd41f64daf3efaf1782588494caa29774866",
+  "repository": "https://github.com/EvotecIT/PSSharedGoods",
+  "sourceRevision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+  "sourceRevisionKind": "GitCommit",
+  "probe": "m29a-host-enum-probe.ps1",
+  "probeSha256": "505c75a8c9dcfdce89cac68ee41cff6a9e56ecaa1d9ade465f91cd0e7f1219da",
+  "sourceFiles": [
+    {
+      "path": "Public/Computers/Get-ComputerSystem.ps1",
+      "sha256": "193a23d56601e03feb5fb4b0b55d427a07f32e58f8c85c719f7d20b93e5ec3cd"
+    },
+    {
+      "path": "Public/Computers/Get-ComputerOperatingSystem.ps1",
+      "sha256": "8a85bae48ef6bbf466fac1977dfa5d1fde60260326d05f5a240d516eebc39d6e"
+    },
+    {
+      "path": "Public/Converts/ConvertTo-OperatingSystem.ps1",
+      "sha256": "005a9ebfe112ae4da63acc2f949d66f4a1978bf004a48bba362343802be7416a"
+    },
+    {
+      "path": "Public/Converts/ConvertFrom-LanguageCode.ps1",
+      "sha256": "7af28769de33a285b3419d986935b96870255cd84cbcade6c07fc25040cf8e93"
+    }
+  ],
+  "originalOnly": [
+    {
+      "host": "pwsh",
+      "framework": "net10.0",
+      "observations": 36,
+      "stdoutSha256": "ce02142c1aac1a7d25ea15891aa7c6ec5067c74a55e61452130a96efa4f67838",
+      "generatedExecuted": false,
+      "observationsData": [
+        {
+          "command": "Get-ComputerSystem",
+          "case": "empty",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "Roles",
+                "SystemFamily"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "empty",
+          "all": true,
+          "count": 0,
+          "records": [],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "null",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "nullToEnumInvalidCast,Get-ComputerSystem",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 35,
+            "column": 16
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "Roles",
+                "SystemFamily"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "null",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": null,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": null,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": null,
+              "enumText": null
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "valid",
+          "all": false,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "ComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles"
+              ],
+              "value": {
+                "ComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": "one, two"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.PCSystemType",
+              "enumText": "Desktop"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "Roles",
+                "SystemFamily"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "valid",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "1"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "named",
+          "all": false,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "ComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles"
+              ],
+              "value": {
+                "ComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": "one, two"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.PCSystemType",
+              "enumText": "Desktop"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "Roles",
+                "SystemFamily"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "named",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": "Desktop",
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": "Desktop",
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.String",
+              "enumText": "Desktop"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "many",
+          "all": false,
+          "count": 2,
+          "records": [
+            {
+              "keys": [
+                "ComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles"
+              ],
+              "value": {
+                "ComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": "one, two"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.PCSystemType",
+              "enumText": "Desktop"
+            },
+            {
+              "keys": [
+                "ComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles"
+              ],
+              "value": {
+                "ComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": "one, two"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.PCSystemType",
+              "enumText": "Desktop"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "Roles",
+                "SystemFamily"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "many",
+          "all": true,
+          "count": 2,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "1"
+            },
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "1"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "undefined",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "UndefinedIntegerToEnum,Get-ComputerSystem",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 35,
+            "column": 16
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "Roles",
+                "SystemFamily"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "undefined",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 65535,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 65535,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "65535"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "invalid",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "SubstringDisambiguationEnumParseThrewAnException,Get-ComputerSystem",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 35,
+            "column": 16
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "Roles",
+                "SystemFamily"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "invalid",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": "bad-enum",
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": "bad-enum",
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.String",
+              "enumText": "bad-enum"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "error",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "offline-provider-failure",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 21,
+            "column": 37
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "Roles",
+                "SystemFamily"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "error",
+          "all": true,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "offline-provider-failure",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 21,
+            "column": 37
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "fallback",
+          "all": false,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "ComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles"
+              ],
+              "value": {
+                "ComputerName": "EVOMAGIC",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": "one, two"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.PCSystemType",
+              "enumText": "Desktop"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "Roles",
+                "SystemFamily"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "fallback",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "1"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "empty",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "Caption",
+                "Manufacturer",
+                "InstallDate",
+                "OSArchitecture",
+                "Version",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode",
+                "OSLanguage",
+                "OSProductSuite",
+                "PSComputerName",
+                "LastBootUpTime",
+                "LocalDateTime"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "empty",
+          "all": true,
+          "count": 0,
+          "records": [],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "null",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "nullToEnumInvalidCast,Get-ComputerOperatingSystem",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 35,
+            "column": 16
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "Caption",
+                "Manufacturer",
+                "InstallDate",
+                "OSArchitecture",
+                "Version",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode",
+                "OSLanguage",
+                "OSProductSuite",
+                "PSComputerName",
+                "LastBootUpTime",
+                "LocalDateTime"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "null",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": null,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": null,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": null,
+              "enumText": null
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "valid",
+          "all": false,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "ComputerName",
+                "OperatingSystem",
+                "OperatingSystemVersion",
+                "OperatingSystemBuild",
+                "Manufacturer",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "ComputerName": "offline-host",
+                "OperatingSystem": "Windows Server 2022",
+                "OperatingSystemVersion": "Windows Server 2022",
+                "OperatingSystemBuild": "10.0.20348",
+                "Manufacturer": "offline-vendor",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": "English (United States)",
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.OSProductSuite",
+              "enumText": "SmallBusinessServer"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "Caption",
+                "Manufacturer",
+                "InstallDate",
+                "OSArchitecture",
+                "Version",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode",
+                "OSLanguage",
+                "OSProductSuite",
+                "PSComputerName",
+                "LastBootUpTime",
+                "LocalDateTime"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "valid",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "1"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "named",
+          "all": false,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "ComputerName",
+                "OperatingSystem",
+                "OperatingSystemVersion",
+                "OperatingSystemBuild",
+                "Manufacturer",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "ComputerName": "offline-host",
+                "OperatingSystem": "Windows Server 2022",
+                "OperatingSystemVersion": "Windows Server 2022",
+                "OperatingSystemBuild": "10.0.20348",
+                "Manufacturer": "offline-vendor",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": "English (United States)",
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.OSProductSuite",
+              "enumText": "SmallBusinessServer"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "Caption",
+                "Manufacturer",
+                "InstallDate",
+                "OSArchitecture",
+                "Version",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode",
+                "OSLanguage",
+                "OSProductSuite",
+                "PSComputerName",
+                "LastBootUpTime",
+                "LocalDateTime"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "named",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": "SmallBusinessServer",
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": "SmallBusinessServer",
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.String",
+              "enumText": "SmallBusinessServer"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "many",
+          "all": false,
+          "count": 2,
+          "records": [
+            {
+              "keys": [
+                "ComputerName",
+                "OperatingSystem",
+                "OperatingSystemVersion",
+                "OperatingSystemBuild",
+                "Manufacturer",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "ComputerName": "offline-host",
+                "OperatingSystem": "Windows Server 2022",
+                "OperatingSystemVersion": "Windows Server 2022",
+                "OperatingSystemBuild": "10.0.20348",
+                "Manufacturer": "offline-vendor",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": "English (United States)",
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.OSProductSuite",
+              "enumText": "SmallBusinessServer"
+            },
+            {
+              "keys": [
+                "ComputerName",
+                "OperatingSystem",
+                "OperatingSystemVersion",
+                "OperatingSystemBuild",
+                "Manufacturer",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "ComputerName": "offline-host",
+                "OperatingSystem": "Windows Server 2022",
+                "OperatingSystemVersion": "Windows Server 2022",
+                "OperatingSystemBuild": "10.0.20348",
+                "Manufacturer": "offline-vendor",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": "English (United States)",
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.OSProductSuite",
+              "enumText": "SmallBusinessServer"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "Caption",
+                "Manufacturer",
+                "InstallDate",
+                "OSArchitecture",
+                "Version",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode",
+                "OSLanguage",
+                "OSProductSuite",
+                "PSComputerName",
+                "LastBootUpTime",
+                "LocalDateTime"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "many",
+          "all": true,
+          "count": 2,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "1"
+            },
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "1"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "undefined",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "UndefinedIntegerToEnum,Get-ComputerOperatingSystem",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 35,
+            "column": 16
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "Caption",
+                "Manufacturer",
+                "InstallDate",
+                "OSArchitecture",
+                "Version",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode",
+                "OSLanguage",
+                "OSProductSuite",
+                "PSComputerName",
+                "LastBootUpTime",
+                "LocalDateTime"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "undefined",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 65535,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 65535,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "65535"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "invalid",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "SubstringDisambiguationEnumParseThrewAnException,Get-ComputerOperatingSystem",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 35,
+            "column": 16
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "Caption",
+                "Manufacturer",
+                "InstallDate",
+                "OSArchitecture",
+                "Version",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode",
+                "OSLanguage",
+                "OSProductSuite",
+                "PSComputerName",
+                "LastBootUpTime",
+                "LocalDateTime"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "invalid",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": "bad-enum",
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": "bad-enum",
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.String",
+              "enumText": "bad-enum"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "error",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "offline-provider-failure",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 21,
+            "column": 37
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "Caption",
+                "Manufacturer",
+                "InstallDate",
+                "OSArchitecture",
+                "Version",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode",
+                "OSLanguage",
+                "OSProductSuite",
+                "PSComputerName",
+                "LastBootUpTime",
+                "LocalDateTime"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "error",
+          "all": true,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "offline-provider-failure",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 21,
+            "column": 37
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "fallback",
+          "all": false,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "ComputerName",
+                "OperatingSystem",
+                "OperatingSystemVersion",
+                "OperatingSystemBuild",
+                "Manufacturer",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "ComputerName": "EVOMAGIC",
+                "OperatingSystem": "Windows Server 2022",
+                "OperatingSystemVersion": "Windows Server 2022",
+                "OperatingSystemBuild": "10.0.20348",
+                "Manufacturer": "offline-vendor",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": "English (United States)",
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.OSProductSuite",
+              "enumText": "SmallBusinessServer"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "Caption",
+                "Manufacturer",
+                "InstallDate",
+                "OSArchitecture",
+                "Version",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode",
+                "OSLanguage",
+                "OSProductSuite",
+                "PSComputerName",
+                "LastBootUpTime",
+                "LocalDateTime"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "fallback",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "1"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        }
+      ],
+      "loadedHostTypes": [
+        {
+          "Name": "Microsoft.PowerShell.Commands.PCSystemType",
+          "Resolved": true,
+          "Assembly": "Microsoft.PowerShell.Commands.Management, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+          "Enum": true
+        },
+        {
+          "Name": "Microsoft.PowerShell.Commands.OSProductSuite",
+          "Resolved": true,
+          "Assembly": "Microsoft.PowerShell.Commands.Management, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+          "Enum": true
+        }
+      ]
+    },
+    {
+      "host": "powershell.exe",
+      "framework": "net472",
+      "observations": 36,
+      "stdoutSha256": "ce02142c1aac1a7d25ea15891aa7c6ec5067c74a55e61452130a96efa4f67838",
+      "generatedExecuted": false,
+      "observationsData": [
+        {
+          "command": "Get-ComputerSystem",
+          "case": "empty",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "Roles",
+                "SystemFamily"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "empty",
+          "all": true,
+          "count": 0,
+          "records": [],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "null",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "nullToEnumInvalidCast,Get-ComputerSystem",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 35,
+            "column": 16
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "Roles",
+                "SystemFamily"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "null",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": null,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": null,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": null,
+              "enumText": null
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "valid",
+          "all": false,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "ComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles"
+              ],
+              "value": {
+                "ComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": "one, two"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.PCSystemType",
+              "enumText": "Desktop"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "Roles",
+                "SystemFamily"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "valid",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "1"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "named",
+          "all": false,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "ComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles"
+              ],
+              "value": {
+                "ComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": "one, two"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.PCSystemType",
+              "enumText": "Desktop"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "Roles",
+                "SystemFamily"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "named",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": "Desktop",
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": "Desktop",
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.String",
+              "enumText": "Desktop"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "many",
+          "all": false,
+          "count": 2,
+          "records": [
+            {
+              "keys": [
+                "ComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles"
+              ],
+              "value": {
+                "ComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": "one, two"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.PCSystemType",
+              "enumText": "Desktop"
+            },
+            {
+              "keys": [
+                "ComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles"
+              ],
+              "value": {
+                "ComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": "one, two"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.PCSystemType",
+              "enumText": "Desktop"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "Roles",
+                "SystemFamily"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "many",
+          "all": true,
+          "count": 2,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "1"
+            },
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "1"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "undefined",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "UndefinedIntegerToEnum,Get-ComputerSystem",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 35,
+            "column": 16
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "Roles",
+                "SystemFamily"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "undefined",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 65535,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 65535,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "65535"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "invalid",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "SubstringDisambiguationEnumParseThrewAnException,Get-ComputerSystem",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 35,
+            "column": 16
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "Roles",
+                "SystemFamily"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "invalid",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": "bad-enum",
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": "bad-enum",
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.String",
+              "enumText": "bad-enum"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "error",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "offline-provider-failure",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 21,
+            "column": 37
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "Roles",
+                "SystemFamily"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "error",
+          "all": true,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "offline-provider-failure",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 21,
+            "column": 37
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "fallback",
+          "all": false,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "ComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles"
+              ],
+              "value": {
+                "ComputerName": "EVOMAGIC",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": "one, two"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.PCSystemType",
+              "enumText": "Desktop"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "Roles",
+                "SystemFamily"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerSystem",
+          "case": "fallback",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "1"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "Win32_ComputerSystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "empty",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "Caption",
+                "Manufacturer",
+                "InstallDate",
+                "OSArchitecture",
+                "Version",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode",
+                "OSLanguage",
+                "OSProductSuite",
+                "PSComputerName",
+                "LastBootUpTime",
+                "LocalDateTime"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "empty",
+          "all": true,
+          "count": 0,
+          "records": [],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "null",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "nullToEnumInvalidCast,Get-ComputerOperatingSystem",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 35,
+            "column": 16
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "Caption",
+                "Manufacturer",
+                "InstallDate",
+                "OSArchitecture",
+                "Version",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode",
+                "OSLanguage",
+                "OSProductSuite",
+                "PSComputerName",
+                "LastBootUpTime",
+                "LocalDateTime"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "null",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": null,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": null,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": null,
+              "enumText": null
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "valid",
+          "all": false,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "ComputerName",
+                "OperatingSystem",
+                "OperatingSystemVersion",
+                "OperatingSystemBuild",
+                "Manufacturer",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "ComputerName": "offline-host",
+                "OperatingSystem": "Windows Server 2022",
+                "OperatingSystemVersion": "Windows Server 2022",
+                "OperatingSystemBuild": "10.0.20348",
+                "Manufacturer": "offline-vendor",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": "English (United States)",
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.OSProductSuite",
+              "enumText": "SmallBusinessServer"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "Caption",
+                "Manufacturer",
+                "InstallDate",
+                "OSArchitecture",
+                "Version",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode",
+                "OSLanguage",
+                "OSProductSuite",
+                "PSComputerName",
+                "LastBootUpTime",
+                "LocalDateTime"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "valid",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "1"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "named",
+          "all": false,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "ComputerName",
+                "OperatingSystem",
+                "OperatingSystemVersion",
+                "OperatingSystemBuild",
+                "Manufacturer",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "ComputerName": "offline-host",
+                "OperatingSystem": "Windows Server 2022",
+                "OperatingSystemVersion": "Windows Server 2022",
+                "OperatingSystemBuild": "10.0.20348",
+                "Manufacturer": "offline-vendor",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": "English (United States)",
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.OSProductSuite",
+              "enumText": "SmallBusinessServer"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "Caption",
+                "Manufacturer",
+                "InstallDate",
+                "OSArchitecture",
+                "Version",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode",
+                "OSLanguage",
+                "OSProductSuite",
+                "PSComputerName",
+                "LastBootUpTime",
+                "LocalDateTime"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "named",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": "SmallBusinessServer",
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": "SmallBusinessServer",
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.String",
+              "enumText": "SmallBusinessServer"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "many",
+          "all": false,
+          "count": 2,
+          "records": [
+            {
+              "keys": [
+                "ComputerName",
+                "OperatingSystem",
+                "OperatingSystemVersion",
+                "OperatingSystemBuild",
+                "Manufacturer",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "ComputerName": "offline-host",
+                "OperatingSystem": "Windows Server 2022",
+                "OperatingSystemVersion": "Windows Server 2022",
+                "OperatingSystemBuild": "10.0.20348",
+                "Manufacturer": "offline-vendor",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": "English (United States)",
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.OSProductSuite",
+              "enumText": "SmallBusinessServer"
+            },
+            {
+              "keys": [
+                "ComputerName",
+                "OperatingSystem",
+                "OperatingSystemVersion",
+                "OperatingSystemBuild",
+                "Manufacturer",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "ComputerName": "offline-host",
+                "OperatingSystem": "Windows Server 2022",
+                "OperatingSystemVersion": "Windows Server 2022",
+                "OperatingSystemBuild": "10.0.20348",
+                "Manufacturer": "offline-vendor",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": "English (United States)",
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.OSProductSuite",
+              "enumText": "SmallBusinessServer"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "Caption",
+                "Manufacturer",
+                "InstallDate",
+                "OSArchitecture",
+                "Version",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode",
+                "OSLanguage",
+                "OSProductSuite",
+                "PSComputerName",
+                "LastBootUpTime",
+                "LocalDateTime"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "many",
+          "all": true,
+          "count": 2,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "1"
+            },
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "1"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "undefined",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "UndefinedIntegerToEnum,Get-ComputerOperatingSystem",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 35,
+            "column": 16
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "Caption",
+                "Manufacturer",
+                "InstallDate",
+                "OSArchitecture",
+                "Version",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode",
+                "OSLanguage",
+                "OSProductSuite",
+                "PSComputerName",
+                "LastBootUpTime",
+                "LocalDateTime"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "undefined",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 65535,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 65535,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "65535"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "invalid",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "SubstringDisambiguationEnumParseThrewAnException,Get-ComputerOperatingSystem",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 35,
+            "column": 16
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "Caption",
+                "Manufacturer",
+                "InstallDate",
+                "OSArchitecture",
+                "Version",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode",
+                "OSLanguage",
+                "OSProductSuite",
+                "PSComputerName",
+                "LastBootUpTime",
+                "LocalDateTime"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "invalid",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "offline-host",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": "bad-enum",
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": "bad-enum",
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.String",
+              "enumText": "bad-enum"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "error",
+          "all": false,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "offline-provider-failure",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 21,
+            "column": 37
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "Caption",
+                "Manufacturer",
+                "InstallDate",
+                "OSArchitecture",
+                "Version",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode",
+                "OSLanguage",
+                "OSProductSuite",
+                "PSComputerName",
+                "LastBootUpTime",
+                "LocalDateTime"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "error",
+          "all": true,
+          "count": 0,
+          "records": [],
+          "error": {
+            "id": "offline-provider-failure",
+            "type": "System.Management.Automation.RuntimeException",
+            "line": 21,
+            "column": 37
+          },
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "fallback",
+          "all": false,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "ComputerName",
+                "OperatingSystem",
+                "OperatingSystemVersion",
+                "OperatingSystemBuild",
+                "Manufacturer",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "ComputerName": "EVOMAGIC",
+                "OperatingSystem": "Windows Server 2022",
+                "OperatingSystemVersion": "Windows Server 2022",
+                "OperatingSystemBuild": "10.0.20348",
+                "Manufacturer": "offline-vendor",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": "English (United States)",
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "Microsoft.PowerShell.Commands.OSProductSuite",
+              "enumText": "SmallBusinessServer"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "Caption",
+                "Manufacturer",
+                "InstallDate",
+                "OSArchitecture",
+                "Version",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode",
+                "OSLanguage",
+                "OSProductSuite",
+                "PSComputerName",
+                "LastBootUpTime",
+                "LocalDateTime"
+              ],
+              "credential": false
+            }
+          ]
+        },
+        {
+          "command": "Get-ComputerOperatingSystem",
+          "case": "fallback",
+          "all": true,
+          "count": 1,
+          "records": [
+            {
+              "keys": [
+                "PSComputerName",
+                "Name",
+                "Manufacturer",
+                "Domain",
+                "Model",
+                "Systemtype",
+                "PrimaryOwnerName",
+                "PCSystemType",
+                "PartOfDomain",
+                "CurrentTimeZone",
+                "BootupState",
+                "SystemFamily",
+                "Roles",
+                "Caption",
+                "Version",
+                "OSArchitecture",
+                "OSLanguage",
+                "OSProductSuite",
+                "InstallDate",
+                "LastBootUpTime",
+                "LocalDateTime",
+                "SerialNumber",
+                "BootDevice",
+                "WindowsDirectory",
+                "CountryCode"
+              ],
+              "value": {
+                "PSComputerName": "",
+                "Name": "offline",
+                "Manufacturer": "offline-vendor",
+                "Domain": "offline.invalid",
+                "Model": "offline-model",
+                "Systemtype": "x64",
+                "PrimaryOwnerName": "offline-owner",
+                "PCSystemType": 1,
+                "PartOfDomain": false,
+                "CurrentTimeZone": 60,
+                "BootupState": "Normal",
+                "SystemFamily": "offline-family",
+                "Roles": [
+                  "one",
+                  "two"
+                ],
+                "Caption": "Windows Server 2022",
+                "Version": "10.0.20348",
+                "OSArchitecture": "64-bit",
+                "OSLanguage": 1033,
+                "OSProductSuite": 1,
+                "InstallDate": "fixed-install",
+                "LastBootUpTime": "fixed-boot",
+                "LocalDateTime": "fixed-time",
+                "SerialNumber": "offline-serial",
+                "BootDevice": "offline-device",
+                "WindowsDirectory": "offline-directory",
+                "CountryCode": "1"
+              },
+              "enumType": "System.Int32",
+              "enumText": "1"
+            }
+          ],
+          "error": null,
+          "calls": [
+            {
+              "computer": [
+                "offline-host"
+              ],
+              "protocol": "Dcom",
+              "class": "win32_operatingsystem",
+              "properties": [
+                "*"
+              ],
+              "credential": false
+            }
+          ]
+        }
+      ],
+      "loadedHostTypes": [
+        {
+          "Name": "Microsoft.PowerShell.Commands.PCSystemType",
+          "Resolved": true,
+          "Assembly": "Microsoft.PowerShell.Commands.Management, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+          "Enum": true
+        },
+        {
+          "Name": "Microsoft.PowerShell.Commands.OSProductSuite",
+          "Resolved": true,
+          "Assembly": "Microsoft.PowerShell.Commands.Management, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+          "Enum": true
+        }
+      ]
+    }
+  ],
+  "currentCompiler": [
+    {
+      "name": "Get-ComputerSystem",
+      "framework": "net10.0",
+      "explanationSha256": "f458b8d1b63e54658c46055669ab0cd6ba5187fa66908291888fdc82428b3062",
+      "unit": {
+        "unitId": "ae8cb0f464786b77a6430696",
+        "name": "Get-ComputerSystem",
+        "kind": "Function",
+        "startLine": 1,
+        "returnType": "System.Object",
+        "parameters": [
+          {
+            "name": "ComputerName",
+            "typeName": "System.String[]",
+            "allowNull": false,
+            "hasDefaultValue": true
+          },
+          {
+            "name": "Protocol",
+            "typeName": "System.String",
+            "allowNull": false,
+            "hasDefaultValue": true
+          },
+          {
+            "name": "Credential",
+            "typeName": "System.Management.Automation.PSCredential",
+            "allowNull": false,
+            "hasDefaultValue": false
+          },
+          {
+            "name": "All",
+            "typeName": "System.Boolean",
+            "allowNull": false,
+            "hasDefaultValue": false
+          }
+        ],
+        "decision": "RuntimeFallback",
+        "loweringRoute": "BoundClrRegions+PowerShellRuntime",
+        "artifactDisposition": "TypedRegions+HostedSource",
+        "semanticEligible": false,
+        "emitted": false,
+        "retainedHostedSource": true,
+        "usesNativeFunctionBinding": false,
+        "runtimeCommandRegions": 0,
+        "moduleStateReadBoundaryCrossings": 0,
+        "moduleStateWriteBoundaryCrossings": 0,
+        "boundaryCrossings": 1,
+        "regionGraph": {
+          "schemaVersion": 1,
+          "regions": [
+            {
+              "regionId": "region:c371e89d96dc1340ff9b708ba45e2f385e8189987148b767dd1b2e5882709a1c:1216:1256:Typed",
+              "ordinal": 0,
+              "execution": "Typed",
+              "startOffset": 1216,
+              "endOffset": 1256,
+              "startLine": 36,
+              "startColumn": 5,
+              "endLine": 36,
+              "endColumn": 45,
+              "inputs": [],
+              "outputs": [
+                "transfer:Local:Class"
+              ],
+              "mutations": [
+                "Local:CLASS"
+              ],
+              "streams": [],
+              "errors": [],
+              "ordering": "AuthoredSequentialSingleEvaluation",
+              "hostedCommandBoundarySites": 0,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 0,
+              "staticBoundaryValueTransfers": 0,
+              "staticBoundaryCostUnits": 0
+            }
+          ],
+          "scriptBlocks": [],
+          "hostedCommandBoundarySites": 0,
+          "moduleStateReadBoundarySites": 0,
+          "moduleStateWriteBoundarySites": 0,
+          "staticBoundaryCrossings": 0,
+          "staticBoundaryCostUnits": 0
+        },
+        "promotedTypedRegions": 1,
+        "generatedRegionMemberNames": [
+          "__PowerForgeRegion_a72731295cd241bd2ac2716d"
+        ],
+        "shapingFallback": false,
+        "omitted": false,
+        "rejected": false,
+        "causes": [
+          {
+            "code": "UnsupportedSyntax",
+            "featureId": "expression.conversion",
+            "message": "Conversion target 'Microsoft.PowerShell.Commands.PCSystemType' requires runtime type resolution.",
+            "line": 57,
+            "column": 40
+          }
+        ]
+      }
+    },
+    {
+      "name": "Get-ComputerOperatingSystem",
+      "framework": "net10.0",
+      "explanationSha256": "f08043a66fea14c30dc578a4ba015cb89943b35f36436ff3ac01664358a5db23",
+      "unit": {
+        "unitId": "f092858a746981bc08ff495c",
+        "name": "Get-ComputerOperatingSystem",
+        "kind": "Function",
+        "startLine": 1,
+        "returnType": "System.Object",
+        "parameters": [
+          {
+            "name": "ComputerName",
+            "typeName": "System.String[]",
+            "allowNull": false,
+            "hasDefaultValue": true
+          },
+          {
+            "name": "Protocol",
+            "typeName": "System.String",
+            "allowNull": false,
+            "hasDefaultValue": true
+          },
+          {
+            "name": "Credential",
+            "typeName": "System.Management.Automation.PSCredential",
+            "allowNull": false,
+            "hasDefaultValue": false
+          },
+          {
+            "name": "All",
+            "typeName": "System.Boolean",
+            "allowNull": false,
+            "hasDefaultValue": false
+          }
+        ],
+        "decision": "RuntimeFallback",
+        "loweringRoute": "BoundClrRegions+PowerShellRuntime",
+        "artifactDisposition": "TypedRegions+HostedSource",
+        "semanticEligible": false,
+        "emitted": false,
+        "retainedHostedSource": true,
+        "usesNativeFunctionBinding": false,
+        "runtimeCommandRegions": 0,
+        "moduleStateReadBoundaryCrossings": 0,
+        "moduleStateWriteBoundaryCrossings": 0,
+        "boundaryCrossings": 1,
+        "regionGraph": {
+          "schemaVersion": 1,
+          "regions": [
+            {
+              "regionId": "region:4669215b37ebbc63384fadb5e8365bcc578ea2ab6981732e80da9fcea34cdca3:1552:1916:Typed",
+              "ordinal": 0,
+              "execution": "Typed",
+              "startOffset": 1552,
+              "endOffset": 1916,
+              "startLine": 37,
+              "startColumn": 5,
+              "endLine": 42,
+              "endColumn": 6,
+              "inputs": [
+                "Parameter:ALL"
+              ],
+              "outputs": [
+                "transfer:Local:Class",
+                "transfer:Local:Properties"
+              ],
+              "mutations": [
+                "Local:CLASS",
+                "Local:PROPERTIES"
+              ],
+              "streams": [],
+              "errors": [],
+              "ordering": "AuthoredSequentialSingleEvaluation",
+              "hostedCommandBoundarySites": 0,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 0,
+              "staticBoundaryValueTransfers": 0,
+              "staticBoundaryCostUnits": 0
+            }
+          ],
+          "scriptBlocks": [],
+          "hostedCommandBoundarySites": 0,
+          "moduleStateReadBoundarySites": 0,
+          "moduleStateWriteBoundarySites": 0,
+          "staticBoundaryCrossings": 0,
+          "staticBoundaryCostUnits": 0
+        },
+        "promotedTypedRegions": 1,
+        "generatedRegionMemberNames": [
+          "__PowerForgeRegion_519881617abb8a1a43398ac3"
+        ],
+        "shapingFallback": false,
+        "omitted": false,
+        "rejected": false,
+        "causes": [
+          {
+            "code": "UnsupportedSyntax",
+            "featureId": "expression.conversion",
+            "message": "Conversion target 'Microsoft.PowerShell.Commands.OSProductSuite' requires runtime type resolution.",
+            "line": 57,
+            "column": 42
+          }
+        ]
+      }
+    },
+    {
+      "name": "Get-ComputerSystem",
+      "framework": "net472",
+      "explanationSha256": "fc611c5d6f8779303340c314d69bce324c9941d9b3b610034b83df848bde2ad2",
+      "unit": {
+        "unitId": "ae8cb0f464786b77a6430696",
+        "name": "Get-ComputerSystem",
+        "kind": "Function",
+        "startLine": 1,
+        "returnType": "System.Object",
+        "parameters": [
+          {
+            "name": "ComputerName",
+            "typeName": "System.String[]",
+            "allowNull": false,
+            "hasDefaultValue": true
+          },
+          {
+            "name": "Protocol",
+            "typeName": "System.String",
+            "allowNull": false,
+            "hasDefaultValue": true
+          },
+          {
+            "name": "Credential",
+            "typeName": "System.Management.Automation.PSCredential",
+            "allowNull": false,
+            "hasDefaultValue": false
+          },
+          {
+            "name": "All",
+            "typeName": "System.Boolean",
+            "allowNull": false,
+            "hasDefaultValue": false
+          }
+        ],
+        "decision": "RuntimeFallback",
+        "loweringRoute": "BoundClrRegions+PowerShellRuntime",
+        "artifactDisposition": "TypedRegions+HostedSource",
+        "semanticEligible": false,
+        "emitted": false,
+        "retainedHostedSource": true,
+        "usesNativeFunctionBinding": false,
+        "runtimeCommandRegions": 0,
+        "moduleStateReadBoundaryCrossings": 0,
+        "moduleStateWriteBoundaryCrossings": 0,
+        "boundaryCrossings": 1,
+        "regionGraph": {
+          "schemaVersion": 1,
+          "regions": [
+            {
+              "regionId": "region:c371e89d96dc1340ff9b708ba45e2f385e8189987148b767dd1b2e5882709a1c:1216:1256:Typed",
+              "ordinal": 0,
+              "execution": "Typed",
+              "startOffset": 1216,
+              "endOffset": 1256,
+              "startLine": 36,
+              "startColumn": 5,
+              "endLine": 36,
+              "endColumn": 45,
+              "inputs": [],
+              "outputs": [
+                "transfer:Local:Class"
+              ],
+              "mutations": [
+                "Local:CLASS"
+              ],
+              "streams": [],
+              "errors": [],
+              "ordering": "AuthoredSequentialSingleEvaluation",
+              "hostedCommandBoundarySites": 0,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 0,
+              "staticBoundaryValueTransfers": 0,
+              "staticBoundaryCostUnits": 0
+            }
+          ],
+          "scriptBlocks": [],
+          "hostedCommandBoundarySites": 0,
+          "moduleStateReadBoundarySites": 0,
+          "moduleStateWriteBoundarySites": 0,
+          "staticBoundaryCrossings": 0,
+          "staticBoundaryCostUnits": 0
+        },
+        "promotedTypedRegions": 1,
+        "generatedRegionMemberNames": [
+          "__PowerForgeRegion_a72731295cd241bd2ac2716d"
+        ],
+        "shapingFallback": false,
+        "omitted": false,
+        "rejected": false,
+        "causes": [
+          {
+            "code": "UnsupportedSyntax",
+            "featureId": "expression.conversion",
+            "message": "Conversion target 'Microsoft.PowerShell.Commands.PCSystemType' requires runtime type resolution.",
+            "line": 57,
+            "column": 40
+          }
+        ]
+      }
+    },
+    {
+      "name": "Get-ComputerOperatingSystem",
+      "framework": "net472",
+      "explanationSha256": "007cc72f2a5b4c8a24328703f6c36a27eec307714dcd8fb453dc9ef9e30e6e2a",
+      "unit": {
+        "unitId": "f092858a746981bc08ff495c",
+        "name": "Get-ComputerOperatingSystem",
+        "kind": "Function",
+        "startLine": 1,
+        "returnType": "System.Object",
+        "parameters": [
+          {
+            "name": "ComputerName",
+            "typeName": "System.String[]",
+            "allowNull": false,
+            "hasDefaultValue": true
+          },
+          {
+            "name": "Protocol",
+            "typeName": "System.String",
+            "allowNull": false,
+            "hasDefaultValue": true
+          },
+          {
+            "name": "Credential",
+            "typeName": "System.Management.Automation.PSCredential",
+            "allowNull": false,
+            "hasDefaultValue": false
+          },
+          {
+            "name": "All",
+            "typeName": "System.Boolean",
+            "allowNull": false,
+            "hasDefaultValue": false
+          }
+        ],
+        "decision": "RuntimeFallback",
+        "loweringRoute": "BoundClrRegions+PowerShellRuntime",
+        "artifactDisposition": "TypedRegions+HostedSource",
+        "semanticEligible": false,
+        "emitted": false,
+        "retainedHostedSource": true,
+        "usesNativeFunctionBinding": false,
+        "runtimeCommandRegions": 0,
+        "moduleStateReadBoundaryCrossings": 0,
+        "moduleStateWriteBoundaryCrossings": 0,
+        "boundaryCrossings": 1,
+        "regionGraph": {
+          "schemaVersion": 1,
+          "regions": [
+            {
+              "regionId": "region:4669215b37ebbc63384fadb5e8365bcc578ea2ab6981732e80da9fcea34cdca3:1552:1916:Typed",
+              "ordinal": 0,
+              "execution": "Typed",
+              "startOffset": 1552,
+              "endOffset": 1916,
+              "startLine": 37,
+              "startColumn": 5,
+              "endLine": 42,
+              "endColumn": 6,
+              "inputs": [
+                "Parameter:ALL"
+              ],
+              "outputs": [
+                "transfer:Local:Class",
+                "transfer:Local:Properties"
+              ],
+              "mutations": [
+                "Local:CLASS",
+                "Local:PROPERTIES"
+              ],
+              "streams": [],
+              "errors": [],
+              "ordering": "AuthoredSequentialSingleEvaluation",
+              "hostedCommandBoundarySites": 0,
+              "moduleStateReadBoundarySites": 0,
+              "moduleStateWriteBoundarySites": 0,
+              "staticBoundaryCrossings": 0,
+              "staticBoundaryValueTransfers": 0,
+              "staticBoundaryCostUnits": 0
+            }
+          ],
+          "scriptBlocks": [],
+          "hostedCommandBoundarySites": 0,
+          "moduleStateReadBoundarySites": 0,
+          "moduleStateWriteBoundarySites": 0,
+          "staticBoundaryCrossings": 0,
+          "staticBoundaryCostUnits": 0
+        },
+        "promotedTypedRegions": 1,
+        "generatedRegionMemberNames": [
+          "__PowerForgeRegion_519881617abb8a1a43398ac3"
+        ],
+        "shapingFallback": false,
+        "omitted": false,
+        "rejected": false,
+        "causes": [
+          {
+            "code": "UnsupportedSyntax",
+            "featureId": "expression.conversion",
+            "message": "Conversion target 'Microsoft.PowerShell.Commands.OSProductSuite' requires runtime type resolution.",
+            "line": 57,
+            "column": 42
+          }
+        ]
+      }
+    }
+  ]
+}

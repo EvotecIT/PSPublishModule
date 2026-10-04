@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Native exact-switch script-block predicates; same-input per-function no-loss comparison.",
+  "baselineCompilerCommit": "1681702014081aac1016180ebc06b779bd9db365",
+  "baselineComparison": "m29a-filter-header-comparison.net10.json",
+  "baselineComparisonSha256": "c80bd2a332741f2f4f741dcf7683615cc4eec521acaa9683a99bd10c241a026a",
+  "baselineRetainedInventory": "m29a-retained-functions.net10.json at baselineCompilerCommit",
+  "baselineRetainedInventorySha256": "832205ed569c30d471f56e6c42f1239de7fd07295d32ae7359c38aacba94f711",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 452,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "candidateEmitted": 242,
+      "candidateExplanationSha256": "2657e1acde0a75449fecacc1ec2a25a193ad83c9803ae674b6f2a3d847a143c0",
+      "changes": []
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "candidateEmitted": 54,
+      "candidateExplanationSha256": "2c7f3b5552a75776c3f19ce63108618366e001d300574797c446281ed94a6f64",
+      "changes": [
+        {
+          "unitId": "b0d07944aec2f9420c410ff3",
+          "name": "Get-CloudDevicesToProcess",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "candidateEmitted": 55,
+      "candidateExplanationSha256": "eeda66ded0b2a18edcb08eba5f3191ea968f7f67b3069f21ce083286aa4523ce",
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "candidateEmitted": 78,
+      "candidateExplanationSha256": "e7bf6803d2f8210e6c7d2f638b227527cefc572a3df115236d3485d42de326b6",
+      "changes": []
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "candidateEmitted": 24,
+      "candidateExplanationSha256": "33db727b972d0164311bb9bea1aa885067c91999c419f1f0775022b285fbe25e",
+      "changes": []
+    }
+  ],
+  "lostEmittedMethods": 0,
+  "lostRetainedRegions": 0,
+  "compilerSourceHashes": [
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.ControlFlow.cs",
+      "sha256": "c65abb3db72cb9703b7c2c8a5344c2e2d9424a28c026205ffb5802bafd7b01bd"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.ScriptBlocks.cs",
+      "sha256": "3bdc0e7710fbcea9500fce16995c870e00a51946db9defd47859ca11c7079f6c"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.ScriptBlocks.cs",
+      "sha256": "2b2f55d87a5b092de7dadd25eb55d86cee00cefeddc6d39b0c7905c8edd73c48"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Switch.cs",
+      "sha256": "b124ffc3ad58916402f88ee62a390bf345d3b73810d0d679197e84078d817905"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeScriptBlock.cs",
+      "sha256": "95ea795de6a944de7635a86632c19769dd5fddcf21a1c1ced64b286e251f8cbb"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeScriptBlock.cs",
+      "sha256": "0c4d3e0d11f083185d38ceb602bcf2a5efc5fcbe555d9efc71d885736d67cfb2"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs",
+      "sha256": "7e9ba7278e5e78b1e43a9c304fa7022c22b1ef23b20393a1f894d7aaeee5cc20"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.ScriptBlocks.cs",
+      "sha256": "0bffb6f861543823c3fa0594a61d294289e8412fc604bb1aba8d66c56cec9c38"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Switch.cs",
+      "sha256": "887f9d3accbee63e966585e834b4ee4d04920366920073de133fb7eeb2357168"
+    }
+  ],
+  "candidateEmitted": 453
+}

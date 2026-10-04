@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
 using System.Reflection;
@@ -33,16 +34,7 @@ internal static class Program
             runspace.Open();
             using var powerShell = PowerShell.Create();
             powerShell.Runspace = runspace;
-            powerShell.AddScript(source, useLocalScope: false);
-            foreach (var argument in ParseArguments(args))
-            {
-                if (argument.Name is null)
-                    powerShell.AddArgument(argument.Value);
-                else if (argument.Value is null)
-                    powerShell.AddParameter(argument.Name);
-                else
-                    powerShell.AddParameter(argument.Name, argument.Value);
-            }
+{{ENTRY_INVOCATION}}
             powerShell.AddCommand("Out-String").AddParameter("Stream");
 
             int? requestedExitCode = null;

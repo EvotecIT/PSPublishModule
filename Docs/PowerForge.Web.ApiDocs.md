@@ -8,6 +8,12 @@ overriding templates via `templateRoot`.
 
 For C# references, supply both the XML documentation and its matching assembly.
 The assembly restricts output to the public API and supplies C# signatures.
+For a project built from several assemblies, pass each XML file through `xmls`
+and each matching DLL through `assemblies` in the `apidocs` pipeline step. The
+equivalent library options are `XmlPaths` and `AssemblyPaths`; the existing
+`xml`/`assembly` or `XmlPath`/`AssemblyPath` inputs remain supported. Each XML
+file's `<assembly><name>` must match a supplied DLL. The generator combines the
+public types into one reference and rejects an XML/DLL mismatch.
 XML-only generation remains available, but reports a warning because XML member
 records do not encode accessibility. Treat that warning as a generation limit
 when publishing a reference from XML alone.

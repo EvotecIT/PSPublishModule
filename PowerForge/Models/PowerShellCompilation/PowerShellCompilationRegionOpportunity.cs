@@ -19,17 +19,29 @@ public enum PowerShellCompilationRegionContinuation
 public sealed class PowerShellCompilationRegionTransfer
 {
     /// <summary>Creates an immutable prospective boundary-value record.</summary>
-    [JsonConstructor]
     public PowerShellCompilationRegionTransfer(
         string identity,
         string typeName,
         string typeProvenance,
         bool stableScalar)
+        : this(identity, typeName, typeProvenance, stableScalar, null)
+    {
+    }
+
+    /// <summary>Creates an immutable prospective boundary-value record with its closed ABI contract.</summary>
+    [JsonConstructor]
+    public PowerShellCompilationRegionTransfer(
+        string identity,
+        string typeName,
+        string typeProvenance,
+        bool stableScalar,
+        PowerShellRegionTransferContract? contract)
     {
         Identity = identity ?? string.Empty;
         TypeName = typeName ?? string.Empty;
         TypeProvenance = typeProvenance ?? string.Empty;
         StableScalar = stableScalar;
+        Contract = contract;
     }
 
     /// <summary>Canonical parameter, local, or pipeline-variable identity.</summary>
@@ -38,8 +50,10 @@ public sealed class PowerShellCompilationRegionTransfer
     public string TypeName { get; }
     /// <summary>Origin of the CLR type fact, such as Explicit, Inferred, or Unknown.</summary>
     public string TypeProvenance { get; }
-    /// <summary>Whether the current bounded terminal ABI already permits this transfer type.</summary>
+    /// <summary>Whether the transfer retains the legacy stable-scalar classification.</summary>
     public bool StableScalar { get; }
+    /// <summary>Generalized shape, element, direction, ownership, output, and mutation contract.</summary>
+    public PowerShellRegionTransferContract? Contract { get; }
 }
 
 /// <summary>
@@ -103,7 +117,7 @@ public sealed class PowerShellCompilationRegionOpportunity
     }
 
     /// <summary>Opportunity evidence schema version.</summary>
-    public int SchemaVersion => 1;
+    public int SchemaVersion => 2;
     /// <summary>Stable identity derived from the authored document and exact typed span.</summary>
     public string OpportunityId { get; }
     /// <summary>SHA-256 of the exact authored opportunity text.</summary>

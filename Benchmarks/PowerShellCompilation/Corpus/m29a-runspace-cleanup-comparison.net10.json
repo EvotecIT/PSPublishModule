@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Local runspace cleanup through the existing SDK native identity and caller-owned lifecycle contract",
+  "baselineCompilerCommit": "933a40b539da1b1b26e4f3f0ef0695644f3f315b",
+  "baselineDispositionLedger": "m29a-local-execution-comparison.net10.json",
+  "dispositionContract": "Apply this one change to the linked baseline chain. All 565 function identities match; no complete method or region of a still-retained function is lost.",
+  "verifiedFunctionIdentities": 565,
+  "observedStableUnits": 584,
+  "baselineEmitted": 517,
+  "candidateEmitted": 518,
+  "candidateRetained": 47,
+  "packets": [
+    {
+      "packet": "pssg",
+      "resourceMode": "CompleteModule",
+      "functions": 282,
+      "emitted": 269,
+      "retained": 13,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "9df714ed3ddcd04ed204441a14942343db9fe7d40a73199385df45d7d7ab0933"
+    },
+    {
+      "packet": "cleanup",
+      "resourceMode": "CompleteModule",
+      "functions": 68,
+      "emitted": 63,
+      "retained": 5,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "51277db657806711a57853e04fa18848f05040d5c4343f18f3aad8e7627472d3"
+    },
+    {
+      "packet": "pinf",
+      "resourceMode": "Declared",
+      "functions": 66,
+      "emitted": 65,
+      "retained": 1,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "0be6c42dae3f50456d294f128e9377a5d9ce3f3b0dc00f3f4fad31a8b9c71c47"
+    },
+    {
+      "packet": "pst",
+      "resourceMode": "CompleteModule",
+      "functions": 109,
+      "emitted": 94,
+      "retained": 15,
+      "gains": [
+        {
+          "name": "Remove-Runspace",
+          "unitId": "09a30ea6dc3cca424ff570fc"
+        }
+      ],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "a89dcee275cac8031619aea7c5316f9390273ba09e5bc5f8ad3691059fff13ba"
+    },
+    {
+      "packet": "platyps",
+      "resourceMode": "Declared",
+      "functions": 40,
+      "emitted": 27,
+      "retained": 13,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "c1693d9d13ef6349b1f21099dbcd22b8c2899388fe8e8f5df928c5867bea2144"
+    }
+  ],
+  "changedDispositions": [
+    {
+      "packet": "pst",
+      "unitId": "09a30ea6dc3cca424ff570fc",
+      "name": "Remove-Runspace",
+      "baselineEmitted": false,
+      "candidateEmitted": true,
+      "retainedHostedSource": false,
+      "usesNativeFunctionBinding": true,
+      "baselineRegionMembers": [],
+      "candidateRegionMembers": []
+    }
+  ],
+  "lostCompleteMethods": [],
+  "lostRegionsOfRetainedFunctions": [],
+  "retainedInventory": "m29a-retained-functions.net10.json",
+  "retainedInventorySha256": "35ed3aa1702924de10f0e25cf232c63094032216da13b61f4c960248b6000559",
+  "changedSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "871dad4bc0f0b8ceadccc8eb4032878e05ff83b5f39e3c3bb55f4f0bbd49f1dc",
+    "PowerForge.Tests/PowerShellCompilationLocalExecutionTests.cs": "0cec897ce00f55ffa6b1e5292b94a94a3914a84bd91ea3cf979b67ba3ed50844",
+    "PowerForge.Tests/PowerShellCompilationRunspaceCleanupTests.cs": "b59931ee1741ed2015fe0c5fb09e3bf20f866e5b65f2ffd2f9d244506f072b4c",
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/LocalRunspace/remove-runspace.ps1": "9f07a632413fab809840d7c460fa2108e5db2633d09b64081dfa24b575519451",
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/LocalRunspace/license.txt": "fb7d4eb5de8741978ce3dc1338771a53756e87d1134dc19b0199b2ee43beef95"
+  },
+  "workflow": {
+    "source": "https://github.com/jdhitsolutions/PSScriptTools",
+    "revision": "549fa3e3d769532320054fc0b3c8f42df0452361",
+    "authoredPath": "functions/remove-runspace.ps1",
+    "unchangedSourceSha256": "9f07a632413fab809840d7c460fa2108e5db2633d09b64081dfa24b575519451",
+    "license": "MIT",
+    "compiledFunctions": [
+      "Remove-Runspace"
+    ],
+    "syntheticFunctions": [
+      "Get-BorrowedRunspace"
+    ],
+    "hosts": [
+      "PowerShell 7/net10.0 Windows",
+      "Windows PowerShell 5.1/net472"
+    ],
+    "observationsPerHost": 10,
+    "cases": [
+      "opened",
+      "unopened",
+      "closed",
+      "disposed",
+      "WhatIf plus caller reuse",
+      "ID lookup",
+      "busy refusal plus child completion",
+      "two pipeline inputs",
+      "null",
+      "missing ID"
+    ],
+    "cleanup": "Driver finally closes/disposes every task-created runspace and pipeline and releases/disposes child synchronization signals. Authored ShouldProcess performs accepted close/dispose; compiler adds no disposal policy."
+  },
+  "validation": {
+    "firstFocused": {
+      "passed": 6,
+      "total": 6,
+      "durationSeconds": 29,
+      "trxSha256": "69111214e65aabd77e0e0298b3c1cac3462cc9ed398b47804771e99485717403"
+    },
+    "finalFocused": {
+      "passed": 14,
+      "total": 14,
+      "durationSeconds": 53,
+      "trxSha256": "cd682ab599b4a586a050d2f6349e2c202fc072da346007806c442f5652846b3f",
+      "filter": "LocalRunspaceCleanup_|LocalExecution_|ReferenceParameter_|HostDataContracts_"
+    },
+    "net472Build": {
+      "succeeded": true,
+      "warnings": 0,
+      "errors": 0,
+      "elapsedSeconds": 4.16
+    },
+    "finalCallerIdentity": {
+      "passed": 4,
+      "total": 4,
+      "durationSeconds": 19,
+      "trxSha256": "d1073aac4da6aa9165375d9ca4da1af654b57bb6f441de7b2a8becca6e730465",
+      "filter": "LocalRunspaceCleanup_|LocalExecution_RequiresNativeHostBinding",
+      "reason": "Strengthened caller-token identity observations after review. Production is unchanged from the 14/14 compatibility run."
+    }
+  },
+  "review": {
+    "status": "candidate-reviewed",
+    "findings": [],
+    "scope": "One independent read-only production, native ABI and lifecycle-test pass; no independently executed artifacts. Subsequent test-only caller-token strengthening stays within the reviewed ownership contract.",
+    "limits": [
+      "No runtime array/List container proof",
+      "No reopen-after-removal claim",
+      "No remote runspace execution"
+    ]
+  },
+  "boundaries": [
+    "PowerShell host types and native binding both required, recursively through supported array/List containers.",
+    "Runtime-free Strict and PSSession remain closed. Container signatures have semantic admission, not separate runtime identity proof.",
+    "Only task-created local runspaces execute; no remoting, network, AD, scheduler or general cancellation qualification.",
+    "No full-module execution. Hosted commands and top-level argument-completer registration remain PowerShell-owned.",
+    "Busy refusal follows authored RunspaceAvailability check; no claim of fixing its RunspaceStateInfo comparison or races with state changes.",
+    "The driver guarantees test cleanup; this does not repair other authored lifecycle defects."
+  ]
+}

@@ -7,7 +7,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Theory]
     [InlineData("net472")]
-    [InlineData("net8.0")]
     [InlineData("net10.0")]
     public void Analyze_BinaryModuleClassifiesUntypedParameterAsHostObjectContract(string targetFramework)
     {
@@ -46,6 +45,154 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains(unit.Diagnostics, static diagnostic => diagnostic.FeatureId == PowerShellCompilationFeatureIds.ParameterType);
     }
 
+    [Theory]
+    [InlineData("net10.0")]
+    [InlineData("net472")]
+    public void Analyze_HybridModuleRetainsFunctionWithUnresolvedAuthoredParameterType(string targetFramework)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Read-OptionalType { param([Contoso.Optional.Runtime.Type] $Value) return 42 }", ".psm1");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Hybrid,
+            targetFramework: targetFramework,
+            capabilities: PowerShellCompilationCapabilities.HybridModule));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.False(unit.IsCompilable);
+        Assert.Contains(unit.Diagnostics, diagnostic =>
+            diagnostic.Code == PowerShellCompilationDiagnosticCode.UnsupportedParameterType &&
+            diagnostic.Message.Contains("Contoso.Optional.Runtime.Type", StringComparison.Ordinal));
+        Assert.True(plan.CanProceed);
+
+        var strict = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Strict,
+            targetFramework: targetFramework,
+            capabilities: PowerShellCompilationCapabilities.BinaryModule));
+        Assert.False(strict.CanProceed);
+    }
+
+    [Theory]
+    [InlineData("net10.0")]
+    [InlineData("net472")]
+    public void Analyze_HybridModuleKeepsDetachedRegionForUnresolvedCalleeInNativeInvocationClosure(string targetFramework)
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Test-Exists {
+                param([Contoso.Optional.Issue] $Issue, [string] $Name)
+                data Barrier { }
+                return $false
+            }
+            function Invoke-Check {
+                param($Issue)
+                $result = Test-Exists -Issue $Issue -Name 'missing'
+                return $result
+            }
+            """, ".psm1");
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Hybrid,
+            targetFramework: targetFramework,
+            capabilities: PowerShellCompilationCapabilities.HybridModule));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units, static unit => unit.Name == "Test-Exists");
+        Assert.False(unit.IsCompilable);
+        Assert.Contains(unit.Diagnostics, static diagnostic =>
+            diagnostic.Code == PowerShellCompilationDiagnosticCode.UnsupportedParameterType);
+        Assert.True(plan.CanProceed);
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "UnresolvedCalleeMethods",
+            targetFramework, PowerShellCompilationCapabilities.HybridModule);
+        var region = Assert.Single(typed.PromotedRegions, static item => item.SourceName == "Test-Exists");
+        Assert.Equal(4, region.StartLine);
+    }
+
+    [Theory]
+    [InlineData("net10.0")]
+    [InlineData("net472")]
+    public void Analyze_HybridModuleKeepsNativeInitializerRegionForUnresolvedIntrinsicBinding(string targetFramework)
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Read-Optional {
+                param([Contoso.Optional.Issue] $Issue)
+                $credentialSplat = @{}
+                foreach ($key in $credentialSplat.Keys) { [void] $key }
+                return $false
+            }
+            """, ".psm1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "UnresolvedIntrinsicMethods",
+            targetFramework, PowerShellCompilationCapabilities.HybridModule);
+
+        Assert.Contains(typed.PromotedRegions, static region =>
+            region.SourceName == "Read-Optional" && region.StartLine == 3);
+        Assert.DoesNotContain(typed.Methods, static method => method.SourceName == "Read-Optional");
+    }
+
+    [Fact]
+    public void Analyze_HybridExecutableDoesNotPromoteDetachedRegionWithoutRegionOwner()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Test-Exists {
+                param([Contoso.Optional.Issue] $Issue)
+                data Barrier { }
+                return $false
+            }
+            function Invoke-Check {
+                param($Issue)
+                Test-Exists -Issue $Issue
+            }
+            """, ".ps1");
+
+        var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+            new[] { fixture.ScriptPath }, "PowerForge.Compiled", "UnresolvedExecutableMethods",
+            "net10.0", PowerShellCompilationCapabilities.HybridExecutable);
+
+        Assert.DoesNotContain(typed.PromotedRegions, static region => region.SourceName == "Test-Exists");
+        Assert.DoesNotContain(typed.Methods, static method => method.SourceName == "Test-Exists");
+    }
+
+    [Theory]
+    [InlineData("net10.0")]
+    [InlineData("net472")]
+    public void Analyze_HybridModuleRetainsUnresolvedHostTypeWithoutNativeBinding(string targetFramework)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Read-Session { param([Microsoft.PowerShell.Commands.WebRequestSession] $Session) return 42 }", ".psm1");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Hybrid,
+            targetFramework: targetFramework,
+            capabilities: PowerShellCompilationCapabilities.HybridModule));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.False(unit.IsCompilable);
+        Assert.Contains(unit.Diagnostics, diagnostic =>
+            diagnostic.Code == PowerShellCompilationDiagnosticCode.UnsupportedParameterType);
+    }
+
+    [Theory]
+    [InlineData("net10.0")]
+    [InlineData("net472")]
+    public void Analyze_HybridModuleAllowsKnownHostTypeWithNativeBinding(string targetFramework)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Read-Session { param([Microsoft.PowerShell.Commands.WebRequestSession] $Session,$Name) return $Session.$Name }", ".psm1");
+        var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
+            fixture.ScriptPath,
+            PowerShellCompilationMode.Hybrid,
+            targetFramework: targetFramework,
+            capabilities: PowerShellCompilationCapabilities.HybridModule));
+
+        var unit = Assert.Single(Assert.Single(plan.Files).Units);
+        Assert.DoesNotContain(unit.Diagnostics, diagnostic =>
+            diagnostic.Code == PowerShellCompilationDiagnosticCode.UnsupportedParameterType);
+    }
+
     [Fact]
     public void Analyze_BinaryModuleDoesNotTreatUntypedObjectAsDynamicMemberContract()
     {
@@ -76,7 +223,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(
             fixture.ScriptPath,
             targetFramework: "net10.0",
-            capabilities: PowerShellCompilationCapabilities.BinaryModule));
+            capabilities: PowerShellCompilationCapabilities.HybridModule));
 
         var unit = Assert.Single(Assert.Single(plan.Files).Units);
         Assert.True(unit.IsCompilable, string.Join(Environment.NewLine, unit.Diagnostics.Select(static diagnostic => diagnostic.Message)));
@@ -357,8 +504,16 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(2, result.Manifest!.CompiledMethods);
-        Assert.Equal(2, result.Manifest.RuntimeFallbackUnits);
+        Assert.Equal(3, result.Manifest!.CompiledMethods);
+        foreach (var name in new[] { "Join-Position", "Get-Position", "Get-FallbackValue" })
+        {
+            var unit = Assert.Single(result.Manifest.UnitDispositionLedger!.Entries, unit => unit.Name == name);
+            Assert.True(unit.EmittedClrMethod);
+            // The private helper retains its authored module entrypoint alongside its CLR method.
+            Assert.Equal(name == "Join-Position", unit.RetainedHostedSource);
+        }
+        Assert.True(Assert.Single(result.Manifest.UnitDispositionLedger!.Entries,
+            unit => unit.Name == "Get-FallbackValue").UsesNativeFunctionBinding);
         const string proof = "Get-Position; [int](Get-FallbackValue) -gt 2000";
         var original = RunModuleProof(fixture.ScriptPath, proof, host);
         var compiled = RunModuleProof(result.ArtifactPath!, proof, host);

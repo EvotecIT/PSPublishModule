@@ -19,7 +19,7 @@ internal static partial class Program
     {
         var argv = filteredArgs.Skip(1).ToArray();
         var outputJson = IsJsonOutput(argv);
-        if (argv.Length == 0 || argv.Any(IsHelpArgument))
+        if (argv.Length == 0 || argv.TakeWhile(static argument => argument != "--").Any(IsHelpArgument))
         {
             WritePowerShellHelp(outputJson);
             return 0;
@@ -94,7 +94,7 @@ internal static partial class Program
         try
         {
             PowerShellCompilationTargetContract? targetContract = null;
-            var targetFramework = TryGetOptionValue(args, "--framework") ?? "net8.0";
+            var targetFramework = TryGetOptionValue(args, "--framework") ?? PowerShellCompilationTargetFrameworkPolicy.Default;
             var semanticProfileId = TryGetOptionValue(args, "--semantic-profile") ??
                                     PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework);
             semanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId).ProfileId;
@@ -497,7 +497,7 @@ internal static partial class Program
                 Command = "powershell",
                 Success = true,
                 ExitCode = 0,
-                Result = JsonSerializer.SerializeToElement(new { analyzeUsage = PowerShellAnalyzeUsage, explainUsage = PowerShellExplainUsage, diagnoseUsage = PowerShellDiagnoseUsage, buildUsage = PowerShellBuildUsage, censusUsage = PowerShellCensusUsage, projectUsage = PowerShellProjectUsage, supportUsage = PowerShellSupportUsage })
+                Result = JsonSerializer.SerializeToElement(new { analyzeUsage = PowerShellAnalyzeUsage, explainUsage = PowerShellExplainUsage, diagnoseUsage = PowerShellDiagnoseUsage, buildUsage = PowerShellBuildUsage, censusUsage = PowerShellCensusUsage, projectUsage = PowerShellProjectUsage, projectRunUsage = PowerShellProjectRunUsage, projectPackUsage = PowerShellProjectPackUsage, supportUsage = PowerShellSupportUsage })
             });
         }
         else
@@ -508,6 +508,8 @@ internal static partial class Program
             Console.WriteLine(PowerShellCensusUsage);
             Console.WriteLine(PowerShellDiagnoseUsage);
             Console.WriteLine(PowerShellProjectUsage);
+            Console.WriteLine(PowerShellProjectRunUsage);
+            Console.WriteLine(PowerShellProjectPackUsage);
             Console.WriteLine(PowerShellSupportUsage);
         }
     }

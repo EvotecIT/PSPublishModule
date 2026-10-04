@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "343f8248526647b98df325cec961044595ca963d",
+  "purpose": "Native script-root lowering through canonical parser/binder/analysis/lowering/CSharp pipeline, with generated callback execution; executable admission and launcher remain unchanged.",
+  "sourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.cs": "690cc5cf1c64a25c76d9185372b098405e12f5cc951e9161806548d97b78eefa",
+    "PowerForge.PowerShell/Services/Compilation/FrontEnd/ParsedSourceDocument.cs": "709ef95df74484b5a6aa3951bd8a5b1e6bcbe00b7b1832897af56a4cd408769e",
+    "PowerForge.PowerShell/Services/Compilation/PowerShellTypedExecutableCompiler.cs": "8c2dd8876b57c29a3dbb5b8ef4598387ef6ba5670dd52d6c058273d32d12cb58",
+    "PowerForge.Tests/Fixtures/PowerShellCompilationStatementErrorFixture/NativeScriptEntryFixture.cs": "c83bf6ee27ee3aa0cffdd1d3cb0839af7eb12d50755797e6dd609c435cc7c9f4",
+    "PowerForge.Tests/Fixtures/PowerShellCompilationStatementErrorFixture/NativeScriptEntryProbe.ps1": "b0c6209396784903a7358f87b9e64d370d30a6985feae7c5567148ae310adbce",
+    "PowerForge.Tests/PowerShellCompilationNativeScriptRootTests.cs": "efac52f28af1211bf46a12c05c71725126219a857b31d37fa6f9b0367446f17e"
+  },
+  "validation": [
+    {
+      "file": "native-root-execution-corrected.trx",
+      "sha256": "ac15016f2d81f0e60f72e9e1cf67dded31d73aea021b9d6cd4576410e72e7a53",
+      "total": 8,
+      "passed": 8,
+      "failed": 0,
+      "results": [
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_NativeScriptRootKeepsUnqualifiedDeclarationOwnersClosed(source: \"#requires -Version 7.0\\n1\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeScriptEntry_PreservesSingleBindingLiveStorageAndAuthoredContext(framework: \"net10.0\", host: \"pwsh\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeScriptEntry_PreservesSingleBindingLiveStorageAndAuthoredContext(framework: \"net472\", host: \"powershell.exe\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_NativeScriptRootMatchesOriginalBindingAndExecution(framework: \"net472\", host: \"powershell.exe\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_NativeScriptRootKeepsUnqualifiedDeclarationOwnersClosed(source: \"enum Kind { One }\\n1\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_NativeScriptRootMatchesOriginalBindingAndExecution(framework: \"net10.0\", host: \"pwsh\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_NativeScriptRootUsesAuthoredStorageAndSourcePositions",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_NativeScriptRootKeepsUnqualifiedDeclarationOwnersClosed(source: \"function Helper { 1 }\\nHelper\")",
+          "outcome": "Passed"
+        }
+      ]
+    },
+    {
+      "file": "entry-siblings.trx",
+      "sha256": "827be215e2c93383bec7f36b30c6b825b55d7824e7502cac496848ad684b936e",
+      "total": 5,
+      "passed": 5,
+      "failed": 0,
+      "results": [
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_HybridPreboundEntryRejectsIneligibleRoot",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridExecutableRunsCompiledPreboundScriptRoot",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_HybridPreboundEntryPreservesAuthoredRegionSource",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_HybridEntryRejectsChangedHostedStatement",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridEntryPreservesAuthoredBridgeNameAlias",
+          "outcome": "Passed"
+        }
+      ]
+    },
+    {
+      "file": "strict-root-sibling.trx",
+      "sha256": "40466440ab9a19e3f180cd7c88399f5800585aa23520c70de6b7e8ad68b4a531",
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "results": [
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_StrictExecutableExecutesOptimizedAuthoredConstants",
+          "outcome": "Passed"
+        }
+      ]
+    }
+  ],
+  "independentReview": {
+    "patchSha256": "289a57c103627d04b055cb705f5dd27e54c24978c04f17ea917a2670fcc677ab",
+    "result": "No actionable P0-P3 findings",
+    "scope": "Six staged source/test files; reader inspected supplied 8/8 TRX, no independent build/run"
+  },
+  "limits": [
+    "Internal lowering API only; not selected by executable explain/build or packaged launcher.",
+    "Synthetic original/generated host qualification; no unchanged third-party application acceptance.",
+    "Counts remain 544/565 emitted, 21 retained: 15 justified hosted, 6 WPF unqualified.",
+    "Single end-only source; local functions/types, using, requirements, source dependencies and named lifecycle owners rejected.",
+    "Full stream/stopping/cleanup, caller metadata, authorization policy, declaration ordering and artifact source/lock integration remain pending.",
+    "No aggregate gate/census, PR, merge or release."
+  ],
+  "design": [
+    "Adapts a copy of the authored script AST as one compiler-created function without inserting a textual function header.",
+    "Retains authored document identity, text, tokens, line/column extents for native variable/error/command metadata.",
+    "Selects live native storage only for the marked root through the existing binder; dependency enrichment preserves the marker.",
+    "Generated CSharp callback runs four positive cases and one binding rejection on both hosts, replacing the prior handwritten callback body."
+  ],
+  "net472Build": {
+    "result": "Succeeded, zero warnings/errors",
+    "logSha256": "d0444c153f8bc1b93367ba77a57b94c8bc88f70c4a400a2bf2fc138b518fdf89"
+  },
+  "priorFailures": [
+    {
+      "file": "native-root.trx",
+      "result": "1 failed/4 total: duplicate original/adapter document identity; corrected by replacing rather than appending the original entry document.",
+      "sha256": "2d2148277620a7f3fbd0d63219ea3723f80ccb4b179b4647baba10ff404933f3"
+    },
+    {
+      "file": "native-root-execution.trx",
+      "result": "3 failed/8 total: probe reflection argument received PSObject rather than string; corrected native static factory dispatch. Probe edit overlapped the tail of this unsuccessful run, which is not final-source qualification.",
+      "sha256": "90343822a46b3f34b2a709924fa9606da3dad23d2645993716581a87076adb52"
+    }
+  ]
+}

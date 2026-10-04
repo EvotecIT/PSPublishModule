@@ -1,0 +1,1079 @@
+{
+  "schemaVersion": 1,
+  "recordedAtUtc": "2026-10-04T03:55:00Z",
+  "state": "InProgress",
+  "finalReleaseVersion": "3.0.155",
+  "versionSelection": {
+    "reason": "Independent default-branch CLI release occupies public PowerForge.Build 3.0.154",
+    "defaultBranchCheckpoint": "deac0de17",
+    "allEleven155PackageIdsUnoccupiedAtCheckpoint": true,
+    "psGallery155UnoccupiedAtCheckpoint": true,
+    "historical154LocalFeedEvidenceRetained": true
+  },
+  "interpretation": "Evidence is bound to its stated package/source identity. This signed local-feed candidate predates the restore-workspace correction. Public-feed availability and final-candidate integration/signing remain separate gates.",
+  "target": {
+    "os": "Microsoft Windows Server 2025 Standard",
+    "architecture": "x64",
+    "windowsPowerShell": "5.1.26100.33438",
+    "powerShell": "7.6.6",
+    "sdk": "10.0.303",
+    "longPathsEnabled": 0,
+    "dotnetInitiallyAbsent": true,
+    "powerShell7InitiallyAbsent": true,
+    "installationScope": "Task-owned portable SDK/host and isolated tool/module/package directories; process-local environment",
+    "sdkArchiveSha512": "ad4ef6202e55babde1c65e1be7b468c3ecb738ccc2fb8bd3c2bb408a4f45d247c8c5a5f57fedc54ebee7cb5fc4f487772997f2d053010d2e1903b974cc64216d",
+    "hostArchiveSha256": "02fe458be20493fbdf43f61ea20610b811ee6c738ab1676c61b9cfcd1a33c860",
+    "hostExecutableSha256": "bfb46af89433268872ddb43d1ca7a3f433452ee91ed356a9786940f90118e285"
+  },
+  "signedLocalFeed": {
+    "version": "3.0.154",
+    "sourceCommit": "8e6c8d482e04d3adc714a9ef93b1fa2a17adf45e",
+    "signerSha256": "D13C03BFEEC0CBF7FD0E0E7FFAF3F3D2076E62B1AF64665E806917B9191CFFDE",
+    "moduleArchiveSha256": "641a9b4d66b3094f0c7689788bac9cfc145842c07e0d93b00ef7f3948f7a870d",
+    "nugetVerification": "All eleven packages passed dotnet nuget verify --all with the expected signer fingerprint",
+    "packages": [
+      {
+        "id": "PowerForge",
+        "version": "3.0.154",
+        "authors": "Przemyslaw Klys",
+        "license": "MIT",
+        "sourceCommit": "8e6c8d482e04d3adc714a9ef93b1fa2a17adf45e",
+        "sha256": "87d71328b55c7f449fd9ff72f64a9c059caea5e0b99056bdcf442add43207492",
+        "signaturePresent": true,
+        "primaryAssemblies": [
+          {
+            "assemblyName": "PowerForge",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "995d145b4ece2c6713812aff85cd0db87ea3411e40dd2224d02885142ad861ca",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          },
+          {
+            "assemblyName": "PowerForge",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "be3db4d2391cce93d82399105ec77e7ce23c7114e7233a0f9cc12457a8bad68b",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          },
+          {
+            "assemblyName": "PowerForge",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "6de8e351cf67b00fb02dd6fe402d379f1078176af45214da0b3546c9f1428acb",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          }
+        ]
+      },
+      {
+        "id": "PowerForge.Blazor",
+        "version": "3.0.154",
+        "authors": "Przemyslaw Klys",
+        "license": "MIT",
+        "sourceCommit": "8e6c8d482e04d3adc714a9ef93b1fa2a17adf45e",
+        "sha256": "972871898282561e0e4b7b77ec16fce7a0faaa2140ce9d2d472bd54a0c6b3f20",
+        "signaturePresent": true,
+        "primaryAssemblies": [
+          {
+            "assemblyName": "PowerForge.Blazor",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "3922a2fc89328fffa422ac63ae66cfb705409eecbd524a584ef075627d4318cf",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          }
+        ]
+      },
+      {
+        "id": "PowerForge.Build",
+        "version": "3.0.154",
+        "authors": "Przemyslaw Klys",
+        "license": "MIT",
+        "sourceCommit": "8e6c8d482e04d3adc714a9ef93b1fa2a17adf45e",
+        "sha256": "a01534f26b3fa8e09551ce90d0e84e6ec8410deab8a85a6bc5d1a2fac2e8114a",
+        "signaturePresent": true,
+        "primaryAssemblies": [
+          {
+            "assemblyName": "PowerForge.Cli",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "28794c2742339138792dd371a63f8fe0ff4872d22374951137cb74202d9a0d70",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          },
+          {
+            "assemblyName": "PowerForge.Cli",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "03651c5a5557f875ac7d22f38d4bb6593a9efe1db5d1d7afefe756c427266b5d",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          }
+        ]
+      },
+      {
+        "id": "PowerForge.PowerShell",
+        "version": "3.0.154",
+        "authors": "Przemyslaw Klys",
+        "license": "MIT",
+        "sourceCommit": "8e6c8d482e04d3adc714a9ef93b1fa2a17adf45e",
+        "sha256": "6e4bf0c25cd43b82a2c4bf2cd6608c7f05427983e0d6fd415d940514a8806e3d",
+        "signaturePresent": true,
+        "primaryAssemblies": [
+          {
+            "assemblyName": "PowerForge.PowerShell",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "4d92d1815997e00b7bc3b1efd97fef58ed9bb3179887a9dea11d1089f046e362",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          },
+          {
+            "assemblyName": "PowerForge.PowerShell",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "697d91a57a3b05fbf7d60e1130a9a25d380eab202d8c7e8a7c09271675c1171c",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          },
+          {
+            "assemblyName": "PowerForge.PowerShell",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "48c0ba74ac02b288676d83dc82d0c982157ff8282e99415f9976d5c998e26f70",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          }
+        ]
+      },
+      {
+        "id": "PowerForge.PowerShell.Provider.Directory",
+        "version": "3.0.154",
+        "authors": "Przemyslaw Klys",
+        "license": "MIT",
+        "sourceCommit": "8e6c8d482e04d3adc714a9ef93b1fa2a17adf45e",
+        "sha256": "0a7c837def0f6b3a32afdff0f9962ed7e0d9d8d820aa7a2e3963d0e32c8ea3e4",
+        "signaturePresent": true,
+        "primaryAssemblies": [
+          {
+            "assemblyName": "PowerForge.PowerShell.Provider.Directory",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "048f13e8641d90bd0174d1f56a7c065b6ffddc18b2fcbf60e9bc47feed692184",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          },
+          {
+            "assemblyName": "PowerForge.PowerShell.Provider.Directory",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "e4fb6b3349540193c13da53559a65c3cb97197f61fe4802df951e81d6e144929",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          },
+          {
+            "assemblyName": "PowerForge.PowerShell.Provider.Directory",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "17eeedbd81ca475d0d6e48079ac6906d371ef68538d321189bef679b95c9f52d",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          }
+        ]
+      },
+      {
+        "id": "PowerForge.PowerShell.Provider.Directory.Runtime",
+        "version": "3.0.154",
+        "authors": "EvotecIT",
+        "license": "MIT",
+        "sourceCommit": "8e6c8d482e04d3adc714a9ef93b1fa2a17adf45e",
+        "sha256": "5f2c7d8cda7df1acd4fabf21d310414f48beb87513683ec13c19cbc0ec1c71b9",
+        "signaturePresent": true,
+        "primaryAssemblies": [
+          {
+            "assemblyName": "PowerForge.PowerShell.Provider.Directory",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "e2423d1e054f09faece187c0b9e38e551e94b705b79008c40125422166288a34",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          }
+        ]
+      },
+      {
+        "id": "PowerForge.PowerShell.Provider.Management",
+        "version": "3.0.154",
+        "authors": "Przemyslaw Klys",
+        "license": "MIT",
+        "sourceCommit": "8e6c8d482e04d3adc714a9ef93b1fa2a17adf45e",
+        "sha256": "9e0f92075fc34c11d424851bac9390115f934e41c3abdec7f111a477a2257e8a",
+        "signaturePresent": true,
+        "primaryAssemblies": [
+          {
+            "assemblyName": "PowerForge.PowerShell.Provider.Management",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "3708c849ef884c4cf494f3a8e8c6d5198e13a72bf46a2060534faf41f8093099",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          },
+          {
+            "assemblyName": "PowerForge.PowerShell.Provider.Management",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "446189b24ebdf7bc019f269e22e219e9861a187e9ef16ecc28cf3c1e02e0bfd1",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          },
+          {
+            "assemblyName": "PowerForge.PowerShell.Provider.Management",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "2a37aede27ec2433d5cd1e7425a67f97f716c180a40b491b0b92977a9c3ea46b",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          }
+        ]
+      },
+      {
+        "id": "PowerForge.PowerShell.Provider.Management.Runtime",
+        "version": "3.0.154",
+        "authors": "EvotecIT",
+        "license": "MIT",
+        "sourceCommit": "8e6c8d482e04d3adc714a9ef93b1fa2a17adf45e",
+        "sha256": "33ad65e42835fccf12a0f99160a107d076205539e3b907262727b625add6a84e",
+        "signaturePresent": true,
+        "primaryAssemblies": [
+          {
+            "assemblyName": "PowerForge.PowerShell.Provider.Management",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "0017d8ea0a3c87fc5dd6aaea2f7213a03f5c9b73841b2d643399ecdbf9b2c0d1",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          }
+        ]
+      },
+      {
+        "id": "PowerForge.PowerShell.ProviderSdk",
+        "version": "3.0.154",
+        "authors": "Przemyslaw Klys",
+        "license": "MIT",
+        "sourceCommit": "8e6c8d482e04d3adc714a9ef93b1fa2a17adf45e",
+        "sha256": "a6eb19acbbe5429dfc0a4a6c0fadc698ce1a56ff86e2f6e359cbb23f8ae7fa66",
+        "signaturePresent": true,
+        "primaryAssemblies": [
+          {
+            "assemblyName": "PowerForge.PowerShell.ProviderSdk",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "359bb910e6d2f5f9e0c5e64d23e684572bad9aa72447797af3abd51685d65022",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          },
+          {
+            "assemblyName": "PowerForge.PowerShell.ProviderSdk",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "a757051a650577f3da56af24bd2ea910fc8c592dc51be0f8764b5edae4bdf0d7",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          },
+          {
+            "assemblyName": "PowerForge.PowerShell.ProviderSdk",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "9bf43768fd00d4deabf0f8cffe42bdb6d5afa9f2db9613ff5c35b8a41e2d01ed",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          }
+        ]
+      },
+      {
+        "id": "PowerForge.Web",
+        "version": "3.0.154",
+        "authors": "Przemyslaw Klys",
+        "license": "MIT",
+        "sourceCommit": "8e6c8d482e04d3adc714a9ef93b1fa2a17adf45e",
+        "sha256": "28556438615679aaa937733967b4de8d77b597bd6da3f46eb00ef40a2957f7a0",
+        "signaturePresent": true,
+        "primaryAssemblies": [
+          {
+            "assemblyName": "PowerForge.Web",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "c5cdbd4f75891815866d87fc076a385bf625119858d819308f718960c8e9f3d0",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          },
+          {
+            "assemblyName": "PowerForge.Web",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "331eaa2b511001307eeed5c867c8e795a0bf26edcda5d41ecdf237ed1cb53928",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          }
+        ]
+      },
+      {
+        "id": "PowerForge.Web.Build",
+        "version": "3.0.154",
+        "authors": "Przemyslaw Klys",
+        "license": "MIT",
+        "sourceCommit": "8e6c8d482e04d3adc714a9ef93b1fa2a17adf45e",
+        "sha256": "c6cbaf47f35ca7ed2f606d6606593d25083e41098f866f91ce7358918c7c337f",
+        "signaturePresent": true,
+        "primaryAssemblies": [
+          {
+            "assemblyName": "PowerForge.Web.Cli",
+            "assemblyVersion": "3.0.154.0",
+            "sha256": "0c12d153a4088f2a77c1fa71551e283ed9feaa397489dec3d5ad5d964cd9f529",
+            "signature": "Valid",
+            "signer": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+            "timestampSigner": "51D9ABDA034973D84F4266ACA48248E6B369C439"
+          }
+        ]
+      }
+    ],
+    "providers": [
+      {
+        "id": "PowerForge.PowerShell.Provider.Directory.Runtime",
+        "providerContracts": 7,
+        "lockSha256": "0bb58176dd1a2a340305127f474abeb2b4a9d405f29827fdc1fe9d27eb3207c5",
+        "tamperingRefused": true,
+        "unqualifiedLinuxRidRefused": true,
+        "packages": [
+          {
+            "PackageId": "PowerForge.PowerShell.Provider.Directory.Runtime",
+            "PackageVersion": "3.0.154",
+            "ProviderAbiVersion": "5",
+            "PackageSha256": "5f2c7d8cda7df1acd4fabf21d310414f48beb87513683ec13c19cbc0ec1c71b9",
+            "ManifestSha256": "806eb17517e061c72f4c3b53d3ef866704c074496ac864934c0259bfc42c83b0",
+            "Signature": "ValidIntegrity",
+            "SignerFingerprint": "d13c03bfeec0cbf7fd0e0e7ffaf3f3d2076e62b1af64665e806917b9191cffde",
+            "Publisher": "EvotecIT",
+            "LicenseExpression": "MIT",
+            "Redistributable": true,
+            "SupportedRuntimeIdentifiers": [
+              "win-x64"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "PowerForge.PowerShell.Provider.Management.Runtime",
+        "providerContracts": 9,
+        "lockSha256": "4de8bbe71c6f07740aac347c84eb191861ffed88a80b5d2670a56b3f1dabe2ad",
+        "tamperingRefused": true,
+        "unqualifiedLinuxRidRefused": true,
+        "packages": [
+          {
+            "PackageId": "PowerForge.PowerShell.Provider.Management.Runtime",
+            "PackageVersion": "3.0.154",
+            "ProviderAbiVersion": "5",
+            "PackageSha256": "33ad65e42835fccf12a0f99160a107d076205539e3b907262727b625add6a84e",
+            "ManifestSha256": "c793c2cae6627ecad3fefc1638e67260ecf24584482ca4e44708cdb3eb82e0e8",
+            "Signature": "ValidIntegrity",
+            "SignerFingerprint": "d13c03bfeec0cbf7fd0e0e7ffaf3f3d2076e62b1af64665e806917b9191cffde",
+            "Publisher": "EvotecIT",
+            "LicenseExpression": "MIT",
+            "Redistributable": true,
+            "SupportedRuntimeIdentifiers": [
+              "win-x64"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "moduleLifecycle": {
+    "candidateArchiveSha256": "641A9B4D66B3094F0C7689788BAC9CFC145842C07E0D93B00EF7F3948F7A870D",
+    "baselineArchiveSha256": "D555E7509630AECD41002934277BCDC05857DF8FC6C0C0193ACF3702E8E73C3B",
+    "results": [
+      {
+        "phase": "initial",
+        "version": "3.0.153",
+        "edition": "Desktop",
+        "host": "5.1.26100.33438",
+        "commandCount": 216,
+        "manifestSha256": "d0375bf4e915367ed74ba54f63683bb25df72e99e9c12c7e2d7bfcfe2f422c81",
+        "manifestSignature": "Valid",
+        "framework": null,
+        "emittedMethods": null,
+        "scalar": null,
+        "scalarType": null,
+        "year": null,
+        "shadow": null,
+        "mapping": null,
+        "booleanDelegate": null
+      },
+      {
+        "phase": "upgrade",
+        "version": "3.0.154",
+        "edition": "Desktop",
+        "host": "5.1.26100.33438",
+        "commandCount": 216,
+        "manifestSha256": "636baf20959ae48b8654b317c8caa792a4664339a38717031a2bb1da6a31a9f3",
+        "manifestSignature": "Valid",
+        "framework": "net472",
+        "emittedMethods": 4,
+        "scalar": 7,
+        "scalarType": "System.Int32",
+        "year": 2026,
+        "shadow": 2031,
+        "mapping": 42,
+        "booleanDelegate": true
+      },
+      {
+        "phase": "rollback",
+        "version": "3.0.153",
+        "edition": "Desktop",
+        "host": "5.1.26100.33438",
+        "commandCount": 216,
+        "manifestSha256": "d0375bf4e915367ed74ba54f63683bb25df72e99e9c12c7e2d7bfcfe2f422c81",
+        "manifestSignature": "Valid",
+        "framework": null,
+        "emittedMethods": null,
+        "scalar": null,
+        "scalarType": null,
+        "year": null,
+        "shadow": null,
+        "mapping": null,
+        "booleanDelegate": null
+      },
+      {
+        "phase": "initial",
+        "version": "3.0.153",
+        "edition": "Core",
+        "host": "7.6.6",
+        "commandCount": 216,
+        "manifestSha256": "d0375bf4e915367ed74ba54f63683bb25df72e99e9c12c7e2d7bfcfe2f422c81",
+        "manifestSignature": "Valid",
+        "framework": null,
+        "emittedMethods": null,
+        "scalar": null,
+        "scalarType": null,
+        "year": null,
+        "shadow": null,
+        "mapping": null,
+        "booleanDelegate": null
+      },
+      {
+        "phase": "upgrade",
+        "version": "3.0.154",
+        "edition": "Core",
+        "host": "7.6.6",
+        "commandCount": 216,
+        "manifestSha256": "636baf20959ae48b8654b317c8caa792a4664339a38717031a2bb1da6a31a9f3",
+        "manifestSignature": "Valid",
+        "framework": "net10.0",
+        "emittedMethods": 4,
+        "scalar": 7,
+        "scalarType": "System.Int32",
+        "year": 2026,
+        "shadow": 2031,
+        "mapping": 42,
+        "booleanDelegate": true
+      },
+      {
+        "phase": "rollback",
+        "version": "3.0.153",
+        "edition": "Core",
+        "host": "7.6.6",
+        "commandCount": 216,
+        "manifestSha256": "d0375bf4e915367ed74ba54f63683bb25df72e99e9c12c7e2d7bfcfe2f422c81",
+        "manifestSignature": "Valid",
+        "framework": null,
+        "emittedMethods": null,
+        "scalar": null,
+        "scalarType": null,
+        "year": null,
+        "shadow": null,
+        "mapping": null,
+        "booleanDelegate": null
+      }
+    ],
+    "pathCharacters": [
+      "spaces",
+      "apostrophe",
+      "non-ASCII"
+    ],
+    "rollbackManifestMatchesBaseline": true
+  },
+  "ordinaryPackageLifecycle": {
+    "projectReferencesUsed": false,
+    "results": [
+      {
+        "phase": "initial",
+        "version": "3.0.153",
+        "framework": "net10.0",
+        "exit": 0,
+        "output": "10.0.303",
+        "assemblies": [
+          {
+            "name": "PowerForge",
+            "version": "3.0.153.0",
+            "sha256": "94294941f6a20fa43ea11be761fd3b699d56823daf461b29d3e8738be65e7f43"
+          },
+          {
+            "name": "PowerForge.PowerShell",
+            "version": "3.0.153.0",
+            "sha256": "fdb60c988cecee04674f80109237d34648f673d1ffa962604081df833ffe37ec"
+          },
+          {
+            "name": "PowerForge.PowerShell.ProviderSdk",
+            "version": "3.0.153.0",
+            "sha256": "ccf0ed7ee2da96ec99d18a571ddd773addfd5226e8759b74a570df91ccb8a4d0"
+          },
+          {
+            "name": "PowerForge.PowerShell.Provider.Directory",
+            "version": "3.0.153.0",
+            "sha256": "beacd0a7c3808c75c1eaf09159c5a27d19320c4665b0196a717c9f423eaaef5a"
+          },
+          {
+            "name": "PowerForge.PowerShell.Provider.Management",
+            "version": "3.0.153.0",
+            "sha256": "bd5b9cae6918757dbf9219b67a67b2112e776598033aebbb2624e29cc9af4042"
+          }
+        ]
+      },
+      {
+        "phase": "initial",
+        "version": "3.0.153",
+        "framework": "net472",
+        "exit": 0,
+        "output": "10.0.303",
+        "assemblies": [
+          {
+            "name": "PowerForge",
+            "version": "3.0.153.0",
+            "sha256": "b0d4a96a8a3d1c3497b7c098bd1525038f3c2d389902073a197483f26211df63"
+          },
+          {
+            "name": "PowerForge.PowerShell",
+            "version": "3.0.153.0",
+            "sha256": "248bae64a1bdd39402c541c576b547b5f429f049ec9ca6f6b30768c2d5db6343"
+          },
+          {
+            "name": "PowerForge.PowerShell.ProviderSdk",
+            "version": "3.0.153.0",
+            "sha256": "b3ba4f8e1cb5ad36bc8f5dc2b9a4216003c017c963957bde8c6de600649db7c6"
+          },
+          {
+            "name": "PowerForge.PowerShell.Provider.Directory",
+            "version": "3.0.153.0",
+            "sha256": "2eccbaaf0f3208c77680fb4849ff483704bf12131d88c37c562a2da79be40c7f"
+          },
+          {
+            "name": "PowerForge.PowerShell.Provider.Management",
+            "version": "3.0.153.0",
+            "sha256": "c111ca12df3806ebb28367bc7c33147bc35aa34d7eba203edf4e989ea63a9bf9"
+          }
+        ]
+      },
+      {
+        "phase": "upgrade",
+        "version": "3.0.154",
+        "framework": "net10.0",
+        "exit": 0,
+        "output": "10.0.303",
+        "assemblies": [
+          {
+            "name": "PowerForge",
+            "version": "3.0.154.0",
+            "sha256": "995d145b4ece2c6713812aff85cd0db87ea3411e40dd2224d02885142ad861ca"
+          },
+          {
+            "name": "PowerForge.PowerShell",
+            "version": "3.0.154.0",
+            "sha256": "4d92d1815997e00b7bc3b1efd97fef58ed9bb3179887a9dea11d1089f046e362"
+          },
+          {
+            "name": "PowerForge.PowerShell.ProviderSdk",
+            "version": "3.0.154.0",
+            "sha256": "359bb910e6d2f5f9e0c5e64d23e684572bad9aa72447797af3abd51685d65022"
+          },
+          {
+            "name": "PowerForge.PowerShell.Provider.Directory",
+            "version": "3.0.154.0",
+            "sha256": "048f13e8641d90bd0174d1f56a7c065b6ffddc18b2fcbf60e9bc47feed692184"
+          },
+          {
+            "name": "PowerForge.PowerShell.Provider.Management",
+            "version": "3.0.154.0",
+            "sha256": "3708c849ef884c4cf494f3a8e8c6d5198e13a72bf46a2060534faf41f8093099"
+          }
+        ]
+      },
+      {
+        "phase": "upgrade",
+        "version": "3.0.154",
+        "framework": "net472",
+        "exit": 0,
+        "output": "10.0.303",
+        "assemblies": [
+          {
+            "name": "PowerForge",
+            "version": "3.0.154.0",
+            "sha256": "be3db4d2391cce93d82399105ec77e7ce23c7114e7233a0f9cc12457a8bad68b"
+          },
+          {
+            "name": "PowerForge.PowerShell",
+            "version": "3.0.154.0",
+            "sha256": "697d91a57a3b05fbf7d60e1130a9a25d380eab202d8c7e8a7c09271675c1171c"
+          },
+          {
+            "name": "PowerForge.PowerShell.ProviderSdk",
+            "version": "3.0.154.0",
+            "sha256": "a757051a650577f3da56af24bd2ea910fc8c592dc51be0f8764b5edae4bdf0d7"
+          },
+          {
+            "name": "PowerForge.PowerShell.Provider.Directory",
+            "version": "3.0.154.0",
+            "sha256": "e4fb6b3349540193c13da53559a65c3cb97197f61fe4802df951e81d6e144929"
+          },
+          {
+            "name": "PowerForge.PowerShell.Provider.Management",
+            "version": "3.0.154.0",
+            "sha256": "446189b24ebdf7bc019f269e22e219e9861a187e9ef16ecc28cf3c1e02e0bfd1"
+          }
+        ]
+      },
+      {
+        "phase": "rollback",
+        "version": "3.0.153",
+        "framework": "net10.0",
+        "exit": 0,
+        "output": "10.0.303",
+        "assemblies": [
+          {
+            "name": "PowerForge",
+            "version": "3.0.153.0",
+            "sha256": "94294941f6a20fa43ea11be761fd3b699d56823daf461b29d3e8738be65e7f43"
+          },
+          {
+            "name": "PowerForge.PowerShell",
+            "version": "3.0.153.0",
+            "sha256": "fdb60c988cecee04674f80109237d34648f673d1ffa962604081df833ffe37ec"
+          },
+          {
+            "name": "PowerForge.PowerShell.ProviderSdk",
+            "version": "3.0.153.0",
+            "sha256": "ccf0ed7ee2da96ec99d18a571ddd773addfd5226e8759b74a570df91ccb8a4d0"
+          },
+          {
+            "name": "PowerForge.PowerShell.Provider.Directory",
+            "version": "3.0.153.0",
+            "sha256": "beacd0a7c3808c75c1eaf09159c5a27d19320c4665b0196a717c9f423eaaef5a"
+          },
+          {
+            "name": "PowerForge.PowerShell.Provider.Management",
+            "version": "3.0.153.0",
+            "sha256": "bd5b9cae6918757dbf9219b67a67b2112e776598033aebbb2624e29cc9af4042"
+          }
+        ]
+      },
+      {
+        "phase": "rollback",
+        "version": "3.0.153",
+        "framework": "net472",
+        "exit": 0,
+        "output": "10.0.303",
+        "assemblies": [
+          {
+            "name": "PowerForge",
+            "version": "3.0.153.0",
+            "sha256": "b0d4a96a8a3d1c3497b7c098bd1525038f3c2d389902073a197483f26211df63"
+          },
+          {
+            "name": "PowerForge.PowerShell",
+            "version": "3.0.153.0",
+            "sha256": "248bae64a1bdd39402c541c576b547b5f429f049ec9ca6f6b30768c2d5db6343"
+          },
+          {
+            "name": "PowerForge.PowerShell.ProviderSdk",
+            "version": "3.0.153.0",
+            "sha256": "b3ba4f8e1cb5ad36bc8f5dc2b9a4216003c017c963957bde8c6de600649db7c6"
+          },
+          {
+            "name": "PowerForge.PowerShell.Provider.Directory",
+            "version": "3.0.153.0",
+            "sha256": "2eccbaaf0f3208c77680fb4849ff483704bf12131d88c37c562a2da79be40c7f"
+          },
+          {
+            "name": "PowerForge.PowerShell.Provider.Management",
+            "version": "3.0.153.0",
+            "sha256": "c111ca12df3806ebb28367bc7c33147bc35aa34d7eba203edf4e989ea63a9bf9"
+          }
+        ]
+      }
+    ],
+    "allRollbackAssemblyHashesMatchBaseline": true,
+    "preservedBaselineConsumersExecutedAfterRollback": true,
+    "preservedConsumerReceiptSha256": "94de8e6a19ecec767d168a5157ed82400a6a39d812206634629587d34b3587b4",
+    "binaryDropInUpgradeQualified": false
+  },
+  "ordinaryToolLifecycle": {
+    "results": [
+      {
+        "phase": "upgrade",
+        "version": "3.0.154",
+        "assemblyVersion": "3.0.154.0",
+        "assemblySha256": "28794C2742339138792DD371A63F8FE0FF4872D22374951137CB74202D9A0D70",
+        "signature": "Valid",
+        "helpExecuted": true
+      },
+      {
+        "phase": "side-by-side-baseline",
+        "version": "3.0.153",
+        "assemblyVersion": "3.0.153.0",
+        "assemblySha256": "513C588D983118DA3F1534DEC5A736CA81A4043EB6D91682A148FF3BA055B311",
+        "signature": "Valid",
+        "helpExecuted": true
+      },
+      {
+        "phase": "rollback",
+        "version": "3.0.153",
+        "assemblyVersion": "3.0.153.0",
+        "assemblySha256": "513C588D983118DA3F1534DEC5A736CA81A4043EB6D91682A148FF3BA055B311",
+        "signature": "Valid",
+        "helpExecuted": true
+      },
+      {
+        "phase": "reinstall",
+        "version": "3.0.154",
+        "assemblyVersion": "3.0.154.0",
+        "assemblySha256": "28794C2742339138792DD371A63F8FE0FF4872D22374951137CB74202D9A0D70",
+        "signature": "Valid",
+        "helpExecuted": true
+      }
+    ],
+    "uninstallRemovedShim": true,
+    "sourceWorkflows": [
+      {
+        "framework": "net10.0",
+        "v1": {
+          "host": "7.6.6",
+          "exports": [
+            "Get-CompiledValue",
+            "Get-FallbackValue"
+          ],
+          "value": 1,
+          "valueType": "System.Int32",
+          "year": 2026,
+          "yearType": "System.Int32",
+          "shadow": 2031,
+          "privateExport": false
+        },
+        "v2": {
+          "host": "7.6.6",
+          "exports": [
+            "Get-CompiledValue",
+            "Get-FallbackValue"
+          ],
+          "value": 2,
+          "valueType": "System.Int32",
+          "year": 2026,
+          "yearType": "System.Int32",
+          "shadow": 2031,
+          "privateExport": false
+        },
+        "rollback": {
+          "host": "7.6.6",
+          "exports": [
+            "Get-CompiledValue",
+            "Get-FallbackValue"
+          ],
+          "value": 1,
+          "valueType": "System.Int32",
+          "year": 2026,
+          "yearType": "System.Int32",
+          "shadow": 2031,
+          "privateExport": false
+        },
+        "offlineRestore": true,
+        "staleSourceRejected": true,
+        "packAndInstall": true
+      },
+      {
+        "framework": "net472",
+        "v1": {
+          "host": "5.1.26100.33438",
+          "exports": [
+            "Get-CompiledValue",
+            "Get-FallbackValue"
+          ],
+          "value": 1,
+          "valueType": "System.Int32",
+          "year": 2026,
+          "yearType": "System.Int32",
+          "shadow": 2031,
+          "privateExport": false
+        },
+        "v2": {
+          "host": "5.1.26100.33438",
+          "exports": [
+            "Get-CompiledValue",
+            "Get-FallbackValue"
+          ],
+          "value": 2,
+          "valueType": "System.Int32",
+          "year": 2026,
+          "yearType": "System.Int32",
+          "shadow": 2031,
+          "privateExport": false
+        },
+        "rollback": {
+          "host": "5.1.26100.33438",
+          "exports": [
+            "Get-CompiledValue",
+            "Get-FallbackValue"
+          ],
+          "value": 1,
+          "valueType": "System.Int32",
+          "year": 2026,
+          "yearType": "System.Int32",
+          "shadow": 2031,
+          "privateExport": false
+        },
+        "offlineRestore": true,
+        "staleSourceRejected": true,
+        "packAndInstall": true
+      }
+    ],
+    "operations": [
+      "init",
+      "explain",
+      "lock",
+      "restore",
+      "offline restore",
+      "build",
+      "import",
+      "test",
+      "diagnose",
+      "pack",
+      "install"
+    ]
+  },
+  "managementProvider": {
+    "packageVersion": "3.0.154",
+    "packageSha256": "33AD65E42835FCCF12A0F99160A107D076205539E3B907262727B625ADD6A84E",
+    "signerFingerprint": "D13C03BFEEC0CBF7FD0E0E7FFAF3F3D2076E62B1AF64665E806917B9191CFFDE",
+    "artifactSha256": "822F969714F5DAD38F79119DC27032C609D08DA353E82B309A31E3E597D3B5A2",
+    "operation": "Query",
+    "exit": 0,
+    "caption": "Microsoft Windows Server 2025 Standard",
+    "osVersion": "10.0.26100",
+    "instanceCount": 1,
+    "scope": "Read-only local Win32_OperatingSystem query; no reboot, directory write, or management mutation"
+  },
+  "executablePreview": {
+    "signedQualification": false,
+    "results": [
+      {
+        "profile": "framework-dependent",
+        "sha256": "0B8D74FBCC19135C879FDDC813657B067B4AFCC151E78A4592A893C34F1BD2D0",
+        "signature": "NotSigned",
+        "exit": 0,
+        "output": "7",
+        "runtimeDiscoverable": true
+      },
+      {
+        "profile": "self-contained",
+        "sha256": "0B8D74FBCC19135C879FDDC813657B067B4AFCC151E78A4592A893C34F1BD2D0",
+        "signature": "NotSigned",
+        "exit": 0,
+        "output": "7",
+        "runtimeDiscoverable": false
+      },
+      {
+        "profile": "trimmed",
+        "sha256": "6C4D98C35FC1C56EE3631332A6ABFFCD80362ED4EC228D95D175284CEEB16BDD",
+        "signature": "NotSigned",
+        "exit": 0,
+        "output": "7",
+        "runtimeDiscoverable": false
+      },
+      {
+        "profile": "native-aot",
+        "sha256": "4E74204F35E90D903991240E72E4334EE378E0E53D15138AAB4CBCE767126F78",
+        "signature": "NotSigned",
+        "exit": 0,
+        "output": "7",
+        "runtimeDiscoverable": false
+      }
+    ],
+    "scope": "Execution only; generated-artifact signing remains pending hardware-token access"
+  },
+  "restoreCorrection": {
+    "patchGitObject": "c10c1aeb09e223850a2e49aefeb464dfb496e5a2",
+    "independentReview": "No actionable P0-P3 findings; no dependency or public API change",
+    "focusedTests": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "duration": "5m04s",
+      "trxSha256": "e70702ab90c492bc1ede75223263afd8cc12c2168a94bd7cf60667ac69d0133d"
+    },
+    "sourcePreview": {
+      "signedPackageQualification": false,
+      "changedAssemblySha256": "b342ec6b87402d24237761bb515732eb1957e39853151865417e735ce19b7524",
+      "longPathsEnabled": 0,
+      "projectPathLength": 249,
+      "artifactPathLength": 238,
+      "longestInternalFilePathLength": 397,
+      "operations": [
+        "lock",
+        "restore",
+        "build",
+        "test",
+        "diagnose",
+        "pack",
+        "execute"
+      ],
+      "exit": 0,
+      "output": "7"
+    },
+    "requiredFollowUp": "Rebuild the signed final candidate and repeat the affected installed-CLI restore/path workflow"
+  },
+  "artifactTampering": {
+    "installedCliSha256": "28794C2742339138792DD371A63F8FE0FF4872D22374951137CB74202D9A0D70",
+    "artifactSha256": "51932DDDB3AD83109B2060191F8C7C73FBE309F45AB7366A2222F206A447E9B9",
+    "packageSha256": "ACBBB725FD5CDCD7CD2E93498D520752C2BEF0DE02814DEA00B807CCAA7318FB",
+    "refusals": [
+      {
+        "operation": "test",
+        "exit": 1,
+        "refused": true
+      },
+      {
+        "operation": "pack",
+        "exit": 1,
+        "refused": true
+      }
+    ],
+    "previousPackagePreserved": true,
+    "originalArtifactRestored": true,
+    "recoveredTestPassed": true
+  },
+  "ci": {
+    "sourceCommit": "8e6c8d482e04d3adc714a9ef93b1fa2a17adf45e",
+    "focusedRun": 37156266148,
+    "focusedJob": 111300160954,
+    "focusedTestsPassed": 296,
+    "focusedStrictProgramsPassed": 6,
+    "focusedStepSeconds": 809,
+    "focusedStepBudgetSeconds": 1200,
+    "pinnedHostAcquisitionSeconds": 4,
+    "comparisonNote": "Earlier candidate focused lane completed in 13m07s; final correction requires its own head-bound gate",
+    "fullRun": 37156593659,
+    "fullState": "Running at the historical checkpoint; not final-candidate proof",
+    "finalCandidateFailure": {
+      "sourceCommit": "25d25ed9776cc4d4cfddeb4cd87ebdec80465ece",
+      "recordedAtUtc": "2026-10-04T01:34:00Z",
+      "focusedRun": 37161281061,
+      "focusedPassed": 293,
+      "focusedFailed": 3,
+      "fullRun": 37161308469,
+      "fullPassed": 1346,
+      "fullFailed": 8,
+      "fullTotal": 1354,
+      "fullDuration": "1h29m",
+      "manualLegacySmokePassed": 6,
+      "manualLegacySmokeFailed": 1,
+      "regularWindowsLinuxMacOsPassed": true,
+      "dotNetPublishTestsPassed": true,
+      "delayedReviewThreads": 0
+    },
+    "fixtureRepairValidation": {
+      "passed": 16,
+      "failed": 0,
+      "coldCacheDiagnosticsPassed": 2,
+      "streamLoopAndCliObserversPassed": 7,
+      "net472SmokePassed": 7,
+      "coldCacheTrxSha256": "72B83293E71F8D11905ABE9E06086FDB28EE10BF23EB0347A0F380EA26E47C24",
+      "observersTrxSha256": "DE5AB8CAA918EAA4B7E9EBB5EB922B950F06CDF55C3C7A4DED48E4CC33D0A510",
+      "net472TrxSha256": "BBDA4B8815E511801FBBBCA3EECCE29B34B0E976D91115B036ECC72FC31EB221",
+      "scope": "Test setup and observer repairs; focused CI subsequently passes at f7fdae19a, while Full CI remains in progress"
+    },
+    "repairedCandidateCheckpoint": {
+      "sourceCommit": "f7fdae19aa55736839b421e03a2c1e22b9de6393",
+      "recordedAtUtc": "2026-10-04T03:55:00Z",
+      "focusedRun": 37169315455,
+      "focusedJob": 111338839955,
+      "focusedTestsPassed": 296,
+      "focusedStrictProgramsPassed": 6,
+      "focusedStepSeconds": 961,
+      "focusedStepBudgetSeconds": 1200,
+      "regularWindowsLinuxMacOsPassed": true,
+      "dotNetPublishTestsPassed": true,
+      "manualWindowsLinuxMacOsPassed": true,
+      "delayedReviewThreads": 0,
+      "fullRun": 37169338544,
+      "fullState": "Complete compiler gate in progress at checkpoint",
+      "latestFetchedDefaultBranch": "c97e6855ca9eaa53c2411ac11d8cf2a91dbb7182",
+      "defaultBranchChange": "Website listing SEO; no compiler production-owner changes"
+    },
+    "mainIntegratedCheckpoint": {
+      "sourceCommit": "38f33e167bb112aa7e1dfb31a3d0ec3611601427",
+      "defaultBranchCommit": "c97e6855ca9eaa53c2411ac11d8cf2a91dbb7182",
+      "recordedAtUtc": "2026-10-04T06:59:19Z",
+      "focusedRun": 37175733916,
+      "focusedJob": 111357831459,
+      "focusedTestsPassed": 295,
+      "focusedTestsFailed": 1,
+      "focusedFailure": "Watch lifecycle test source edit encounters a transient Windows sharing violation before rebuild assertions",
+      "fullRun": 37175769843,
+      "fullJob": 111357981182,
+      "fullTestsPassed": 1354,
+      "fullTestsFailed": 0,
+      "fullTestsSkipped": 0,
+      "fullStrictProgramsPassed": 6,
+      "fullStepSeconds": 5322,
+      "fullStepBudgetSeconds": 7200,
+      "regularWindowsLinuxMacOsPassed": true,
+      "manualWindowsLinuxMacOsPassed": true,
+      "dotNetPublishTestsPassed": true,
+      "delayedReviewThreads": 0,
+      "checkpointSha256": "9198EBAA8307346757BBF350522CFB49B2A35DD8EE9668742E35C794972F62A4",
+      "disposition": "Full passes; bounded test-editor sharing retries require fresh final-head CI"
+    },
+    "watchEditRepairValidation": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "trxSha256": "63421D4EA7EB537C30173999CB8A7D2C88B9B684EC8F1E737E87BD619776F080",
+      "sharingViolationWin32Code": 32,
+      "persistentSharingRetryLimitSeconds": 5,
+      "scope": "Test editor retries only Windows sharing violations; rebuild recovery, process-tree shutdown and cancellation assertions remain intact; no production changes"
+    }
+  },
+  "pending": [
+    "Final compiler CI and delayed review settlement after watch test-editor repair",
+    "Final signed coherent release-set rebuild and affected installed-package requalification",
+    "Generated executable signing and target signature verification",
+    "Default-branch integration",
+    "Public-feed lifecycle after separate publication authorization"
+  ],
+  "unqualified": [
+    "Binary replacement in a running consumer process",
+    "Arbitrarily deep final Windows executable or working-directory paths",
+    "Additional physical RIDs",
+    "Live directory effects",
+    "Management reboot/reconnect"
+  ],
+  "evidenceSha256": {
+    "signedReleaseSet": "6a967b307523616153afa4c4188beac02c9855d8dc71da4ce29bc81cd9d01448",
+    "bootstrap": "0e95ff54cb69c87e2e8398480d9526e1cb00b293fb8bdaf5a454c15855b23b0e",
+    "moduleLifecycle": "4c528b8c45c49466fdfd7d6dcd02199c041593212ecb7705949890e982b56e48",
+    "toolLifecycle": "ca94700da685e8f762c8c2b5e46e924c419888204c2c1ece707b54e46f6fb29b",
+    "moduleSourceWorkflow": "9c7ecaa090a90c9141777536257bf01ac8ef4dcda690f92363b3d65012d1cf0a",
+    "managementProvider": "409eb1fea07ca616f4a5f3494bb91e3c23d5101128ff6e2ba46c9ebfd66af4d0",
+    "unsignedExecutablePreview": "0b396468331934a3e5703b8771d462706c0bebf182c5a2997a9319027efd39f2",
+    "longPathSourcePreview": "885c4cf7ea6f7d050b2c128edcb767ff1c07a50ae9c0605753dc1c2669800b0e",
+    "artifactTampering": "b051aa351bb5e92c36c568bd478b4d4b693b9b41553e066b61f9f15351302f8f"
+  }
+}

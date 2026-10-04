@@ -143,7 +143,9 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
                 result.Limitations.Add($"Runtime dependency format is not currently certifiable: {Path.GetFileName(file.Path)}");
         }
 
+        AddReviewedRuntimePackIdentities(request, managedAssemblies, targetRuntimeAssemblies);
         VerifyManagedReferenceClosure(managedAssemblies, targetRuntimeAssemblies, compatibleSignedRuntimeAssemblies);
+        VerifyUsedFacadeReferences(managedAssemblies, targetRuntimeAssemblies, compatibleSignedRuntimeAssemblies);
         VerifyReviewedDependencyGraph(request, managedAssemblies, result);
         VerifyReviewedNativeDependencyGraph(request, nativeLibraries, result);
         VerifyNativeReferenceClosure(request, managedAssemblies, result);
@@ -216,6 +218,8 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
         var headerOffset = FindBundleHeaderOffset(stream);
         if (headerOffset is null)
         {
+            if (TryInspectReviewedRuntimeExecutable(request, path, result, nativeLibraries))
+                return true;
             if (request.Optimization != PowerShellCompilationExecutableOptimization.NativeAot ||
                 !request.Files.Any(file => file.Role == "Primary" && PowerShellCompilationPathSafety.PathEquals(file.Path, path)))
                 return false;
@@ -509,7 +513,9 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
             var name = reader.GetString(module.Name);
             if (!string.IsNullOrWhiteSpace(name)) nativeImports.Add(name);
         }
-        managedAssemblies.Add(new ManagedAssemblyInspection(assemblyIdentity, displayPath, contentSha256, references.ToArray(), nativeImports.ToArray()));
+        var inspection = new ManagedAssemblyInspection(assemblyIdentity, displayPath, contentSha256, references.ToArray(), nativeImports.ToArray());
+        ReadFacadeMetadata(reader, inspection);
+        managedAssemblies.Add(inspection);
     }
 
     private static void VerifyManagedReferenceClosure(
@@ -524,6 +530,10 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
         {
             if (delivered.Contains(reference.StableKey) || targetRuntimeAssemblies.Contains(reference.StableKey) ||
                 IsResolvedRuntimeFacadeReference(reference, assemblies, targetRuntimeAssemblies, compatibleSignedRuntimeAssemblies)) continue;
+            if (assembly.IsReviewedRuntimePack && assembly.IsPureFacade &&
+                assembly.ForwardedTypes.Any(type => type.Assembly.StableKey.Equals(reference.StableKey, StringComparison.OrdinalIgnoreCase)) &&
+                !assembly.TypeReferences.Any(type => type.Assembly.StableKey.Equals(reference.StableKey, StringComparison.OrdinalIgnoreCase)))
+                continue; // Unused optional runtime forwarders are not executable dependencies; actual type uses are checked separately.
             throw new InvalidOperationException(
                 $"Strict runtime-free managed dependency '{assembly.DisplayPath}' references missing managed assembly '{reference.DisplayName}'. The delivered closure must contain that exact assembly identity or classify its signed identity as part of the target runtime.");
         }
@@ -614,6 +624,10 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
         internal string ContentSha256 { get; }
         internal AssemblyIdentity[] References { get; }
         internal string[] NativeImports { get; }
+        internal bool IsReviewedRuntimePack { get; set; }
+        internal bool IsPureFacade { get; set; }
+        internal ManagedTypeReference[] TypeReferences { get; set; } = Array.Empty<ManagedTypeReference>();
+        internal ManagedTypeReference[] ForwardedTypes { get; set; } = Array.Empty<ManagedTypeReference>();
     }
 
     private sealed class AssemblyIdentity

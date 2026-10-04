@@ -215,7 +215,8 @@ function Compare-Baseline {
                 }
             }
             $expectedPromotedRegions = Get-OptionalIntegerProperty -Value $expectedDisposition -Name 'promotedTypedRegions'
-            if ([int] $currentDisposition.promotedTypedRegions -lt $expectedPromotedRegions) {
+            # A complete emitted method supersedes its earlier partial typed regions.
+            if ($currentDisposition.emitted -ne $true -and [int] $currentDisposition.promotedTypedRegions -lt $expectedPromotedRegions) {
                 $regressions.Add([ordered]@{ id = $expected.id; metric = "promotedTypedRegions`:$unitId"; expectedMinimum = $expectedPromotedRegions; actual = $currentDisposition.promotedTypedRegions })
             }
             if ($expectedDisposition.semanticEligible -eq $true -and $expectedDisposition.shapingFallback -ne $true -and $currentDisposition.shapingFallback -eq $true) {

@@ -26,7 +26,7 @@ public sealed partial class PowerShellCompilationAnalyzer
     public PowerShellCompilationPlan Analyze(
         PowerShellCompilationResolvedInput input,
         PowerShellCompilationMode mode = PowerShellCompilationMode.Analyze,
-        string? targetFramework = "net8.0",
+        string? targetFramework = PowerShellCompilationTargetFrameworkPolicy.Default,
         PowerShellCompilationResourceMode resourceMode = PowerShellCompilationResourceMode.Declared,
         IEnumerable<string>? includeResource = null,
         IEnumerable<string>? excludeResource = null,
@@ -55,7 +55,8 @@ public sealed partial class PowerShellCompilationAnalyzer
         string? outputDirectory,
         PowerShellCompilationTargetContract? targetContract,
         IEnumerable<string>? generatedOutputDirectories,
-        string? nuGetPackageRoot)
+        string? nuGetPackageRoot,
+        Action? beforeDependencyAnalysis = null)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
@@ -71,13 +72,8 @@ public sealed partial class PowerShellCompilationAnalyzer
         var normalizedTargetFramework = new PowerShellCompilationSpec(
             input.SourcePath,
             target?.Mode ?? mode,
-            targetFramework: target?.TargetFramework ?? targetFramework ?? "net8.0").TargetFramework;
-        var plan = AnalyzeFiles(
-            target?.Mode ?? mode,
-            input.CompilationSourceFiles,
-            input.ModuleRoot,
-            normalizedTargetFramework,
-            PowerShellCompilationBuildSpec.GetCapabilities(input.Kind, capabilityMode));
+            targetFramework: target?.TargetFramework ?? targetFramework ?? PowerShellCompilationTargetFrameworkPolicy.Default).TargetFramework;
+        beforeDependencyAnalysis?.Invoke();
         var dependencyPlanner = new PowerShellCompilationDependencyPlanner();
         var dependencies = dependencyPlanner.Analyze(
             input,
@@ -112,6 +108,10 @@ public sealed partial class PowerShellCompilationAnalyzer
                                     target.Deployment != PowerShellCompilationDeploymentModel.FrameworkDependent,
                 nuGetPackageRoot);
         }
+        var nativeTypes = PowerShellNativeDependencyTypes.Create(input.ModuleManifestPath, dependencies, dependencyGraph, input.ModuleRoot);
+        var plan = new PowerShellCompilationAnalyzer(_commandRegistry, _semanticProfileId, nativeTypes).AnalyzeFiles(
+            target?.Mode ?? mode, input.CompilationSourceFiles, input.ModuleRoot, normalizedTargetFramework,
+            PowerShellCompilationBuildSpec.GetCapabilities(input.Kind, capabilityMode));
         var combined = new PowerShellCompilationPlan(
             plan.Mode,
             plan.Files,
@@ -120,7 +120,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             dependencyGraph,
             target);
         return capabilityMode == PowerShellCompilationMode.Package
-            ? ApplyPackagedValidation(combined, input, normalizedTargetFramework ?? "net8.0")
+            ? ApplyPackagedValidation(combined, input, normalizedTargetFramework ?? PowerShellCompilationTargetFrameworkPolicy.Default)
             : combined;
     }
 
@@ -188,7 +188,8 @@ public sealed partial class PowerShellCompilationAnalyzer
         var structural = files.Select(file => AnalyzeFile(file, basePath, analysisTargetFramework, capabilities, localFunctionNames)).ToArray();
         var analyzed = mode == PowerShellCompilationMode.Package
             ? structural
-            : ApplySemanticEvidence(structural, files, basePath, analysisTargetFramework, capabilities, _commandRegistry, _semanticProfileId);
+            : ApplySemanticEvidence(structural, files, basePath, analysisTargetFramework, capabilities, _commandRegistry, _semanticProfileId,
+                _nativeDependencyTypes);
         return new PowerShellCompilationPlan(mode, analyzed, targetFramework);
     }
 
