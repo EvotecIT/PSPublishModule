@@ -45,6 +45,7 @@ public sealed partial class BenchmarkServicesTests
     [InlineData("CPU")]
     [InlineData("Architecture")]
     [InlineData("Runtime")]
+    [InlineData("SDK")]
     [InlineData("Affinity")]
     [InlineData("Power")]
     [InlineData("Runner")]
@@ -61,6 +62,7 @@ public sealed partial class BenchmarkServicesTests
             case "CPU": current.Environment.ProcessorName = "Other CPU"; break;
             case "Architecture": current.Environment.ProcessArchitecture = "Arm64"; break;
             case "Runtime": current.Environment.RuntimeVersion = ".NET 11"; break;
+            case "SDK": current.Environment.DotNetSdkVersion = "10.0.304"; break;
             case "Affinity": current.Metadata["processAffinityMask"] = "0x00FF"; break;
             case "Power": current.Metadata["benchmark.PowerPlan"] = "Balanced"; break;
             case "Runner": request.RunnerIdentity = "other-pool"; break;

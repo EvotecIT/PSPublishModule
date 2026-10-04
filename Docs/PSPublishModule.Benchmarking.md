@@ -51,6 +51,12 @@ split calibration automatically. Windows, Linux and macOS histories may
 share one file; they do not share duration thresholds. Missing placement metadata
 cannot establish that processor placement was controlled.
 
+The PowerShell runner records the CLI SDK selected by `dotnet --version` from
+the benchmark source directory, including its `global.json` policy. An absent
+SDK or unresolved pin leaves this field empty. This describes the selected
+toolchain, not the build provenance of an externally supplied DLL; retain
+assembly hashes and build metadata separately when measuring such inputs.
+
 Each lane uses the median of the most recent twenty accepted run medians. Its
 upper limit adds the largest of `-RelativeTolerance` (default ten percent),
 `-AbsoluteToleranceMs` (default zero), or three times the median absolute deviation

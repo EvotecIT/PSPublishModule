@@ -186,7 +186,7 @@ public sealed partial class PowerShellBenchmarkRunner
             Summary = summary,
             Comparison = Array.Empty<BenchmarkComparisonRow>(),
             Metadata = PowerShellBenchmarkEnvironmentMetadata.Build(suite, sourceProvenance),
-            Environment = PowerShellBenchmarkEnvironmentMetadata.BuildEnvironment()
+            Environment = PowerShellBenchmarkEnvironmentMetadata.BuildEnvironment(suite.SourceRoot)
         };
 
         placement?.RecordMetadata(result.Metadata);
