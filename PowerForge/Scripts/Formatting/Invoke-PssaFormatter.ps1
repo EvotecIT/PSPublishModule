@@ -107,10 +107,11 @@ function ConvertTo-Hashtable {
 }
 $batches = @([pscustomobject]@{ Files = $Files; Settings = $settings })
 if ($BatchPath) {
-    $batches = @(Get-Content -LiteralPath $BatchPath -Raw -ErrorAction Stop | ConvertFrom-Json | ForEach-Object {
+    $batchEntries = Get-Content -LiteralPath $BatchPath -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
+    $batches = @(foreach ($entry in @($batchEntries)) {
         $batchSettings = $null
-        if ($_.SettingsJson) { $batchSettings = ConvertFrom-Json -InputObject $_.SettingsJson }
-        [pscustomobject]@{ Files = $_.Files; Settings = $batchSettings }
+        if ($entry.SettingsJson) { $batchSettings = ConvertFrom-Json -InputObject $entry.SettingsJson }
+        [pscustomobject]@{ Files = $entry.Files; Settings = $batchSettings }
     })
 }
 

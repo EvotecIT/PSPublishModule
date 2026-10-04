@@ -94,8 +94,7 @@ public sealed class PssaFormatter : IFormatter
         }
         if (result.ExitCode == 124)
         {
-            _logger.Warn("PSSA: Formatting timed out; skipping.");
-            return list.Select(p => new FormatterResult(p, false, "Skipped: Timeout")).ToArray();
+            _logger.Warn("PSSA: Formatting timed out; skipping unfinished files.");
         }
         if (result.ExitCode == 3 || (result.StdOut ?? string.Empty).Contains("PSSA_NOT_FOUND", StringComparison.Ordinal))
         {
@@ -147,7 +146,9 @@ public sealed class PssaFormatter : IFormatter
         {
             if (!outputs.Any(o => string.Equals(o.Path, p, StringComparison.OrdinalIgnoreCase)))
             {
-                if (result.ExitCode != 0)
+                if (result.ExitCode == 124)
+                    outputs.Add(new FormatterResult(p, false, "Skipped: Timeout"));
+                else if (result.ExitCode != 0)
                     outputs.Add(new FormatterResult(p, false, $"Skipped: PSSA failed (exit {result.ExitCode})"));
                 else
                     outputs.Add(new FormatterResult(p, false, "Error: PSSA returned no result"));

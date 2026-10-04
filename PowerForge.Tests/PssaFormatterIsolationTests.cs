@@ -334,6 +334,15 @@ public sealed class PssaFormatterIsolationTests
 
     [Fact]
     public void FormatBatches_PreservesDifferentSettingsAndPerFileErrorsInOneIsolatedProcess()
+        => AssertBatchSettingsAndErrors(executableOverride: null);
+
+    [WindowsFact]
+    public void FormatBatches_PreservesDifferentSettingsAndPerFileErrorsOnWindowsPowerShell()
+        => AssertBatchSettingsAndErrors(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.System),
+            "WindowsPowerShell", "v1.0", "powershell.exe"));
+
+    private static void AssertBatchSettingsAndErrors(string? executableOverride)
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -358,7 +367,7 @@ public sealed class PssaFormatterIsolationTests
                 new EnvironmentPowerShellRunner(new Dictionary<string, string?>
                 {
                     ["PSModulePath"] = Path.Combine(root, "modules")
-                }), new NullLogger());
+                }, executableOverride), new NullLogger());
 
             var results = formatter.FormatBatches(new[]
             {
@@ -386,6 +395,43 @@ public sealed class PssaFormatterIsolationTests
         }
     }
 
+    [Fact]
+    public void FormatBatches_PreservesCompletedErrorsAndChangesWhenLaterFilesTimeOut()
+    {
+        var formatter = new PssaFormatter(new StubRunner(new PowerShellRunResult(
+            124,
+            "ERROR::first.psd1::Rejected first group\r\nFORMATTED::second.psm1\r\n",
+            string.Empty,
+            "pwsh")), new NullLogger());
+
+        var results = formatter.FormatBatches(new[]
+        {
+            new FormattingBatch(new[] { "first.psd1" }, new FormatOptions()),
+            new FormattingBatch(new[] { "second.psm1" }, new FormatOptions()),
+            new FormattingBatch(new[] { "third.ps1" }, new FormatOptions())
+        });
+
+        Assert.Collection(results,
+            result =>
+            {
+                Assert.Equal("first.psd1", result.Path);
+                Assert.Equal("Error: Rejected first group", result.Message);
+            },
+            result =>
+            {
+                Assert.Equal("second.psm1", result.Path);
+                Assert.True(result.Changed);
+            },
+            result =>
+            {
+                Assert.Equal("third.ps1", result.Path);
+                Assert.Equal("Skipped: Timeout", result.Message);
+            });
+        var summary = FormattingSummary.FromResults(results);
+        Assert.Equal(CheckStatus.Fail, summary.Status);
+        Assert.Equal(1, summary.Errors);
+    }
+
     private sealed class StubRunner : IPowerShellRunner
     {
         private readonly PowerShellRunResult _result;
@@ -398,10 +444,14 @@ public sealed class PssaFormatterIsolationTests
     private sealed class EnvironmentPowerShellRunner : IPowerShellRunner
     {
         private readonly IReadOnlyDictionary<string, string?> _environmentVariables;
+        private readonly string? _executableOverride;
         private readonly PowerShellRunner _inner = new();
 
-        public EnvironmentPowerShellRunner(IReadOnlyDictionary<string, string?> environmentVariables)
-            => _environmentVariables = environmentVariables;
+        public EnvironmentPowerShellRunner(IReadOnlyDictionary<string, string?> environmentVariables, string? executableOverride = null)
+        {
+            _environmentVariables = environmentVariables;
+            _executableOverride = executableOverride;
+        }
 
         public PowerShellRunResult Run(PowerShellRunRequest request)
             => _inner.Run(new PowerShellRunRequest(
@@ -411,7 +461,7 @@ public sealed class PssaFormatterIsolationTests
                 request.PreferPwsh,
                 request.WorkingDirectory,
                 _environmentVariables,
-                request.ExecutableOverride,
+                _executableOverride ?? request.ExecutableOverride,
                 request.CaptureOutput,
                 request.CaptureError,
                 request.OutputLineReceived,
