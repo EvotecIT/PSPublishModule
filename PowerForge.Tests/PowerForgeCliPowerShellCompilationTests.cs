@@ -690,7 +690,8 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
     }
 
     private static async Task<(int ExitCode, string StdOut, string StdErr)> RunCliAsync(
-        string repositoryRoot, string arguments, IReadOnlyDictionary<string, string>? environment = null)
+        string repositoryRoot, string arguments, IReadOnlyDictionary<string, string>? environment = null,
+        TimeSpan? timeout = null)
     {
         var cli = Path.Combine(repositoryRoot, "PowerForge.Cli", "bin", "Release", "net10.0", "PowerForge.Cli.dll");
         using var process = new Process
@@ -712,10 +713,13 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
         var exitTask = process.WaitForExitAsync();
-        if (await Task.WhenAny(exitTask, Task.Delay(TimeSpan.FromSeconds(120))) != exitTask)
+        // Artifact builds have a five-minute child budget; the observer must let the
+        // owning workflow report its own failure before enforcing an outer deadline.
+        var deadline = timeout ?? TimeSpan.FromMinutes(6);
+        if (await Task.WhenAny(exitTask, Task.Delay(deadline)) != exitTask)
         {
             try { process.Kill(entireProcessTree: true); } catch { }
-            throw new TimeoutException("PowerShell compilation CLI test timed out.");
+            throw new TimeoutException($"PowerShell compilation CLI test timed out after {deadline}: {arguments}");
         }
         return (process.ExitCode, await stdoutTask, await stderrTask);
     }

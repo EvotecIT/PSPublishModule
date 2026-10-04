@@ -52,7 +52,8 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
 
         async Task<JsonElement> Invoke(string command)
         {
-            var result = await RunCliAsync(FindRepositoryRoot(), "powershell project " + command + " --output json");
+            var result = await RunCliAsync(FindRepositoryRoot(), "powershell project " + command + " --output json",
+                timeout: command.StartsWith("restore ", StringComparison.Ordinal) ? TimeSpan.FromMinutes(11) : null);
             Assert.True(result.ExitCode == 0, FormatFailure(command, result));
             using var document = JsonDocument.Parse(result.StdOut);
             Assert.True(document.RootElement.GetProperty("success").GetBoolean());

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedAtUtc": "2026-10-03T23:16:32.8563275Z",
+  "recordedAtUtc": "2026-10-04T01:49:31Z",
   "state": "InProgress",
   "finalReleaseVersion": "3.0.155",
   "versionSelection": {
@@ -970,7 +970,35 @@
     "pinnedHostAcquisitionSeconds": 4,
     "comparisonNote": "Earlier candidate focused lane completed in 13m07s; final correction requires its own head-bound gate",
     "fullRun": 37156593659,
-    "fullState": "Running at the recorded checkpoint"
+    "fullState": "Running at the historical checkpoint; not final-candidate proof",
+    "finalCandidateFailure": {
+      "sourceCommit": "25d25ed9776cc4d4cfddeb4cd87ebdec80465ece",
+      "recordedAtUtc": "2026-10-04T01:34:00Z",
+      "focusedRun": 37161281061,
+      "focusedPassed": 293,
+      "focusedFailed": 3,
+      "fullRun": 37161308469,
+      "fullPassed": 1346,
+      "fullFailed": 8,
+      "fullTotal": 1354,
+      "fullDuration": "1h29m",
+      "manualLegacySmokePassed": 6,
+      "manualLegacySmokeFailed": 1,
+      "regularWindowsLinuxMacOsPassed": true,
+      "dotNetPublishTestsPassed": true,
+      "delayedReviewThreads": 0
+    },
+    "fixtureRepairValidation": {
+      "passed": 16,
+      "failed": 0,
+      "coldCacheDiagnosticsPassed": 2,
+      "streamLoopAndCliObserversPassed": 7,
+      "net472SmokePassed": 7,
+      "coldCacheTrxSha256": "72B83293E71F8D11905ABE9E06086FDB28EE10BF23EB0347A0F380EA26E47C24",
+      "observersTrxSha256": "DE5AB8CAA918EAA4B7E9EBB5EB922B950F06CDF55C3C7A4DED48E4CC33D0A510",
+      "net472TrxSha256": "BBDA4B8815E511801FBBBCA3EECCE29B34B0E976D91115B036ECC72FC31EB221",
+      "scope": "Test setup and observer repairs; focused and Full CI must pass on the new head"
+    }
   },
   "pending": [
     "Final restore correction CI and delayed review settlement",

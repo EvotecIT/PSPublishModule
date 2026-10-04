@@ -56,7 +56,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
                 var stderr = process.StandardError.ReadToEndAsync();
                 await process.StandardInput.BaseStream.WriteAsync(input);
                 process.StandardInput.Close();
-                using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(4));
+                using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(6));
                 await process.WaitForExitAsync(timeout.Token);
                 await stdout;
                 var errorOutput = await stderr;

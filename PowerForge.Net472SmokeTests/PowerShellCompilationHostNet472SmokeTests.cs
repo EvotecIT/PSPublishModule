@@ -63,7 +63,7 @@ if ($usingResult.Succeeded -or $usingResult.Error -notlike '*using module/assemb
             var result = await new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(
                 host, root, new[] { "-NoProfile", "-NonInteractive", "-File", script,
                     "-CompilerAssembly", compiler, "-Source", source, "-Output", Path.Combine(root, "out") },
-                TimeSpan.FromMinutes(3)));
+                TimeSpan.FromMinutes(6)));
             Assert.True(result.Succeeded, result.StdErr + Environment.NewLine + result.StdOut);
             Assert.Contains("LEGACY_COMPILER_AND_MODULE_PASSED", result.StdOut);
         }

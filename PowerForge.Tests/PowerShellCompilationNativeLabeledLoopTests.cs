@@ -57,8 +57,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         const string probe="""
             Trace-LabeledLoops -Mode 1; Trace-LabeledLoops -Mode 2; Trace-LabeledKinds -Seed 1; Trace-LabeledKinds -Seed 2
             & (Get-Command Get-ADComputersToProcess).Module {
-                function Write-Color { param($Text,$Color) }
-                function Get-Date { [datetime]'2020-01-02T03:04:05' }
+                function script:Write-Color { param($Text,$Color) }
+                function script:Get-Date { [datetime]'2020-01-02T03:04:05' }
             }
             $cases=@(
                 @{name='none';rules=@{};exclusions=@()},

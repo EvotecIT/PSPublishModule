@@ -429,6 +429,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             RedirectStandardError = true,
             CreateNoWindow = true
         };
+        // Compare stream content independently of the invoking terminal's color policy.
+        startInfo.Environment["NO_COLOR"] = "1";
         foreach (var argument in arguments)
             startInfo.ArgumentList.Add(argument);
         using var process = Process.Start(startInfo)!;

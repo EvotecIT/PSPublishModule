@@ -20,6 +20,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
             PowerShellCompilationExecutableOptimization.None, true);
         var manifests = new PowerShellCompilationProjectManifestService();
         manifests.Save(fixture.Project, manifests.Create(fixture.Project, source, "Acquired", target));
+        await AcquireRuntimePackAsync();
         var workflow = new PowerShellCompilationProjectWorkflowService();
         Check(workflow.Lock(fixture.Project));
         Check(workflow.Restore(fixture.Project));
@@ -58,6 +59,29 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
 
         static void Check(PowerShellCompilationProjectResult result)
             => Assert.True(result.Succeeded, string.Join(Environment.NewLine, result.Targets.Select(item => item.Message)));
+    }
+
+    private static async Task AcquireRuntimePackAsync()
+    {
+        // Lock inventories existing runtime assets. Acquire its prerequisite explicitly
+        // so this test does not depend on another test warming the configured cache.
+        using var workspace = PowerShellCompilationWorkspace.Create(keep: false);
+        PowerShellCompilationArtifactBuilder.WriteSdkSelection(
+            workspace.Path, PowerShellCompilationToolchainFingerprint.ResolveSelectedSdk().Version);
+        var project = Path.Combine(workspace.Path, "RuntimePack.csproj");
+        File.WriteAllText(project, """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+                <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+                <SelfContained>true</SelfContained>
+              </PropertyGroup>
+            </Project>
+            """);
+        var restored = await new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(
+            "dotnet", workspace.Path, new[] { "restore", project, "--nologo", "--verbosity", "minimal" },
+            TimeSpan.FromMinutes(5)));
+        Assert.True(restored.Succeeded, restored.StdErr + restored.StdOut);
     }
 
     [Fact]
