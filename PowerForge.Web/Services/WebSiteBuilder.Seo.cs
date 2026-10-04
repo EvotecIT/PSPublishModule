@@ -65,16 +65,26 @@ public static partial class WebSiteBuilder
     {
         var overrideTitle = GetMetaString(item.Meta, "seo_title");
         if (!string.IsNullOrWhiteSpace(overrideTitle))
-            return overrideTitle.Trim();
+            return AddPaginationTitleSuffix(item, overrideTitle.Trim());
 
         var fallback = ResolveSeoTitleDefault(spec, item);
 
         var template = ResolveEffectiveSeoTitleTemplate(spec, item);
         if (string.IsNullOrWhiteSpace(template))
-            return fallback;
+            return AddPaginationTitleSuffix(item, fallback);
 
         var rendered = ApplySeoTemplate(template, spec, item, fallback, ResolveMetaDescriptionDefault(spec, item));
-        return string.IsNullOrWhiteSpace(rendered) ? fallback : rendered;
+        return AddPaginationTitleSuffix(item, string.IsNullOrWhiteSpace(rendered) ? fallback : rendered);
+    }
+
+    private static string AddPaginationTitleSuffix(ContentItem item, string title)
+    {
+        var page = GetMetaInt(item.Meta, PaginationPageMetaKey, 1);
+        if (page <= 1)
+            return title;
+
+        var totalPages = GetMetaInt(item.Meta, PaginationTotalPagesMetaKey, page);
+        return $"{title} ({page.ToString(CultureInfo.InvariantCulture)}/{totalPages.ToString(CultureInfo.InvariantCulture)})";
     }
 
     private static string ResolveMetaDescription(SiteSpec spec, ContentItem item)
@@ -184,10 +194,11 @@ public static partial class WebSiteBuilder
 
     private static string ResolveSeoTitleDefault(SiteSpec spec, ContentItem item)
     {
-        if (!string.IsNullOrWhiteSpace(item.Title))
-            return item.Title.Trim();
-        if (!string.IsNullOrWhiteSpace(spec.Name))
-            return spec.Name.Trim();
-        return "Documentation";
+        var title = !string.IsNullOrWhiteSpace(item.Title) ? item.Title.Trim()
+            : !string.IsNullOrWhiteSpace(spec.Name) ? spec.Name.Trim() : "Documentation";
+        var taxonomy = GetMetaString(item.Meta, "taxonomy");
+        if (item.Kind == PageKind.Term && !string.IsNullOrWhiteSpace(taxonomy))
+            title += " | " + HumanizeSegment(taxonomy);
+        return title;
     }
 }

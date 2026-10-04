@@ -20,6 +20,7 @@ internal sealed class SimpleTemplateEngine : ITemplateEngine
         return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(context.Page.Title),
+            ["TITLE_HTML"] = context.TitleHtml,
             ["DESCRIPTION"] = System.Web.HttpUtility.HtmlEncode(context.Page.Description ?? string.Empty),
             ["CONTENT"] = context.Page.HtmlContent,
             ["EDIT_URL"] = context.Page.EditUrl ?? string.Empty,

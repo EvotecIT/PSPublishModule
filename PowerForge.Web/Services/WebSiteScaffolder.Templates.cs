@@ -8,7 +8,7 @@ public static partial class WebSiteScaffolder
 <head>
   <meta charset=""utf-8"" />
   <meta name=""viewport"" content=""width=device-width, initial-scale=1"" />
-  <title>{{TITLE}}</title>
+  <title>{{TITLE_HTML}}</title>
   {{DESCRIPTION_META}}
   {{CANONICAL}}
   {{PRELOADS}}
@@ -42,7 +42,7 @@ public static partial class WebSiteScaffolder
 <head>
   <meta charset=""utf-8"" />
   <meta name=""viewport"" content=""width=device-width, initial-scale=1"" />
-  <title>{{ page.title }}</title>
+  <title>{{ title_html }}</title>
   {{ description_meta_html }}
   {{ canonical_html }}
   {{ assets.preloads_html }}
@@ -76,7 +76,7 @@ public static partial class WebSiteScaffolder
 <head>
   <meta charset=""utf-8"" />
   <meta name=""viewport"" content=""width=device-width, initial-scale=1"" />
-  <title>{{ page.title }}</title>
+  <title>{{ title_html }}</title>
   {{ description_meta_html }}
   {{ canonical_html }}
   {{ assets.preloads_html }}
@@ -116,7 +116,7 @@ public static partial class WebSiteScaffolder
 <head>
   <meta charset=""utf-8"" />
   <meta name=""viewport"" content=""width=device-width, initial-scale=1"" />
-  <title>{{ page.title }}</title>
+  <title>{{ title_html }}</title>
   {{ description_meta_html }}
   {{ canonical_html }}
   {{ assets.preloads_html }}
@@ -161,7 +161,7 @@ public static partial class WebSiteScaffolder
 <head>
   <meta charset=""utf-8"" />
   <meta name=""viewport"" content=""width=device-width, initial-scale=1"" />
-  <title>{{ page.title }}</title>
+  <title>{{ title_html }}</title>
   {{ description_meta_html }}
   {{ canonical_html }}
   {{ assets.preloads_html }}
@@ -211,7 +211,7 @@ public static partial class WebSiteScaffolder
 <head>
   <meta charset=""utf-8"" />
   <meta name=""viewport"" content=""width=device-width, initial-scale=1"" />
-  <title>{{ page.title }}</title>
+  <title>{{ title_html }}</title>
   {{ description_meta_html }}
   {{ canonical_html }}
   {{ assets.preloads_html }}

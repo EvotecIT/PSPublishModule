@@ -1211,6 +1211,12 @@ meta.seo_description: "Custom SEO description"
 
 Each build emits resolved SEO metadata at `_powerforge/seo-preview.json`.
 
+Generated taxonomy term titles include the taxonomy name, such as `Security | Tags`,
+so a category and a tag with the same name have distinct titles. Visible page titles
+retain the term name. Paginated listings keep their landing-page SEO title and append
+a language-neutral page count on later pages, such as `Engineering journal | Example Site (2/3)`.
+This suffix also applies when pagination copies a landing page's `meta.seo_title` override.
+
 ### Crawl policy (robots directives)
 Use route-scoped crawl directives with optional bot-specific overrides:
 ```json
