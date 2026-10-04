@@ -14,7 +14,6 @@ internal static class PowerShellAdvancedFunctionLifecyclePlanner
         PowerShellTypedCompilationResult typed,
         string? targetFramework)
     {
-        _ = targetFramework;
         var existing = typed.Methods.Select(static method => MethodKey(method.SourcePath, method.SourceName, method.SourceLine))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var isolatedSources = typed.SourcePaths
@@ -26,6 +25,9 @@ internal static class PowerShellAdvancedFunctionLifecyclePlanner
             // A hosted lifecycle rebinds the original argument dictionary in its native function.
             // That cannot preserve parameter or preference mutations made during string conversion.
             .Where(source => !source.Parameters.Any(parameter => parameter.TypeName == typeof(string).FullName))
+            // A generated cmdlet can expose only metadata represented by the shared binder.
+            // Keep unsupported attributes on the original function instead of narrowing or dropping validation.
+            .Where(source => HasSupportedParameterMetadata(source, targetFramework))
             .Where(source => !existing.Contains(MethodKey(source.SourcePath, source.Name, source.SourceLine)))
             .OrderBy(static source => source.SourcePath, PowerShellCompilationPathSafety.PathComparer)
             .ThenBy(static source => source.SourceLine)
@@ -106,6 +108,18 @@ internal static class PowerShellAdvancedFunctionLifecyclePlanner
 
     private static string MethodKey(string path, string name, int line)
         => Path.GetFullPath(path) + "\0" + name + "\0" + line.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private static bool HasSupportedParameterMetadata(PowerShellCompilationLifecycleSource source, string? targetFramework)
+    {
+        var document = PowerShellSourceParser.ParseFile(source.SourcePath);
+        var function = document.SyntaxRoot.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+            .Cast<FunctionDefinitionAst>()
+            .Single(candidate => candidate.Name.Equals(source.Name, StringComparison.OrdinalIgnoreCase) &&
+                candidate.Body.Extent.StartLineNumber == source.SourceLine &&
+                candidate.Body.Extent.StartColumnNumber == source.SourceColumn);
+        return PowerShellParameterSemanticValidator.HasSupportedMetadata(
+            document, function, targetFramework, PowerShellCompilationCapabilities.BinaryModule);
+    }
 
     private static bool CanHostLifecycleInIsolation(string sourcePath)
     {

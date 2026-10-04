@@ -5,6 +5,18 @@ namespace PowerForge;
 /// <summary>Owns target-aware parameter and advanced-binding validation during semantic binding.</summary>
 internal static class PowerShellParameterSemanticValidator
 {
+    internal static bool HasSupportedMetadata(
+        ParsedSourceDocument document,
+        FunctionDefinitionAst function,
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities)
+    {
+        var syntax = PowerShellParameterSyntax.Create(function.Body);
+        return syntax.Attributes.OfType<AttributeAst>()
+            .Concat(syntax.Parameters.SelectMany(static parameter => parameter.Attributes.OfType<AttributeAst>()))
+            .All(attribute => IsSupportedMetadata(document, attribute, capabilities, targetFramework));
+    }
+
     internal static bool Validate(
         ParsedSourceDocument document,
         FunctionDefinitionAst function,
