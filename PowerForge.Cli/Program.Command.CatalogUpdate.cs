@@ -19,7 +19,7 @@ internal static partial class Program
             }
             var action = args.FirstOrDefault();
             if (action is not ("prepare" or "submit" or "status" or "reconcile" or "reserve")) throw new ArgumentException(CatalogUpdateUsage);
-            var allowed = new[] { "--config", "--out", "--manifest", "--checksums", "--asset-root", "--delivery-release", "--channel", "--store-config", "--execute", "--output", "--reference", "--confirm-reconciled", "--reservation-key", "--require-authentication" };
+            var allowed = new[] { "--config", "--out", "--manifest", "--checksums", "--asset-root", "--delivery-release", "--resume-from", "--channel", "--store-config", "--execute", "--output", "--reference", "--confirm-reconciled", "--reservation-key", "--require-authentication" };
             foreach (var value in args.Where(value => value.StartsWith("--", StringComparison.Ordinal)))
                 if (!allowed.Contains(value, StringComparer.Ordinal)) throw new ArgumentException("Unknown catalog option: " + value);
             if (action != "submit" && args.Contains("--execute")) throw new ArgumentException("--execute is only valid with submit.");
@@ -34,7 +34,8 @@ internal static partial class Program
             CatalogUpdateReceipt result;
             if (action == "prepare")
                 result = service.PrepareAsync(profile, profilePath, release.Value, release.FullPath, Required("--manifest"),
-                    Required("--checksums"), Required("--asset-root"), output, Required("--delivery-release")).GetAwaiter().GetResult();
+                    Required("--checksums"), Required("--asset-root"), output, Required("--delivery-release"),
+                    resumeFrom: TryGetOptionValue(args, "--resume-from")).GetAwaiter().GetResult();
             else if (action == "reconcile")
                 result = service.Reconcile(output, profilePath, release.FullPath, Required("--channel"), Required("--reference"), args.Contains("--confirm-reconciled"),
                     TryGetOptionValue(args, "--store-config") ?? (profile.StoreConfigPath is null ? null : Path.Combine(basePath, profile.StoreConfigPath)));

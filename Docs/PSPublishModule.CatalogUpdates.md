@@ -87,8 +87,13 @@ environment's approval policy and the four credential secrets named above
 `winget` and `wingetcreate` installed.
 
 The workflow downloads MSI assets and metadata from the selected public GitHub
-release. Its pinned owner builds the CLI, performs preparation/preflight, and
-restores the latest receipt for the product profile and release tag. Before a
+release on every run. It restores progress only from the same caller workflow,
+repository, dispatch event and branch, verified through GitHub's run API.
+Preparation rechecks signatures and release identity and requires restored
+installer data and generated files to match the selected signed release.
+Locally, use `prepare --resume-from <previous-directory>` with a new output
+directory to perform the same requalification while preserving channel progress.
+Before a
 live command it reserves the selected channels and uploads that intent as a
 separate artifact; final receipts never overwrite it. Concurrency queues updates
 for the same product/tag and automatic replay is disabled after an interrupted
@@ -101,3 +106,11 @@ for long-term recovery. Expired or missing receipts require checking remote
 state before a live rerun; artifact retention is not a substitute for a release
 record. Preparing/signing the release, promoting its public delivery and
 submitting catalog updates remain distinct operations with their own authority.
+
+Without confirmed retained history, execution requires the caller's explicit
+`confirm-no-prior-submission` input after checking both remote catalogs for the
+exact version. This includes a release's first submission and deleted receipts;
+a dry run never creates that confirmation. An expired receipt blocks restoration.
+Recover and reconcile its progress first, or remove obsolete artifacts only
+after remote reconciliation and use the explicit confirmation when no submission
+exists. Preserve the latest receipt when a submission already exists.

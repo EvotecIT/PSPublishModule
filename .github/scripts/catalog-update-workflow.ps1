@@ -17,6 +17,7 @@ $identity = "$env:GITHUB_REPOSITORY`n$ProfilePath`n$ReleaseTag"
 $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($identity))).ToLowerInvariant()
 $artifactPrefix = "catalog-update-$($digest.Substring(0, 24))-"
 $receiptPath = Join-Path $OutputPath 'catalog-update.json'
+. "$PSScriptRoot/catalog-update-receipt.ps1"
 function Invoke-Catalog([string[]] $Arguments) {
     & dotnet $ToolPath release catalog @Arguments --config $profileFullPath --out $OutputPath
     if ($LASTEXITCODE -ne 0) { throw "Catalog command failed: $($Arguments[0]). Inspect the retained receipt and workflow log." }
@@ -27,31 +28,33 @@ if ($Action -eq 'Prepare') {
     foreach ($name in @($ManifestName, $ChecksumsName)) {
         if ($name -notmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$') { throw 'Release metadata names must be safe basenames.' }
     }
-    # Paginate the entire repository artifact inventory; an old intent must not disappear behind newer runs.
-    $pages = & gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/actions/artifacts?per_page=100"
-    if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect previous catalog receipts.' }
-    $previous = @($pages | ConvertFrom-Json | ForEach-Object { $_.artifacts } |
-        Where-Object { $_.name.StartsWith($artifactPrefix, [StringComparison]::Ordinal) } | Sort-Object id -Descending | Select-Object -First 1)
-    if ($previous.Count) {
-        if ($previous[0].expired) { throw 'Previous catalog receipt expired. Reconcile remote submissions before continuing.' }
-        & gh run download $previous[0].workflow_run.id --repo $env:GITHUB_REPOSITORY --name $previous[0].name --dir $OutputPath
+    $previous = Get-TrustedCatalogArtifact $artifactPrefix
+    $restoreRoot = "$OutputPath-restored"
+    if (Test-Path -LiteralPath $restoreRoot) { throw 'Catalog restore scratch directory already exists.' }
+    if ($previous) {
+        & gh run download $previous.workflow_run.id --repo $env:GITHUB_REPOSITORY --name $previous.name --dir $restoreRoot
         if ($LASTEXITCODE -ne 0) { throw 'Cannot restore the previous catalog receipt.' }
-        $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
-        if ($receipt.DeliveryReleaseId -ne $DeliveryReleaseId) { throw 'Delivery release ID differs from the retained catalog receipt.' }
-    } else {
+    }
+    try {
         $assetRoot = "$OutputPath-assets"
         if (Test-Path -LiteralPath $assetRoot) { throw 'Catalog asset scratch directory already exists.' }
         New-Item -ItemType Directory -Path $assetRoot | Out-Null
         try {
             & gh release download $ReleaseTag --repo $env:GITHUB_REPOSITORY --dir $assetRoot --pattern '*.msi' --pattern $ManifestName --pattern $ChecksumsName
             if ($LASTEXITCODE -ne 0) { throw 'Cannot download the published signed release assets.' }
-            Invoke-Catalog -Arguments @('prepare', '--manifest', (Join-Path $assetRoot $ManifestName), '--checksums', (Join-Path $assetRoot $ChecksumsName),
+            $prepare = @('prepare', '--manifest', (Join-Path $assetRoot $ManifestName), '--checksums', (Join-Path $assetRoot $ChecksumsName),
                 '--asset-root', $assetRoot, '--delivery-release', $DeliveryReleaseId)
+            if ($previous) { $prepare += @('--resume-from', $restoreRoot) }
+            Invoke-Catalog -Arguments $prepare
+            if ($previous -and (Test-Path -LiteralPath (Join-Path $restoreRoot 'workflow-history.json'))) {
+                Copy-Item -LiteralPath (Join-Path $restoreRoot 'workflow-history.json') -Destination $OutputPath
+            }
+            Confirm-CatalogHistory $OutputPath
         } finally {
             # This sibling was created empty above and holds only downloads from this invocation.
             Remove-Item -LiteralPath $assetRoot -Recurse
         }
-    }
+    } finally { if (Test-Path -LiteralPath $restoreRoot) { Remove-Item -LiteralPath $restoreRoot -Recurse } }
     $preflight = @('submit', '--channel', $Channel)
     if ($env:CATALOG_EXECUTE -eq 'true') { $preflight += '--require-authentication' }
     Invoke-Catalog -Arguments $preflight

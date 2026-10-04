@@ -127,6 +127,45 @@ public sealed class CatalogUpdateServiceTests : IDisposable
         Path.Combine(_root, "manifest.json"), Path.Combine(_root, "SHA256SUMS.txt"), _root, Output, "release-123");
 
     [Fact]
+    public async Task Reprepare_RequalifiesReleaseBeforeRestoringCompletedProgress()
+    {
+        var runner = new Runner(); var checks = 0;
+        var service = Service(runner, verify: (_, _, _) => { checks++; return Task.CompletedTask; });
+        await Prepare(service);
+        await service.SubmitAsync(_profile, ProfilePath, _release, ReleasePath, Output, "winget", null, null, true);
+        var resumed = await service.PrepareAsync(_profile, ProfilePath, _release, ReleasePath,
+            Path.Combine(_root, "manifest.json"), Path.Combine(_root, "SHA256SUMS.txt"), _root,
+            Path.Combine(_root, "resumed"), "release-123", resumeFrom: Output);
+        Assert.Equal("Submitted", resumed.Winget.State);
+        Assert.Equal("https://github.com/microsoft/winget-pkgs/pull/123", resumed.Winget.Reference);
+        Assert.Equal(3, checks);
+        Assert.Equal(1, runner.Calls);
+    }
+
+    [Theory]
+    [InlineData("installer")]
+    [InlineData("manifest")]
+    public async Task Reprepare_RejectsSelfConsistentForgedReceipt(string changed)
+    {
+        var service = Service(); var receipt = await Prepare(service);
+        if (changed == "installer") receipt.Artifacts[0].StoreUrl = "https://attacker.example.test/app.msi";
+        else
+        {
+            var relative = receipt.Files.Keys.First(); var path = Path.Combine(Output, relative);
+            File.AppendAllText(path, "changed input");
+            receipt.Files[relative] = DotNetPublishReleaseArtifactVerifier.ComputeSha256(path);
+        }
+        File.WriteAllText(Path.Combine(Output, "catalog-update.json"),
+            JsonSerializer.Serialize(receipt, ReleaseCatalogJsonContext.Default.CatalogUpdateReceipt));
+        service.Read(Output, ProfilePath, ReleasePath);
+        var resumedPath = Path.Combine(_root, "resumed");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.PrepareAsync(_profile, ProfilePath, _release, ReleasePath,
+            Path.Combine(_root, "manifest.json"), Path.Combine(_root, "SHA256SUMS.txt"), _root,
+            resumedPath, "release-123", resumeFrom: Output));
+        Assert.False(Directory.Exists(resumedPath));
+    }
+
+    [Fact]
     public async Task Reservation_BlocksFreshRunAndConsumedKeyCannotReplay()
     {
         var runner = new Runner { Interrupt = true }; var service = Service(runner); await Prepare(service);

@@ -27,7 +27,7 @@ internal sealed partial class CatalogUpdateService
 
     public async Task<CatalogUpdateReceipt> PrepareAsync(CatalogUpdateSpec profile, string profilePath,
         PowerForgeReleaseSpec release, string releaseConfigPath, string manifest, string checksums,
-        string assetRoot, string output, string deliveryReleaseId, CancellationToken cancellationToken = default)
+        string assetRoot, string output, string deliveryReleaseId, CancellationToken cancellationToken = default, string? resumeFrom = null)
     {
         RequireProfile(profile);
         output = Path.GetFullPath(output);
@@ -68,6 +68,13 @@ internal sealed partial class CatalogUpdateService
                 Files = prepared.WingetManifestPaths.Append(prepared.DesktopPackagesPath).ToDictionary(
                     path => FrameworkCompatibility.GetRelativePath(temporary, path).Replace('\\', '/'), Hash)
             };
+            if (resumeFrom is not null)
+            {
+                var previous = Read(resumeFrom, profilePath, releaseConfigPath);
+                RequireSameRelease(previous, receipt);
+                receipt.Winget = previous.Winget;
+                receipt.Store = previous.Store;
+            }
             Save(temporary, receipt);
             Directory.Move(temporary, output);
             return receipt;
