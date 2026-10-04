@@ -1,0 +1,201 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Bounded native indexed/member statement-output destinations; execution qualification is separate from emission.",
+  "baselineCompilerCommit": "66a5422ac0c40c5b053636ac22ce8197acc3ef18",
+  "baselineComparison": "m29a-static-receiver-comparison.net10.json",
+  "baselineComparisonSha256": "c14f27d1496d9885b88d6008aa7dcff2bc515aba948903d2257fdf64005789e8",
+  "baselineRetainedInventorySha256": "262692e88e8dcaeeec57ebde592cd6f048bfb3d094c794aa38f55b3e9468995f",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 478,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "baselineEmitted": 251,
+      "candidateEmitted": 252,
+      "candidateExplanationSha256": "2f8d5b6b124e805cf40af34bad7920de56760b7731fc0a08d150e11d22f2a636",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": [
+        {
+          "unitId": "fa01c793c48e1b879fa98c7e",
+          "name": "Get-WinADForestControllers",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [
+            "__PowerForgeRegion_2aabc08e69d3a317fb989abe"
+          ],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "17f55553dcb9ef7cc5e3af7f",
+          "name": "Get-WinADForestDetails",
+          "baselineEmitted": false,
+          "candidateEmitted": false,
+          "baselineRegionMembers": [
+            "__PowerForgeRegion_d713aad620217f4018cc0c47"
+          ],
+          "candidateRegionMembers": [
+            "__PowerForgeRegion_d713aad620217f4018cc0c47"
+          ],
+          "candidateCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.trystatement",
+              "message": "Expression 'TryStatementAst' is not yet represented by the bound pipeline.",
+              "line": 183,
+              "column": 30
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "baselineEmitted": 63,
+      "candidateEmitted": 63,
+      "candidateExplanationSha256": "6c7bbe0901b21e4edb9ad10c1b4405b3679728319b529760a3bc630edc7de47d",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "baselineEmitted": 57,
+      "candidateEmitted": 60,
+      "candidateExplanationSha256": "dff885fe4d0660da2265dd9e9bb43bf7ebe41b9f0c96ea10399850007c2f74d8",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": [
+        {
+          "unitId": "da1695567456707ad84d3c46",
+          "name": "Add-InfobloxDHCPRange",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [
+            "__PowerForgeRegion_5deb79e191b410b90701ff05"
+          ],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "591fd5c14e1425940448f295",
+          "name": "Add-InfobloxNetwork",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [
+            "__PowerForgeRegion_e501094c42c72288d9a77633"
+          ],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        },
+        {
+          "unitId": "f1b9f57cab21ceef2174e21a",
+          "name": "Set-InfobloxDHCPRange",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [
+            "__PowerForgeRegion_f9ed8722e95035024422131d"
+          ],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "baselineEmitted": 81,
+      "candidateEmitted": 81,
+      "candidateExplanationSha256": "91cfcccc4915628cfe8c4f8ac62d1041a5d5b61869b63ae5933f55c0fde019d9",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "baselineEmitted": 26,
+      "candidateEmitted": 26,
+      "candidateExplanationSha256": "d5c2988c739a56a9159b7b165dc814e07f8e198e592b75f8015ed688e720415c",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    }
+  ],
+  "candidateEmitted": 482,
+  "productionSourceHashes": [
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
+      "sha256": "0a5dfc249badda75672b48a58602c99a1518f138f1a8d8617a669c2fb339f641"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.NativeAssignments.cs",
+      "sha256": "dacb4398e280c7e68912228819b0b2d2a53fcc390b5eadc6287c0caf071f326c"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.OutputCapture.cs",
+      "sha256": "473322da61e08bf9440c7579f9d6d17f28f5a487d849960b1ff67cd6cb20922e"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellNativeAssignmentTarget.cs",
+      "sha256": "0e9720eef0aa7ce71c0e437b92d821f188eae5de8254e8d8a5380081b2f29e5a"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredRegionGraphBuilder.cs",
+      "sha256": "8594a424806dfb30e879ae0e7cc1d5c6796ab0d9986423c8ca23c9d74419c3b1"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.AccessMutations.cs",
+      "sha256": "d23d5f2e05a71e50f2a4bc1989820c0c735b4674b6eb0e9198c0ab96f2d6f80b"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.CaptureTargets.cs",
+      "sha256": "c1080644d4b9d673bf8096f560d551b003daec632f67bb502346b041a0a66fdd"
+    }
+  ],
+  "newlyExecutedFunctions": [
+    "Get-WinADForestControllers"
+  ],
+  "workflowSourceHashes": [
+    {
+      "name": "Get-WinADForestControllers",
+      "sha256": "85099f8e89b3684022fe2373e93b925211c59026056b3e5eec079761f172c241"
+    }
+  ],
+  "executionLimits": "Hybrid BinaryModule Windows PowerShell7/net10.0 and5.1/net472; unchanged forest inventory with in-memory AD and connection provider stand-ins. Other gains are emission-only. No live AD/network/WAPI, other platform, refreshed net472 portfolio or runtime-free support claim.",
+  "executionEvidence": {
+    "focusedTests": {
+      "passed": 13,
+      "failed": 0,
+      "trxSha256": "cf2d23f24cdf96e2aec25e0b94b08eba15a24f4e20b841539187fa5f888dd091"
+    },
+    "perHostObservations": {
+      "captureSemantics": 150,
+      "unchangedForestInventory": 8
+    },
+    "net472Build": {
+      "warnings": 0,
+      "errors": 0
+    },
+    "independentReview": {
+      "scope": "Seven production files, new test and surrounding capture/assignment/region owners; fresh read-only review, no actionable P0-P3 findings. Later admission narrowed to indexed loop/array destinations after portfolio regression; plain member loop/array captures remain hosted."
+    },
+    "testSourceHashes": [
+      {
+        "path": "PowerForge.Tests/PowerShellCompilationNativeAccessCaptureTests.cs",
+        "sha256": "a94876ba4ce77aca6e897daadff46e63d273779a897b0c45229f44ecf11b527b"
+      }
+    ]
+  }
+}

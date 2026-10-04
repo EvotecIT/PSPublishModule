@@ -162,7 +162,7 @@ public sealed partial class PowerShellCompilationProviderPackageTests
             var target = PowerShellCompilationTargetContractService.Create(
                 PowerShellCompilationArtifactKind.Executable,
                 PowerShellCompilationMode.Strict,
-                "net8.0",
+                "net10.0",
                 "win-x64",
                 selfContained: false,
                 singleFile: false,

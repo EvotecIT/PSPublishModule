@@ -64,7 +64,7 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
     /// <summary>Generated .NET target framework.</summary>
     [Parameter]
     [ValidateNotNullOrEmpty]
-    public string TargetFramework { get; set; } = "net8.0";
+    public string TargetFramework { get; set; } = PowerShellCompilationTargetFrameworkPolicy.Default;
 
     /// <summary>Optional runtime identifier used when publishing an executable.</summary>
     [Parameter]

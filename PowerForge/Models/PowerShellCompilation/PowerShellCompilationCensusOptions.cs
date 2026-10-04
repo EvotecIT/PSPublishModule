@@ -3,7 +3,7 @@ namespace PowerForge;
 /// <summary>Artifact and semantic contracts used for a source coverage census.</summary>
 public sealed class PowerShellCompilationCensusOptions
 {
-    /// <summary>Requested CLR target framework; null selects the standard net8.0 artifact target.</summary>
+    /// <summary>Requested CLR target framework; null selects the standard net10.0 artifact target.</summary>
     public string? TargetFramework { get; set; }
     /// <summary>Artifact to assess; null infers the kind from each input.</summary>
     public PowerShellCompilationArtifactKind? ArtifactKind { get; set; }

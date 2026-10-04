@@ -9,7 +9,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Theory]
     [InlineData("net472", "5.1", "Desktop")]
-    [InlineData("net8.0", "7.4", "Core")]
     [InlineData("net10.0", "7.6", "Core")]
     public void Build_BinaryModuleAlignsManifestCompatibilityWithTargetFramework(
         string targetFramework,

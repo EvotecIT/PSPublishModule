@@ -5,14 +5,49 @@ namespace PowerForge;
 internal sealed partial class PowerShellBoundCSharpBackend
 {
     private Func<string, string> _getTemporaryIdentifier = null!;
-    private readonly Dictionary<(Type, Type, PowerShellBoundMutationOperator, PowerShellIntegralMutationSemantics), (string Name, string Source)> _numericHelpers = new();
+    private readonly Dictionary<(Type, Type, PowerShellBoundMutationOperator, PowerShellIntegralMutationSemantics, bool), (string Name, string Source)> _numericHelpers = new();
+
+    private string? EmitNumericUnionBinary(PowerShellLoweredBinaryExpression expression, string left, string right)
+    {
+        if (expression.Operation is PowerShellBoundBinaryOperator.PromotingAdd or
+            PowerShellBoundBinaryOperator.PromotingSubtract or PowerShellBoundBinaryOperator.PromotingMultiply or
+            PowerShellBoundBinaryOperator.NumericUnionNonzeroDivide or PowerShellBoundBinaryOperator.NumericUnionNonzeroRemainder)
+        {
+            var arithmetic = expression.Operation switch
+            {
+                PowerShellBoundBinaryOperator.PromotingAdd => PowerShellBoundMutationOperator.Add,
+                PowerShellBoundBinaryOperator.PromotingSubtract => PowerShellBoundMutationOperator.Subtract,
+                PowerShellBoundBinaryOperator.NumericUnionNonzeroDivide => PowerShellBoundMutationOperator.Divide,
+                PowerShellBoundBinaryOperator.NumericUnionNonzeroRemainder => PowerShellBoundMutationOperator.Remainder,
+                _ => PowerShellBoundMutationOperator.Multiply
+            };
+            var helper = GetIntegralArithmeticHelper(typeof(object), typeof(object), arithmetic,
+                PowerShellIntegralMutationSemantics.UnconstrainedInt32OrDouble);
+            var invocation = $"{helper}({left}, {right})";
+            return expression.ClrType == typeof(double) ? $"global::System.Convert.ToDouble({invocation})" : invocation;
+        }
+        var symbol = expression.Operation switch
+        {
+            PowerShellBoundBinaryOperator.NumericUnionEqual => "==",
+            PowerShellBoundBinaryOperator.NumericUnionNotEqual => "!=",
+            PowerShellBoundBinaryOperator.NumericUnionLessThan => "<",
+            PowerShellBoundBinaryOperator.NumericUnionLessThanOrEqual => "<=",
+            PowerShellBoundBinaryOperator.NumericUnionGreaterThan => ">",
+            PowerShellBoundBinaryOperator.NumericUnionGreaterThanOrEqual => ">=",
+            PowerShellBoundBinaryOperator.NumericUnionFloatingDivide => "/",
+            PowerShellBoundBinaryOperator.NumericUnionFloatingRemainder => "%",
+            _ => null
+        };
+        return symbol is null ? null : $"(global::System.Convert.ToDouble({left}) {symbol} global::System.Convert.ToDouble({right}))";
+    }
 
     private string EmitIntegralMutation(
         string target,
         Type targetType,
         PowerShellBoundMutationOperator operation,
         PowerShellLoweredExpression? value,
-        PowerShellIntegralMutationSemantics semantics)
+        PowerShellIntegralMutationSemantics semantics,
+        bool preserveStatementErrors)
     {
         var arithmetic = operation switch
         {
@@ -21,28 +56,33 @@ internal sealed partial class PowerShellBoundCSharpBackend
             _ => operation
         };
         var rightType = value?.ClrType ?? targetType;
-        var helper = GetIntegralArithmeticHelper(targetType, rightType, arithmetic, semantics);
+        var helper = GetIntegralArithmeticHelper(targetType, rightType, arithmetic, semantics, preserveStatementErrors);
         // Evaluate the RHS before entering the conversion helper. Exceptions from
         // user expressions must not be mistaken for a failed numeric conversion.
         var right = value is null ? "1" : EmitExpression(value);
-        return $"{target} = {helper}({target}, {right})";
+        if (!preserveStatementErrors) return $"{target} = {helper}({target}, {right})";
+        var typeName = PowerShellCSharpSymbolRenderer.TypeName(targetType);
+        var rightTypeName = PowerShellCSharpSymbolRenderer.TypeName(rightType);
+        return $"{target} = __statementErrors.EvaluateArithmetic<{typeName}, {rightTypeName}, {typeName}>({target}, {right}, {helper})";
     }
 
     private string GetIntegralArithmeticHelper(Type targetType, Type rightType, PowerShellBoundMutationOperator arithmetic,
-        PowerShellIntegralMutationSemantics semantics)
+        PowerShellIntegralMutationSemantics semantics,
+        bool preserveStatementErrors = false)
     {
-        var key = (targetType, rightType, arithmetic, semantics);
+        var key = (targetType, rightType, arithmetic, semantics, preserveStatementErrors);
         if (!_numericHelpers.TryGetValue(key, out var helper))
         {
             var name = _getTemporaryIdentifier("typedNumericUpdate");
-            helper = (name, RenderIntegralMutationHelper(name, targetType, rightType, arithmetic, semantics));
+            helper = (name, RenderIntegralMutationHelper(name, targetType, rightType, arithmetic, semantics, preserveStatementErrors));
             _numericHelpers.Add(key, helper);
         }
         return helper.Name;
     }
 
     private string RenderIntegralMutationHelper(string name, Type targetType, Type rightType, PowerShellBoundMutationOperator operation,
-        PowerShellIntegralMutationSemantics semantics)
+        PowerShellIntegralMutationSemantics semantics,
+        bool preserveStatementErrors)
     {
         var type = PowerShellCSharpSymbolRenderer.TypeName(targetType);
         var rightTypeName = PowerShellCSharpSymbolRenderer.TypeName(rightType);
@@ -57,16 +97,52 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellBoundMutationOperator.Add => "+",
             PowerShellBoundMutationOperator.Subtract => "-",
             PowerShellBoundMutationOperator.Multiply => "*",
+            PowerShellBoundMutationOperator.Divide => "/",
             PowerShellBoundMutationOperator.Remainder => "%",
             _ => throw new InvalidOperationException($"Unsupported typed integral update '{operation}'.")
         };
+        if (targetType == typeof(decimal))
+            return $"            static decimal {name}(decimal {left}, decimal {right}) => {left} {symbol} {right};" + Environment.NewLine;
+        if (semantics == PowerShellIntegralMutationSemantics.UnconstrainedInt32OrDouble)
+        {
+            var builder = new StringBuilder()
+                .Append("            static object ").Append(name).Append("(object? ").Append(left).Append(", object? ").Append(right).AppendLine(")")
+                .AppendLine("            {")
+                .Append("                ").Append(left).AppendLine(" ??= 0;")
+                .Append("                ").Append(right).AppendLine(" ??= 0;")
+                .Append("                if (").Append(left).Append(" is int && ").Append(right).AppendLine(" is int)")
+                .AppendLine("                {");
+            // A fractional integer quotient becomes Double. Use Int64 for the
+            // exact branch so Int32.MinValue / -1 and % -1 cannot overflow.
+            if (operation == PowerShellBoundMutationOperator.Divide)
+                builder.Append("                    if ((long)(int)").Append(left).Append(" % (long)(int)").Append(right).AppendLine(" != 0)")
+                    .Append("                        return (double)(int)").Append(left).Append(" / (double)(int)").Append(right).AppendLine(";");
+            return builder
+                .Append("                    long ").Append(result).Append(" = (long)(int)").Append(left).Append(' ').Append(symbol).Append(" (long)(int)").Append(right).AppendLine(";")
+                .Append("                    if (").Append(result).Append(" >= int.MinValue && ").Append(result).AppendLine(" <= int.MaxValue)")
+                .Append("                        return (object)(int)").Append(result).AppendLine(";")
+                .Append("                    return (double)").Append(result).AppendLine(";")
+                .AppendLine("                }")
+                .Append("                if ((").Append(left).Append(" is int || ").Append(left).Append(" is double) && (")
+                .Append(right).Append(" is int || ").Append(right).AppendLine(" is double))")
+                .Append("                    return global::System.Convert.ToDouble(").Append(left).Append(") ").Append(symbol)
+                .Append(" global::System.Convert.ToDouble(").Append(right).AppendLine(");")
+                .AppendLine("                throw new global::System.InvalidOperationException(\"The numeric value left its bound Int32/Double contract.\");")
+                .AppendLine("            }").ToString();
+        }
         // Keep ordinary constrained updates on the checked CLR fast path.
         // Decimal represents every integral operand exactly and computes signed
         // minimum remainder -1 without the CLR integral remainder overflow trap.
-        // An out-of-range integer result is promoted to Double before conversion
-        // back to the constrained variable, as in PowerShell numeric assignment.
+        // Arithmetic promotion depends on both operands, independently of the
+        // variable constraint. Preserve that result type for hosted conversion.
         // The bound contract selects BigInteger for promoted 64-bit products so
         // its exact Double conversion remains the selected runtime behavior.
+        var convertedValue = semantics == PowerShellIntegralMutationSemantics.UnsignedDecrement
+            ? (targetType == typeof(uint) ? $"(long){result}" : result)
+            : RenderIntegralConversionOperand(targetType, rightType, left, right, result);
+        var constrainedConversion = preserveStatementErrors
+            ? $"({type})global::System.Management.Automation.LanguagePrimitives.ConvertTo({convertedValue}, typeof({type}), global::System.Globalization.CultureInfo.InvariantCulture)"
+            : $"checked(({type})(double){result})";
         return new StringBuilder()
             .Append("            static ").Append(type).Append(' ').Append(name)
             .Append('(').Append(type).Append(' ').Append(left).Append(", ").Append(rightTypeName).Append(' ').Append(right).AppendLine(")")
@@ -80,7 +156,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .Append(" (").Append(promotedType).Append(')').Append(right).AppendLine(";")
             .Append("                    if (").Append(result).Append(" >= ").Append(type).Append(".MinValue && ").Append(result).Append(" <= ").Append(type).AppendLine(".MaxValue)")
             .Append("                        return checked((").Append(type).Append(')').Append(result).AppendLine(");")
-            .Append("                    return checked((").Append(type).Append(")(double)").Append(result).AppendLine(");")
+            .Append("                    return ").Append(constrainedConversion).AppendLine(";")
             .AppendLine("                }")
             .Append("                catch (global::System.OverflowException ").Append(error).AppendLine(")")
             .AppendLine("                {")
@@ -88,5 +164,23 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .AppendLine("                }")
             .AppendLine("            }")
             .ToString();
+    }
+
+    private static string RenderIntegralConversionOperand(Type leftType, Type rightType, string left, string right, string result)
+    {
+        // Box each branch before combining it: a numeric conditional expression
+        // would itself promote the integral branch to Double and lose precision.
+        string Preserve(string type) =>
+            $"({result} >= {type}.MinValue && {result} <= {type}.MaxValue ? (object)({type}){result} : (object)(double){result})";
+        if (leftType == typeof(ulong) || rightType == typeof(ulong)) return Preserve("ulong");
+        if (leftType == typeof(long) || rightType == typeof(long)) return Preserve("long");
+        if (leftType == typeof(uint) || rightType == typeof(uint))
+        {
+            static bool IsSigned(Type type) => type == typeof(sbyte) || type == typeof(short) || type == typeof(int);
+            var signedOperand = IsSigned(leftType) ? left : IsSigned(rightType) ? right : null;
+            return signedOperand is null ? Preserve("uint") :
+                $"({signedOperand} < 0 ? {Preserve("long")} : {Preserve("uint")})";
+        }
+        return Preserve("int");
     }
 }

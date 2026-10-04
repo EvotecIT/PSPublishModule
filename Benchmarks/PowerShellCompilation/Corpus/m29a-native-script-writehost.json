@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "52778fae1e0be839be86b854c78bad2bb9c7f498",
+  "purpose": "Qualify ordinary Write-Host as a PowerShell-routed command site in the bounded Hybrid native script-root artifact.",
+  "claimedHost": "Windows x64, PowerShell 7 SDK, .NET 10 Hybrid executable",
+  "sourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/PowerShellHybridNativeEntryPlanner.cs": "57b711b87fcabd7c7511a76aec458dee705bd115b3afe73384e9415de88228ce",
+    "PowerForge.Tests/PowerShellCompilationNativeScriptArtifactTests.cs": "7c85ff8c911495f23e3c0bd3972439c5e15fb8c3835f8d4a10c54b2068d00ca2",
+    "PowerForge.Tests/Fixtures/PowerShellCompilationExternalQuine/Quine.ps1": "8a72c4ab7ed990a135c5fb4faf4212ffe000bc706013b6238a32dd6d4d9e907d",
+    "PowerForge.Tests/Fixtures/PowerShellCompilationExternalQuine/LICENSE": "2dd977f0232372b5d597126ccb2fe0d1a10f540a97f758708b950a64cd6052d9"
+  },
+  "provenance": {
+    "source": "Pinned third-party sample-programs archive/p/powershell/Quine.ps1",
+    "sourceBlob": "62e7c8cef94886f30ae2d5ca8a3731613994b521",
+    "license": "MIT, original LICENSE copied beside the unchanged script fixture"
+  },
+  "validation": [
+    {
+      "result": "Passed 11/11 affected net10 tests",
+      "scope": "Quine and Baklava original/generated artifacts plus retained native-root explain cases, including redirected Write-Host and Write-Warning",
+      "trxSha256": "0fda73c4d3f0ebeb8b8443a8372117fe1fadf1e2485ee272a1a81a29c9a457fa"
+    },
+    {
+      "result": "Passed 1/1 final rebuilt Quine artifact test after fixture relocation",
+      "trxSha256": "4caec8c974f0847b701dff635c98f23a9b5ca31b4ecf5f146066311b187fb941"
+    },
+    {
+      "result": "Passed 1/1 final built interleaved host/success loop artifact test",
+      "scope": "Generated source contains a CLR for loop; six original/generated stdout records match in alternating host/success order",
+      "trxSha256": "147562b71b7b04be4b87b33180b2ec8542ad3548766a1a8f51a4c0c4c67e6acf"
+    },
+    {
+      "result": "PowerForge.PowerShell net472 owner build succeeded with zero warnings and errors",
+      "scope": "Source compatibility only; no net472 executable execution claim"
+    }
+  ],
+  "application": {
+    "name": "Quine",
+    "observed": "An emitted native-bound root with runtime-routed Write-Host; exact packaged source and generated factory/launcher wiring; original/generated exit code, stdout and stderr match; output has two lines.",
+    "compiledOperations": "String assignment in the root CLR method; separately, a synthetic emitted CLR for loop",
+    "hostedOperation": "Unqualified Write-Host command lookup, its formatting argument, and information output"
+  },
+  "excludedFailure": "A --no-build test immediately after moving the fixture used a stale test binary and failed to find its old path. The rebuilt final test passed; the stale result is not green evidence.",
+  "limits": [
+    "Only explicit net10.0/win-x64 Hybrid native script-root artifacts; Strict and Package are unchanged.",
+    "No CLR translation of Write-Host, full information-stream preference/record matrix, command-shadowing or other host guarantee.",
+    "No redirection or dynamic invocation admitted; other stream commands remain outside this root command list.",
+    "Named-function portfolio remains 544/565 emitted with fifteen justified hosted functions and six unqualified WPF functions.",
+    "No broad compiler gate, new five-module census, PR, merge or release."
+  ]
+}

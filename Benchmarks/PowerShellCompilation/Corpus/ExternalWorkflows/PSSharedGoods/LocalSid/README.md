@@ -1,0 +1,9 @@
+# PSSharedGoods local-SAM hosted boundary
+
+`Prepare.ps1` assembles an unchanged SHA-256-pinned Get-LocalComputerSid source into an isolated module. Supply the external source path and a new task-owned directory. The generated Hybrid artifact retains its one function and emits no complete methods.
+
+Run `Observe.ps1` in fresh noninteractive child processes for each original/generated artifact and `real` or `assembly-failure` case on both Windows hosts. The real path uses DirectoryServices AccountManagement with explicit Machine context to read local SAM accounts. A separately owned, disposed search establishes the RID-500 SID baseline; the function is called twice and must match its authored algorithm. The failure path shadows Add-Type only inside the module and requires one warning and no SID on each call. No AD/domain query, account/password change, remote operation or network probe is part of this workflow.
+
+Only the returned SID digest and comparison booleans are recorded; local account names and raw machine/account SIDs are not written to evidence. The baseline disposes its principal/searcher/results/context. The authored function does not dispose its own DirectoryServices objects; fresh process isolation bounds that existing behavior without repairing the pinned source.
+
+The observer records a synthetic public counterexample for the authored TrimEnd("-500") suffix bug. That method removes a trailing character set and can remove more than the final RID. Correct SID derivation and authored resource disposal belong to PSSharedGoods source maintenance, separate from compiler type admission. This fixture qualifies Windows hosted behavior, not portable/native-free AccountManagement, complete-module execution, arbitrary DirectoryServices dependency admission, or performance.

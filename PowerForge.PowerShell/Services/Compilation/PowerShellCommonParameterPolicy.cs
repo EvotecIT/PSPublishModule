@@ -14,7 +14,7 @@ internal static class PowerShellCommonParameterPolicy
         new("ErrorAction", "ea"),
         new("WarningAction", "wa"),
         new("InformationAction", "infa"),
-        new("ProgressAction", "proga", minimumTargetFramework: "net8.0"),
+        new("ProgressAction", "proga", minimumTargetFramework: PowerShellCompilationTargetFrameworkPolicy.Modern),
         new("ErrorVariable", "ev"),
         new("WarningVariable", "wv"),
         new("InformationVariable", "iv"),

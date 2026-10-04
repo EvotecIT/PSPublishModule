@@ -79,7 +79,21 @@ internal sealed partial class WindowsOwnedProcessExecution : OwnedProcessExecuti
         }
         catch
         {
-            if (_process is not null && !_process.IsInvalid) TerminateProcess(_process, 127);
+            if (_process is not null && !_process.IsInvalid)
+            {
+                // Assignment can fail before the new job owns the suspended process.
+                // Join its handle directly; TerminateProcess alone is asynchronous.
+                if (!TerminateProcess(_process, 127))
+                {
+                    var terminationError = Marshal.GetLastWin32Error();
+                    // A failed assignment can itself terminate a process when a job limit is hit.
+                    if (WaitForSingleObject(_process, 0) != 0)
+                        throw new Win32Exception(terminationError, "TerminateProcess after failed startup failed.");
+                }
+                var wait = WaitForSingleObject(_process, 5000);
+                if (wait == uint.MaxValue) throw Error("WaitForSingleObject after failed startup");
+                if (wait != 0) throw new TimeoutException("The created Windows process did not exit after failed startup.");
+            }
             throw;
         }
         finally
@@ -97,6 +111,24 @@ internal sealed partial class WindowsOwnedProcessExecution : OwnedProcessExecuti
     {
         // The job remains valid after its original process exits; parent PID lookup is unnecessary.
         if (_job is not null && !_job.IsInvalid && !TerminateJobObject(_job, 1)) throw Error("TerminateJobObject");
+    }
+
+    internal override async Task WaitForTreeExitAsync(TimeSpan timeout)
+    {
+        if (_job is null || _job.IsInvalid) return;
+        var watch = Stopwatch.StartNew();
+        while (true)
+        {
+            // TerminateJobObject and closing redirected pipes do not join process exit.
+            // Query the owned job rather than taking a racy snapshot of descendant PIDs.
+            if (!QueryInformationJobObject(_job, 1, out var accounting,
+                (uint)Marshal.SizeOf<JobAccounting>(), IntPtr.Zero)) throw Error("QueryInformationJobObject");
+            if (accounting.ActiveProcesses == 0) return;
+            if (watch.Elapsed >= timeout)
+                throw new TimeoutException("The owned Windows process job did not terminate before the cleanup deadline.");
+            // Cleanup must complete even when the caller's cancellation token is canceled.
+            await Task.Delay(10).ConfigureAwait(false);
+        }
     }
 
     public override void Dispose()

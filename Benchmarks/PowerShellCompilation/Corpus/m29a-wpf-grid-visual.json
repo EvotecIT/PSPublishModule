@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "status": "BoundedHostedQualification",
+  "purpose": "Unchanged PSScriptTools ConvertTo-WPFGrid in-memory scriptblock input, rendered grid, Close callback and owned runspace cleanup on Windows PowerShell 7. No CLR grid-method gain.",
+  "compilerBaselineCommit": "a4d7bddb13d0fb1d0057370785ded65790a057bf",
+  "sourceRevision": "549fa3e3d769532320054fc0b3c8f42df0452361",
+  "sourceSha256": {
+    "functions/ConvertTo-WPFGrid.ps1": "ee46ea4187323dac24099d9956268dc608fdb3b7ee1f7e9553d9fff517e96b89",
+    "functions/Utilities.ps1": "1625373211d326669795cdd8ff2b40381e57147fd07065ca69bbec50cec81592",
+    "functions/Test-IsWindows.ps1": "8514f3cb7e47f21aee2d4c9f3773b7d45c18d9b863f7dd0b7bb01c17be409f1d",
+    "extracted/New-RunspaceCleanupJob.ps1": "1bb12afe6282ecce9565124728a6967a266e39d02e2ac8cc7fa8c85154c9c2ac"
+  },
+  "fixtureScriptsSha256": {
+    "Prepare.ps1": "ffa1b41cca236842497fb63c1b76f3b29f036553ce7f49d293a2f184f717fd8e",
+    "Observe.ps1": "d158d78a51234cea8ca36d35800b374a2e7c29e9ba17c31d14d2878d32cf7e89",
+    "OperateVisual.ps1": "e981395abd1b760f0f618edabece5bff5d91bd60d645d3e7b70d089a1daaab92"
+  },
+  "host": {
+    "name": "Windows x64 PowerShell 7",
+    "version": "7.6.6",
+    "targetFramework": "net10.0",
+    "apartment": "STA",
+    "wpfAssembly": "PresentationFramework, Version=10.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+    "renderMode": "SoftwareOnly",
+    "startThreadJobAvailable": true
+  },
+  "build": {
+    "mode": "Hybrid",
+    "dependencyLockReviewed": true,
+    "dependencyLockFileSha256": "18781917f84b5f3df5b728942de9fb3999dc64d91a6db8e28e14e2d7946cde9e",
+    "artifactManifestSha256": "bd45e5fffa22c7254234bf86497f2338cb07eb65e6a6145e3f6e4270dff920db",
+    "artifactSha256": "240f0b16f4043cd69c0009cff2abe5c5700a244bd42dbbd977c4d7c7aa76e622",
+    "gridFunctionEmittedClrMethod": false,
+    "gridFunctionRetainedHostedSource": true,
+    "cleanupHelperEmittedClrMethod": true,
+    "strictCanProceed": false,
+    "strictRejectedUnits": 4,
+    "strictExplanationSha256": "34de1fa50dc39c896159e551e9c02268ac4d2f9d93131ab24ba8242736448a45"
+  },
+  "original": {
+    "screenshotSha256": "7df61626c98cbc1ca60df68b572ec24b37302ee295498353346574465b1bf490",
+    "gridControlsSha256": "51ed24333b45183d4653a5bd8531ad73a2b6e5e32a885589303424f89f5d0c38",
+    "resultSha256": "23237b5d0969a5c450eff483b97ebd31d62a2752b54ddb9d1bce0192eb2ae813",
+    "stderrBytes": 0,
+    "exitCode": 0
+  },
+  "generated": {
+    "screenshotSha256": "7ee1e2acf944f0fa62da6ac375ed4e246e9aa0c78e3824f91b7e9ba58da5c63e",
+    "gridControlsSha256": "51ed24333b45183d4653a5bd8531ad73a2b6e5e32a885589303424f89f5d0c38",
+    "resultSha256": "23237b5d0969a5c450eff483b97ebd31d62a2752b54ddb9d1bce0192eb2ae813",
+    "stderrBytes": 0,
+    "exitCode": 0
+  },
+  "observedContract": [
+    "Both rendered screenshots were visually inspected. The stable content rectangle x=10..279, y=45..219 matches pixel-for-pixel (0 differences in 47,250 pixels); whole-image hashes differ because the authored status shows the current time.",
+    "A separate saved DataGrid UI Automation subtree has 24 matching controls, SHA-256 51ed24333b45183d4653a5bd8531ad73a2b6e5e32a885589303424f89f5d0c38; it shows Name/Count columns and Alpha/2, Beta/5 rows. OS titlebar exposure varied and is excluded from this comparison.",
+    "The owned Close InvokePattern completes ShowDialog, then the authored cleanup ThreadJob completes with zero records on its own Error, Output and Warning streams. Original and generated result JSON bytes match, success output is empty, stderr is empty, exit is zero, and the child is gone."
+  ],
+  "limits": [
+    "This is one PowerShell 7.6.6 Windows desktop with a caller-requested SoftwareOnly WPF render mode. Default hardware rendering, other Windows/PowerShell versions, remote/headless and non-Windows hosts are unqualified.",
+    "Windows PowerShell 5.1.26100.9444 on this machine has no Start-ThreadJob command, an authored PSScriptTools helper dependency. No 5.1 normal-grid artifact or cleanup claim is made.",
+    "Only in-memory -Scriptblock input and the normal Close path were executed. Refresh Now, -Refresh/-Timeout, profile and initialization loading, local variables, sorting, large/empty rows and cleanup failures are unqualified.",
+    "ConvertTo-WPFGrid stays hosted and Strict rejects the fixture. The emitted cleanup helper in this mini module does not establish a new complete grid method or update the fixed five-packet census."
+  ],
+  "portfolio": {
+    "emitted": 544,
+    "retained": 21,
+    "sourceFunctions": 565,
+    "justifiedHosted": 18,
+    "unresolved": 3,
+    "censusRepeated": false,
+    "reason": "Compiler and pinned portfolio input are unchanged; one retained function gains bounded PS7 hosted visual/callback proof."
+  }
+}

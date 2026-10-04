@@ -601,6 +601,43 @@ public sealed class BinaryDependencyPreflightServiceTests
         Assert.Contains(hostAssemblies, name => string.Equals(name, "System.Runtime.WindowsRuntime", StringComparison.OrdinalIgnoreCase));
     }
 
+    [WindowsFact]
+    public void Analyze_DesktopAcceptsHostCimReferenceAndStillReportsUnbundledDependency()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var gac = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Microsoft.NET", "assembly");
+            var cimAssembly = Directory.EnumerateFiles(gac, "Microsoft.Management.Infrastructure.dll", SearchOption.AllDirectories).First();
+            var paths = CreateDependencyFixture(root.FullName);
+            var project = File.ReadAllText(paths.ConsumerProjectPath).Replace("</Project>", $"""
+  <ItemGroup>
+    <Reference Include="Microsoft.Management.Infrastructure">
+      <HintPath>{System.Security.SecurityElement.Escape(cimAssembly)}</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>
+""");
+            File.WriteAllText(paths.ConsumerProjectPath, project);
+            File.WriteAllText(Path.Combine(Path.GetDirectoryName(paths.ConsumerProjectPath)!, "CimMarker.cs"),
+                "public sealed class CimMarker { public Microsoft.Management.Infrastructure.CimInstance? Value { get; set; } }");
+            BuildProject(paths.ConsumerProjectPath);
+            var payload = Directory.CreateDirectory(Path.Combine(root.FullName, "Module", "Lib", "Default"));
+            File.Copy(paths.ConsumerAssemblyPath, Path.Combine(payload.FullName, "Consumer.dll"));
+
+            var result = new BinaryDependencyPreflightService(new NullLogger()).Analyze(
+                Path.Combine(root.FullName, "Module"), "Desktop");
+
+            Assert.DoesNotContain(result.Issues, issue => issue.MissingDependencyName == "Microsoft.Management.Infrastructure");
+            Assert.Contains(result.Issues, issue => issue.MissingDependencyName == "Dependency");
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void CoreHostBaseline_IncludesKnownPowerShellRuntimeAssemblies()
     {

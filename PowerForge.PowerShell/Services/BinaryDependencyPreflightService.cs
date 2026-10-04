@@ -714,6 +714,11 @@ public sealed class BinaryDependencyPreflightService
                     set,
                     Path.Combine(windir, "Microsoft.NET", "assembly"),
                     "System.Management.Automation.dll");
+                // Windows PowerShell supplies CIM through the GAC, outside its module directory.
+                AddSpecificAssemblyIfPresent(
+                    set,
+                    Path.Combine(windir, "Microsoft.NET", "assembly"),
+                    "Microsoft.Management.Infrastructure.dll");
                 AddSpecificAssemblyIfPresent(
                     set,
                     Path.Combine(windir, "Microsoft.NET", "assembly"),

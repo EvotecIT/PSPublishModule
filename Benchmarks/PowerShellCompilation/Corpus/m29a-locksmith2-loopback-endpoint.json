@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "recordedOn": "2026-09-28",
+  "source": {
+    "workload": "locksmith2",
+    "revision": "f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639",
+    "archiveSha256": "d4f511b16ed95d15bfa37ba06ddfc92709f0412e8669004cb70e3407ae9fc8b9",
+    "sourceFingerprint": "b1e65521a013471cfc80589f0edd062a714f4b498a347685a06d7dce97b1b4ef",
+    "license": "Commons Clause License Condition v1.0",
+    "unchangedFunctionHashes": {
+      "Private/Get/Get-WebEnrollmentEndpointStatus.ps1": "5e067f0155df73d4c4121fe4244863e7e6f4e73dada4c5a84e216ea54337daba",
+      "Private/Set/Set-CAWebEnrollmentEndpoints.ps1": "eb1bc10e2c78cdd0968311acd65fa071089485219a119e94eae0b902d6bdfae8"
+    },
+    "classHashes": {
+      "Classes/LS2Principal.ps1": "5b8542654843f25be0218a346780cdd40ec6f236bc73004e228eb960cb49fca1",
+      "Classes/LS2AdcsObject.ps1": "abb27b68cdfe94c111013009ab453aa96a7f67748e2b33abd1e703640a9c93a5",
+      "Classes/LS2Issue.ps1": "736d4440eace31299822b2d8e20863b1c26a7cb9186da235c478910226202e38"
+    }
+  },
+  "fixture": {
+    "manifestSha256": "18fe770b0052725857f2c3faacb1e7d0323b2c8c701029352d1f52c99a25bf65",
+    "moduleSourceSha256": "000bd8467d9ffc9d5a08426f0e495312cde4a9aee066900de86e2a00b5aac64c",
+    "observerSha256": "ce08546b5f901d49627b7517a461b6678003b20a597c0233a5194e62a087996e",
+    "loopbackServerSha256": "1f578b5fab5a6de6f4138fbe9f098e36326012be654890eaa36c3a10ba17d7d3",
+    "classCopiesHashIdentical": 3,
+    "observerLoadsSystemNetHttpOnBothHosts": true
+  },
+  "generated": {
+    "mode": "Hybrid",
+    "net10ManifestSha256": "4310bae2aa6c1a09784017af681adadff988d50b00fc59a8805f4b35050c0154",
+    "net472ManifestSha256": "b83734673a7f867e0bf399ff515a4ba136cc1c9563157b1a3885bdc9adda8bb4",
+    "compiledSetterMethodsPerTarget": 1,
+    "hostedHelperPromotedRegionsPerTarget": 1,
+    "setterUninstalledNativeCallbackStubsThrow": true,
+    "strict": {
+      "targets": [
+        "net10.0",
+        "net472"
+      ],
+      "canProceed": false,
+      "typedUnits": 0,
+      "rejectedUnits": 2
+    }
+  },
+  "execution": {
+    "hosts": [
+      "PowerShell 7/net10.0 Windows x64",
+      "Windows PowerShell 5.1/net472 Windows x64 after explicit System.Net.Http load"
+    ],
+    "originalGeneratedAndCrossHostRawJsonEqual": true,
+    "allPreparedChildExitCodesZero": true,
+    "stderrEmpty": true,
+    "newlyExecutedMethod": "Set-CAWebEnrollmentEndpoints",
+    "result": {
+      "type": "LS2AdcsObject",
+      "outputCount": 3,
+      "same": [
+        true,
+        true,
+        true
+      ],
+      "endpointCount": 5,
+      "endpoints": [
+        {
+          "url": "http://127.0.0.1:59431/certsrv/",
+          "ntlm": null,
+          "epaNotRequired": null
+        },
+        {
+          "url": "http://127.0.0.1:59431/LoopbackCA_CES_Kerberos/service.svc",
+          "ntlm": null,
+          "epaNotRequired": null
+        },
+        {
+          "url": "http://127.0.0.1:59431/LoopbackCA_CES_Kerberos/service.svc/CES",
+          "ntlm": null,
+          "epaNotRequired": null
+        },
+        {
+          "url": "http://127.0.0.1:59431/ADPolicyProvider_CEP_Kerberos/service.svc",
+          "ntlm": null,
+          "epaNotRequired": null
+        },
+        {
+          "url": "http://127.0.0.1:59431/certsrv/mscep/",
+          "ntlm": null,
+          "epaNotRequired": null
+        }
+      ],
+      "noHostUntouched": true,
+      "templateUntouched": true
+    },
+    "loopback": {
+      "bindAddress": "127.0.0.1",
+      "port": 59431,
+      "finalRunTrafficStartLineZeroBased": 31,
+      "finalRunRequests": 50,
+      "httpRequests": 20,
+      "tlsRejected": 30,
+      "httpAuthorizationHeaders": 0,
+      "eachPathCount": {
+        "/ADPolicyProvider_CEP_Kerberos/service.svc": 4,
+        "/certsrv/": 4,
+        "/certsrv/mscep/": 4,
+        "/LoopbackCA_CES_Kerberos/service.svc": 4,
+        "/LoopbackCA_CES_Kerberos/service.svc/CES": 4
+      },
+      "fullLogSha256": "8685cd210a004afde7399834df91b03c5ec0b32eac13926666dc5bdaacae6cf0"
+    }
+  },
+  "sourcePrerequisite": {
+    "host": "Windows PowerShell 5.1 without explicit System.Net.Http load",
+    "directHelperExitCode": 1,
+    "failure": "Unable to find type [System.Net.Http.HttpRequestException]",
+    "stderrSha256": "404ab4c64ac27c3223447bfb4498804e4329ea54d578b2a1da1509666e159837",
+    "classification": "Authored module/runtime assembly-loading gap; original and generated setter both returned zero endpoints before preparation"
+  },
+  "disposition": {
+    "locksmith2EmittedFunctions": 75,
+    "locksmith2TotalFunctions": 100,
+    "gainedSincePriorBaseline": 37,
+    "gainedExecutedOffline": 17,
+    "gainedAnalysisOnly": 20,
+    "newlyExecutedThisRecord": 1,
+    "regressions": 0,
+    "sameInputAssessmentSha256": "7908672ca7de149fc576db1ef4c4aa0665a8d98e8ee06ae917fe6dbe589db873"
+  },
+  "limits": [
+    "Only loopback HTTP response and HTTPS handshake-failure paths, not HTTPS NTLM/EPA success or real CA endpoints",
+    "The helper is retained PowerShell source with one promoted typed region; the setter alone emits a complete compiled method",
+    "No System.Net.Http assembly loading is declared by the pinned source; Windows PowerShell 5.1 needs explicit preparation for this observation",
+    "LS2AdcsObject instances bypass their AD-backed constructor and hold only in-memory CA/template data",
+    "No external network, AD, CA, principal resolution, credential challenge, remediation or full Locksmith2 import",
+    "The isolated mini-module build used unreviewed dependency resolution",
+    "No broad compiler gate rerun because compiler source and tracked test fixtures were unchanged"
+  ]
+}

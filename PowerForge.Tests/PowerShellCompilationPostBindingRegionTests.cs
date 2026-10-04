@@ -26,10 +26,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Fact]
     [Trait("Category", "PowerShellCompilerGate")]
-    public void Transpile_HybridDiscoversRegionAfterCmdletParameterShapingRejectsFunction()
+    public void Transpile_HybridPromotesRegionAfterCmdletParameterShapingRejectsFunction()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-Scaled { param([int]$Verbose) [int]$Result = 2; $Result += $Verbose; return $Result }",
+            "function Get-Scaled { param([int]$Verbose) [int]$Result = 2; $Result = $Verbose; return $Result }",
             ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
             new[] { fixture.ScriptPath }, "PowerForge.Compiled", "RegionalMethods", "net10.0",
@@ -51,20 +51,23 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(PowerShellCompilationRegionContinuation.Terminating, opportunity.Continuation);
         Assert.Contains(opportunity.LiveInputs, input => input.Identity == "Parameter:VERBOSE" && input.StableScalar);
         Assert.True(opportunity.AnalysisOnly);
-        Assert.Empty(prepared.PromotedRegions);
+        Assert.Single(prepared.PromotedRegions);
     }
 
     [Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Transpile_HybridDiscoversRetainedFunctionWithResolvedLocalCallClosure()
     {
+        // Exercise the CLR local-call discovery lane. Native captured commands keep their
+        // invocation storage and cannot be detached into this analysis-only scalar helper.
+        var capabilities = PowerShellCompilationCapabilities.HybridModule & ~PowerShellCompilationCapability.NativeFunctionBinding;
         using var fixture = ArtifactFixture.Create(
-            "function Get-Seed { param([int]$Value) if ($Value -gt 0) { return $Value }; return 2 }; function Get-Scaled { param([int]$Value) [int]$Result = Get-Seed -Value $Value; $Result += $Value; return $Result }",
+            "function Get-Seed { param([int]$Value) if ($Value -gt 0) { return $Value }; return 2 }; function Get-Scaled { param([int]$Value) [double]$Result = Get-Seed -Value $Value; $Result += $Value; return $Result }",
             ".psm1");
         var transpiler = new PowerShellTypedCompilationTranspiler();
         var typed = transpiler.TranspileForBinaryModule(
             new[] { fixture.ScriptPath }, "PowerForge.Compiled", "RegionalMethods", "net10.0",
-            PowerShellCompilationCapabilities.HybridModule);
+            capabilities);
         Assert.Equal(2, typed.Methods.Length);
         Assert.Empty(typed.RegionOpportunities);
         var seed = Assert.Single(typed.Methods, method => method.SourceName == "Get-Scaled");
@@ -75,7 +78,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         var retained = transpiler.TranspileExcluding(
             new[] { fixture.ScriptPath }, "PowerForge.Compiled", "RegionalMethods", "net10.0", excluded,
-            PowerShellCompilationCapabilities.HybridModule);
+            capabilities);
 
         Assert.Equal("Get-Seed", Assert.Single(retained.Methods).SourceName);
         var caller = Assert.Single(retained.RegionOpportunities, opportunity => opportunity.SourceName == "Get-Scaled");

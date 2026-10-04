@@ -1,0 +1,289 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Exact SDK local execution identities through native binding, with unchanged pooled workflow and borrowed pipeline proof",
+  "baselineCompilerCommit": "cabe8002c53be2f2f792289d50850a71c406fd4c",
+  "baselineDispositionLedger": "m29a-static-enum-comparison.net10.json",
+  "dispositionContract": "Apply these seven changes through the linked static-enum, reference-parameter and Type-factory comparisons to the complete web-session ledger. All other dispositions are unchanged; current retained causes and regions are in the inventory.",
+  "verifiedFunctionIdentities": 565,
+  "observedStableUnits": 584,
+  "baselineEmitted": 510,
+  "candidateEmitted": 517,
+  "candidateRetained": 48,
+  "packets": [
+    {
+      "packet": "pssg",
+      "resourceMode": "CompleteModule",
+      "functions": 282,
+      "emitted": 269,
+      "retained": 13,
+      "gains": [
+        {
+          "name": "Invoke-CommandCustom",
+          "unitId": "523c7f446c83fea454b06443"
+        },
+        {
+          "name": "New-Runspace",
+          "unitId": "a28fa9856c4fb8e2ad2bbbe5"
+        },
+        {
+          "name": "Start-Runspace",
+          "unitId": "87b78ba611eeb68ad6247667"
+        },
+        {
+          "name": "Stop-Runspace",
+          "unitId": "cab8c3dd7b27b00b84116b4e"
+        }
+      ],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "2114bf330c9a5c1cc8f2dd1397dda9443780c6c7cd8d04050ee70c123ad42450"
+    },
+    {
+      "packet": "cleanup",
+      "resourceMode": "CompleteModule",
+      "functions": 68,
+      "emitted": 63,
+      "retained": 5,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1"
+    },
+    {
+      "packet": "pinf",
+      "resourceMode": "Declared",
+      "functions": 66,
+      "emitted": 65,
+      "retained": 1,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "35f6919cdd439a762a9284cc3a90d32d6f984621307cafd753e71f40c9bc3d53"
+    },
+    {
+      "packet": "pst",
+      "resourceMode": "CompleteModule",
+      "functions": 109,
+      "emitted": 93,
+      "retained": 16,
+      "gains": [
+        {
+          "name": "Get-MyAlias",
+          "unitId": "a63ce85887a982d477843842"
+        },
+        {
+          "name": "Get-MyVariable",
+          "unitId": "c2bf4e394f6db01038dfe459"
+        },
+        {
+          "name": "New-RunspaceCleanupJob",
+          "unitId": "14fe1c438037e0fc323e3ef9"
+        }
+      ],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "11b2e7c516caf93500e24a3471612edc585d8b32a98966a6a3a5ce291b0f9f1a"
+    },
+    {
+      "packet": "platyps",
+      "resourceMode": "Declared",
+      "functions": 40,
+      "emitted": 27,
+      "retained": 13,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "f3a8acb7feecc018adfe9d5daf63170ea3af30eed2b718cb1426d9e2346c005f"
+    }
+  ],
+  "changedDispositions": [
+    {
+      "packet": "pssg",
+      "unitId": "523c7f446c83fea454b06443",
+      "name": "Invoke-CommandCustom",
+      "baselineEmitted": false,
+      "candidateEmitted": true,
+      "retainedHostedSource": false,
+      "usesNativeFunctionBinding": true,
+      "baselineRegionMembers": [
+        "__PowerForgeRegion_41b660818cac276d1a9e3dde"
+      ],
+      "candidateRegionMembers": []
+    },
+    {
+      "packet": "pssg",
+      "unitId": "a28fa9856c4fb8e2ad2bbbe5",
+      "name": "New-Runspace",
+      "baselineEmitted": false,
+      "candidateEmitted": true,
+      "retainedHostedSource": false,
+      "usesNativeFunctionBinding": true,
+      "baselineRegionMembers": [],
+      "candidateRegionMembers": []
+    },
+    {
+      "packet": "pssg",
+      "unitId": "87b78ba611eeb68ad6247667",
+      "name": "Start-Runspace",
+      "baselineEmitted": false,
+      "candidateEmitted": true,
+      "retainedHostedSource": false,
+      "usesNativeFunctionBinding": true,
+      "baselineRegionMembers": [],
+      "candidateRegionMembers": []
+    },
+    {
+      "packet": "pssg",
+      "unitId": "cab8c3dd7b27b00b84116b4e",
+      "name": "Stop-Runspace",
+      "baselineEmitted": false,
+      "candidateEmitted": true,
+      "retainedHostedSource": false,
+      "usesNativeFunctionBinding": true,
+      "baselineRegionMembers": [],
+      "candidateRegionMembers": []
+    },
+    {
+      "packet": "pst",
+      "unitId": "a63ce85887a982d477843842",
+      "name": "Get-MyAlias",
+      "baselineEmitted": false,
+      "candidateEmitted": true,
+      "retainedHostedSource": false,
+      "usesNativeFunctionBinding": true,
+      "baselineRegionMembers": [],
+      "candidateRegionMembers": []
+    },
+    {
+      "packet": "pst",
+      "unitId": "c2bf4e394f6db01038dfe459",
+      "name": "Get-MyVariable",
+      "baselineEmitted": false,
+      "candidateEmitted": true,
+      "retainedHostedSource": false,
+      "usesNativeFunctionBinding": true,
+      "baselineRegionMembers": [],
+      "candidateRegionMembers": []
+    },
+    {
+      "packet": "pst",
+      "unitId": "14fe1c438037e0fc323e3ef9",
+      "name": "New-RunspaceCleanupJob",
+      "baselineEmitted": false,
+      "candidateEmitted": true,
+      "retainedHostedSource": false,
+      "usesNativeFunctionBinding": true,
+      "baselineRegionMembers": [],
+      "candidateRegionMembers": []
+    }
+  ],
+  "lostCompleteMethods": [],
+  "lostRegionsOfRetainedFunctions": [],
+  "retainedInventory": "m29a-retained-functions.net10.json",
+  "retainedInventorySha256": "5bf40e1369e6030e27eff2e6eccef1998d953b2ddf414ffb04e342a8d6a43540",
+  "changedSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs": "1aeaf1552df16d944ad9960579c80b2b6422f787c9c039a50d8c06b095689cf5",
+    "PowerForge.Tests/PowerShellCompilationLocalExecutionTests.cs": "0e3f5d315aa315dd8430a53e433a7c516377603e7e6287c16c6df3c9fc8cf4dd"
+  },
+  "workflow": {
+    "source": "https://github.com/EvotecIT/PSSharedGoods",
+    "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+    "license": "MIT, unchanged tracked fixtures",
+    "sourceHashes": {
+      "Public/Runspaces/New-Runspace.ps1": "b79f20cadb05a05eb0ad67d76c92b6c12bf141c7e9940e2fea244a3ca3cf651b",
+      "Public/Runspaces/Start-Runspace.ps1": "972800110c64bb1d9da09603953b5e1f9272f34d92d557a0e2bb6bb3b7e58e4f",
+      "Public/Runspaces/Stop-Runspace.ps1": "d4f7d15145f5e7034cfa8788fa1b8c9de091a38c6fd3261f1c1efd21ae32518a"
+    },
+    "artifactCompleteMethods": 5,
+    "originalFunctionsExecuted": [
+      "New-Runspace",
+      "Start-Runspace",
+      "Stop-Runspace"
+    ],
+    "syntheticFunctions": [
+      "Invoke-BorrowedPipeline",
+      "Get-BorrowedPool"
+    ],
+    "observationsPerHost": 17,
+    "hosts": [
+      "PowerShell 7 / net10.0 Windows",
+      "Windows PowerShell 5.1 / net472"
+    ],
+    "cases": [
+      "borrowed pipeline success, nonterminating error, terminating failure, disposed input and null",
+      "borrowed caller reuse after return and after handled error",
+      "pooled success, warning, nonterminating error, terminating failure and empty work in normal/extended modes",
+      "invalid minimum and inverted pool range",
+      "output cardinality/types, error/warning fields and authored positions, pool identity and closed state"
+    ],
+    "cleanup": "Pool size explicitly one. Driver waits at most five seconds for each child; returned pipelines and pools are stopped/closed/disposed in caller finally. This proves the driver-owned workflow, not general failure-before-handle-return cleanup.",
+    "errorProjection": "Random nested runspace IDs are not compared. Error ID, exception type/message, line/column, target type, scalar/array/dictionary shapes and values are compared."
+  },
+  "validation": {
+    "runs": [
+      {
+        "file": "local-execution-approved-probe.trx",
+        "sha256": "7be1a8bd02956161c9d189eef369478ec381309abfd88ba79c9c1b9da2b037e0",
+        "total": 4,
+        "passed": 2,
+        "failed": 2
+      },
+      {
+        "file": "local-execution-final.trx",
+        "sha256": "488eb30aeca22fb3e39840de09e53cc6a38879341d9c98fc9bea6afabb203f89",
+        "total": 12,
+        "passed": 12,
+        "failed": 0
+      },
+      {
+        "file": "local-execution-first.trx",
+        "sha256": "8c2ec123b22288ecd74f4a496c7f13106ba823250fc7afcc181ab1999a78c316",
+        "total": 4,
+        "passed": 2,
+        "failed": 2
+      },
+      {
+        "file": "local-execution-record-shape.trx",
+        "sha256": "61771cf5b38447d70accd30221da68f8415ff5076338d51541a9332c77889110",
+        "total": 4,
+        "passed": 2,
+        "failed": 2
+      }
+    ],
+    "acceptedFinalRun": "local-execution-final.trx",
+    "finalDurationSeconds": 43,
+    "net472OwnerBuild": {
+      "passed": true,
+      "warnings": 0,
+      "errors": 0,
+      "seconds": 7.96
+    },
+    "censusSha256": "b818f52b561253334213265ebce724aac742c914249ed1888752451118c73ba0",
+    "aggregateGateRun": false
+  },
+  "failureAccounting": [
+    "First run passed 2/4: unapproved Describe helper introduced module-name import warnings. Renaming fixture helper to Get corrected the probe.",
+    "Second run passed 2/4: whole nested error serialization compared process-specific random runspace IDs. Stable semantic projection retains output shapes, error fields and target type.",
+    "Third run passed 2/4: original/generated output already matched, but the assertion required a terminating message not yet projected. The strengthened final probe includes message/position fields and proves caller pipeline reuse. None of these failed runs is counted as final green evidence."
+  ],
+  "review": {
+    "status": "candidate-reviewed",
+    "scope": "One independent strictly read-only pass over exact type/capability classification, native invocation/ABI/signature/overload consumers, and driver resource/error contracts",
+    "result": "No actionable defect found",
+    "independentlyExecuted": false
+  },
+  "emissionOnly": [
+    "Invoke-CommandCustom",
+    "Get-MyAlias",
+    "Get-MyVariable",
+    "New-RunspaceCleanupJob"
+  ],
+  "boundaries": [
+    "Exact PowerShell, RunspacePool and RunspaceFactory SDK identities require both host types and native function binding, recursively for existing supported containers.",
+    "Runtime containers have semantic admission/capability tests but no separate container identity execution claim.",
+    "Borrowed execution objects remain caller-owned. No implicit disposal, second scheduler, evaluation engine or resource wrapper is introduced.",
+    "Authored Invoke-CommandCustom allocates without disposal; Stop-Runspace can fail before closing its pool. These source limitations are preserved and explicitly documented.",
+    "Runspace, PSSession, unrelated SDK types and Strict remain closed.",
+    "No general cancellation, remoting, live network/HTTP/AD/admin/installer execution, failure-before-handle-return safety, full-module execution, full net472 portfolio refresh, non-Windows proof, performance claim, reviewed dependency lock, aggregate gate, PR, merge or release."
+  ]
+}

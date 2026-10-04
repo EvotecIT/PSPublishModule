@@ -10,6 +10,7 @@ public sealed partial class PowerShellCompilationAnalyzer
     private readonly PowerShellCommandSemanticRegistry _commandRegistry;
     private readonly PowerShellCommandSemanticResolver _commandResolver;
     private readonly string _semanticProfileId;
+    private readonly PowerShellNativeDependencyTypes _nativeDependencyTypes;
 
     /// <summary>Creates an analyzer with the built-in deterministic command providers.</summary>
     public PowerShellCompilationAnalyzer()
@@ -35,10 +36,17 @@ public sealed partial class PowerShellCompilationAnalyzer
     }
 
     internal PowerShellCompilationAnalyzer(PowerShellCommandSemanticRegistry commandRegistry, string semanticProfileId)
+        : this(commandRegistry, semanticProfileId, PowerShellNativeDependencyTypes.Empty)
+    {
+    }
+
+    internal PowerShellCompilationAnalyzer(PowerShellCommandSemanticRegistry commandRegistry, string semanticProfileId,
+        PowerShellNativeDependencyTypes nativeDependencyTypes)
     {
         _commandRegistry = commandRegistry ?? throw new ArgumentNullException(nameof(commandRegistry));
         _commandResolver = new PowerShellCommandSemanticResolver(_commandRegistry);
         _semanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId).ProfileId;
+        _nativeDependencyTypes = nativeDependencyTypes;
     }
 
     private static readonly HashSet<string> SupportedBinaryOperators = new(StringComparer.Ordinal)
@@ -353,6 +361,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                     if (PowerShellCommandIslandPolicy.TryGetTargetStreamCommand(
                             command,
                             capabilities,
+                            out _,
                             out _,
                             out _,
                             out _,

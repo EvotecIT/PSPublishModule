@@ -1,0 +1,3730 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Qualified native simple captured assignments with resolved local loop transfers",
+  "baselineCompilerCommit": "7cb410fed77b5ae4a3b68347826b9a60ae25ed55",
+  "functions": 565,
+  "baselineEmitted": 505,
+  "candidateEmitted": 505,
+  "candidateRetained": 60,
+  "packets": [
+    {
+      "packet": "pssg",
+      "functions": 282,
+      "emitted": 262,
+      "retained": 20,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "ca36311c25537c6b8b2bdb75152c1198cef0cc6a4f83e9c1041583df2ad9b306",
+      "elapsedSeconds": 23.7
+    },
+    {
+      "packet": "cleanup",
+      "functions": 68,
+      "emitted": 63,
+      "retained": 5,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1",
+      "elapsedSeconds": 13.53
+    },
+    {
+      "packet": "pinf",
+      "functions": 66,
+      "emitted": 63,
+      "retained": 3,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "5e9f5116623536238dd8564152297efd986b979ff6a2ba03d9eff38e38da2264",
+      "elapsedSeconds": 6.74
+    },
+    {
+      "packet": "pst",
+      "functions": 109,
+      "emitted": 90,
+      "retained": 19,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "58f9421a20c0f866af3b63740ecfd6679f2f92004ba59f7f267e50533d715e70",
+      "elapsedSeconds": 13.08
+    },
+    {
+      "packet": "platyps",
+      "functions": 40,
+      "emitted": 27,
+      "retained": 13,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea",
+      "elapsedSeconds": 12.79
+    }
+  ],
+  "compilerAndTestSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellBoundOptimizer.cs": "e288f476ff4434ad0f8d6af0a1df46b42afe378103dcaf1dcd70dea2ef132b79",
+    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellStatementErrorCallPass.cs": "603df39b43621e314fa287b39adb5ca8ad8b876b3b4a050de4ab166ad399b92e",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.LoopTransfers.cs": "f9ee11e23f5f4df7a299bf3d873ae4ed99e71b9227d30b9a7a8ebb6535a5a8c3",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.OutputCapture.cs": "7df1703fecafeb77afe28b9fe00b8d63ad0f97f35fdaea3aa913fe08b7837f54",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellControlFlowBindingPolicy.cs": "e0942912848695e188823e2921e57d7e1990939bd02b2d0c5285773be334e12b",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.OutputCapture.cs": "6ec5a58fd2eba8f92d648a1a017efe6b02b75f072791201de75dce538796974f",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs": "b7c0460f8dd9f8646bd27707b29e749d148d18dc48f7af76fda41cffdcecf853",
+    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundOutputCaptureStatement.cs": "fe0fcebb5390383faef1d73a7f5cbc41df33370d4b938c72d47ef9cc13a7cbb4",
+    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundStatementRewriter.cs": "2b6846dabcb6a89a75649e72df90e77c90e084df8db63908b8f9408ffb3c1775",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredOutputCaptureStatement.cs": "89bda7c779d5313c595b59435091fcde6f977d116c266bad68c0703b5cae9897",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.cs": "f52a1b42b13a62928850c58bb712beb08eaf540ef7a68c889ef82aaab5a5eaca",
+    "PowerForge.Tests/PowerShellCompilationAssignedSwitchCaptureTests.cs": "336f7a9dc71ec9a5ccc14a16debd853f98998f28a54cac924c1dce1997c473d4",
+    "PowerForge.Tests/PowerShellCompilationCapturedTransferTests.cs": "8a535acd94f2367251be1812f7aa1f50aca81645d32b8f5f6857af738bb38605",
+    "PowerForge.Tests/PowerShellCompilationNativeTypedArrayCaptureTests.cs": "b2c5b13734b1383a4adbd4e6effa836846604dee46e4ce7943d6dfdf75196b81",
+    "PowerForge.Tests/PowerShellCompilationTryArrayCaptureTests.cs": "1fb024ab5a5b6a49bc30b9665b24bfac074af0b4e5e61211e48a02377d39739e",
+    "PowerForge.Tests/PowerShellCompilationNativeCapturedLoopTests.cs": "2950071c72d5d09f3f98f996845f4c5de47ada771910b84fd68f4079ca1168d3"
+  },
+  "validation": [
+    {
+      "file": "cancelled-transfer.trx",
+      "sha256": "743523f997056cc9cd569bfbed0f7741a1be2a59622907773f4cfee568688cbc",
+      "counts": {
+        "total": "2",
+        "executed": "2",
+        "passed": "2",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "file": "captured-loops-candidate.trx",
+      "sha256": "6484b549a12b37753ecaf4845dd6ba7d854fab4ae069c886c296bed0215c692c",
+      "counts": {
+        "total": "32",
+        "executed": "32",
+        "passed": "32",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "file": "captured-loops-final.trx",
+      "sha256": "174f420346ce4ae2cd03db8230fd61ff74685d1ab719544a723e8265ef743b8b",
+      "counts": {
+        "total": "32",
+        "executed": "32",
+        "passed": "26",
+        "failed": "6",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "file": "captured-loops-first.trx",
+      "sha256": "c10f90376ecb9af264bb406d3b1648202990bfa8a0cf707f6e7885312fc14a35",
+      "counts": {
+        "total": "6",
+        "executed": "6",
+        "passed": "2",
+        "failed": "4",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "file": "captured-loops-qualified.trx",
+      "sha256": "b8ea2e2b14e459e9a1e9cc545ebfd2526545b73033b4b1db8c81270d0f70d0ca",
+      "counts": {
+        "total": "32",
+        "executed": "32",
+        "passed": "30",
+        "failed": "2",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "file": "captured-loops-rewritten.trx",
+      "sha256": "b60213e3475937e5c67a1e978149f0d7d949732184c0d8fb31fbeb75f4691182",
+      "counts": {
+        "total": "8",
+        "executed": "8",
+        "passed": "8",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "kind": "net472 owner build",
+      "warnings": 0,
+      "errors": 0,
+      "elapsedSeconds": 4.15
+    }
+  ],
+  "review": {
+    "result": "No validated findings in one independent read-only pass",
+    "residualConcern": "Pending array-discard marker after finally cancels a transfer then raw enumeration fails",
+    "resolution": "Targeted two-host generated-method differential test passed 2/2; production unchanged"
+  },
+  "workflow": {
+    "source": "ExternalWorkflows/PSSharedGoods/FullModule/Public/ActiveDirectory/Get-WinADForestDetails.ps1",
+    "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+    "license": "MIT",
+    "qualification": "One unchanged catch-body excerpt in an offline driver; full AD function remains hosted for unresolved ADIdentityNotFoundException",
+    "effects": "No AD, network, administration or installation operation executes"
+  },
+  "proof": {
+    "sourceSha256": "047647ea46d2f6a4fe5535f4a0b00b71defc2a65c025b659573e9cbc675c63da",
+    "probeSha256": "35551fee6773b356b66164e22ba2e53d5e4918e6f6e0429737a601d1b22dd238",
+    "forestSourceSha256": "112b8ca5e27dc1e492d5f950bdd088065e2534d0b649de8a98d60d928dcb8400",
+    "forestCatchBodySha256": "5708370932b0ae957183fdb266b1bb6ca5c79ad310cd9b50e4d9b525e0aae241",
+    "hosts": {
+      "net10.0": {
+        "host": "pwsh",
+        "version": "7.6.6",
+        "compiledMethods": 6,
+        "artifactSha256": "db0c4deef26391d1606f20bad31c146b1953e21d273b3401bd29ccffec2a2ef6",
+        "manifestSha256": "e42ea2b8e22242ca91774d40638dae9474a3bccea1a09e0ed56dc1e23068b590",
+        "observations": {
+          "original": [
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "break",
+              "records": [
+                "pending",
+                "capture-finally",
+                "direct-finally",
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "continue",
+              "records": [
+                "pending",
+                "capture-finally",
+                "direct-finally",
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "break",
+              "records": [
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "continue",
+              "records": [
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "break",
+              "records": [
+                "nested-finally",
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "continue",
+              "records": [
+                "nested-finally",
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "break",
+              "records": [
+                "pending",
+                "capture-finally",
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "continue",
+              "records": [
+                "pending",
+                "capture-finally",
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "break",
+              "records": [
+                "pending",
+                "capture-finally",
+                "member-finally",
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "continue",
+              "records": [
+                "pending",
+                "capture-finally",
+                "member-finally",
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-ForestRecovery",
+              "records": [
+                "after:owned.invalid",
+                [
+                  "owned-dc"
+                ],
+                "done"
+              ],
+              "warnings": [
+                "Get-WinADForestDetails - Error listing DCs for domain failed.invalid - offline provider failure"
+              ]
+            }
+          ],
+          "generated": [
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "break",
+              "records": [
+                "pending",
+                "capture-finally",
+                "direct-finally",
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "continue",
+              "records": [
+                "pending",
+                "capture-finally",
+                "direct-finally",
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "break",
+              "records": [
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "continue",
+              "records": [
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "break",
+              "records": [
+                "nested-finally",
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "continue",
+              "records": [
+                "nested-finally",
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "break",
+              "records": [
+                "pending",
+                "capture-finally",
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "continue",
+              "records": [
+                "pending",
+                "capture-finally",
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "break",
+              "records": [
+                "pending",
+                "capture-finally",
+                "member-finally",
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "continue",
+              "records": [
+                "pending",
+                "capture-finally",
+                "member-finally",
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-ForestRecovery",
+              "records": [
+                "after:owned.invalid",
+                [
+                  "owned-dc"
+                ],
+                "done"
+              ],
+              "warnings": [
+                "Get-WinADForestDetails - Error listing DCs for domain failed.invalid - offline provider failure"
+              ]
+            }
+          ]
+        },
+        "strictSummary": {
+          "canProceed": false,
+          "typedUnits": 0,
+          "runtimeFallbackUnits": 0,
+          "rejectedUnits": 6,
+          "promotedTypedRegions": 0
+        }
+      },
+      "net472": {
+        "host": "powershell.exe",
+        "version": "5.1.26100.9444",
+        "compiledMethods": 6,
+        "artifactSha256": "db0c4deef26391d1606f20bad31c146b1953e21d273b3401bd29ccffec2a2ef6",
+        "manifestSha256": "268cec28880954a3eb62ec50f1aab91d9f0e6bc0f2caf3d7be771de6f0cf7794",
+        "observations": {
+          "original": [
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "break",
+              "records": [
+                "pending",
+                "capture-finally",
+                "direct-finally",
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "continue",
+              "records": [
+                "pending",
+                "capture-finally",
+                "direct-finally",
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "break",
+              "records": [
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "continue",
+              "records": [
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "break",
+              "records": [
+                "nested-finally",
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "continue",
+              "records": [
+                "nested-finally",
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "break",
+              "records": [
+                "pending",
+                "capture-finally",
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "continue",
+              "records": [
+                "pending",
+                "capture-finally",
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "break",
+              "records": [
+                "pending",
+                "capture-finally",
+                "member-finally",
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "continue",
+              "records": [
+                "pending",
+                "capture-finally",
+                "member-finally",
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-ForestRecovery",
+              "records": [
+                "after:owned.invalid",
+                [
+                  "owned-dc"
+                ],
+                "done"
+              ],
+              "warnings": [
+                "Get-WinADForestDetails - Error listing DCs for domain failed.invalid - offline provider failure"
+              ]
+            }
+          ],
+          "generated": [
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "break",
+              "records": [
+                "pending",
+                "capture-finally",
+                "direct-finally",
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "continue",
+              "records": [
+                "pending",
+                "capture-finally",
+                "direct-finally",
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedDirect",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "direct-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "break",
+              "records": [
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "continue",
+              "records": [
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedArray",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "array-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "break",
+              "records": [
+                "nested-finally",
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "continue",
+              "records": [
+                "nested-finally",
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedNested",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ],
+                "done",
+                [
+                  "after-inner",
+                  [
+                    "pending",
+                    "value",
+                    "capture-finally",
+                    "inner-array-finally"
+                  ],
+                  "nested-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "break",
+              "records": [
+                "pending",
+                "capture-finally",
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "continue",
+              "records": [
+                "pending",
+                "capture-finally",
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedSwitch",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "none",
+              "records": [
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "break",
+              "records": [
+                "pending",
+                "capture-finally",
+                "member-finally",
+                "loop-finally",
+                "done",
+                "old"
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "continue",
+              "records": [
+                "pending",
+                "capture-finally",
+                "member-finally",
+                "loop-finally",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": []
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "throw",
+              "records": [
+                "caught:failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": [
+                "failure",
+                "failure",
+                "failure",
+                "failure",
+                "failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "break-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-CapturedMember",
+              "mode": "continue-finally",
+              "records": [
+                "caught:finally failure",
+                "loop-finally",
+                "after",
+                "old",
+                "loop-finally",
+                "after",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ],
+                "done",
+                [
+                  "pending",
+                  "value",
+                  "capture-finally",
+                  "member-finally"
+                ]
+              ],
+              "errors": [
+                "finally failure",
+                "finally failure",
+                "finally failure",
+                "finally failure"
+              ]
+            },
+            {
+              "name": "Read-ForestRecovery",
+              "records": [
+                "after:owned.invalid",
+                [
+                  "owned-dc"
+                ],
+                "done"
+              ],
+              "warnings": [
+                "Get-WinADForestDetails - Error listing DCs for domain failed.invalid - offline provider failure"
+              ]
+            }
+          ]
+        },
+        "strictSummary": {
+          "canProceed": false,
+          "typedUnits": 0,
+          "runtimeFallbackUnits": 0,
+          "rejectedUnits": 6,
+          "promotedTypedRegions": 0
+        }
+      }
+    }
+  },
+  "limits": [
+    "No new complete pinned function is claimed",
+    "Dynamic/missing labels, nearest-switch escape, compound captures and callback-boundary escape retain guards",
+    "PowerShell continue 2 is an authored label, not nesting depth; account-selection source remains hosted",
+    "Strict six-function mini module has zero typed and six rejected units on both targets",
+    "No aggregate gate or full net472 portfolio refresh",
+    "No non-Windows, performance, reviewed dependency lock, PR, merge or release claim"
+  ],
+  "failedStages": {
+    "captured-loops-first.trx": "Transfer metadata initially dropped by bound cloning owners; corrected all owners",
+    "captured-loops-final.trx": "Stale nested-declaration/loop-label assertions and basic-function warning capture in fixture",
+    "captured-loops-qualified.trx": "Numeric switch over object-valued foreach local correctly hit separate scalar-switch guard; corrected probe to switch(1)",
+    "proofHarness": "Strict explain expected exit 1 and top-level summary fields were initially misread; existing evidence reused without rerunning successful artifacts"
+  }
+}

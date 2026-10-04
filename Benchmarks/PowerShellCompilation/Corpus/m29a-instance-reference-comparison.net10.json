@@ -1,0 +1,578 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Actual native reference cells for optimized, unoptimized and mixed local storage; qualified instance method calls and authored argument failure positions.",
+  "baselineCompilerCommit": "c5bcee252bf6a9e79e6a2a7ac1a79f784fc7be79",
+  "baselineComparison": "m29a-native-throw-comparison.net10.json",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "baselineEmitted": 502,
+  "candidateEmitted": 504,
+  "candidateRetained": 61,
+  "packets": [
+    {
+      "packet": "pssg",
+      "functions": 282,
+      "emitted": 261,
+      "retained": 21,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [
+        {
+          "unitId": "ffe888fa05d905b08ee67e27",
+          "name": "Initialize-ModulePortable"
+        },
+        {
+          "unitId": "7b30d755a00abec0255a9d6e",
+          "name": "Test-ComputerPort"
+        }
+      ],
+      "explanationSha256": "e03ac4ef89f5a6a08cdac4ea612107947218e05a36916aa80647ec7e0bb75146"
+    },
+    {
+      "packet": "cleanup",
+      "functions": 68,
+      "emitted": 63,
+      "retained": 5,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [],
+      "explanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1"
+    },
+    {
+      "packet": "pinf",
+      "functions": 66,
+      "emitted": 63,
+      "retained": 3,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [],
+      "explanationSha256": "5e9f5116623536238dd8564152297efd986b979ff6a2ba03d9eff38e38da2264"
+    },
+    {
+      "packet": "pst",
+      "functions": 109,
+      "emitted": 90,
+      "retained": 19,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [],
+      "explanationSha256": "58f9421a20c0f866af3b63740ecfd6679f2f92004ba59f7f267e50533d715e70"
+    },
+    {
+      "packet": "platyps",
+      "functions": 40,
+      "emitted": 27,
+      "retained": 13,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "gains": [],
+      "explanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea"
+    }
+  ],
+  "newlyExecutedFunctions": [
+    "Initialize-ModulePortable"
+  ],
+  "emissionOnlyGains": [
+    "Test-ComputerPort"
+  ],
+  "retainedFunctionFeatureCounts": {
+    "binary-module.cmdlet-shape": 2,
+    "command.foreach-object": 2,
+    "command.get-help": 1,
+    "command.get-item": 1,
+    "command.get-location": 1,
+    "command.new-object": 2,
+    "command.out-gridview": 1,
+    "command.out-string": 1,
+    "command.read-host": 1,
+    "command.resolve-path": 1,
+    "command.select-object": 1,
+    "command.set-clipboard": 1,
+    "command.showcontainer": 1,
+    "command.test-connection": 1,
+    "command.write-verbose": 2,
+    "command.write-warning": 2,
+    "control.finally.stream-stop": 2,
+    "parameter.default": 1,
+    "parameter.metadata": 3,
+    "parameter.type": 22,
+    "pipeline.lifecycle": 2,
+    "runtime.scope": 2,
+    "scriptblock.typed": 1,
+    "semantic.lowering.missing": 2,
+    "syntax.exitstatement": 1,
+    "syntax.foreachstatement": 1,
+    "syntax.functiondefinition": 1,
+    "syntax.invokememberexpression": 3,
+    "syntax.memberexpression": 2,
+    "syntax.pipeline": 1,
+    "syntax.subexpression": 1,
+    "syntax.typedefinition": 1,
+    "syntax.typeexpression": 2,
+    "syntax.unsupported": 28
+  },
+  "sourceAndTestHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "8bc996305b041e08e92abb2435e391a78ad50022100d8b12f94a58249000d312",
+    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeReferenceExpression.cs": "4c9ab798686f3e67b8ea3aa8cd6205b43d4fc9f2998269dad95c1ef0b84e8007",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeReferenceExpression.cs": "5d88678ead768a64b3c8de95a11ad231fb1bafde03b92e67a97196e3b9816ff7",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs": "3e6566d1d16a5b258eacf00ad95b28e6e171d31ab5f8995e27f8ca98124b4f66",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.cs": "0a488bf77768ba49a3e68daf02ac93ba93032a14e0a1bd347d6e5e172b0e0d70",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.NativeAccess.cs": "68b03245e389021acc7796cda99b775e8003572b7fe847ea82d90ad735b28755",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Invocations.cs": "9dfff29122b5dd0701ab9c9ca08ddda8f71983b7fa99d2c737d50e4403f71852",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.NativeFunction.cs": "456d4cb9623abb02a77681a495c7fae9133581b9f172e0efdcd1aa0e569ebfc7",
+    "PowerForge.Tests/PowerShellCompilationNativeReferenceCellTests.cs": "59522838ef57d2702e41fa7a95e109988c383447ae37ce9919919ff6003ed357"
+  },
+  "probes": {
+    "m29a-instance-reference-portable-probe.ps1": "53461272a56a1ca45bdbd76b417d19583c49d1f2de410faf0e5011f061e1de04"
+  },
+  "sourceProvenance": {
+    "source": "https://github.com/EvotecIT/PSSharedGoods",
+    "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+    "license": "MIT",
+    "relativePath": "Public/Programs/Initialize-ModulePortable.ps1",
+    "unchangedSourceSha256": "03ba363b329e058fe654aef97c44ef6ec6831b8eaf4f71ba1a22aeff478e6288",
+    "emissionOnlySourceSha256": "c1bf72776d459e89e6da10039dba3be0653f584074afd34bf68d9c9f6ddab205"
+  },
+  "validation": {
+    "testRuns": [
+      {
+        "file": "instance-reference-focused.trx",
+        "sha256": "be06445d5772e8ed6aa305ce61020941fe30a460c4aa272324c4b75c77ef48da",
+        "counters": {
+          "total": "14",
+          "executed": "14",
+          "passed": "6",
+          "failed": "8",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "accepted": false
+      },
+      {
+        "file": "instance-reference-corrected.trx",
+        "sha256": "96037b27fe2d1418bd481369d4d3aa813f93fc166d102ad9b4473a1a9612abfb",
+        "counters": {
+          "total": "14",
+          "executed": "14",
+          "passed": "12",
+          "failed": "2",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "accepted": false
+      },
+      {
+        "file": "instance-reference-final.trx",
+        "sha256": "d8f3ad610ae476b3cf4dcc6e7128e4551fa7e0490f84f1b7a728b543ef3235c5",
+        "counters": {
+          "total": "32",
+          "executed": "32",
+          "passed": "32",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "accepted": true
+      },
+      {
+        "file": "instance-reference-module-scope.trx",
+        "sha256": "072eac5621c2848f7f2313abc1962ee9a406808c6b9c41e79352c1dcf774d09a",
+        "counters": {
+          "total": "2",
+          "executed": "2",
+          "passed": "2",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "accepted": true
+      },
+      {
+        "file": "instance-reference-position.trx",
+        "sha256": "457b008d2b8b56718120f58e2f682d5574100283a67f60ab805edd1167671ee0",
+        "counters": {
+          "total": "14",
+          "executed": "14",
+          "passed": "14",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "accepted": true
+      },
+      {
+        "file": "instance-reference-retention.trx",
+        "sha256": "1b13ab784f70c75ea2abd3fabadac73d34f8d90e810da2bd0a8749c4c518791f",
+        "counters": {
+          "total": "14",
+          "executed": "14",
+          "passed": "12",
+          "failed": "2",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "accepted": false
+      }
+    ],
+    "net472OwnerBuild": {
+      "succeeded": true,
+      "warnings": 0,
+      "errors": 0,
+      "seconds": 4.72
+    },
+    "independentReview": {
+      "status": "completed",
+      "findings": [],
+      "scope": "Frozen nine code/test files and offline probe, surrounding native variable/compilation/host/error contracts",
+      "residualLimits": [
+        "No review-time command execution",
+        "General instance overload matrix and read-only/tuple-deoptimization mechanisms remain outside new observations",
+        "Reference retention and module AllScope tests added after review; execution evidence below"
+      ]
+    },
+    "failedStages": [
+      "Initial context wiring:8/14 failures; corrected native FunctionContext",
+      "Argument sequence points:2/14 failures; corrected latest authored argument point",
+      "AllScope fixture assertion:2/14 failures with matching original/generated; caller-global created after module import did not target module-owned storage; moved fixture to module scope"
+    ],
+    "artifactAttemptFailure": {
+      "file": "portable-final-build.net10.json",
+      "sha256": "590eca2e2896b1795b935b3b2be11055eedac7b977adfa4792befc13e959d1c5",
+      "error": "The process cannot access the file 'C:\\Users\\przemyslaw.klys.EVOTEC\\AppData\\Local\\Temp\\PFC\\m29a-instance-references-20260927\\platyps-final-explain.json' because it is being used by another process.",
+      "disposition": "Task-layout input folder contained a concurrently written census file; final proof uses isolated immutable inputs/portable, separate from generated evidence"
+    }
+  },
+  "offlineWorkflow": {
+    "net10": {
+      "host": "7.6.6",
+      "cases": 10,
+      "matched": true,
+      "compiledMethods": 1,
+      "dependencyLockReviewed": false,
+      "buildEvidenceSha256": "8128ac49186fe839c77dacf26a14f7e0ca512e6c380123ca459a35b3ec25cdaf",
+      "originalSha256": "1efe9e3fa40faa48c1bff340958f70073a6bbf381998c32be571504e0cb16b40",
+      "generatedSha256": "1efe9e3fa40faa48c1bff340958f70073a6bbf381998c32be571504e0cb16b40",
+      "observations": [
+        {
+          "id": "missing-name",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Initialize-ModulePortable - Module name not given. Terminating."
+            }
+          ],
+          "caught": null,
+          "loaded": []
+        },
+        {
+          "id": "missing-flags",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Initialize-ModulePortable - Please choose Download/Import switch. Terminating."
+            }
+          ],
+          "caught": null,
+          "loaded": []
+        },
+        {
+          "id": "environment-provider",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Initialize-ModulePortable - Path must use the FileSystem provider."
+            }
+          ],
+          "caught": null,
+          "loaded": []
+        },
+        {
+          "id": "missing-drive",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Initialize-ModulePortable - Invalid path MissingOwnedDrive:/path. Exception calling \"GetUnresolvedProviderPathFromPSPath\" with \"3\" argument(s): \"Cannot find drive. A drive with the name 'MissingOwnedDrive' does not exist.\""
+            }
+          ],
+          "caught": null,
+          "loaded": []
+        },
+        {
+          "id": "missing-module",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Initialize-ModulePortable - Unable to resolve a compatible dependency graph for module OwnedPortableRoot in <owned>\\missing-module."
+            }
+          ],
+          "caught": null,
+          "loaded": []
+        },
+        {
+          "id": "valid",
+          "records": [],
+          "caught": null,
+          "loaded": [
+            "OwnedPortableDependency",
+            "OwnedPortableRoot"
+          ]
+        },
+        {
+          "id": "version-conflict",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Initialize-ModulePortable - Unable to resolve a compatible dependency graph for module OwnedPortableRoot in <owned>\\version-conflict."
+            }
+          ],
+          "caught": null,
+          "loaded": []
+        },
+        {
+          "id": "cycle",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Initialize-ModulePortable - Unable to resolve a compatible dependency graph for module OwnedPortableRoot in <owned>\\cycle."
+            }
+          ],
+          "caught": null,
+          "loaded": []
+        },
+        {
+          "id": "malformed",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Initialize-ModulePortable - Ignoring invalid module manifest <owned>\\malformed\\OwnedPortableRoot\\OwnedPortableRoot.psd1: Cannot convert value \"not-a-version\" to type \"System.Version\". Error: \"Version string portion was too short or too long. (Parameter 'input')\""
+            },
+            {
+              "kind": "warning",
+              "message": "Initialize-ModulePortable - Unable to resolve a compatible dependency graph for module OwnedPortableRoot in <owned>\\malformed."
+            }
+          ],
+          "caught": null,
+          "loaded": []
+        },
+        {
+          "id": "repeat-alias",
+          "records": [],
+          "caught": null,
+          "loaded": [
+            "OwnedPortableDependency",
+            "OwnedPortableRoot",
+            "OwnedPortableDependency",
+            "OwnedPortableRoot"
+          ]
+        }
+      ],
+      "strict": {
+        "canProceed": false,
+        "typed": 0,
+        "rejected": 1,
+        "sha256": "953a9bd8a33546b013ca9e55f06ab049d1bde043be524068c45c326ad9c84b47"
+      }
+    },
+    "net472": {
+      "host": "5.1.26100.9444",
+      "cases": 10,
+      "matched": true,
+      "compiledMethods": 1,
+      "dependencyLockReviewed": false,
+      "buildEvidenceSha256": "c7a7dafdcac81fb44ff745647001610010747eef5846f0232d4293fee1818c13",
+      "originalSha256": "a4877dd822d165f256369823be7dc22322527bdc7637f380ef02eab9355561f0",
+      "generatedSha256": "a4877dd822d165f256369823be7dc22322527bdc7637f380ef02eab9355561f0",
+      "observations": [
+        {
+          "id": "missing-name",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Initialize-ModulePortable - Module name not given. Terminating."
+            }
+          ],
+          "caught": null,
+          "loaded": []
+        },
+        {
+          "id": "missing-flags",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Initialize-ModulePortable - Please choose Download/Import switch. Terminating."
+            }
+          ],
+          "caught": null,
+          "loaded": []
+        },
+        {
+          "id": "environment-provider",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Initialize-ModulePortable - Path must use the FileSystem provider."
+            }
+          ],
+          "caught": null,
+          "loaded": []
+        },
+        {
+          "id": "missing-drive",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Initialize-ModulePortable - Invalid path MissingOwnedDrive:/path. Exception calling \"GetUnresolvedProviderPathFromPSPath\" with \"3\" argument(s): \"Cannot find drive. A drive with the name 'MissingOwnedDrive' does not exist.\""
+            }
+          ],
+          "caught": null,
+          "loaded": []
+        },
+        {
+          "id": "missing-module",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Initialize-ModulePortable - Unable to resolve a compatible dependency graph for module OwnedPortableRoot in <owned>\\missing-module."
+            }
+          ],
+          "caught": null,
+          "loaded": []
+        },
+        {
+          "id": "valid",
+          "records": [],
+          "caught": null,
+          "loaded": [
+            "OwnedPortableDependency",
+            "OwnedPortableRoot"
+          ]
+        },
+        {
+          "id": "version-conflict",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Initialize-ModulePortable - Unable to resolve a compatible dependency graph for module OwnedPortableRoot in <owned>\\version-conflict."
+            }
+          ],
+          "caught": null,
+          "loaded": []
+        },
+        {
+          "id": "cycle",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Initialize-ModulePortable - Unable to resolve a compatible dependency graph for module OwnedPortableRoot in <owned>\\cycle."
+            }
+          ],
+          "caught": null,
+          "loaded": []
+        },
+        {
+          "id": "malformed",
+          "records": [
+            {
+              "kind": "warning",
+              "message": "Initialize-ModulePortable - Ignoring invalid module manifest <owned>\\malformed\\OwnedPortableRoot\\OwnedPortableRoot.psd1: Cannot convert value \"not-a-version\" to type \"System.Version\". Error: \"Version string portion was too short or too long.\""
+            },
+            {
+              "kind": "warning",
+              "message": "Initialize-ModulePortable - Unable to resolve a compatible dependency graph for module OwnedPortableRoot in <owned>\\malformed."
+            }
+          ],
+          "caught": null,
+          "loaded": []
+        },
+        {
+          "id": "repeat-alias",
+          "records": [],
+          "caught": null,
+          "loaded": [
+            "OwnedPortableDependency",
+            "OwnedPortableRoot",
+            "OwnedPortableDependency",
+            "OwnedPortableRoot"
+          ]
+        }
+      ],
+      "strict": {
+        "canProceed": false,
+        "typed": 0,
+        "rejected": 1,
+        "sha256": "47898e9c74bbefa8ed067db566a8f9c012cae693a00b655f4a0e46632c3a85c9"
+      }
+    }
+  },
+  "nativeReferenceOwners": {
+    "compiler": "https://github.com/PowerShell/PowerShell/blob/master/src/System.Management.Automation/engine/parser/Compiler.cs",
+    "variableCells": "https://github.com/PowerShell/PowerShell/blob/master/src/System.Management.Automation/engine/runtime/Operations/VariableOps.cs"
+  },
+  "limits": [
+    "Hybrid PowerShell-runtime-backed semantics; Strict reference contracts unchanged",
+    "Distinct trailing direct locals; scoped/member/aliased/nontrailing shapes remain hosted; literal static overload guard retained",
+    "Task-owned local module imports only; no downloads, package installation, network, registry or live provider operation",
+    "Test-ComputerPort is emission-only; no TCP/UDP network operation executed",
+    "No fresh full net472 portfolio, aggregate gate, non-Windows qualification, performance claim, reviewed dependency lock or release"
+  ]
+}

@@ -722,8 +722,8 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(0, result.Manifest!.CompiledMethods);
-        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        Assert.Equal(1, result.Manifest!.CompiledMethods);
+        Assert.True(Assert.Single(result.Manifest.UnitDispositionLedger!.Entries, entry => entry.Name == "Get-BasicVerbose").UsesNativeFunctionBinding);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
             $"Import-Module -Name '{escapedPath}' -Force; Get-BasicVerbose -Verbose");

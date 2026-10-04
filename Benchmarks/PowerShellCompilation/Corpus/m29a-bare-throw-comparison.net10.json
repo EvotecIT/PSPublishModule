@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Bare non-rethrow statements use native null exception conversion while lexical rethrows retain the existing handled-exception owner. Registry qualification is offline invalid-hive handling only.",
+  "baselineCompilerCommit": "ab50a557eaf3b6cc633836ed42d9c84c5617f3c3",
+  "baselineComparison": "m29a-closed-value-receiver-comparison.net10.json",
+  "baselineComparisonSha256": "041c7c823f7401f8ddd8c7d5f4ad1808be928063f9ba4ad5277a0e20390cbd9e",
+  "baselineRetainedInventory": "m29a-retained-functions.net10.json at baselineCompilerCommit",
+  "baselineRetainedInventorySha256": "55f82e9ceae1ebf6cd41da91b82e2cfc4b43aafb9eb6d3d6fedaf1b7fdea215f",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 466,
+  "candidateEmitted": 469,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "baselineEmitted": 246,
+      "candidateEmitted": 249,
+      "candidateExplanationSha256": "38ebc9592b5b9f9b20b9930dbdba3a6330edbd565f28e92d229a0c4bfc7ff1c1",
+      "changes": [
+        {
+          "unitId": "eae0fabd2a6ff707f25100bb",
+          "name": "New-PSRegistry",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "baselineCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.throwstatement",
+              "message": "Statement 'ThrowStatementAst' is not yet represented by the bound pipeline.",
+              "line": 57,
+              "column": 17
+            }
+          ],
+          "candidateCauses": [],
+          "newExecutionQualification": true
+        },
+        {
+          "unitId": "67ea8a335a26934ffb7b1351",
+          "name": "Remove-PSRegistry",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "baselineCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.throwstatement",
+              "message": "Statement 'ThrowStatementAst' is not yet represented by the bound pipeline.",
+              "line": 68,
+              "column": 17
+            }
+          ],
+          "candidateCauses": [],
+          "newExecutionQualification": true
+        },
+        {
+          "unitId": "c5a04a295594097dd19d2958",
+          "name": "Set-PSRegistry",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "baselineCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.throwstatement",
+              "message": "Statement 'ThrowStatementAst' is not yet represented by the bound pipeline.",
+              "line": 88,
+              "column": 17
+            }
+          ],
+          "candidateCauses": [],
+          "newExecutionQualification": true
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "baselineEmitted": 59,
+      "candidateEmitted": 59,
+      "candidateExplanationSha256": "92a40a4958d900fb27b09057ce13c568be73b30382040bb54d829a9d7095f17e",
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "baselineEmitted": 57,
+      "candidateEmitted": 57,
+      "candidateExplanationSha256": "bf72f44dfd97021241aae4a9c408360dd6bd22f8c702c18da95ace1633fd917b",
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "baselineEmitted": 80,
+      "candidateEmitted": 80,
+      "candidateExplanationSha256": "d1b9bce9d03bcf1f2683664817564d0f9932a89295091206b10b7d75b06e2294",
+      "changes": []
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "baselineEmitted": 24,
+      "candidateEmitted": 24,
+      "candidateExplanationSha256": "33db727b972d0164311bb9bea1aa885067c91999c419f1f0775022b285fbe25e",
+      "changes": []
+    }
+  ],
+  "lostEmittedMethods": 0,
+  "lostRetainedRegions": 0,
+  "compilerSourceHashes": [
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
+      "sha256": "df275f6dafd3831f0a6f4721d0ec522e7e3e4c2a02f987176b829a34b1ada5f7"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs",
+      "sha256": "6ab0176bd382102c356a153592b0419f62e3269e770d95f9556c2a2646631a47"
+    }
+  ],
+  "newlyExecutedFunctions": [
+    "New-PSRegistry",
+    "Remove-PSRegistry",
+    "Set-PSRegistry"
+  ],
+  "executionLimits": {
+    "New-PSRegistry": "Both Windows hosts, invalid-hive branch under offline module-owned helpers: Continue warnings and Stop bare throw, unregister traces, zero mutation helper calls. Registry operations remain unqualified.",
+    "Remove-PSRegistry": "Both Windows hosts, invalid-hive branch under offline module-owned helpers: Continue warnings and Stop bare throw, unregister traces, zero mutation helper calls. Registry operations remain unqualified.",
+    "Set-PSRegistry": "Both Windows hosts, invalid-hive branch under offline module-owned helpers: Continue warnings and Stop bare throw, unregister traces, zero mutation helper calls. Registry operations remain unqualified."
+  },
+  "workflowSourceHashes": [
+    {
+      "name": "New-PSRegistry",
+      "sha256": "fe0821a6f12c821d53ebdf541d1d55e27aa271ccc289b0689888ad3b98275a32"
+    },
+    {
+      "name": "Remove-PSRegistry",
+      "sha256": "bdff3dbcd3bb632e193c91420722c44514939324b1ff1eaa7e3c71d7167f1dee"
+    },
+    {
+      "name": "Set-PSRegistry",
+      "sha256": "93d0be21e0e36f089159b691502769c329ed5b0510c6033a51354bacf8ce9cb5"
+    }
+  ]
+}

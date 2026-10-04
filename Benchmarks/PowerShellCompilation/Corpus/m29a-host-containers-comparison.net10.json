@@ -1,0 +1,240 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Target-qualified CLR containers recursively propagate the existing accepted SDK element contracts and PowerShell-host requirement. SID request selection is executed only on in-memory rows; removal/orchestration gains are emission-only.",
+  "baselineCompilerCommit": "ba835b763b6aab026db17740874b77816c87976c",
+  "baselineComparison": "m29a-expression-index-comparison.net10.json",
+  "baselineComparisonSha256": "eeaebb9870949eeac36c1a5d0117751c2dc5599a9236a429a4bc0fc4d29bbf64",
+  "baselineRetainedInventory": "m29a-retained-functions.net10.json at baselineCompilerCommit",
+  "baselineRetainedInventorySha256": "61c35e7607401a2a03eb9f7f9f4164e1cfee1e31acbb2934210f6f0233449ab9",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 471,
+  "candidateEmitted": 474,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "baselineEmitted": 251,
+      "candidateEmitted": 251,
+      "candidateExplanationSha256": "194254d952ebefca8df2e4e89cfe0d058aecde8b053584e4979fd43021fa186c",
+      "changes": [
+        {
+          "unitId": "9191ed8710d7173dc2ac36bb",
+          "name": "Remove-ChildItems",
+          "baselineEmitted": false,
+          "candidateEmitted": false,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "baselineCauses": [
+            {
+              "code": "UnsupportedParameterType",
+              "featureId": "parameter.type",
+              "message": "Parameter '$Results' has CLR type 'System.Collections.Generic.List`1[[System.Management.Automation.PSObject, System.Management.Automation, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35]]' that requires a target capability unavailable to this compilation.",
+              "line": 66,
+              "column": 9
+            },
+            {
+              "code": "UnsupportedParameterType",
+              "featureId": "parameter.type",
+              "message": "Parameter '$AllSucceededRef' has CLR type 'System.Management.Automation.PSReference' that requires a target capability unavailable to this compilation.",
+              "line": 68,
+              "column": 9
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.invokememberexpression",
+              "message": "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
+              "line": 128,
+              "column": 42
+            }
+          ],
+          "candidateCauses": [
+            {
+              "code": "UnsupportedParameterType",
+              "featureId": "parameter.type",
+              "message": "Parameter '$AllSucceededRef' has CLR type 'System.Management.Automation.PSReference' that requires a target capability unavailable to this compilation.",
+              "line": 68,
+              "column": 9
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.invokememberexpression",
+              "message": "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
+              "line": 128,
+              "column": 42
+            }
+          ],
+          "newExecutionQualification": false
+        },
+        {
+          "unitId": "782548ce522fdeba9135d68c",
+          "name": "Remove-FileItem",
+          "baselineEmitted": false,
+          "candidateEmitted": false,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "baselineCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Collections.Generic.List[PSObject]' is not available in the generated project reference set for the requested target.",
+              "line": 92,
+              "column": 20
+            }
+          ],
+          "candidateCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.invokememberexpression",
+              "message": "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
+              "line": 210,
+              "column": 46
+            }
+          ],
+          "newExecutionQualification": false
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "baselineEmitted": 59,
+      "candidateEmitted": 62,
+      "candidateExplanationSha256": "00475543df05c1a36eafe23ca8bdeecaecbb33fbbfebe54a8cb282fa886c2d77",
+      "changes": [
+        {
+          "unitId": "75d131a2200973600d3077af",
+          "name": "Remove-ADSIDHistory",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "baselineCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Collections.Generic.List[PSCustomObject]' is not available in the generated project reference set for the requested target.",
+              "line": 14,
+              "column": 29
+            }
+          ],
+          "candidateCauses": [],
+          "newExecutionQualification": false
+        },
+        {
+          "unitId": "bcf3a0b2c8f38b4967d30b13",
+          "name": "Request-ADSIDHistory",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "baselineCauses": [
+            {
+              "code": "UnsupportedParameterType",
+              "featureId": "parameter.type",
+              "message": "Parameter '$ObjectsToProcess' has CLR type 'System.Collections.Generic.List`1[[System.Management.Automation.PSObject, System.Management.Automation, Version=7.6.0.500, Culture=neutral, PublicKeyToken=31bf3856ad364e35]]' that requires a target capability unavailable to this compilation.",
+              "line": 21,
+              "column": 9
+            }
+          ],
+          "candidateCauses": [],
+          "newExecutionQualification": true
+        },
+        {
+          "unitId": "80b99474fc5f60c7fb47f569",
+          "name": "Invoke-ADSIDHistoryCleanup",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "baselineCauses": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Collections.Generic.List[PSCustomObject]' is not available in the generated project reference set for the requested target.",
+              "line": 185,
+              "column": 28
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'System.Collections.Generic.List[PSCustomObject]' is not available in the generated project reference set for the requested target.",
+              "line": 239,
+              "column": 25
+            }
+          ],
+          "candidateCauses": [],
+          "newExecutionQualification": false
+        }
+      ]
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "baselineEmitted": 57,
+      "candidateEmitted": 57,
+      "candidateExplanationSha256": "bf72f44dfd97021241aae4a9c408360dd6bd22f8c702c18da95ace1633fd917b",
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "baselineEmitted": 80,
+      "candidateEmitted": 80,
+      "candidateExplanationSha256": "d1b9bce9d03bcf1f2683664817564d0f9932a89295091206b10b7d75b06e2294",
+      "changes": []
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "baselineEmitted": 24,
+      "candidateEmitted": 24,
+      "candidateExplanationSha256": "33db727b972d0164311bb9bea1aa885067c91999c419f1f0775022b285fbe25e",
+      "changes": []
+    }
+  ],
+  "lostEmittedMethods": 0,
+  "lostRetainedRegions": 0,
+  "compilerSourceHashes": [
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
+      "sha256": "30e1e3db559ae41e659b52a3749fba0755c8cfe68e0a81e2ff16d7ab801ac781"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs",
+      "sha256": "8df1965fb2fec0e4adc36001056fed366f6b44ace0fabc3e7c72fd2ece10aaee"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs",
+      "sha256": "c7b0502a84aea9817f40e1c31dcd4174e6d754439afdaeb92251c9bf37f5e445"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/PowerShellGeneratedTypePolicy.cs",
+      "sha256": "719cad63093abceca9eed145e965b8d8d9cd6f20d08e5c60af0f58a73e863f4f"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/PowerShellGeneratedElementTypePolicy.cs",
+      "sha256": "a8207a8447778d404abfcf57108e6ce9201db7e28e0e895dbd69f7fe594613fc"
+    }
+  ],
+  "newlyExecutedFunctions": [
+    "Request-ADSIDHistory"
+  ],
+  "executionLimits": {
+    "Request-ADSIDHistory": "Both Windows hosts, unchanged source, twelve cases of in-memory domain/SID matching, enabled-object/type filters, object limits and shared object/list identity. Module-owned logging helper; no AD query or mutation.",
+    "Remove-ADSIDHistory": "Emission-only. No removal or administration execution.",
+    "Invoke-ADSIDHistoryCleanup": "Emission-only. No orchestration, external provider or administration execution."
+  },
+  "workflowSourceHashes": [
+    {
+      "name": "Request-ADSIDHistory",
+      "sha256": "02c735ba0332b84db95c293599441433d352011c81aa6cf8d267542e4c0b8a63"
+    }
+  ]
+}

@@ -57,12 +57,13 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 ModuleManifestPath = resolved.ModuleManifestPath,
                 CompilationSourcePaths = resolved.CompilationSourceFiles,
                 RuntimeSourcePaths = resolved.SourceFiles,
-                TargetFramework = "net8.0",
+                TargetFramework = "net10.0",
                 EmitSource = true
             });
 
             Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-            Assert.Equal(8, result.Manifest!.CompiledMethods);
+            Assert.True(result.Manifest!.CompiledMethods == 8,
+                "Expected eight compiled corpus methods.\n" + string.Join(Environment.NewLine, result.Manifest.Diagnostics.Select(diagnostic => $"{diagnostic.Line}:{diagnostic.Column}: {diagnostic.Message}")));
             Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
             Assert.True(result.Manifest.UsesPowerShellRuntimeFallback);
             Assert.True(result.Manifest.AllowsPowerShellRuntimeEvaluation);
@@ -122,7 +123,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             {
                 CompilationSourcePaths = resolved.CompilationSourceFiles,
                 RuntimeSourcePaths = resolved.SourceFiles,
-                TargetFramework = "net8.0",
+                TargetFramework = "net10.0",
                 EmitSource = true
             });
 

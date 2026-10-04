@@ -9,7 +9,12 @@ internal sealed class PowerShellLoweredBinaryExpression : PowerShellLoweredExpre
         PowerShellLoweredExpression left,
         PowerShellLoweredExpression right,
         string? leftTemporary,
-        string? rightTemporary)
+        string? rightTemporary,
+        bool preserveStatementErrors = false,
+        bool usesNativeInvocation = false,
+        bool nativeIgnoreCase = true,
+        SourceSpan? operatorSpan = null,
+        string? operatorSourceText = null)
         : base(span, clrType)
     {
         Operation = operation;
@@ -17,6 +22,11 @@ internal sealed class PowerShellLoweredBinaryExpression : PowerShellLoweredExpre
         Right = right;
         LeftTemporary = leftTemporary;
         RightTemporary = rightTemporary;
+        PreserveStatementErrors = preserveStatementErrors;
+        UsesNativeInvocation = usesNativeInvocation;
+        NativeIgnoreCase = nativeIgnoreCase;
+        OperatorSpan = operatorSpan;
+        OperatorSourceText = operatorSourceText;
     }
 
     internal PowerShellBoundBinaryOperator Operation { get; }
@@ -24,6 +34,11 @@ internal sealed class PowerShellLoweredBinaryExpression : PowerShellLoweredExpre
     internal PowerShellLoweredExpression Right { get; }
     internal string? LeftTemporary { get; }
     internal string? RightTemporary { get; }
+    internal bool PreserveStatementErrors { get; }
+    internal bool UsesNativeInvocation { get; }
+    internal bool NativeIgnoreCase { get; }
+    internal SourceSpan? OperatorSpan { get; }
+    internal string? OperatorSourceText { get; }
 }
 
 internal sealed class PowerShellLoweredUnaryExpression : PowerShellLoweredExpression
@@ -41,17 +56,19 @@ internal sealed class PowerShellLoweredUnaryExpression : PowerShellLoweredExpres
 
 internal sealed class PowerShellLoweredTypeTestExpression : PowerShellLoweredExpression
 {
-    internal PowerShellLoweredTypeTestExpression(SourceSpan span, PowerShellLoweredExpression operand, Type targetType, bool negate)
+    internal PowerShellLoweredTypeTestExpression(SourceSpan span, PowerShellLoweredExpression operand, Type targetType, bool negate, bool usesPowerShellSemantics = false)
         : base(span, typeof(bool))
     {
         Operand = operand;
         TargetType = targetType;
         Negate = negate;
+        UsesPowerShellSemantics = usesPowerShellSemantics;
     }
 
     internal PowerShellLoweredExpression Operand { get; }
     internal Type TargetType { get; }
     internal bool Negate { get; }
+    internal bool UsesPowerShellSemantics { get; }
 }
 
 internal sealed class PowerShellLoweredRegexExpression : PowerShellLoweredExpression
@@ -113,7 +130,9 @@ internal sealed class PowerShellLoweredMembershipExpression : PowerShellLoweredE
         bool negate,
         string leftTemporary,
         string rightTemporary,
-        string itemTemporary)
+        string itemTemporary,
+        bool usesNativeInvocation = false,
+        bool usesCommandHostInvocation = false)
         : base(span, typeof(bool))
     {
         Left = left;
@@ -125,6 +144,8 @@ internal sealed class PowerShellLoweredMembershipExpression : PowerShellLoweredE
         LeftTemporary = leftTemporary;
         RightTemporary = rightTemporary;
         ItemTemporary = itemTemporary;
+        UsesNativeInvocation = usesNativeInvocation;
+        UsesCommandHostInvocation = usesCommandHostInvocation;
     }
 
     internal PowerShellLoweredExpression Left { get; }
@@ -136,6 +157,8 @@ internal sealed class PowerShellLoweredMembershipExpression : PowerShellLoweredE
     internal string LeftTemporary { get; }
     internal string RightTemporary { get; }
     internal string ItemTemporary { get; }
+    internal bool UsesNativeInvocation { get; }
+    internal bool UsesCommandHostInvocation { get; }
 }
 
 internal sealed class PowerShellLoweredStringSplitExpression : PowerShellLoweredExpression
@@ -155,17 +178,24 @@ internal sealed class PowerShellLoweredStringSplitExpression : PowerShellLowered
 
 internal sealed class PowerShellLoweredStringJoinExpression : PowerShellLoweredExpression
 {
-    internal PowerShellLoweredStringJoinExpression(SourceSpan span, PowerShellLoweredExpression values, PowerShellLoweredExpression separator, string valuesTemporary, string separatorTemporary)
+    internal PowerShellLoweredStringJoinExpression(SourceSpan span, PowerShellLoweredExpression values, PowerShellLoweredExpression separator, string valuesTemporary, string separatorTemporary,
+        string? nativeSourcePath = null, string nativeSourceText = "", bool isUnary = false)
         : base(span, typeof(string))
     {
         Values = values;
         Separator = separator;
         ValuesTemporary = valuesTemporary;
         SeparatorTemporary = separatorTemporary;
+        NativeSourcePath = nativeSourcePath;
+        NativeSourceText = nativeSourceText;
+        IsUnary = isUnary;
     }
 
     internal PowerShellLoweredExpression Values { get; }
     internal PowerShellLoweredExpression Separator { get; }
     internal string ValuesTemporary { get; }
     internal string SeparatorTemporary { get; }
+    internal string? NativeSourcePath { get; }
+    internal string NativeSourceText { get; }
+    internal bool IsUnary { get; }
 }

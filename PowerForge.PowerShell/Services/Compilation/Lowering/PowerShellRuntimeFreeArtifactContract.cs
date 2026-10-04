@@ -25,10 +25,12 @@ internal sealed class PowerShellRuntimeFreeArtifactContract
         string workspace,
         string namespaceName,
         string typeName,
-        IEnumerable<PowerShellCompiledMethod> methods)
+        IEnumerable<PowerShellCompiledMethod> methods,
+        PowerShellRuntimeFreeModuleContract? moduleLifetime = null)
     {
         var profile = new PowerShellCompilationSemanticProfile();
-        var abi = PowerShellCompilationAbiBuilder.Create(namespaceName, typeName, methods);
+        if (moduleLifetime is not null) profile.CompilerRuntimeAbiVersion = "5";
+        var abi = PowerShellCompilationAbiBuilder.Create(namespaceName, typeName, methods, moduleLifetime);
         File.WriteAllText(
             Path.Combine(workspace, "PowerForgeRuntimeFreeContract.g.cs"),
             PowerShellRuntimeFreeContractSource.Generate(profile, abi),
@@ -36,7 +38,7 @@ internal sealed class PowerShellRuntimeFreeArtifactContract
         return new PowerShellRuntimeFreeArtifactContract(profile, abi, ComputeGeneratedSourceSha256(workspace));
     }
 
-    private static string ComputeGeneratedSourceSha256(string workspace)
+    internal static string ComputeGeneratedSourceSha256(string workspace)
     {
         var normalized = new StringBuilder();
         foreach (var path in Directory.EnumerateFiles(workspace, "*.cs", SearchOption.TopDirectoryOnly)

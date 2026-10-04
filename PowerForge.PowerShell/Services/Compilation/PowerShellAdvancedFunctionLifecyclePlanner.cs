@@ -23,6 +23,9 @@ internal static class PowerShellAdvancedFunctionLifecyclePlanner
             .ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         var lifecycleMethods = typed.LifecycleSources
             .Where(source => isolatedSources.Contains(Path.GetFullPath(source.SourcePath)))
+            // A hosted lifecycle rebinds the original argument dictionary in its native function.
+            // That cannot preserve parameter or preference mutations made during string conversion.
+            .Where(source => !source.Parameters.Any(parameter => parameter.TypeName == typeof(string).FullName))
             .Where(source => !existing.Contains(MethodKey(source.SourcePath, source.Name, source.SourceLine)))
             .OrderBy(static source => source.SourcePath, PowerShellCompilationPathSafety.PathComparer)
             .ThenBy(static source => source.SourceLine)

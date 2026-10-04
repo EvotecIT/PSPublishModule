@@ -132,9 +132,18 @@ public static class PowerShellCompilationTargetContractService
 {
     /// <summary>Returns the semantic profile implied by a compatibility target framework.</summary>
     public static string GetDefaultSemanticProfileId(string? targetFramework)
-        => string.Equals(targetFramework?.Trim(), "net472", StringComparison.OrdinalIgnoreCase)
-            ? PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId
-            : PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;
+    {
+        if (targetFramework is null)
+            return PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;
+
+        var framework = targetFramework.Trim();
+        if (framework.Length == 0 || PowerShellCompilationTargetFrameworkPolicy.IsModern(framework))
+            return PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;
+        if (framework.Equals(PowerShellCompilationTargetFrameworkPolicy.Legacy, StringComparison.OrdinalIgnoreCase))
+            return PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId;
+        PowerShellCompilationTargetFrameworkPolicy.EnsureSupported(framework);
+        throw new InvalidOperationException("Unreachable target framework policy state.");
+    }
 
     /// <summary>Creates the target implied by compatibility build fields.</summary>
     public static PowerShellCompilationTargetContract Create(
@@ -150,6 +159,7 @@ public static class PowerShellCompilationTargetContractService
     {
         var rid = runtimeIdentifier?.Trim() ?? string.Empty;
         var framework = targetFramework?.Trim() ?? string.Empty;
+        PowerShellCompilationTargetFrameworkPolicy.EnsureSupported(framework, kind);
         var deployment = optimization switch
         {
             PowerShellCompilationExecutableOptimization.Trimmed => PowerShellCompilationDeploymentModel.Trimmed,
@@ -211,6 +221,7 @@ public static class PowerShellCompilationTargetContractService
         if (originalSchema < 3) contract.SemanticProfileId = string.Empty;
         else contract.SemanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(contract.SemanticProfileId).ProfileId;
         contract.TargetFramework = contract.TargetFramework?.Trim() ?? string.Empty;
+        PowerShellCompilationTargetFrameworkPolicy.EnsureSupported(contract.TargetFramework, contract.ArtifactKind);
         contract.RuntimeIdentifier = contract.RuntimeIdentifier?.Trim() ?? string.Empty;
         contract.OperatingSystem = contract.OperatingSystem?.Trim() ?? string.Empty;
         contract.Architecture = contract.Architecture?.Trim() ?? string.Empty;

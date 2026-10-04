@@ -5,7 +5,9 @@ internal enum PowerShellIntegralMutationSemantics
 {
     None,
     CheckedConversion,
-    PromotedBigIntegerProduct
+    PromotedBigIntegerProduct,
+    UnconstrainedInt32OrDouble,
+    UnsignedDecrement
 }
 
 internal enum PowerShellBoundMutationOperator
@@ -32,13 +34,20 @@ internal sealed class PowerShellBoundMutationExpression : PowerShellBoundExpress
         PowerShellBoundExpression? value,
         PowerShellTypeFact type,
         bool normalizeNullString,
-        PowerShellIntegralMutationSemantics integralSemantics)
+        PowerShellIntegralMutationSemantics integralSemantics,
+        bool preserveStatementErrors = false,
+        PowerShellBoundNativeVariableExpression? nativeTargetRead = null,
+        string nativeSourceText = "", bool nativeSetSequencePoint = true, PowerShellNativeAssignmentTarget? nativeAssignmentTarget = null)
         : base(
             span,
             type,
             PowerShellValueState.Unknown,
-            PowerShellSemanticEffect.Mutation | (value?.Effects ?? PowerShellSemanticEffect.None),
-            value?.Capabilities ?? PowerShellRequiredCapability.None)
+            PowerShellSemanticEffect.Mutation | (value?.Effects ?? PowerShellSemanticEffect.None) |
+                (preserveStatementErrors ? PowerShellSemanticEffect.TerminatingError : PowerShellSemanticEffect.None) |
+                (nativeTargetRead?.Effects ?? PowerShellSemanticEffect.None),
+            (value?.Capabilities ?? PowerShellRequiredCapability.None) |
+                (preserveStatementErrors ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None) |
+                (nativeTargetRead?.Capabilities ?? PowerShellRequiredCapability.None))
     {
         Target = target;
         TargetClrType = targetClrType;
@@ -46,6 +55,11 @@ internal sealed class PowerShellBoundMutationExpression : PowerShellBoundExpress
         Value = value;
         NormalizeNullString = normalizeNullString;
         IntegralSemantics = integralSemantics;
+        PreserveStatementErrors = preserveStatementErrors;
+        NativeTargetRead = nativeTargetRead;
+        NativeSourceText = nativeSourceText;
+        NativeSetSequencePoint = nativeSetSequencePoint;
+        NativeAssignmentTarget = nativeAssignmentTarget;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -54,4 +68,16 @@ internal sealed class PowerShellBoundMutationExpression : PowerShellBoundExpress
     internal PowerShellBoundExpression? Value { get; }
     internal bool NormalizeNullString { get; }
     internal PowerShellIntegralMutationSemantics IntegralSemantics { get; }
+    internal bool PreserveStatementErrors { get; }
+    internal PowerShellBoundNativeVariableExpression? NativeTargetRead { get; }
+    internal bool UsesNativeInvocation => NativeTargetRead is not null;
+    internal string NativeSourceText { get; }
+    /// <summary>Distinguishes statement mutations from value operands that inherit the surrounding sequence point.</summary>
+    internal bool NativeSetSequencePoint { get; }
+    internal PowerShellNativeAssignmentTarget? NativeAssignmentTarget { get; }
+
+    /// <summary>Preserves the operation while selecting its expression-result representation.</summary>
+    internal PowerShellBoundMutationExpression WithResultType(PowerShellTypeFact type, bool? nativeSetSequencePoint = null)
+        => new(Span, Target, TargetClrType, Operation, Value, type, NormalizeNullString,
+            IntegralSemantics, PreserveStatementErrors, NativeTargetRead, NativeSourceText, nativeSetSequencePoint ?? NativeSetSequencePoint, NativeAssignmentTarget);
 }

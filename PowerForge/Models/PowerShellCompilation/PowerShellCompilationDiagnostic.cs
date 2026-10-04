@@ -30,7 +30,10 @@ public enum PowerShellCompilationDiagnosticCode
     UnsupportedSyntax,
 
     /// <summary>The unit uses an operator not implemented by the typed compiler.</summary>
-    UnsupportedOperator
+    UnsupportedOperator,
+
+    /// <summary>A semantically eligible unit remains hosted because the selected artifact cannot emit it.</summary>
+    ArtifactShaping
 }
 
 /// <summary>

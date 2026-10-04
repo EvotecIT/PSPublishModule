@@ -36,15 +36,35 @@ internal sealed class PowerShellLoweredConversionExpression : PowerShellLoweredE
         Type clrType,
         PowerShellLoweredExpression operand,
         bool usePowerShellLanguageRuntime,
-        bool usePowerShellTruthiness) : base(span, clrType)
+        bool usePowerShellTruthiness,
+        bool normalizeNullString = false,
+        string? nativeSourcePath = null,
+        string nativeSourceText = "", bool nativePostTestCondition = false, bool useNativeConversion = false,
+        bool useNativeCustomObjectConversion = false, string? nativeRuntimeTypeName = null, SourceSpan? nativeRuntimeTypeSpan = null) : base(span, clrType)
     {
         Operand = operand;
         UsePowerShellLanguageRuntime = usePowerShellLanguageRuntime;
         UsePowerShellTruthiness = usePowerShellTruthiness;
+        NormalizeNullString = normalizeNullString;
+        NativeSourcePath = nativeSourcePath;
+        NativeSourceText = nativeSourceText;
+        NativePostTestCondition = nativePostTestCondition;
+        UseNativeConversion = useNativeConversion;
+        UseNativeCustomObjectConversion = useNativeCustomObjectConversion;
+        NativeRuntimeTypeName = nativeRuntimeTypeName;
+        NativeRuntimeTypeSpan = nativeRuntimeTypeSpan;
     }
     internal PowerShellLoweredExpression Operand { get; }
     internal bool UsePowerShellLanguageRuntime { get; }
     internal bool UsePowerShellTruthiness { get; }
+    internal bool NormalizeNullString { get; }
+    internal string? NativeSourcePath { get; }
+    internal string NativeSourceText { get; }
+    internal bool NativePostTestCondition { get; }
+    internal bool UseNativeConversion { get; }
+    internal bool UseNativeCustomObjectConversion { get; }
+    internal string? NativeRuntimeTypeName { get; }
+    internal SourceSpan? NativeRuntimeTypeSpan { get; }
 }
 
 internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredExpression
@@ -63,7 +83,14 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
         bool requiresPowerShellCommandRegions,
         bool requiresPowerShellRuntimeState,
         bool requiresPowerShellModuleStateRead,
-        bool requiresPowerShellModuleStateWrite)
+        bool requiresPowerShellModuleStateWrite,
+        bool requiresPowerShellStatementErrors = false,
+        string statementErrorContextTemporary = "",
+        string statementErrorTemporary = "",
+        bool requiresPowerShellStopping = false,
+        bool capturesSuccessOutput = false,
+        string capturedOutputTemporary = "",
+        bool capturesClrReturn = false)
         : base(span, clrType)
     {
         Target = target;
@@ -78,6 +105,13 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
         RequiresPowerShellRuntimeState = requiresPowerShellRuntimeState;
         RequiresPowerShellModuleStateRead = requiresPowerShellModuleStateRead;
         RequiresPowerShellModuleStateWrite = requiresPowerShellModuleStateWrite;
+        RequiresPowerShellStatementErrors = requiresPowerShellStatementErrors;
+        StatementErrorContextTemporary = statementErrorContextTemporary;
+        StatementErrorTemporary = statementErrorTemporary;
+        RequiresPowerShellStopping = requiresPowerShellStopping;
+        CapturesSuccessOutput = capturesSuccessOutput;
+        CapturedOutputTemporary = capturedOutputTemporary;
+        CapturesClrReturn = capturesClrReturn;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -93,19 +127,31 @@ internal sealed class PowerShellLoweredInvocationExpression : PowerShellLoweredE
     internal bool RequiresPowerShellModuleStateRead { get; }
     internal bool RequiresPowerShellModuleStateWrite { get; }
     internal bool RequiresPowerShellModuleState => RequiresPowerShellModuleStateRead || RequiresPowerShellModuleStateWrite;
+    internal bool RequiresPowerShellStatementErrors { get; }
+    internal string StatementErrorContextTemporary { get; }
+    internal string StatementErrorTemporary { get; }
+    internal bool RequiresPowerShellStopping { get; }
+    internal bool CapturesSuccessOutput { get; }
+    internal string CapturedOutputTemporary { get; }
+    internal bool CapturesClrReturn { get; }
 }
 
-internal sealed class PowerShellLoweredReturnStatement : PowerShellLoweredStatement
+internal class PowerShellLoweredReturnStatement : PowerShellLoweredStatement
 {
     internal PowerShellLoweredReturnStatement(SourceSpan span, PowerShellLoweredExpression? expression, bool emitsValue)
+        : this(span, expression, emitsValue, emitsSuccessOutput: true) { }
+
+    protected PowerShellLoweredReturnStatement(SourceSpan span, PowerShellLoweredExpression? expression, bool emitsValue, bool emitsSuccessOutput)
         : base(span)
     {
         Expression = expression;
         EmitsValue = expression is not null && emitsValue;
+        EmitsSuccessOutput = EmitsValue && emitsSuccessOutput;
     }
 
     internal PowerShellLoweredExpression? Expression { get; }
     internal bool EmitsValue { get; }
+    internal bool EmitsSuccessOutput { get; }
 }
 
 internal sealed class PowerShellLoweredExpressionStatement : PowerShellLoweredStatement
@@ -131,7 +177,8 @@ internal sealed class PowerShellLoweredAssignmentStatement : PowerShellLoweredSt
         bool declare,
         PowerShellBoundMutationOperator operation = PowerShellBoundMutationOperator.Assign,
         bool normalizeNullString = false,
-        PowerShellIntegralMutationSemantics integralSemantics = PowerShellIntegralMutationSemantics.None)
+        PowerShellIntegralMutationSemantics integralSemantics = PowerShellIntegralMutationSemantics.None,
+        bool preserveStatementErrors = false)
         : base(span)
     {
         Target = target;
@@ -141,6 +188,7 @@ internal sealed class PowerShellLoweredAssignmentStatement : PowerShellLoweredSt
         Operation = operation;
         NormalizeNullString = normalizeNullString;
         IntegralSemantics = integralSemantics;
+        PreserveStatementErrors = preserveStatementErrors;
     }
 
     internal PowerShellSymbolId Target { get; }
@@ -150,6 +198,7 @@ internal sealed class PowerShellLoweredAssignmentStatement : PowerShellLoweredSt
     internal PowerShellBoundMutationOperator Operation { get; }
     internal bool NormalizeNullString { get; }
     internal PowerShellIntegralMutationSemantics IntegralSemantics { get; }
+    internal bool PreserveStatementErrors { get; }
 }
 
 internal sealed class PowerShellLoweredLocalDeclarationStatement : PowerShellLoweredStatement
@@ -205,7 +254,12 @@ internal sealed class PowerShellLoweredFunction
         PowerShellValueState[] outputValueStates,
         Type? collectionElementType,
         PowerShellLoweredStatement[] statements,
-        SourceSpan span)
+        SourceSpan span,
+        bool requiresPowerShellStatementErrors = false,
+        bool requiresPowerShellStopping = false,
+        PowerShellNativeFunctionBinding? nativeFunctionBinding = null,
+        string sourcePath = "", string sourceText = "", Type? successOutputType = null,
+        PowerShellOutputTypeDeclaration[]? outputTypeDeclarations = null)
     {
         Symbol = symbol;
         GeneratedName = generatedName;
@@ -217,6 +271,7 @@ internal sealed class PowerShellLoweredFunction
         CommandBinding = commandBinding ?? new PowerShellCompilationCommandBinding();
         DeclaredOutputType = declaredOutputType;
         DeclaredOutputTypeName = declaredOutputTypeName ?? string.Empty;
+        OutputTypeDeclarations = outputTypeDeclarations ?? Array.Empty<PowerShellOutputTypeDeclaration>();
         RequiresPowerShellBoundParameters = requiresPowerShellBoundParameters;
         RequiresPowerShellStreams = requiresPowerShellStreams;
         RequiresRuntimeFreeProviderOperations = requiresRuntimeFreeProviderOperations;
@@ -231,6 +286,12 @@ internal sealed class PowerShellLoweredFunction
         CollectionElementType = collectionElementType;
         Statements = statements;
         Span = span;
+        RequiresPowerShellStatementErrors = requiresPowerShellStatementErrors;
+        RequiresPowerShellStopping = requiresPowerShellStopping;
+        NativeFunctionBinding = nativeFunctionBinding;
+        SourcePath = sourcePath;
+        SourceText = sourceText;
+        SuccessOutputType = successOutputType;
     }
 
     internal PowerShellSymbolId Symbol { get; }
@@ -243,10 +304,16 @@ internal sealed class PowerShellLoweredFunction
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
     internal Type? DeclaredOutputType { get; }
     internal string DeclaredOutputTypeName { get; }
+    internal PowerShellOutputTypeDeclaration[] OutputTypeDeclarations { get; }
     internal bool RequiresPowerShellBoundParameters { get; }
     internal bool RequiresPowerShellStreams { get; }
     internal bool RequiresRuntimeFreeProviderOperations { get; }
     internal bool RequiresPowerShellHostStreams { get; }
+    internal bool RequiresPowerShellStatementErrors { get; }
+    internal bool RequiresPowerShellStopping { get; }
+    internal PowerShellNativeFunctionBinding? NativeFunctionBinding { get; }
+    internal string SourcePath { get; }
+    internal string SourceText { get; }
     internal bool RequiresProviderCancellation { get; }
     internal bool RequiresPowerShellCommandRegions { get; }
     internal bool RequiresPowerShellRuntimeState { get; }
@@ -256,6 +323,7 @@ internal sealed class PowerShellLoweredFunction
     internal PowerShellOutputCardinality OutputCardinality { get; }
     internal PowerShellImmutableArray<PowerShellValueState> OutputValueStates { get; }
     internal Type? CollectionElementType { get; }
+    internal Type? SuccessOutputType { get; }
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
     internal SourceSpan Span { get; }
 }
@@ -277,14 +345,17 @@ internal sealed class PowerShellLoweredProgram
     internal PowerShellLoweredProgram(
         PowerShellLoweredFunction[] functions,
         PowerShellSemanticDiagnostic[] diagnostics,
-        PowerShellCompilationCapability targetCapabilities)
+        PowerShellCompilationCapability targetCapabilities,
+        PowerShellCompilationSemanticHostFamily semanticHostFamily)
     {
         Functions = functions;
         Diagnostics = diagnostics;
         TargetCapabilities = targetCapabilities;
+        SemanticHostFamily = semanticHostFamily;
     }
 
     internal PowerShellImmutableArray<PowerShellLoweredFunction> Functions { get; }
     internal PowerShellImmutableArray<PowerShellSemanticDiagnostic> Diagnostics { get; }
     internal PowerShellCompilationCapability TargetCapabilities { get; }
+    internal PowerShellCompilationSemanticHostFamily SemanticHostFamily { get; }
 }

@@ -32,7 +32,6 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
 
     [Theory]
     [InlineData(PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId, "net472", 5)]
-    [InlineData(PowerShellCompilationSemanticOracleCatalog.PowerShell74ProfileId, "net8.0", 7)]
     [InlineData(PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, "net10.0", 7)]
     public void Transpile_VersionMajorIsFixedBySemanticProfileWithoutHostState(
         string profileId,
@@ -191,7 +190,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             new[] { fixture.ScriptPath },
             "PowerForge.MixedCommandHost",
             "CompiledPowerShell",
-            "net8.0");
+            "net10.0");
 
         Assert.Empty(typed.Methods);
         Assert.Contains(typed.Diagnostics, static diagnostic =>
@@ -206,7 +205,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             new[] { transitiveFixture.ScriptPath },
             "PowerForge.TransitiveCommandHost",
             "CompiledPowerShell",
-            "net8.0");
+            "net10.0");
 
         Assert.DoesNotContain(transitive.Methods, static method => method.SourceName == "Test-TransitiveAvailability");
         Assert.Contains(transitive.Diagnostics, static diagnostic =>
@@ -219,7 +218,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             new[] { countedFixture.ScriptPath },
             "PowerForge.CountedCommandHost",
             "CompiledPowerShell",
-            "net8.0");
+            "net10.0");
 
         Assert.Empty(counted.Diagnostics.Select(static diagnostic => diagnostic.Message));
         var caller = Assert.Single(counted.Methods, static method => method.SourceName == "Test-CountedAvailability");
@@ -236,7 +235,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             new[] { invalidFixture.ScriptPath },
             "PowerForge.InvalidCommandDiscovery",
             "CompiledPowerShell",
-            "net8.0");
+            "net10.0");
 
         Assert.Empty(invalid.Methods);
         Assert.Contains(invalid.Diagnostics, static diagnostic =>
@@ -250,7 +249,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             new[] { nestedFixture.ScriptPath },
             "PowerForge.NestedCommandDiscovery",
             "CompiledPowerShell",
-            "net8.0");
+            "net10.0");
 
         Assert.Empty(nested.Diagnostics.Select(static diagnostic => diagnostic.Message));
         var caller = Assert.Single(nested.Methods, static method => method.SourceName == "Test-NestedCommandAvailability");
@@ -260,15 +259,15 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Theory]
-    [InlineData("net8.0", "pwsh")]
+    [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
     public void Build_BinaryModulePreservesBooleanGetCommandDiscovery(string targetFramework, string host)
     {
         if (targetFramework == "net472" && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
         using var fixture = ArtifactFixture.Create(
-            "function Test-CommandAvailability { param([string] $Name) return [bool](Microsoft.PowerShell.Core\\Get-Command $Name -ErrorAction SilentlyContinue) }; " +
-            "function Test-IgnoreCommandAvailability { param([string] $Name) return [bool](Microsoft.PowerShell.Core\\Get-Command $Name -ErrorAction Ignore) }; " +
-            "function Test-LiteralCommandAvailability { if (Microsoft.PowerShell.Core\\Get-Command -Name Get-Command -EA Ignore) { return $true }; return $false }",
+            "function Test-CommandAvailability { [CmdletBinding()] param([string] $Name) return [bool](Microsoft.PowerShell.Core\\Get-Command $Name -ErrorAction SilentlyContinue) }; " +
+            "function Test-IgnoreCommandAvailability { [CmdletBinding()] param([string] $Name) return [bool](Microsoft.PowerShell.Core\\Get-Command $Name -ErrorAction Ignore) }; " +
+            "function Test-LiteralCommandAvailability { [CmdletBinding()] param() if (Microsoft.PowerShell.Core\\Get-Command -Name Get-Command -EA Ignore) { return $true }; return $false }",
             ".psm1");
         var discoveryModuleRoot = Path.Combine(fixture.RootPath, "modules");
         var discoveryModulePath = Path.Combine(discoveryModuleRoot, "PowerForgeCommandDiscoveryFixture");
@@ -376,7 +375,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Theory]
-    [InlineData("net8.0", "pwsh")]
+    [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
     public void Build_BinaryModuleSnapshotsSupportedPreferencesAndErrorCollection(string targetFramework, string host)
     {
@@ -414,7 +413,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Theory]
-    [InlineData("net8.0", "pwsh")]
+    [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
     public void Build_BinaryModulePreservesEditionAndVersionState(string targetFramework, string host)
     {
@@ -451,7 +450,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Theory]
-    [InlineData("net8.0", "pwsh")]
+    [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
     public void Build_BinaryModulePreservesProcessUserAndCultureState(string targetFramework, string host)
     {
@@ -557,7 +556,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Theory]
-    [InlineData("net8.0", "pwsh")]
+    [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
     public void Build_BinaryModulePreservesExecutionContextLanguageMode(string targetFramework, string host)
     {
@@ -593,7 +592,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Theory]
-    [InlineData("net8.0", "pwsh")]
+    [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
     public void Build_BinaryModulePreservesShouldProcessAndWhatIfState(string targetFramework, string host)
     {
@@ -645,28 +644,28 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
-    public void Build_InterpolatedRuntimeStatePropagatesThroughLocalCalls()
+    public void Build_OpaquePreferenceInterpolationRetainsLocalCallClosure()
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-PreferenceText { [CmdletBinding(SupportsShouldProcess = $true)] param() return \"whatif=$WhatIfPreference\" }; " +
             "function Invoke-PreferenceText { [CmdletBinding(SupportsShouldProcess = $true)] param() return Get-PreferenceText }",
             ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
-            new[] { fixture.ScriptPath }, "PowerForge.InterpolatedRuntimeState", "CompiledPowerShell", "net8.0");
+            new[] { fixture.ScriptPath }, "PowerForge.InterpolatedRuntimeState", "CompiledPowerShell", "net10.0");
 
-        Assert.Empty(typed.Diagnostics.Select(static diagnostic => diagnostic.Message));
-        Assert.Equal(2, typed.Methods.Length);
-        Assert.All(typed.Methods, static method => Assert.True(method.RequiresPowerShellRuntimeState));
-        Assert.Contains("__whatIfPreference", typed.SourceCode, StringComparison.Ordinal);
+        Assert.Empty(typed.Methods);
+        Assert.Contains(typed.Diagnostics, static diagnostic => diagnostic.Message.Contains("caller locals", StringComparison.Ordinal));
 
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
             "PowerForge.InterpolatedRuntimeState",
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Strict,
+            PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true));
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Equal(0, result.Manifest!.CompiledMethods);
+        Assert.True(result.Manifest.RuntimeFallbackUnits > 0);
         var compiled = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
             $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; " +
             "Get-PreferenceText -WhatIf; Invoke-PreferenceText -WhatIf");
@@ -679,18 +678,17 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     [Theory]
     [InlineData("return ([string] $WhatIfPreference) -split 'r'")]
     [InlineData("return ([string[]] @([string] $WhatIfPreference)) -join ','")]
-    public void Transpile_StringOperatorsCarryNestedRuntimeStateRequirement(string body)
+    public void Transpile_StringOperatorsRetainOpaqueNestedRuntimeState(string body)
     {
         using var fixture = ArtifactFixture.Create(
             $"function Get-PreferenceText {{ [CmdletBinding(SupportsShouldProcess = $true)] param() {body} }}",
             ".psm1");
 
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
-            new[] { fixture.ScriptPath }, "PowerForge.StringRuntimeState", "CompiledPowerShell", "net8.0");
+            new[] { fixture.ScriptPath }, "PowerForge.StringRuntimeState", "CompiledPowerShell", "net10.0");
 
-        Assert.Empty(typed.Diagnostics.Select(static diagnostic => diagnostic.Message));
-        Assert.True(Assert.Single(typed.Methods).RequiresPowerShellRuntimeState);
-        Assert.Contains("__whatIfPreference", typed.SourceCode, StringComparison.Ordinal);
+        Assert.Empty(typed.Methods);
+        Assert.Contains(typed.Diagnostics, static diagnostic => diagnostic.Message.Contains("caller locals", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -758,7 +756,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             fixture.ScriptPath,
             "PowerForge.StaticFacts",
             "CompiledPowerShell",
-            "net8.0");
+            "net10.0");
 
         Assert.True(typed.Methods.Length == 1, string.Join(Environment.NewLine, typed.Diagnostics.Select(static diagnostic => diagnostic.Message)));
         Assert.False(typed.Methods[0].RequiresPowerShellRuntimeState);
@@ -774,7 +772,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             "$WhatIfPreference = $false; return $WhatIfPreference }",
             ".psm1");
         var typed = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
-            new[] { fixture.ScriptPath }, "PowerForge.LocalWhatIf", "CompiledPowerShell", "net8.0");
+            new[] { fixture.ScriptPath }, "PowerForge.LocalWhatIf", "CompiledPowerShell", "net10.0");
         var method = Assert.Single(typed.Methods);
         Assert.False(method.RequiresPowerShellRuntimeState);
 

@@ -1,0 +1,2445 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Original/generated caller-continuation proof for two retained paging/formatting functions; no complete-method gains.",
+  "compilerCommit": "9a5698fe820eb7e2cf0d71a4077004abc090be27",
+  "sources": [
+    {
+      "workflow": "Format",
+      "function": "Format-Stream",
+      "module": "PSSharedGoods",
+      "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+      "relativePath": "Public/Objects/Format-Stream.ps1",
+      "sourceSha256": "68161424368aee826c0bcb13a1de2526fdd9592d373dccff0a95c174a59fdc61"
+    },
+    {
+      "workflow": "Paging",
+      "function": "Out-More",
+      "module": "PSScriptTools",
+      "revision": "549fa3e3d769532320054fc0b3c8f42df0452361",
+      "relativePath": "functions/Utilities.ps1",
+      "parentSourceSha256": "1625373211d326669795cdd8ff2b40381e57147fd07065ca69bbec50cec81592",
+      "sourceSha256": "68b45883216818ce2050c134c4fd8551332d67ff7ca8717cb1a43a90ef3bd1cb",
+      "extraction": "Exact authored function bytes from function Out-More through its closing comment; no edits."
+    }
+  ],
+  "builds": [
+    {
+      "workflow": "Format",
+      "framework": "net10.0",
+      "succeeded": true,
+      "compiledMethods": 0,
+      "buildEvidenceSha256": "446ed97ca9c8d22e8eab14a80e796d252faa42a3ab508f07534a96b0fd9257f5",
+      "dependencyLockReviewed": false
+    },
+    {
+      "workflow": "Format",
+      "framework": "net472",
+      "succeeded": true,
+      "compiledMethods": 0,
+      "buildEvidenceSha256": "dbcccde0824e9a385737e81304285cd019e38c621859d9a66c76a40b542d6dea",
+      "dependencyLockReviewed": false
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net10.0",
+      "succeeded": true,
+      "compiledMethods": 0,
+      "buildEvidenceSha256": "92394d27f2544ff936c0f94cf2fc0da8c056f8483125ec1131bf5159449f76c1",
+      "dependencyLockReviewed": false
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net472",
+      "succeeded": true,
+      "compiledMethods": 0,
+      "buildEvidenceSha256": "d279513dddabb9a4564d80187be0dacd923dbaa64c415a470d45fc3998e43ab5",
+      "dependencyLockReviewed": false
+    }
+  ],
+  "strict": [
+    {
+      "workflow": "Format",
+      "framework": "net10.0",
+      "emitted": false,
+      "causes": [
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "semantic.lowering.missing",
+          "message": "The semantic pipeline did not produce a lowered compilation contract.",
+          "line": 1,
+          "column": 1
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "pipeline.lifecycle",
+          "message": "The 'begin' block requires PowerShell pipeline lifecycle semantics.",
+          "line": 97,
+          "column": 5
+        },
+        {
+          "code": "RuntimeScope",
+          "featureId": "runtime.scope",
+          "message": "Variable '$PSCmdlet' depends on PowerShell runtime scope.",
+          "line": 98,
+          "column": 29
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "expression.conversion",
+          "message": "Typed local declaration 'System.Management.Automation.ActionPreference' is not supported by the typed compiler.",
+          "line": 105,
+          "column": 13
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "expression.conversion",
+          "message": "Typed local declaration 'System.Management.Automation.ActionPreference' is not supported by the typed compiler.",
+          "line": 108,
+          "column": 13
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "expression.conversion",
+          "message": "Typed local declaration 'System.Management.Automation.ActionPreference' is not supported by the typed compiler.",
+          "line": 111,
+          "column": 13
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "expression.conversion",
+          "message": "Typed local declaration 'System.Management.Automation.ActionPreference' is not supported by the typed compiler.",
+          "line": 114,
+          "column": 13
+        },
+        {
+          "code": "RuntimeScope",
+          "featureId": "runtime.scope",
+          "message": "Variable '$Host' depends on PowerShell runtime scope.",
+          "line": 121,
+          "column": 30
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "pipeline.lifecycle",
+          "message": "The 'process' block requires PowerShell pipeline lifecycle semantics.",
+          "line": 124,
+          "column": 5
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.format-transposetable",
+          "message": "Command invocation 'Format-TransposeTable' requires the PowerShell runtime.",
+          "line": 128,
+          "column": 46
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.format-pstable",
+          "message": "Command invocation 'Format-PSTable' requires the PowerShell runtime.",
+          "line": 129,
+          "column": 21
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.format-transposetable",
+          "message": "Command invocation 'Format-TransposeTable' requires the PowerShell runtime.",
+          "line": 136,
+          "column": 46
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.format-pstable",
+          "message": "Command invocation 'Format-PSTable' requires the PowerShell runtime.",
+          "line": 137,
+          "column": 21
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "assignment.target",
+          "message": "Only direct local-variable assignment and conservative typed index/member mutation are supported; other assignment targets require PowerShell runtime semantics.",
+          "line": 149,
+          "column": 25
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 155,
+          "column": 17
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 156,
+          "column": 17
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.measure-object",
+          "message": "Command invocation 'Measure-Object' requires the PowerShell runtime.",
+          "line": 183,
+          "column": 54
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.subexpression",
+          "message": "Syntax node 'SubExpressionAst' is not supported by the typed compiler.",
+          "line": 194,
+          "column": 41
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.subexpression",
+          "message": "Syntax node 'SubExpressionAst' is not supported by the typed compiler.",
+          "line": 196,
+          "column": 41
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-output",
+          "message": "Command invocation 'Write-Output' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 205,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-host",
+          "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 207,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-warning",
+          "message": "Command invocation 'Write-Warning' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 209,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 211,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-debug",
+          "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 213,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-information",
+          "message": "Command invocation 'Write-Information' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 215,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-output",
+          "message": "Command invocation 'Write-Output' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 223,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-host",
+          "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 225,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-warning",
+          "message": "Command invocation 'Write-Warning' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 227,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 229,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-debug",
+          "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 231,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-information",
+          "message": "Command invocation 'Write-Information' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 233,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.select-object",
+          "message": "Command invocation 'Select-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 265,
+          "column": 72
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.select-object",
+          "message": "Command invocation 'Select-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 267,
+          "column": 72
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-output",
+          "message": "Command invocation 'Write-Output' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 285,
+          "column": 21
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-host",
+          "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 289,
+          "column": 25
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-host",
+          "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 291,
+          "column": 25
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-warning",
+          "message": "Command invocation 'Write-Warning' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 294,
+          "column": 21
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 296,
+          "column": 21
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-debug",
+          "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 298,
+          "column": 21
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-information",
+          "message": "Command invocation 'Write-Information' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 300,
+          "column": 21
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-output",
+          "message": "Command invocation 'Write-Output' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 310,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-host",
+          "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 314,
+          "column": 33
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-host",
+          "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 316,
+          "column": 33
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-warning",
+          "message": "Command invocation 'Write-Warning' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 319,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 321,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-debug",
+          "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 323,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-information",
+          "message": "Command invocation 'Write-Information' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 325,
+          "column": 29
+        }
+      ],
+      "explanationSha256": "c826f7e7ef5977a6ae4df8e8fb159e090a5b86f2e3699d5809997c798d1d4f1a",
+      "canProceed": false
+    },
+    {
+      "workflow": "Format",
+      "framework": "net472",
+      "emitted": false,
+      "causes": [
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "semantic.lowering.missing",
+          "message": "The semantic pipeline did not produce a lowered compilation contract.",
+          "line": 1,
+          "column": 1
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "pipeline.lifecycle",
+          "message": "The 'begin' block requires PowerShell pipeline lifecycle semantics.",
+          "line": 97,
+          "column": 5
+        },
+        {
+          "code": "RuntimeScope",
+          "featureId": "runtime.scope",
+          "message": "Variable '$PSCmdlet' depends on PowerShell runtime scope.",
+          "line": 98,
+          "column": 29
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "expression.conversion",
+          "message": "Typed local declaration 'System.Management.Automation.ActionPreference' is not supported by the typed compiler.",
+          "line": 105,
+          "column": 13
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "expression.conversion",
+          "message": "Typed local declaration 'System.Management.Automation.ActionPreference' is not supported by the typed compiler.",
+          "line": 108,
+          "column": 13
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "expression.conversion",
+          "message": "Typed local declaration 'System.Management.Automation.ActionPreference' is not supported by the typed compiler.",
+          "line": 111,
+          "column": 13
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "expression.conversion",
+          "message": "Typed local declaration 'System.Management.Automation.ActionPreference' is not supported by the typed compiler.",
+          "line": 114,
+          "column": 13
+        },
+        {
+          "code": "RuntimeScope",
+          "featureId": "runtime.scope",
+          "message": "Variable '$Host' depends on PowerShell runtime scope.",
+          "line": 121,
+          "column": 30
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "pipeline.lifecycle",
+          "message": "The 'process' block requires PowerShell pipeline lifecycle semantics.",
+          "line": 124,
+          "column": 5
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.format-transposetable",
+          "message": "Command invocation 'Format-TransposeTable' requires the PowerShell runtime.",
+          "line": 128,
+          "column": 46
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.format-pstable",
+          "message": "Command invocation 'Format-PSTable' requires the PowerShell runtime.",
+          "line": 129,
+          "column": 21
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.format-transposetable",
+          "message": "Command invocation 'Format-TransposeTable' requires the PowerShell runtime.",
+          "line": 136,
+          "column": 46
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.format-pstable",
+          "message": "Command invocation 'Format-PSTable' requires the PowerShell runtime.",
+          "line": 137,
+          "column": 21
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "assignment.target",
+          "message": "Only direct local-variable assignment and conservative typed index/member mutation are supported; other assignment targets require PowerShell runtime semantics.",
+          "line": 149,
+          "column": 25
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 155,
+          "column": 17
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 156,
+          "column": 17
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.measure-object",
+          "message": "Command invocation 'Measure-Object' requires the PowerShell runtime.",
+          "line": 183,
+          "column": 54
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.subexpression",
+          "message": "Syntax node 'SubExpressionAst' is not supported by the typed compiler.",
+          "line": 194,
+          "column": 41
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.subexpression",
+          "message": "Syntax node 'SubExpressionAst' is not supported by the typed compiler.",
+          "line": 196,
+          "column": 41
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-output",
+          "message": "Command invocation 'Write-Output' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 205,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-host",
+          "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 207,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-warning",
+          "message": "Command invocation 'Write-Warning' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 209,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 211,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-debug",
+          "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 213,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-information",
+          "message": "Command invocation 'Write-Information' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 215,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-output",
+          "message": "Command invocation 'Write-Output' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 223,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-host",
+          "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 225,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-warning",
+          "message": "Command invocation 'Write-Warning' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 227,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 229,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-debug",
+          "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 231,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-information",
+          "message": "Command invocation 'Write-Information' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 233,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.select-object",
+          "message": "Command invocation 'Select-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 265,
+          "column": 72
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.select-object",
+          "message": "Command invocation 'Select-Object' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 267,
+          "column": 72
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-output",
+          "message": "Command invocation 'Write-Output' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 285,
+          "column": 21
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-host",
+          "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 289,
+          "column": 25
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-host",
+          "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 291,
+          "column": 25
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-warning",
+          "message": "Command invocation 'Write-Warning' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 294,
+          "column": 21
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 296,
+          "column": 21
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-debug",
+          "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 298,
+          "column": 21
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-information",
+          "message": "Command invocation 'Write-Information' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 300,
+          "column": 21
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-output",
+          "message": "Command invocation 'Write-Output' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 310,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-host",
+          "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 314,
+          "column": 33
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-host",
+          "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 316,
+          "column": 33
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-warning",
+          "message": "Command invocation 'Write-Warning' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 319,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 321,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-debug",
+          "message": "Command invocation 'Write-Debug' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 323,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-information",
+          "message": "Command invocation 'Write-Information' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 325,
+          "column": 29
+        }
+      ],
+      "explanationSha256": "336a36d3ceb212fb0976365fcee27a5ca7b78fb3ead4cb90f3424bb208c3a872",
+      "canProceed": false
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net10.0",
+      "emitted": false,
+      "causes": [
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "semantic.lowering.missing",
+          "message": "The semantic pipeline did not produce a lowered compilation contract.",
+          "line": 1,
+          "column": 1
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "pipeline.lifecycle",
+          "message": "The 'begin' block requires PowerShell pipeline lifecycle semantics.",
+          "line": 17,
+          "column": 5
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.clear-host",
+          "message": "Command invocation 'Clear-Host' requires the PowerShell runtime.",
+          "line": 21,
+          "column": 13
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 24,
+          "column": 9
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 25,
+          "column": 9
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 28,
+          "column": 9
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.functiondefinition",
+          "message": "Syntax node 'FunctionDefinitionAst' is not supported by the typed compiler.",
+          "line": 38,
+          "column": 9
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "pipeline.lifecycle",
+          "message": "The 'process' block requires PowerShell pipeline lifecycle semantics.",
+          "line": 47,
+          "column": 5
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 49,
+          "column": 13
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 56,
+          "column": 13
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 62,
+          "column": 13
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-host",
+          "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 76,
+          "column": 17
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.read-host",
+          "message": "Command invocation 'Read-Host' requires the PowerShell runtime.",
+          "line": 77,
+          "column": 22
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.clearprompt",
+          "message": "Command invocation '_clearPrompt' requires the PowerShell runtime.",
+          "line": 81,
+          "column": 21
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.clearprompt",
+          "message": "Command invocation '_clearPrompt' requires the PowerShell runtime.",
+          "line": 86,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.clearprompt",
+          "message": "Command invocation '_clearPrompt' requires the PowerShell runtime.",
+          "line": 92,
+          "column": 29
+        },
+        {
+          "code": "RuntimeScope",
+          "featureId": "runtime.scope",
+          "message": "Variable '$PSBoundParameters' depends on PowerShell runtime scope.",
+          "line": 123,
+          "column": 19
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 124,
+          "column": 13
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 128,
+          "column": 13
+        },
+        {
+          "code": "RuntimeScope",
+          "featureId": "runtime.scope",
+          "message": "Variable '$PSBoundParameters' depends on PowerShell runtime scope.",
+          "line": 129,
+          "column": 19
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.out-string",
+          "message": "Command invocation 'Out-String' requires the PowerShell runtime.",
+          "line": 130,
+          "column": 22
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 134,
+          "column": 13
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 137,
+          "column": 9
+        }
+      ],
+      "explanationSha256": "4cefd5873cde44450c45e4d24b4d8e54c7e1d80bd293055df3ff305c95310eb5",
+      "canProceed": false
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net472",
+      "emitted": false,
+      "causes": [
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "semantic.lowering.missing",
+          "message": "The semantic pipeline did not produce a lowered compilation contract.",
+          "line": 1,
+          "column": 1
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "pipeline.lifecycle",
+          "message": "The 'begin' block requires PowerShell pipeline lifecycle semantics.",
+          "line": 17,
+          "column": 5
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.clear-host",
+          "message": "Command invocation 'Clear-Host' requires the PowerShell runtime.",
+          "line": 21,
+          "column": 13
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 24,
+          "column": 9
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 25,
+          "column": 9
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 28,
+          "column": 9
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "syntax.functiondefinition",
+          "message": "Syntax node 'FunctionDefinitionAst' is not supported by the typed compiler.",
+          "line": 38,
+          "column": 9
+        },
+        {
+          "code": "UnsupportedSyntax",
+          "featureId": "pipeline.lifecycle",
+          "message": "The 'process' block requires PowerShell pipeline lifecycle semantics.",
+          "line": 47,
+          "column": 5
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 49,
+          "column": 13
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 56,
+          "column": 13
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 62,
+          "column": 13
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-host",
+          "message": "Command invocation 'Write-Host' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 76,
+          "column": 17
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.read-host",
+          "message": "Command invocation 'Read-Host' requires the PowerShell runtime.",
+          "line": 77,
+          "column": 22
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.clearprompt",
+          "message": "Command invocation '_clearPrompt' requires the PowerShell runtime.",
+          "line": 81,
+          "column": 21
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.clearprompt",
+          "message": "Command invocation '_clearPrompt' requires the PowerShell runtime.",
+          "line": 86,
+          "column": 29
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.clearprompt",
+          "message": "Command invocation '_clearPrompt' requires the PowerShell runtime.",
+          "line": 92,
+          "column": 29
+        },
+        {
+          "code": "RuntimeScope",
+          "featureId": "runtime.scope",
+          "message": "Variable '$PSBoundParameters' depends on PowerShell runtime scope.",
+          "line": 123,
+          "column": 19
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 124,
+          "column": 13
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 128,
+          "column": 13
+        },
+        {
+          "code": "RuntimeScope",
+          "featureId": "runtime.scope",
+          "message": "Variable '$PSBoundParameters' depends on PowerShell runtime scope.",
+          "line": 129,
+          "column": 19
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.out-string",
+          "message": "Command invocation 'Out-String' requires the PowerShell runtime.",
+          "line": 130,
+          "column": 22
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 134,
+          "column": 13
+        },
+        {
+          "code": "CommandInvocation",
+          "featureId": "command.write-verbose",
+          "message": "Command invocation 'Write-Verbose' must preserve PowerShell runtime resolution because it is not one canonical module-qualified provider command.",
+          "line": 137,
+          "column": 9
+        }
+      ],
+      "explanationSha256": "26f9122f491d27a15f928a24ae54ac4f5bf112e77deac249dc71e74fa02e72ef",
+      "canProceed": false
+    }
+  ],
+  "observations": [
+    {
+      "workflow": "Format",
+      "framework": "net10.0",
+      "host": "pwsh",
+      "case": "empty",
+      "mode": "plain",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call",
+              "finally"
+            ],
+            "outputs": [],
+            "providerEvents": []
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Format",
+      "framework": "net10.0",
+      "host": "pwsh",
+      "case": "empty",
+      "mode": "loop",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call:1",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [],
+            "providerEvents": []
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call:1",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [],
+            "providerEvents": []
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Format",
+      "framework": "net10.0",
+      "host": "pwsh",
+      "case": "data",
+      "mode": "plain",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              "",
+              "Value ",
+              "----- ",
+              "alpha ",
+              "beta  ",
+              ""
+            ],
+            "providerEvents": [
+              "format:2"
+            ]
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              "",
+              "Value ",
+              "----- ",
+              "alpha ",
+              "beta  ",
+              ""
+            ],
+            "providerEvents": [
+              "format:2"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Format",
+      "framework": "net10.0",
+      "host": "pwsh",
+      "case": "data",
+      "mode": "loop",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call:1",
+              "returned:1",
+              "before-call:2",
+              "returned:2",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              "",
+              "Value ",
+              "----- ",
+              "alpha ",
+              "beta  ",
+              "",
+              "",
+              "Value ",
+              "----- ",
+              "alpha ",
+              "beta  ",
+              ""
+            ],
+            "providerEvents": [
+              "format:2",
+              "format:2"
+            ]
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call:1",
+              "returned:1",
+              "before-call:2",
+              "returned:2",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              "",
+              "Value ",
+              "----- ",
+              "alpha ",
+              "beta  ",
+              "",
+              "",
+              "Value ",
+              "----- ",
+              "alpha ",
+              "beta  ",
+              ""
+            ],
+            "providerEvents": [
+              "format:2",
+              "format:2"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Format",
+      "framework": "net472",
+      "host": "powershell.exe",
+      "case": "empty",
+      "mode": "plain",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call",
+              "finally"
+            ],
+            "outputs": [],
+            "providerEvents": []
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Format",
+      "framework": "net472",
+      "host": "powershell.exe",
+      "case": "empty",
+      "mode": "loop",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call:1",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [],
+            "providerEvents": []
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call:1",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [],
+            "providerEvents": []
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Format",
+      "framework": "net472",
+      "host": "powershell.exe",
+      "case": "data",
+      "mode": "plain",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              "",
+              "Value ",
+              "----- ",
+              "alpha ",
+              "beta  ",
+              ""
+            ],
+            "providerEvents": [
+              "format:2"
+            ]
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              "",
+              "Value ",
+              "----- ",
+              "alpha ",
+              "beta  ",
+              ""
+            ],
+            "providerEvents": [
+              "format:2"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Format",
+      "framework": "net472",
+      "host": "powershell.exe",
+      "case": "data",
+      "mode": "loop",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call:1",
+              "returned:1",
+              "before-call:2",
+              "returned:2",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              "",
+              "Value ",
+              "----- ",
+              "alpha ",
+              "beta  ",
+              "",
+              "",
+              "Value ",
+              "----- ",
+              "alpha ",
+              "beta  ",
+              ""
+            ],
+            "providerEvents": [
+              "format:2",
+              "format:2"
+            ]
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call:1",
+              "returned:1",
+              "before-call:2",
+              "returned:2",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              "",
+              "Value ",
+              "----- ",
+              "alpha ",
+              "beta  ",
+              "",
+              "",
+              "Value ",
+              "----- ",
+              "alpha ",
+              "beta  ",
+              ""
+            ],
+            "providerEvents": [
+              "format:2",
+              "format:2"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net10.0",
+      "host": "pwsh",
+      "case": "data",
+      "mode": "plain",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              1,
+              2
+            ],
+            "providerEvents": []
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              1,
+              2
+            ],
+            "providerEvents": []
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net10.0",
+      "host": "pwsh",
+      "case": "data",
+      "mode": "loop",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call:1",
+              "returned:1",
+              "before-call:2",
+              "returned:2",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              1,
+              2
+            ],
+            "providerEvents": []
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call:1",
+              "returned:1",
+              "before-call:2",
+              "returned:2",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              1,
+              2
+            ],
+            "providerEvents": []
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net10.0",
+      "host": "pwsh",
+      "case": "quit",
+      "mode": "plain",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call",
+              "finally"
+            ],
+            "outputs": [
+              1,
+              2
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net10.0",
+      "host": "pwsh",
+      "case": "quit",
+      "mode": "loop",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call:1",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              1,
+              2
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call:1",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              1,
+              2
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net10.0",
+      "host": "pwsh",
+      "case": "quit-last",
+      "mode": "plain",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              1,
+              2
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              1,
+              2
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net10.0",
+      "host": "pwsh",
+      "case": "more",
+      "mode": "plain",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              [
+                3
+              ],
+              4,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              5
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read",
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              [
+                3
+              ],
+              4,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              5
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read",
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net10.0",
+      "host": "pwsh",
+      "case": "all",
+      "mode": "plain",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              3,
+              4,
+              5
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              3,
+              4,
+              5
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net10.0",
+      "host": "pwsh",
+      "case": "next",
+      "mode": "plain",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              3,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              4,
+              5
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read",
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              3,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              4,
+              5
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read",
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net10.0",
+      "host": "pwsh",
+      "case": "invalid-response",
+      "mode": "plain",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              3,
+              4,
+              5
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read",
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              3,
+              4,
+              5
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read",
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net472",
+      "host": "powershell.exe",
+      "case": "data",
+      "mode": "plain",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              1,
+              2
+            ],
+            "providerEvents": []
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              1,
+              2
+            ],
+            "providerEvents": []
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net472",
+      "host": "powershell.exe",
+      "case": "data",
+      "mode": "loop",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call:1",
+              "returned:1",
+              "before-call:2",
+              "returned:2",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              1,
+              2
+            ],
+            "providerEvents": []
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call:1",
+              "returned:1",
+              "before-call:2",
+              "returned:2",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              1,
+              2
+            ],
+            "providerEvents": []
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net472",
+      "host": "powershell.exe",
+      "case": "quit",
+      "mode": "plain",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call",
+              "finally"
+            ],
+            "outputs": [
+              1,
+              2
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net472",
+      "host": "powershell.exe",
+      "case": "quit",
+      "mode": "loop",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call:1",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              1,
+              2
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call:1",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              1,
+              2
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net472",
+      "host": "powershell.exe",
+      "case": "quit-last",
+      "mode": "plain",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              1,
+              2
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              1,
+              2
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net472",
+      "host": "powershell.exe",
+      "case": "more",
+      "mode": "plain",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              [
+                3
+              ],
+              4,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              5
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read",
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              [
+                3
+              ],
+              4,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              5
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read",
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net472",
+      "host": "powershell.exe",
+      "case": "all",
+      "mode": "plain",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              3,
+              4,
+              5
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              3,
+              4,
+              5
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net472",
+      "host": "powershell.exe",
+      "case": "next",
+      "mode": "plain",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              3,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              4,
+              5
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read",
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              3,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              4,
+              5
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read",
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "workflow": "Paging",
+      "framework": "net472",
+      "host": "powershell.exe",
+      "case": "invalid-response",
+      "mode": "plain",
+      "matching": true,
+      "observation": {
+        "exitCode": 0,
+        "rows": [
+          {
+            "phase": "finally",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              3,
+              4,
+              5
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read",
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          },
+          {
+            "phase": "complete",
+            "events": [
+              "before-call",
+              "returned",
+              "after-call",
+              "finally",
+              "after-finally"
+            ],
+            "outputs": [
+              1,
+              2,
+              "\u001b[2A",
+              "\u001b[K",
+              "\u001b[3A",
+              "\u001b[1G",
+              3,
+              4,
+              5
+            ],
+            "providerEvents": [
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read",
+              "host:[M]ore [A]ll [N]ext [Q]uit ",
+              "read"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "driverSha256": "4dac38b9618deafdd1fcbc29b9d0def3c65484df7abc8257d1a528455ec72f1f",
+  "portfolio": {
+    "emitted": 535,
+    "functions": 565,
+    "retained": 30,
+    "stableUnits": 584,
+    "censusRepeated": false,
+    "reason": "No compiler or pinned source changes; accepted event-record same-input comparison remains authoritative."
+  },
+  "limits": [
+    "Zero complete compiled functions gained. Authored bodies and caller transfers remain PowerShell-owned.",
+    "Module-owned in-memory formatting and queued input/host providers; no keyboard or screen mutation. Physical display, ClearScreen, multiline/help recursion, arbitrary callers and non-Windows hosts are unqualified.",
+    "Generated development dependency locks are unreviewed. No aggregate gate or local reviewer repeated because production is unchanged and the bounded hosted outcomes are directly observed."
+  ]
+}

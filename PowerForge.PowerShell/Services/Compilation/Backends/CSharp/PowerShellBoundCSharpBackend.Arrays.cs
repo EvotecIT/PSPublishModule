@@ -2,10 +2,28 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellBoundCSharpBackend
 {
+    private string EmitArrayCopy(PowerShellLoweredArrayCopyExpression copy)
+    {
+        var source = copy.SourceTemporary;
+        var result = copy.ResultTemporary;
+        var index = copy.IndexTemporary;
+        var empty = copy.ShareEmptyResult
+            ? "global::System.Array.Empty<object>()"
+            : "new object?[0]";
+        return "new global::System.Func<object?[]>(() => { " +
+               $"var {source} = {EmitExpression(copy.Source)}; " +
+               $"if ({source} is null) return new object?[] {{ null }}; " +
+               $"if ({source}.Length == 0) return {empty}; " +
+               $"var {result} = new object?[{source}.Length]; " +
+               $"for (int {index} = 0; {index} < {source}.Length; {index}++) {result}[{index}] = {source}[{index}]; " +
+               $"return {result}; " + "})()";
+    }
+
     private string EmitArray(PowerShellLoweredArrayExpression array)
     {
         var elementType = array.ClrType.GetElementType()!;
-        if (array.Elements.Length == 0) return $"global::System.Array.Empty<{PowerShellCSharpSymbolRenderer.TypeName(elementType)}>()";
+        if (array.Kind == PowerShellBoundArrayKind.SharedEmptyCollection) return "global::System.Array.Empty<object>()";
+        if (array.Elements.Length == 0) return $"new {PowerShellCSharpSymbolRenderer.TypeName(elementType)}[] {{ }}";
         return $"new {PowerShellCSharpSymbolRenderer.TypeName(elementType)}[] {{ {string.Join(", ", array.Elements.Select(EmitExpression))} }}";
     }
 

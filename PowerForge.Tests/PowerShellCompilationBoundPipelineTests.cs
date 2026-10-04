@@ -74,7 +74,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     [Theory]
     [InlineData("[int[]] $values = 1, 2, 3", "new int[] { 1, 2, 3 }")]
     [InlineData("[string[]] $values = @('one'; 'two')", "new string[] { \"one\", \"two\" }")]
-    [InlineData("[string[]] $values = @()", "System.Array.Empty<string>()")]
+    [InlineData("[string[]] $values = @()", "new string[] { }")]
     public void ArraysCarryContextualElementContractsThroughLowering(string assignment, string expectedSource)
     {
         var document = PowerShellSourceParser.Parse(
@@ -104,7 +104,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var loop = Assert.IsType<PowerShellBoundForEachStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements, static statement => statement is PowerShellBoundForEachStatement));
-        Assert.Equal(parameter.Contains("[]", StringComparison.Ordinal), !loop.ScalarString);
+        Assert.Equal(parameter.Contains("[]", StringComparison.Ordinal), loop.EnumerationKind == PowerShellForEachEnumerationKind.TypedArray);
         Assert.IsType<PowerShellLoweredForEachStatement>(Assert.Single(Assert.Single(result.Lowered.Functions).Statements, static statement => statement is PowerShellLoweredForEachStatement));
         var source = Assert.Single(result.Emitted.Methods).Source;
         Assert.Contains("string value = default!;", source, StringComparison.Ordinal);
@@ -118,7 +118,8 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         else
         {
             Assert.Contains("foreach (string __foreachItem_", source, StringComparison.Ordinal);
-            Assert.Contains("new[] { Values }", source, StringComparison.Ordinal);
+            Assert.Contains("var __foreachScalar_", source, StringComparison.Ordinal);
+            Assert.Contains("is null ? global::System.Array.Empty<string>() : new[] { __foreachScalar_", source, StringComparison.Ordinal);
         }
     }
 
@@ -268,7 +269,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             "function Get-Length { param([string] $Value) return $Value.Length } function Get-Upper { param([string] $Value) return $Value.ToUpperInvariant() } function Get-Absolute { param([double] $Value) return [System.Math]::Abs($Value) }",
             TestPath("clr-interop.ps1"));
 
-        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var length = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Get-Length");
@@ -287,7 +288,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             "function Get-Date { return [System.DateTime]::new(2026, 8, 27, 0, 0, 0, 'Utc') }",
             TestPath("clr-constructor.ps1"));
 
-        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var invocation = Assert.IsType<PowerShellBoundClrInvocationExpression>(
@@ -297,11 +298,14 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.Contains("(global::System.DateTimeKind)1L", Assert.Single(result.Emitted.Methods).Source, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ConstructedGenericListInvocationPropagatesPossibleMutationFromParameterReceiver()
+    [Theory]
+    [InlineData("List[string]", "'alpha'")]
+    [InlineData("HashSet[string]", "'alpha'")]
+    [InlineData("Dictionary[string,int]", "'alpha',1")]
+    public void ConstructedGenericCollectionInvocationPropagatesPossibleMutationFromParameterReceiver(string collection, string arguments)
     {
         var document = PowerShellSourceParser.Parse(
-            "function Add-Item { param([System.Collections.Generic.List[string]] $Items) $Items.Add('alpha') } function Invoke-Root { param([System.Collections.Generic.List[string]] $Items) Add-Item -Items $Items }",
+            $"function Add-Item {{ param([System.Collections.Generic.{collection}] $Items) $Items.Add({arguments}) }} function Invoke-Root {{ param([System.Collections.Generic.{collection}] $Items) Add-Item -Items $Items }}",
             TestPath("generic-list-mutation.ps1"));
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(
@@ -326,7 +330,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             "function Get-ShortName { $builder = [System.Text.StringBuilder]::new('Ada'); $builder.Length = 1; return $builder.ToString() }",
             TestPath("member-mutation.ps1"));
 
-        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var function = Assert.Single(result.Analyzed.Functions);
@@ -345,7 +349,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             "function Get-Last { param([int[]] $Values) return $Values[-1] } function Get-MapValue { $map = @{ One = '1' }; $map['Two'] = '2'; return $map['two'] }",
             TestPath("indexing.ps1"));
 
-        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var last = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Get-Last");
@@ -355,11 +359,11 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.IsType<PowerShellBoundIndexAssignmentStatement>(map.Body.Statements[1]);
         Assert.IsType<PowerShellLoweredIndexAssignmentStatement>(Assert.Single(result.Lowered.Functions, static function => function.Symbol.Name == "Get-MapValue").Statements[1]);
         var source = Assert.Single(result.Emitted.Methods, static method => method.GeneratedName == "Get_MapValue").Source;
-        Assert.Contains("Dictionary<string, string>", source, StringComparison.Ordinal);
+        Assert.Contains("System.Collections.Hashtable", source, StringComparison.Ordinal);
         Assert.Contains("__pf_index_value_", source, StringComparison.Ordinal);
         Assert.Contains("__pf_index_target_", source, StringComparison.Ordinal);
         Assert.Contains("__pf_index_key_", source, StringComparison.Ordinal);
-        Assert.Contains(".ContainsKey(__pf_index_key_", source, StringComparison.Ordinal);
+        Assert.Contains(".Contains(__pf_index_key_", source, StringComparison.Ordinal);
         Assert.Contains("var __pf_index_target_", source, StringComparison.Ordinal);
         Assert.Contains("var __pf_index_key_", source, StringComparison.Ordinal);
     }
@@ -371,7 +375,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             "function Get-OrderedValue { $map = [ordered] @{ One = '1'; Two = '2' }; return $map['two'] }",
             TestPath("ordered-dictionary.ps1"));
 
-        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var assignment = Assert.IsType<PowerShellBoundAssignmentStatement>(Assert.Single(result.Analyzed.Functions).Body.Statements[0]);
@@ -447,7 +451,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             "function Convert-Value { param([int] $Value) return [long] $Value } function Get-Identifier { return [guid] 'd2719d0d-6f72-4d9b-8c56-ccf150b9f6cf' }",
             TestPath("conversions.ps1"));
 
-        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var conversion = Assert.IsType<PowerShellBoundConversionExpression>(
@@ -467,7 +471,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             "function Test-Text { param([string] $Value) return $Value -match '^a' } function Update-Text { param([string] $Value) return $Value -creplace 'a', 'b' } function Test-Type { param([object] $Value) return $Value -is [string] }",
             TestPath("language-operators.ps1"));
 
-        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var match = Assert.IsType<PowerShellBoundRegexExpression>(Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Test-Text").Body.Statements)).Expression);
@@ -495,7 +499,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
 
         var supported = new PowerShellSemanticCompilationPipeline().Compile(
             new[] { document },
-            "net8.0",
+            "net10.0",
             PowerShellCompilationCapability.PowerShellLanguageOperators);
         Assert.Empty(supported.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var wildcard = Assert.IsType<PowerShellLoweredWildcardExpression>(
@@ -516,7 +520,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
 
         var supported = new PowerShellSemanticCompilationPipeline().Compile(
             new[] { document },
-            "net8.0",
+            "net10.0",
             PowerShellCompilationCapabilities.BinaryModule);
 
         Assert.Empty(supported.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
@@ -539,7 +543,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
 
         var runtimeFree = new PowerShellSemanticCompilationPipeline().Compile(
             new[] { document },
-            "net8.0",
+            "net10.0",
             PowerShellCompilationCapabilities.StaticRuntimeFacts);
         Assert.NotEmpty(runtimeFree.Emitted.Diagnostics);
         Assert.Single(runtimeFree.Emitted.Methods, static method => method.GeneratedName == "Get_StaticFact");
@@ -552,7 +556,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             "function Convert-Value { param([int] $Value) return [string] $Value }",
             TestPath("runtime-conversion.ps1"));
 
-        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0");
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0");
 
         Assert.Contains(result.Bound.Diagnostics, static diagnostic => diagnostic.Code == "PSB2202");
         Assert.Empty(result.Emitted.Methods);
@@ -692,7 +696,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
 
         var result = new PowerShellSemanticCompilationPipeline().Compile(
             new[] { document },
-            "net8.0",
+            "net10.0",
             PowerShellCompilationCapability.LocalFunctionCalls);
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
@@ -711,7 +715,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             "function Join-Value { param([string] $First = 'default', [Parameter(Mandatory)] [string] $Second) return $First + $Second } function Get-Joined { return Join-Value -Second 'B' -First 'A' } function Get-DefaultJoined { return Join-Value -Second 'B' }",
             TestPath("named-local-calls.ps1"));
 
-        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net8.0", PowerShellCompilationCapability.BoundParameters);
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0", PowerShellCompilationCapability.BoundParameters);
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
         var joined = Assert.IsType<PowerShellBoundInvocationExpression>(

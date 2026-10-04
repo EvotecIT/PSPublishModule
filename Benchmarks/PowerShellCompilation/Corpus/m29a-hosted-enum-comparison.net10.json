@@ -1,0 +1,1529 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Authored enums retained as native parameter metadata; body emission and execution separate.",
+  "baselineCompilerCommit": "c0c27662121fb412659930a947bb3144c7867ac5",
+  "baselineComparison": "m29a-hosted-attribute-comparison.net10.json",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "baselineEmitted": 497,
+  "candidateEmitted": 498,
+  "candidateRetained": 67,
+  "packets": [
+    {
+      "packet": "pssg",
+      "functions": 282,
+      "baselineEmitted": 259,
+      "candidateEmitted": 259,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateExplanationSha256": "7703c55d82630bce181342922eaf8c5d5500ea293e390fd7032ccf0b369b2b1a",
+      "changes": []
+    },
+    {
+      "packet": "cleanup",
+      "functions": 68,
+      "baselineEmitted": 63,
+      "candidateEmitted": 63,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateExplanationSha256": "51277db657806711a57853e04fa18848f05040d5c4343f18f3aad8e7627472d3",
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "functions": 66,
+      "baselineEmitted": 61,
+      "candidateEmitted": 61,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateExplanationSha256": "1e440e07730e829f4ca57f443a1f0b4f4c8b62c92311475d8fb13e2ee716d409",
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "functions": 109,
+      "baselineEmitted": 87,
+      "candidateEmitted": 88,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateExplanationSha256": "391f654b08642a6101b5312081b449f91d66c95eff3d0b7e048132e82c2dcecd",
+      "changes": [
+        {
+          "unitId": "9ab14a5915e28cf2804c71e6",
+          "name": "Write-PSHorizontalRule",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "platyps",
+      "functions": 40,
+      "baselineEmitted": 27,
+      "candidateEmitted": 27,
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "candidateExplanationSha256": "ffcef4ea501818413c6d7d2372b853388024b79b2361a537dd01889dbfcc6ab7",
+      "changes": []
+    }
+  ],
+  "sourceAndTestHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSourceSemanticValidator.cs": "ee5a3b1f84e2641e06f11916461787aa55c4a71f2805909f7ee1052f28266597",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.cs": "bef359d76dbee21656c429002090b501f050d100adc41961d6c7fe888d2c0ecd",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "26b8ebb4e184926095fd6af0ce253f55948a3ac0d7d983e112e3f1efb713fbc1",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedEnumDeclarationPolicy.cs": "3c73fa914308606aa8ec7dd41f99aa97d4a29a32fac1a5134574129719bcb9fb",
+    "PowerForge.Tests/PowerShellHostedEnumDeclarationTests.cs": "a4c7a557fdc3d341f30b7ec8b606ef4539d3be73015e8c197652b9624a70f1c7",
+    "PowerForge.Tests/PowerShellCompilationHostedEnumTests.cs": "59be6d45000cbc5e1e451c5a9cc010befc106b91c22e4bdb16a5bd5d80e7e389"
+  },
+  "baselineComparisonSha256": "a8e1db0a12d6eb923655beeca25ace5a46a8ae6a1288076dab60ae3af7e416c9",
+  "newlyExecutedFunctions": [
+    "Write-PSHorizontalRule"
+  ],
+  "validation": {
+    "focusedRuns": [
+      {
+        "file": "hosted-enum-identity-corrected-probe.trx",
+        "sha256": "8697735ab79e2a66583ab007964a0403fb5ab14a99cdb088f5292f8395faa08b",
+        "counters": {
+          "total": "12",
+          "executed": "12",
+          "passed": "12",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "tests": [
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"if($true) { enum NativeChoice { Zero } }; function\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0014295"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0006722"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0005993"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:04.0287514"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.0451273"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0042405"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0034449"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice : long { Zero }; function Read-C\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0003361"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumDeclarationDoesNotResolveUnrelatedUnknownParameterTypes",
+            "outcome": "Passed",
+            "duration": "00:00:00.0824825"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001799"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0870602"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0008210"
+          }
+        ]
+      },
+      {
+        "file": "hosted-enum-final-compatibility.trx",
+        "sha256": "2139802df10c1c9c8114b196418e37df8ee1a697b8ed9764e499c03ca22cfb10",
+        "counters": {
+          "total": "44",
+          "executed": "44",
+          "passed": "44",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "tests": [
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsUnownedOrNonAttributeConsumers(consumer: \"function Read-Value { param([AuthoredTransform(1)]\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0004190"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeRegistration_PreservesDeclarationPreferencesAliasesAndStatus(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.1173124"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0003424"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0929786"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsUnownedOrNonAttributeConsumers(consumer: \"function Read-Value { param() process { function R\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0006100"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumDeclarationDoesNotResolveUnrelatedUnknownParameterTypes",
+            "outcome": "Passed",
+            "duration": "00:00:00.0693772"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeRegistration_PreservesReadOnlyDeclarationFailures(framework: \"net472\", host: \"powershell.exe\", wholeFunction: False)",
+            "outcome": "Passed",
+            "duration": "00:00:03.0136114"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedArgumentAttributes_PreserveModuleScopeEffectsAndRepeatedImports(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.5486024"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellSourceTypeClosureTests.AttributeNameAmbiguityKeepsEveryDeclarationCandidate",
+            "outcome": "Passed",
+            "duration": "00:00:00.0014871"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.0617645"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeRegistration_PreservesDeclarationPreferencesAliasesAndStatus(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.5235152"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeDeclarations_PreserveAuthoredMetadataWithIndependentCompiledStorage(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:01.3856032"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeRegistration_PreservesReadOnlyDeclarationFailures(framework: \"net472\", host: \"powershell.exe\", wholeFunction: True)",
+            "outcome": "Passed",
+            "duration": "00:00:02.9125272"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeRegistration_PreservesReadOnlyDeclarationFailures(framework: \"net10.0\", host: \"pwsh\", wholeFunction: False)",
+            "outcome": "Passed",
+            "duration": "00:00:03.3070852"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeRegistration_PreservesProtectedAuthoredBodyDeclarations(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.0732561"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureKeepsNativeParameterMetadataAndStrictClosed(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0009000"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsAmbiguousSuffixLookupAndConditionalDeclarations",
+            "outcome": "Passed",
+            "duration": "00:00:00.0003577"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001350"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsStateConstructorsAndUnclosedMemberTypes(member: \"[object]$State\", body: \"\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0003081"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeRegistration_PreservesReadOnlyDeclarationFailures(framework: \"net10.0\", host: \"pwsh\", wholeFunction: True)",
+            "outcome": "Passed",
+            "duration": "00:00:03.3427401"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice : long { Zero }; function Read-C\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001651"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0033704"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsStateConstructorsAndUnclosedMemberTypes(member: \"\", body: \"[AuthoredTransform]::new();\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001393"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeLifecycle_PreservesDefaultsValidationParameterSetsAndCallbacks(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.6456673"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeLifecycle_PreservesDefaultsValidationParameterSetsAndCallbacks(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.0754227"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsUnownedOrNonAttributeConsumers(consumer: \"function Read-Value { param([AuthoredTransform()][\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0206417"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsUnownedOrNonAttributeConsumers(consumer: \"function Read-Value { param([AuthoredTransform]$Va\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001329"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0005823"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsStateConstructorsAndUnclosedMemberTypes(member: \"\", body: \"[Missing.Authored.Type]$Unknown = $null;\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0022647"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0167928"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellSourceTypeClosureTests.DeclarationFactsDoNotAuthorizeDetachingMetadataOrRemovingSourceGuard",
+            "outcome": "Passed",
+            "duration": "00:00:00.0007710"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedArgumentAttributes_PreserveModuleScopeEffectsAndRepeatedImports(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.0941158"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureKeepsNativeParameterMetadataAndStrictClosed(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0009886"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureQualifiesStatelessValidationSignature",
+            "outcome": "Passed",
+            "duration": "00:00:00.0013735"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellSourceTypeClosureTests.ClassPropertiesAndOverloadedMethodsKeepSeparateConsumerIdentities",
+            "outcome": "Passed",
+            "duration": "00:00:00.0066895"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsStateConstructorsAndUnclosedMemberTypes(member: \"AuthoredTransform() { throw 'Constructor must not \"···, body: \"\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0005385"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeDeclarations_PreserveAuthoredMetadataWithIndependentCompiledStorage(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:01.4737866"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellSourceTypeClosureTests.FunctionHeaderParametersKeepAttributeAndNestedTypeDependencies",
+            "outcome": "Passed",
+            "duration": "00:00:00.0882524"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.6001892"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeRegistration_PreservesProtectedAuthoredBodyDeclarations(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:04.0621281"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"if($true) { enum NativeChoice { Zero } }; function\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0012093"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedAttributeDeclarationTests.HostedAttributeClosureRejectsUnownedOrNonAttributeConsumers(consumer: \"function Read-Value { param([AuthoredTransform()][\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0952452"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellSourceTypeClosureTests.AuthoredMetadataAndNestedTypeArgumentsRetainTheirSourceDependencies",
+            "outcome": "Passed",
+            "duration": "00:00:00.0164699"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0005102"
+          }
+        ]
+      }
+    ],
+    "failedAttempt": {
+      "file": "hosted-enum-identity.trx",
+      "sha256": "e4937cb39eb6cd0e8d0964bbba323da5358848aad818cc8335b64bb6a22f3a6a",
+      "failed": 3,
+      "total": 12,
+      "reason": "Harness assertions conflated declaration qualification with unresolved parameter binding and left invalid enum inputs uncaught. Corrected probe captures native errors; no failed run counted as passing."
+    },
+    "net472OwnerBuild": {
+      "passed": true,
+      "seconds": 4.7,
+      "warnings": 0,
+      "errors": 0
+    },
+    "independentReadOnlyReview": {
+      "findings": [],
+      "scope": "Enum declaration closure, native parameter selection, source validator, semantic binder and focused tests; surrounding native owner/composer inspected. No fresh unrelated ABI or full-portfolio execution claim."
+    },
+    "aggregateGateRun": false
+  },
+  "workflowProof": {
+    "sourceRevision": "549fa3e3d769532320054fc0b3c8f42df0452361",
+    "sourceRelativePath": "functions/Write-PSHorizontalRule.ps1",
+    "sourceSha256": "a3a596d8765ce73998708acf2d471b34732f192ad6ac512d2560edb24a5c2691",
+    "license": "MIT; unchanged upstream source kept external",
+    "probe": "m29a-hosted-enum-probe.ps1",
+    "probeSha256": "67a1bb69e099e84641d10c49a47fc65121a661e6010430bca9146666b04c8b6d",
+    "hosts": [
+      {
+        "host": "pwsh",
+        "version": "7.6.6",
+        "framework": "net10.0",
+        "originalSha256": "392667d95d83de22e8187545924c0af94c77c42bea08f12dee0080f4179bd8b2",
+        "generatedSha256": "392667d95d83de22e8187545924c0af94c77c42bea08f12dee0080f4179bd8b2",
+        "observationsAndMetadata": {
+          "host": "7.6.6",
+          "observations": [
+            {
+              "id": "thin-defaults",
+              "records": [
+                "\u001b[92m──ABC\u001b[0m\u001b[92m─────────────\u001b[0m"
+              ],
+              "warnings": [],
+              "information": [
+                {
+                  "data": {
+                    "InformationAction": 0,
+                    "InformationVariable": "info",
+                    "Title": "ABC",
+                    "WarningAction": 0,
+                    "WarningVariable": "warnings",
+                    "Width": 20
+                  },
+                  "tags": [
+                    "runtime"
+                  ]
+                },
+                {
+                  "data": "Using dash ─",
+                  "tags": [
+                    "runtime"
+                  ]
+                }
+              ],
+              "error": null
+            },
+            {
+              "id": "thick-center",
+              "records": [
+                "\u001b[92m▬▬▬▬▬▬▬▬▬▬ABC\u001b[0m\u001b[92m▬▬▬▬▬▬▬▬▬▬\u001b[0m"
+              ],
+              "warnings": [],
+              "information": [
+                {
+                  "data": {
+                    "Alignment": 1,
+                    "InformationAction": 0,
+                    "InformationVariable": "info",
+                    "LineWeight": 1,
+                    "Title": "ABC",
+                    "WarningAction": 0,
+                    "WarningVariable": "warnings",
+                    "Width": 24
+                  },
+                  "tags": [
+                    "runtime"
+                  ]
+                },
+                {
+                  "data": "Using dash ▬",
+                  "tags": [
+                    "runtime"
+                  ]
+                }
+              ],
+              "error": null
+            },
+            {
+              "id": "right-title",
+              "records": [
+                "\u001b[92m───────────────ABC\u001b[0m\u001b[92m──\u001b[0m"
+              ],
+              "warnings": [],
+              "information": [
+                {
+                  "data": {
+                    "Alignment": 2,
+                    "InformationAction": 0,
+                    "InformationVariable": "info",
+                    "Title": "ABC",
+                    "WarningAction": 0,
+                    "WarningVariable": "warnings",
+                    "Width": 22
+                  },
+                  "tags": [
+                    "runtime"
+                  ]
+                },
+                {
+                  "data": "Using dash ─",
+                  "tags": [
+                    "runtime"
+                  ]
+                }
+              ],
+              "error": null
+            },
+            {
+              "id": "style-array",
+              "records": [
+                "\u001b[92m──\u001b[1;3mABC\u001b[0m\u001b[92m─────────────────\u001b[0m"
+              ],
+              "warnings": [],
+              "information": [
+                {
+                  "data": {
+                    "InformationAction": 0,
+                    "InformationVariable": "info",
+                    "Title": "ABC",
+                    "TitleStyle": [
+                      1,
+                      3
+                    ],
+                    "WarningAction": 0,
+                    "WarningVariable": "warnings",
+                    "Width": 24
+                  },
+                  "tags": [
+                    "runtime"
+                  ]
+                },
+                {
+                  "data": "Using dash ─",
+                  "tags": [
+                    "runtime"
+                  ]
+                }
+              ],
+              "error": null
+            },
+            {
+              "id": "numeric-enums",
+              "records": [
+                "\u001b[92m▬▬▬▬▬▬▬▬▬▬▬▬▬\u001b[1;7mABC\u001b[0m\u001b[92m▬▬\u001b[0m"
+              ],
+              "warnings": [],
+              "information": [
+                {
+                  "data": {
+                    "Alignment": 2,
+                    "InformationAction": 0,
+                    "InformationVariable": "info",
+                    "LineWeight": 1,
+                    "Title": "ABC",
+                    "TitleStyle": [
+                      1,
+                      7
+                    ],
+                    "WarningAction": 0,
+                    "WarningVariable": "warnings",
+                    "Width": 20
+                  },
+                  "tags": [
+                    "runtime"
+                  ]
+                },
+                {
+                  "data": "Using dash ▬",
+                  "tags": [
+                    "runtime"
+                  ]
+                }
+              ],
+              "error": null
+            },
+            {
+              "id": "case-fold",
+              "records": [
+                "\u001b[92m▬▬▬▬▬▬▬▬ABC\u001b[0m\u001b[92m▬▬▬▬▬▬▬▬\u001b[0m"
+              ],
+              "warnings": [],
+              "information": [
+                {
+                  "data": {
+                    "Alignment": 1,
+                    "InformationAction": 0,
+                    "InformationVariable": "info",
+                    "LineWeight": 1,
+                    "Title": "ABC",
+                    "WarningAction": 0,
+                    "WarningVariable": "warnings",
+                    "Width": 20
+                  },
+                  "tags": [
+                    "runtime"
+                  ]
+                },
+                {
+                  "data": "Using dash ▬",
+                  "tags": [
+                    "runtime"
+                  ]
+                }
+              ],
+              "error": null
+            },
+            {
+              "id": "no-title",
+              "records": [
+                "\u001b[92m──\u001b[0m\u001b[92m────────────\u001b[0m"
+              ],
+              "warnings": [],
+              "information": [
+                {
+                  "data": {
+                    "InformationAction": 0,
+                    "InformationVariable": "info",
+                    "WarningAction": 0,
+                    "WarningVariable": "warnings",
+                    "Width": 16
+                  },
+                  "tags": [
+                    "runtime"
+                  ]
+                },
+                {
+                  "data": "Using dash ─",
+                  "tags": [
+                    "runtime"
+                  ]
+                }
+              ],
+              "error": null
+            },
+            {
+              "id": "long-title",
+              "records": [],
+              "warnings": [
+                "The title length exceeds the horizontal rule width."
+              ],
+              "information": [
+                {
+                  "data": {
+                    "InformationAction": 0,
+                    "InformationVariable": "info",
+                    "Title": "Long title",
+                    "WarningAction": 0,
+                    "WarningVariable": "warnings",
+                    "Width": 6
+                  },
+                  "tags": [
+                    "runtime"
+                  ]
+                },
+                {
+                  "data": "Using dash ─",
+                  "tags": [
+                    "runtime"
+                  ]
+                }
+              ],
+              "error": null
+            },
+            {
+              "id": "invalid-weight",
+              "records": [],
+              "warnings": [],
+              "information": [],
+              "error": {
+                "id": "ParameterArgumentTransformationError,Write-PSHorizontalRule",
+                "type": "System.Management.Automation.ParameterBindingArgumentTransformationException",
+                "category": "InvalidData"
+              }
+            },
+            {
+              "id": "undefined-number",
+              "records": [],
+              "warnings": [],
+              "information": [],
+              "error": {
+                "id": "ParameterArgumentTransformationError,Write-PSHorizontalRule",
+                "type": "System.Management.Automation.ParameterBindingArgumentTransformationException",
+                "category": "InvalidData"
+              }
+            },
+            {
+              "id": "null-weight",
+              "records": [],
+              "warnings": [],
+              "information": [],
+              "error": {
+                "id": "ParameterArgumentTransformationError,Write-PSHorizontalRule",
+                "type": "System.Management.Automation.ParameterBindingArgumentTransformationException",
+                "category": "InvalidData"
+              }
+            },
+            {
+              "id": "invalid-style-array",
+              "records": [],
+              "warnings": [],
+              "information": [],
+              "error": {
+                "id": "ParameterArgumentTransformationError,Write-PSHorizontalRule",
+                "type": "System.Management.Automation.ParameterBindingArgumentTransformationException",
+                "category": "InvalidData"
+              }
+            }
+          ],
+          "metadata": [
+            {
+              "name": "LineWeight",
+              "type": "psRuleWeight",
+              "names": [
+                "Thin",
+                "Thick"
+              ],
+              "values": [
+                0,
+                1
+              ],
+              "aliases": [
+                "Weight"
+              ]
+            },
+            {
+              "name": "Alignment",
+              "type": "psRuleAlignment",
+              "names": [
+                "Left",
+                "Center",
+                "Right"
+              ],
+              "values": [
+                0,
+                1,
+                2
+              ],
+              "aliases": []
+            },
+            {
+              "name": "TitleStyle",
+              "type": "psRuleTextStyle[]",
+              "names": [
+                "none",
+                "bold",
+                "faint",
+                "italic",
+                "blink",
+                "reverse"
+              ],
+              "values": [
+                0,
+                1,
+                2,
+                3,
+                5,
+                7
+              ],
+              "aliases": []
+            }
+          ]
+        },
+        "buildEvidenceSha256": "92d013defe19d5cc009435e87bc180254597adf754b26c4cfc73ed4c17286c4a",
+        "strictEvidenceSha256": "0955ab7734c7f18f5448b07528fafe9b7b6c313988ae311e34a60873c49a968b",
+        "strictExitCode": 1,
+        "strictTypedUnits": 0,
+        "strictRejectedUnits": 2,
+        "artifactPathRecorded": "Qualified.Horizontal.net100.psm1",
+        "artifactUnitDispositionLedger": {
+          "schemaVersion": 5,
+          "entries": [
+            {
+              "unitId": "72511de9b109ad12d5eb283b",
+              "relativePath": "Write-PSHorizontalRule.ps1",
+              "name": "<script>",
+              "kind": "Script",
+              "startLine": 1,
+              "semanticEligible": false,
+              "emittedClrMethod": false,
+              "emittedBinaryCmdlet": false,
+              "retainedHostedSource": true,
+              "usesNativeFunctionBinding": false,
+              "runtimeCommandRegions": 0,
+              "boundaryCrossings": 0,
+              "shapingFallback": false,
+              "omitted": false,
+              "rejected": false,
+              "generatedMemberName": "",
+              "dependencyCauses": [],
+              "boundaryCauses": [
+                "Authored source remains on the hosted PowerShell path after artifact shaping."
+              ],
+              "diagnosticChain": [
+                {
+                  "code": "UnsupportedSyntax",
+                  "featureId": "syntax.typedefinition",
+                  "message": "Statement 'TypeDefinitionAst' is not yet represented by the bound pipeline.",
+                  "line": 1,
+                  "column": 1
+                }
+              ],
+              "moduleStateReadBoundaryCrossings": 0,
+              "moduleStateWriteBoundaryCrossings": 0,
+              "promotedTypedRegions": 0,
+              "generatedRegionMemberNames": []
+            },
+            {
+              "unitId": "25a4fd97dcfe1857eb88476d",
+              "relativePath": "Write-PSHorizontalRule.ps1",
+              "name": "Write-PSHorizontalRule",
+              "kind": "Function",
+              "startLine": 19,
+              "semanticEligible": true,
+              "emittedClrMethod": true,
+              "emittedBinaryCmdlet": false,
+              "retainedHostedSource": false,
+              "usesNativeFunctionBinding": true,
+              "runtimeCommandRegions": 13,
+              "boundaryCrossings": 14,
+              "shapingFallback": false,
+              "omitted": false,
+              "rejected": false,
+              "generatedMemberName": "Write_PSHorizontalRule",
+              "dependencyCauses": [],
+              "boundaryCauses": [
+                "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+                "The emitted CLR method contains hosted PowerShell command regions.",
+                "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation.",
+                "The emitted CLR method requires the invocation's native PowerShell loop-stopping callback."
+              ],
+              "diagnosticChain": [],
+              "moduleStateReadBoundaryCrossings": 0,
+              "moduleStateWriteBoundaryCrossings": 0,
+              "regionGraph": {
+                "schemaVersion": 1,
+                "regions": [
+                  {
+                    "regionId": "region:5b20525587ddf3ab4bb6ce71937e99248f62ae4eafd5bc7b587b6a7be8297906:239:3992:Mixed",
+                    "ordinal": 0,
+                    "execution": "Mixed",
+                    "startOffset": 239,
+                    "endOffset": 3992,
+                    "startLine": 19,
+                    "startColumn": 33,
+                    "endLine": 114,
+                    "endColumn": 2,
+                    "inputs": [
+                      "PowerShellSessionState:*",
+                      "PowerShellSessionVariable:ALIGNMENT",
+                      "PowerShellSessionVariable:HOST",
+                      "PowerShellSessionVariable:LINE",
+                      "PowerShellSessionVariable:LINEWEIGHT",
+                      "PowerShellSessionVariable:STYLE",
+                      "PowerShellSessionVariable:TITLE",
+                      "PowerShellSessionVariable:TITLESTYLE",
+                      "PowerShellSessionVariable:WIDTH"
+                    ],
+                    "outputs": [
+                      "stream:Success"
+                    ],
+                    "mutations": [
+                      "Local:LINE",
+                      "PowerShellSessionState:*",
+                      "PowerShellSessionVariable:BALANCE",
+                      "PowerShellSessionVariable:ENDSEGMENT",
+                      "PowerShellSessionVariable:LEAD",
+                      "PowerShellSessionVariable:RESET",
+                      "PowerShellSessionVariable:TEXTSTYLE",
+                      "PowerShellSessionVariable:WIDTH"
+                    ],
+                    "streams": [
+                      "Success",
+                      "Error",
+                      "Warning",
+                      "Verbose",
+                      "Debug",
+                      "Information",
+                      "Host"
+                    ],
+                    "errors": [
+                      "ClrException",
+                      "PowerShellErrorRecord",
+                      "PowerShellSessionStateError",
+                      "PowerShellStatementError"
+                    ],
+                    "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                    "hostedCommandBoundarySites": 13,
+                    "moduleStateReadBoundarySites": 0,
+                    "moduleStateWriteBoundarySites": 0,
+                    "staticBoundaryCrossings": 13,
+                    "staticBoundaryValueTransfers": 16,
+                    "staticBoundaryCostUnits": 29
+                  }
+                ],
+                "scriptBlocks": [],
+                "hostedCommandBoundarySites": 13,
+                "moduleStateReadBoundarySites": 0,
+                "moduleStateWriteBoundarySites": 0,
+                "staticBoundaryCrossings": 13,
+                "staticBoundaryCostUnits": 29
+              },
+              "promotedTypedRegions": 0,
+              "generatedRegionMemberNames": []
+            }
+          ],
+          "deliveryRuntimeCauses": [],
+          "analyzedUnits": 2,
+          "emittedUnits": 1,
+          "runtimeRoutedUnits": 2,
+          "fallbackUnits": 1,
+          "shapedFallbackUnits": 0,
+          "omittedUnits": 0,
+          "rejectedUnits": 0,
+          "runtimeCommandRegions": 13,
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "moduleStateBoundaryCrossings": 0,
+          "boundaryCrossings": 14,
+          "promotedTypedRegions": 0,
+          "usesPowerShellRuntimeFallback": true,
+          "compilationCoveragePercentage": 50
+        },
+        "compiledMethods": 1,
+        "artifactSha256": "bc756bbfe0d7de8c1f3d1f2ca800189f3dbe4ecf8bc024e026164dc2b1352fd9",
+        "generatedSourceSha256": ""
+      },
+      {
+        "host": "powershell.exe",
+        "version": "5.1.26100.9444",
+        "framework": "net472",
+        "originalSha256": "c59e9da2caa7dc1030493811a2abbbc76c58377f97ca5304214546cd612f2456",
+        "generatedSha256": "c59e9da2caa7dc1030493811a2abbbc76c58377f97ca5304214546cd612f2456",
+        "observationsAndMetadata": {
+          "host": "5.1.26100.9444",
+          "observations": [
+            {
+              "id": "thin-defaults",
+              "records": [
+                "\u001b[92m──ABC\u001b[0m\u001b[92m─────────────\u001b[0m"
+              ],
+              "warnings": [],
+              "information": [
+                {
+                  "data": {
+                    "InformationAction": 0,
+                    "InformationVariable": "info",
+                    "Title": "ABC",
+                    "WarningAction": 0,
+                    "WarningVariable": "warnings",
+                    "Width": 20
+                  },
+                  "tags": [
+                    "runtime"
+                  ]
+                },
+                {
+                  "data": "Using dash ─",
+                  "tags": [
+                    "runtime"
+                  ]
+                }
+              ],
+              "error": null
+            },
+            {
+              "id": "thick-center",
+              "records": [
+                "\u001b[92m▬▬▬▬▬▬▬▬▬▬ABC\u001b[0m\u001b[92m▬▬▬▬▬▬▬▬▬▬\u001b[0m"
+              ],
+              "warnings": [],
+              "information": [
+                {
+                  "data": {
+                    "Alignment": 1,
+                    "InformationAction": 0,
+                    "InformationVariable": "info",
+                    "LineWeight": 1,
+                    "Title": "ABC",
+                    "WarningAction": 0,
+                    "WarningVariable": "warnings",
+                    "Width": 24
+                  },
+                  "tags": [
+                    "runtime"
+                  ]
+                },
+                {
+                  "data": "Using dash ▬",
+                  "tags": [
+                    "runtime"
+                  ]
+                }
+              ],
+              "error": null
+            },
+            {
+              "id": "right-title",
+              "records": [
+                "\u001b[92m───────────────ABC\u001b[0m\u001b[92m──\u001b[0m"
+              ],
+              "warnings": [],
+              "information": [
+                {
+                  "data": {
+                    "Alignment": 2,
+                    "InformationAction": 0,
+                    "InformationVariable": "info",
+                    "Title": "ABC",
+                    "WarningAction": 0,
+                    "WarningVariable": "warnings",
+                    "Width": 22
+                  },
+                  "tags": [
+                    "runtime"
+                  ]
+                },
+                {
+                  "data": "Using dash ─",
+                  "tags": [
+                    "runtime"
+                  ]
+                }
+              ],
+              "error": null
+            },
+            {
+              "id": "style-array",
+              "records": [
+                "\u001b[92m──\u001b[1;3mABC\u001b[0m\u001b[92m─────────────────\u001b[0m"
+              ],
+              "warnings": [],
+              "information": [
+                {
+                  "data": {
+                    "InformationAction": 0,
+                    "InformationVariable": "info",
+                    "Title": "ABC",
+                    "TitleStyle": [
+                      1,
+                      3
+                    ],
+                    "WarningAction": 0,
+                    "WarningVariable": "warnings",
+                    "Width": 24
+                  },
+                  "tags": [
+                    "runtime"
+                  ]
+                },
+                {
+                  "data": "Using dash ─",
+                  "tags": [
+                    "runtime"
+                  ]
+                }
+              ],
+              "error": null
+            },
+            {
+              "id": "numeric-enums",
+              "records": [
+                "\u001b[92m▬▬▬▬▬▬▬▬▬▬▬▬▬\u001b[1;7mABC\u001b[0m\u001b[92m▬▬\u001b[0m"
+              ],
+              "warnings": [],
+              "information": [
+                {
+                  "data": {
+                    "Alignment": 2,
+                    "InformationAction": 0,
+                    "InformationVariable": "info",
+                    "LineWeight": 1,
+                    "Title": "ABC",
+                    "TitleStyle": [
+                      1,
+                      7
+                    ],
+                    "WarningAction": 0,
+                    "WarningVariable": "warnings",
+                    "Width": 20
+                  },
+                  "tags": [
+                    "runtime"
+                  ]
+                },
+                {
+                  "data": "Using dash ▬",
+                  "tags": [
+                    "runtime"
+                  ]
+                }
+              ],
+              "error": null
+            },
+            {
+              "id": "case-fold",
+              "records": [
+                "\u001b[92m▬▬▬▬▬▬▬▬ABC\u001b[0m\u001b[92m▬▬▬▬▬▬▬▬\u001b[0m"
+              ],
+              "warnings": [],
+              "information": [
+                {
+                  "data": {
+                    "Alignment": 1,
+                    "InformationAction": 0,
+                    "InformationVariable": "info",
+                    "LineWeight": 1,
+                    "Title": "ABC",
+                    "WarningAction": 0,
+                    "WarningVariable": "warnings",
+                    "Width": 20
+                  },
+                  "tags": [
+                    "runtime"
+                  ]
+                },
+                {
+                  "data": "Using dash ▬",
+                  "tags": [
+                    "runtime"
+                  ]
+                }
+              ],
+              "error": null
+            },
+            {
+              "id": "no-title",
+              "records": [
+                "\u001b[92m──\u001b[0m\u001b[92m────────────\u001b[0m"
+              ],
+              "warnings": [],
+              "information": [
+                {
+                  "data": {
+                    "InformationAction": 0,
+                    "InformationVariable": "info",
+                    "WarningAction": 0,
+                    "WarningVariable": "warnings",
+                    "Width": 16
+                  },
+                  "tags": [
+                    "runtime"
+                  ]
+                },
+                {
+                  "data": "Using dash ─",
+                  "tags": [
+                    "runtime"
+                  ]
+                }
+              ],
+              "error": null
+            },
+            {
+              "id": "long-title",
+              "records": [],
+              "warnings": [
+                "The title length exceeds the horizontal rule width."
+              ],
+              "information": [
+                {
+                  "data": {
+                    "InformationAction": 0,
+                    "InformationVariable": "info",
+                    "Title": "Long title",
+                    "WarningAction": 0,
+                    "WarningVariable": "warnings",
+                    "Width": 6
+                  },
+                  "tags": [
+                    "runtime"
+                  ]
+                },
+                {
+                  "data": "Using dash ─",
+                  "tags": [
+                    "runtime"
+                  ]
+                }
+              ],
+              "error": null
+            },
+            {
+              "id": "invalid-weight",
+              "records": [],
+              "warnings": [],
+              "information": [],
+              "error": {
+                "id": "ParameterArgumentTransformationError,Write-PSHorizontalRule",
+                "type": "System.Management.Automation.ParameterBindingArgumentTransformationException",
+                "category": "InvalidData"
+              }
+            },
+            {
+              "id": "undefined-number",
+              "records": [],
+              "warnings": [],
+              "information": [],
+              "error": {
+                "id": "ParameterArgumentTransformationError,Write-PSHorizontalRule",
+                "type": "System.Management.Automation.ParameterBindingArgumentTransformationException",
+                "category": "InvalidData"
+              }
+            },
+            {
+              "id": "null-weight",
+              "records": [],
+              "warnings": [],
+              "information": [],
+              "error": {
+                "id": "ParameterArgumentTransformationError,Write-PSHorizontalRule",
+                "type": "System.Management.Automation.ParameterBindingArgumentTransformationException",
+                "category": "InvalidData"
+              }
+            },
+            {
+              "id": "invalid-style-array",
+              "records": [],
+              "warnings": [],
+              "information": [],
+              "error": {
+                "id": "ParameterArgumentTransformationError,Write-PSHorizontalRule",
+                "type": "System.Management.Automation.ParameterBindingArgumentTransformationException",
+                "category": "InvalidData"
+              }
+            }
+          ],
+          "metadata": [
+            {
+              "name": "LineWeight",
+              "type": "psRuleWeight",
+              "names": [
+                "Thin",
+                "Thick"
+              ],
+              "values": [
+                0,
+                1
+              ],
+              "aliases": [
+                "Weight"
+              ]
+            },
+            {
+              "name": "Alignment",
+              "type": "psRuleAlignment",
+              "names": [
+                "Left",
+                "Center",
+                "Right"
+              ],
+              "values": [
+                0,
+                1,
+                2
+              ],
+              "aliases": []
+            },
+            {
+              "name": "TitleStyle",
+              "type": "psRuleTextStyle[]",
+              "names": [
+                "none",
+                "bold",
+                "faint",
+                "italic",
+                "blink",
+                "reverse"
+              ],
+              "values": [
+                0,
+                1,
+                2,
+                3,
+                5,
+                7
+              ],
+              "aliases": []
+            }
+          ]
+        },
+        "buildEvidenceSha256": "92ebe6bc460131dd5d9d9b206faf42b2f2fbb96d4d082500a0488f0788520929",
+        "strictEvidenceSha256": "17bcaa84a0a55aca09d58103e96efbf5cdb532d428580b1b74e38676f57ff8b4",
+        "strictExitCode": 1,
+        "strictTypedUnits": 0,
+        "strictRejectedUnits": 2,
+        "artifactPathRecorded": "Qualified.Horizontal.net472.psm1",
+        "artifactUnitDispositionLedger": {
+          "schemaVersion": 5,
+          "entries": [
+            {
+              "unitId": "72511de9b109ad12d5eb283b",
+              "relativePath": "Write-PSHorizontalRule.ps1",
+              "name": "<script>",
+              "kind": "Script",
+              "startLine": 1,
+              "semanticEligible": false,
+              "emittedClrMethod": false,
+              "emittedBinaryCmdlet": false,
+              "retainedHostedSource": true,
+              "usesNativeFunctionBinding": false,
+              "runtimeCommandRegions": 0,
+              "boundaryCrossings": 0,
+              "shapingFallback": false,
+              "omitted": false,
+              "rejected": false,
+              "generatedMemberName": "",
+              "dependencyCauses": [],
+              "boundaryCauses": [
+                "Authored source remains on the hosted PowerShell path after artifact shaping."
+              ],
+              "diagnosticChain": [
+                {
+                  "code": "UnsupportedSyntax",
+                  "featureId": "syntax.typedefinition",
+                  "message": "Statement 'TypeDefinitionAst' is not yet represented by the bound pipeline.",
+                  "line": 1,
+                  "column": 1
+                }
+              ],
+              "moduleStateReadBoundaryCrossings": 0,
+              "moduleStateWriteBoundaryCrossings": 0,
+              "promotedTypedRegions": 0,
+              "generatedRegionMemberNames": []
+            },
+            {
+              "unitId": "25a4fd97dcfe1857eb88476d",
+              "relativePath": "Write-PSHorizontalRule.ps1",
+              "name": "Write-PSHorizontalRule",
+              "kind": "Function",
+              "startLine": 19,
+              "semanticEligible": true,
+              "emittedClrMethod": true,
+              "emittedBinaryCmdlet": false,
+              "retainedHostedSource": false,
+              "usesNativeFunctionBinding": true,
+              "runtimeCommandRegions": 13,
+              "boundaryCrossings": 14,
+              "shapingFallback": false,
+              "omitted": false,
+              "rejected": false,
+              "generatedMemberName": "Write_PSHorizontalRule",
+              "dependencyCauses": [],
+              "boundaryCauses": [
+                "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+                "The emitted CLR method contains hosted PowerShell command regions.",
+                "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation.",
+                "The emitted CLR method requires the invocation's native PowerShell loop-stopping callback."
+              ],
+              "diagnosticChain": [],
+              "moduleStateReadBoundaryCrossings": 0,
+              "moduleStateWriteBoundaryCrossings": 0,
+              "regionGraph": {
+                "schemaVersion": 1,
+                "regions": [
+                  {
+                    "regionId": "region:5b20525587ddf3ab4bb6ce71937e99248f62ae4eafd5bc7b587b6a7be8297906:239:3992:Mixed",
+                    "ordinal": 0,
+                    "execution": "Mixed",
+                    "startOffset": 239,
+                    "endOffset": 3992,
+                    "startLine": 19,
+                    "startColumn": 33,
+                    "endLine": 114,
+                    "endColumn": 2,
+                    "inputs": [
+                      "PowerShellSessionState:*",
+                      "PowerShellSessionVariable:ALIGNMENT",
+                      "PowerShellSessionVariable:HOST",
+                      "PowerShellSessionVariable:LINE",
+                      "PowerShellSessionVariable:LINEWEIGHT",
+                      "PowerShellSessionVariable:STYLE",
+                      "PowerShellSessionVariable:TITLE",
+                      "PowerShellSessionVariable:TITLESTYLE",
+                      "PowerShellSessionVariable:WIDTH"
+                    ],
+                    "outputs": [
+                      "stream:Success"
+                    ],
+                    "mutations": [
+                      "Local:LINE",
+                      "PowerShellSessionState:*",
+                      "PowerShellSessionVariable:BALANCE",
+                      "PowerShellSessionVariable:ENDSEGMENT",
+                      "PowerShellSessionVariable:LEAD",
+                      "PowerShellSessionVariable:RESET",
+                      "PowerShellSessionVariable:TEXTSTYLE",
+                      "PowerShellSessionVariable:WIDTH"
+                    ],
+                    "streams": [
+                      "Success",
+                      "Error",
+                      "Warning",
+                      "Verbose",
+                      "Debug",
+                      "Information",
+                      "Host"
+                    ],
+                    "errors": [
+                      "ClrException",
+                      "PowerShellErrorRecord",
+                      "PowerShellSessionStateError",
+                      "PowerShellStatementError"
+                    ],
+                    "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                    "hostedCommandBoundarySites": 13,
+                    "moduleStateReadBoundarySites": 0,
+                    "moduleStateWriteBoundarySites": 0,
+                    "staticBoundaryCrossings": 13,
+                    "staticBoundaryValueTransfers": 16,
+                    "staticBoundaryCostUnits": 29
+                  }
+                ],
+                "scriptBlocks": [],
+                "hostedCommandBoundarySites": 13,
+                "moduleStateReadBoundarySites": 0,
+                "moduleStateWriteBoundarySites": 0,
+                "staticBoundaryCrossings": 13,
+                "staticBoundaryCostUnits": 29
+              },
+              "promotedTypedRegions": 0,
+              "generatedRegionMemberNames": []
+            }
+          ],
+          "deliveryRuntimeCauses": [],
+          "analyzedUnits": 2,
+          "emittedUnits": 1,
+          "runtimeRoutedUnits": 2,
+          "fallbackUnits": 1,
+          "shapedFallbackUnits": 0,
+          "omittedUnits": 0,
+          "rejectedUnits": 0,
+          "runtimeCommandRegions": 13,
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "moduleStateBoundaryCrossings": 0,
+          "boundaryCrossings": 14,
+          "promotedTypedRegions": 0,
+          "usesPowerShellRuntimeFallback": true,
+          "compilationCoveragePercentage": 50
+        },
+        "compiledMethods": 1,
+        "artifactSha256": "fc0ceaeb6bca772e4cd74ec1a97fbb16384f3a156b39095a26903a193d193341",
+        "generatedSourceSha256": ""
+      }
+    ],
+    "limits": [
+      "Hybrid DLL proof uses unreviewed offline dependency resolution, not a reviewed lock.",
+      "Enum declarations, native parameter binding and command invocation remain hosted; function body emits C#.",
+      "Explicit widths avoid host-dependent console default; verbose/debug streams not enabled.",
+      "Full five-packet census is net10.0 emission analysis only; no full-module execution or fresh net472 census.",
+      "No non-Windows, performance, arbitrary enum/class or runtime-free authored type support claimed."
+    ]
+  },
+  "retainedFunctionFeatureCounts": {
+    "assignment.target": 1,
+    "binary-module.cmdlet-shape": 2,
+    "command.foreach-object": 2,
+    "command.get-help": 1,
+    "command.get-item": 1,
+    "command.get-location": 1,
+    "command.new-object": 2,
+    "command.out-gridview": 1,
+    "command.out-string": 1,
+    "command.read-host": 1,
+    "command.resolve-path": 1,
+    "command.select-object": 1,
+    "command.set-clipboard": 1,
+    "command.showcontainer": 1,
+    "command.test-connection": 1,
+    "command.write-verbose": 4,
+    "command.write-warning": 2,
+    "control.finally.stream-stop": 2,
+    "expression.conversion": 2,
+    "parameter.default": 1,
+    "parameter.metadata": 3,
+    "parameter.type": 22,
+    "pipeline.lifecycle": 2,
+    "psb2611": 1,
+    "psb2961": 1,
+    "runtime.scope": 2,
+    "scriptblock.typed": 1,
+    "semantic.lowering.missing": 2,
+    "source.type-definition": 1,
+    "syntax.exitstatement": 1,
+    "syntax.foreachstatement": 1,
+    "syntax.functiondefinition": 1,
+    "syntax.invokememberexpression": 3,
+    "syntax.memberexpression": 2,
+    "syntax.pipeline": 1,
+    "syntax.subexpression": 1,
+    "syntax.typedefinition": 1,
+    "syntax.typeexpression": 2,
+    "syntax.unsupported": 34
+  }
+}

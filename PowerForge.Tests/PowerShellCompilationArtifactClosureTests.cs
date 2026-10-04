@@ -694,7 +694,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Theory]
-    [InlineData("net8.0", false)]
+    [InlineData("net10.0", false)]
     [InlineData("net10.0", true)]
     public void Build_GuidVersion7MethodFollowsRequestedTargetSurface(string targetFramework, bool succeeds)
     {

@@ -1,0 +1,296 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Qualify unchanged Get-LocalComputerSid hosted local-SAM behavior on both Windows hosts; zero complete compiled method gains.",
+  "compilerCommit": "ee26e12727525985f368b181070eedf6a74f902f",
+  "source": {
+    "module": "PSSharedGoods",
+    "function": "Get-LocalComputerSid",
+    "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+    "relativePath": "Private/Get-LocalComputerSid.ps1",
+    "sourceSha256": "5e614cd7d9bf3545f1c1851805e7d94010a8e37497b1b3c0a00cc6e55853b2a7"
+  },
+  "fixtureSourceHashes": {
+    "Observe.ps1": "e15fc0add4ae17bf75a0195efe7f9f124030fefbb27ba275806a405f37f7580a",
+    "Prepare.ps1": "d23c589f6ed948fec4617107eba2a88a82bb34557b7afd25ae897bac3a2a852b",
+    "README.md": "6fa86c603077f2320e646f795a76fb3caf480c10cf6edd02bab1dc6b15671f9d"
+  },
+  "portfolio": {
+    "emitted": 544,
+    "retained": 21,
+    "functions": 565,
+    "stableUnits": 584,
+    "censusRepeated": false,
+    "reason": "Compiler and pinned five packets unchanged; isolated hosted execution qualification only."
+  },
+  "hosts": [
+    {
+      "framework": "net10.0",
+      "artifactSha256": "f50953b7aa55e83f2a8a2ed010183cfc26f3fc60a90d396f7d6ee0585e4e853b",
+      "dependencyLockSha256": "01908e67874ce88ddc08b63eb614cb93825415c3088f2afe8e78d2c19a60afe2",
+      "workloadDisposition": {
+        "unitId": "7184a03b97c453b4c430c650",
+        "relativePath": "Fixture.psm1",
+        "name": "Get-LocalComputerSid",
+        "kind": "Function",
+        "startLine": 1,
+        "semanticEligible": false,
+        "emittedClrMethod": false,
+        "emittedBinaryCmdlet": false,
+        "retainedHostedSource": true,
+        "usesNativeFunctionBinding": false,
+        "runtimeCommandRegions": 0,
+        "boundaryCrossings": 0,
+        "shapingFallback": false,
+        "omitted": false,
+        "rejected": false,
+        "generatedMemberName": "",
+        "dependencyCauses": [],
+        "boundaryCauses": [
+          "Authored source remains on the hosted PowerShell path after artifact shaping."
+        ],
+        "diagnosticChain": [
+          {
+            "code": "UnsupportedSyntax",
+            "featureId": "syntax.unsupported",
+            "message": "CLR type 'System.DirectoryServices.AccountManagement.PrincipalContext' is not available in the generated project reference set for the requested target.",
+            "line": 19,
+            "column": 29
+          }
+        ],
+        "moduleStateReadBoundaryCrossings": 0,
+        "moduleStateWriteBoundaryCrossings": 0,
+        "regionGraph": null,
+        "promotedTypedRegions": 0,
+        "generatedRegionMemberNames": []
+      },
+      "strictCanProceed": false,
+      "strictExplanationSha256": "3de44e8a2eec4ecfb7397fa103e008992cef4a5852ec1afe51a659ef9d13853f",
+      "cases": [
+        {
+          "case": "real",
+          "originalExitCode": 0,
+          "generatedExitCode": 0,
+          "originalSha256": "5e6935a435a60e70d0f5381a134c7fea4e187d5011a4de76d3df96a355db294d",
+          "generatedSha256": "5e6935a435a60e70d0f5381a134c7fea4e187d5011a4de76d3df96a355db294d",
+          "result": {
+            "case": "real",
+            "hostVersion": "7.6.6",
+            "directoryAssembly": "System.DirectoryServices.AccountManagement, Version=10.0.0.5, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+            "context": "Machine (local SAM only)",
+            "observations": [
+              {
+                "iteration": 1,
+                "type": "System.String",
+                "valueSha256": "983b769c5cb811b2e1b2d97cea4121af6b1bd683fd229525a9ee10e98e51da2d",
+                "matchesAuthoredAlgorithm": true,
+                "matchesCorrectAccountDomainSid": true,
+                "warnings": []
+              },
+              {
+                "iteration": 2,
+                "type": "System.String",
+                "valueSha256": "983b769c5cb811b2e1b2d97cea4121af6b1bd683fd229525a9ee10e98e51da2d",
+                "matchesAuthoredAlgorithm": true,
+                "matchesCorrectAccountDomainSid": true,
+                "warnings": []
+              }
+            ],
+            "ownedTrimEndCounterexample": {
+              "ownedInput": "S-1-5-21-111-222-123450-500",
+              "authored": "S-1-5-21-111-222-1234",
+              "correct": "S-1-5-21-111-222-123450"
+            }
+          }
+        },
+        {
+          "case": "assembly-failure",
+          "originalExitCode": 0,
+          "generatedExitCode": 0,
+          "originalSha256": "2ff4e15e785fc2dae1f2247bef495e6b21170cfd8ca5698e8aae1d48be4e560c",
+          "generatedSha256": "2ff4e15e785fc2dae1f2247bef495e6b21170cfd8ca5698e8aae1d48be4e560c",
+          "result": {
+            "case": "assembly-failure",
+            "hostVersion": "7.6.6",
+            "directoryAssembly": null,
+            "context": "Machine (local SAM only)",
+            "observations": [
+              {
+                "iteration": 1,
+                "records": [],
+                "warnings": [
+                  "Get-LocalComputerSid - Error: owned local-SAM assembly refusal"
+                ]
+              },
+              {
+                "iteration": 2,
+                "records": [],
+                "warnings": [
+                  "Get-LocalComputerSid - Error: owned local-SAM assembly refusal"
+                ]
+              }
+            ],
+            "ownedTrimEndCounterexample": {
+              "ownedInput": "S-1-5-21-111-222-123450-500",
+              "authored": "S-1-5-21-111-222-1234",
+              "correct": "S-1-5-21-111-222-123450"
+            }
+          }
+        }
+      ],
+      "generatedSourceHashes": {
+        "2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a": "01676a1eec594e15e4bbd058e6c976cb9bcc8fcff10285a56101517ef720322b",
+        "CompiledCmdlets.cs": "93c52ee9813388f12b305df28bc8402e17d164c0fc2fa987d857c6bd90000592",
+        "CompiledPowerShell.cs": "41194d2e9a4c62926416fc86cf04b1ca0795ee43360108c33829bcf69a57e56f",
+        "Directory.Build.props": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Build.targets": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Packages.props": "a96e6b8834dbdb32e1410abfdb50d0483c028bba2edd5fed4b6e5cfc583c6e46",
+        "global.json": "1a9972198a8d91eb872d3b4d3f5d6603fa2b04620c9e5c6d057a59f0d0f32992",
+        "LocalSid.csproj": "daaf7bd3affed3584b896517b29ffe4350fdaab943f05f4bcd1aa986dae62c85",
+        "NuGet.Config": "81afa9a2ee0dd27b21be56f5efed21aa8cf08c8b2d4db4763cbee5cf28fb402e",
+        "PowerForge.TargetContract.json": "90180f20d4060b1d15573552f333e59b81e8c77f1bdfb9e4b9a3da8bdc269c78",
+        "source-map.json": "37820042e37e95481bace82b27185307279355b625ea75eb31c2d5b9fc045db4"
+      }
+    },
+    {
+      "framework": "net472",
+      "artifactSha256": "f908485639d13f0fcedb13fed3950765c5a786ed5b1d88c3dedb39e2c81db9ff",
+      "dependencyLockSha256": "4d2fac816835fed6fc3302a43ade348fe26a9a0b97dee1a17a863789e25a2c04",
+      "workloadDisposition": {
+        "unitId": "7184a03b97c453b4c430c650",
+        "relativePath": "Fixture.psm1",
+        "name": "Get-LocalComputerSid",
+        "kind": "Function",
+        "startLine": 1,
+        "semanticEligible": false,
+        "emittedClrMethod": false,
+        "emittedBinaryCmdlet": false,
+        "retainedHostedSource": true,
+        "usesNativeFunctionBinding": false,
+        "runtimeCommandRegions": 0,
+        "boundaryCrossings": 0,
+        "shapingFallback": false,
+        "omitted": false,
+        "rejected": false,
+        "generatedMemberName": "",
+        "dependencyCauses": [],
+        "boundaryCauses": [
+          "Authored source remains on the hosted PowerShell path after artifact shaping."
+        ],
+        "diagnosticChain": [
+          {
+            "code": "UnsupportedSyntax",
+            "featureId": "syntax.unsupported",
+            "message": "CLR type 'System.DirectoryServices.AccountManagement.PrincipalContext' is not available in the generated project reference set for the requested target.",
+            "line": 19,
+            "column": 29
+          }
+        ],
+        "moduleStateReadBoundaryCrossings": 0,
+        "moduleStateWriteBoundaryCrossings": 0,
+        "regionGraph": null,
+        "promotedTypedRegions": 0,
+        "generatedRegionMemberNames": []
+      },
+      "strictCanProceed": false,
+      "strictExplanationSha256": "687c4f5b2c9385bfbe4ce50a3aebe4960f423d888b536a38d7df3d6e6eea3834",
+      "cases": [
+        {
+          "case": "real",
+          "originalExitCode": 0,
+          "generatedExitCode": 0,
+          "originalSha256": "00fef0f6ccdedcd728a424490fa63729a01d2d28e646da2ac0f5c42b07a2b709",
+          "generatedSha256": "00fef0f6ccdedcd728a424490fa63729a01d2d28e646da2ac0f5c42b07a2b709",
+          "result": {
+            "case": "real",
+            "hostVersion": "5.1.26100.9444",
+            "directoryAssembly": "System.DirectoryServices.AccountManagement, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+            "context": "Machine (local SAM only)",
+            "observations": [
+              {
+                "iteration": 1,
+                "type": "System.String",
+                "valueSha256": "983b769c5cb811b2e1b2d97cea4121af6b1bd683fd229525a9ee10e98e51da2d",
+                "matchesAuthoredAlgorithm": true,
+                "matchesCorrectAccountDomainSid": true,
+                "warnings": []
+              },
+              {
+                "iteration": 2,
+                "type": "System.String",
+                "valueSha256": "983b769c5cb811b2e1b2d97cea4121af6b1bd683fd229525a9ee10e98e51da2d",
+                "matchesAuthoredAlgorithm": true,
+                "matchesCorrectAccountDomainSid": true,
+                "warnings": []
+              }
+            ],
+            "ownedTrimEndCounterexample": {
+              "ownedInput": "S-1-5-21-111-222-123450-500",
+              "authored": "S-1-5-21-111-222-1234",
+              "correct": "S-1-5-21-111-222-123450"
+            }
+          }
+        },
+        {
+          "case": "assembly-failure",
+          "originalExitCode": 0,
+          "generatedExitCode": 0,
+          "originalSha256": "32d3802e1d7b413c303b2485dd5627813aa217f9c357ec44faee04c6c093a025",
+          "generatedSha256": "32d3802e1d7b413c303b2485dd5627813aa217f9c357ec44faee04c6c093a025",
+          "result": {
+            "case": "assembly-failure",
+            "hostVersion": "5.1.26100.9444",
+            "directoryAssembly": null,
+            "context": "Machine (local SAM only)",
+            "observations": [
+              {
+                "iteration": 1,
+                "records": [],
+                "warnings": [
+                  "Get-LocalComputerSid - Error: owned local-SAM assembly refusal"
+                ]
+              },
+              {
+                "iteration": 2,
+                "records": [],
+                "warnings": [
+                  "Get-LocalComputerSid - Error: owned local-SAM assembly refusal"
+                ]
+              }
+            ],
+            "ownedTrimEndCounterexample": {
+              "ownedInput": "S-1-5-21-111-222-123450-500",
+              "authored": "S-1-5-21-111-222-1234",
+              "correct": "S-1-5-21-111-222-123450"
+            }
+          }
+        }
+      ],
+      "generatedSourceHashes": {
+        "2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a": "01676a1eec594e15e4bbd058e6c976cb9bcc8fcff10285a56101517ef720322b",
+        "CompiledCmdlets.cs": "93c52ee9813388f12b305df28bc8402e17d164c0fc2fa987d857c6bd90000592",
+        "CompiledPowerShell.cs": "41194d2e9a4c62926416fc86cf04b1ca0795ee43360108c33829bcf69a57e56f",
+        "Directory.Build.props": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Build.targets": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Packages.props": "a96e6b8834dbdb32e1410abfdb50d0483c028bba2edd5fed4b6e5cfc583c6e46",
+        "global.json": "1a9972198a8d91eb872d3b4d3f5d6603fa2b04620c9e5c6d057a59f0d0f32992",
+        "LocalSid.csproj": "c22d405500cc349520d69dcf79c9a01cbdf689d60689d324242c0077c44f1467",
+        "NuGet.Config": "81afa9a2ee0dd27b21be56f5efed21aa8cf08c8b2d4db4763cbee5cf28fb402e",
+        "PowerForge.TargetContract.json": "50340bf76aea78627ddc1f69c8b49badd286303bafef1aa02f98e1c16a1ab688",
+        "source-map.json": "37820042e37e95481bace82b27185307279355b625ea75eb31c2d5b9fc045db4"
+      }
+    }
+  ],
+  "authoredLimitations": [
+    "TrimEnd(\"-500\") trims a character set, not an exact RID suffix; synthetic SecurityIdentifier counterexample reproduces truncation",
+    "PrincipalContext/UserPrincipal/PrincipalSearcher/SearchResultCollection are not explicitly disposed by authored function; this is source inspection, not a measured leak"
+  ],
+  "limits": [
+    "Windows x64 only; active host AccountManagement assemblies required",
+    "Explicit ContextType.Machine local SAM read; no AD/domain query, remote provider, account/password changes or network probe requested",
+    "Owned independent baseline objects disposed; source behavior bounded by fresh child process exit",
+    "Only local SID digest and booleans retained; no raw local SID or account names persisted",
+    "No portable/runtime-free AccountManagement or arbitrary host assembly admission",
+    "No full-module execution or performance claim",
+    "net10 generated build retains existing NU1510 warnings"
+  ]
+}

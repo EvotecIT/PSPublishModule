@@ -16,14 +16,14 @@ public sealed class PowerShellCompilationNuGetLockTests
             version = 1,
             dependencies = new Dictionary<string, object>
             {
-                ["net8.0"] = new Dictionary<string, object>
+                ["net10.0"] = new Dictionary<string, object>
                 {
                     ["Exact.Direct"] = new { type = "Direct", requested = "[1.2.3, )", resolved = "1.2.3", contentHash = hash },
                     ["Exact.Transitive"] = new { type = "Transitive", resolved = "4.5.6", contentHash = ValidContentHash(4) }
                 }
             }
         }));
-        File.WriteAllText(fixture.ProjectPath, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>");
+        File.WriteAllText(fixture.ProjectPath, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
         var spec = new PowerShellCompilationBuildSpec(
             fixture.SourcePath,
             fixture.OutputPath,
@@ -65,7 +65,7 @@ public sealed class PowerShellCompilationNuGetLockTests
             version = 1,
             dependencies = new Dictionary<string, object>
             {
-                ["net8.0"] = new Dictionary<string, object>
+                ["net10.0"] = new Dictionary<string, object>
                 {
                     ["Exact.Direct"] = new { type = "Direct", requested = "[1.2.3, )", resolved = "1.2.3", contentHash = expectedHash }
                 }

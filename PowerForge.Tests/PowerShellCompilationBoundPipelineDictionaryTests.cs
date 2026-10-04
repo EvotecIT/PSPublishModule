@@ -2,6 +2,19 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationBoundPipelineTests
 {
+    [Theory]
+    [InlineData("'before'; @{ Text='ready' }")]
+    [InlineData("$map=@{ Text='ready' }; $copy=$map; 'before'; $copy")]
+    [InlineData("$map=@{ Text='ready' }; 'before'; return ,$map")]
+    [InlineData("$result=$null; $result=for($i=0;$i -lt 1;$i++) { @{ Text='ready' } }; return $result")]
+    public void StreamedDictionaryLiteralsKeepTheirUnqualifiedEscapeBoundary(string body)
+    {
+        var document = PowerShellSourceParser.Parse("function Get-Map { [CmdletBinding()] param(); " + body + " }", TestPath("dictionary-output.psm1"));
+        var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, "net10.0", PowerShellCompilationCapabilities.BinaryModule);
+        Assert.Empty(result.Emitted.Methods);
+        Assert.Contains(result.Analyzed.Functions, function => function.Disposition.Explanation.Contains("lookup-only local", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void HostedDictionariesPreserveHeterogeneousObjectValuesInIr()
     {
@@ -145,8 +158,10 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             PowerShellCompilationCapabilities.BinaryModule);
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
-        var member = Assert.IsType<PowerShellBoundClrMemberExpression>(
-            Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements)).Expression);
+        var member = Assert.Single(PowerShellSemanticAnalyzer.EnumerateStatements(Assert.Single(result.Analyzed.Functions).Body)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+            .OfType<PowerShellBoundClrMemberExpression>());
         Assert.Equal(PowerShellClrReceiverBehavior.DictionaryKeyLookup, member.ReceiverBehavior);
         var source = Assert.Single(result.Emitted.Methods).Source;
         Assert.Contains(".Contains(\"AjaxSessionKey\")", source, StringComparison.Ordinal);
@@ -166,8 +181,10 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             PowerShellCompilationCapabilities.BinaryModule);
 
         Assert.Empty(result.Emitted.Diagnostics.Select(static diagnostic => diagnostic.Code + ": " + diagnostic.Message));
-        var member = Assert.IsType<PowerShellBoundClrMemberExpression>(
-            Assert.IsType<PowerShellBoundReturnStatement>(Assert.Single(Assert.Single(result.Analyzed.Functions).Body.Statements)).Expression);
+        var member = Assert.Single(PowerShellSemanticAnalyzer.EnumerateStatements(Assert.Single(result.Analyzed.Functions).Body)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+            .OfType<PowerShellBoundClrMemberExpression>());
         Assert.Equal(PowerShellClrReceiverBehavior.DictionaryKeyLookupWithClrFallback, member.ReceiverBehavior);
         Assert.False(member.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellHostTypes));
         var source = Assert.Single(result.Emitted.Methods).Source;

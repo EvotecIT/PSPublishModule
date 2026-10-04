@@ -30,11 +30,20 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 var graph = ReadJson<PowerShellCompilationDependencyGraph>(lockPath);
                 PowerShellCompilationDependencyLockHasher.EnsureValid(graph, artifact.Name);
                 var packages = GetTargetPackages(graph, context, artifact);
-                var restoreProject = WriteRestoreProject(environmentRoot, artifact, packages, offline);
+                // NuGet and Windows process launch can reject a deeply nested restore project
+                // even when the authored project and final artifact have valid short paths.
+                // Reuse the compiler's disposable isolated workspace; retain only the reviewed
+                // closure lock under the project after acquisition and verification succeed.
+                using var workspace = PowerShellCompilationWorkspace.Create(keep: false, offlineRestore: offline);
+                PowerShellCompilationArtifactBuilder.WriteSdkSelection(
+                    workspace.Path, PowerShellCompilationToolchainFingerprint.ResolveSelectedSdk().Version);
+                var restoreProject = WriteRestoreProject(workspace.Path, artifact, packages, offline);
                 var restoreRoot = Path.GetDirectoryName(restoreProject)!;
                 var resolvedLockPath = Path.Combine(restoreRoot, "packages.lock.json");
-                if (offline && !File.Exists(resolvedLockPath))
+                var retainedLockPath = Path.Combine(environmentRoot, "restore", artifact.Name, "packages.lock.json");
+                if (offline && !File.Exists(retainedLockPath))
                     throw new FileNotFoundException("Offline restore requires a previously acquired exact NuGet closure lock.", resolvedLockPath);
+                if (File.Exists(retainedLockPath)) File.Copy(retainedLockPath, resolvedLockPath);
                 var arguments = new List<string>
                 {
                     "restore", restoreProject,
@@ -54,7 +63,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 }
                 var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
                     "dotnet",
-                    Path.GetDirectoryName(restoreProject)!,
+                    restoreRoot,
                     arguments,
                     TimeSpan.FromMinutes(10),
                     new Dictionary<string, string?>
@@ -74,13 +83,14 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                     var verified = PowerShellCompilationNuGetPackageVerifier.Verify(packageRoot, package);
                     verifiedPackages[verified.Id + "/" + verified.Version] = verified;
                 }
+                VerifyRuntimeAssets(packageRoot, graph);
+                PublishRestoreLock(resolvedLockPath, retainedLockPath);
                 resolvedLocks.Add(new PowerShellCompilationProjectResolvedLock
                 {
                     TargetName = artifact.Name,
-                    Path = FrameworkCompatibility.GetRelativePath(context.Root, resolvedLockPath).Replace('\\', '/'),
-                    Sha256 = PowerShellCompilationProjectManifestService.ComputeSha256(resolvedLockPath)
+                    Path = FrameworkCompatibility.GetRelativePath(context.Root, retainedLockPath).Replace('\\', '/'),
+                    Sha256 = PowerShellCompilationProjectManifestService.ComputeSha256(retainedLockPath)
                 });
-                VerifyRuntimeAssets(packageRoot, graph);
                 results.Add(Pass(artifact, offline ? "Offline locked restore passed." : "Exact isolated acquisition passed.", packageRoot, graph.LockSha256));
             }
             catch (Exception exception)
@@ -158,12 +168,11 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
     }
 
     private static string WriteRestoreProject(
-        string environmentRoot,
+        string root,
         PowerShellCompilationProjectArtifact artifact,
         IEnumerable<PowerShellCompilationProjectPackage> packages,
         bool offline)
     {
-        var root = Path.Combine(environmentRoot, "restore", artifact.Name);
         Directory.CreateDirectory(root);
         var packageItems = string.Join(Environment.NewLine, packages.Select(package =>
             $"    <PackageReference Include=\"{EscapeXml(package.Id)}\" Version=\"{EscapeXml(package.Version)}\" PrivateAssets=\"all\" />"));
@@ -193,6 +202,23 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             $"<?xml version=\"1.0\" encoding=\"utf-8\"?><configuration><packageSources>{sources}</packageSources></configuration>" + Environment.NewLine,
             new UTF8Encoding(false));
         return projectPath;
+    }
+
+    private static void PublishRestoreLock(string source, string destination)
+    {
+        var parent = Path.GetDirectoryName(destination)!;
+        Directory.CreateDirectory(parent);
+        var temporary = Path.Combine(parent, ".packages-" + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            File.Copy(source, temporary);
+            if (File.Exists(destination)) File.Replace(temporary, destination, destinationBackupFileName: null);
+            else File.Move(temporary, destination);
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
     }
 
     private static PowerShellCompilationProjectPackage[] ReadResolvedPackages(string lockPath)

@@ -4,6 +4,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
 {
     private string EmitRuntimeState(PowerShellLoweredRuntimeStateExpression expression)
     {
+        if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.FormattedCurrentLocalDateTime)
+            return $"global::System.DateTime.Now.ToString({EmitExpression(expression.Arguments[0])}, global::System.Globalization.CultureInfo.CurrentCulture)";
         if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget)
             return $"__shouldProcessTarget({EmitExpression(expression.Arguments[0])})";
         if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.ShouldProcessAction)

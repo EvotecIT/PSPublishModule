@@ -52,7 +52,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal((0, "12", string.Empty), (process.ExitCode, process.StandardOutput.Trim(), process.StandardError.Trim()));
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShellScript.cs"));
         Assert.Contains("new int[] { 1, 2, 3 }", generated, StringComparison.Ordinal);
-        Assert.Contains("global::System.Array.Empty<int>()", generated, StringComparison.Ordinal);
+        Assert.Contains("new int[] { }", generated, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
         Assert.Contains("$null = Write-Output 'hidden'", generated, StringComparison.Ordinal);
         var ledger = Assert.IsType<PowerShellCompilationUnitDispositionLedger>(result.Manifest!.UnitDispositionLedger);
-        Assert.Equal(4, ledger.SchemaVersion);
+        Assert.Equal(5, ledger.SchemaVersion);
         var entry = Assert.Single(ledger.Entries, static candidate => candidate.Name == "Invoke-FrontierRegion");
         var graph = Assert.IsType<PowerShellCompilationRegionGraph>(entry.RegionGraph);
         Assert.Equal(1, graph.SchemaVersion);
@@ -266,11 +266,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(2, result.Manifest!.CompiledMethods);
         Assert.Equal(new[] { "region", "2" }, RunModuleProof(result.ArtifactPath!, "function global:Get-RegionText { 'region' }; Get-FrontierRegionOuter -Value 1").Split(Environment.NewLine));
-        var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
-        Assert.Contains(
-            "Get_FrontierRegionHelper(Value, __writeOutput, __writeVerbose, __writeDebug, __writeWarning, __writeInformation, __writeHost, __writeError, __invokePowerShellRegion, __invokePowerShellCapture)",
-            generated,
-            StringComparison.Ordinal);
+        Assert.All(result.Manifest.UnitDispositionLedger!.Entries, unit => Assert.False(unit.RetainedHostedSource));
     }
 
     [Fact]

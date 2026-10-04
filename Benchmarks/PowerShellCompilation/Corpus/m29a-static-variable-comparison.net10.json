@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Qualify literal static member reads on variable receivers through existing invocation-owned member semantics. Emission and execution are separate evidence.",
+  "baselineCompilerCommit": "acbeaed76a2a8d9ff2af2b0af78364274a96d506",
+  "baselineComparison": "m29a-assigned-switch-comparison.net10.json",
+  "baselineComparisonSha256": "8fe70751f183eff79aa778927ee78a96cbd5ae6700e792391f40b45d541088d7",
+  "baselineRetainedInventorySha256": "6b70997b02db19bada1f655591f5a10120da0cb7072c8183d06aacd8bc1de919",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 488,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "baselineEmitted": 254,
+      "candidateEmitted": 255,
+      "candidateExplanationSha256": "f784d4955c37b9934f83fc94f0513a997e14c9dad6a1f2da3682e19d46c13da5",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": [
+        {
+          "unitId": "005401f052dbe8e7f319d556",
+          "name": "Convert-GenericRightsToFileSystemRights",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "baselineEmitted": 63,
+      "candidateEmitted": 63,
+      "candidateExplanationSha256": "0fe9323878dbf15bc173231b8ad447afc5ddf1d9833e9b2cd631e66cc998bee3",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "baselineEmitted": 61,
+      "candidateEmitted": 61,
+      "candidateExplanationSha256": "73172aaac03d1c74782e361a0716d2c2d0c14b80abae98e870ef80c8253a8ee2",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "baselineEmitted": 83,
+      "candidateEmitted": 83,
+      "candidateExplanationSha256": "e7535d0f82ec88abba570b995969fa36c7dfc9dc6571589a91eb525b94b75d3a",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "baselineEmitted": 27,
+      "candidateEmitted": 27,
+      "candidateExplanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    }
+  ],
+  "candidateEmitted": 489,
+  "candidateRetained": 76,
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "2d90548658ac1b70e5b8b3a071f93fe80dbce970254992a8bc7c832142ffa1cb",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "2b49fa3566c76e7792f2f87e60cba2acf79b3cbeb611d340bd4c3c3d25c4e055"
+  },
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "workflowSourceHashes": {
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSSharedGoods/FullModule/Private/Convert-GenericRightsToFileSystemRights.ps1": "b01bae9e6bd264af7b47fce699f8632370c1adb4b2781c0ee7a56a5f80339e50"
+  },
+  "validation": {
+    "focusedTests": 10,
+    "focusedDurationSeconds": 21,
+    "focusedTrxSha256": "2fd7538dd51a2f6d6779a6036ba8c5d860388abd84475c5a5547a51796300f7b",
+    "testSourceHashes": {
+      "PowerForge.Tests/PowerShellCompilationStaticVariableMemberTests.cs": "e189cbf460386f0822e3eacf2d69d76586795feeb2973394d13d298ce900d134"
+    },
+    "net472BuildWarnings": 0,
+    "net472BuildErrors": 0,
+    "net472BuildDurationSeconds": 9.09,
+    "workflowObservationsPerHost": 18,
+    "syntheticStaticObservationsPerHost": 16,
+    "newlyExecutedCompleteFunctions": [
+      "Convert-GenericRightsToFileSystemRights"
+    ],
+    "independentReview": "One fresh read-only static_variable_member_review pass: no actionable P0-P3 findings. Selection, expression binder, IR effects, lowering, backend receiver evaluation, runtime binder and statement-error ownership inspected; no tests run by reviewer.",
+    "limits": [
+      "Only literal static member names on variable receivers gain selection. Existing dynamic-name forms retain their prior owner; arbitrary new receiver expression shapes are not admitted by this rule.",
+      "Rights calculation has no filesystem or ACL mutation. Generic bits are supplied as actual enum objects through Enum.ToObject because original PowerShell rejects undefined enum integer casts. The authored -as conversion returns null for the all-bits case; generated behavior matches.",
+      "Tests cover actual Type values, null/non-Type receivers, missing MaxValue, StrictMode off/2, rebinding, error identity/positions and finally. Undefined/scoped receiver storage and static getter callbacks that mutate session state or throw have no new dedicated differential cases.",
+      "Focused artifacts qualify Windows PowerShell 5.1/net472 and PowerShell 7/net10.0. Full five-packet census is net10.0 only. No full-module administration, other platform, performance, package or release proof.",
+      "Initial 2/4 run failed in the original-only harness on undefined integer enum casts and invalid Set-StrictMode -Version 0; corrected input construction and StrictMode setup passed 10/10. No production correction or weakened contract followed."
+    ]
+  }
+}

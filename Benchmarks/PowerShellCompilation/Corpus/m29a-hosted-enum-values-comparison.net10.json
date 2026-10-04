@@ -1,0 +1,2022 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Document-owned enum literal values and direct command-return record forwarding; real unchanged YAML package qualification. Emitted functions remain distinct from runtime-free compilation.",
+  "baselineCompilerCommit": "91ca4bbb6cc95b67732f9fa10f88582ad978cb1d",
+  "baselineComparison": "m29a-hosted-value-class-comparison.net10.json",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "existingPortfolio": [
+    {
+      "packet": "pssg",
+      "functions": 282,
+      "emitted": 259,
+      "retained": 23,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "ec83e7c4dcc792ce267fd6efa08f1b054bc79518e951e6b3d7c8bbf7d6b39299"
+    },
+    {
+      "packet": "cleanup",
+      "functions": 68,
+      "emitted": 63,
+      "retained": 5,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1"
+    },
+    {
+      "packet": "pinf",
+      "functions": 66,
+      "emitted": 61,
+      "retained": 5,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "73172aaac03d1c74782e361a0716d2c2d0c14b80abae98e870ef80c8253a8ee2"
+    },
+    {
+      "packet": "pst",
+      "functions": 109,
+      "emitted": 89,
+      "retained": 20,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "7f24946fcdbb2e8d0158e02ed4f8458b2935089d307dda66a7ea4a70fc2bb2e6"
+    },
+    {
+      "packet": "platyps",
+      "functions": 40,
+      "emitted": 27,
+      "retained": 13,
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea"
+    }
+  ],
+  "existingFunctions": 565,
+  "existingEmitted": 499,
+  "existingRetained": 66,
+  "validation": {
+    "focusedRuns": [
+      {
+        "file": "enum-values-focused.trx",
+        "sha256": "236662ba839185eba67d0f7bf356ebf443413881b00eaf900223ecf4f529c173",
+        "accepted": false,
+        "counters": {
+          "total": "20",
+          "executed": "20",
+          "passed": "19",
+          "failed": "1",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "tests": [
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::new()\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0368457"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:14.1037069"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumLiteralMembersAndFlagsKeepNativeValueAndDefaultOwnership(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.1649159"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumValues_PreserveFlagsDefaultsAndModuleIsolation(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Failed",
+            "duration": "00:00:02.0513146"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0000919"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumValues_PreserveFlagsDefaultsAndModuleIsolation(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.9960162"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0111840"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::Parse('One')\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0002045"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.1199330"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"if($true) { enum NativeChoice { Zero } }; function\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0009611"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumLiteralMembersAndFlagsKeepNativeValueAndDefaultOwnership(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0310120"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::$Name\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0092236"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0030573"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0002155"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0004990"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0002458"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumDeclarationDoesNotResolveUnrelatedUnknownParameterTypes",
+            "outcome": "Passed",
+            "duration": "00:00:00.0121226"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::Missing\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0008968"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice : long { Zero }; function Read-C\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0187571"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0169445"
+          }
+        ]
+      },
+      {
+        "file": "enum-values-focused-corrected.trx",
+        "sha256": "3e18e71b630b2bf61bb52a3e54cc906e4c7d5cb94b9c1ae60e55a2cca27bc573",
+        "accepted": false,
+        "counters": {
+          "total": "20",
+          "executed": "20",
+          "passed": "19",
+          "failed": "1",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "tests": [
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"if($true) { enum NativeChoice { Zero } }; function\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0009836"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.1099829"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumDeclarationDoesNotResolveUnrelatedUnknownParameterTypes",
+            "outcome": "Passed",
+            "duration": "00:00:00.0137497"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::$Name\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0098791"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:04.0526816"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::new()\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0362023"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::Missing\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0009721"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumValues_PreserveFlagsDefaultsAndModuleIsolation(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.0948672"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0005048"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0002643"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumValues_PreserveFlagsDefaultsAndModuleIsolation(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Failed",
+            "duration": "00:00:02.0249795"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0000889"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumLiteralMembersAndFlagsKeepNativeValueAndDefaultOwnership(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0308521"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumLiteralMembersAndFlagsKeepNativeValueAndDefaultOwnership(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.1613972"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice : long { Zero }; function Read-C\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0185669"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001979"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0143756"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0026246"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0113166"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::Parse('One')\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0005121"
+          }
+        ]
+      },
+      {
+        "file": "enum-values-focused-spaced-probe.trx",
+        "sha256": "20ca8222922335da3f0d09cf54fcdee5200e206a8e671930e19b3ba55da99190",
+        "accepted": true,
+        "counters": {
+          "total": "20",
+          "executed": "20",
+          "passed": "20",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "tests": [
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0114647"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumValues_PreserveFlagsDefaultsAndModuleIsolation(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.0607445"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumLiteralMembersAndFlagsKeepNativeValueAndDefaultOwnership(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.1805634"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::$Name\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0102862"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::Missing\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0010306"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001981"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:04.7322621"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0152186"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0030913"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0005335"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::Parse('One')\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0002598"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumValues_PreserveFlagsDefaultsAndModuleIsolation(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.6618909"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.1346459"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::new()\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0376537"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001101"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumDeclarationDoesNotResolveUnrelatedUnknownParameterTypes",
+            "outcome": "Passed",
+            "duration": "00:00:00.0121955"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice : long { Zero }; function Read-C\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0175904"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumLiteralMembersAndFlagsKeepNativeValueAndDefaultOwnership(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0411733"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0003034"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"if($true) { enum NativeChoice { Zero } }; function\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0010280"
+          }
+        ]
+      },
+      {
+        "file": "enum-values-return-records.trx",
+        "sha256": "20d65cdee0e9eb716e905bc8a127b929380e178bf25e9daeb80f9a186e485034",
+        "accepted": false,
+        "counters": {
+          "total": "22",
+          "executed": "22",
+          "passed": "20",
+          "failed": "2",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "tests": [
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.1442884"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::new()\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0353552"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumValues_PreserveFlagsDefaultsAndModuleIsolation(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.5485992"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0144676"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001017"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeReturnPipelines_PreserveCollectionRecordsAndParenthesizedScalarization(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Failed",
+            "duration": "00:00:02.9770225"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::$Name\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0091861"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumValues_PreserveFlagsDefaultsAndModuleIsolation(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.0383269"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumLiteralMembersAndFlagsKeepNativeValueAndDefaultOwnership(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0310965"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice : long { Zero }; function Read-C\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0205669"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0005035"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::Parse('One')\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001657"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0106990"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.9214772"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumDeclarationDoesNotResolveUnrelatedUnknownParameterTypes",
+            "outcome": "Passed",
+            "duration": "00:00:00.0128516"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0025851"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0003543"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::Missing\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0008053"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001754"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"if($true) { enum NativeChoice { Zero } }; function\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0009595"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeReturnPipelines_PreserveCollectionRecordsAndParenthesizedScalarization(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Failed",
+            "duration": "00:00:02.7676444"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumLiteralMembersAndFlagsKeepNativeValueAndDefaultOwnership(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.1563363"
+          }
+        ]
+      },
+      {
+        "file": "enum-values-return-records-try.trx",
+        "sha256": "bd19805345fae4bfd0ba2fddf257530eb2c385cf8416a5b78a40d918cdf7af5e",
+        "accepted": true,
+        "counters": {
+          "total": "26",
+          "executed": "26",
+          "passed": "26",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "tests": [
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0002280"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumLiteralMembersAndFlagsKeepNativeValueAndDefaultOwnership(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.1349357"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.HostedEnumStringEqualityUsesCanonicalPowerShellOperator(operation: \"-cne\", expectedOperator: \"PowerShellNotEqualCaseSensitive\", expectedIgnoreCase: \"false\", expectedNegation: True)",
+            "outcome": "Passed",
+            "duration": "00:00:00.2312779"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::Parse('One')\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0007658"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::new()\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0468121"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0007209"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::Missing\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0009398"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice : long { Zero }; function Read-C\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0007408"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::$Name\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0114693"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:06.2965217"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeReturnPipelines_PreserveCollectionRecordsAndParenthesizedScalarization(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:04.1687283"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"if($true) { enum NativeChoice { Zero } }; function\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0010367"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0138266"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0143807"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001194"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.HostedEnumStringEqualityUsesCanonicalPowerShellOperator(operation: \"-ceq\", expectedOperator: \"PowerShellEqualCaseSensitive\", expectedIgnoreCase: \"false\", expectedNegation: False)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0021173"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.HostedEnumStringEqualityUsesCanonicalPowerShellOperator(operation: \"-eq\", expectedOperator: \"PowerShellEqualIgnoreCase\", expectedIgnoreCase: \"true\", expectedNegation: False)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0012640"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:09.3907766"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeReturnPipelines_PreserveCollectionRecordsAndParenthesizedScalarization(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:05.3664176"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0034731"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumValues_PreserveFlagsDefaultsAndModuleIsolation(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:06.3056326"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0002909"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumDeclarationDoesNotResolveUnrelatedUnknownParameterTypes",
+            "outcome": "Passed",
+            "duration": "00:00:00.0049931"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumLiteralMembersAndFlagsKeepNativeValueAndDefaultOwnership(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0324565"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumValues_PreserveFlagsDefaultsAndModuleIsolation(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:06.3678006"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.HostedEnumStringEqualityUsesCanonicalPowerShellOperator(operation: \"-ne\", expectedOperator: \"PowerShellNotEqualIgnoreCase\", expectedIgnoreCase: \"true\", expectedNegation: True)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0011220"
+          }
+        ]
+      },
+      {
+        "file": "enum-values-compatibility.trx",
+        "sha256": "3f736faae316c2027e6a099716ebec507eaf2b59502d00d824da21446599251c",
+        "accepted": true,
+        "counters": {
+          "total": "55",
+          "executed": "55",
+          "passed": "55",
+          "failed": "0",
+          "error": "0",
+          "timeout": "0",
+          "aborted": "0",
+          "inconclusive": "0",
+          "passedButRunAborted": "0",
+          "notRunnable": "0",
+          "notExecuted": "0",
+          "disconnected": "0",
+          "warning": "0",
+          "completed": "0",
+          "inProgress": "0",
+          "pending": "0"
+        },
+        "tests": [
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumValues_PreserveFlagsDefaultsAndModuleIsolation(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.2186172"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0003165"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue : Exception { [string]$Name }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0146491"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumLiteralMembersAndFlagsKeepNativeValueAndDefaultOwnership(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0057519"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { static [string]$Name }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0573832"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001077"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellSourceTypeClosureTests.ClassPropertiesAndOverloadedMethodsKeepSeparateConsumerIdentities",
+            "outcome": "Passed",
+            "duration": "00:00:00.0055822"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.HostedEnumStringEqualityUsesCanonicalPowerShellOperator(operation: \"-ceq\", expectedOperator: \"PowerShellEqualCaseSensitive\", expectedIgnoreCase: \"false\", expectedNegation: False)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0017129"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::$Name\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0094121"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellSourceTypeClosureTests.AttributeNameAmbiguityKeepsEveryDeclarationCandidate",
+            "outcome": "Passed",
+            "duration": "00:00:00.0015704"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice : long { Zero }; function Read-C\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0003429"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeOutputCapture_PreservesRecordsAndAssignmentFailures(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:06.8980231"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]$value=$null\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0000653"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeArrayStatementCapture_PreservesNestedLoopRecordsAndArrayIdentity(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.1971740"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0005862"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeReturnPipelines_PreserveCollectionRecordsAndParenthesizedScalarization(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:04.1263693"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.TryArrayCapture_PreservesHostedBoundaryForEscapingLoopTransfer(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.7240238"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.HostedEnumStringEqualityUsesCanonicalPowerShellOperator(operation: \"-ne\", expectedOperator: \"PowerShellNotEqualIgnoreCase\", expectedIgnoreCase: \"true\", expectedNegation: True)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0010539"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumDeclarationDoesNotResolveUnrelatedUnknownParameterTypes",
+            "outcome": "Passed",
+            "duration": "00:00:00.0028502"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::Parse('One')\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0004472"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.4098199"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellSourceTypeClosureTests.DeclarationFactsDoNotAuthorizeDetachingMetadataOrRemovingSourceGuard",
+            "outcome": "Passed",
+            "duration": "00:00:00.0004922"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.TryArrayCapture_PreservesHostedBoundaryForEscapingLoopTransfer(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.2340955"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.HostedEnumStringEqualityUsesCanonicalPowerShellOperator(operation: \"-eq\", expectedOperator: \"PowerShellEqualIgnoreCase\", expectedIgnoreCase: \"true\", expectedNegation: False)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0013671"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumParametersUseDeclaredNativeIdentityAndKeepStrictClosed(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0140052"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumParameters_PreserveIdentityDefaultsArrayBindingAndRepeatedImports(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.8779481"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0000482"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::new()\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0363332"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.TryArrayCapture_QualifiesUnchangedSqlMetadataWithOfflineProvider(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:04.7500234"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeReturnPipelines_PreserveCollectionRecordsAndParenthesizedScalarization(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:04.8547174"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0016927"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.HostedEnumStringEqualityUsesCanonicalPowerShellOperator(operation: \"-cne\", expectedOperator: \"PowerShellNotEqualCaseSensitive\", expectedIgnoreCase: \"false\", expectedNegation: True)",
+            "outcome": "Passed",
+            "duration": "00:00:00.1704888"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]::new('argument')\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0002676"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumValueAdmissionRejectsNonliteralAndUndeclaredMembers(body: \"[NativeChoice]::Missing\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0009223"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.TryArrayCapture_PreservesHandledRecordsRollbackAndReturn(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:03.6216396"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellSourceTypeClosureTests.FunctionHeaderParametersKeepAttributeAndNestedTypeDependencies",
+            "outcome": "Passed",
+            "duration": "00:00:00.0797003"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.TryArrayCapture_RemainsRejectedWithoutNativeHost(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.1197281"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeArrayStatementCapture_PreservesNestedLoopRecordsAndArrayIdentity(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.7711099"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassConstructionUsesNativeLexicalTypeAndKeepsStrictClosed(framework: \"net472\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0801341"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureDoesNotAdmitOtherTypeValueConsumers(body: \"[OwnedValue]::Missing()\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0004033"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0045017"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeOutputCapture_PreservesRecordsAndAssignmentFailures(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:06.4811306"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.TryArrayCapture_PreservesHandledRecordsRollbackAndReturn(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.6062496"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HostedEnumValues_PreserveFlagsDefaultsAndModuleIsolation(framework: \"net472\", host: \"powershell.exe\")",
+            "outcome": "Passed",
+            "duration": "00:00:02.6480601"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.TryArrayCapture_RemainsRejectedWithoutNativeHost(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0030263"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { [string]$Name=(Get-Date) }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0140609"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { OwnedValue() {} }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0028765"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { [string]Method() { return 'valu\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0003621"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellSourceTypeClosureTests.AuthoredMetadataAndNestedTypeArgumentsRetainTheirSourceDependencies",
+            "outcome": "Passed",
+            "duration": "00:00:00.0019056"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.TryArrayCapture_QualifiesUnchangedSqlMetadataWithOfflineProvider(framework: \"net10.0\", host: \"pwsh\")",
+            "outcome": "Passed",
+            "duration": "00:00:04.6858578"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassConstructionUsesNativeLexicalTypeAndKeepsStrictClosed(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0020160"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedValueClassTests.DataClassClosureRejectsUnqualifiedDeclarationMembers(declaration: \"class OwnedValue { [object]$Name }\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001209"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"if($true) { enum NativeChoice { Zero } }; function\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0014708"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumLiteralMembersAndFlagsKeepNativeValueAndDefaultOwnership(framework: \"net10.0\")",
+            "outcome": "Passed",
+            "duration": "00:00:00.0984248"
+          },
+          {
+            "testName": "PowerForge.Tests.PowerShellHostedEnumDeclarationTests.EnumClosureRejectsUnclosedOrUnqualifiedConsumers(source: \"enum NativeChoice { Zero }; function Read-Choice {\"···)",
+            "outcome": "Passed",
+            "duration": "00:00:00.0001777"
+          }
+        ]
+      }
+    ],
+    "net472OwnerBuild": {
+      "success": true,
+      "warnings": 0,
+      "errors": 0,
+      "seconds": 4.47
+    },
+    "review": {
+      "task": "enum_values_return_records_review",
+      "scope": "11 modified code/test files plus native return-record test; surrounding type closure, lowering and native runtime contracts",
+      "outcome": "No actionable P0-P3 findings",
+      "independent": true,
+      "reranTests": false
+    },
+    "aggregateCompilerGateRun": false,
+    "failedRunDisposition": "First two enum artifact runs used WinPS-incompatible unspaced enum numeric assignments in the probe. Initial return test used an unqualified plain array-return shape; final test uses supported try-array capture. None of these failed runs is accepted."
+  },
+  "yaml": {
+    "moduleVersion": "0.4.12",
+    "sourceArchiveSha256": "d4602bc7a4a093766520422d53ca8b09acde162286fae11e2ee6c8edfea07810",
+    "sourceSha256": "415b0de1b4d5af6980ec50316d3267fa19663b7dbf809d219783b41ed39b2e5d",
+    "license": "Apache-2.0",
+    "sourceIsExternal": true,
+    "functions": 14,
+    "baselineEmitted": 0,
+    "candidateEmitted": 13,
+    "retained": [
+      "Convert-ValueToProperType"
+    ],
+    "artifactKind": "BinaryModule",
+    "mode": "Hybrid",
+    "sourceMode": "CompleteModule",
+    "dependencyResolution": "Unreviewed offline dependency resolution; no reviewed lock claimed",
+    "binaryInventory": [
+      {
+        "relativePath": "lib/net47/PowerShellYamlSerializer.dll",
+        "identity": "PowerShellYamlSerializer, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "sha256": "a5bdd33675629ca88cf05cd08150a19a69bc20b21cbe1d1e5e55fe63a332062a",
+        "references": [
+          "mscorlib:4.0.0.0",
+          "YamlDotNet:16.0.0.0",
+          "System.Numerics:4.0.0.0",
+          "System.Management.Automation:3.0.0.0",
+          "System:4.0.0.0"
+        ],
+        "nativeImports": []
+      },
+      {
+        "relativePath": "lib/net47/YamlDotNet.dll",
+        "identity": "YamlDotNet, Version=16.0.0.0, Culture=neutral, PublicKeyToken=ec19458f3c15af5e",
+        "sha256": "d35c770d92632bd94bba4203db05eee5ebce6e6ea6d92e7ebe8997a942b5321c",
+        "references": [
+          "mscorlib:4.0.0.0",
+          "System:4.0.0.0",
+          "System.Core:4.0.0.0"
+        ],
+        "nativeImports": []
+      },
+      {
+        "relativePath": "lib/netstandard2.1/PowerShellYamlSerializer.dll",
+        "identity": "PowerShellYamlSerializer, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+        "sha256": "c9193f2fb5afa40af61d908589fdd0929ab58472be215fc2afb692194d53210d",
+        "references": [
+          "netstandard:2.1.0.0",
+          "YamlDotNet:16.0.0.0",
+          "System.Management.Automation:3.0.0.0"
+        ],
+        "nativeImports": []
+      },
+      {
+        "relativePath": "lib/netstandard2.1/YamlDotNet.dll",
+        "identity": "YamlDotNet, Version=16.0.0.0, Culture=neutral, PublicKeyToken=ec19458f3c15af5e",
+        "sha256": "d7543a03a69f14ca1e302aa2bbb09777200b72e0c6db0d0eb7614593f5c33e0f",
+        "references": [
+          "netstandard:2.1.0.0"
+        ],
+        "nativeImports": []
+      }
+    ],
+    "hosts": [
+      {
+        "host": "7.6.6",
+        "framework": "net10.0",
+        "observationsMatch": true,
+        "observationCount": 16,
+        "originalSha256": "ec17bfd9d49b367fd5527f52581ded8f3c59fd9bb6a322aaa1454d809e40e385",
+        "generatedSha256": "ec17bfd9d49b367fd5527f52581ded8f3c59fd9bb6a322aaa1454d809e40e385",
+        "observations": [
+          {
+            "id": "parse-map",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "active",
+                    "value": {
+                      "type": "System.Boolean",
+                      "value": "True"
+                    }
+                  },
+                  {
+                    "key": "count",
+                    "value": {
+                      "type": "System.Int32",
+                      "value": "3"
+                    }
+                  },
+                  {
+                    "key": "empty",
+                    "value": null
+                  },
+                  {
+                    "key": "name",
+                    "value": "example"
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-ordered",
+            "records": [
+              {
+                "type": "System.Collections.Specialized.OrderedDictionary",
+                "entries": [
+                  {
+                    "key": "a",
+                    "value": "first"
+                  },
+                  {
+                    "key": "z",
+                    "value": "last"
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-sequence",
+            "records": [
+              {
+                "type": "System.Collections.Generic.List`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+                "values": [
+                  "one",
+                  "two",
+                  "three"
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-nested",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "outer",
+                    "value": {
+                      "type": "System.Collections.Hashtable",
+                      "entries": [
+                        {
+                          "key": "children",
+                          "value": {
+                            "type": "System.Collections.Generic.List`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+                            "values": [
+                              {
+                                "type": "System.Collections.Hashtable",
+                                "entries": [
+                                  {
+                                    "key": "name",
+                                    "value": "alpha"
+                                  },
+                                  {
+                                    "key": "value",
+                                    "value": {
+                                      "type": "System.Int32",
+                                      "value": "7"
+                                    }
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "System.Collections.Hashtable",
+                                "entries": [
+                                  {
+                                    "key": "name",
+                                    "value": "beta"
+                                  },
+                                  {
+                                    "key": "value",
+                                    "value": {
+                                      "type": "System.Int32",
+                                      "value": "8"
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-alias",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "first",
+                    "value": {
+                      "type": "System.Collections.Generic.List`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+                      "values": [
+                        "one",
+                        "two"
+                      ]
+                    }
+                  },
+                  {
+                    "key": "second",
+                    "value": {
+                      "type": "System.Collections.Generic.List`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+                      "values": [
+                        "one",
+                        "two"
+                      ]
+                    }
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-multiple",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "a",
+                    "value": "one"
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-invalid",
+            "records": [],
+            "caught": {
+              "error": "SemanticErrorException,Get-YamlDocuments",
+              "exception": "System.Management.Automation.MethodInvocationException",
+              "category": "NotSpecified",
+              "message": "Exception calling \"Load\" with \"1\" argument(s): \"While parsing a flow sequence, did not find expected ',' or ']'.\""
+            }
+          },
+          {
+            "id": "serialize-map",
+            "records": [
+              "name: example\r\ncount: 3\r\nactive: true\r\nempty: \r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "serialize-json",
+            "records": [
+              "{\"name\": \"example\", \"count\": 3}\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "serialize-flags",
+            "records": [
+              "name: example\r\nvalues:\r\n  - one\r\n  - two\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "serialize-flow",
+            "records": [
+              "name: example\r\nvalues:\r\n- one\r\n- two\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "serialize-pipeline",
+            "records": [
+              "- id: 1\r\n- id: 2\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "invalid-option",
+            "records": [],
+            "caught": {
+              "error": "ParameterArgumentTransformationError,ConvertTo-Yaml",
+              "exception": "System.Management.Automation.ParameterBindingArgumentTransformationException",
+              "category": "InvalidData",
+              "message": "Cannot process argument transformation on parameter 'Options'. Cannot convert value \"Missing\" to type \"SerializationOptions\". Error: \"Unable to match the identifier name Missing to a valid enumerator name. Specify one of the following enumerator names and try again:\r\nNone, Roundtrip, DisableAliases, EmitDefaults, JsonCompatible, DefaultToStaticType, WithIndentedSequences, OmitNullValues, UseFlowStyle, UseSequenceFlowStyle\""
+            }
+          },
+          {
+            "id": "outfile",
+            "records": [
+              "name: owned\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "outfile-exists",
+            "records": [],
+            "caught": {
+              "error": "Target file already exists. Use -Force to overwrite.",
+              "exception": "System.Management.Automation.RuntimeException",
+              "category": "OperationStopped",
+              "message": "Target file already exists. Use -Force to overwrite."
+            }
+          },
+          {
+            "id": "outfile-force",
+            "records": [
+              "name: replacement\r\n"
+            ],
+            "caught": null
+          }
+        ],
+        "dependencies": [
+          {
+            "name": "YamlDotNet.dll",
+            "identity": "YamlDotNet, Version=16.0.0.0, Culture=neutral, PublicKeyToken=ec19458f3c15af5e",
+            "sha256": "d7543a03a69f14ca1e302aa2bbb09777200b72e0c6db0d0eb7614593f5c33e0f",
+            "underModuleRoot": true
+          },
+          {
+            "name": "PowerShellYamlSerializer.dll",
+            "identity": "PowerShellYamlSerializer, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+            "sha256": "c9193f2fb5afa40af61d908589fdd0929ab58472be215fc2afb692194d53210d",
+            "underModuleRoot": true
+          }
+        ],
+        "options": {
+          "type": "SerializationOptions",
+          "names": [
+            "None",
+            "Roundtrip",
+            "DisableAliases",
+            "EmitDefaults",
+            "JsonCompatible",
+            "DefaultToStaticType",
+            "WithIndentedSequences",
+            "OmitNullValues",
+            "UseFlowStyle",
+            "UseSequenceFlowStyle"
+          ],
+          "values": [
+            0,
+            1,
+            2,
+            4,
+            8,
+            16,
+            32,
+            64,
+            128,
+            256
+          ],
+          "flags": true
+        },
+        "functionLedger": [
+          {
+            "unitId": "1a93db890c2230ab0b40c054",
+            "name": "Invoke-LoadFile",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "65be33f5f1e94af522277233",
+            "name": "Invoke-LoadAssembly",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "8edafbab3be6349baa6911f2",
+            "name": "Get-YamlDocuments",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "ed4f294607df6fcc2786e6d0",
+            "name": "Convert-ValueToProperType",
+            "emittedClrMethod": false,
+            "retainedHostedSource": true,
+            "usesNativeFunctionBinding": false,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": [
+              {
+                "code": "UnsupportedSyntax",
+                "featureId": "syntax.unsupported",
+                "message": "Native reference arguments require distinct direct local variables and retain other reference shapes in PowerShell.",
+                "line": 142,
+                "column": 26
+              }
+            ]
+          },
+          {
+            "unitId": "f92a66cfccf886c3483a3193",
+            "name": "Convert-YamlMappingToHashtable",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "ef39b29f7583f49b716fe425",
+            "name": "Convert-YamlSequenceToArray",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "fd9eec7474056a1f1fd49623",
+            "name": "Convert-YamlDocumentToPSObject",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "21396e454d69c045cc215d43",
+            "name": "Convert-HashtableToDictionary",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "947d6513458008a35515dbda",
+            "name": "Convert-OrderedHashtableToDictionary",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "58bff30fe5879aec6f1e9e07",
+            "name": "Convert-ListToGenericList",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "086e6f3005b20cb3f0683fb3",
+            "name": "Convert-PSObjectToGenericObject",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "c321dbc631cc91c37776f777",
+            "name": "ConvertFrom-Yaml",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "a5b9f0e6a822e3bd6f8daed5",
+            "name": "Get-Serializer",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "c3234d51c5da948eb059ac5f",
+            "name": "ConvertTo-Yaml",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          }
+        ]
+      },
+      {
+        "host": "5.1.26100.9444",
+        "framework": "net472",
+        "observationsMatch": true,
+        "observationCount": 16,
+        "originalSha256": "c6838e28bfeb85a23f71e8cd7818f5ef3811c4752737a345254c8aa539ef1dd6",
+        "generatedSha256": "c6838e28bfeb85a23f71e8cd7818f5ef3811c4752737a345254c8aa539ef1dd6",
+        "observations": [
+          {
+            "id": "parse-map",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "active",
+                    "value": {
+                      "type": "System.Boolean",
+                      "value": "True"
+                    }
+                  },
+                  {
+                    "key": "count",
+                    "value": {
+                      "type": "System.Int32",
+                      "value": "3"
+                    }
+                  },
+                  {
+                    "key": "empty",
+                    "value": null
+                  },
+                  {
+                    "key": "name",
+                    "value": "example"
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-ordered",
+            "records": [
+              {
+                "type": "System.Collections.Specialized.OrderedDictionary",
+                "entries": [
+                  {
+                    "key": "a",
+                    "value": "first"
+                  },
+                  {
+                    "key": "z",
+                    "value": "last"
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-sequence",
+            "records": [
+              {
+                "type": "System.Collections.Generic.List`1[[System.Object, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]",
+                "values": [
+                  "one",
+                  "two",
+                  "three"
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-nested",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "outer",
+                    "value": {
+                      "type": "System.Collections.Hashtable",
+                      "entries": [
+                        {
+                          "key": "children",
+                          "value": {
+                            "type": "System.Collections.Generic.List`1[[System.Object, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]",
+                            "values": [
+                              {
+                                "type": "System.Collections.Hashtable",
+                                "entries": [
+                                  {
+                                    "key": "name",
+                                    "value": "alpha"
+                                  },
+                                  {
+                                    "key": "value",
+                                    "value": {
+                                      "type": "System.Int32",
+                                      "value": "7"
+                                    }
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "System.Collections.Hashtable",
+                                "entries": [
+                                  {
+                                    "key": "name",
+                                    "value": "beta"
+                                  },
+                                  {
+                                    "key": "value",
+                                    "value": {
+                                      "type": "System.Int32",
+                                      "value": "8"
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-alias",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "first",
+                    "value": {
+                      "type": "System.Collections.Generic.List`1[[System.Object, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]",
+                      "values": [
+                        "one",
+                        "two"
+                      ]
+                    }
+                  },
+                  {
+                    "key": "second",
+                    "value": {
+                      "type": "System.Collections.Generic.List`1[[System.Object, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]",
+                      "values": [
+                        "one",
+                        "two"
+                      ]
+                    }
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-multiple",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "a",
+                    "value": "one"
+                  }
+                ]
+              }
+            ],
+            "caught": null
+          },
+          {
+            "id": "parse-invalid",
+            "records": [],
+            "caught": {
+              "error": "SemanticErrorException,Get-YamlDocuments",
+              "exception": "System.Management.Automation.MethodInvocationException",
+              "category": "NotSpecified",
+              "message": "Exception calling \"Load\" with \"1\" argument(s): \"While parsing a flow sequence, did not find expected ',' or ']'.\""
+            }
+          },
+          {
+            "id": "serialize-map",
+            "records": [
+              "name: example\r\ncount: 3\r\nactive: true\r\nempty: \r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "serialize-json",
+            "records": [
+              "{\"name\": \"example\", \"count\": 3}\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "serialize-flags",
+            "records": [
+              "name: example\r\nvalues:\r\n  - one\r\n  - two\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "serialize-flow",
+            "records": [
+              "name: example\r\nvalues:\r\n- one\r\n- two\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "serialize-pipeline",
+            "records": [
+              "- id: 1\r\n- id: 2\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "invalid-option",
+            "records": [],
+            "caught": {
+              "error": "ParameterArgumentTransformationError,ConvertTo-Yaml",
+              "exception": "System.Management.Automation.ParameterBindingArgumentTransformationException",
+              "category": "InvalidData",
+              "message": "Cannot process argument transformation on parameter 'Options'. Cannot convert value \"Missing\" to type \"SerializationOptions\". Error: \"Unable to match the identifier name Missing to a valid enumerator name. Specify one of the following enumerator names and try again:\r\nNone, Roundtrip, DisableAliases, EmitDefaults, JsonCompatible, DefaultToStaticType, WithIndentedSequences, OmitNullValues, UseFlowStyle, UseSequenceFlowStyle\""
+            }
+          },
+          {
+            "id": "outfile",
+            "records": [
+              "name: owned\r\n"
+            ],
+            "caught": null
+          },
+          {
+            "id": "outfile-exists",
+            "records": [],
+            "caught": {
+              "error": "Target file already exists. Use -Force to overwrite.",
+              "exception": "System.Management.Automation.RuntimeException",
+              "category": "OperationStopped",
+              "message": "Target file already exists. Use -Force to overwrite."
+            }
+          },
+          {
+            "id": "outfile-force",
+            "records": [
+              "name: replacement\r\n"
+            ],
+            "caught": null
+          }
+        ],
+        "dependencies": [
+          {
+            "name": "YamlDotNet.dll",
+            "identity": "YamlDotNet, Version=16.0.0.0, Culture=neutral, PublicKeyToken=ec19458f3c15af5e",
+            "sha256": "d35c770d92632bd94bba4203db05eee5ebce6e6ea6d92e7ebe8997a942b5321c",
+            "underModuleRoot": true
+          },
+          {
+            "name": "PowerShellYamlSerializer.dll",
+            "identity": "PowerShellYamlSerializer, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null",
+            "sha256": "a5bdd33675629ca88cf05cd08150a19a69bc20b21cbe1d1e5e55fe63a332062a",
+            "underModuleRoot": true
+          }
+        ],
+        "options": {
+          "type": "SerializationOptions",
+          "names": [
+            "None",
+            "Roundtrip",
+            "DisableAliases",
+            "EmitDefaults",
+            "JsonCompatible",
+            "DefaultToStaticType",
+            "WithIndentedSequences",
+            "OmitNullValues",
+            "UseFlowStyle",
+            "UseSequenceFlowStyle"
+          ],
+          "values": [
+            0,
+            1,
+            2,
+            4,
+            8,
+            16,
+            32,
+            64,
+            128,
+            256
+          ],
+          "flags": true
+        },
+        "functionLedger": [
+          {
+            "unitId": "1a93db890c2230ab0b40c054",
+            "name": "Invoke-LoadFile",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "65be33f5f1e94af522277233",
+            "name": "Invoke-LoadAssembly",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "8edafbab3be6349baa6911f2",
+            "name": "Get-YamlDocuments",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "ed4f294607df6fcc2786e6d0",
+            "name": "Convert-ValueToProperType",
+            "emittedClrMethod": false,
+            "retainedHostedSource": true,
+            "usesNativeFunctionBinding": false,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": [
+              {
+                "code": "UnsupportedSyntax",
+                "featureId": "syntax.unsupported",
+                "message": "Native reference arguments require distinct direct local variables and retain other reference shapes in PowerShell.",
+                "line": 142,
+                "column": 26
+              }
+            ]
+          },
+          {
+            "unitId": "f92a66cfccf886c3483a3193",
+            "name": "Convert-YamlMappingToHashtable",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "ef39b29f7583f49b716fe425",
+            "name": "Convert-YamlSequenceToArray",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "fd9eec7474056a1f1fd49623",
+            "name": "Convert-YamlDocumentToPSObject",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "21396e454d69c045cc215d43",
+            "name": "Convert-HashtableToDictionary",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "947d6513458008a35515dbda",
+            "name": "Convert-OrderedHashtableToDictionary",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "58bff30fe5879aec6f1e9e07",
+            "name": "Convert-ListToGenericList",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "086e6f3005b20cb3f0683fb3",
+            "name": "Convert-PSObjectToGenericObject",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "c321dbc631cc91c37776f777",
+            "name": "ConvertFrom-Yaml",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "a5b9f0e6a822e3bd6f8daed5",
+            "name": "Get-Serializer",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          },
+          {
+            "unitId": "c3234d51c5da948eb059ac5f",
+            "name": "ConvertTo-Yaml",
+            "emittedClrMethod": true,
+            "retainedHostedSource": false,
+            "usesNativeFunctionBinding": true,
+            "generatedRegionMemberNames": [],
+            "diagnosticChain": []
+          }
+        ]
+      }
+    ],
+    "executionQualification": "16 observed parsing, serialization, option/error and owned-file cases per host exercise the generated module and its helpers. This is not exhaustive branch execution of every emitted method.",
+    "reproducedDefect": "Before direct return-record forwarding, generated sequence parsing flattened one List[object] record into strings and nested/alias list values became Object[]. Corrected comparisons preserve CLR list types and nested contents.",
+    "strictBoundary": [
+      {
+        "framework": "net10.0",
+        "typedUnits": 0,
+        "rejectedUnits": 15,
+        "canProceed": false,
+        "explanationSha256": "3500a328af2aff5876d3373f99ca829259edb9ddf95a80b8244309d34cb0876a"
+      },
+      {
+        "framework": "net472",
+        "typedUnits": 0,
+        "rejectedUnits": 15,
+        "canProceed": false,
+        "explanationSha256": "904b90d44c4b692f59ad992d96164eaff057c4e78f7a6e7c50147e4a830a1466"
+      }
+    ]
+  },
+  "limits": [
+    "Enum declaration, parameter binding, command regions, third-party managed APIs and invocation context remain PowerShell-owned.",
+    "Only two Windows hosts are claimed; no speedup, non-Windows result, released package or reviewed dependency lock.",
+    "Dynamic by-reference scalar conversion remains hosted; casts, free Type values, computed enum members, static enum calls, nested consumers and custom underlying types remain unqualified.",
+    "The existing five-packet census is net10.0 only; both-host YAML proof is additional evidence, not a refreshed full net472 portfolio.",
+    "No general AssemblyResolve callback lifetime/fault qualification beyond the original loader import and observed module operations is claimed."
+  ],
+  "sourceAndTestHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.CapturedReturns.cs": "42cd464e2cb631fa9b73879600b2fa441b186be06b3093b20f9e75cfe1aaccc6",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.Providers.cs": "cb2581bb4204a7cca30e205ef2621e65e1e89a39857793546f7f5fc83162659c",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellCommandRegionSemanticBinder.cs": "ef0e4e45be290a8ac7e2edf19d187a87a91d5f44e13826dc3f9d729878710423",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellHostedEnumDeclarationPolicy.cs": "13c19ff47ae23ae9d641c6d76ea6fe605e3187ccf13ecd607e53b68e2909c4c9",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeAccessSemanticBinder.cs": "68f50ea1eecbd26a660b27cdc8870173087685ab72ec8d9c2e8ebc34a23b2f04",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "d2dd876d1f617fa524a4c392c602bc3cac7d33ab91f0efc58b401e8620659b22",
+    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeCommandExpression.cs": "07241bbcc0907e83a386773f060582dda059d5e68f506cce1f3c222628115aa8",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeCommandExpression.cs": "81437e1f7c875d7d05a3518b56dfc22cf1292381171ddb2b1e8be80017af32e0",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs": "fef1e099da71f0219e299aa9eed3bb723d98c3ef643173cd5e3f081123664fbe",
+    "PowerForge.Tests/PowerShellCompilationHostedEnumTests.cs": "e85fa71b4f3ef7f62b7601b27d233c8d4cc9c5125ee998fe5b4f075bc370d28e",
+    "PowerForge.Tests/PowerShellHostedEnumDeclarationTests.cs": "f8df6a409f28de38dd10a800b6b14c80fc027016f5147336e3f17c7d1aa82b45",
+    "PowerForge.Tests/PowerShellCompilationNativeReturnRecordsTests.cs": "8cc9715dbe6eac8245eb2bef44a12e9d3f23daed2af8708de6f9be71ef1d1121"
+  },
+  "probeSha256": "f57a2ef759a5cda2f91fa206062e0ef4777ac9ca61974299c47b6f11a8297c8b"
+}

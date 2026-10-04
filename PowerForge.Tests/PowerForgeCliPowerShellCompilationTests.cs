@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace PowerForge.Tests;
 
 [Trait("Category", "PowerShellCompilation")]
-public sealed class PowerForgeCliPowerShellCompilationTests
+public sealed partial class PowerForgeCliPowerShellCompilationTests
 {
     [Theory]
     [InlineData("powershell build missing.ps1 --kind exe --sing --output json", "powershell.build", "--sing")]
@@ -102,8 +102,8 @@ public sealed class PowerForgeCliPowerShellCompilationTests
             using var document = JsonDocument.Parse(result.StdOut);
             Assert.Equal("powershell.explain", document.RootElement.GetProperty("command").GetString());
             var explanation = document.RootElement.GetProperty("result");
-            Assert.Equal(5, explanation.GetProperty("schemaVersion").GetInt32());
-            Assert.Equal(4, explanation.GetProperty("semanticCompatibilityVersion").GetInt32());
+            Assert.Equal(6, explanation.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(5, explanation.GetProperty("semanticCompatibilityVersion").GetInt32());
             var file = Assert.Single(explanation.GetProperty("files").EnumerateArray());
             Assert.Equal("Input.ps1", file.GetProperty("relativePath").GetString());
             var unit = Assert.Single(file.GetProperty("units").EnumerateArray());
@@ -137,7 +137,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
             Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
             using var document = JsonDocument.Parse(result.StdOut);
             var explanation = document.RootElement.GetProperty("result");
-            Assert.Equal(5, explanation.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(6, explanation.GetProperty("schemaVersion").GetInt32());
             var unit = Assert.Single(Assert.Single(explanation.GetProperty("files").EnumerateArray())
                 .GetProperty("units").EnumerateArray());
             Assert.Equal("Typed", unit.GetProperty("decision").GetString());
@@ -574,7 +574,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
         var baseline = Path.Combine(root, "census.json");
         Directory.CreateDirectory(product);
         var source = Path.Combine(product, "Functions.psm1");
-        File.WriteAllText(source, "function Add-TypedValue { param([int] $Number) [int] $result = $Number; $result += 1; return $result }");
+        File.WriteAllText(source, "function Add-TypedValue { [CmdletBinding()] param([int] $Number) [int] $result = $Number; $result += 1; return $result }");
 
         try
         {
@@ -591,7 +591,9 @@ public sealed class PowerForgeCliPowerShellCompilationTests
                 Assert.True(result.GetProperty("passed").GetBoolean());
             }
 
-            File.WriteAllText(source, "function Add-TypedValue { throw 'regression' }");
+            // A throw statement is supported. Use the same unsupported -as contract
+            // exercised by the census frontier tests to produce an actual coverage regression.
+            File.WriteAllText(source, "function Add-TypedValue { [CmdletBinding()] param([string] $Value) return ($Value -as [string]) }");
             var regression = await RunCliAsync(
                 repositoryRoot,
                 $"powershell census \"{product}\" --framework net10.0 --baseline \"{baseline}\" --output json");
@@ -610,7 +612,7 @@ public sealed class PowerForgeCliPowerShellCompilationTests
     }
 
     [Fact]
-    public async Task Analyze_HonorsRequestedTargetFrameworkMemberSurface()
+    public async Task Analyze_DefaultsToNet10AndRejectsRetiredNet8Target()
     {
         var repositoryRoot = FindRepositoryRoot();
         var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Target Analysis Tests", Guid.NewGuid().ToString("N"));
@@ -620,26 +622,21 @@ public sealed class PowerForgeCliPowerShellCompilationTests
 
         try
         {
-            var net8 = await RunCliAsync(
+            var retired = await RunCliAsync(
                 repositoryRoot,
                 $"powershell analyze \"{source}\" --mode Strict --framework net8.0 --output json");
-            Assert.Equal(1, net8.ExitCode);
-            using (var document = JsonDocument.Parse(net8.StdOut))
-            {
-                var result = document.RootElement.GetProperty("result");
-                Assert.Equal("net8.0", result.GetProperty("targetFramework").GetString());
-                Assert.Equal(0, result.GetProperty("compilableUnits").GetInt32());
-            }
+            Assert.Equal(2, retired.ExitCode);
+            Assert.Contains("net472 or net10.0", retired.StdErr + retired.StdOut, StringComparison.OrdinalIgnoreCase);
 
             var defaultTarget = await RunCliAsync(
                 repositoryRoot,
                 $"powershell analyze \"{source}\" --mode Strict --output json");
-            Assert.Equal(1, defaultTarget.ExitCode);
+            Assert.Equal(0, defaultTarget.ExitCode);
             using (var document = JsonDocument.Parse(defaultTarget.StdOut))
             {
                 var result = document.RootElement.GetProperty("result");
-                Assert.Equal("net8.0", result.GetProperty("targetFramework").GetString());
-                Assert.Equal(0, result.GetProperty("compilableUnits").GetInt32());
+                Assert.Equal("net10.0", result.GetProperty("targetFramework").GetString());
+                Assert.Equal(1, result.GetProperty("compilableUnits").GetInt32());
             }
 
             var net10 = await RunCliAsync(
@@ -692,7 +689,9 @@ public sealed class PowerForgeCliPowerShellCompilationTests
         }
     }
 
-    private static async Task<(int ExitCode, string StdOut, string StdErr)> RunCliAsync(string repositoryRoot, string arguments)
+    private static async Task<(int ExitCode, string StdOut, string StdErr)> RunCliAsync(
+        string repositoryRoot, string arguments, IReadOnlyDictionary<string, string>? environment = null,
+        TimeSpan? timeout = null)
     {
         var cli = Path.Combine(repositoryRoot, "PowerForge.Cli", "bin", "Release", "net10.0", "PowerForge.Cli.dll");
         using var process = new Process
@@ -708,14 +707,19 @@ public sealed class PowerForgeCliPowerShellCompilationTests
                 CreateNoWindow = true
             }
         };
+        if (environment is not null)
+            foreach (var variable in environment) process.StartInfo.Environment[variable.Key] = variable.Value;
         process.Start();
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
         var exitTask = process.WaitForExitAsync();
-        if (await Task.WhenAny(exitTask, Task.Delay(TimeSpan.FromSeconds(120))) != exitTask)
+        // Artifact builds have a five-minute child budget; the observer must let the
+        // owning workflow report its own failure before enforcing an outer deadline.
+        var deadline = timeout ?? TimeSpan.FromMinutes(6);
+        if (await Task.WhenAny(exitTask, Task.Delay(deadline)) != exitTask)
         {
             try { process.Kill(entireProcessTree: true); } catch { }
-            throw new TimeoutException("PowerShell compilation CLI test timed out.");
+            throw new TimeoutException($"PowerShell compilation CLI test timed out after {deadline}: {arguments}");
         }
         return (process.ExitCode, await stdoutTask, await stderrTask);
     }

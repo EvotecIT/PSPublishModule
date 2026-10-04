@@ -7,9 +7,30 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellPipelineNullInputSemanticPolicy
 {
+    internal static bool CanBindNullRecord(Type elementType)
+        => TryGetNullRecordValue(elementType, out _);
+
     internal static bool TryBindElement(Type elementType, SourceSpan span, out PowerShellBoundExpression element)
     {
-        object? value;
+        if (!TryGetNullRecordValue(elementType, out var value))
+        {
+            element = null!;
+            return false;
+        }
+
+        element = new PowerShellBoundLiteralExpression(
+            span,
+            value,
+            new PowerShellTypeFact(
+                elementType,
+                PowerShellTypeFactProvenance.Inferred,
+                "PowerShell by-value pipeline binding converts one null input record to this stable scalar value."),
+            value is null ? PowerShellValueState.Null : PowerShellValueState.Known);
+        return true;
+    }
+
+    private static bool TryGetNullRecordValue(Type elementType, out object? value)
+    {
         if (Nullable.GetUnderlyingType(elementType) is not null ||
             elementType == typeof(Uri) ||
             elementType == typeof(Version))
@@ -26,18 +47,9 @@ internal static class PowerShellPipelineNullInputSemanticPolicy
         }
         else
         {
-            element = null!;
+            value = null;
             return false;
         }
-
-        element = new PowerShellBoundLiteralExpression(
-            span,
-            value,
-            new PowerShellTypeFact(
-                elementType,
-                PowerShellTypeFactProvenance.Inferred,
-                "PowerShell by-value pipeline binding converts one null input record to this stable scalar value."),
-            value is null ? PowerShellValueState.Null : PowerShellValueState.Known);
         return true;
     }
 }

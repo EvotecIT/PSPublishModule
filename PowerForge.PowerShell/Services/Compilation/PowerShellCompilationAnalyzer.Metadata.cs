@@ -4,7 +4,7 @@ namespace PowerForge;
 
 public sealed partial class PowerShellCompilationAnalyzer
 {
-    private static bool IsSupportedMetadataAttribute(
+    private bool IsSupportedMetadataAttribute(
         AttributeAst attribute,
         PowerShellCompilationCapability capabilities,
         string? targetFramework)
@@ -27,7 +27,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                 capabilities,
                 out _,
                 out _,
-                out _);
+                out _,
+                _nativeDependencyTypes);
         if (PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowNull") ||
             PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowEmptyString") ||
             PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowEmptyCollection") ||

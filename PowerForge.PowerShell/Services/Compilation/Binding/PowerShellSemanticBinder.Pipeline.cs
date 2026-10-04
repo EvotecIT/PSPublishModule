@@ -114,10 +114,11 @@ internal sealed partial class PowerShellSemanticBinder
             itemSymbol,
             elementType,
             input,
-            scalarString: false,
+            PowerShellForEachEnumerationKind.TypedArray,
             body,
             declareVariable: true,
-            nullCollectionElement);
+            nullCollectionElement,
+            checkHostInterrupts: PowerShellLoopInterruptContract.IsAvailable(capabilities));
         return true;
     }
 

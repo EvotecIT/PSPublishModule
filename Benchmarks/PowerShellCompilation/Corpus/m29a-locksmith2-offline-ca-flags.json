@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "recordedOn": "2026-09-28",
+  "source": {
+    "workload": "locksmith2",
+    "revision": "f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639",
+    "archiveSha256": "d4f511b16ed95d15bfa37ba06ddfc92709f0412e8669004cb70e3407ae9fc8b9",
+    "license": "Commons Clause License Condition v1.0",
+    "unchangedFunctionSha256": {
+      "Private/Set/Set-CAEditFlags.ps1": "16503bcddf6ae64fd44814d669cc7f9ce49a1fcf459b8404a2bf833abacd6c55",
+      "Private/Set/Set-CAInterfaceFlags.ps1": "78a11a0caf0d62545418779984cf2ff3cf33d9e00d05151e3dbab79028402db0"
+    },
+    "unchangedManifestClassSha256": {
+      "Classes/LS2Principal.ps1": "5b8542654843f25be0218a346780cdd40ec6f236bc73004e228eb960cb49fca1",
+      "Classes/LS2AdcsObject.ps1": "abb27b68cdfe94c111013009ab453aa96a7f67748e2b33abd1e703640a9c93a5",
+      "Classes/LS2Issue.ps1": "736d4440eace31299822b2d8e20863b1c26a7cb9186da235c478910226202e38"
+    }
+  },
+  "fixture": {
+    "moduleManifestSha256": "64c6250e1c1ee66e722905cd2df2f11b5c84fdea241ea547567de26193a3b0d6",
+    "moduleSourceSha256": "f23ed034a18ea9b45e85d993c4dda81ced4ec27923fad45ba341dbef4a80caf4",
+    "observerSha256": "a5d3d7a3960e8a198350e4cf789d485f765fb9adc4cc9f99f3dece1cf8964319",
+    "unchangedFunctionTextsVerbatimInMiniModule": true,
+    "classCopiesHashIdentical": 3,
+    "providerBoundary": "The observer defines global Get-PSCEditFlag and Get-PSCInterfaceFlag stubs before import; both record calls and return owned in-memory values or throw owned errors. No PSCertutil, CA, AD or network operation runs."
+  },
+  "generated": {
+    "mode": "Hybrid",
+    "net10ManifestSha256": "9907ee43af12d1efcb9860e1ed82c3874d307e5307bd9781c25ed4bb0dc6c4a3",
+    "net472ManifestSha256": "a7efca525a14906fd2da44b3f92a68dd0a2b0b0bef5a65993ab72a9d35c33e35",
+    "compiledMethodsPerTarget": 2,
+    "compiledNativeLifecycleCallbacksPerTarget": 2,
+    "runtimeFallbackUnitsPerTarget": 2,
+    "strict": {
+      "targets": ["net10.0", "net472"],
+      "canProceed": false,
+      "typedUnits": 0,
+      "rejectedUnits": 2,
+      "net10ExplainSha256": "7e228bd46c366bfc9c34e2044b3808a76331d1206afd5a55ed56dd223577fb06",
+      "net472ExplainSha256": "e84c6dee62ba3f0b180f7850911d4f1a1b63e370d325e419b51274bacf2fee7a"
+    }
+  },
+  "execution": {
+    "hosts": ["PowerShell 7/net10.0 Windows x64", "Windows PowerShell 5.1/net472 Windows x64"],
+    "originalGeneratedAndCrossHostRawJsonEqual": true,
+    "allChildExitCodesZero": true,
+    "allStderrEmpty": true,
+    "rawOutputSha256EachRun": "c9e9bc554766263e367e247a5db7ae75dae2aa76fc2272deba4215057e9fcf2c",
+    "newlyExecutedMethods": ["Set-CAEditFlags", "Set-CAInterfaceFlags"],
+    "result": {
+      "inputType": "LS2AdcsObject",
+      "outputCountEachFunction": 4,
+      "sameReferences": [true, true, true, true],
+      "providerCalls": ["edit:ActiveCA", "edit:FalseCA", "edit:EmptyCA", "edit:ErrorCA", "interface:ActiveCA", "interface:FalseCA", "interface:EmptyCA", "interface:ErrorCA"],
+      "active": {"editCount": 2, "sanFlagEnabled": true, "interfaceCount": 2, "rpcEncryptionNotRequired": true},
+      "falseFlag": {"editCount": 1, "sanFlagEnabled": false, "interfaceCount": 1, "rpcEncryptionNotRequired": false},
+      "nonCaAndEmptyAndErrorRetainNullFlagValues": true
+    }
+  },
+  "disposition": {
+    "locksmith2EmittedFunctions": 75,
+    "locksmith2TotalFunctions": 100,
+    "gainedSincePriorBaseline": 37,
+    "gainedExecutedOffline": 19,
+    "gainedAnalysisOnly": 18,
+    "newlyExecutedThisRecord": 2,
+    "sameInputRegressions": 0,
+    "sameInputAssessmentSha256": "531d3d5134b683ec2adb6e9b296ac6d7d07a1e6503eca9ccd9be2547ba00bef7"
+  },
+  "limits": [
+    "Only isolated mini-module execution with owned PSCertutil command stubs; no real CA registry, credential, AD, network, full module or PSCertutil package behavior",
+    "LS2AdcsObject instances bypass their AD-backed constructor and contain selected in-memory properties",
+    "Missing-CAFullName control transfer, alternate flag payload shapes, provider nonterminating errors and real error streams were not qualified",
+    "Native lifecycle callbacks still use PowerShell for command resolution, pipeline operations, object properties and stream handling; no runtime-free claim",
+    "The mini-module build uses unreviewed dependency resolution; no public dependency lock or release claim",
+    "No broad compiler gate rerun because compiler source and tracked test fixtures did not change"
+  ]
+}

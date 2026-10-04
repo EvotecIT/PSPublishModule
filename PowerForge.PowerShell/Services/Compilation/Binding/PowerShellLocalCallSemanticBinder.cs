@@ -25,7 +25,9 @@ internal sealed class PowerShellLocalCallSignature
         PowerShellCompilationCommandBinding commandBinding,
         Type? declaredReturnType,
         PowerShellBoundHelpMetadata? help,
-        int pipelineLifecycleParameterIndex = -1)
+        PowerShellCompiledRegionLocalCall? closedCollectionFactory = null,
+        int pipelineLifecycleParameterIndex = -1,
+        bool pipelineLifecycleRequiresNonNullInput = false)
     {
         Symbol = symbol;
         Parameters = parameters;
@@ -33,7 +35,9 @@ internal sealed class PowerShellLocalCallSignature
         CommandBinding = commandBinding;
         DeclaredReturnType = declaredReturnType;
         Help = help;
+        ClosedCollectionFactory = closedCollectionFactory;
         PipelineLifecycleParameterIndex = pipelineLifecycleParameterIndex;
+        PipelineLifecycleRequiresNonNullInput = pipelineLifecycleRequiresNonNullInput;
     }
 
     internal PowerShellSymbolId Symbol { get; }
@@ -42,10 +46,19 @@ internal sealed class PowerShellLocalCallSignature
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
     internal Type? DeclaredReturnType { get; private set; }
     internal PowerShellBoundHelpMetadata? Help { get; }
+    internal PowerShellCompiledRegionLocalCall? ClosedCollectionFactory { get; }
     internal int PipelineLifecycleParameterIndex { get; }
     internal bool IsPipelineLifecycle => PipelineLifecycleParameterIndex >= 0;
     internal bool PipelineLifecycleReturnsCollection { get; private set; }
+    internal bool PipelineLifecycleRequiresNonNullInput { get; }
     internal bool ReturnsModuleStateDerived { get; private set; }
+    internal PowerShellTypeFact? AnalyzedReturnType { get; private set; }
+
+    internal void SetAnalyzedReturnType(PowerShellTypeFact type)
+    {
+        AnalyzedReturnType = type;
+        DeclaredReturnType = type.ClrType;
+    }
 
     internal bool RefineReturnType(Type type)
     {
@@ -94,8 +107,12 @@ internal static class PowerShellLocalCallSemanticBinder
             capabilities,
             out var outputTypeContract,
             out _,
-            out _);
-        var declaredReturnType = outputTypeContract.SemanticType;
+            out _,
+            document.NativeDependencyTypes);
+        PowerShellClosedLocalCollectionFactoryPolicy.TryCreate(function, symbol, parameters, out var closedCollectionFactory);
+        var declaredReturnType = closedCollectionFactory is null
+            ? outputTypeContract.SemanticType
+            : typeof(System.Collections.ArrayList);
         if (declaredReturnType == typeof(void)) declaredReturnType = null;
         declaredReturnType ??= InferReturnType(function, parameters);
         var pipelineLifecycleParameterIndex = PowerShellRuntimeFreePipelineLifecyclePolicy.TryGetPipelineParameter(
@@ -113,8 +130,11 @@ internal static class PowerShellLocalCallSemanticBinder
             PowerShellAdvancedFunctionPolicy.IsAdvanced(function),
             PowerShellAdvancedFunctionPolicy.GetBodyBinding(function.Body),
             declaredReturnType,
-            PowerShellCommentHelpBinder.Bind(function),
-            pipelineLifecycleParameterIndex);
+            PowerShellCommentHelpBinder.Bind(function, symbol),
+            closedCollectionFactory,
+            pipelineLifecycleParameterIndex,
+            pipelineLifecycleParameterIndex >= 0 && PowerShellRuntimeFreePipelineLifecyclePolicy.RequiresNonNullCollection(
+                parameters[pipelineLifecycleParameterIndex].Type, capabilities));
     }
 
     internal static Type? InferReturnType(
@@ -211,16 +231,31 @@ internal static class PowerShellLocalCallSemanticBinder
             VariableExpressionAst variable when knownTypes.TryGetValue(variable.VariablePath.UserPath, out var type) => type,
             ConvertExpressionAst conversion when conversion.StaticType != typeof(object) => conversion.StaticType,
             ArrayLiteralAst array => InferArrayType(array.Elements, knownTypes),
-            ArrayExpressionAst array => InferArrayType(
-                array.SubExpression.Statements
-                    .OfType<PipelineAst>()
-                    .SelectMany(static pipeline => pipeline.PipelineElements.OfType<CommandExpressionAst>())
-                    .Select(static expression => expression.Expression),
-                knownTypes),
+            ArrayExpressionAst array => InferCollectedArrayType(array, knownTypes, functions),
             CommandAst command when functions is not null && command.GetCommandName() is { } name &&
                                     functions.TryGetValue(name, out var signature) => signature.DeclaredReturnType,
             _ => syntax is ExpressionAst expression && expression.StaticType != typeof(object) ? expression.StaticType : null
         };
+
+    private static Type? InferCollectedArrayType(ArrayExpressionAst array, IReadOnlyDictionary<string, Type> knownTypes,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature>? functions)
+    {
+        if (array.SubExpression.Traps is { Count: > 0 }) return null;
+        var recordTypes = new List<Type>();
+        foreach (var statement in array.SubExpression.Statements)
+        {
+            if (statement is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
+                pipeline.PipelineElements[0] is not CommandExpressionAst command)
+                return null;
+            var type = InferExpressionType(Unwrap(command.Expression), knownTypes, functions);
+            if (type is null) return null;
+            // Collection expressions enumerate each expression's result once. A comma
+            // array contributes its elements; an extra unary comma preserves nesting.
+            recordTypes.Add(type.IsArray ? type.GetElementType()! : type);
+        }
+        var distinct = recordTypes.Distinct().ToArray();
+        return distinct.Length == 1 ? distinct[0].MakeArrayType() : null;
+    }
 
     private static Type? InferArrayType(IEnumerable<ExpressionAst> elements, IReadOnlyDictionary<string, Type> parameterTypes)
     {
@@ -244,10 +279,11 @@ internal static class PowerShellLocalCallSemanticBinder
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        PowerShellBoundExpression? pipelineInput = null)
     {
         var span = PowerShellSourceParser.GetSpan(document, command.Extent);
-        if (signature.IsPipelineLifecycle)
+        if (signature.IsPipelineLifecycle && pipelineInput is null)
             return Reject(diagnostics, "PSB2920", $"Local function '{signature.Symbol.Name}' has a begin/process/end lifecycle and must be invoked through a bounded typed input pipeline.", span);
         if (command.Redirections.Count != 0)
             return Reject(diagnostics, "PSB2801", "Typed local function calls do not support stream redirection.", span);
@@ -257,6 +293,11 @@ internal static class PowerShellLocalCallSemanticBinder
 
         var bound = new Dictionary<int, PowerShellBoundExpression>();
         var authoredOrder = new List<int>();
+        if (pipelineInput is not null)
+        {
+            bound.Add(signature.PipelineLifecycleParameterIndex, pipelineInput);
+            authoredOrder.Add(signature.PipelineLifecycleParameterIndex);
+        }
         var positionalParameters = GetPositionalParameters(signature);
         var positionalIndex = 0;
         var elements = command.CommandElements.Skip(1).ToArray();
@@ -286,6 +327,10 @@ internal static class PowerShellLocalCallSemanticBinder
             }
             else if (elements[elementIndex] is ExpressionAst positional)
             {
+                if (pipelineInput is not null)
+                    return Reject(diagnostics, "PSB2923",
+                        "Runtime-free lifecycle calls currently accept named switch arguments only; positional command binding must precede pipeline binding.",
+                        PowerShellSourceParser.GetSpan(document, positional.Extent));
                 while (positionalIndex < positionalParameters.Length && bound.ContainsKey(positionalParameters[positionalIndex])) positionalIndex++;
                 if (positionalIndex >= positionalParameters.Length)
                 {
@@ -303,9 +348,17 @@ internal static class PowerShellLocalCallSemanticBinder
             var parameter = signature.Parameters[parameterIndex];
             var argument = bindExpression(argumentSyntax, parameter.Type);
             if (argument is null) return null;
+            if (argument.Type.ClrType == typeof(object) &&
+                capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors))
+                argument = new PowerShellBoundUnaryExpression(argument.Span, PowerShellBoundUnaryOperator.NormalizeCommandArgument,
+                    argument, new PowerShellTypeFact(typeof(object), PowerShellTypeFactProvenance.CommandContract,
+                        "Parameter binding normalizes an empty-output sentinel to null before conversion."));
             if (!PowerShellClrTypeSemantics.CanAssign(parameter.Type, argument.Type.ClrType) &&
                 !(argument.ValueState == PowerShellValueState.Null && !parameter.Type.IsValueType))
             {
+                if (PowerShellStringificationScopePolicy.RequiresCallerScope(parameter.Type, argument))
+                    return Reject(diagnostics, PowerShellStringificationScopePolicy.DiagnosticCode,
+                        PowerShellStringificationScopePolicy.DiagnosticMessage, argument.Span);
                 if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions))
                     return Reject(diagnostics, "PSB2808", $"Argument for '-{parameter.Contract.Name}' has CLR type '{argument.Type.ClrType.FullName}', not assignable to '{parameter.Type.FullName}'.", argument.Span);
                 argument = new PowerShellBoundConversionExpression(
@@ -338,9 +391,20 @@ internal static class PowerShellLocalCallSemanticBinder
                 return Reject(diagnostics, "PSB2809", $"Mandatory local function parameter '-{parameter.Contract.Name}' was not supplied.", span);
             arguments[index] = DefaultValue(span, parameter.Type);
         }
-        var returnType = signature.DeclaredReturnType is null
+        var invocationReturnType = signature.ClosedCollectionFactory is not null
+            ? typeof(System.Collections.ArrayList)
+            : signature.DeclaredReturnType is not null && signature.PipelineLifecycleReturnsCollection
+            ? signature.DeclaredReturnType.MakeArrayType()
+            : signature.DeclaredReturnType;
+        var returnType = signature.AnalyzedReturnType ?? (invocationReturnType is null
             ? PowerShellTypeFact.Unknown
-            : new PowerShellTypeFact(signature.DeclaredReturnType, PowerShellTypeFactProvenance.Explicit, $"Local function '{signature.Symbol.Name}' declares its success-output type.");
+            : new PowerShellTypeFact(invocationReturnType, PowerShellTypeFactProvenance.Explicit, $"Local function '{signature.Symbol.Name}' declares its success-output type."));
+        var capturesSuccessOutput = returnType.Provenance == PowerShellTypeFactProvenance.CapturedCommandOutput &&
+            command.Parent is PipelineAst { PipelineElements.Count: 1 } pipeline &&
+            pipeline.Parent is not (StatementBlockAst or NamedBlockAst or ReturnStatementAst);
+        if (returnType.Provenance == PowerShellTypeFactProvenance.CapturedCommandOutput && !capturesSuccessOutput)
+            returnType = new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.CommandContract,
+                "An unconsumed local command writes directly to its caller's success stream.");
         return new PowerShellBoundInvocationExpression(
             span,
             signature.Symbol,
@@ -348,7 +412,12 @@ internal static class PowerShellLocalCallSemanticBinder
             returnType,
             authoredOrder.ToArray(),
             bound.Keys.Select(index => signature.Parameters[index].Contract.Name).OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).ToArray(),
-            signature.ReturnsModuleStateDerived);
+            signature.ReturnsModuleStateDerived,
+            capturesSuccessOutput,
+            signature.ClosedCollectionFactory is null
+                ? PowerShellLocalCallResultProjection.None
+                : PowerShellLocalCallResultProjection.ClosedCollectionFactory,
+            signature.ClosedCollectionFactory);
     }
 
     private static int[] GetPositionalParameters(PowerShellLocalCallSignature signature)

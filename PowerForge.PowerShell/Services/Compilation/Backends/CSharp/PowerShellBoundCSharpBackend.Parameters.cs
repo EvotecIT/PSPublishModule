@@ -7,6 +7,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
         PowerShellLoweredFunction function,
         bool requiresBoundParameters)
     {
+        if (function.RequiresPowerShellStatementErrors)
+            parameters.Add("global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext __statementErrors");
+        if (function.RequiresPowerShellStopping)
+            parameters.Add("global::System.Action __checkLoopInterrupts");
         if (function.RequiresPowerShellStreams)
         {
             parameters.Add("global::System.Action<object?> __writeOutput");
@@ -19,17 +23,17 @@ internal sealed partial class PowerShellBoundCSharpBackend
         }
         if (function.RequiresProviderCancellation)
             parameters.Add("global::System.Threading.CancellationToken __providerCancellationToken");
-        if (function.RequiresPowerShellCommandRegions)
+        if (function.RequiresPowerShellCommandRegions && function.NativeFunctionBinding is null)
         {
-            parameters.Add("global::System.Action<string, object?[]> __invokePowerShellRegion");
-            parameters.Add("global::System.Func<string, object?[], object?> __invokePowerShellCapture");
+            parameters.Add("global::System.Action<global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext, string, object?[], global::PowerForge.Generated.Runtime.PowerShellHostedRegionSource?> __invokePowerShellRegion");
+            parameters.Add("global::System.Func<global::PowerForge.Generated.Runtime.PowerShellStatementErrorContext, string, object?[], global::PowerForge.Generated.Runtime.PowerShellHostedRegionSource?, object?> __invokePowerShellCapture");
         }
         if (function.RequiresPowerShellRuntimeState)
         {
             parameters.Add("global::System.Func<string, bool> __shouldProcessTarget");
             parameters.Add("global::System.Func<string, string, bool> __shouldProcessAction");
             parameters.Add("object __psVersion");
-            parameters.Add("bool __whatIfPreference");
+            parameters.Add("object? __whatIfPreference");
             parameters.Add("global::System.Collections.Generic.IReadOnlyDictionary<string, object?> __runtimeState");
         }
         if (function.RequiresPowerShellModuleStateRead)

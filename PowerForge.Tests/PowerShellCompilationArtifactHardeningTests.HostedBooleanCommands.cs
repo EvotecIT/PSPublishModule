@@ -156,7 +156,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             PowerShellCompilationMode.Strict,
             allowUnreviewedDependencyResolution: true)
         {
-            TargetFramework = "net8.0",
+            TargetFramework = "net10.0",
             EmitSource = true
         });
 
@@ -166,7 +166,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             new[] { fixture.ScriptPath },
             "PowerForge.HostedBooleanBoundParameters",
             "CompiledPowerShell",
-            "net8.0").Methods;
+            "net10.0").Methods;
         Assert.Equal(4, methods.Length);
         Assert.All(methods, static method => Assert.True(method.RequiresPowerShellBoundParameters));
         Assert.True(Assert.Single(methods, static method => method.SourceName == "Test-NestedBoundPath").RequiresPowerShellRuntimeState);
@@ -223,7 +223,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Theory]
-    [InlineData("net8.0", "pwsh")]
+    [InlineData("net10.0", "pwsh")]
     [InlineData("net472", "powershell.exe")]
     public void Build_BinaryModulePreservesHostedTestPathSemantics(string targetFramework, string host)
     {

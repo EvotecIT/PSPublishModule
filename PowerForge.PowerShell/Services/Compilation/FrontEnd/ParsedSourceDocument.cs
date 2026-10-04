@@ -13,7 +13,10 @@ internal sealed class ParsedSourceDocument
         string text,
         ScriptBlockAst syntaxRoot,
         Token[] tokens,
-        ParseError[] errors)
+        ParseError[] errors,
+        PowerShellAuthoredSourceProjection? authoredProjection = null,
+        PowerShellNativeDependencyTypes? nativeDependencyTypes = null,
+        string? nativeScriptRootName = null)
     {
         DocumentId = documentId;
         Path = path;
@@ -21,6 +24,10 @@ internal sealed class ParsedSourceDocument
         SyntaxRoot = syntaxRoot;
         Tokens = tokens;
         Errors = errors;
+        AuthoredProjection = authoredProjection;
+        NativeScriptRootName = nativeScriptRootName;
+        NativeDependencyTypes = nativeDependencyTypes ?? PowerShellNativeDependencyTypes.Empty;
+        TypeClosure = PowerShellSourceTypeClosure.Discover(this);
     }
 
     internal string DocumentId { get; }
@@ -29,4 +36,12 @@ internal sealed class ParsedSourceDocument
     internal ScriptBlockAst SyntaxRoot { get; }
     internal Token[] Tokens { get; }
     internal ParseError[] Errors { get; }
+    internal PowerShellAuthoredSourceProjection? AuthoredProjection { get; }
+    /// <summary>Identifies a compiler-created script-root adapter whose storage belongs to a native script invocation.</summary>
+    internal string? NativeScriptRootName { get; }
+    internal PowerShellSourceTypeClosure TypeClosure { get; }
+    internal PowerShellNativeDependencyTypes NativeDependencyTypes { get; }
+    internal ParsedSourceDocument WithNativeDependencyTypes(PowerShellNativeDependencyTypes types)
+        => ReferenceEquals(types, NativeDependencyTypes) ? this : new ParsedSourceDocument(
+            DocumentId, Path, Text, SyntaxRoot, Tokens, Errors, AuthoredProjection, types, NativeScriptRootName);
 }

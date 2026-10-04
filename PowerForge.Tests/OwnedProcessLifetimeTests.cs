@@ -151,6 +151,8 @@ public sealed class OwnedProcessLifetimeTests : IDisposable
     {
         Assert.True(File.Exists(pidFile), "The fixture must prove a child was actually started.");
         var pid = int.Parse(File.ReadAllText(pidFile).Trim());
+        if (OperatingSystem.IsWindows())
+            Assert.False(ChildIsRunning(pid), $"Descendant {pid} must have exited before the owned Windows job returns.");
         var watch = Stopwatch.StartNew();
         while (ChildIsRunning(pid) && watch.Elapsed < TimeSpan.FromSeconds(2)) await Task.Delay(25);
         Assert.False(ChildIsRunning(pid), $"Descendant {pid} is still running after the owned process completed.");

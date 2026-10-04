@@ -1,0 +1,1292 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Pinned offline original behavior and current compiler boundaries for try-valued dictionary and note-property literals; no generated execution claim.",
+  "compilerCommit": "0b990d5e3ac9d83a03fff521b3db4b7471d5e6d4",
+  "repository": "https://github.com/EvotecIT/GPOZaurr",
+  "sourceCommit": "7bda3134afabbaab93fb5f21a66e2f08a9606209",
+  "workloads": [
+    {
+      "name": "ConvertTo-XMLSystemServices",
+      "relativePath": "Private/ConvertTo-XMLSystemServices.ps1",
+      "gitSourceSha256": "dbe9b82c464ffb25c138e31a59f4eea3d304779ca500c746c9789acf39ef23e1",
+      "checkoutSourceSha256": "9650574a6b2257c67df72501f913f562275a90723bc60f409c14a825ecef344c",
+      "sourceExternal": true,
+      "explanations": [
+        {
+          "framework": "net10.0",
+          "emitted": false,
+          "retainedHostedSource": true,
+          "generatedRegionMemberNames": [],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "[pscustomobject] note-property values require one expression, a native-hosted conditional, or one qualified hosted command or local invocation value.",
+              "line": 44,
+              "column": 46
+            }
+          ],
+          "explanationSha256": "1d29ab46fb76b0283b3be231c197ed8bd6f29d3b7a23d0bdcc8228121a791a1c"
+        },
+        {
+          "framework": "net472",
+          "emitted": false,
+          "retainedHostedSource": true,
+          "generatedRegionMemberNames": [],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "[pscustomobject] note-property values require one expression, a native-hosted conditional, or one qualified hosted command or local invocation value.",
+              "line": 44,
+              "column": 46
+            }
+          ],
+          "explanationSha256": "229e7a2cb58c35383c9e1cc6a0b74cea5f95231749a20169c8b2efff74a06727"
+        }
+      ]
+    },
+    {
+      "name": "ConvertTo-XMLPrinterInternal",
+      "relativePath": "Private/ConvertTo-XMLPrinterInternal.ps1",
+      "gitSourceSha256": "ed2034c26bf9be93256292f9f3d3f2f2622aa12bcbc62c0d63ef28c412904d65",
+      "checkoutSourceSha256": "c157faa2e8da67292144c19c330eb1b925ce5b7f2a017c3cfae0daf449f75009",
+      "sourceExternal": true,
+      "explanations": [
+        {
+          "framework": "net10.0",
+          "emitted": false,
+          "retainedHostedSource": true,
+          "generatedRegionMemberNames": [],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "Dictionary values require one expression, a native-hosted conditional, or one qualified hosted command or local invocation value.",
+              "line": 39,
+              "column": 36
+            }
+          ],
+          "explanationSha256": "655b17ab54ce494b21161ca01d2179699a29e068812bb6d2c98332a02927f77c"
+        },
+        {
+          "framework": "net472",
+          "emitted": false,
+          "retainedHostedSource": true,
+          "generatedRegionMemberNames": [],
+          "causes": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "Dictionary values require one expression, a native-hosted conditional, or one qualified hosted command or local invocation value.",
+              "line": 39,
+              "column": 36
+            }
+          ],
+          "explanationSha256": "e77142f68b947405c225040a105378028098f02f34ac0aa892668b4ea64d99c3"
+        }
+      ]
+    }
+  ],
+  "probe": "m29a-literal-try-gpo-probe.ps1",
+  "probeSha256": "9cba48bdd5aa7daed20cb448d70bc88fedfad4442e62482e0b064ee75df541f2",
+  "originalOnly": [
+    {
+      "host": "pwsh",
+      "observations": 24,
+      "stdoutSha256": "58cda3eb63e268f052c4723c3e736cc4e2aca62dda4bc146df83ce8315b90669",
+      "generatedExecuted": false
+    },
+    {
+      "host": "powershell",
+      "observations": 24,
+      "stdoutSha256": "58cda3eb63e268f052c4723c3e736cc4e2aca62dda4bc146df83ce8315b90669",
+      "generatedExecuted": false
+    }
+  ],
+  "originalObservations": [
+    {
+      "kind": "service",
+      "mode": "empty",
+      "single": false,
+      "count": 0,
+      "records": [],
+      "propertyOrder": []
+    },
+    {
+      "kind": "service",
+      "mode": "empty",
+      "single": true,
+      "count": 1,
+      "records": [
+        {
+          "DisplayName": "offline",
+          "DomainName": "offline.invalid",
+          "GUID": "00000000-0000-0000-0000-000000000001",
+          "GpoType": "Computer",
+          "Count": 0,
+          "Settings": null,
+          "Linked": true,
+          "LinksCount": 2,
+          "Links": [
+            "first",
+            "second"
+          ]
+        }
+      ],
+      "propertyOrder": [
+        [
+          "DisplayName",
+          "DomainName",
+          "GUID",
+          "GpoType",
+          "Count",
+          "Settings",
+          "Linked",
+          "LinksCount",
+          "Links"
+        ]
+      ]
+    },
+    {
+      "kind": "service",
+      "mode": "true",
+      "single": false,
+      "count": 1,
+      "records": [
+        {
+          "DisplayName": "offline",
+          "DomainName": "offline.invalid",
+          "GUID": "00000000-0000-0000-0000-000000000001",
+          "GpoType": "Computer",
+          "ServiceName": "offline-service",
+          "ServiceStartUpMode": "Automatic",
+          "SecurityAuditingPresent": true,
+          "SecurityPermissionsPresent": false,
+          "SecurityDescriptor": {
+            "AuditingPresent": {
+              "#text": "true"
+            },
+            "PermissionsPresent": {
+              "#text": "False"
+            }
+          },
+          "Linked": true,
+          "LinksCount": 2,
+          "Links": [
+            "first",
+            "second"
+          ]
+        }
+      ],
+      "propertyOrder": [
+        [
+          "DisplayName",
+          "DomainName",
+          "GUID",
+          "GpoType",
+          "ServiceName",
+          "ServiceStartUpMode",
+          "SecurityAuditingPresent",
+          "SecurityPermissionsPresent",
+          "SecurityDescriptor",
+          "Linked",
+          "LinksCount",
+          "Links"
+        ]
+      ]
+    },
+    {
+      "kind": "service",
+      "mode": "true",
+      "single": true,
+      "count": 1,
+      "records": [
+        {
+          "DisplayName": "offline",
+          "DomainName": "offline.invalid",
+          "GUID": "00000000-0000-0000-0000-000000000001",
+          "GpoType": "Computer",
+          "Count": 1,
+          "Settings": [
+            {
+              "ServiceName": "offline-service",
+              "ServiceStartUpMode": "Automatic",
+              "SecurityAuditingPresent": true,
+              "SecurityPermissionsPresent": false,
+              "SecurityDescriptor": {
+                "AuditingPresent": {
+                  "#text": "true"
+                },
+                "PermissionsPresent": {
+                  "#text": "False"
+                }
+              }
+            }
+          ],
+          "Linked": true,
+          "LinksCount": 2,
+          "Links": [
+            "first",
+            "second"
+          ]
+        }
+      ],
+      "propertyOrder": [
+        [
+          "DisplayName",
+          "DomainName",
+          "GUID",
+          "GpoType",
+          "Count",
+          "Settings",
+          "Linked",
+          "LinksCount",
+          "Links"
+        ]
+      ]
+    },
+    {
+      "kind": "service",
+      "mode": "false",
+      "single": false,
+      "count": 1,
+      "records": [
+        {
+          "DisplayName": "offline",
+          "DomainName": "offline.invalid",
+          "GUID": "00000000-0000-0000-0000-000000000001",
+          "GpoType": "Computer",
+          "ServiceName": "offline-service",
+          "ServiceStartUpMode": "Automatic",
+          "SecurityAuditingPresent": false,
+          "SecurityPermissionsPresent": false,
+          "SecurityDescriptor": {
+            "AuditingPresent": {
+              "#text": "false"
+            },
+            "PermissionsPresent": {
+              "#text": "False"
+            }
+          },
+          "Linked": true,
+          "LinksCount": 2,
+          "Links": [
+            "first",
+            "second"
+          ]
+        }
+      ],
+      "propertyOrder": [
+        [
+          "DisplayName",
+          "DomainName",
+          "GUID",
+          "GpoType",
+          "ServiceName",
+          "ServiceStartUpMode",
+          "SecurityAuditingPresent",
+          "SecurityPermissionsPresent",
+          "SecurityDescriptor",
+          "Linked",
+          "LinksCount",
+          "Links"
+        ]
+      ]
+    },
+    {
+      "kind": "service",
+      "mode": "false",
+      "single": true,
+      "count": 1,
+      "records": [
+        {
+          "DisplayName": "offline",
+          "DomainName": "offline.invalid",
+          "GUID": "00000000-0000-0000-0000-000000000001",
+          "GpoType": "Computer",
+          "Count": 1,
+          "Settings": [
+            {
+              "ServiceName": "offline-service",
+              "ServiceStartUpMode": "Automatic",
+              "SecurityAuditingPresent": false,
+              "SecurityPermissionsPresent": false,
+              "SecurityDescriptor": {
+                "AuditingPresent": {
+                  "#text": "false"
+                },
+                "PermissionsPresent": {
+                  "#text": "False"
+                }
+              }
+            }
+          ],
+          "Linked": true,
+          "LinksCount": 2,
+          "Links": [
+            "first",
+            "second"
+          ]
+        }
+      ],
+      "propertyOrder": [
+        [
+          "DisplayName",
+          "DomainName",
+          "GUID",
+          "GpoType",
+          "Count",
+          "Settings",
+          "Linked",
+          "LinksCount",
+          "Links"
+        ]
+      ]
+    },
+    {
+      "kind": "service",
+      "mode": "bad",
+      "single": false,
+      "count": 1,
+      "records": [
+        {
+          "DisplayName": "offline",
+          "DomainName": "offline.invalid",
+          "GUID": "00000000-0000-0000-0000-000000000001",
+          "GpoType": "Computer",
+          "ServiceName": "offline-service",
+          "ServiceStartUpMode": "Automatic",
+          "SecurityAuditingPresent": null,
+          "SecurityPermissionsPresent": false,
+          "SecurityDescriptor": {
+            "AuditingPresent": {
+              "#text": "bad"
+            },
+            "PermissionsPresent": {
+              "#text": "False"
+            }
+          },
+          "Linked": true,
+          "LinksCount": 2,
+          "Links": [
+            "first",
+            "second"
+          ]
+        }
+      ],
+      "propertyOrder": [
+        [
+          "DisplayName",
+          "DomainName",
+          "GUID",
+          "GpoType",
+          "ServiceName",
+          "ServiceStartUpMode",
+          "SecurityAuditingPresent",
+          "SecurityPermissionsPresent",
+          "SecurityDescriptor",
+          "Linked",
+          "LinksCount",
+          "Links"
+        ]
+      ]
+    },
+    {
+      "kind": "service",
+      "mode": "bad",
+      "single": true,
+      "count": 1,
+      "records": [
+        {
+          "DisplayName": "offline",
+          "DomainName": "offline.invalid",
+          "GUID": "00000000-0000-0000-0000-000000000001",
+          "GpoType": "Computer",
+          "Count": 1,
+          "Settings": [
+            {
+              "ServiceName": "offline-service",
+              "ServiceStartUpMode": "Automatic",
+              "SecurityAuditingPresent": null,
+              "SecurityPermissionsPresent": false,
+              "SecurityDescriptor": {
+                "AuditingPresent": {
+                  "#text": "bad"
+                },
+                "PermissionsPresent": {
+                  "#text": "False"
+                }
+              }
+            }
+          ],
+          "Linked": true,
+          "LinksCount": 2,
+          "Links": [
+            "first",
+            "second"
+          ]
+        }
+      ],
+      "propertyOrder": [
+        [
+          "DisplayName",
+          "DomainName",
+          "GUID",
+          "GpoType",
+          "Count",
+          "Settings",
+          "Linked",
+          "LinksCount",
+          "Links"
+        ]
+      ]
+    },
+    {
+      "kind": "service",
+      "mode": "missing",
+      "single": false,
+      "count": 1,
+      "records": [
+        {
+          "DisplayName": "offline",
+          "DomainName": "offline.invalid",
+          "GUID": "00000000-0000-0000-0000-000000000001",
+          "GpoType": "Computer",
+          "ServiceName": "offline-service",
+          "ServiceStartUpMode": "Automatic",
+          "SecurityAuditingPresent": null,
+          "SecurityPermissionsPresent": false,
+          "SecurityDescriptor": {
+            "AuditingPresent": {
+              "#text": null
+            },
+            "PermissionsPresent": {
+              "#text": "False"
+            }
+          },
+          "Linked": true,
+          "LinksCount": 2,
+          "Links": [
+            "first",
+            "second"
+          ]
+        }
+      ],
+      "propertyOrder": [
+        [
+          "DisplayName",
+          "DomainName",
+          "GUID",
+          "GpoType",
+          "ServiceName",
+          "ServiceStartUpMode",
+          "SecurityAuditingPresent",
+          "SecurityPermissionsPresent",
+          "SecurityDescriptor",
+          "Linked",
+          "LinksCount",
+          "Links"
+        ]
+      ]
+    },
+    {
+      "kind": "service",
+      "mode": "missing",
+      "single": true,
+      "count": 1,
+      "records": [
+        {
+          "DisplayName": "offline",
+          "DomainName": "offline.invalid",
+          "GUID": "00000000-0000-0000-0000-000000000001",
+          "GpoType": "Computer",
+          "Count": 1,
+          "Settings": [
+            {
+              "ServiceName": "offline-service",
+              "ServiceStartUpMode": "Automatic",
+              "SecurityAuditingPresent": null,
+              "SecurityPermissionsPresent": false,
+              "SecurityDescriptor": {
+                "AuditingPresent": {
+                  "#text": null
+                },
+                "PermissionsPresent": {
+                  "#text": "False"
+                }
+              }
+            }
+          ],
+          "Linked": true,
+          "LinksCount": 2,
+          "Links": [
+            "first",
+            "second"
+          ]
+        }
+      ],
+      "propertyOrder": [
+        [
+          "DisplayName",
+          "DomainName",
+          "GUID",
+          "GpoType",
+          "Count",
+          "Settings",
+          "Linked",
+          "LinksCount",
+          "Links"
+        ]
+      ]
+    },
+    {
+      "kind": "service",
+      "mode": "many",
+      "single": false,
+      "count": 3,
+      "records": [
+        {
+          "DisplayName": "offline",
+          "DomainName": "offline.invalid",
+          "GUID": "00000000-0000-0000-0000-000000000001",
+          "GpoType": "Computer",
+          "ServiceName": "offline-service",
+          "ServiceStartUpMode": "Automatic",
+          "SecurityAuditingPresent": true,
+          "SecurityPermissionsPresent": false,
+          "SecurityDescriptor": {
+            "AuditingPresent": {
+              "#text": "True"
+            },
+            "PermissionsPresent": {
+              "#text": "False"
+            }
+          },
+          "Linked": true,
+          "LinksCount": 2,
+          "Links": [
+            "first",
+            "second"
+          ]
+        },
+        {
+          "DisplayName": "offline",
+          "DomainName": "offline.invalid",
+          "GUID": "00000000-0000-0000-0000-000000000001",
+          "GpoType": "Computer",
+          "ServiceName": "offline-service",
+          "ServiceStartUpMode": "Automatic",
+          "SecurityAuditingPresent": false,
+          "SecurityPermissionsPresent": false,
+          "SecurityDescriptor": {
+            "AuditingPresent": {
+              "#text": "False"
+            },
+            "PermissionsPresent": {
+              "#text": "False"
+            }
+          },
+          "Linked": true,
+          "LinksCount": 2,
+          "Links": [
+            "first",
+            "second"
+          ]
+        },
+        {
+          "DisplayName": "offline",
+          "DomainName": "offline.invalid",
+          "GUID": "00000000-0000-0000-0000-000000000001",
+          "GpoType": "Computer",
+          "ServiceName": "offline-service",
+          "ServiceStartUpMode": "Automatic",
+          "SecurityAuditingPresent": null,
+          "SecurityPermissionsPresent": false,
+          "SecurityDescriptor": {
+            "AuditingPresent": {
+              "#text": "bad"
+            },
+            "PermissionsPresent": {
+              "#text": "False"
+            }
+          },
+          "Linked": true,
+          "LinksCount": 2,
+          "Links": [
+            "first",
+            "second"
+          ]
+        }
+      ],
+      "propertyOrder": [
+        [
+          "DisplayName",
+          "DomainName",
+          "GUID",
+          "GpoType",
+          "ServiceName",
+          "ServiceStartUpMode",
+          "SecurityAuditingPresent",
+          "SecurityPermissionsPresent",
+          "SecurityDescriptor",
+          "Linked",
+          "LinksCount",
+          "Links"
+        ],
+        [
+          "DisplayName",
+          "DomainName",
+          "GUID",
+          "GpoType",
+          "ServiceName",
+          "ServiceStartUpMode",
+          "SecurityAuditingPresent",
+          "SecurityPermissionsPresent",
+          "SecurityDescriptor",
+          "Linked",
+          "LinksCount",
+          "Links"
+        ],
+        [
+          "DisplayName",
+          "DomainName",
+          "GUID",
+          "GpoType",
+          "ServiceName",
+          "ServiceStartUpMode",
+          "SecurityAuditingPresent",
+          "SecurityPermissionsPresent",
+          "SecurityDescriptor",
+          "Linked",
+          "LinksCount",
+          "Links"
+        ]
+      ]
+    },
+    {
+      "kind": "service",
+      "mode": "many",
+      "single": true,
+      "count": 1,
+      "records": [
+        {
+          "DisplayName": "offline",
+          "DomainName": "offline.invalid",
+          "GUID": "00000000-0000-0000-0000-000000000001",
+          "GpoType": "Computer",
+          "Count": 3,
+          "Settings": [
+            {
+              "ServiceName": "offline-service",
+              "ServiceStartUpMode": "Automatic",
+              "SecurityAuditingPresent": true,
+              "SecurityPermissionsPresent": false,
+              "SecurityDescriptor": {
+                "AuditingPresent": {
+                  "#text": "True"
+                },
+                "PermissionsPresent": {
+                  "#text": "False"
+                }
+              }
+            },
+            {
+              "ServiceName": "offline-service",
+              "ServiceStartUpMode": "Automatic",
+              "SecurityAuditingPresent": false,
+              "SecurityPermissionsPresent": false,
+              "SecurityDescriptor": {
+                "AuditingPresent": {
+                  "#text": "False"
+                },
+                "PermissionsPresent": {
+                  "#text": "False"
+                }
+              }
+            },
+            {
+              "ServiceName": "offline-service",
+              "ServiceStartUpMode": "Automatic",
+              "SecurityAuditingPresent": null,
+              "SecurityPermissionsPresent": false,
+              "SecurityDescriptor": {
+                "AuditingPresent": {
+                  "#text": "bad"
+                },
+                "PermissionsPresent": {
+                  "#text": "False"
+                }
+              }
+            }
+          ],
+          "Linked": true,
+          "LinksCount": 2,
+          "Links": [
+            "first",
+            "second"
+          ]
+        }
+      ],
+      "propertyOrder": [
+        [
+          "DisplayName",
+          "DomainName",
+          "GUID",
+          "GpoType",
+          "Count",
+          "Settings",
+          "Linked",
+          "LinksCount",
+          "Links"
+        ]
+      ]
+    },
+    {
+      "kind": "printer",
+      "mode": "valid",
+      "limited": false,
+      "authoredAction": "D",
+      "count": 1,
+      "changedType": "System.DateTime",
+      "changed": "2026-09-27T14:34:56.0000000+02:00",
+      "action": "OfflineCreate",
+      "path": "/offline/printer",
+      "useDNS": true,
+      "default": false,
+      "port": "123",
+      "propertyOrder": [
+        "DisplayName",
+        "DomainName",
+        "GUID",
+        "GpoType",
+        "GpoCategory",
+        "GpoSettings",
+        "Changed",
+        "BypassErrors",
+        "GPOSettingOrder",
+        "Filter",
+        "type",
+        "Action",
+        "Comment",
+        "Path",
+        "Location",
+        "HostName",
+        "LocalName",
+        "UseDNS",
+        "UseIPv6",
+        "Default",
+        "SkipLocal",
+        "DeleteAllShared",
+        "Persistent",
+        "DeleteMaps",
+        "LPRSettingsQueueName",
+        "Protocol",
+        "PortNumber",
+        "DoubleSpool",
+        "SNMPEnabled",
+        "SNMPCommunityName",
+        "SNMPDeviceIndex",
+        "Linked",
+        "LinksCount",
+        "Links"
+      ]
+    },
+    {
+      "kind": "printer",
+      "mode": "valid",
+      "limited": false,
+      "authoredAction": "",
+      "count": 1,
+      "changedType": "System.DateTime",
+      "changed": "2026-09-27T14:34:56.0000000+02:00",
+      "action": "Deploy",
+      "path": "/offline/printer",
+      "useDNS": true,
+      "default": false,
+      "port": "123",
+      "propertyOrder": [
+        "DisplayName",
+        "DomainName",
+        "GUID",
+        "GpoType",
+        "GpoCategory",
+        "GpoSettings",
+        "Changed",
+        "BypassErrors",
+        "GPOSettingOrder",
+        "Filter",
+        "type",
+        "Action",
+        "Comment",
+        "Path",
+        "Location",
+        "HostName",
+        "LocalName",
+        "UseDNS",
+        "UseIPv6",
+        "Default",
+        "SkipLocal",
+        "DeleteAllShared",
+        "Persistent",
+        "DeleteMaps",
+        "LPRSettingsQueueName",
+        "Protocol",
+        "PortNumber",
+        "DoubleSpool",
+        "SNMPEnabled",
+        "SNMPCommunityName",
+        "SNMPDeviceIndex",
+        "Linked",
+        "LinksCount",
+        "Links"
+      ]
+    },
+    {
+      "kind": "printer",
+      "mode": "valid",
+      "limited": true,
+      "authoredAction": "D",
+      "count": 1,
+      "changedType": "System.DateTime",
+      "changed": "2026-09-27T14:34:56.0000000+02:00",
+      "action": "OfflineCreate",
+      "path": "/offline/printer",
+      "useDNS": true,
+      "default": false,
+      "port": "123",
+      "propertyOrder": [
+        "Changed",
+        "BypassErrors",
+        "GPOSettingOrder",
+        "Filter",
+        "type",
+        "Action",
+        "Comment",
+        "Path",
+        "Location",
+        "HostName",
+        "LocalName",
+        "UseDNS",
+        "UseIPv6",
+        "Default",
+        "SkipLocal",
+        "DeleteAllShared",
+        "Persistent",
+        "DeleteMaps",
+        "LPRSettingsQueueName",
+        "Protocol",
+        "PortNumber",
+        "DoubleSpool",
+        "SNMPEnabled",
+        "SNMPCommunityName",
+        "SNMPDeviceIndex"
+      ]
+    },
+    {
+      "kind": "printer",
+      "mode": "valid",
+      "limited": true,
+      "authoredAction": "",
+      "count": 1,
+      "changedType": "System.DateTime",
+      "changed": "2026-09-27T14:34:56.0000000+02:00",
+      "action": "Deploy",
+      "path": "/offline/printer",
+      "useDNS": true,
+      "default": false,
+      "port": "123",
+      "propertyOrder": [
+        "Changed",
+        "BypassErrors",
+        "GPOSettingOrder",
+        "Filter",
+        "type",
+        "Action",
+        "Comment",
+        "Path",
+        "Location",
+        "HostName",
+        "LocalName",
+        "UseDNS",
+        "UseIPv6",
+        "Default",
+        "SkipLocal",
+        "DeleteAllShared",
+        "Persistent",
+        "DeleteMaps",
+        "LPRSettingsQueueName",
+        "Protocol",
+        "PortNumber",
+        "DoubleSpool",
+        "SNMPEnabled",
+        "SNMPCommunityName",
+        "SNMPDeviceIndex"
+      ]
+    },
+    {
+      "kind": "printer",
+      "mode": "bad",
+      "limited": false,
+      "authoredAction": "D",
+      "count": 1,
+      "changedType": "System.String",
+      "changed": "not-a-date",
+      "action": "OfflineCreate",
+      "path": "/offline/printer",
+      "useDNS": true,
+      "default": false,
+      "port": "123",
+      "propertyOrder": [
+        "DisplayName",
+        "DomainName",
+        "GUID",
+        "GpoType",
+        "GpoCategory",
+        "GpoSettings",
+        "Changed",
+        "BypassErrors",
+        "GPOSettingOrder",
+        "Filter",
+        "type",
+        "Action",
+        "Comment",
+        "Path",
+        "Location",
+        "HostName",
+        "LocalName",
+        "UseDNS",
+        "UseIPv6",
+        "Default",
+        "SkipLocal",
+        "DeleteAllShared",
+        "Persistent",
+        "DeleteMaps",
+        "LPRSettingsQueueName",
+        "Protocol",
+        "PortNumber",
+        "DoubleSpool",
+        "SNMPEnabled",
+        "SNMPCommunityName",
+        "SNMPDeviceIndex",
+        "Linked",
+        "LinksCount",
+        "Links"
+      ]
+    },
+    {
+      "kind": "printer",
+      "mode": "bad",
+      "limited": false,
+      "authoredAction": "",
+      "count": 1,
+      "changedType": "System.String",
+      "changed": "not-a-date",
+      "action": "Deploy",
+      "path": "/offline/printer",
+      "useDNS": true,
+      "default": false,
+      "port": "123",
+      "propertyOrder": [
+        "DisplayName",
+        "DomainName",
+        "GUID",
+        "GpoType",
+        "GpoCategory",
+        "GpoSettings",
+        "Changed",
+        "BypassErrors",
+        "GPOSettingOrder",
+        "Filter",
+        "type",
+        "Action",
+        "Comment",
+        "Path",
+        "Location",
+        "HostName",
+        "LocalName",
+        "UseDNS",
+        "UseIPv6",
+        "Default",
+        "SkipLocal",
+        "DeleteAllShared",
+        "Persistent",
+        "DeleteMaps",
+        "LPRSettingsQueueName",
+        "Protocol",
+        "PortNumber",
+        "DoubleSpool",
+        "SNMPEnabled",
+        "SNMPCommunityName",
+        "SNMPDeviceIndex",
+        "Linked",
+        "LinksCount",
+        "Links"
+      ]
+    },
+    {
+      "kind": "printer",
+      "mode": "bad",
+      "limited": true,
+      "authoredAction": "D",
+      "count": 1,
+      "changedType": "System.String",
+      "changed": "not-a-date",
+      "action": "OfflineCreate",
+      "path": "/offline/printer",
+      "useDNS": true,
+      "default": false,
+      "port": "123",
+      "propertyOrder": [
+        "Changed",
+        "BypassErrors",
+        "GPOSettingOrder",
+        "Filter",
+        "type",
+        "Action",
+        "Comment",
+        "Path",
+        "Location",
+        "HostName",
+        "LocalName",
+        "UseDNS",
+        "UseIPv6",
+        "Default",
+        "SkipLocal",
+        "DeleteAllShared",
+        "Persistent",
+        "DeleteMaps",
+        "LPRSettingsQueueName",
+        "Protocol",
+        "PortNumber",
+        "DoubleSpool",
+        "SNMPEnabled",
+        "SNMPCommunityName",
+        "SNMPDeviceIndex"
+      ]
+    },
+    {
+      "kind": "printer",
+      "mode": "bad",
+      "limited": true,
+      "authoredAction": "",
+      "count": 1,
+      "changedType": "System.String",
+      "changed": "not-a-date",
+      "action": "Deploy",
+      "path": "/offline/printer",
+      "useDNS": true,
+      "default": false,
+      "port": "123",
+      "propertyOrder": [
+        "Changed",
+        "BypassErrors",
+        "GPOSettingOrder",
+        "Filter",
+        "type",
+        "Action",
+        "Comment",
+        "Path",
+        "Location",
+        "HostName",
+        "LocalName",
+        "UseDNS",
+        "UseIPv6",
+        "Default",
+        "SkipLocal",
+        "DeleteAllShared",
+        "Persistent",
+        "DeleteMaps",
+        "LPRSettingsQueueName",
+        "Protocol",
+        "PortNumber",
+        "DoubleSpool",
+        "SNMPEnabled",
+        "SNMPCommunityName",
+        "SNMPDeviceIndex"
+      ]
+    },
+    {
+      "kind": "printer",
+      "mode": "null",
+      "limited": false,
+      "authoredAction": "D",
+      "count": 1,
+      "changedType": null,
+      "changed": null,
+      "action": "OfflineCreate",
+      "path": "/offline/printer",
+      "useDNS": true,
+      "default": false,
+      "port": "123",
+      "propertyOrder": [
+        "DisplayName",
+        "DomainName",
+        "GUID",
+        "GpoType",
+        "GpoCategory",
+        "GpoSettings",
+        "Changed",
+        "BypassErrors",
+        "GPOSettingOrder",
+        "Filter",
+        "type",
+        "Action",
+        "Comment",
+        "Path",
+        "Location",
+        "HostName",
+        "LocalName",
+        "UseDNS",
+        "UseIPv6",
+        "Default",
+        "SkipLocal",
+        "DeleteAllShared",
+        "Persistent",
+        "DeleteMaps",
+        "LPRSettingsQueueName",
+        "Protocol",
+        "PortNumber",
+        "DoubleSpool",
+        "SNMPEnabled",
+        "SNMPCommunityName",
+        "SNMPDeviceIndex",
+        "Linked",
+        "LinksCount",
+        "Links"
+      ]
+    },
+    {
+      "kind": "printer",
+      "mode": "null",
+      "limited": false,
+      "authoredAction": "",
+      "count": 1,
+      "changedType": null,
+      "changed": null,
+      "action": "Deploy",
+      "path": "/offline/printer",
+      "useDNS": true,
+      "default": false,
+      "port": "123",
+      "propertyOrder": [
+        "DisplayName",
+        "DomainName",
+        "GUID",
+        "GpoType",
+        "GpoCategory",
+        "GpoSettings",
+        "Changed",
+        "BypassErrors",
+        "GPOSettingOrder",
+        "Filter",
+        "type",
+        "Action",
+        "Comment",
+        "Path",
+        "Location",
+        "HostName",
+        "LocalName",
+        "UseDNS",
+        "UseIPv6",
+        "Default",
+        "SkipLocal",
+        "DeleteAllShared",
+        "Persistent",
+        "DeleteMaps",
+        "LPRSettingsQueueName",
+        "Protocol",
+        "PortNumber",
+        "DoubleSpool",
+        "SNMPEnabled",
+        "SNMPCommunityName",
+        "SNMPDeviceIndex",
+        "Linked",
+        "LinksCount",
+        "Links"
+      ]
+    },
+    {
+      "kind": "printer",
+      "mode": "null",
+      "limited": true,
+      "authoredAction": "D",
+      "count": 1,
+      "changedType": null,
+      "changed": null,
+      "action": "OfflineCreate",
+      "path": "/offline/printer",
+      "useDNS": true,
+      "default": false,
+      "port": "123",
+      "propertyOrder": [
+        "Changed",
+        "BypassErrors",
+        "GPOSettingOrder",
+        "Filter",
+        "type",
+        "Action",
+        "Comment",
+        "Path",
+        "Location",
+        "HostName",
+        "LocalName",
+        "UseDNS",
+        "UseIPv6",
+        "Default",
+        "SkipLocal",
+        "DeleteAllShared",
+        "Persistent",
+        "DeleteMaps",
+        "LPRSettingsQueueName",
+        "Protocol",
+        "PortNumber",
+        "DoubleSpool",
+        "SNMPEnabled",
+        "SNMPCommunityName",
+        "SNMPDeviceIndex"
+      ]
+    },
+    {
+      "kind": "printer",
+      "mode": "null",
+      "limited": true,
+      "authoredAction": "",
+      "count": 1,
+      "changedType": null,
+      "changed": null,
+      "action": "Deploy",
+      "path": "/offline/printer",
+      "useDNS": true,
+      "default": false,
+      "port": "123",
+      "propertyOrder": [
+        "Changed",
+        "BypassErrors",
+        "GPOSettingOrder",
+        "Filter",
+        "type",
+        "Action",
+        "Comment",
+        "Path",
+        "Location",
+        "HostName",
+        "LocalName",
+        "UseDNS",
+        "UseIPv6",
+        "Default",
+        "SkipLocal",
+        "DeleteAllShared",
+        "Persistent",
+        "DeleteMaps",
+        "LPRSettingsQueueName",
+        "Protocol",
+        "PortNumber",
+        "DoubleSpool",
+        "SNMPEnabled",
+        "SNMPCommunityName",
+        "SNMPDeviceIndex"
+      ]
+    }
+  ]
+}

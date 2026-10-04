@@ -50,6 +50,20 @@ public sealed class PowerShellCompilationAnalyzerTests
     }
 
     [Theory]
+    [InlineData(PowerShellCompilationCapabilities.StaticRuntimeFacts)]
+    [InlineData(PowerShellCompilationCapabilities.TypedLibrary)]
+    [InlineData(PowerShellCompilationCapabilities.TypedExecutable)]
+    [InlineData(PowerShellCompilationCapabilities.BinaryModule)]
+    [InlineData(PowerShellCompilationCapabilities.HybridModule)]
+    public void PublicCompilationSpecAcceptsCanonicalCapabilitySets(PowerShellCompilationCapability capabilities)
+    {
+        var spec = new PowerShellCompilationSpec(Path.GetTempPath(), capabilities: capabilities);
+        Assert.Equal(capabilities, spec.Capabilities);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new PowerShellCompilationSpec(
+            Path.GetTempPath(), capabilities: capabilities | (PowerShellCompilationCapability)(1 << 30)));
+    }
+
+    [Theory]
     [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Package, true)]
     [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid, true)]
     [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Strict, true)]
@@ -322,7 +336,7 @@ public sealed class PowerShellCompilationAnalyzerTests
         Assert.Equal(2, plan.RuntimeFallbackUnits);
         var units = Assert.Single(plan.Files).Units;
         Assert.Contains(units.Single(unit => unit.Name == "Get-EscapingMap").Diagnostics, diagnostic =>
-            diagnostic.Message.Contains("lookup-only local", StringComparison.OrdinalIgnoreCase));
+            diagnostic.FeatureId == PowerShellCompilationFeatureIds.ForSyntax("VariableExpressionAst"));
         Assert.Contains(units.Single(unit => unit.Name == "Get-DynamicMetadata").Diagnostics, diagnostic =>
             diagnostic.Message.Contains("AttributeAst", StringComparison.Ordinal));
     }
