@@ -15,7 +15,11 @@ public sealed class LineEndingsNormalizer : ILineEndingsNormalizer
     public NormalizationResult NormalizeFile(string path, NormalizationOptions? options = null)
     {
         options ??= new NormalizationOptions();
-        var text = File.ReadAllText(path);
+        var originalBytes = File.ReadAllBytes(path);
+        string text;
+        using (var stream = new MemoryStream(originalBytes, writable: false))
+        using (var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
+            text = reader.ReadToEnd();
 
         // Detect dominant line ending if Auto
         var target = options.LineEnding switch
@@ -27,7 +31,6 @@ public sealed class LineEndingsNormalizer : ILineEndingsNormalizer
         };
 
         var normalized = NormalizeEndings(text, target);
-        var changed = !ReferenceEquals(text, normalized) && !text.Equals(normalized, StringComparison.Ordinal);
         var replacements = CountReplacements(text, normalized);
 
         // Save with desired encoding
@@ -37,7 +40,13 @@ public sealed class LineEndingsNormalizer : ILineEndingsNormalizer
             encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         }
 
-        File.WriteAllText(path, normalized, encoding);
+        var preamble = encoding.GetPreamble();
+        var normalizedBytes = new byte[preamble.Length + encoding.GetByteCount(normalized)];
+        Buffer.BlockCopy(preamble, 0, normalizedBytes, 0, preamble.Length);
+        encoding.GetBytes(normalized, 0, normalized.Length, normalizedBytes, preamble.Length);
+        var changed = !originalBytes.SequenceEqual(normalizedBytes);
+        if (changed)
+            File.WriteAllBytes(path, normalizedBytes);
         return new NormalizationResult(path, changed, replacements, encoding.WebName);
     }
 

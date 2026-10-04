@@ -122,7 +122,7 @@ public sealed class ModulePipelinePowerShellCompilationTests
         var strictRoot = CreateDslModule(
             testRoot,
             strictName,
-            "function Get-StrictValue { param([int] $Number); [int] $Result = $Number; $Result += 1; return $Result }; Export-ModuleMember -Function Get-StrictValue");
+            "function Get-StrictValue { [CmdletBinding()] param([int] $Number); [int] $Result = $Number; $Result += 1; return $Result }; Export-ModuleMember -Function Get-StrictValue");
         _ = CreateDslModule(
             testRoot,
             rejectedName,
