@@ -40,22 +40,6 @@ internal static class ModulePipelinePlanningHelpers
         }
     }
 
-    internal static bool HasStandardFormattingConfiguration(ConfigurationFormattingSegment formatting)
-    {
-        if (formatting is null) return false;
-        var options = formatting.Options;
-        if (options is null) return false;
-
-        var standard = options.Standard;
-        if (standard is null) return false;
-
-        if (standard.FormatCodePS1?.Enabled == true) return true;
-        if (standard.FormatCodePSM1?.Enabled == true) return true;
-        if (standard.FormatCodePSD1?.Enabled == true) return true;
-
-        return !string.IsNullOrWhiteSpace(standard.Style?.PSD1);
-    }
-
     internal static string? TryResolveCsprojPath(string projectRoot, string moduleName, string? netProjectPath, string? netProjectName)
     {
         var projectName = string.IsNullOrWhiteSpace(netProjectName) ? moduleName : netProjectName!.Trim();

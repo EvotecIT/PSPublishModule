@@ -27,13 +27,6 @@ internal static class ProjectBuildConfigurationAdapter
             throw new ArgumentNullException(nameof(reference));
 
         ApplyOptions(target, reference.Options);
-        if (UsesDefaultActions(target) && HasActionOverride(reference))
-        {
-            target.UpdateVersions = true;
-            target.Build = true;
-            target.PublishNuget = false;
-            target.PublishGitHub = false;
-        }
         Apply(target, reference.UpdateVersions, static (config, value) => config.UpdateVersions = value);
         Apply(target, reference.Build, static (config, value) => config.Build = value);
         Apply(target, reference.IncludeSymbols, static (config, value) => config.IncludeSymbols = value);
@@ -47,18 +40,6 @@ internal static class ProjectBuildConfigurationAdapter
         Apply(target, reference.OverwriteSignedPackages, static (config, value) => config.OverwriteSignedPackages = value);
         return target;
     }
-
-    private static bool UsesDefaultActions(ProjectBuildConfiguration target)
-        => target.UpdateVersions is null &&
-           target.Build is null &&
-           target.PublishNuget is null &&
-           target.PublishGitHub is null;
-
-    private static bool HasActionOverride(ProjectBuildConfigurationReference reference)
-        => reference.UpdateVersions is not null ||
-           reference.Build is not null ||
-           reference.PublishNuget is not null ||
-           reference.PublishGitHub is not null;
 
     private static void Apply(
         ProjectBuildConfiguration target,

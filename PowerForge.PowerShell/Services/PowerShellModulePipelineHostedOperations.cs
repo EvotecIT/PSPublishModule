@@ -13,6 +13,7 @@ internal sealed class PowerShellModulePipelineHostedOperations :
     private readonly IPowerShellRunner _runner;
     private readonly ILogger _logger;
     private readonly bool _isWindows;
+    private readonly BinaryDependencyPreflightService _dependencyPreflight;
 
     internal PowerShellModulePipelineHostedOperations(IPowerShellRunner runner, ILogger logger)
         : this(runner, logger, Path.DirectorySeparatorChar == '\\')
@@ -24,6 +25,7 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
         _logger = logger ?? new NullLogger();
         _isWindows = isWindows;
+        _dependencyPreflight = new BinaryDependencyPreflightService(_logger, _runner);
     }
 
     internal PowerShellModulePipelineHostedOperations(ILogger logger)
@@ -79,8 +81,7 @@ internal sealed class PowerShellModulePipelineHostedOperations :
 
     public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget)
     {
-        var service = new BinaryDependencyPreflightService(_logger);
-        var result = service.Analyze(moduleRoot, powerShellEdition, modulePath);
+        var result = _dependencyPreflight.Analyze(moduleRoot, powerShellEdition, modulePath);
         if (!result.HasIssues)
             return;
 

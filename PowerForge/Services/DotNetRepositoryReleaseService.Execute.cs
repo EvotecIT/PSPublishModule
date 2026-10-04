@@ -60,6 +60,13 @@ public sealed partial class DotNetRepositoryReleaseService
                 return result;
             }
             spec.RootPath = root;
+            if (spec.Pack && (spec.SignAssemblies || spec.SignPackages) &&
+                string.IsNullOrWhiteSpace(spec.CertificateThumbprint))
+            {
+                result.Success = false;
+                result.ErrorMessage = "Signing was requested, but CertificateThumbprint is missing. Configure a signing certificate or explicitly disable signing.";
+                return result;
+            }
             if (!string.IsNullOrWhiteSpace(spec.PublishSource))
                 spec.PublishSource = ResolvePublishSource(spec.PublishSource!, root);
 
@@ -127,9 +134,8 @@ public sealed partial class DotNetRepositoryReleaseService
 
             _logger.Info($"Discovered {projects.Count} project(s), {packable.Length} packable.");
 
-            var hasSigningCertificate = spec.Pack && !string.IsNullOrWhiteSpace(spec.CertificateThumbprint);
-            var signAssemblyOutputs = hasSigningCertificate && spec.SignAssemblies;
-            var signNuGetPackages = hasSigningCertificate && spec.SignPackages;
+            var signAssemblyOutputs = spec.Pack && spec.SignAssemblies;
+            var signNuGetPackages = spec.Pack && spec.SignPackages;
             string? signingSha256 = null;
             if (signAssemblyOutputs || signNuGetPackages)
             {
@@ -246,7 +252,8 @@ public sealed partial class DotNetRepositoryReleaseService
                     }
                     else
                     {
-                        resolvedVersion = ResolveVersion(project, expectedVersion, spec, out resolutionWarning);
+                        resolvedVersion = ResolveVersion(project, expectedVersion, spec, out resolutionWarning,
+                            candidateMetadata[project.CsprojPath].PackageVersion);
                     }
 
                     resolvedVersion = ApplyReleaseVersionFloor(
@@ -655,8 +662,10 @@ public sealed partial class DotNetRepositoryReleaseService
     {
         if (!TryResolveSelectedProjectCandidates(spec, logger: null, out var candidates, out string? error))
             throw new InvalidOperationException(error);
+        var metadata = new DotNetRepositoryReleaseService(new NullLogger())
+            .ResolveProjectMetadata(candidates, spec, CancellationToken.None, progress: null);
         return candidates
-            .Where(static candidate => IsPackable(candidate.Path))
+            .Where(candidate => metadata[candidate.Path].IsPackable)
             .Select(static candidate => candidate.Path)
             .ToArray();
     }

@@ -92,33 +92,6 @@ public sealed partial class DotNetRepositoryReleaseService
         }
     }
 
-    private static string? GetCertificateSha256(string thumbprint, CertificateStoreLocation storeLocation)
-    {
-        try
-        {
-            var loc = storeLocation == CertificateStoreLocation.LocalMachine ? StoreLocation.LocalMachine : StoreLocation.CurrentUser;
-            using var store = new X509Store(StoreName.My, loc);
-            store.Open(OpenFlags.ReadOnly);
-            var cert = store.Certificates.Cast<X509Certificate2>()
-                .FirstOrDefault(c => NormalizeThumbprint(c.Thumbprint) == NormalizeThumbprint(thumbprint));
-            if (cert is null) return null;
-#if NET472
-            using var sha = SHA256.Create();
-            var hash = sha.ComputeHash(cert.RawData);
-            return BitConverter.ToString(hash).Replace("-", string.Empty).ToUpperInvariant();
-#else
-            return cert.GetCertHashString(HashAlgorithmName.SHA256);
-#endif
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static string NormalizeThumbprint(string? thumbprint)
-        => (thumbprint ?? string.Empty).Replace(" ", string.Empty).ToUpperInvariant();
-
     private static bool MatchesExpectedMap(string projectName, Dictionary<string, string> expectedMap, bool allowWildcards)
     {
         foreach (var kvp in expectedMap)

@@ -205,6 +205,23 @@ public sealed partial class DotNetRepositoryReleaseService
         if (lines.Length == 0)
             return null;
 
+        var jsonStart = Array.FindIndex(lines, static line => line.StartsWith("{", StringComparison.Ordinal));
+        if (jsonStart >= 0)
+        {
+            try
+            {
+                using var document = System.Text.Json.JsonDocument.Parse(string.Join(Environment.NewLine, lines.Skip(jsonStart)));
+                if (document.RootElement.TryGetProperty("Properties", out var properties) &&
+                    properties.TryGetProperty(propertyName, out var property))
+                    return property.GetString();
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // An unreadable evaluated result cannot be used as package metadata.
+            }
+            return null;
+        }
+
         var xmlStart = Array.FindIndex(lines, static line => line.StartsWith("<", StringComparison.Ordinal));
         if (xmlStart >= 0)
         {

@@ -612,9 +612,10 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             ConsoleEncoding.EnsureUtf8();
             var interactive = !NoInteractive.IsPresent && SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
             BufferedLogger? interactiveBuffer = null;
-            ILogger logger = interactive
+            ILogger outputLogger = interactive
                 ? interactiveBuffer = new BufferedLogger { IsVerbose = isVerbose }
                 : new CmdletLogger(this, isVerbose);
+            var logger = new CmdletWarningLogger(this, outputLogger);
             var service = new PowerForgeReleaseService(
                 logger,
                 DotNetAssemblySigningCallbackFactory.Create(logger),
@@ -632,6 +633,7 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
                         return service.Execute(spec, request);
                     });
                 watch.Stop();
+                logger.RethrowWarningStop();
                 SpectrePowerForgeReleaseConsoleUi.WriteSummary(result, watch.Elapsed);
                 if (!result.Success && interactiveBuffer?.Entries.Count > 0)
                 {
@@ -644,6 +646,7 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             {
                 result = service.Execute(spec, request);
                 watch.Stop();
+                logger.RethrowWarningStop();
             }
             WriteObject(AppleSummary.IsPresent && result.AppleReceipt is not null
                 ? result.AppleReceipt
@@ -655,7 +658,7 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             if (exitCodeMode)
                 Host.SetShouldExit(0);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not PipelineStoppedException && ex is not ActionPreferenceStopException)
         {
             WriteError(new ErrorRecord(ex, "InvokePowerForgeReleaseFailed", ErrorCategory.NotSpecified, ConfigPath));
             if (exitCodeMode)

@@ -86,6 +86,9 @@ public sealed class ModuleBuildWorkflowServiceTests
         Assert.True(workflow.WrotePolicySummary);
         Assert.Single(summaries);
         Assert.Same(result, summaries[0]);
+        Assert.True(new ModuleBuildOutcomeService().Evaluate(
+            workflow, exitCodeMode: false, jsonOnly: false, useLegacy: false, elapsed: TimeSpan.Zero)
+            .ShouldEmitErrorRecord);
     }
 
     [Fact]

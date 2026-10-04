@@ -259,8 +259,11 @@ public sealed partial class ModulePipelinePackageBuildTests
         }
     }
 
-    [Fact]
-    public void Run_PreservesDefaultProjectBuildActionsWhenOneDslActionIsOverridden()
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public void Run_ProjectBuildDefaultsDoNotEnableVersionUpdates(bool? build, bool expectedBuild)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -318,7 +321,8 @@ public sealed partial class ModulePipelinePackageBuildTests
                             Name = "JsonPackages",
                             ConfigPath = Path.Combine("Build", "project.build.json"),
                             BuildBeforeModule = true,
-                            PublishNuget = false
+                            Build = build,
+                            PublishNuget = build is null ? null : false
                         }
                     }
                 }
@@ -327,8 +331,8 @@ public sealed partial class ModulePipelinePackageBuildTests
             runner.Run(spec);
 
             var call = Assert.Single(calls);
-            Assert.True(call.Request.UpdateVersions);
-            Assert.True(call.Request.Build);
+            Assert.False(call.Request.UpdateVersions);
+            Assert.Equal(expectedBuild, call.Request.Build);
             Assert.False(call.Request.PublishNuget);
             Assert.False(call.Request.PublishGitHub);
         }
@@ -510,7 +514,7 @@ public sealed partial class ModulePipelinePackageBuildTests
             var result = runner.Run(spec, plan, new RecordingProgressReporter());
 
             Assert.Equal(2, calls.Count);
-            Assert.True(calls[0].Request.UpdateVersions);
+            Assert.False(calls[0].Request.UpdateVersions);
             Assert.True(calls[0].Request.Build);
             Assert.False(calls[0].Request.PublishNuget);
             Assert.False(calls[0].Request.PublishGitHub);

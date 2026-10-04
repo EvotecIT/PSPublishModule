@@ -397,13 +397,13 @@ public sealed class ModulePipelineManifestRefreshTests
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
         {
-            if (FrameworkCompatibility.GetPathStringComparison(root.FullName) != StringComparison.Ordinal)
-                return;
-
             const string moduleName = "TestModule";
             string hookDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Classes")).FullName;
             File.WriteAllText(Path.Combine(hookDirectory, "Initialize.ps1"), "class RuntimeHookClass { }");
             File.WriteAllText(Path.Combine(hookDirectory, "initialize.ps1"), "function Get-CaseDistinctMerged { 'ok' }");
+            // An empty-directory fallback is not proof of case-sensitive storage.
+            if (Directory.GetFiles(hookDirectory, "*.ps1").Length != 2)
+                return;
             File.WriteAllText(Path.Combine(root.FullName, moduleName + ".psm1"), "# bootstrap");
             File.WriteAllText(
                 Path.Combine(root.FullName, moduleName + ".psd1"),

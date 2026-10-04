@@ -155,12 +155,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         }
         finally
         {
-            if (Directory.Exists(root))
-            {
-                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
-                    file.Attributes = FileAttributes.Normal;
-                Directory.Delete(root, recursive: true);
-            }
+            CleanupNormalPublishFixture(root);
         }
     }
 
@@ -217,13 +212,28 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
         }
         finally
         {
-            if (Directory.Exists(root))
-            {
-                foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
-                    file.Attributes = FileAttributes.Normal;
-                Directory.Delete(root, recursive: true);
-            }
+            CleanupNormalPublishFixture(root);
         }
     }
 
+    private static void CleanupNormalPublishFixture(string root)
+    {
+        if (!Directory.Exists(root)) return;
+        foreach (FileInfo file in new DirectoryInfo(root).EnumerateFiles("*", SearchOption.AllDirectories))
+            file.Attributes = FileAttributes.Normal;
+
+        // Exited SDK processes can briefly retain a directory handle on Windows.
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                Directory.Delete(root, recursive: true);
+                return;
+            }
+            catch (IOException) when (OperatingSystem.IsWindows() && attempt < 4)
+            {
+                Thread.Sleep(100);
+            }
+        }
+    }
 }

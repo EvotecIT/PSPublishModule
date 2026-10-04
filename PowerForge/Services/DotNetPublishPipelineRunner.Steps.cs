@@ -636,6 +636,11 @@ public sealed partial class DotNetPublishPipelineRunner
         return resolved;
     }
 
+    // NoBuildInPublish is a default preference; it is effective only in an explicit build mode.
+    private static bool UsesExplicitNoBuildPublish(DotNetPublishPlan plan)
+        => plan.NoBuildInPublish &&
+           (plan.UseControlledSourceProvenance || plan.SkipBuildRequested || plan.SeparateBuildRequested);
+
     internal static List<string> BuildPublishArguments(
         DotNetPublishPlan plan,
         DotNetPublishTargetPlan target,
@@ -669,7 +674,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (plan.NoRestoreInPublish) publishArgs.Add("--no-restore");
         // Normal publishing rebuilds by default. Explicit skip-build and the
         // project DSL's separate-build mode preserve their no-build contract.
-        if ((plan.UseControlledSourceProvenance || plan.SkipBuildRequested || plan.SeparateBuildRequested) && plan.NoBuildInPublish &&
+        if (UsesExplicitNoBuildPublish(plan) &&
             !TargetUsesPublishMsiVersionProperties(plan, target.Name, framework, runtime, style))
             publishArgs.Add("--no-build");
 

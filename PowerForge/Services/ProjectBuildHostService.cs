@@ -149,7 +149,7 @@ public sealed partial class ProjectBuildHostService
     {
         if (request.PublicationCheckpoint is not null)
             return PublishCheckpoint(request);
-        var preparation = new ProjectBuildPreparationService().Prepare(
+        var preparation = new ProjectBuildPreparationService(_logger).Prepare(
             config,
             configDirectory,
             request.PlanOutputPath,

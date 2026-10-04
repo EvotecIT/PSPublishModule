@@ -27,7 +27,7 @@ public sealed class DotNetReleaseBuildService
     /// <param name="spec">Release build specification.</param>
     /// <param name="signAssemblies">
     /// Optional callback used to sign assemblies in the release output directory (PowerShell-only in PSPublishModule).
-    /// When null, assembly signing is skipped.
+    /// Required when a certificate thumbprint requests signing.
     /// </param>
     public DotNetReleaseBuildResult Execute(DotNetReleaseBuildSpec spec, Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies = null)
     {
@@ -95,6 +95,22 @@ public sealed class DotNetReleaseBuildService
             {
                 result.ErrorMessage = "dotnet CLI is not available.";
                 return result;
+            }
+
+            string? signingSha256 = null;
+            if (!string.IsNullOrWhiteSpace(spec.CertificateThumbprint))
+            {
+                if (signAssemblies is null)
+                {
+                    result.ErrorMessage = "Assembly signing was requested, but no assembly signing handler was provided.";
+                    return result;
+                }
+                signingSha256 = CodeSigningCertificateValidation.GetSha256FromStore(spec.CertificateThumbprint!.Trim(), spec.LocalStore);
+                if (signingSha256 is null)
+                {
+                    result.ErrorMessage = "Certificate not found for signing.";
+                    return result;
+                }
             }
 
             CleanReleaseDirectory(releasePath);
@@ -177,13 +193,7 @@ public sealed class DotNetReleaseBuildService
             {
                 _logger.Verbose($"DotNetReleaseBuild - Signing {allPackages.Count} packages");
 
-                var sha256 = GetCertificateSha256(spec.CertificateThumbprint!.Trim(), spec.LocalStore);
-                if (sha256 is null)
-                {
-                    _logger.Warn($"DotNetReleaseBuild - Certificate with thumbprint '{spec.CertificateThumbprint}' not found in {spec.LocalStore}\\My store");
-                    result.ErrorMessage = "Certificate not found for signing";
-                    return result;
-                }
+                var sha256 = signingSha256!;
 
                 _logger.Verbose($"DotNetReleaseBuild - Using certificate SHA256: {sha256}");
 
@@ -198,7 +208,10 @@ public sealed class DotNetReleaseBuildService
                     .GetAwaiter()
                     .GetResult();
                 if (!signResult.Succeeded)
-                    _logger.Warn($"DotNetReleaseBuild - Failed to sign NuGet packages. {signResult.ErrorMessage}");
+                {
+                    result.ErrorMessage = $"NuGet package signing failed. {signResult.ErrorMessage}";
+                    return result;
+                }
                 else
                     _logger.Verbose($"DotNetReleaseBuild - NuGet package signing completed. {signResult.StdOut}".Trim());
             }
@@ -331,7 +344,7 @@ public sealed class DotNetReleaseBuildService
             }
 
             var rel = ComputeRelativePath(directoryPath, file);
-            archive.CreateEntryFromFile(file, rel, CompressionLevel.Optimal);
+            archive.CreateEntryFromFile(file, rel.Replace('\\', '/'), CompressionLevel.Optimal);
         }
     }
 
@@ -402,33 +415,6 @@ public sealed class DotNetReleaseBuildService
         p.WaitForExit();
         return p.ExitCode;
     }
-
-    private static string? GetCertificateSha256(string thumbprint, CertificateStoreLocation storeLocation)
-    {
-        try
-        {
-            var loc = storeLocation == CertificateStoreLocation.LocalMachine ? StoreLocation.LocalMachine : StoreLocation.CurrentUser;
-            using var store = new X509Store(StoreName.My, loc);
-            store.Open(OpenFlags.ReadOnly);
-            var cert = store.Certificates.Cast<X509Certificate2>()
-                .FirstOrDefault(c => NormalizeThumbprint(c.Thumbprint) == NormalizeThumbprint(thumbprint));
-            if (cert is null) return null;
-#if NET472
-            using var sha = SHA256.Create();
-            var hash = sha.ComputeHash(cert.RawData);
-            return BitConverter.ToString(hash).Replace("-", string.Empty).ToUpperInvariant();
-#else
-            return cert.GetCertHashString(HashAlgorithmName.SHA256);
-#endif
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static string NormalizeThumbprint(string? thumbprint)
-        => (thumbprint ?? string.Empty).Replace(" ", string.Empty).ToUpperInvariant();
 
     private static string Quote(string value)
     {

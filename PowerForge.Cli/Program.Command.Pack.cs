@@ -91,11 +91,13 @@ internal static partial class Program
             }
         }
 
+        BufferedLogger? interactiveLogs = null;
         try
         {
             var interactive = PipelineConsoleUi.ShouldUseInteractiveView(outputJson, cli);
-            var (cmdLogger, logBuffer) = interactive
-                ? (new NullLogger { IsVerbose = cli.Verbose }, null)
+            if (interactive) interactiveLogs = new BufferedLogger { IsVerbose = cli.Verbose };
+            (ILogger cmdLogger, BufferedLogger? logBuffer) = interactive
+                ? (interactiveLogs!, interactiveLogs)
                 : CreateCommandLogger(outputJson, cli, logger);
             var runner = new ModulePipelineRunner(cmdLogger);
 
@@ -170,6 +172,6 @@ internal static partial class Program
             logger.Error(ex.Message);
             return 1;
         }
+        finally { ReplayInteractiveWarnings(interactiveLogs, logger); }
     }
 }
-

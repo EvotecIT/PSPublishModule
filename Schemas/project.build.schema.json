@@ -179,7 +179,7 @@
     },
     "SignAssemblies": {
       "type": "boolean",
-      "description": "When true and CertificateThumbprint is configured, signs build outputs before NuGet packages and release ZIPs are created. Defaults to true when CertificateThumbprint is set."
+      "description": "Signs build outputs before NuGet packages and release ZIPs are created. An explicit true requires CertificateThumbprint and usable signing prerequisites. When omitted, defaults to true if CertificateThumbprint is set."
     },
     "SignDependencyAssemblies": {
       "type": "boolean",
@@ -187,7 +187,7 @@
     },
     "SignPackages": {
       "type": "boolean",
-      "description": "When true and CertificateThumbprint is configured, signs generated NuGet packages. Defaults to true when CertificateThumbprint is set."
+      "description": "Signs generated NuGet packages. An explicit true requires CertificateThumbprint and usable signing prerequisites. When omitted, defaults to true if CertificateThumbprint is set."
     },
     "OverwriteSignedAssemblies": {
       "type": "boolean",

@@ -961,9 +961,9 @@ internal static class SpectrePipelineSummaryWriter
         return reasons;
     }
 
-    private static string GetFailureHeadline(string message)
+    internal static string GetFailureHeadline(string? message)
     {
-        if (string.IsNullOrWhiteSpace(message))
+        if (message is null || string.IsNullOrWhiteSpace(message))
             return string.Empty;
 
         return message.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries)

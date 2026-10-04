@@ -71,7 +71,9 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
         {
-            if (FrameworkCompatibility.GetPathStringComparisonForPath(root.FullName) != StringComparison.Ordinal)
+            File.WriteAllText(Path.Combine(root.FullName, "Case.txt"), "upper");
+            File.WriteAllText(Path.Combine(root.FullName, "case.txt"), "lower");
+            if (Directory.GetFiles(root.FullName, "*.txt").Length != 2)
                 return;
 
             const string moduleName = "TestModule";
@@ -131,7 +133,9 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
         {
-            if (FrameworkCompatibility.GetPathStringComparisonForPath(root.FullName) != StringComparison.Ordinal)
+            File.WriteAllText(Path.Combine(root.FullName, "Case.txt"), "upper");
+            File.WriteAllText(Path.Combine(root.FullName, "case.txt"), "lower");
+            if (Directory.GetFiles(root.FullName, "*.txt").Length != 2)
                 return;
 
             const string moduleName = "TestModule";

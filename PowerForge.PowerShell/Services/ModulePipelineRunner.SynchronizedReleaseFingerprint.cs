@@ -48,7 +48,7 @@ public sealed partial class ModulePipelineRunner
 
             var configPath = ResolvePackageBuildPath(plan.ProjectRoot, reference.ConfigPath);
             var configuration = LoadProjectBuildConfiguration(configPath, reference);
-            var actions = ResolveEffectiveActions(configuration);
+            var actions = ProjectBuildPreparationService.ResolveActions(configuration);
             var laneLabel = reference.Name ?? configPath;
             var checkpointKey = ResolveSynchronizedReleaseLaneKey(
                 plan,
@@ -97,7 +97,7 @@ public sealed partial class ModulePipelineRunner
                 continue;
 
             var configuration = MapPackageBuildConfiguration(packageBuild, plan.ProjectRoot);
-            var actions = ResolveEffectiveActions(configuration);
+            var actions = ProjectBuildPreparationService.ResolveActions(configuration);
             var inlineConfigPath = Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
             var laneLabel = packageBuild.Name ?? inlineConfigPath;
             var checkpointKey = ResolveSynchronizedReleaseLaneKey(

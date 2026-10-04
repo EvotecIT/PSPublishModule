@@ -112,9 +112,17 @@ internal static partial class ModuleBootstrapperGenerator
         IReadOnlyList<string> resolvedAssemblyReferences)
     {
         var hasExplicitAssembly = configuredAssemblies?.Any(static entry => !string.IsNullOrWhiteSpace(entry)) == true;
-        return hasExplicitAssembly
-            ? ModuleBinaryFileLocator.ContainsAnyFileName(libRoot, resolvedAssemblyReferences, SearchOption.AllDirectories)
-            : ModuleBinaryFileLocator.ContainsAnySelectablePayloadFileName(libRoot, resolvedAssemblyReferences);
+        if (!hasExplicitAssembly)
+            return ModuleBinaryFileLocator.ContainsAnySelectablePayloadFileName(libRoot, resolvedAssemblyReferences);
+        if (!Directory.Exists(libRoot)) return false;
+
+        // Explicit assemblies may live in custom folders, but archive-like runtime folders
+        // must not turn a script module into a binary bootstrapper.
+        return ModuleBinaryFileLocator.ContainsAnyFileName(libRoot, resolvedAssemblyReferences, SearchOption.TopDirectoryOnly) ||
+               Directory.EnumerateDirectories(libRoot).Where(folder =>
+                   !ModuleBinaryPayloadLayout.IsPayloadLikeFolderName(Path.GetFileName(folder)) ||
+                   ModuleBinaryPayloadLayout.IsSelectablePayloadFolderName(Path.GetFileName(folder)))
+                   .Any(folder => ModuleBinaryFileLocator.ContainsAnyFileName(folder, resolvedAssemblyReferences, SearchOption.AllDirectories));
     }
 
     private static bool ShouldWriteBootstrapper(

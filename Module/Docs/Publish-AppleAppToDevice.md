@@ -11,7 +11,7 @@ Builds, installs, and optionally launches an Apple app on a physical device.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Publish-AppleAppToDevice [-ProjectPath] <string> -Scheme <string> [-Workspace] [-ProductName <string>] [-Configuration <string>] [-Platform <ApplePlatform>] [-Destination <string>] [-DeviceIdentifier <string>] [-Device <string>] [-BundleIdentifier <string>] [-Launch] [-DerivedDataPath <string>] [-AppPath <string>] [-XcodeBuild <string>] [-Xcrun <string>] [-AllowProvisioningUpdates] [-UseBuildMirror] [-BuildRoot <string>] [-BuildMirrorPath <string>] [-Rsync <string>] [-AdditionalArgument <string[]>] [-TimeoutMinutes <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Publish-AppleAppToDevice [-ProjectPath] <string> -Scheme <string> [-Workspace] [-ProductName <string>] [-Configuration <string>] [-OptimizeSwift] [-Platform <ApplePlatform>] [-Destination <string>] [-DeviceIdentifier <string>] [-Device <string>] [-BundleIdentifier <string>] [-Launch] [-DerivedDataPath <string>] [-AppPath <string>] [-XcodeBuild <string>] [-Xcrun <string>] [-AllowProvisioningUpdates] [-UseBuildMirror] [-BuildRoot <string>] [-BuildMirrorPath <string>] [-Rsync <string>] [-AdditionalArgument <string[]>] [-TimeoutMinutes <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -205,6 +205,22 @@ Accept wildcard characters: False
 
 ### -Launch
 Launch the app after a successful install.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -OptimizeSwift
+Optimize Swift while retaining the selected configuration and compilation conditions.
 
 ```yaml
 Type: SwitchParameter
