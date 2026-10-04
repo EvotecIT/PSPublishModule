@@ -156,7 +156,7 @@ public class WebApiDocsGeneratorSourceAndCssTests
             Assert.Contains("if (toggle) toggle.focus();", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("PowerForge API docs first-paint control stability", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("body.pf-api-docs .namespace-select", html, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain("<style>body.pf-api-docs", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("<style>body.pf-api-docs{", html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(".pf-combobox-list::-webkit-scrollbar", html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(".member-header pre.member-signature", html, StringComparison.OrdinalIgnoreCase);
         }

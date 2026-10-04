@@ -474,7 +474,7 @@ public static partial class WebApiDocsGenerator
     private static string GetAccessModifier(MethodBase method)
     {
         if (method.IsPublic) return "public";
-        if (method.IsFamily && method.IsAssembly) return "private protected";
+        if (method.IsFamilyAndAssembly) return "private protected";
         if (method.IsFamilyOrAssembly) return "protected internal";
         if (method.IsFamily) return "protected";
         if (method.IsAssembly) return "internal";
@@ -484,7 +484,7 @@ public static partial class WebApiDocsGenerator
     private static string GetAccessModifier(FieldInfo field)
     {
         if (field.IsPublic) return "public";
-        if (field.IsFamily && field.IsAssembly) return "private protected";
+        if (field.IsFamilyAndAssembly) return "private protected";
         if (field.IsFamilyOrAssembly) return "protected internal";
         if (field.IsFamily) return "protected";
         if (field.IsAssembly) return "internal";
@@ -504,7 +504,7 @@ public static partial class WebApiDocsGenerator
         if (method.IsFamilyOrAssembly) return 4;
         if (method.IsFamily) return 3;
         if (method.IsAssembly) return 2;
-        if (method.IsFamily && method.IsAssembly) return 1;
+        if (method.IsFamilyAndAssembly) return 1;
         return 0;
     }
 
