@@ -12,6 +12,14 @@ internal static class DocumentationFallbackEnricher
         pattern: @"-(?<name>[A-Za-z][A-Za-z0-9_-]*)",
         options: RegexOptions.Compiled);
 
+    private static readonly Regex PositionalParameterNameRegex = new(
+        pattern: @"\[(?<parameter>-[A-Za-z][A-Za-z0-9_-]*)\](?=\s*<)",
+        options: RegexOptions.Compiled);
+
+    private static readonly Regex TypePlaceholderRegex = new(
+        pattern: @"<[^>]*>",
+        options: RegexOptions.Compiled);
+
     public static void Enrich(DocumentationExtractionPayload payload, ILogger logger)
     {
         if (payload is null) throw new ArgumentNullException(nameof(payload));
@@ -63,10 +71,8 @@ internal static class DocumentationFallbackEnricher
         for (var i = 0; i < syntaxSets.Length && examples.Count < 3; i++)
         {
             var set = syntaxSets[i];
-            var requiredParams = ExtractRequiredParameterNamesFromSyntax(set.Text!, cmd.Name)
-                .Take(5)
-                .ToArray();
-            var code = BuildExampleInvocation(cmd, requiredParams);
+            var requiredParams = ExtractParameterNamesFromSyntax(set.Text!, cmd.Name, includeOptional: false);
+            var code = BuildExampleInvocation(cmd, requiredParams, set.Text);
             if (!uniqueCodes.Add(code)) continue;
 
             examples.Add(new DocumentationExampleHelp
@@ -90,7 +96,7 @@ internal static class DocumentationFallbackEnricher
         cmd.Examples = examples;
     }
 
-    private static IEnumerable<string> ExtractRequiredParameterNamesFromSyntax(string syntaxText, string commandName)
+    private static string[] ExtractParameterNamesFromSyntax(string syntaxText, string commandName, bool includeOptional)
     {
         if (string.IsNullOrWhiteSpace(syntaxText)) return Array.Empty<string>();
 
@@ -98,18 +104,16 @@ internal static class DocumentationFallbackEnricher
         if (!string.IsNullOrWhiteSpace(commandName) && text.StartsWith(commandName.Trim(), StringComparison.OrdinalIgnoreCase))
             text = text.Substring(commandName.Trim().Length);
 
-        var outside = StripBracketedContent(text);
-        if (string.IsNullOrWhiteSpace(outside)) return Array.Empty<string>();
+        // [-Name] <Type> requires a value: only the positional parameter's spelling is optional.
+        // Preserve outer brackets in [[-Name] <Type>] so an optional value stays optional.
+        text = PositionalParameterNameRegex.Replace(text, "${parameter}");
+        text = TypePlaceholderRegex.Replace(text, string.Empty);
+        if (!includeOptional) text = StripBracketedContent(text);
 
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (Match m in ParameterRegex.Matches(outside))
-        {
-            var n = m.Groups["name"].Value;
-            if (string.IsNullOrWhiteSpace(n)) continue;
-            names.Add(n.Trim());
-        }
-
-        return names.ToArray();
+        return ParameterRegex.Matches(text).Cast<Match>()
+            .Select(match => match.Groups["name"].Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static string StripBracketedContent(string text)
@@ -125,13 +129,19 @@ internal static class DocumentationFallbackEnricher
         return sb.ToString();
     }
 
-    private static string BuildExampleInvocation(DocumentationCommandHelp cmd, IReadOnlyCollection<string> requiredParameterNames)
+    private static string BuildExampleInvocation(
+        DocumentationCommandHelp cmd,
+        IReadOnlyCollection<string> requiredParameterNames,
+        string? syntaxText = null)
     {
         var name = (cmd.Name ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(name)) return string.Empty;
 
+        var availableNames = syntaxText is null ? null : new HashSet<string>(
+            ExtractParameterNamesFromSyntax(syntaxText, name, includeOptional: true), StringComparer.OrdinalIgnoreCase);
         var parameters = (cmd.Parameters ?? new List<DocumentationParameterHelp>())
             .Where(p => p is not null && !string.IsNullOrWhiteSpace(p.Name))
+            .Where(p => availableNames is null || availableNames.Contains(p.Name))
             .ToArray();
 
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

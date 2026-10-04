@@ -950,7 +950,6 @@ public static partial class WebApiDocsGenerator
         var parameters = method?.Parameters ?? new List<ApiParameterModel>();
         var picked = parameters
             .Where(static p => !p.IsOptional)
-            .Take(4)
             .ToList();
 
         if (picked.Count == 0)
