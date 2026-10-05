@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory = $true)] [scriptblock] $Block,
     [object[]] $Arguments = @(),
     [bool] $StrictMode = $false,
-    [object] $NativeExitCodeTrackerType
+    [object] $NativeExitCodeTrackerType,
+    [System.Diagnostics.Stopwatch] $OperationStopwatch
 )
 
 $previousGlobalLastExitCodeVariable = Get-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
@@ -33,7 +34,13 @@ try {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
     }
-    & $Block @Arguments
+    if ($null -ne $OperationStopwatch) { $OperationStopwatch.Start() }
+    try {
+        & $Block @Arguments
+    }
+    finally {
+        if ($null -ne $OperationStopwatch) { $OperationStopwatch.Stop() }
+    }
     $nativeExitCode = $nativeExitTracker.FirstFailureExitCode
     if ($null -eq $nativeExitCode) {
         $nativeExitCode = $global:LASTEXITCODE

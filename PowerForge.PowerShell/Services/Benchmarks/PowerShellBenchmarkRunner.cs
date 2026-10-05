@@ -255,9 +255,8 @@ public sealed partial class PowerShellBenchmarkRunner
                 memorySampler = new OperationMemorySampler(suite.MemorySamplingIntervalMilliseconds);
             stage = iteration < 0 ? "Warmup operation" : "Operation";
             memoryBefore = CaptureOperationMemory();
-            operationStopwatch = Stopwatch.StartNew();
-            InvokeStrict(item.Handler, caseObject, runObject);
-            operationStopwatch.Stop();
+            operationStopwatch = new Stopwatch();
+            InvokeOperation(item.Handler, operationStopwatch, caseObject, runObject);
             durationMs = operationStopwatch.Elapsed.TotalMilliseconds;
             CaptureOperationMemoryDifference(memoryBefore, out allocatedBytes, out workingSetDeltaBytes);
             memorySampler?.Stop();
@@ -281,7 +280,7 @@ public sealed partial class PowerShellBenchmarkRunner
         }
         catch (Exception ex) when (!IsPowerShellStopRequest(ex))
         {
-            if (operationStopwatch is { IsRunning: true })
+            if (operationStopwatch is not null)
             {
                 operationStopwatch.Stop();
                 durationMs = operationStopwatch.Elapsed.TotalMilliseconds;
@@ -730,24 +729,6 @@ public sealed partial class PowerShellBenchmarkRunner
         else
             existing.Value = propertyValue;
     }
-
-    private static Collection<PSObject> InvokeStrict(ScriptBlock block, params object[] args)
-    {
-        var variables = new List<PSVariable>
-        {
-            new("ErrorActionPreference", ActionPreference.Stop),
-            new("PSNativeCommandUseErrorActionPreference", true)
-        };
-        return NativeExitAwareInvokeWrapper.InvokeWithContext(functionsToDefine: null, variablesToDefine: variables, new object[] { PrepareNativeExitGuardedBlock(block), args, false, typeof(PowerShellNativeExitCodeTracker) });
-    }
-
-    private static ScriptBlock PrepareNativeExitGuardedBlock(ScriptBlock block)
-        => block.Module is null
-            ? ScriptBlock.Create(PowerShellNativeExitCodeGuard.AddChecks(block.ToString()))
-            : block;
-
-    private static readonly ScriptBlock NativeExitAwareInvokeWrapper =
-        ScriptBlock.Create(EmbeddedScripts.Load("Scripts/Benchmarks/Invoke-NativeExitAwareBlock.ps1"));
 
     private static string FormatVariables(IReadOnlyDictionary<string, string?> variables)
         => string.Join(

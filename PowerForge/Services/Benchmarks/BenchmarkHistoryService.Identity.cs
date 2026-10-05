@@ -28,6 +28,13 @@ public sealed partial class BenchmarkHistoryService
         if (identity.Any(string.IsNullOrWhiteSpace))
             throw new InvalidOperationException("Runner environment requires OS, architecture, CPU, runtime and runner version identity.");
         var policy = PolicyKeys.ToDictionary(key => key, key => Metadata(result, key), StringComparer.Ordinal);
+        // Preserve existing unsampled report identities, but never combine changed timing
+        // boundaries or enabled memory-sampling policies with those accepted references.
+        string timingBoundary = Metadata(result, "operationTimingBoundary");
+        if (!string.IsNullOrWhiteSpace(timingBoundary)) policy.Add("operationTimingBoundary", timingBoundary);
+        string samplingInterval = Metadata(result, "memorySamplingIntervalMilliseconds");
+        if (!string.IsNullOrWhiteSpace(samplingInterval) && samplingInterval != "0")
+            policy.Add("memorySamplingIntervalMilliseconds", samplingInterval);
         // External PowerShell hosts report their actual placement under execution-path keys.
         // Requested settings alone cannot establish that different child processes ran alike.
         var hostPlacement = (result.Metadata ?? new Dictionary<string, string>())
