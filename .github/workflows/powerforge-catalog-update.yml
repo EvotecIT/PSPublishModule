@@ -141,7 +141,7 @@ jobs:
         run: |
           ../catalog-owner/.github/scripts/catalog-update-workflow.ps1 -Action Submit -ToolPath ../catalog-owner/PowerForge.Cli/bin/Release/net10.0/PowerForge.Cli.dll -ProfilePath $env:CATALOG_PROFILE -ReleaseTag $env:CATALOG_TAG -DeliveryReleaseId $env:CATALOG_DELIVERY -OutputPath $env:CATALOG_OUTPUT -Channel $env:CATALOG_CHANNEL
       - name: Retain preparation or final receipt
-        if: ${{ always() && steps.prepare.outcome == 'success' }}
+        if: ${{ always() && steps.prepare.outputs.artifact-prefix != '' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ steps.prepare.outputs.artifact-prefix }}${{ github.run_id }}-${{ github.run_attempt }}-result
