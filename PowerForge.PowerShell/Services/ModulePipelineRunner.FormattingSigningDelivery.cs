@@ -15,6 +15,7 @@ public sealed partial class ModulePipelineRunner
         string moduleName,
         string manifestPath,
         bool includeMergeFormatting,
+        bool mergedRootPsm1,
         ConfigurationFormattingSegment formatting,
         FormattingPipeline pipeline)
     {
@@ -50,10 +51,11 @@ public sealed partial class ModulePipelineRunner
         string[] psm1Files = all.Where(p => HasExtension(p, ".psm1")).ToArray();
         string[] psd1Files = all.Where(p => HasExtension(p, ".psd1")).ToArray();
 
-        // Avoid formatting the same output file twice when merge settings are enabled.
+        // Merged PSM1 output belongs to OnMergePSM1, even when that formatting is disabled.
+        // Ordinary staging/project PSM1 files retain their default settings.
         if (includeMergeFormatting)
         {
-            if (cfg.Merge.FormatCodePSM1?.Enabled == true)
+            if (mergedRootPsm1 || cfg.Merge.FormatCodePSM1?.Enabled == true)
                 psm1Files = psm1Files.Where(p => !string.Equals(p, rootPsm1, StringComparison.OrdinalIgnoreCase)).ToArray();
 
             if (mergePsd1?.Enabled == true)
