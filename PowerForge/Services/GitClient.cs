@@ -45,7 +45,7 @@ public sealed class GitClient
         TimeSpan? defaultTimeout = null)
     {
         var executable = ResolveTrustedSystemExecutable();
-        var nullDevice = Path.DirectorySeparatorChar == '\\' ? "NUL" : "/dev/null";
+        const string nullDevice = "/dev/null";
         var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
             ["GIT_CONFIG_NOSYSTEM"] = "1",

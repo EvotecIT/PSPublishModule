@@ -164,7 +164,7 @@ internal sealed class HomeAssistantRepositoryService {
             ["GITHUB_TOKEN"] = null,
             ["GIT_ASKPASS"] = null,
             ["GIT_CONFIG_COUNT"] = "2",
-            ["GIT_CONFIG_GLOBAL"] = Path.DirectorySeparatorChar == '\\' ? "NUL" : "/dev/null",
+            ["GIT_CONFIG_GLOBAL"] = "/dev/null",
             ["GIT_CONFIG_KEY_0"] = "credential.helper",
             ["GIT_CONFIG_KEY_1"] = "http.extraheader",
             ["GIT_CONFIG_NOSYSTEM"] = "1",

@@ -683,6 +683,8 @@ public sealed class HomeAssistantReleaseTests {
             Assert.Null(request.EnvironmentVariables["GH_TOKEN"]);
             Assert.Null(request.EnvironmentVariables["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]);
             Assert.Null(request.EnvironmentVariables["GITHUB_OUTPUT"]);
+            Assert.Equal("1", request.EnvironmentVariables["GIT_CONFIG_NOSYSTEM"]);
+            Assert.Equal("/dev/null", request.EnvironmentVariables["GIT_CONFIG_GLOBAL"]);
         });
         var exception = Assert.Throws<InvalidOperationException>(() => new HomeAssistantReleaseGitService().EnsureNoTrackedChanges(fixture.Root));
         Assert.Contains("changed tracked files", exception.Message, StringComparison.OrdinalIgnoreCase);
