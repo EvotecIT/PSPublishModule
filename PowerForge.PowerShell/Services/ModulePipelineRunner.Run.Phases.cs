@@ -250,6 +250,8 @@ public sealed partial class ModulePipelineRunner
                     moduleName: plan.ModuleName,
                     manifestPath: buildResult.ManifestPath,
                     includeMergeFormatting: true,
+                    mergedRootPsm1: state.MergeExecution.MergedModule ||
+                        (plan.MergeMissing && state.MergeExecution.TotalInlinedFunctions > 0),
                     formatting: plan.Formatting,
                     pipeline: formattingPipeline);
 
@@ -279,6 +281,7 @@ public sealed partial class ModulePipelineRunner
                         moduleName: plan.ModuleName,
                         manifestPath: projectManifest,
                         includeMergeFormatting: false,
+                        mergedRootPsm1: false,
                         formatting: plan.Formatting,
                         pipeline: formattingPipeline);
 
