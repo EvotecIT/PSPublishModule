@@ -31,7 +31,7 @@ Registers a managed module repository profile using PSResourceGet-shaped paramet
 
 ### EXAMPLE 1
 ```powershell
-Register-ManagedModuleRepository -Name 'Name'
+Register-ManagedModuleRepository -Name 'Name' -Uri 'https://example.com'
 ```
 
 

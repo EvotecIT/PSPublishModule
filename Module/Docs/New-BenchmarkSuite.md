@@ -21,7 +21,7 @@ Declares a PowerShell benchmark suite.
 
 ### EXAMPLE 1
 ```powershell
-New-BenchmarkSuite -Name 'Name'
+New-BenchmarkSuite -Name 'Name' -ScriptBlock { }
 ```
 
 

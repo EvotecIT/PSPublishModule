@@ -21,7 +21,7 @@ Exports current Apple commerce and compliance state as a reviewable governance d
 
 ### EXAMPLE 1
 ```powershell
-Export-AppStoreConnectGovernance -IssuerId 'Value' -KeyId 'Value' -AppId 'Value'
+Export-AppStoreConnectGovernance -Path 'C:\Path' -IssuerId 'Value' -KeyId 'Value' -AppId 'Value'
 ```
 
 

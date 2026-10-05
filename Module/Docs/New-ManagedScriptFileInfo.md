@@ -21,7 +21,7 @@ Creates a PowerShell script file with PSResourceGet-compatible PSScriptInfo meta
 
 ### EXAMPLE 1
 ```powershell
-New-ManagedScriptFileInfo -Description 'Value'
+New-ManagedScriptFileInfo -Path 'C:\Path' -Description 'Value'
 ```
 
 

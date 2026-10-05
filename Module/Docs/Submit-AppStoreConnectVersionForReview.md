@@ -21,7 +21,7 @@ Submits a prepared App Store Connect Distribution version to App Review.
 
 ### EXAMPLE 1
 ```powershell
-Submit-AppStoreConnectVersionForReview -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value'
+Submit-AppStoreConnectVersionForReview -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value' -Platform 'Value'
 ```
 
 

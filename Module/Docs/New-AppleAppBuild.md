@@ -21,7 +21,7 @@ Builds an Apple app for local installation using xcodebuild.
 
 ### EXAMPLE 1
 ```powershell
-New-AppleAppBuild -Scheme 'Value'
+New-AppleAppBuild -ProjectPath 'C:\Path' -Scheme 'Value'
 ```
 
 

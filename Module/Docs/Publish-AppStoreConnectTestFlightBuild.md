@@ -21,7 +21,7 @@ Distributes a processed App Store Connect build to TestFlight beta groups and op
 
 ### EXAMPLE 1
 ```powershell
-Publish-AppStoreConnectTestFlightBuild -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value'
+Publish-AppStoreConnectTestFlightBuild -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value' -Platform 'Value'
 ```
 
 

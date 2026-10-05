@@ -21,7 +21,7 @@ Adds a benchmark matrix axis.
 
 ### EXAMPLE 1
 ```powershell
-Add-BenchmarkAxis -Name 'Name'
+Add-BenchmarkAxis -Name 'Name' -Values @('Value')
 ```
 
 

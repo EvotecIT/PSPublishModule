@@ -21,7 +21,7 @@ Converges reviewed App Store commerce and compliance state through an approval-g
 
 ### EXAMPLE 1
 ```powershell
-Sync-AppStoreConnectGovernance -IssuerId 'Value' -KeyId 'Value'
+Sync-AppStoreConnectGovernance -ConfigPath 'C:\Path' -IssuerId 'Value' -KeyId 'Value'
 ```
 
 

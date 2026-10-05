@@ -21,7 +21,7 @@ Syncs localized app-level App Store information from a JSON configuration file.
 
 ### EXAMPLE 1
 ```powershell
-Sync-AppStoreConnectAppInfoMetadata -IssuerId 'Value' -KeyId 'Value'
+Sync-AppStoreConnectAppInfoMetadata -ConfigPath 'C:\Path' -IssuerId 'Value' -KeyId 'Value'
 ```
 
 

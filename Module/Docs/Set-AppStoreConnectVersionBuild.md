@@ -21,7 +21,7 @@ Creates or finds an App Store version and selects a processed build for Distribu
 
 ### EXAMPLE 1
 ```powershell
-Set-AppStoreConnectVersionBuild -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value'
+Set-AppStoreConnectVersionBuild -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value' -Platform 'Value'
 ```
 
 

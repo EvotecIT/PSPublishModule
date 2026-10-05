@@ -37,13 +37,13 @@ Get-BenchmarkInput -Name 'Name'
 
 ### EXAMPLE 2
 ```powershell
-Get-BenchmarkInput -Bool
+Get-BenchmarkInput -Name 'Name' -Bool
 ```
 
 
 ### EXAMPLE 3
 ```powershell
-Get-BenchmarkInput -Int
+Get-BenchmarkInput -Name 'Name' -Int
 ```
 
 

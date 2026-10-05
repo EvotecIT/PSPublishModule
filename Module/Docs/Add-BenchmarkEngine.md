@@ -21,7 +21,7 @@ Adds a benchmark engine.
 
 ### EXAMPLE 1
 ```powershell
-Add-BenchmarkEngine -Name 'Name'
+Add-BenchmarkEngine -Name 'Name' -ScriptBlock { }
 ```
 
 
