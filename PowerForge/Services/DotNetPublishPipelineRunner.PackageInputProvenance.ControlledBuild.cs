@@ -156,7 +156,7 @@ public sealed partial class DotNetPublishPipelineRunner
 
         private string DescribePackageInputVerificationFailure(string fullInput, string root)
         {
-            if (IsReparsePoint(root) || HasReparsePointBelowRoot(fullInput, root))
+            if (HasReparsePointBelowRoot(fullInput, root))
                 return $"package input '{Path.GetFileName(fullInput)}' traversed an unverified reparse point";
 
             string relative = FrameworkCompatibility.GetRelativePath(root, fullInput)

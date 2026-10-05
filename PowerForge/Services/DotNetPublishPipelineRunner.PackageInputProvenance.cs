@@ -817,7 +817,10 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             try
             {
-                if (IsReparsePoint(root) || HasReparsePointBelowRoot(path, root))
+                // The configured cache root may be an alias to relocated storage. Trust comes
+                // from the pinned archive hash and byte comparison below, not its location.
+                // Links inside the package remain outside the accepted extraction contract.
+                if (HasReparsePointBelowRoot(path, root))
                     return false;
 
                 string relative = FrameworkCompatibility.GetRelativePath(root, path)
@@ -1073,18 +1076,6 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 hashes.Clear();
                 return false;
-            }
-        }
-
-        private static bool IsReparsePoint(string path)
-        {
-            try
-            {
-                return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
-            }
-            catch
-            {
-                return true;
             }
         }
     }
