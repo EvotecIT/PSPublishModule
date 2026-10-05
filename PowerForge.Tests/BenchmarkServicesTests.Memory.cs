@@ -9,6 +9,7 @@ public sealed class PowerShellBenchmarkMemoryTests
     [InlineData("")]
     [InlineData("Operation")]
     [InlineData("Validation")]
+    [InlineData("Metrics")]
     public void Runner_RecordsOperationMemoryEvenWhenTheOperationOrValidationFails(string failure)
     {
         var suite = CreateMemorySuite();
@@ -21,6 +22,9 @@ public sealed class PowerShellBenchmarkMemoryTests
         suite.Validate = ScriptBlock.Create(
             "param($case, $run) $run.ValidationBuffer = [byte[]]::new(32MB); "
             + (failure == "Validation" ? "throw 'validation failed'" : ""));
+        if (failure == "Metrics")
+            suite.Metrics.Add(new PowerForge.PowerShellBenchmarkMetric { Name = "Probe", ScriptBlock = ScriptBlock.Create(
+                "param($case, $run) $run.MetricBuffer = [byte[]]::new(32MB); throw 'metrics failed'") });
 
         try
         {

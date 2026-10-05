@@ -235,6 +235,7 @@ public sealed partial class PowerShellBenchmarkRunner
         var durationMs = 0d;
         var stage = "Setup";
         Stopwatch? operationStopwatch = null;
+        var operationMeasurementsCaptured = false;
         OperationMemorySnapshot memoryBefore = default;
         long? allocatedBytes = null;
         long? workingSetDeltaBytes = null;
@@ -259,6 +260,7 @@ public sealed partial class PowerShellBenchmarkRunner
             InvokeOperation(item.Handler, operationStopwatch, caseObject, runObject);
             durationMs = operationStopwatch.Elapsed.TotalMilliseconds;
             CaptureOperationMemoryDifference(memoryBefore, out allocatedBytes, out workingSetDeltaBytes);
+            operationMeasurementsCaptured = true;
             memorySampler?.Stop();
             stage = "Memory sampling";
             memorySampler?.ThrowIfFailed();
@@ -280,7 +282,7 @@ public sealed partial class PowerShellBenchmarkRunner
         }
         catch (Exception ex) when (!IsPowerShellStopRequest(ex))
         {
-            if (operationStopwatch is not null)
+            if (operationStopwatch is not null && !operationMeasurementsCaptured)
             {
                 operationStopwatch.Stop();
                 durationMs = operationStopwatch.Elapsed.TotalMilliseconds;

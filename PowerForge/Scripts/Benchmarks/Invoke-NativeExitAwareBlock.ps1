@@ -3,7 +3,8 @@ param(
     [object[]] $Arguments = @(),
     [bool] $StrictMode = $false,
     [object] $NativeExitCodeTrackerType,
-    [System.Diagnostics.Stopwatch] $OperationStopwatch
+    [System.Diagnostics.Stopwatch] $OperationStopwatch,
+    [bool] $CapturedOperationBody = $false
 )
 
 $previousGlobalLastExitCodeVariable = Get-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
@@ -34,12 +35,18 @@ try {
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
     }
-    if ($null -ne $OperationStopwatch) { $OperationStopwatch.Start() }
-    try {
-        & $Block @Arguments
-    }
-    finally {
-        if ($null -ne $OperationStopwatch) { $OperationStopwatch.Stop() }
+    if ($CapturedOperationBody -and $null -ne $OperationStopwatch) {
+        $operationVariables = [System.Collections.Generic.List[System.Management.Automation.PSVariable]]::new()
+        $operationVariables.Add([System.Management.Automation.PSVariable]::new('__PowerForgeOperationStopwatch', $OperationStopwatch))
+        $Block.InvokeWithContext($null, $operationVariables, $Arguments)
+    } else {
+        if ($null -ne $OperationStopwatch) { $OperationStopwatch.Start() }
+        try {
+            & $Block @Arguments
+        }
+        finally {
+            if ($null -ne $OperationStopwatch) { $OperationStopwatch.Stop() }
+        }
     }
     $nativeExitCode = $nativeExitTracker.FirstFailureExitCode
     if ($null -eq $nativeExitCode) {

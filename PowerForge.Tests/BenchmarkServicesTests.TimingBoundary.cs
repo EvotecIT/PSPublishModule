@@ -8,9 +8,11 @@ namespace PowerForge.Tests;
 public sealed partial class BenchmarkServicesTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Runner_TimesOperationBodyAndRetainsFailedDurationWithoutGuardSetup(bool failOperation)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void Runner_TimesOperationBodyAndRetainsFailedDurationWithoutGuardSetup(bool failOperation, bool capturedDsl)
     {
         string root = CreateTempRoot();
         var previous = Runspace.DefaultRunspace;
@@ -19,21 +21,37 @@ public sealed partial class BenchmarkServicesTests
         try
         {
             Runspace.DefaultRunspace = runspace;
-            runspace.SessionStateProxy.SetVariable("PowerForgeBenchmarkDslCommandAliases", new SlowTimingAliases());
             runspace.SessionStateProxy.SetVariable("timingFixtureFailure", failOperation);
             runspace.SessionStateProxy.SetVariable("LASTEXITCODE", 13);
-            var suite = new PowerShellBenchmarkSuite { Name = "timing", OutputRoot = root, WarmupCount = 0,
-                IterationCount = 1, Artifacts = BenchmarkArtifactKind.None };
-            var engine = new PowerShellBenchmarkEngine { Name = "Managed" };
-            engine.Operations.Add("Run", ScriptBlock.Create("""
+            const string operation = """
 param($case, $run)
 $watch = [System.Diagnostics.Stopwatch]::StartNew()
 [System.Threading.Thread]::Sleep(40)
 $watch.Stop()
 $global:timingFixtureObservedMs = $watch.Elapsed.TotalMilliseconds
 if ($timingFixtureFailure) { throw 'Observed operation failure' }
-"""));
-            suite.Engines.Add(engine);
+""";
+            PowerShellBenchmarkSuite suite;
+            if (capturedDsl)
+            {
+                suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(ScriptBlock.Create(
+                    "New-BenchmarkSuite 'timing' { Add-BenchmarkEngine Managed { Add-BenchmarkOperation Run { "
+                    + operation + " } } }")));
+                suite.Engines.Single().Operations["Run"].Module.SessionState.PSVariable.Set(
+                    "capturedFunctions", new SlowTimingAliases());
+            }
+            else
+            {
+                suite = new PowerShellBenchmarkSuite { Name = "timing" };
+                var engine = new PowerShellBenchmarkEngine { Name = "Managed" };
+                engine.Operations.Add("Run", ScriptBlock.Create(operation));
+                suite.Engines.Add(engine);
+            }
+            suite.OutputRoot = root;
+            suite.WarmupCount = 0;
+            suite.IterationCount = 1;
+            suite.Artifacts = BenchmarkArtifactKind.None;
+            runspace.SessionStateProxy.SetVariable("PowerForgeBenchmarkDslCommandAliases", new SlowTimingAliases());
             var result = new PowerShellBenchmarkRunner().Run(suite);
             var sample = Assert.Single(result.Samples);
             double innerMs = Convert.ToDouble(runspace.SessionStateProxy.GetVariable("timingFixtureObservedMs"));

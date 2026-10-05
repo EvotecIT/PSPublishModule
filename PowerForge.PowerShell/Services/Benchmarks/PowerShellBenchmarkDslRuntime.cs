@@ -708,8 +708,10 @@ try {
             functionsToDefine: null,
             variablesToDefine: CreateInvocationVariables(),
             new object[] { closer, new object[] { scriptBlock }, true, typeof(PowerShellNativeExitCodeTracker) });
-        return output.FirstOrDefault()?.BaseObject as ScriptBlock
+        var captured = output.FirstOrDefault()?.BaseObject as ScriptBlock
                ?? throw new InvalidOperationException("Benchmark block capture did not return a script block.");
+        PowerShellBenchmarkCapturedBlocks.Register(captured);
+        return captured;
     }
 
     private static ScriptBlock PrepareRootScriptBlock(ScriptBlock scriptBlock)
