@@ -17,7 +17,7 @@ public sealed partial class PowerShellBenchmarkRunner
     private static Collection<PSObject> InvokeGuarded(ScriptBlock block, object[] args, Stopwatch? stopwatch)
     {
         var capturedOperation = stopwatch is not null && PowerShellBenchmarkCapturedBlocks.Contains(block);
-        using var timingScope = PowerShellBenchmarkCapturedBlocks.EnterTiming(capturedOperation ? stopwatch : null);
+        using var timingScope = PowerShellBenchmarkCapturedBlocks.EnterTiming(block, capturedOperation ? stopwatch : null);
         var variables = new List<PSVariable>
         {
             new("ErrorActionPreference", ActionPreference.Stop),

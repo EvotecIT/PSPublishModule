@@ -102,4 +102,51 @@ if ($timingFixtureFailure) { throw 'Observed operation failure' }
             return new Dictionary<string, string> { ["timing-unused-alias"] = "Write-Output" }.GetEnumerator();
         }
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Runner_NestedCapturedHandlersCannotStopTheirCallersTimer(bool recurse)
+    {
+        string root = CreateTempRoot();
+        var previous = Runspace.DefaultRunspace;
+        using var runspace = RunspaceFactory.CreateRunspace();
+        runspace.Open();
+        try
+        {
+            Runspace.DefaultRunspace = runspace;
+            var invocation = new Hashtable();
+            runspace.SessionStateProxy.SetVariable("timingNestedInvocation", invocation);
+            var suite = Assert.Single(PowerShellBenchmarkDslRuntime.Evaluate(ScriptBlock.Create("""
+New-BenchmarkSuite nested {
+    Add-BenchmarkEngine Managed {
+        Add-BenchmarkOperation Outer {
+            param($case, $run)
+            if ($timingNestedInvocation.Active) { [System.Threading.Thread]::Sleep(40); return }
+            $innerWatch = [System.Diagnostics.Stopwatch]::StartNew()
+            $timingNestedInvocation.Active = $true
+            try { & $timingNestedInvocation.Handler $case $run }
+            finally { $timingNestedInvocation.Active = $false }
+            [System.Threading.Thread]::Sleep(300)
+            $innerWatch.Stop()
+            $global:timingNestedObservedMs = $innerWatch.Elapsed.TotalMilliseconds
+        }
+        Add-BenchmarkOperation Inner { param($case, $run) [System.Threading.Thread]::Sleep(40) }
+    }
+}
+""")));
+            var operations = suite.Engines.Single().Operations;
+            invocation["Handler"] = operations[recurse ? "Outer" : "Inner"];
+            operations.Remove("Inner");
+            suite.OutputRoot = root;
+            suite.WarmupCount = 0;
+            suite.IterationCount = 1;
+            suite.Artifacts = BenchmarkArtifactKind.None;
+            var sample = Assert.Single(new PowerShellBenchmarkRunner().Run(suite).Samples);
+            double observed = Convert.ToDouble(runspace.SessionStateProxy.GetVariable("timingNestedObservedMs"));
+            Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status);
+            Assert.InRange(sample.DurationMs, observed, observed + 200);
+        }
+        finally { Runspace.DefaultRunspace = previous; Directory.Delete(root, true); }
+    }
 }

@@ -10,26 +10,48 @@ namespace PowerForge;
 // without changing their public argument list or retaining completed suites.
 internal static class PowerShellBenchmarkCapturedBlocks
 {
-    private static readonly ConditionalWeakTable<ScriptBlock, object> Blocks = new();
-    private static readonly AsyncLocal<Stopwatch?> CurrentTimer = new();
+    private static readonly ConditionalWeakTable<ScriptBlock, TimingIdentity> Blocks = new();
+    private static readonly AsyncLocal<TimingInvocation?> CurrentInvocation = new();
 
     // The captured delegate remains usable after its declaring runspace is disposed.
     // Each invocation restores its predecessor, including nested or failing runs.
-    internal static Func<Stopwatch?> TimerAccessor { get; } = () => CurrentTimer.Value;
+    internal static TimingIdentity CreateIdentity() => new();
 
-    internal static IDisposable EnterTiming(Stopwatch? timer)
+    internal static IDisposable EnterTiming(ScriptBlock block, Stopwatch? timer)
     {
-        var previous = CurrentTimer.Value;
-        CurrentTimer.Value = timer;
+        var previous = CurrentInvocation.Value;
+        CurrentInvocation.Value = timer is not null && Blocks.TryGetValue(block, out var identity)
+            ? new TimingInvocation(identity, timer) : null;
         return new TimingScope(previous);
     }
 
-    internal static void Register(ScriptBlock block) => Blocks.Add(block, new object());
+    internal static void Register(ScriptBlock block, TimingIdentity identity) => Blocks.Add(block, identity);
 
     internal static bool Contains(ScriptBlock block) => Blocks.TryGetValue(block, out _);
 
-    private sealed class TimingScope(Stopwatch? previous) : IDisposable
+    internal sealed class TimingIdentity
     {
-        public void Dispose() => CurrentTimer.Value = previous;
+        internal Func<Stopwatch?> TimerAccessor => ClaimTimer;
+
+        // A direct nested handler must not stop its caller's clock. A one-time claim
+        // also excludes recursion of the same handler from owning the outer timer.
+        private Stopwatch? ClaimTimer()
+        {
+            var invocation = CurrentInvocation.Value;
+            return invocation is not null && ReferenceEquals(invocation.Identity, this)
+                && Interlocked.Exchange(ref invocation.Claimed, 1) == 0 ? invocation.Timer : null;
+        }
+    }
+
+    private sealed class TimingInvocation(TimingIdentity identity, Stopwatch timer)
+    {
+        internal TimingIdentity Identity { get; } = identity;
+        internal Stopwatch Timer { get; } = timer;
+        internal int Claimed;
+    }
+
+    private sealed class TimingScope(TimingInvocation? previous) : IDisposable
+    {
+        public void Dispose() => CurrentInvocation.Value = previous;
     }
 }
