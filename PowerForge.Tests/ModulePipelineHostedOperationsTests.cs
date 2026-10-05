@@ -3494,7 +3494,7 @@ public sealed partial class ModulePipelineHostedOperationsTests
         public ModuleValidationReport ValidateModule(ModuleValidationSpec spec)
             => throw new InvalidOperationException("Not used in this test.");
 
-        public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget)
+        public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget, IReadOnlyDictionary<string, string[]>? optionalDependencies = null)
         {
             BinaryDependencyRoots.Add(moduleRoot);
             BinaryDependencyManifestsAvailable.Add(!string.IsNullOrWhiteSpace(modulePath) && File.Exists(modulePath));

@@ -79,9 +79,9 @@ internal sealed class PowerShellModulePipelineHostedOperations :
     public ModuleValidationReport ValidateModule(ModuleValidationSpec spec)
         => new ModuleValidationService(_logger, _runner).Run(spec);
 
-    public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget)
+    public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget, IReadOnlyDictionary<string, string[]>? optionalDependencies = null)
     {
-        var result = _dependencyPreflight.Analyze(moduleRoot, powerShellEdition, modulePath);
+        var result = _dependencyPreflight.Analyze(moduleRoot, powerShellEdition, modulePath, optionalDependencies);
         if (!result.HasIssues)
             return;
 

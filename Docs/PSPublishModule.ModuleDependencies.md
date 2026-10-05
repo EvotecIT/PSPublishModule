@@ -29,6 +29,29 @@ workflows. It is not a runtime dependency declaration.
 carry selected dependency payloads without adding those modules to PSD1
 `RequiredModules`.
 
+## Optional Binary References
+
+Binary dependency preflight checks the assemblies delivered with the module.
+Some libraries reference alternative providers and load only the selected one.
+Declare those optional references by exact referring and dependency DLL filenames:
+
+```powershell
+New-ConfigurationImportModule -ImportSelf -OptionalBinaryDependencies @{
+    'itext.bouncy-castle-connector.dll' = @('itext.bouncy-castle-fips-adapter.dll')
+}
+```
+
+This example applies when the module delivers iText's standard Bouncy Castle
+adapter. It exempts only the connector's reference to the alternative FIPS
+adapter. It does not install an adapter or change which provider iText selects.
+Every other missing reference remains an error, including references to the
+same DLL from another assembly. Assemblies explicitly required by the module
+manifest remain required. Paths and wildcards are rejected.
+
+Use this only for references whose absence is supported by the library and
+validated by the module's intended operations. Core/Desktop import checks still
+run; a successful import alone does not exercise every lazily loaded provider.
+
 ## PSD1 Rebuild Contract
 
 The build definition is the source of truth. Existing PSD1 files can provide
