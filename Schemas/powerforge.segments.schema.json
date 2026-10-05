@@ -191,6 +191,14 @@
       "properties": {
         "Self": { "type": ["boolean", "null"] },
         "RequiredModules": { "type": ["boolean", "null"] },
+        "AnalyzeBinaryConflicts": { "type": ["boolean", "null"] },
+        "PreferBinaryConflictOrder": { "type": ["boolean", "null"] },
+        "SkipBinaryDependencyCheck": { "type": ["boolean", "null"] },
+        "OptionalBinaryDependencies": {
+          "type": ["object", "null"],
+          "description": "Exact referring DLL filenames mapped to optional dependency DLL filenames. Other missing references and manifest-declared assemblies remain errors.",
+          "additionalProperties": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+        },
         "Verbose": { "type": ["boolean", "null"] }
       }
     },

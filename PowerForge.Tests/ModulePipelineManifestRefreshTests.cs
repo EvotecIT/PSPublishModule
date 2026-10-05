@@ -864,7 +864,7 @@ public sealed class ModulePipelineManifestRefreshTests
         public ModuleValidationReport ValidateModule(ModuleValidationSpec spec)
             => throw new InvalidOperationException("Not used in this test.");
 
-        public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget)
+        public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget, IReadOnlyDictionary<string, string[]>? optionalDependencies = null)
             => throw new InvalidOperationException("Not used in this test.");
 
         public ModuleTestSuiteResult RunModuleTestSuite(ModuleTestSuiteSpec spec)

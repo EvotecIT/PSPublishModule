@@ -82,6 +82,13 @@ public sealed class ImportModulesConfiguration
     /// <summary>Skip binary dependency preflight before importing the built module.</summary>
     public bool? SkipBinaryDependencyCheck { get; set; }
 
+    /// <summary>
+    /// Optional assembly references, keyed by the referring DLL filename. Values
+    /// are exact optional DLL filenames; wildcards and manifest entries are not supported.
+    /// Import validation still runs and all other missing references remain errors.
+    /// </summary>
+    public Dictionary<string, string[]>? OptionalBinaryDependencies { get; set; }
+
     /// <summary>Enable verbose output.</summary>
     public bool? Verbose { get; set; }
 }

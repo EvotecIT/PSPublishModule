@@ -472,6 +472,7 @@ public sealed partial class ModulePipelineRunner
                     if (cfg.AnalyzeBinaryConflicts.HasValue) importModules.AnalyzeBinaryConflicts = cfg.AnalyzeBinaryConflicts;
                     if (cfg.PreferBinaryConflictOrder.HasValue) importModules.PreferBinaryConflictOrder = cfg.PreferBinaryConflictOrder;
                     if (cfg.SkipBinaryDependencyCheck.HasValue) importModules.SkipBinaryDependencyCheck = cfg.SkipBinaryDependencyCheck;
+                    if (cfg.OptionalBinaryDependencies is not null) importModules.OptionalBinaryDependencies = cfg.OptionalBinaryDependencies;
                     if (cfg.Verbose.HasValue) importModules.Verbose = cfg.Verbose;
                     break;
                 }

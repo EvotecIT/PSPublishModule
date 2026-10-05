@@ -159,7 +159,8 @@ public sealed partial class ModulePipelineRunner
                 moduleRoot,
                 target.PowerShellEdition,
                 manifestPath ?? Path.Combine(moduleRoot, plan.ModuleName + ".psd1"),
-                target.Label);
+                target.Label,
+                plan.ImportModules?.OptionalBinaryDependencies);
         }
     }
 

@@ -6,7 +6,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class BinaryDependencyPreflightServiceTests
+public sealed partial class BinaryDependencyPreflightServiceTests
 {
     [Theory]
     [InlineData("RequiredAssemblies")]

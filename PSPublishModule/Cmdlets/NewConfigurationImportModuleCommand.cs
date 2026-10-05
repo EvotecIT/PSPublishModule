@@ -1,4 +1,8 @@
 using System.Management.Automation;
+using System.Collections.Generic;
+using System.Collections;
+using System.Linq;
+using System;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -23,6 +27,11 @@ namespace PSPublishModule;
 /// <prefix>PS&gt; </prefix>
 /// <code>New-ConfigurationImportModule -ImportSelf</code>
 /// </example>
+/// <example>
+/// <summary>Declare an alternative provider reference as optional</summary>
+/// <code>New-ConfigurationImportModule -ImportSelf -OptionalBinaryDependencies @{ 'Connector.dll' = @('AlternativeProvider.dll') }</code>
+/// <para>Only this exact reference is optional. Other missing dependencies and manifest-declared assemblies still fail validation.</para>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationImportModule")]
 public sealed class NewConfigurationImportModuleCommand : PSCmdlet
 {
@@ -41,6 +50,9 @@ public sealed class NewConfigurationImportModuleCommand : PSCmdlet
     /// <summary>Skips binary dependency preflight before importing the built module.</summary>
     [Parameter] public SwitchParameter SkipBinaryDependencyCheck { get; set; }
 
+    /// <summary>Maps each referring DLL filename to exact optional dependency DLL filenames.</summary>
+    [Parameter] public Hashtable? OptionalBinaryDependencies { get; set; }
+
     /// <summary>Emits import configuration for the build pipeline.</summary>
     protected override void ProcessRecord()
     {
@@ -51,6 +63,10 @@ public sealed class NewConfigurationImportModuleCommand : PSCmdlet
             AnalyzeBinaryConflicts = MyInvocation.BoundParameters.ContainsKey(nameof(SkipBinaryConflictAnalysis)) ? !SkipBinaryConflictAnalysis.IsPresent : null,
             PreferBinaryConflictOrder = MyInvocation.BoundParameters.ContainsKey(nameof(PreferBinaryConflictOrder)) ? PreferBinaryConflictOrder.IsPresent : null,
             SkipBinaryDependencyCheck = MyInvocation.BoundParameters.ContainsKey(nameof(SkipBinaryDependencyCheck)) ? SkipBinaryDependencyCheck.IsPresent : null,
+            OptionalBinaryDependencies = OptionalBinaryDependencies?.Cast<DictionaryEntry>().ToDictionary(
+                entry => LanguagePrimitives.ConvertTo<string>(entry.Key),
+                entry => LanguagePrimitives.ConvertTo<string[]>(entry.Value),
+                StringComparer.OrdinalIgnoreCase),
             Verbose = MyInvocation.BoundParameters.ContainsKey("Verbose") ? true : null
         };
 
