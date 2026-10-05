@@ -36,9 +36,7 @@ try {
         $ErrorActionPreference = 'Stop'
     }
     if ($CapturedOperationBody -and $null -ne $OperationStopwatch) {
-        $operationVariables = [System.Collections.Generic.List[System.Management.Automation.PSVariable]]::new()
-        $operationVariables.Add([System.Management.Automation.PSVariable]::new('__PowerForgeOperationStopwatch', $OperationStopwatch))
-        $Block.InvokeWithContext($null, $operationVariables, $Arguments)
+        & $Block @Arguments
     } else {
         if ($null -ne $OperationStopwatch) { $OperationStopwatch.Start() }
         try {

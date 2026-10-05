@@ -1,11 +1,12 @@
 param([scriptblock] $ScriptBlock)
 
 $scriptRoot = __POWERFORGE_SCRIPT_ROOT__
+$operationTimerAccessor = $__PowerForgeOperationTimerAccessor
 $captured = @{}
 $capturedFunctions = @{}
 $skipNames = @(
     'args', 'input', 'this', 'PSItem', '_', 'Error',
-    'PWD', 'captured', 'capturedFunctions', 'scriptText', 'scriptRoot', '__PowerForgeOperationStopwatch',
+    'PWD', 'captured', 'capturedFunctions', 'scriptText', 'scriptRoot', 'operationTimerAccessor', '__PowerForgeOperationTimerAccessor',
     'BenchmarkCallerFunctions', 'PowerForgeBenchmarkDslCommandAliases', 'PowerForgeBenchmarkDslRuntimeType',
     'ConfirmPreference', 'DebugPreference', 'ErrorActionPreference', 'ErrorView',
     'InformationPreference', 'ProgressPreference', 'PSNativeCommandUseErrorActionPreference',
@@ -103,8 +104,7 @@ $scriptText = __PowerForgeBenchmarkDslInvoke -Name 'CaptureScriptText' -Argument
         $ErrorActionPreference = 'Stop'
         $PSNativeCommandUseErrorActionPreference = $true
         $operationBody = [scriptblock]::Create($scriptText)
-        $operationTimerVariable = Get-Variable -Name __PowerForgeOperationStopwatch -Scope Local -ErrorAction Ignore
-        $operationTimer = if ($null -eq $operationTimerVariable) { $null } else { $operationTimerVariable.Value }
+        $operationTimer = $operationTimerAccessor.Invoke()
         if ($null -ne $operationTimer) { $operationTimer.Start() }
         try {
             & $operationBody @args
