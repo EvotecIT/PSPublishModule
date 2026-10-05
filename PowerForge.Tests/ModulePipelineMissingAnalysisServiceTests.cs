@@ -74,7 +74,7 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
             var method = typeof(ModulePipelineRunner).GetMethod("AnalyzeMissingFunctions", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.True(method is not null, "AnalyzeMissingFunctions method signature may have changed.");
 
-            var result = (MissingFunctionAnalysisResult?)method!.Invoke(runner, new object?[] { null, "Get-Thing", plan });
+            var result = (MissingFunctionAnalysisResult?)method!.Invoke(runner, new object?[] { null, "Get-Thing", plan, Array.Empty<string>() });
 
             Assert.Equal(1, analysisService.Calls);
             Assert.Same(expected, result);
@@ -97,7 +97,7 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
     }
 
     [Fact]
-    public void AnalyzeMissingFunctions_PassesModuleLevelConsumerFunctionsButNotPrivateScopedFunctionsAsKnown()
+    public void AnalyzeMissingFunctions_KnowsConsumerFunctionsAndBinaryCommandsWithoutWildcardExemptions()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -133,10 +133,14 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
             var method = typeof(ModulePipelineRunner).GetMethod("AnalyzeMissingFunctions", BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.NotNull(method);
 
-            method!.Invoke(runner, new object?[] { null, code, runner.Plan(spec) });
+            method!.Invoke(runner, new object?[] { null, code, runner.Plan(spec), new[] { "Get-PDFVersion", "pdfver", "*", "Get-*" } });
 
             Assert.NotNull(analysisService.LastOptions);
             Assert.Contains("Get-ConsumerHelper", analysisService.LastOptions!.KnownFunctions, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("Get-PDFVersion", analysisService.LastOptions.KnownFunctions);
+            Assert.Contains("pdfver", analysisService.LastOptions.KnownFunctions);
+            Assert.DoesNotContain("*", analysisService.LastOptions.KnownFunctions);
+            Assert.DoesNotContain("Get-*", analysisService.LastOptions.KnownFunctions);
             Assert.DoesNotContain("Get-PrivateHelper", analysisService.LastOptions.KnownFunctions, StringComparer.OrdinalIgnoreCase);
         }
         finally

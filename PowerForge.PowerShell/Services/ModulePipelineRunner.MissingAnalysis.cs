@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Management.Automation;
 using System.Management.Automation.Language;
 using System.Management.Automation.Runspaces;
 using System.Text;
@@ -10,7 +11,7 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
-    private MissingFunctionAnalysisResult? AnalyzeMissingFunctions(string? filePath, string? code, ModulePipelinePlan plan)
+    private MissingFunctionAnalysisResult? AnalyzeMissingFunctions(string? filePath, string? code, ModulePipelinePlan plan, string[] binaryCommands)
     {
         if (string.IsNullOrWhiteSpace(filePath) && string.IsNullOrWhiteSpace(code))
             return null;
@@ -21,7 +22,11 @@ public sealed partial class ModulePipelineRunner
         try
         {
             var options = new MissingFunctionsOptions(
-                knownFunctions: ResolveConsumerModuleFunctionNames(filePath, code),
+                knownFunctions: ResolveConsumerModuleFunctionNames(filePath, code)
+                    .Concat(binaryCommands)
+                    .Where(static name => !string.IsNullOrWhiteSpace(name) && !WildcardPattern.ContainsWildcardCharacters(name))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
                 approvedModules: approved,
                 ignoreFunctions: Array.Empty<string>(),
                 includeFunctionsRecursively: true,

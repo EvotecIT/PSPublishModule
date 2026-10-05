@@ -63,7 +63,12 @@ public sealed partial class ModulePipelineRunner
                 approvedModules,
                 plan.ModuleSkip?.IgnoreModuleName ?? Array.Empty<string>());
 
-            missingReport = AnalyzeMissingFunctions(analysisPath, analysisCode, plan);
+            // Compiled commands belong to this module, just like its script functions.
+            // Do not resolve them against an older installed copy of the consumer.
+            var binaryCommands = mergeInfo.HasLib
+                ? buildResult.Exports.Cmdlets.Concat(buildResult.Exports.Aliases).ToArray()
+                : Array.Empty<string>();
+            missingReport = AnalyzeMissingFunctions(analysisPath, analysisCode, plan, binaryCommands);
             LogMergeSummary(plan, mergeInfo, missingReport, dependentRequiredModules);
             if (missingReport is not null)
                 ValidateMissingFunctions(missingReport, plan, dependentRequiredModules);
