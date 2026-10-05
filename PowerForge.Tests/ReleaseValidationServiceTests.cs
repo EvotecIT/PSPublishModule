@@ -352,6 +352,7 @@ public sealed class ReleaseValidationServiceTests : IDisposable
             roots.Add(request.WorkingDirectory);
             Assert.Equal(Path.Combine(request.WorkingDirectory, "packages"), request.EnvironmentVariables!["NUGET_PACKAGES"]);
             Assert.Equal(request.WorkingDirectory, request.EnvironmentVariables["DOTNET_CLI_HOME"]);
+            Assert.Equal("false", request.EnvironmentVariables["DOTNET_ADD_GLOBAL_TOOLS_TO_PATH"]);
             if (request.Arguments.Contains("install")) {
                 ReleaseValidationToolInstallFixture.Complete(request, "example");
                 Assert.Contains("1.2.3", request.Arguments);
