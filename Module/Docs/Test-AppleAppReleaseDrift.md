@@ -21,7 +21,7 @@ Tests local Xcode project version values against App Store Connect.
 
 ### EXAMPLE 1
 ```powershell
-Test-AppleAppReleaseDrift -IssuerId 'Value' -KeyId 'Value'
+Test-AppleAppReleaseDrift -Path 'C:\Path' -IssuerId 'Value' -KeyId 'Value'
 ```
 
 

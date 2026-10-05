@@ -21,7 +21,7 @@ Adds a README or Markdown benchmark block target.
 
 ### EXAMPLE 1
 ```powershell
-Add-BenchmarkReadmeBlock -Block 'Value'
+Add-BenchmarkReadmeBlock -Path 'C:\Path' -Block 'Value'
 ```
 
 

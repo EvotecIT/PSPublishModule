@@ -21,7 +21,7 @@ Reads Apple state and produces a non-mutating commerce and compliance drift plan
 
 ### EXAMPLE 1
 ```powershell
-Get-AppStoreConnectGovernancePlan -IssuerId 'Value' -KeyId 'Value'
+Get-AppStoreConnectGovernancePlan -ConfigPath 'C:\Path' -IssuerId 'Value' -KeyId 'Value'
 ```
 
 

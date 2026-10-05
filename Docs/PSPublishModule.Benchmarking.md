@@ -75,6 +75,12 @@ the file and can read a complete snapshot while an accepted update replaces it.
 run after a failed gate. Keep the history file as a local or CI artifact alongside
 the complete run reports used to calibrate it.
 
+Timing history separates reports with different `operationTimingBoundary`
+metadata and different enabled memory-sampling intervals. Measurements of the
+guarded operation body require their own accepted references; earlier measurements
+that included invocation setup cannot qualify that cohort. Legacy reports without
+the boundary field retain their existing identity.
+
 ## Benchmark Specs
 
 For Windows measurements that need fixed processor placement, declare
@@ -262,6 +268,12 @@ in this order:
 Setup, data generation, validation, and metric capture are outside the timed
 operation. Validation and metric failures are still recorded as failed benchmark
 samples so fast but invalid output is visible.
+
+Guard preparation, native-exit tracker setup, and DSL alias installation finish
+before timing starts. Timing stops in `finally` before the wrapper checks exit
+codes and restores caller state. Native failures still fail the sample, and an
+operation that throws retains its elapsed duration. Reports record this boundary
+as `operationTimingBoundary = GuardedScriptBodyV1`.
 
 ## Profiles And Cleanup
 

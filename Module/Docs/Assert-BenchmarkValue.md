@@ -26,13 +26,13 @@ Asserts a benchmark value condition.
 
 ### EXAMPLE 1
 ```powershell
-Assert-BenchmarkValue -Actual 'Value'
+Assert-BenchmarkValue -Actual 'Value' -Expected 'Value'
 ```
 
 
 ### EXAMPLE 2
 ```powershell
-Assert-BenchmarkValue -NotNull
+Assert-BenchmarkValue -Actual 'Value' -NotNull
 ```
 
 

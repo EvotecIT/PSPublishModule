@@ -21,7 +21,7 @@ Adds a custom benchmark metric.
 
 ### EXAMPLE 1
 ```powershell
-Add-BenchmarkMetric -Name 'Name'
+Add-BenchmarkMetric -Name 'Name' -ScriptBlock { }
 ```
 
 

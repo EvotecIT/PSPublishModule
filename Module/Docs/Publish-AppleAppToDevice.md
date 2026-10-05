@@ -21,7 +21,7 @@ Builds, installs, and optionally launches an Apple app on a physical device.
 
 ### EXAMPLE 1
 ```powershell
-Publish-AppleAppToDevice -Scheme 'Value'
+Publish-AppleAppToDevice -ProjectPath 'C:\Path' -Scheme 'Value'
 ```
 
 

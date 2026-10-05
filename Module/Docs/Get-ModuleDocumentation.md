@@ -40,6 +40,18 @@ Resolves documentation files from an installed module (root or Internals folder)
 
 ### EXAMPLE 1
 ```powershell
+Get-ModuleDocumentation -Name 'Name'
+```
+
+
+### EXAMPLE 2
+```powershell
+Get-ModuleDocumentation -All
+```
+
+
+### EXAMPLE 3
+```powershell
 Get-ModuleDocumentation -DocsPath 'C:\Path'
 ```
 

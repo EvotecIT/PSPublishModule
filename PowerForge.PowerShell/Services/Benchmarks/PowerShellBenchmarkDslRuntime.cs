@@ -704,12 +704,17 @@ try {
         var closer = ScriptBlock.Create(EmbeddedScripts
             .Load("Scripts/Benchmarks/Close-BenchmarkBlock.Template.ps1")
             .Replace("__POWERFORGE_SCRIPT_ROOT__", scriptRootLiteral));
+        var captureVariables = CreateInvocationVariables();
+        var timingIdentity = PowerShellBenchmarkCapturedBlocks.CreateIdentity();
+        captureVariables.Add(new PSVariable("__PowerForgeOperationTimerAccessor", timingIdentity.TimerAccessor));
         var output = NativeExitAwareInvokeWrapper.InvokeWithContext(
             functionsToDefine: null,
-            variablesToDefine: CreateInvocationVariables(),
+            variablesToDefine: captureVariables,
             new object[] { closer, new object[] { scriptBlock }, true, typeof(PowerShellNativeExitCodeTracker) });
-        return output.FirstOrDefault()?.BaseObject as ScriptBlock
+        var captured = output.FirstOrDefault()?.BaseObject as ScriptBlock
                ?? throw new InvalidOperationException("Benchmark block capture did not return a script block.");
+        PowerShellBenchmarkCapturedBlocks.Register(captured, timingIdentity);
+        return captured;
     }
 
     private static ScriptBlock PrepareRootScriptBlock(ScriptBlock scriptBlock)

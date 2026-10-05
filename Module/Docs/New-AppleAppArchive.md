@@ -21,7 +21,7 @@ Creates an Apple app .xcarchive using xcodebuild.
 
 ### EXAMPLE 1
 ```powershell
-New-AppleAppArchive -Scheme 'Value'
+New-AppleAppArchive -ProjectPath 'C:\Path' -Scheme 'Value'
 ```
 
 

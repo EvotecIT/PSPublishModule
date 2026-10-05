@@ -1,11 +1,12 @@
 param([scriptblock] $ScriptBlock)
 
 $scriptRoot = __POWERFORGE_SCRIPT_ROOT__
+$operationTimerAccessor = $__PowerForgeOperationTimerAccessor
 $captured = @{}
 $capturedFunctions = @{}
 $skipNames = @(
     'args', 'input', 'this', 'PSItem', '_', 'Error',
-    'PWD', 'captured', 'capturedFunctions', 'scriptText', 'scriptRoot',
+    'PWD', 'captured', 'capturedFunctions', 'scriptText', 'scriptRoot', 'operationTimerAccessor', '__PowerForgeOperationTimerAccessor',
     'BenchmarkCallerFunctions', 'PowerForgeBenchmarkDslCommandAliases', 'PowerForgeBenchmarkDslRuntimeType',
     'ConfirmPreference', 'DebugPreference', 'ErrorActionPreference', 'ErrorView',
     'InformationPreference', 'ProgressPreference', 'PSNativeCommandUseErrorActionPreference',
@@ -102,7 +103,15 @@ $scriptText = __PowerForgeBenchmarkDslInvoke -Name 'CaptureScriptText' -Argument
         }
         $ErrorActionPreference = 'Stop'
         $PSNativeCommandUseErrorActionPreference = $true
-        & ([scriptblock]::Create($scriptText)) @args
+        $operationBody = [scriptblock]::Create($scriptText)
+        $operationTimer = $operationTimerAccessor.Invoke()
+        if ($null -ne $operationTimer) { $operationTimer.Start() }
+        try {
+            & $operationBody @args
+        }
+        finally {
+            if ($null -ne $operationTimer) { $operationTimer.Stop() }
+        }
     }
     finally {
         foreach ($entry in $capturedFunctions.GetEnumerator()) {

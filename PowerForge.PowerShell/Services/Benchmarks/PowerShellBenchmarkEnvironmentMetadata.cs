@@ -58,6 +58,7 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
             ["profile"] = suite.Profile.ToString(),
             ["cleanup"] = suite.Cleanup.ToString(),
             ["warmupCount"] = suite.WarmupCount.ToString(CultureInfo.InvariantCulture),
+            ["operationTimingBoundary"] = "GuardedScriptBodyV1",
             ["iterationCount"] = suite.IterationCount.ToString(CultureInfo.InvariantCulture),
             ["runOrder"] = suite.RunOrder.ToString(),
             ["memoryCleanup"] = suite.MemoryCleanup.ToString(),
