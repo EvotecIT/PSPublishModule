@@ -670,8 +670,10 @@ public static partial class WebSitemapGenerator
         var context = new TemplateContext
         {
             LoopLimit = 0,
-            // Scriban otherwise silently truncates a captured loop's rendered HTML at 1 MiB.
-            LimitToString = int.MaxValue
+            // Allow large maps beyond Scriban's 1 MiB default, while failing oversized renders explicitly.
+            LimitToString = 32 * 1024 * 1024,
+            OnStringLimit = Scriban.ScriptLimitBehavior.Throw,
+            OnOutputLimit = Scriban.ScriptLimitBehavior.Throw
         };
         context.PushGlobal(globals);
 
@@ -717,7 +719,7 @@ public static partial class WebSitemapGenerator
   <style>
     body { margin: 0; font-family: Segoe UI, Arial, sans-serif; background: var(--pf-bg, #f8fafc); color: var(--pf-ink, #0f172a); }
     .pf-sitemap-wrap { box-sizing: border-box; max-width: 1080px; margin: 0 auto; padding: 38px 18px 44px; overflow-wrap: anywhere; }
-    .pf-sitemap-wrap h1, .pf-sitemap-group h2 { color: var(--pf-ink-strong, #0f172a); }
+    .pf-sitemap-wrap h1, .pf-sitemap-group h2 { color: var(--pf-ink, #0f172a); }
     .pf-sitemap-meta { margin-top: 8px; color: var(--pf-muted, #475569); font-size: 0.92rem; }
     .pf-sitemap-group { margin-top: 28px; }
     .pf-sitemap-group h2 { margin: 0 0 12px; font-size: 1.2rem; }

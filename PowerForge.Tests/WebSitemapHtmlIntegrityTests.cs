@@ -80,4 +80,36 @@ public sealed class WebSitemapHtmlIntegrityTests
             Directory.Delete(root, true);
         }
     }
+
+    [Theory]
+    [InlineData("{{ 'x' | string.pad_right 33554433 }}")]
+    [InlineData("{{ for i in 1..33 }}{{ 'x' | string.pad_right 1048576 }}{{ end }}")]
+    public void GenerateCustomHtml_RejectsExcessiveAllocationAndOutputWithoutReplacingExistingHtml(string template)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-html-sitemap-budget-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var templatePath = Path.Combine(root, "custom.sbn");
+            var htmlPath = Path.Combine(root, "sitemap.html");
+            File.WriteAllText(templatePath, template);
+            File.WriteAllText(htmlPath, "previous complete sitemap");
+
+            Assert.Throws<Scriban.Syntax.ScriptRuntimeException>(() => WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = root,
+                BaseUrl = "https://example.test",
+                IncludeHtmlFiles = false,
+                IncludeTextFiles = false,
+                GenerateHtml = true,
+                HtmlTemplatePath = templatePath,
+                HtmlOutputPath = htmlPath
+            }));
+            Assert.Equal("previous complete sitemap", File.ReadAllText(htmlPath));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
 }
