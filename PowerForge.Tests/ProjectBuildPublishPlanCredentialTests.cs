@@ -6,7 +6,7 @@ public sealed class ProjectBuildPublishPlanCredentialTests
 {
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
-    public void Execute_PublishEnabledPlan_DoesNotReadPublicationSecret()
+    public void Execute_PublishEnabledPlan_DoesNotResolvePublicationCredentials()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "powerforge-publish-plan", Guid.NewGuid().ToString("N")));
         try
@@ -35,22 +35,27 @@ public sealed class ProjectBuildPublishPlanCredentialTests
                   "PublishGitHub": false,
                   "NugetSource": ["feed"],
                   "PublishSource": "feed",
-                  "PublishApiKeyFilePath": "publish.secret"
+                  "PublishApiKeyFilePath": "publish.secret",
+                  "PublishApiKey": "inline-publication-sentinel"
                 }
                 """);
             var secretPath = Path.Combine(root.FullName, "publish.secret");
             File.WriteAllText(secretPath, "test-publication-secret");
-            // A read would fail: planning must leave publication-only credentials unopened.
+            // Accidental credential resolution would fall back to the inline sentinel after the locked-file read.
             using var secretLock = new FileStream(secretPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            DotNetRepositoryReleaseSpec? prepared = null;
 
             var result = new ProjectBuildHostService().Execute(new ProjectBuildHostRequest
             {
                 ConfigPath = configPath,
                 PlanOnly = true,
-                ExecuteBuild = false
+                ExecuteBuild = false,
+                BuildSpecPrepared = spec => prepared = spec
             });
 
             Assert.True(result.Success, result.ErrorMessage);
+            Assert.NotNull(prepared);
+            Assert.Null(prepared.PublishApiKey);
             var release = Assert.IsType<DotNetRepositoryReleaseResult>(result.Result.Release);
             var project = Assert.Single(release.Projects);
             Assert.Equal("1.2.3", project.NewVersion);
