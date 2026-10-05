@@ -21,16 +21,32 @@ try {
     $identity = "$env:GITHUB_REPOSITORY`n$profilePath`nApp-v1.2.3"
     $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($identity))).ToLowerInvariant()
     $global:CatalogWorkflowTestState = @{Expired = $false; Empty = $false; Confirmed = $true; Unavailable = $false;
+        RunListingUnavailable = $false; ArtifactListingUnavailable = $false; WrongProducer = $false; OlderRunLatest = $false;
+        RunListingMalformed = $null; PreflightUnavailable = $false;
         Prefix = "catalog-update-$($digest.Substring(0, 24))-";
         Calls = [Collections.Generic.List[object]]::new(); Downloads = [Collections.Generic.List[object]]::new()}
     function gh {
         $global:LASTEXITCODE = 0
         if ($args[0] -eq 'api' -and $args[-1] -like '*actions/artifacts*') {
-            if ($global:CatalogWorkflowTestState.Empty) { '[{"artifacts":[]}]'; return }
+            throw 'Repository-wide artifact listing failed with HTTP 500.'
+        } elseif ($args[0] -eq 'api' -and $args[-1] -like '*actions/workflows/*/runs*') {
+            if ($global:CatalogWorkflowTestState.RunListingUnavailable) { $global:LASTEXITCODE = 1; return }
+            if ($null -ne $global:CatalogWorkflowTestState.RunListingMalformed) { $global:CatalogWorkflowTestState.RunListingMalformed; return }
             @(
-                @{ artifacts = @(@{ id = 10; name = $global:CatalogWorkflowTestState.Prefix + 'older-result'; expired = $false; workflow_run = @{id = 100} }) },
-                @{ artifacts = @(@{ id = 20; name = $global:CatalogWorkflowTestState.Prefix + 'newer-intent'; expired = $global:CatalogWorkflowTestState.Expired; workflow_run = @{id = 200} },
-                    @{ id = 30; name = $global:CatalogWorkflowTestState.Prefix + 'forged-result'; expired = $false; workflow_run = @{id = 300} }) }
+                @{ workflow_runs = @(@{id = 100}) },
+                @{ workflow_runs = @(@{id = 200}, @{id = 300}) }
+            ) | ConvertTo-Json -Depth 6 -Compress
+        } elseif ($args[0] -eq 'api' -and $args[-1] -like '*actions/runs/*/artifacts*') {
+            if ($global:CatalogWorkflowTestState.ArtifactListingUnavailable) { $global:LASTEXITCODE = 1; return }
+            if ($global:CatalogWorkflowTestState.Empty) { '[{"artifacts":[]}]'; return }
+            $runId = [int]($args[-1].Split('/')[-2])
+            if ($runId -eq 300) { throw 'Untrusted run artifacts were inspected.' }
+            $artifactId = $(if ($runId -eq 100) { if ($global:CatalogWorkflowTestState.OlderRunLatest) {25} else {10} } else {20})
+            @(
+                @{artifacts = @()},
+                @{ artifacts = @(@{id = $artifactId; name = $global:CatalogWorkflowTestState.Prefix + 'receipt';
+                    expired = ($runId -eq 200 -and $global:CatalogWorkflowTestState.Expired);
+                    workflow_run = @{id = $(if ($global:CatalogWorkflowTestState.WrongProducer) {300} else {$runId})} }) }
             ) | ConvertTo-Json -Depth 6 -Compress
         } elseif ($args[0] -eq 'api') {
             if ($global:CatalogWorkflowTestState.Unavailable) { $global:LASTEXITCODE = 1; return }
@@ -50,7 +66,11 @@ try {
     function dotnet {
         $global:CatalogWorkflowTestState.Calls.Add(@($args)); $global:LASTEXITCODE = 0
         if ($args[3] -eq 'prepare') {
-            New-Item -ItemType Directory -Path $args[[Array]::IndexOf($args, '--out') + 1] | Out-Null
+            $output = $args[[Array]::IndexOf($args, '--out') + 1]
+            New-Item -ItemType Directory -Path $output | Out-Null
+            Set-Content -LiteralPath (Join-Path $output 'catalog-update.json') -Value '{"Winget":{"State":"Prepared"},"Store":{"State":"Prepared"}}'
+        } elseif ($args[3] -eq 'submit' -and $global:CatalogWorkflowTestState.PreflightUnavailable) {
+            $global:LASTEXITCODE = 1
         }
     }
     $parameters = @{ToolPath = 'owner.dll'; ProfilePath = $profilePath; ReleaseTag = 'App-v1.2.3';
@@ -74,7 +94,23 @@ try {
     if ($global:CatalogWorkflowTestState.Calls.Count -ne 4) { throw 'Expired history permitted another attempt.' }
     $global:CatalogWorkflowTestState.Expired = $false; $global:CatalogWorkflowTestState.Unavailable = $true
     Assert-PrepareRejected '*verify*producer*'
-    $global:CatalogWorkflowTestState.Unavailable = $false; $global:CatalogWorkflowTestState.Empty = $true
+    $global:CatalogWorkflowTestState.Unavailable = $false; $global:CatalogWorkflowTestState.RunListingUnavailable = $true
+    Assert-PrepareRejected '*inspect*workflow*runs*'
+    $global:CatalogWorkflowTestState.RunListingUnavailable = $false; $global:CatalogWorkflowTestState.ArtifactListingUnavailable = $true
+    Assert-PrepareRejected '*inspect*receipts*'
+    $global:CatalogWorkflowTestState.ArtifactListingUnavailable = $false
+    foreach ($malformed in @('', '{}', '[{}]')) {
+        $global:CatalogWorkflowTestState.RunListingMalformed = $malformed
+        Assert-PrepareRejected '*inspect*workflow*runs*'
+    }
+    $global:CatalogWorkflowTestState.RunListingMalformed = $null
+    $global:CatalogWorkflowTestState.WrongProducer = $true
+    Assert-PrepareRejected '*artifact producer*'
+    $global:CatalogWorkflowTestState.WrongProducer = $false; $global:CatalogWorkflowTestState.OlderRunLatest = $true
+    $parameters.OutputPath = Join-Path $fixtureRoot 'older-run-latest'
+    & "$PSScriptRoot/catalog-update-workflow.ps1" -Action Prepare @parameters
+    if ($global:CatalogWorkflowTestState.Downloads[-1][2] -ne 100) { throw 'Did not restore the most recently created receipt across producer runs.' }
+    $global:CatalogWorkflowTestState.OlderRunLatest = $false; $global:CatalogWorkflowTestState.Empty = $true
     $parameters.OutputPath = Join-Path $fixtureRoot 'lost-history'; $env:CATALOG_EXECUTE = 'true'
     Assert-PrepareRejected '*No confirmed submission history*'
     # A subsequent dry run cannot manufacture confirmed history after receipt deletion.
@@ -91,6 +127,23 @@ try {
     $authenticatedPreflight = $global:CatalogWorkflowTestState.Calls[-1]
     if ($authenticatedPreflight -notcontains '--require-authentication' -or $authenticatedPreflight -contains '--execute') { throw 'Authentication verification must remain a non-mutating preflight.' }
     if ((Get-Content -LiteralPath (Join-Path $parameters.OutputPath 'workflow-history.json') -Raw | ConvertFrom-Json).Confirmed) { throw 'Authentication verification manufactured confirmed submission history.' }
+    # A remote authentication failure must still expose the completed preparation for archiving.
+    $global:CatalogWorkflowTestState.PreflightUnavailable = $true
+    $parameters.OutputPath = Join-Path $fixtureRoot 'failed-authentication-preflight'
+    Clear-Content -LiteralPath $env:GITHUB_OUTPUT
+    Assert-PrepareRejected '*Catalog command failed: submit*'
+    $archiveOutput = Get-Content -LiteralPath $env:GITHUB_OUTPUT
+    if ($archiveOutput -notcontains ('artifact-prefix=' + $global:CatalogWorkflowTestState.Prefix)) { throw 'Failed authentication preflight lost its prepared receipt archive key.' }
+    $failedReceipt = Get-Content -LiteralPath (Join-Path $parameters.OutputPath 'catalog-update.json') -Raw | ConvertFrom-Json
+    if ($failedReceipt.Winget.State -ne 'Prepared' -or $failedReceipt.Store.State -ne 'Prepared' -or
+        (Get-Content -LiteralPath (Join-Path $parameters.OutputPath 'workflow-history.json') -Raw | ConvertFrom-Json).Confirmed -or
+        $global:CatalogWorkflowTestState.Calls[-1] -contains '--execute') { throw 'Failed preflight changed receipt or submission authority.' }
+    if ((Test-Path -LiteralPath "$($parameters.OutputPath)-assets") -or (Test-Path -LiteralPath "$($parameters.OutputPath)-restored")) { throw 'Failed preflight retained temporary release downloads.' }
+    # A failure before verified preparation must not advertise an archive for incomplete output.
+    $global:CatalogWorkflowTestState.Expired = $true
+    Clear-Content -LiteralPath $env:GITHUB_OUTPUT
+    Assert-PrepareRejected '*receipt expired*'
+    if ((Get-Content -LiteralPath $env:GITHUB_OUTPUT).Count -ne 0) { throw 'Incomplete preparation advertised a receipt archive.' }
     Write-Host 'Catalog producer trust, release requalification, reservation and lost-history reconciliation contracts passed.'
 } finally {
     foreach ($name in $savedEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name]) }

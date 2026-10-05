@@ -55,10 +55,11 @@ if ($Action -eq 'Prepare') {
             Remove-Item -LiteralPath $assetRoot -Recurse
         }
     } finally { if (Test-Path -LiteralPath $restoreRoot) { Remove-Item -LiteralPath $restoreRoot -Recurse } }
+    # Preparation is complete: retain its receipt even if remote preflight rejects authentication.
+    "artifact-prefix=$artifactPrefix" | Out-File -LiteralPath $env:GITHUB_OUTPUT -Append -Encoding utf8
     $preflight = @('submit', '--channel', $Channel)
     if ($env:CATALOG_EXECUTE -eq 'true' -or $env:CATALOG_VERIFY_AUTHENTICATION -eq 'true') { $preflight += '--require-authentication' }
     Invoke-Catalog -Arguments $preflight
-    "artifact-prefix=$artifactPrefix" | Out-File -LiteralPath $env:GITHUB_OUTPUT -Append -Encoding utf8
 } elseif ($Action -eq 'Reserve') {
     $reservationKey = [Guid]::NewGuid().ToString('N')
     Invoke-Catalog -Arguments @('reserve', '--channel', $Channel, '--reservation-key', $reservationKey)
