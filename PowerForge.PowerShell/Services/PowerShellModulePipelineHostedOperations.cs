@@ -218,13 +218,14 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         ModuleImportValidationTarget[] targets)
     {
         var modulesB64 = EncodeImportModules(modules);
-        var args = new List<string>(5)
+        var args = new List<string>(6)
         {
             modulesB64,
             importRequired ? "1" : "0",
             importSelf ? "1" : "0",
             manifestPath,
-            verbose ? "1" : "0"
+            verbose ? "1" : "0",
+            Convert.ToBase64String(Encoding.UTF8.GetBytes(Environment.GetEnvironmentVariable("PSModulePath") ?? string.Empty))
         };
 
         var script = EmbeddedScripts.Load("Scripts/ModulePipeline/Import-Modules.ps1");
