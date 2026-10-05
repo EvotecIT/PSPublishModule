@@ -295,7 +295,8 @@ public sealed class MissingFunctionsAnalyzer
         var commandNames = ExtractCommandNames(allCommands, visibilityAnalyzer).ToArray();
         var hasDynamicCommandInvocation = allCommands.Any(static command =>
             (string.IsNullOrWhiteSpace(command.GetCommandName()) &&
-             (command.CommandElements.Count == 0 || command.CommandElements[0] is not StringConstantExpressionAst)) ||
+             (command.CommandElements.Count == 0 || command.CommandElements[0] is not StringConstantExpressionAst) &&
+             !ScriptBlockCallbackAnalysis.IsParameterCallback(command)) ||
             string.Equals(command.GetCommandName(), "Invoke-Expression", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(command.GetCommandName(), "iex", StringComparison.OrdinalIgnoreCase));
         if (!hasDynamicCommandInvocation)
