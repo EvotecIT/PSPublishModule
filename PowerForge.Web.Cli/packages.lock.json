@@ -135,16 +135,16 @@
       },
       "Magick.NET-Q8-AnyCPU": {
         "type": "Transitive",
-        "resolved": "14.17.1",
-        "contentHash": "qcRjhaQ6XueNp2ZUAXYcDrCWlWWlzw3VatXmhCKXDpG4MABGJJr5+o1KQqOe1EtSZaDS6hQNAh4nU8XjCENDiw==",
+        "resolved": "14.17.2",
+        "contentHash": "AIvpBH4fvP3/NUwvWsVj9SxAA6hrU4p5/RNfColyrDn4jipl7loR6y4ZgYLXfBQgjmSEc7m2D2DbkWMnZt+brg==",
         "dependencies": {
-          "Magick.NET.Core": "14.17.1"
+          "Magick.NET.Core": "14.17.2"
         }
       },
       "Magick.NET.Core": {
         "type": "Transitive",
-        "resolved": "14.17.1",
-        "contentHash": "4BBbU5l5DmdT9isSNGrIE/0VwAh29SoKMSDMiIvFBDqz6vQfG6EYBFJQOemdCH3xkMfesSzImOVPjnyMf/PIqA=="
+        "resolved": "14.17.2",
+        "contentHash": "KKvR6eBUcfgkZpfHfN/UKRcK/FjHW6NXXoRRf5HJdhFk5bYLEEFuKu6op0zfNo6Msah51Yw42p599pz3A0CDQQ=="
       },
       "Microsoft.Bcl.AsyncInterfaces": {
         "type": "Transitive",
@@ -223,8 +223,8 @@
       },
       "OfficeIMO.Core": {
         "type": "Transitive",
-        "resolved": "3.4.3",
-        "contentHash": "yQruvXZQtCpslAjVkFs1uZt5BhpBouUaRYCvd57J9uAdrSs+fHp/NCQsjVS7WjkLiBFJ92f/ZwzqKx4MUGb1KQ=="
+        "resolved": "3.4.4",
+        "contentHash": "s1MD3wvn2DSj6rPHKrIfq3qzfVefQrrS2hfl7+OZOWvFsWyuZwzCGC3TxVWevQdPwHUKPs5kzJaWY0vRGDHyqw=="
       },
       "OfficeIMO.Html": {
         "type": "Transitive",
@@ -238,10 +238,10 @@
       },
       "OfficeIMO.Markdown": {
         "type": "Transitive",
-        "resolved": "3.4.3",
-        "contentHash": "TjQjJMOvYC0+3WzWrQORBEYqwrQPlU+mcRosD+izmj6dFprup6ioprt30stbJlOQPhPNmiA4RrCkpNsEZb9n6A==",
+        "resolved": "3.4.4",
+        "contentHash": "ZDzXqNzGaaI+6959gqZvIcBrYXBFnVjP8ksDRn+xrtVNJ4czcBsCvSr185BOQgp9gA3UJbYIVDD4zVRNshv30g==",
         "dependencies": {
-          "OfficeIMO.Core": "3.4.3"
+          "OfficeIMO.Core": "3.4.4"
         }
       },
       "OfficeIMO.Markdown.Html": {
@@ -366,9 +366,9 @@
         "dependencies": {
           "Google.Apis.Auth": "[1.76.0, )",
           "HtmlTinkerX": "[3.0.1, )",
-          "Magick.NET-Q8-AnyCPU": "[14.17.1, )",
-          "OfficeIMO.Markdown": "[3.4.3, )",
-          "PowerForge": "[3.0.153, )",
+          "Magick.NET-Q8-AnyCPU": "[14.17.2, )",
+          "OfficeIMO.Markdown": "[3.4.4, )",
+          "PowerForge": "[3.0.155, )",
           "Scriban": "[7.5.0, )",
           "YamlDotNet": "[18.1.0, )"
         }
