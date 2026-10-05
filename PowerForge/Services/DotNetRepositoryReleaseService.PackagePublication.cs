@@ -152,7 +152,7 @@ public sealed partial class DotNetRepositoryReleaseService
             return true;
         }
 
-        if (string.IsNullOrWhiteSpace(spec.PublishApiKey))
+        if (!spec.WhatIf && string.IsNullOrWhiteSpace(spec.PublishApiKey))
         {
             result.Success = false;
             result.ErrorMessage = "PublishApiKey is required when Publish is enabled.";
