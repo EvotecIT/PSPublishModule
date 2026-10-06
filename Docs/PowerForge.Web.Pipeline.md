@@ -1666,6 +1666,17 @@ Notes:
   - api: `surfaces.apiDotNet` or `surfaces.apiPowerShell` (when `syncApi: true`)
   - examples: `surfaces.examples` (when `syncExamples: true`)
 - Optional `projects` / `projectSlugs` limits the sync to specific catalog slugs, which is useful for project-only refresh jobs.
+- Optional `linkMappings` adapts Markdown navigation URLs when imported guides live at different routes on the consuming site. Configure mappings per project; each source and target prefix must start and end with `/`. The longest matching prefix wins, and query strings and fragments stay intact. Inline links and their used reference definitions are mapped in docs and curated Markdown examples; code samples, external URLs and other projects remain unchanged. Image-only destinations are preserved; a reference definition shared by a link and an image follows the link mapping. For example:
+
+  ```json
+  "linkMappings": {
+    "pswriteoffice": {
+      "/docs/pswriteoffice/": "/projects/pswriteoffice/docs/",
+      "/api/powershell/": "/projects/pswriteoffice/api/"
+    }
+  }
+  ```
+
 - Supports path candidates:
   - docs: `sourceDocsPaths` (array) or `sourceDocsPath` (string)
   - api: `sourceApiPaths` (array) or `sourceApiPath` (string)
