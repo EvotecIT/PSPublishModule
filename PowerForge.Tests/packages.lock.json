@@ -1145,6 +1145,9 @@
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
       },
+      "powerforge.indexnow": {
+        "type": "Project"
+      },
       "powerforge.powershell": {
         "type": "Project",
         "dependencies": {
@@ -1202,6 +1205,7 @@
         "dependencies": {
           "DBAClientX.SQLite": "[1.0.9, )",
           "NuGet.Versioning": "[7.9.0, )",
+          "PowerForge.IndexNow": "[3.0.155, )",
           "PowerForge.Web": "[3.0.155, )"
         }
       },

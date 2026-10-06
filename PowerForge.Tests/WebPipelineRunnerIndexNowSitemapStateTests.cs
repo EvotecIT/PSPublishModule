@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using PowerForge.Web.Cli;
+using PowerForge.IndexNow;
 
 namespace PowerForge.Tests;
 

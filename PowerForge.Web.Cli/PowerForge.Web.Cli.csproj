@@ -25,6 +25,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\PowerForge.IndexNow\PowerForge.IndexNow.csproj" />
     <ProjectReference Include="..\PowerForge.Web\PowerForge.Web.csproj">
       <GlobalPropertiesToRemove>PublishAot;RuntimeIdentifier;SelfContained</GlobalPropertiesToRemove>
     </ProjectReference>

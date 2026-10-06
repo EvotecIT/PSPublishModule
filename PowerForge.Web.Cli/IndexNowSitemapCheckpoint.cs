@@ -6,6 +6,8 @@ using System.Text;
 using System.Text.Json;
 using PowerForge.Web;
 
+using PowerForge.IndexNow;
+
 namespace PowerForge.Web.Cli;
 
 /// <summary>

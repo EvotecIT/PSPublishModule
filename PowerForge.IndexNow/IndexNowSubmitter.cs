@@ -9,49 +9,10 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 
-namespace PowerForge.Web.Cli;
+namespace PowerForge.IndexNow;
 
-internal sealed class IndexNowSubmissionOptions
-{
-    public IReadOnlyList<string> Urls { get; set; } = Array.Empty<string>();
-    public IReadOnlyList<string> Endpoints { get; set; } = Array.Empty<string>();
-    public string Key { get; set; } = string.Empty;
-    public string? KeyLocation { get; set; }
-    public string? Host { get; set; }
-    public bool DryRun { get; set; }
-    public bool FailOnRequestError { get; set; } = true;
-    public int BatchSize { get; set; } = 500;
-    public int RetryCount { get; set; } = 2;
-    public int RetryDelayMs { get; set; } = 500;
-    public int TimeoutSeconds { get; set; } = 20;
-}
-
-internal sealed class IndexNowSubmissionResult
-{
-    public bool Success { get; set; }
-    public bool DryRun { get; set; }
-    public int UrlCount { get; set; }
-    public int HostCount { get; set; }
-    public int RequestCount { get; set; }
-    public int FailedRequestCount { get; set; }
-    public string[] Errors { get; set; } = Array.Empty<string>();
-    public string[] Warnings { get; set; } = Array.Empty<string>();
-    public IndexNowRequestResult[] Requests { get; set; } = Array.Empty<IndexNowRequestResult>();
-}
-
-internal sealed class IndexNowRequestResult
-{
-    public string Endpoint { get; set; } = string.Empty;
-    public string Host { get; set; } = string.Empty;
-    public int UrlCount { get; set; }
-    public bool Success { get; set; }
-    public int AttemptCount { get; set; }
-    public int? StatusCode { get; set; }
-    public string? Error { get; set; }
-    public string? ResponsePreview { get; set; }
-}
-
-internal static class IndexNowSubmitter
+/// <summary>Submits public URLs using the IndexNow protocol without a host or CLI dependency.</summary>
+public static class IndexNowSubmitter
 {
     private const string DefaultEndpoint = "https://api.indexnow.org/indexnow";
     private const int MaxResponsePreviewLength = 300;
@@ -70,8 +31,18 @@ internal static class IndexNowSubmitter
         public string[] UrlList { get; set; } = Array.Empty<string>();
     }
 
-    internal static IndexNowSubmissionResult Submit(IndexNowSubmissionOptions options, WebConsoleLogger? logger)
+    /// <summary>Submits synchronously for console and batch callers.</summary>
+    public static IndexNowSubmissionResult Submit(IndexNowSubmissionOptions options, Action<string>? logger = null) =>
+        SubmitAsync(options, logger: logger).GetAwaiter().GetResult();
+
+    /// <summary>Submits batches asynchronously. The caller retains ownership of an injected HTTP client.</summary>
+    public static async Task<IndexNowSubmissionResult> SubmitAsync(IndexNowSubmissionOptions options, HttpClient? client = null,
+        Action<string>? logger = null, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(options);
+        cancellationToken.ThrowIfCancellationRequested();
+        using var ownedClient = client is null ? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan } : null;
+        var http = client ?? ownedClient!;
         var errors = new List<string>();
         var warnings = new List<string>();
         var requests = new List<IndexNowRequestResult>();
@@ -121,7 +92,7 @@ internal static class IndexNowSubmitter
                         }
                         else
                         {
-                            requestResult = SubmitBatch(
+                            requestResult = await SubmitBatchAsync(
                                 endpoint,
                                 group.Host,
                                 normalizedKey,
@@ -129,7 +100,7 @@ internal static class IndexNowSubmitter
                                 batch,
                                 Math.Max(0, options.RetryCount),
                                 Math.Max(0, options.RetryDelayMs),
-                                Math.Max(1, options.TimeoutSeconds));
+                                Math.Max(1, options.TimeoutSeconds), http, cancellationToken).ConfigureAwait(false);
                         }
 
                         requests.Add(requestResult);
@@ -151,7 +122,7 @@ internal static class IndexNowSubmitter
 
         if (options.DryRun)
         {
-            logger?.Info($"IndexNow dry-run: urls={urls.Count}, hosts={hostGroups.Count}, requests={requests.Count}.");
+            logger?.Invoke($"IndexNow dry-run: urls={urls.Count}, hosts={hostGroups.Count}, requests={requests.Count}.");
         }
 
         return new IndexNowSubmissionResult
@@ -202,14 +173,14 @@ internal static class IndexNowSubmitter
     }
 
     /// <summary>Stable effective endpoint identity used by the durable sitemap checkpoint.</summary>
-    internal static string[] EffectiveEndpointUrls(IReadOnlyList<string> values) =>
+    public static string[] EffectiveEndpointUrls(IReadOnlyList<string> values) =>
         EffectiveEndpoints(values, new List<string>())
             .Select(static endpoint => endpoint.AbsoluteUri)
             .OrderBy(static endpoint => endpoint, StringComparer.Ordinal)
             .ToArray();
 
     /// <summary>Uses submission's URI normalization before a stateful run counts URL coverage.</summary>
-    internal static string[] NormalizeCheckpointUrls(IReadOnlyList<string> values)
+    public static string[] NormalizeCheckpointUrls(IReadOnlyList<string> values)
     {
         var warnings = new List<string>();
         List<Uri> candidates = NormalizeUrlCandidates(values, warnings);
@@ -421,7 +392,7 @@ internal static class IndexNowSubmitter
         }
     }
 
-    private static IndexNowRequestResult SubmitBatch(
+    private static async Task<IndexNowRequestResult> SubmitBatchAsync(
         Uri endpoint,
         string host,
         string key,
@@ -429,13 +400,8 @@ internal static class IndexNowSubmitter
         string[] urls,
         int retryCount,
         int retryDelayMs,
-        int timeoutSeconds)
+        int timeoutSeconds, HttpClient http, CancellationToken cancellationToken)
     {
-        using var http = new HttpClient
-        {
-            Timeout = TimeSpan.FromSeconds(timeoutSeconds)
-        };
-
         var attempts = 0;
         Exception? lastException = null;
         int? lastStatusCode = null;
@@ -463,12 +429,14 @@ internal static class IndexNowSubmitter
                 };
                 var json = JsonSerializer.Serialize(payload, PayloadJsonOptions);
                 request.Content = new StringContent(json, Encoding.UTF8, "application/json");
-                using var response = http.Send(request);
+                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                deadline.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+                using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token).ConfigureAwait(false);
                 lastStatusCode = (int)response.StatusCode;
                 lastReasonPhrase = response.ReasonPhrase;
                 lastBody = response.Content is null
                     ? null
-                    : response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                    : await ReadResponsePreviewAsync(response.Content, deadline.Token).ConfigureAwait(false);
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -484,13 +452,14 @@ internal static class IndexNowSubmitter
                     };
                 }
             }
-            catch (Exception ex)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException)
             {
                 lastException = ex;
             }
 
             if (attempt < maxAttempts && retryDelayMs > 0)
-                Thread.Sleep(retryDelayMs);
+                await Task.Delay(retryDelayMs, cancellationToken).ConfigureAwait(false);
         }
 
         var errorText = lastException?.Message;
@@ -512,6 +481,20 @@ internal static class IndexNowSubmitter
             Error = string.IsNullOrWhiteSpace(errorText) ? "request failed" : TruncateResponse(errorText),
             ResponsePreview = TruncateResponse(lastBody)
         };
+    }
+
+    private static async Task<string> ReadResponsePreviewAsync(HttpContent content, CancellationToken token)
+    {
+        using var reader = new StreamReader(await content.ReadAsStreamAsync(token).ConfigureAwait(false));
+        var buffer = new char[MaxResponsePreviewLength + 1];
+        int length = 0;
+        while (length < buffer.Length)
+        {
+            int read = await reader.ReadAsync(buffer.AsMemory(length), token).ConfigureAwait(false);
+            if (read == 0) break;
+            length += read;
+        }
+        return new string(buffer, 0, length);
     }
 
     private static string? TruncateResponse(string? text)
