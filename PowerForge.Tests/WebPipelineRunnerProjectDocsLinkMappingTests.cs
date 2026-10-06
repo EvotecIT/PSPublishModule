@@ -25,6 +25,7 @@ public sealed class WebPipelineRunnerProjectDocsLinkMappingTests
                 Directory.CreateDirectory(Path.Combine(source, "content", "examples"));
                 File.WriteAllText(Path.Combine(source, "Docs", "guide.md"), markdown);
                 File.WriteAllText(Path.Combine(source, "content", "examples", "sample.md"), markdown);
+                File.WriteAllText(Path.Combine(source, "content", "examples", "sample.markdown"), markdown);
                 File.WriteAllText(Path.Combine(source, "content", "examples", "sample.ps1"), markdown);
             }
             var pipeline = Path.Combine(root, "pipeline.json");
@@ -50,6 +51,8 @@ public sealed class WebPipelineRunnerProjectDocsLinkMappingTests
                     File.ReadAllText(Path.Combine(root, surface, "beta", file)), StringComparison.Ordinal);
             }
             Assert.Equal(markdown, File.ReadAllText(Path.Combine(root, "examples", "alpha", "sample.ps1")));
+            Assert.Contains("[Guide](/projects/alpha/docs/start/)",
+                File.ReadAllText(Path.Combine(root, "examples", "alpha", "sample.markdown")), StringComparison.Ordinal);
             Assert.Equal(markdown, File.ReadAllText(Path.Combine(root, "sources", "alpha", "Docs", "guide.md")));
         }
         finally

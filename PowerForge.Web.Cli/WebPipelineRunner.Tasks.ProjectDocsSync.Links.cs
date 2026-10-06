@@ -38,7 +38,7 @@ internal static partial class WebPipelineRunner
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> linkMappings)
     {
         File.Copy(sourceFile, targetFile, overwrite: true);
-        if (!Path.GetExtension(targetFile).Equals(".md", StringComparison.OrdinalIgnoreCase) ||
+        if (!IsMarkdownExtension(Path.GetExtension(targetFile)) ||
             !linkMappings.TryGetValue(slug, out var mappings) || mappings.Count == 0)
             return;
         var original = File.ReadAllText(targetFile);

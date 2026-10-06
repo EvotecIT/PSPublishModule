@@ -1,4 +1,5 @@
 using OfficeIMO.Markdown;
+using System.Net;
 using System.Text;
 
 namespace PowerForge.Web;
@@ -61,22 +62,48 @@ public static class MarkdownLinkMapper
 
         protected override void VisitLinkInline(LinkInline link)
         {
+            MapDestination(link.Url, link.UrlSourceSpan);
+            base.VisitLinkInline(link);
+        }
+
+        protected override void VisitImageLinkInline(ImageLinkInline image)
+        {
+            MapDestination(image.LinkUrl, image.LinkUrlSourceSpan);
+            base.VisitImageLinkInline(image);
+        }
+
+        protected override void VisitImageBlock(ImageBlock image)
+        {
+            MapDestination(image.LinkUrl, image.LinkUrlSourceSpan);
+            base.VisitImageBlock(image);
+        }
+
+        private void MapDestination(string? url, MarkdownSourceSpan? span)
+        {
+            if (string.IsNullOrEmpty(url) || url.StartsWith("//", StringComparison.Ordinal))
+                return;
             foreach (var prefix in prefixes)
             {
-                if (!link.Url.StartsWith(prefix.Key, StringComparison.Ordinal))
+                if (!url.StartsWith(prefix.Key, StringComparison.Ordinal))
                     continue;
-                if (!link.UrlSourceSpan.HasValue ||
-                    !parsed.TryCreateOriginalSourceSlice(link.UrlSourceSpan.Value, out var slice) ||
-                    !slice.Text.StartsWith(prefix.Key, StringComparison.Ordinal))
-                    throw new InvalidOperationException($"Cannot safely map Markdown link destination '{link.Url}'.");
+                if (!span.HasValue || !parsed.TryCreateOriginalSourceSlice(span.Value, out var slice))
+                    throw new InvalidOperationException($"Cannot safely map Markdown link destination '{url}'.");
+
+                // Keep literal suffixes verbatim. For an encoded prefix, serialize the decoded destination
+                // through the owning Markdown escaper and HTML encoder so entities are not decoded twice.
+                var destination = slice.Text.StartsWith(prefix.Key, StringComparison.Ordinal)
+                    ? EscapeDestination(prefix.Value) + slice.Text[prefix.Key.Length..]
+                    : EscapeDestination(prefix.Value + url[prefix.Key.Length..]);
 
                 Replacements[slice.StartOffset] = new Replacement(
                     slice.StartOffset, slice.EndOffsetInclusive - slice.StartOffset + 1,
-                    prefix.Value + slice.Text[prefix.Key.Length..]);
+                    destination);
                 break;
             }
-            base.VisitLinkInline(link);
         }
+
+        private static string EscapeDestination(string destination) =>
+            MarkdownEscaper.EscapeLinkUrl(WebUtility.HtmlEncode(destination).Replace(" ", "&#32;", StringComparison.Ordinal));
     }
 
     private sealed record Replacement(int Start, int Length, string Text);
