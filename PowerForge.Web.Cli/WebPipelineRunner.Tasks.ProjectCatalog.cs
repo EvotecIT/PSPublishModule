@@ -3338,8 +3338,12 @@ internal static partial class WebPipelineRunner
 
         try
         {
-            var lines = File.ReadLines(filePath).Take(80);
-            var head = string.Join('\n', lines);
+            // Read the whole front matter: product pages carry long presentation metadata before the marker.
+            var lines = File.ReadLines(filePath).Take(2000).ToList();
+            var frontMatterEnd = lines.Count > 0 && lines[0].TrimStart('﻿').Trim() == "---"
+                ? lines.FindIndex(1, static line => line.Trim() == "---")
+                : -1;
+            var head = string.Join('\n', frontMatterEnd > 0 ? lines.Take(frontMatterEnd + 1) : lines.Take(80));
             return GeneratedProjectMarkers.Any(marker =>
                 head.IndexOf(marker, StringComparison.OrdinalIgnoreCase) >= 0);
         }

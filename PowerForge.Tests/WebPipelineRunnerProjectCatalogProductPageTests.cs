@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using PowerForge.Web.Cli;
 using Xunit;
@@ -128,7 +129,9 @@ public partial class WebPipelineRunnerProjectCatalogProductTests
                 """);
             var staleProjectPage = Path.Combine(root, "content", "projects", "casaray.md");
             Directory.CreateDirectory(Path.GetDirectoryName(staleProjectPage)!);
-            File.WriteAllText(staleProjectPage, "---\ntitle: CasaRay\nmeta.generated_by: powerforge.project-catalog\n---\n");
+            // Real product pages carry long presentation front matter, so the generated marker sits well past line 80.
+            var padding = string.Concat(Enumerable.Range(0, 120).Select(static i => $"meta.padding_{i}: true\n"));
+            File.WriteAllText(staleProjectPage, "﻿---\ntitle: CasaRay\n" + padding + "meta.generated_by: powerforge.project-catalog\n---\n");
             var pipelinePath = WriteProductPagesPipeline(root, generateSections: true);
 
             var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
