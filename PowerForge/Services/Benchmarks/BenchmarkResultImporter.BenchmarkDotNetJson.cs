@@ -6,8 +6,9 @@ public sealed partial class BenchmarkResultImporter
 {
     // JsonExporter writes descriptor + ": " + Job.DisplayInfo + " " + Parameters.DisplayInfo.
     // MethodTitle can itself contain colons; parameter values can contain spaces and brackets.
-    private static string? GetBenchmarkDotNetDisplayJob(JsonElement benchmark)
+    private static string? GetBenchmarkDotNetDisplayJob(JsonElement benchmark, out string[]? nativeParameters)
     {
+        nativeParameters = null;
         string? display = GetString(benchmark, "DisplayInfo");
         string? title = GetString(benchmark, "MethodTitle") ?? GetString(benchmark, "Method");
         if (string.IsNullOrWhiteSpace(display) || string.IsNullOrWhiteSpace(title))
@@ -27,43 +28,52 @@ public sealed partial class BenchmarkResultImporter
             int suffixStart = job.IndexOf(" [", StringComparison.Ordinal);
             while (suffixStart >= 0)
             {
-                if (MatchesBenchmarkDotNetDisplayParameters(job, suffixStart + 2, parameters!))
-                    return suffixStart == 0 ? null : job.Substring(0, suffixStart);
+                if (suffixStart > 0 && MatchesBenchmarkDotNetDisplayParameters(job, suffixStart + 2, parameters!, out string[] fields))
+                {
+                    nativeParameters = fields;
+                    return job.Substring(0, suffixStart);
+                }
                 suffixStart = job.IndexOf(" [", suffixStart + 2, StringComparison.Ordinal);
             }
             return null;
         }
 
-        return string.IsNullOrWhiteSpace(job) ? null : job;
+        if (string.IsNullOrWhiteSpace(job))
+            return null;
+        nativeParameters = Array.Empty<string>();
+        return job;
     }
 
-    private static bool MatchesBenchmarkDotNetDisplayParameters(string display, int start, string printInfo)
+    private static bool MatchesBenchmarkDotNetDisplayParameters(string display, int start, string printInfo, out string[] fields)
     {
         // PrintInfo joins fields with '&'; DisplayInfo uses ', '. Literal '&' in a value stays '&'.
+        fields = Array.Empty<string>();
+        var segments = new List<string>();
+        int segmentStart = 0;
         int position = start;
-        foreach (char character in printInfo)
+        for (int index = 0; index < printInfo.Length; index++)
         {
+            char character = printInfo[index];
             if (position >= display.Length - 1)
                 return false;
             if (display[position] == character)
                 position++;
             else if (character == '&' && display[position] == ',' && position + 1 < display.Length - 1 && display[position + 1] == ' ')
+            {
+                // Only the exported display separator establishes a field boundary.
+                // Text such as '&Mode=two' inside a value matches the literal '&' branch above.
+                segments.Add(printInfo.Substring(segmentStart, index - segmentStart));
+                segmentStart = index + 1;
                 position += 2;
+            }
             else
                 return false;
         }
-        return position == display.Length - 1;
-    }
-
-    private static bool IsBenchmarkDotNetParameterStart(string text, int start)
-    {
-        while (start < text.Length && char.IsWhiteSpace(text[start])) start++;
-        if (start >= text.Length || !(char.IsLetter(text[start]) || text[start] == '_'))
+        if (position != display.Length - 1)
             return false;
-        start++;
-        while (start < text.Length && (char.IsLetterOrDigit(text[start]) || text[start] == '_')) start++;
-        while (start < text.Length && char.IsWhiteSpace(text[start])) start++;
-        return start < text.Length && text[start] is '=' or ':';
+        segments.Add(printInfo.Substring(segmentStart));
+        fields = segments.ToArray();
+        return true;
     }
 
     private static bool TryImportBenchmarkDotNetJson(JsonElement root, string path, string? suite, out BenchmarkRunResult result)
@@ -89,8 +99,8 @@ public sealed partial class BenchmarkResultImporter
             if (mean.HasValue)
                 mean *= 0.000001;
 
-            var displayJob = GetBenchmarkDotNetDisplayJob(benchmark);
-            var variables = ParseBenchmarkDotNetParameters(GetString(benchmark, "Parameters"), usePrintInfo: displayJob is not null);
+            var displayJob = GetBenchmarkDotNetDisplayJob(benchmark, out string[]? nativeParameters);
+            var variables = ParseBenchmarkDotNetParameters(GetString(benchmark, "Parameters"), nativeParameters);
             AddBenchmarkDotNetIdentityVariables(benchmark, variables, method);
             var engine = GetBenchmarkDotNetEngine(benchmark, displayJob);
             var metrics = ExtractBenchmarkDotNetMetrics(statistics);

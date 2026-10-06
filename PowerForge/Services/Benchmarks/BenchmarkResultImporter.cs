@@ -742,13 +742,15 @@ public sealed partial class BenchmarkResultImporter
             : null;
     }
 
-    private static Dictionary<string, string?> ParseBenchmarkDotNetParameters(string? parameterText, bool usePrintInfo)
+    private static Dictionary<string, string?> ParseBenchmarkDotNetParameters(string? parameterText, string[]? nativeParameters)
     {
         var variables = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrWhiteSpace(parameterText))
             return variables;
 
-        foreach (var segment in SplitBenchmarkDotNetParameterSegments(parameterText!, usePrintInfo))
+        bool usePrintInfo = nativeParameters is not null;
+        IEnumerable<string> segments = nativeParameters ?? SplitBenchmarkDotNetParameterSegments(parameterText!);
+        foreach (var segment in segments)
         {
             var trimmed = usePrintInfo ? segment : segment.Trim();
             var separator = FindBenchmarkDotNetParameterSeparator(trimmed);
@@ -767,7 +769,7 @@ public sealed partial class BenchmarkResultImporter
         return variables;
     }
 
-    private static IEnumerable<string> SplitBenchmarkDotNetParameterSegments(string text, bool usePrintInfo)
+    private static IEnumerable<string> SplitBenchmarkDotNetParameterSegments(string text)
     {
         var start = 0;
         char? quote = null;
@@ -787,14 +789,13 @@ public sealed partial class BenchmarkResultImporter
                 continue;
             }
 
-            if (!usePrintInfo && c is ('"' or '\''))
+            if (c is '"' or '\'')
             {
                 quote = c;
                 continue;
             }
 
-            bool separator = c == '&' && IsBenchmarkDotNetParameterStart(text, i + 1);
-            if (!separator && (usePrintInfo || c is not (',' or ';')))
+            if (c is not (',' or ';'))
                 continue;
 
             if (i > start)

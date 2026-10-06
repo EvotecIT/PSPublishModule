@@ -97,9 +97,10 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
-    public void BenchmarkDotNetDisplayInfo_ImportsAmpersandSeparatedParametersWithoutSplittingQuotedValues()
+    public void BenchmarkDotNetDisplayInfo_ImportsNativeParametersWithoutSplittingLiteralAmpersands()
     {
-        var benchmark = new { Method = "Decode", Parameters = "Rows=10&Label=\"A&B\"&Mode='C&D'", Statistics = new { Mean = 1_000_000 } };
+        var benchmark = new { DisplayInfo = "Bench.Decode: Dry [Rows=10, Label=A&B, Mode=C&D]", Method = "Decode",
+            Parameters = "Rows=10&Label=A&B&Mode=C&D", Statistics = new { Mean = 1_000_000 } };
         var result = ImportJobIdentityReport(JsonSerializer.Serialize(new { Benchmarks = new[] { benchmark } }));
         var sample = Assert.Single(result.Samples);
 
@@ -119,6 +120,27 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal("one,two; O'Brien&value", sample.Variables["Name"]);
         Assert.Equal("", sample.Variables["Empty"]);
         Assert.Equal(2, sample.Variables.Count);
+    }
+
+    [Theory]
+    [InlineData("one&Mode=two")]
+    [InlineData("one&Mode:two")]
+    [InlineData("one&Rows=10&Mode=x")]
+    public void BenchmarkDotNetDisplayInfo_PreservesLiteralAmpersandsThatLookLikeFields(string value)
+    {
+        var native = new { DisplayInfo = "Bench.Decode: Dry [Name=" + value + ", Rows=5]", Method = "Decode",
+            Parameters = "Name=" + value + "&Rows=5", Statistics = new { Mean = 1_000_000 } };
+        var nativeSample = Assert.Single(ImportJobIdentityReport(JsonSerializer.Serialize(new { Benchmarks = new[] { native } })).Samples);
+        Assert.Equal("Dry", nativeSample.Engine);
+        Assert.Equal(value, nativeSample.Variables["Name"]);
+        Assert.Equal("5", nativeSample.Variables["Rows"]);
+        Assert.Equal(2, nativeSample.Variables.Count);
+
+        var legacy = new { Method = "Decode", Parameters = "Name=" + value, Statistics = new { Mean = 1_000_000 } };
+        var legacySample = Assert.Single(ImportJobIdentityReport(JsonSerializer.Serialize(new { Benchmarks = new[] { legacy } })).Samples);
+        Assert.Equal("BenchmarkDotNet", legacySample.Engine);
+        Assert.Equal(value, legacySample.Variables["Name"]);
+        Assert.Single(legacySample.Variables);
     }
 
     private static BenchmarkRunResult ImportJobIdentityReport(string json)
