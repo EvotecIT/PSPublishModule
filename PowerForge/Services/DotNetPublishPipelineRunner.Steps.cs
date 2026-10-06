@@ -382,11 +382,6 @@ public sealed partial class DotNetPublishPipelineRunner
                 ReadPortableInventorySourceProvenance(plan, outputDir, publishStep: publishStep);
         }
 
-        EnsureOutputDirectoryUnlocked(
-            plan,
-            outputDir,
-            contextLabel: $"{target.Name} ({tfm}, {rid}, {style})",
-            serviceName: target.Publish.Service?.ServiceName);
         Directory.CreateDirectory(outputDir);
 
         var lifecycle = target.Publish.Service?.Lifecycle;
@@ -397,6 +392,14 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             ExecuteServiceLifecycleInlineBeforePublish(outputDir, target.Name, target.Publish.Service, lifecycle);
         }
+
+        // The registered service owns the executable lock until the inline stop completes.
+        // Keep the guard after stopping so unrelated/orphaned locks still fail before writes.
+        EnsureOutputDirectoryUnlocked(
+            plan,
+            outputDir,
+            contextLabel: $"{target.Name} ({tfm}, {rid}, {style})",
+            serviceName: target.Publish.Service?.ServiceName);
 
         var stateTransfer = PreserveStateBeforePublish(
             plan,
