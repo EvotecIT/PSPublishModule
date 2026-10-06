@@ -147,6 +147,18 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 ]
             };
 
+            RunGit(root, "commit --allow-empty -m \"advance after planning\"");
+            string currentRevision = RunGit(root, "rev-parse HEAD").Trim();
+            Assert.NotEqual(plan.SourceRevision, currentRevision);
+            var target = plan.Targets[0];
+            Assert.Contains("/p:SourceRevisionId=" + currentRevision,
+                DotNetPublishPipelineRunner.BuildPreBuildArguments(
+                    plan, target, "net10.0", "win-x64", DotNetPublishStyle.PortableCompat));
+            Assert.Contains("/p:SourceRevisionId=" + currentRevision,
+                DotNetPublishPipelineRunner.BuildPublishArguments(
+                    plan, target, "net10.0", "win-x64", DotNetPublishStyle.PortableCompat,
+                    Path.Combine(root, "Artifacts", "app")));
+
             DotNetPublishResult result = runner.Run(plan, progress: null);
 
             Assert.True(result.Succeeded, result.ErrorMessage);

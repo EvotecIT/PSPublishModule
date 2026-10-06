@@ -178,6 +178,8 @@ Changes made while a build is running are still detected. Clean Git source and
 tracked build-graph verification are available through the explicit
 `AppleApps.LocalDeployment.UseControlledSourceProvenance` option, which defaults
 to `false`.
+The `New-AppleAppBuild` and `Publish-AppleAppToDevice` cmdlets expose the same
+opt-in through `-UseControlledSourceProvenance`; omitting it keeps normal working-tree builds.
 
 ### Development workflow roadmap
 

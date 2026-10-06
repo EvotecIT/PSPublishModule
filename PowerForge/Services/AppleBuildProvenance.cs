@@ -100,11 +100,10 @@ internal static class AppleBuildProvenance
         bool excludesGeneratedDirectories,
         bool useControlledSourceProvenance = false)
     {
-        var snapshot = Capture(sourceRoot, useControlledSourceProvenance);
-        if (excludesGeneratedDirectories)
-        {
-            snapshot.MirrorExcludedRootPaths = ResolveMirrorExcludedRootPaths(sourceRoot);
-        }
+        var excludedRoots = excludesGeneratedDirectories
+            ? ResolveMirrorExcludedRootPaths(sourceRoot)
+            : Array.Empty<string>();
+        var snapshot = Capture(sourceRoot, useControlledSourceProvenance, excludedRoots);
         if (useControlledSourceProvenance)
             RejectIgnoredBuildInputs(
                 sourceRoot,
@@ -294,7 +293,10 @@ internal static class AppleBuildProvenance
         }
     }
 
-    internal static Snapshot Capture(string sourceRoot, bool requireCleanSource = false)
+    internal static Snapshot Capture(
+        string sourceRoot,
+        bool requireCleanSource = false,
+        IReadOnlyCollection<string>? excludedRootPaths = null)
     {
         var root = Path.GetFullPath(sourceRoot);
         var cleanRevision = ResolveLocalSourceRevision(root);
@@ -305,13 +307,15 @@ internal static class AppleBuildProvenance
                 $"Apple source revision could not be resolved in '{root}'." +
                 (requireCleanSource ? " Controlled-source mode requires a clean Git working tree." : string.Empty));
         }
-        var mutationIdentities = CaptureTrackedFileMutationIdentities(root)
+        var excludedRoots = excludedRootPaths ?? Array.Empty<string>();
+        var mutationIdentities = CaptureWorkingTreeFileMutationIdentities(root, excludedRoots, out var hasUntrackedInputs)
             ?? throw new InvalidOperationException(
                 $"Apple source provenance is required, but tracked file identities in '{root}' could not be captured safely.");
         return new Snapshot(root, revision, mutationIdentities)
         {
-            SourceDirty = !string.Equals(cleanRevision, revision, StringComparison.Ordinal),
-            RequireCleanSource = requireCleanSource
+            SourceDirty = hasUntrackedInputs || !string.Equals(cleanRevision, revision, StringComparison.Ordinal),
+            RequireCleanSource = requireCleanSource,
+            MirrorExcludedRootPaths = excludedRoots
         };
     }
 
@@ -330,7 +334,7 @@ internal static class AppleBuildProvenance
             : ResolveWorkingTreeRevision(snapshot.RootPath);
         var currentMutationIdentities = current is null
             ? null
-            : CaptureTrackedFileMutationIdentities(snapshot.RootPath);
+            : CaptureWorkingTreeFileMutationIdentities(snapshot.RootPath, snapshot.MirrorExcludedRootPaths, out _);
         if (!string.Equals(current, snapshot.Revision, StringComparison.Ordinal) ||
             currentMutationIdentities is null ||
             snapshot.TrackedFileMutationIdentities.Count !=
@@ -592,8 +596,12 @@ internal static class AppleBuildProvenance
     }
 
     private static IReadOnlyDictionary<string, string>?
-        CaptureTrackedFileMutationIdentities(string projectRoot)
+        CaptureWorkingTreeFileMutationIdentities(
+            string projectRoot,
+            IReadOnlyCollection<string> excludedRootPaths,
+            out bool hasUntrackedInputs)
     {
+        hasUntrackedInputs = false;
         var git = GitClient.CreateTrustedSystemClient(
             defaultTimeout: TimeSpan.FromSeconds(10));
         var staged = git.RunRawAsync(
@@ -628,15 +636,19 @@ internal static class AppleBuildProvenance
             trackedFiles.Add((relativePath, fullPath));
         }
 
-        // Untracked source is part of an ordinary working-tree build too. Record
-        // its identity so a change during the build remains detectable.
+        // Git-ignored inputs (for example a local xcconfig) participate in normal
+        // builds too. Only omit roots that the build mirror explicitly excludes.
         var untracked = git.RunRawAsync(projectRoot,
-                ["ls-files", "--others", "--exclude-standard", "-z"])
+                ["ls-files", "--others", "-z"])
             .GetAwaiter().GetResult();
         if (!untracked.Succeeded)
             return null;
-        foreach (var relativePath in untracked.StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries))
+        foreach (var relativePath in untracked.StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
+                     .Where(path => !IsExcludedGeneratedPath(path, excludedRootPaths)))
+        {
+            hasUntrackedInputs = true;
             trackedFiles.Add((relativePath, Path.GetFullPath(Path.Combine(projectRoot, relativePath))));
+        }
 
         try
         {
