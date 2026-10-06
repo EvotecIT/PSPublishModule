@@ -96,38 +96,7 @@ public partial class WebPipelineRunnerProjectCatalogProductTests
 
         try
         {
-            var catalogPath = WriteCatalog(root,
-                """
-                {
-                  "projects": [
-                    {
-                      "slug": "casaray",
-                      "name": "CasaRay",
-                      "kind": "product",
-                      "mode": "dedicated-external",
-                      "contentMode": "external",
-                      "description": "Home Assistant on Apple devices.",
-                      "externalUrl": "https://casaray.dev/",
-                      "aliases": ["/products/casaray/", "/apps/casaray/"],
-                      "links": {
-                        "support": "https://casaray.dev/support/",
-                        "privacy": "https://casaray.dev/privacy/",
-                        "appStore": "https://apps.apple.com/us/app/casaray/id6778025328"
-                      },
-                      "surfaces": { "docs": false },
-                      "brand": { "accent": "#73C7E6", "icon": "/assets/products/casaray/icon.png", "iconWidth": 1024, "iconHeight": 1024 },
-                      "product": {
-                        "category": "Smart home",
-                        "tagline": "Your home, calm and native.",
-                        "platforms": ["iPhone"],
-                        "media": [
-                          { "src": "/assets/products/casaray/ipad-home.webp", "alt": "CasaRay on iPad", "width": 1200, "height": 1600, "role": "hero" }
-                        ]
-                      }
-                    }
-                  ]
-                }
-                """);
+            var catalogPath = WriteCatalog(root, PrivateProductCatalog);
             var staleProjectPage = Path.Combine(root, "content", "projects", "casaray.md");
             Directory.CreateDirectory(Path.GetDirectoryName(staleProjectPage)!);
             // Real product pages carry long presentation front matter, so the generated marker sits well past line 80.
@@ -251,6 +220,75 @@ public partial class WebPipelineRunnerProjectCatalogProductTests
             TryDeleteDirectory(root);
         }
     }
+
+    [Fact]
+    public void RunPipeline_ProjectCatalog_ProductRouteWithoutPagesKeepsProductPaths()
+    {
+        var root = CreateTestRoot("product-route-validation");
+
+        try
+        {
+            var catalogPath = WriteCatalog(root, PrivateProductCatalog);
+            var pipelinePath = WritePipeline(root);
+            File.WriteAllText(pipelinePath, File.ReadAllText(pipelinePath)
+                .Replace("\"generatePages\": true", "\"generatePages\": false, \"productRoute\": \"/products/\"", StringComparison.Ordinal));
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success, result.Steps[0].Message);
+            using var normalized = JsonDocument.Parse(File.ReadAllText(catalogPath));
+            var product = normalized.RootElement.GetProperty("projects")[0].GetProperty("product");
+            Assert.Equal("/products/casaray/", product.GetProperty("path").GetString());
+            Assert.False(Directory.Exists(Path.Combine(root, "content", "products")));
+
+            // Generating project pages without product pages must not hand the presentation to a page that does not exist.
+            File.WriteAllText(pipelinePath, File.ReadAllText(pipelinePath)
+                .Replace("\"generatePages\": false", "\"generatePages\": true", StringComparison.Ordinal));
+            result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            Assert.True(result.Success, result.Steps[0].Message);
+            using var regenerated = JsonDocument.Parse(File.ReadAllText(catalogPath));
+            Assert.False(regenerated.RootElement.GetProperty("projects")[0].GetProperty("product").TryGetProperty("path", out _));
+            Assert.Contains("meta.product_presentation:", File.ReadAllText(Path.Combine(root, "content", "projects", "casaray.md")), StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    private const string PrivateProductCatalog =
+        """
+        {
+          "projects": [
+            {
+              "slug": "casaray",
+              "name": "CasaRay",
+              "kind": "product",
+              "mode": "dedicated-external",
+              "contentMode": "external",
+              "description": "Home Assistant on Apple devices.",
+              "externalUrl": "https://casaray.dev/",
+              "aliases": ["/products/casaray/", "/apps/casaray/"],
+              "links": {
+                "support": "https://casaray.dev/support/",
+                "privacy": "https://casaray.dev/privacy/",
+                "appStore": "https://apps.apple.com/us/app/casaray/id6778025328"
+              },
+              "surfaces": { "docs": false },
+              "brand": { "accent": "#73C7E6", "icon": "/assets/products/casaray/icon.png", "iconWidth": 1024, "iconHeight": 1024 },
+              "product": {
+                "category": "Smart home",
+                "tagline": "Your home, calm and native.",
+                "platforms": ["iPhone"],
+                "media": [
+                  { "src": "/assets/products/casaray/ipad-home.webp", "alt": "CasaRay on iPad", "width": 1200, "height": 1600, "role": "hero" }
+                ]
+              }
+            }
+          ]
+        }
+        """;
 
     private static string WriteProductPagesPipeline(string root, bool generateSections = false)
     {

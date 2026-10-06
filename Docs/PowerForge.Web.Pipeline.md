@@ -1606,6 +1606,7 @@ Projects and products have different jobs:
 Notes:
 
 - Without `productContentRoot`, product entries (`kind: "product"`) keep their product presentation on the project page, as before.
+- A validation-only step that rewrites the catalog (`generatePages: false`) should set `productRoute` to the same value as the main step. Otherwise it clears `product.path` before a later build reads the catalog. When `generatePages` is true, `productRoute` has no effect without `productContentRoot`.
 - With `productContentRoot`, every product gets `<productContentRoot>/<slug>.md` with `meta.product_page: true` and the full `meta.product_presentation` front matter.
   - The normalized catalog stores the route in `product.path`. It defaults to `<productRoute><slug>/`, and an explicit `product.path` overrides it.
   - It also stores `product.projectPath`: the project page route, or nothing when the product has only a product page. Themes use it to choose where a product card links. The catalog recomputes it on every run, so don't set it by hand.

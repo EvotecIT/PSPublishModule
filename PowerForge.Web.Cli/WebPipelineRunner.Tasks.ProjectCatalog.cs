@@ -47,9 +47,11 @@ internal static partial class WebPipelineRunner
         var contentRoot = ResolvePath(baseDir, GetString(step, "contentRoot") ?? GetString(step, "content-root") ?? "./content/projects");
         // Optional: generate separate product pages (e.g. /products/<slug>/) next to project pages.
         var productContentRoot = ResolvePath(baseDir, GetString(step, "productContentRoot") ?? GetString(step, "product-content-root"));
-        var productRoute = string.IsNullOrWhiteSpace(productContentRoot)
-            ? null
-            : NormalizeProductRoute(GetString(step, "productRoute") ?? GetString(step, "product-route") ?? "/products/");
+        // productRoute alone keeps product paths in the catalog without writing pages (for example in a validation-only step).
+        var productRoute = NormalizeProductRoute(
+            GetString(step, "productRoute") ??
+            GetString(step, "product-route") ??
+            (string.IsNullOrWhiteSpace(productContentRoot) ? null : "/products/"));
         var publishPath = ResolvePath(baseDir, GetString(step, "publishPath") ?? GetString(step, "publish-path") ?? "./static/data/projects/catalog.json");
         var redirectCsvPath = ResolvePath(baseDir, GetString(step, "redirectCsvPath") ?? GetString(step, "redirect-csv-path"));
         var summaryPath = ResolvePath(baseDir, GetString(step, "summaryPath") ?? GetString(step, "summary-path") ?? "./Build/project-catalog-last-run.json");
@@ -62,6 +64,9 @@ internal static partial class WebPipelineRunner
         var failOnWarnings = GetBool(step, "failOnWarnings") ?? GetBool(step, "fail-on-warnings") ?? false;
         var allowCreateProjects = GetBool(step, "allowCreateProjects") ?? GetBool(step, "allow-create-projects") ?? false;
         var generatePages = GetBool(step, "generatePages") ?? GetBool(step, "generate-pages") ?? true;
+        // Project pages hand their product presentation to the product page, so only do that when product pages are generated too.
+        if (generatePages && string.IsNullOrWhiteSpace(productContentRoot))
+            productRoute = null;
         var generateSections = GetBool(step, "generateSections") ?? GetBool(step, "generate-sections") ?? true;
         var forceOverwriteExisting = GetBool(step, "forceOverwriteExisting") ?? GetBool(step, "force-overwrite-existing") ?? false;
         var includeUnlistedInIndex = GetBool(step, "includeUnlistedInIndex") ?? GetBool(step, "include-unlisted-in-index") ?? false;
