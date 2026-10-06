@@ -43,6 +43,12 @@ public sealed class SocialSpec
     public Dictionary<string, string>? GeneratedCardStylesByCollection { get; set; }
     /// <summary>Optional per-collection variant overrides for generated social cards.</summary>
     public Dictionary<string, string>? GeneratedCardVariantsByCollection { get; set; }
+    /// <summary>
+    /// Collections whose pages always get a generated card (for example projects and products).
+    /// A page image such as meta.social_image is then shown inside the card instead of replacing it.
+    /// Pages can still opt out with meta.social_card: false.
+    /// </summary>
+    public List<string>? GeneratedCardCollections { get; set; }
     /// <summary>Optional default color scheme for generated social cards (dark/light).</summary>
     public string? GeneratedCardColorScheme { get; set; }
     /// <summary>Optional per-collection color scheme overrides for generated social cards.</summary>

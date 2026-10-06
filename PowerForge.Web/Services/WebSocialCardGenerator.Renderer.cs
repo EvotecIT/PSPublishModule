@@ -15,7 +15,7 @@ namespace PowerForge.Web;
 internal static partial class WebSocialCardGenerator
 {
     // Bump whenever raster-visible rendering or media sanitization changes.
-    internal const string RendererVersion = "social-card-renderer-v9";
+    internal const string RendererVersion = "social-card-renderer-v10";
     internal const int MaxRemoteImageBytes = 10 * 1024 * 1024;
     internal const int MaxRemoteImageCacheEntries = 128;
     internal const long MaxRemoteImageCacheBytes = 100L * 1024 * 1024;
@@ -242,6 +242,8 @@ internal static partial class WebSocialCardGenerator
         svg.AppendLine($@"  <!-- renderer:{RendererVersion} layout:{state.LayoutKey} style:{state.StyleKey} variant:{state.VariantKey} -->");
         svg.AppendLine(@"  <defs>");
         AppendDefs(svg, state);
+        if (string.Equals(state.LayoutKey, "panel", StringComparison.OrdinalIgnoreCase))
+            AppendPanelDefs(svg, state);
         if (string.Equals(state.LayoutKey, "inline-image", StringComparison.OrdinalIgnoreCase))
         {
             var media = GetInlineMediaFrame(state);
@@ -250,10 +252,16 @@ internal static partial class WebSocialCardGenerator
             svg.AppendLine(@"    </clipPath>");
         }
         svg.AppendLine(@"  </defs>");
-        AppendBackground(svg, state);
+        if (string.Equals(state.LayoutKey, "panel", StringComparison.OrdinalIgnoreCase))
+            AppendPanelBackground(svg, state);
+        else
+            AppendBackground(svg, state);
 
         switch (state.LayoutKey)
         {
+            case "panel":
+                AppendPanelLayout(svg, state);
+                break;
             case "spotlight":
                 AppendSpotlightLayout(svg, state);
                 break;
@@ -317,12 +325,16 @@ internal static partial class WebSocialCardGenerator
             StyleKey = styleKey,
             VariantKey = variantKey,
             LayoutKey = layoutKey,
-            Palette = SelectPalette(styleKey, string.Join("|", styleKey, variantKey, title, description, eyebrow, normalizedBadge, normalizedFooter, width, height), options.ThemeTokens, options.ColorScheme),
+            Palette = ApplyAccentOverride(
+                SelectPalette(styleKey, string.Join("|", styleKey, variantKey, title, description, eyebrow, normalizedBadge, normalizedFooter, width, height), options.ThemeTokens, options.ColorScheme),
+                options.AccentColor),
             Typography = ResolveTypography(options.ThemeTokens, options.PreferRasterSafeFonts),
             ThemeTokens = options.ThemeTokens,
             LogoDataUri = options.LogoDataUri,
             InlineImageDataUri = options.InlineImageDataUri,
             Metrics = NormalizeSocialCardMetrics(options.Metrics),
+            Chips = (options.Chips ?? Array.Empty<string>()).Where(static chip => !string.IsNullOrWhiteSpace(chip)).ToArray(),
+            SiteAddress = options.SiteAddress?.Trim() ?? string.Empty,
             AllowRemoteMediaFetch = options.AllowRemoteMediaFetch,
             EmbedReferencedMediaInSvg = options.EmbedReferencedMediaInSvg,
             CtaLabel = ResolveCtaLabel(styleKey, normalizedBadge),
@@ -346,6 +358,8 @@ internal static partial class WebSocialCardGenerator
             return "reference";
         if (string.Equals(variantKey, "connect", StringComparison.OrdinalIgnoreCase))
             return "connect";
+        if (string.Equals(variantKey, "panel", StringComparison.OrdinalIgnoreCase))
+            return "panel";
         if (string.Equals(variantKey, "metrics", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(variantKey, "timeline", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(variantKey, "feed", StringComparison.OrdinalIgnoreCase) ||
@@ -420,6 +434,9 @@ internal static partial class WebSocialCardGenerator
             LogoDataUri = options.LogoDataUri,
             InlineImageDataUri = options.InlineImageDataUri,
             Metrics = options.Metrics,
+            Chips = options.Chips,
+            AccentColor = options.AccentColor,
+            SiteAddress = options.SiteAddress,
             ColorScheme = options.ColorScheme,
             AllowRemoteMediaFetch = options.AllowRemoteMediaFetch,
             EmbedReferencedMediaInSvg = embedReferencedMediaInSvg,
@@ -1555,6 +1572,20 @@ internal static partial class WebSocialCardGenerator
             }
         }
 
+        if (string.Equals(state.LayoutKey, "panel", StringComparison.OrdinalIgnoreCase) &&
+            GetPanelVisualRect(state) is { } panel &&
+            PanelShowsImage(state))
+        {
+            // Fit the whole image inside the panel (no cropping), centred.
+            var media = GetPanelImageRect(panel, state);
+            using var image = TryLoadImageSource(state.InlineImageDataUri!, media.Width, media.Height, state.AllowRemoteMediaFetch);
+            if (image is not null)
+            {
+                image.Resize(new MagickGeometry((uint)media.Width, (uint)media.Height));
+                canvas.Composite(image, media.X + ((media.Width - (int)image.Width) / 2), media.Y + ((media.Height - (int)image.Height) / 2), CompositeOperator.Over);
+            }
+        }
+
         if (string.IsNullOrWhiteSpace(state.LogoDataUri))
             return;
 
@@ -1580,6 +1611,9 @@ internal static partial class WebSocialCardGenerator
         var padX = state.SafeMarginX;
         var padY = state.SafeMarginY;
         var radius = GetScaledPixels(state.Width, state.Height, 20, 10);
+
+        if (string.Equals(state.LayoutKey, "panel", StringComparison.OrdinalIgnoreCase))
+            return GetPanelLogoFrame(state);
 
         if (string.Equals(state.LayoutKey, "spotlight", StringComparison.OrdinalIgnoreCase))
         {
@@ -1958,6 +1992,12 @@ internal static partial class WebSocialCardGenerator
         public string? LogoDataUri { get; set; }
         public string? InlineImageDataUri { get; set; }
         public IReadOnlyList<SocialCardMetricSpec>? Metrics { get; set; }
+        /// <summary>Short labels shown as chips on the panel layout (for example platforms).</summary>
+        public IReadOnlyList<string>? Chips { get; set; }
+        /// <summary>Optional hex accent that replaces the theme accent (for example a product's brand colour).</summary>
+        public string? AccentColor { get; set; }
+        /// <summary>Site address shown on the panel layout (for example example.com).</summary>
+        public string? SiteAddress { get; set; }
         /// <summary>"light", "dark", or null (auto = dark).</summary>
         public string? ColorScheme { get; set; }
         public bool AllowRemoteMediaFetch { get; set; }
@@ -1993,6 +2033,8 @@ internal static partial class WebSocialCardGenerator
         public string? LogoDataUri { get; init; }
         public string? InlineImageDataUri { get; init; }
         public required IReadOnlyList<SocialCardMetricSpec> Metrics { get; init; }
+        public IReadOnlyList<string> Chips { get; init; } = Array.Empty<string>();
+        public string SiteAddress { get; init; } = string.Empty;
     }
 
     private sealed record SocialRect(int X, int Y, int Width, int Height, int Radius);
