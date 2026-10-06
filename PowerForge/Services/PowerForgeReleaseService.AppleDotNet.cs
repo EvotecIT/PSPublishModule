@@ -27,6 +27,8 @@ internal sealed partial class PowerForgeReleaseService
         {
             var configured = DotNetPublishReleaseArtifactVerifier.ReadConfiguredPublishSpecWithInputs(app.ProjectPath);
             foreach (string input in configured.InputPaths) yield return input;
+            if (!plan.Archive)
+                continue;
             var spec = DotNetPublishConfiguration.Load(app.ProjectPath);
             var mac = spec.Installers.Single(item => item.Id == app.DotNetPublishInstallerId).MacApp!;
             foreach (string? path in new[] { mac.EntitlementsPath, mac.IconPath, mac.ProvisioningProfilePath, mac.ThirdPartyNoticesManifestPath })
