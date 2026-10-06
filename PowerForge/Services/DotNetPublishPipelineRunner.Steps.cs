@@ -342,7 +342,9 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!string.IsNullOrWhiteSpace(runtime)) args.AddRange(new[] { "-r", runtime });
         if (plan.Restore || plan.SkipRestoreRequested) args.Add("--no-restore");
         AppendPublishStyleArgs(args, target.Publish, style);
-        args.AddRange(BuildMsBuildPropertyArgs(BuildPublishMsBuildProperties(plan, target, framework, runtime, style)));
+        var properties = BuildPublishMsBuildProperties(plan, target, framework, runtime, style);
+        ApplyCurrentWorkingTreeRevision(properties, plan);
+        args.AddRange(BuildMsBuildPropertyArgs(properties));
         return args;
     }
 
@@ -525,7 +527,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     rid,
                     tfm,
                     style.ToString(),
-                    plan.SourceRevision,
+                    provenance.Revision ?? string.Empty,
                     ComputePortableConfigurationPolicySha256(
                         target.Name,
                         target.Kind,
@@ -771,6 +773,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (target is null) throw new ArgumentNullException(nameof(target));
 
         var merged = BuildPublishMsBuildProperties(plan, target, framework, runtime, style);
+        ApplyCurrentWorkingTreeRevision(merged, plan);
         ApplyPublishMsiVersionProperties(
             merged,
             plan,
@@ -781,6 +784,26 @@ public sealed partial class DotNetPublishPipelineRunner
             reserveMonotonicVersions: !string.IsNullOrWhiteSpace(reservationOwner),
             reservationOwner: reservationOwner);
         return merged;
+    }
+
+    private static void ApplyCurrentWorkingTreeRevision(Dictionary<string, string> properties, DotNetPublishPlan plan)
+    {
+        if (!plan.UseControlledSourceProvenance)
+        {
+            // Hooks may advance HEAD after planning. Stamp the revision selected
+            // at invocation time without requiring a clean working tree.
+            string? revision = ReadGitText(plan.ProjectRoot, "rev-parse HEAD");
+            if (revision is not null && !string.IsNullOrWhiteSpace(revision))
+            {
+                properties["SourceRevisionId"] = revision.Trim();
+                properties["IncludeSourceRevisionInInformationalVersion"] = "true";
+            }
+            else
+            {
+                properties.Remove("SourceRevisionId");
+                properties.Remove("IncludeSourceRevisionInInformationalVersion");
+            }
+        }
     }
 
     private static void ApplyPublishMsiVersionProperties(

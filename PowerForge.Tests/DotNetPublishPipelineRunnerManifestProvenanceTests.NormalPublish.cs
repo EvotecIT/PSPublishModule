@@ -87,7 +87,7 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
     }
 
     [Fact]
-    public void NormalSignedPublish_RejectsSourceMutationByPublishBeforeSigning()
+    public void NormalSignedPublish_DoesNotUseGitChangesAsSigningAuthorization()
     {
         string root = Directory.CreateTempSubdirectory().FullName;
         try
@@ -147,10 +147,22 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
                 ]
             };
 
+            RunGit(root, "commit --allow-empty -m \"advance after planning\"");
+            string currentRevision = RunGit(root, "rev-parse HEAD").Trim();
+            Assert.NotEqual(plan.SourceRevision, currentRevision);
+            var target = plan.Targets[0];
+            Assert.Contains("/p:SourceRevisionId=" + currentRevision,
+                DotNetPublishPipelineRunner.BuildPreBuildArguments(
+                    plan, target, "net10.0", "win-x64", DotNetPublishStyle.PortableCompat));
+            Assert.Contains("/p:SourceRevisionId=" + currentRevision,
+                DotNetPublishPipelineRunner.BuildPublishArguments(
+                    plan, target, "net10.0", "win-x64", DotNetPublishStyle.PortableCompat,
+                    Path.Combine(root, "Artifacts", "app")));
+
             DotNetPublishResult result = runner.Run(plan, progress: null);
 
-            Assert.False(result.Succeeded);
-            Assert.Contains("source changed", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.True(result.Succeeded, result.ErrorMessage);
+            Assert.Contains("changed by publish", File.ReadAllText(sourcePath));
             Assert.Equal(1, publishCalls);
         }
         finally
@@ -191,24 +203,24 @@ public sealed partial class DotNetPublishPipelineRunnerManifestProvenanceTests
             Assert.False(clean.Dirty);
 
             File.AppendAllText(sourcePath, "// changed");
-            InvalidOperationException dirty = Assert.Throws<InvalidOperationException>(() =>
-                DotNetPublishPipelineRunner.ReadPortableInventorySourceProvenance(plan));
-            Assert.Contains("source changed", dirty.Message, StringComparison.OrdinalIgnoreCase);
-            InvalidOperationException bundleDirty = Assert.Throws<InvalidOperationException>(() =>
-                DotNetPublishPipelineRunner.ValidateBundleSourceBeforeSigning(
+            var dirty = DotNetPublishPipelineRunner.ReadPortableInventorySourceProvenance(plan);
+            Assert.True(dirty.Dirty);
+            Assert.Contains("App/Program.cs", dirty.DirtyPaths);
+            dirty.ValidateCurrentSource();
+            DotNetPublishPipelineRunner.ValidateBundleSourceBeforeSigning(
                     plan,
                     Path.Combine(root, "bundle-output"),
                     Array.Empty<DotNetPublishArtefactResult>(),
-                    new[] { new DotNetPublishStep() }));
-            Assert.Contains("source changed", bundleDirty.Message, StringComparison.OrdinalIgnoreCase);
+                    new[] { new DotNetPublishStep() });
 
             File.WriteAllText(sourcePath, "class Program { static void Main() { } }");
             string siblingDirectory = Directory.CreateDirectory(Path.Combine(root, "Library")).FullName;
             string siblingPath = Path.Combine(siblingDirectory, "Library.cs");
             File.WriteAllText(siblingPath, "class Library { }");
-            InvalidOperationException siblingDirty = Assert.Throws<InvalidOperationException>(() =>
-                DotNetPublishPipelineRunner.ReadPortableInventorySourceProvenance(plan));
-            Assert.Contains("Library/Library.cs", siblingDirty.Message, StringComparison.OrdinalIgnoreCase);
+            var siblingDirty = DotNetPublishPipelineRunner.ReadPortableInventorySourceProvenance(plan);
+            Assert.True(siblingDirty.Dirty);
+            Assert.Contains("Library/Library.cs", siblingDirty.DirtyPaths);
+            siblingDirty.ValidateCurrentSource();
         }
         finally
         {

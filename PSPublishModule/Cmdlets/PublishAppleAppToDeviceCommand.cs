@@ -38,6 +38,10 @@ public sealed class PublishAppleAppToDeviceCommand : PSCmdlet
     [Parameter]
     public SwitchParameter OptimizeSwift { get; set; }
 
+    /// <summary>Opt into clean Git source and controlled build-input verification. Disabled by default.</summary>
+    [Parameter]
+    public SwitchParameter UseControlledSourceProvenance { get; set; }
+
     /// <summary>Apple platform used to resolve the product directory.</summary>
     [Parameter]
     public ApplePlatform Platform { get; set; } = ApplePlatform.iOS;
@@ -140,6 +144,7 @@ public sealed class PublishAppleAppToDeviceCommand : PSCmdlet
             ProductName = ProductName,
             Configuration = Configuration,
             OptimizeSwift = OptimizeSwift.IsPresent,
+            UseControlledSourceProvenance = UseControlledSourceProvenance.IsPresent,
             Platform = Platform,
             Destination = Destination,
             DeviceIdentifier = DeviceIdentifier,

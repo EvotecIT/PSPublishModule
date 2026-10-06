@@ -550,6 +550,8 @@ internal sealed class PowerForgeAppleReleaseOptions
 
 internal sealed class PowerForgeAppleLocalDeploymentOptions
 {
+    public bool UseControlledSourceProvenance { get; set; }
+
     public ApplePlatform DefaultPlatform { get; set; } = ApplePlatform.iOS;
 
     public string? DefaultDevice { get; set; }

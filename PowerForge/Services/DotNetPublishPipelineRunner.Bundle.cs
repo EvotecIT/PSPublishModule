@@ -237,7 +237,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     runtime,
                     framework,
                     style.Value.ToString(),
-                    plan.SourceRevision,
+                    provenance.Revision ?? string.Empty,
                     ComputePortableConfigurationPolicySha256(
                         sourceTargetPlan.Name,
                         sourceTargetPlan.Kind,

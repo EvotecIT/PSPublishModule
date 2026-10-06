@@ -291,7 +291,9 @@ public sealed partial class DotNetPublishPipelineRunner
             dirtyReasons.ToArray(),
             dirtyScope.NoBuildPublishInputs,
             publishInputFiles,
-            validateCurrentSourceWithTrackedGeneratedPaths: additionalTrackedGeneratedPaths =>
+            validateCurrentSourceWithTrackedGeneratedPaths: buildPlan is { UseControlledSourceProvenance: false }
+                ? null
+                : additionalTrackedGeneratedPaths =>
                 ValidateCurrentSourceProvenance(
                     projectRoot,
                     gitRoot!,

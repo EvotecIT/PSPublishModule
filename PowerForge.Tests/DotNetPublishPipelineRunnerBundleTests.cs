@@ -660,8 +660,10 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
         }
     }
 
-    [Fact]
-    public void BuildBundle_SignedDirectOutputEmitsPublisherBoundMatrixAndSourceEvidence()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BuildBundle_SignedDirectOutputEmitsPublisherBoundMatrixAndSourceEvidence(bool stalePlannedRevision)
     {
         if (!DotNetPublishPipelineRunner.IsWindows()) return;
         var root = CreateTempRoot();
@@ -687,9 +689,9 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
             };
             var plan = new DotNetPublishPlan
             {
-                UseControlledSourceProvenance = true,
+                UseControlledSourceProvenance = !stalePlannedRevision,
                 ProjectRoot = root,
-                SourceRevision = sourceRevision,
+                SourceRevision = stalePlannedRevision ? new string('a', 40) : sourceRevision,
                 Targets =
                 [
                     new DotNetPublishTargetPlan
@@ -771,6 +773,10 @@ public sealed class DotNetPublishPipelineRunnerBundleTests
             Assert.Equal("net10.0", inventory.Framework);
             Assert.Equal("PortableCompat", inventory.Style);
             Assert.False(inventory.SourceDirty);
+            Assert.Equal(sourceRevision, inventory.SourceRevision);
+            runner.FinalizePortableEvidence(plan, new[] { result });
+            var finalized = JsonSerializer.Deserialize<PowerForgePortablePayloadInventory>(File.ReadAllBytes(inventoryPath))!;
+            Assert.Equal(sourceRevision, finalized.SourceRevision);
             Assert.Single(inventory.Entries);
         }
         finally
