@@ -11,7 +11,7 @@ Builds an Apple app for local installation using xcodebuild.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-AppleAppBuild [-ProjectPath] <string> -Scheme <string> [-Workspace] [-ProductName <string>] [-Configuration <string>] [-OptimizeSwift] [-Platform <ApplePlatform>] [-Destination <string>] [-DeviceIdentifier <string>] [-Device <string>] [-DerivedDataPath <string>] [-AppPath <string>] [-XcodeBuild <string>] [-Xcrun <string>] [-AllowProvisioningUpdates] [-UseBuildMirror] [-BuildRoot <string>] [-BuildMirrorPath <string>] [-Rsync <string>] [-AdditionalArgument <string[]>] [-TimeoutMinutes <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
+New-AppleAppBuild [-ProjectPath] <string> -Scheme <string> [-Workspace] [-ProductName <string>] [-Configuration <string>] [-OptimizeSwift] [-UseControlledSourceProvenance] [-Platform <ApplePlatform>] [-Destination <string>] [-DeviceIdentifier <string>] [-Device <string>] [-DerivedDataPath <string>] [-AppPath <string>] [-XcodeBuild <string>] [-Xcrun <string>] [-AllowProvisioningUpdates] [-UseBuildMirror] [-BuildRoot <string>] [-BuildMirrorPath <string>] [-Rsync <string>] [-AdditionalArgument <string[]>] [-TimeoutMinutes <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -301,6 +301,22 @@ Accept wildcard characters: False
 
 ### -UseBuildMirror
 Mirror the project root to a local folder before running xcodebuild.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -UseControlledSourceProvenance
+Opt into clean Git source and controlled build-input verification. Disabled by default.
 
 ```yaml
 Type: SwitchParameter
