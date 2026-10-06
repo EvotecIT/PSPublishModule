@@ -113,7 +113,7 @@ public static partial class WebSiteBuilder
                 if (isSectionIndex || isBundleIndex)
                     slugPath = ApplySlugOverride(relativeDir, matter?.Slug);
                 var baseOutput = ReplaceProjectPlaceholder(resolvedCollection.Output, projectSlug);
-                var route = BuildRoute(baseOutput, slugPath, spec.TrailingSlash);
+                var route = ResolveContentRoute(baseOutput, slugPath, spec.TrailingSlash, matter);
                 route = ApplyLanguagePrefixToRoute(spec, route, resolvedLanguage);
                 var kind = ResolvePageKind(route, resolvedCollection, isSectionIndex);
                 var shortcodeContext = new ShortcodeRenderContext

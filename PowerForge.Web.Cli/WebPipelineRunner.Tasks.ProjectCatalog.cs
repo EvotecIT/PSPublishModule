@@ -45,6 +45,13 @@ internal static partial class WebPipelineRunner
 
         var sourcesRoot = ResolvePath(baseDir, GetString(step, "sourcesRoot") ?? GetString(step, "sources-root") ?? "./projects-sources");
         var contentRoot = ResolvePath(baseDir, GetString(step, "contentRoot") ?? GetString(step, "content-root") ?? "./content/projects");
+        // Optional: generate separate product pages (e.g. /products/<slug>/) next to project pages.
+        var productContentRoot = ResolvePath(baseDir, GetString(step, "productContentRoot") ?? GetString(step, "product-content-root"));
+        // productRoute alone keeps product paths in the catalog without writing pages (for example in a validation-only step).
+        var productRoute = NormalizeProductRoute(
+            GetString(step, "productRoute") ??
+            GetString(step, "product-route") ??
+            (string.IsNullOrWhiteSpace(productContentRoot) ? null : "/products/"));
         var publishPath = ResolvePath(baseDir, GetString(step, "publishPath") ?? GetString(step, "publish-path") ?? "./static/data/projects/catalog.json");
         var redirectCsvPath = ResolvePath(baseDir, GetString(step, "redirectCsvPath") ?? GetString(step, "redirect-csv-path"));
         var summaryPath = ResolvePath(baseDir, GetString(step, "summaryPath") ?? GetString(step, "summary-path") ?? "./Build/project-catalog-last-run.json");
@@ -57,6 +64,9 @@ internal static partial class WebPipelineRunner
         var failOnWarnings = GetBool(step, "failOnWarnings") ?? GetBool(step, "fail-on-warnings") ?? false;
         var allowCreateProjects = GetBool(step, "allowCreateProjects") ?? GetBool(step, "allow-create-projects") ?? false;
         var generatePages = GetBool(step, "generatePages") ?? GetBool(step, "generate-pages") ?? true;
+        // Project pages hand their product presentation to the product page, so only do that when product pages are generated too.
+        if (generatePages && string.IsNullOrWhiteSpace(productContentRoot))
+            productRoute = null;
         var generateSections = GetBool(step, "generateSections") ?? GetBool(step, "generate-sections") ?? true;
         var forceOverwriteExisting = GetBool(step, "forceOverwriteExisting") ?? GetBool(step, "force-overwrite-existing") ?? false;
         var includeUnlistedInIndex = GetBool(step, "includeUnlistedInIndex") ?? GetBool(step, "include-unlisted-in-index") ?? false;
@@ -200,7 +210,7 @@ internal static partial class WebPipelineRunner
         if (mergeReleaseTelemetry)
             releaseTelemetryMerged = MergeProjectReleaseTelemetry(catalog.Projects, githubToken, githubApiBaseUrl, releaseTimeoutSeconds);
 
-        NormalizeProjectCatalogContracts(catalog.Projects, hubSectionLinkTarget);
+        NormalizeProjectCatalogContracts(catalog.Projects, hubSectionLinkTarget, productRoute);
 
         catalog.GeneratedOn = DateTimeOffset.UtcNow.ToString("O");
         catalog.Projects = catalog.Projects
@@ -228,6 +238,12 @@ internal static partial class WebPipelineRunner
         var pagesSkipped = 0;
         if (generatePages)
             GenerateProjectPages(catalog.Projects, contentRoot ?? string.Empty, forceOverwriteExisting, includeUnlistedInIndex, out pagesWritten, out pagesSkipped);
+
+        var productPagesWritten = 0;
+        var productPagesSkipped = 0;
+        var productPagesDeleted = 0;
+        if (generatePages && !string.IsNullOrWhiteSpace(productContentRoot))
+            GenerateProductPages(catalog.Projects, productContentRoot, forceOverwriteExisting, out productPagesWritten, out productPagesSkipped, out productPagesDeleted);
 
         var sectionsWritten = 0;
         var sectionsSkipped = 0;
@@ -278,6 +294,10 @@ internal static partial class WebPipelineRunner
                 hubSectionLinkTarget,
                 pagesWritten,
                 pagesSkipped,
+                productContentRoot = string.IsNullOrWhiteSpace(productContentRoot) ? null : Path.GetFullPath(productContentRoot),
+                productPagesWritten,
+                productPagesSkipped,
+                productPagesDeleted,
                 sectionsWritten,
                 sectionsSkipped,
                 sectionsDeleted,
@@ -350,7 +370,18 @@ internal static partial class WebPipelineRunner
         {
             project.Links ??= new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
             foreach (var pair in manifest.Links)
+            {
+                // An explicit null or empty value removes a link the project no longer has, instead of keeping the old one.
+                if (string.IsNullOrWhiteSpace(pair.Value))
+                {
+                    project.Links.Remove(pair.Key);
+                    if (pair.Key.Equals("website", StringComparison.OrdinalIgnoreCase))
+                        project.ExternalUrl = null;
+                    continue;
+                }
+
                 project.Links[pair.Key] = pair.Value;
+            }
 
             if (project.Links.TryGetValue("website", out var website) && !string.IsNullOrWhiteSpace(website))
                 project.ExternalUrl = website!.Trim();
@@ -1051,7 +1082,7 @@ internal static partial class WebPipelineRunner
         return normalized.StartsWith(repoRoot, StringComparison.Ordinal);
     }
 
-    private static void NormalizeProjectCatalogContracts(IList<ProjectCatalogEntry> projects, string hubSectionLinkTarget)
+    private static void NormalizeProjectCatalogContracts(IList<ProjectCatalogEntry> projects, string hubSectionLinkTarget, string? productRoute = null)
     {
         if (projects is null || projects.Count == 0)
             return;
@@ -1244,7 +1275,7 @@ internal static partial class WebPipelineRunner
             artifacts.Docs = NormalizeOptionalString(artifacts.Docs);
             artifacts.Api = NormalizeOptionalString(artifacts.Api);
             artifacts.Examples = NormalizeOptionalString(artifacts.Examples);
-            NormalizeProductCatalogContract(project, links, slug);
+            NormalizeProductCatalogContract(project, links, slug, productRoute);
         }
     }
 
@@ -1645,6 +1676,14 @@ internal static partial class WebPipelineRunner
                 continue;
 
             var outputPath = Path.Combine(contentRoot, slug + ".md");
+            if (!HasProjectPage(project))
+            {
+                // A private product only has a product page; its old project route redirects there through an alias.
+                if (File.Exists(outputPath) && CanOverwriteGenerated(outputPath, forceOverwriteExisting: false))
+                    File.Delete(outputPath);
+                continue;
+            }
+
             if (!CanOverwriteGenerated(outputPath, forceOverwriteExisting))
             {
                 skipped++;
@@ -1662,11 +1701,13 @@ internal static partial class WebPipelineRunner
 
             if (project.Aliases is { Length: > 0 })
             {
-                var aliases = project.Aliases
-                    .Where(static alias => !string.IsNullOrWhiteSpace(alias))
-                    .Select(static alias => alias!.Trim())
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
+                var aliases = HasSeparateProductPage(project)
+                    ? SplitProductAliases(project, slug).ProjectAliases
+                    : project.Aliases
+                        .Where(static alias => !string.IsNullOrWhiteSpace(alias))
+                        .Select(static alias => alias!.Trim())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
                 if (aliases.Length > 0)
                 {
                     lines.Add("aliases:");
@@ -1689,6 +1730,8 @@ internal static partial class WebPipelineRunner
             lines.Add($"meta.project_hub_path: {YamlQuote(hubPath)}");
             lines.Add($"meta.project_base_slug: {YamlQuote(slug)}");
             lines.Add("meta.project_section: \"overview\"");
+            if (HasSeparateProductPage(project))
+                lines.Add($"meta.project_product_path: {YamlQuote(project.Product!.Path)}");
             if (!string.IsNullOrWhiteSpace(project.ExternalUrl))
                 lines.Add($"meta.project_external_url: {YamlQuote(project.ExternalUrl)}");
             if (!string.IsNullOrWhiteSpace(project.GitHubRepo))
@@ -1704,7 +1747,8 @@ internal static partial class WebPipelineRunner
             var projectLastModified = ResolveProjectSitemapLastModified(project, outputPath, projectFingerprint);
             if (!string.IsNullOrWhiteSpace(projectLastModified))
                 lines.Add($"sitemap.lastmod: {YamlQuote(projectLastModified)}");
-            AppendProjectFrontMatterExtensions(lines, project, includeProductPresentation: true);
+            // With a separate product page, the product presentation and its social image belong there.
+            AppendProjectFrontMatterExtensions(lines, project, includeProductPresentation: !HasSeparateProductPage(project));
             lines.Add("meta.generated_by: powerforge.project-catalog");
             lines.Add("---");
             lines.Add(string.Empty);
@@ -1906,6 +1950,8 @@ internal static partial class WebPipelineRunner
             var description = string.IsNullOrWhiteSpace(project.Description) ? $"{name} project page." : project.Description!;
             var hubPath = ResolveProjectHubPath(project, slug);
             var sections = new List<string>();
+            if (!HasProjectPage(project))
+                continue;
             if (HasProjectDocsSection(project))
                 sections.Add("docs");
             if (HasProjectApiSection(project))
@@ -3297,8 +3343,12 @@ internal static partial class WebPipelineRunner
 
         try
         {
-            var lines = File.ReadLines(filePath).Take(80);
-            var head = string.Join('\n', lines);
+            // Read the whole front matter: product pages carry long presentation metadata before the marker.
+            var lines = File.ReadLines(filePath).Take(2000).ToList();
+            var frontMatterEnd = lines.Count > 0 && lines[0].TrimStart('﻿').Trim() == "---"
+                ? lines.FindIndex(1, static line => line.Trim() == "---")
+                : -1;
+            var head = string.Join('\n', frontMatterEnd > 0 ? lines.Take(frontMatterEnd + 1) : lines.Take(80));
             return GeneratedProjectMarkers.Any(marker =>
                 head.IndexOf(marker, StringComparison.OrdinalIgnoreCase) >= 0);
         }
