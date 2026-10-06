@@ -1581,6 +1581,59 @@ Notes:
 - Redirect CSV columns are `legacy_url,target_url,status,match_kind,notes`, matching the link-service import/export workflow.
 - Review CSV rows are for missing or ambiguous legacy URLs that should not be promoted automatically.
 
+#### project-catalog
+Normalizes and validates `data/projects/catalog.json`, merges project manifests from tracked source repositories, and generates project pages. It can also generate separate product pages.
+
+```json
+{
+  "task": "project-catalog",
+  "catalog": "./data/projects/catalog.json",
+  "sourcesRoot": "./projects-sources",
+  "contentRoot": "./content/projects",
+  "productContentRoot": "./content/products",
+  "productRoute": "/products/",
+  "publishPath": "./static/data/projects/catalog.json",
+  "validate": true,
+  "failOnWarnings": true
+}
+```
+
+Projects and products have different jobs:
+
+- A **project page** (`/projects/<slug>/`) is the technical hub. It links to the source, docs, API, examples, and changelog.
+- A **product page** (`/products/<slug>/`) presents the product to customers: what it is, where to get it, and screenshots. It links back to the project page.
+
+Notes:
+
+- Without `productContentRoot`, product entries (`kind: "product"`) keep their product presentation on the project page, as before.
+- With `productContentRoot`, every product gets `<productContentRoot>/<slug>.md` with `meta.product_page: true` and the full `meta.product_presentation` front matter.
+  - The normalized catalog stores the route in `product.path`. It defaults to `<productRoute><slug>/`, and an explicit `product.path` overrides it.
+  - The project page keeps the project layout, drops the product presentation, and gains `meta.project_product_path`.
+  - `/products/...` and `/apps/...` aliases move to the product page. All other aliases stay on the project page.
+  - Generated product pages whose product was removed are deleted. Hand-written files (not marked `meta.generated_by`) are never overwritten unless `forceOverwriteExisting` is set.
+- **Private products.** A product has a project page when it has a public repository (`githubRepo` or `links.source`) or a docs, API, or examples surface. Set `product.projectPage` to override this. A product without a project page (for example a closed-source app) gets no `/projects/<slug>/` page and no section pages. Its old project route becomes an alias of the product page, so existing links redirect there.
+- **Distribution channels.** `product.channels` lists where people can get the product. Themes render these as store badges and install commands.
+
+  ```json
+  "channels": [
+    { "kind": "microsoftStore", "url": "https://apps.microsoft.com/detail/...", "platforms": ["Windows"] },
+    { "kind": "winget", "status": "coming-soon", "command": "winget install Vendor.App" },
+    { "kind": "macAppStore", "status": "coming-soon" }
+  ]
+  ```
+
+  - Known kinds:
+    - stores: `microsoftStore`, `appStore`, `macAppStore`, `googlePlay`
+    - package managers: `winget`, `homebrew`, `chocolatey`, `scoop`, `nuget`, `powershellGallery`, `npm`, `docker`
+    - other: `githubReleases`, `download`, `web`
+
+    Kind names are not case-sensitive.
+  - `status` is `available` (the default), `beta`, or `coming-soon`.
+  - `label` defaults to the store's display name.
+  - A channel needs a `url` or a `command` unless it is `coming-soon`. A URL must be HTTPS or root-relative.
+  - `meta.software.download_url` (used in `SoftwareApplication` structured data) comes from the first available store or download channel, falling back to `links.appStore` and `links.downloads`.
+- **Clearing links from a manifest.** Manifest links merge into the catalog. To remove a link the project no longer has, set it to `null` or `""` in `project-manifest.json`. For example, `"website": null` removes `links.website` and clears `externalUrl`. Without this, an old URL would stay in the catalog forever.
+
 #### project-docs-sync
 Synchronizes project documentation, curated public examples, and optionally API artifacts from source repositories listed in your project catalog.
 
