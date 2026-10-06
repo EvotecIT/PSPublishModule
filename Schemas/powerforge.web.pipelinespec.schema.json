@@ -1722,6 +1722,14 @@
       "additionalProperties": false,
       "properties": {
         "task": { "enum": ["project-docs-sync", "sync-project-docs", "project-docs"] },
+        "linkMappings": {
+          "type": "object",
+          "description": "Markdown navigation URL prefix mappings keyed by project slug. Source and target prefixes must be root-relative directories starting and ending with a slash.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          }
+        },
         "id": { "type": "string" },
         "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
         "mode": { "type": "string" },

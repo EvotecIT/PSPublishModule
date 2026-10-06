@@ -80,6 +80,7 @@ internal static partial class WebPipelineRunner
             scalarKeys: new[] { "sourceExamplesPath", "source-examples-path", "sourceExamplesFolder", "source-examples-folder" },
             defaults: new[] { "Website/content/examples", "content/examples" });
         var selectedProjectSlugs = ResolveProjectDocsProjectFilter(step);
+        var linkMappings = ReadProjectDocsLinkMappings(step);
 
         var apiRoot = ResolvePath(baseDir,
             GetString(step, "apiRoot") ??
@@ -325,7 +326,7 @@ internal static partial class WebPipelineRunner
                 if (!string.IsNullOrWhiteSpace(targetDirectory))
                     Directory.CreateDirectory(targetDirectory);
 
-                File.Copy(sourceFile, targetFile, overwrite: true);
+                CopyProjectDocumentationFile(sourceFile, targetFile, slug, linkMappings);
                 copiedFiles++;
             }
 
@@ -447,7 +448,7 @@ internal static partial class WebPipelineRunner
                     if (!string.IsNullOrWhiteSpace(targetDirectory))
                         Directory.CreateDirectory(targetDirectory);
 
-                    File.Copy(sourceFile, targetFile, overwrite: true);
+                    CopyProjectDocumentationFile(sourceFile, targetFile, slug, linkMappings);
                     copiedExampleFiles++;
                 }
 
