@@ -673,7 +673,7 @@ internal static partial class WebPipelineRunner
                     string.Equals(channel.Kind, kind, StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(channel.Status, "coming-soon", StringComparison.OrdinalIgnoreCase) &&
                     !string.IsNullOrWhiteSpace(channel.Url) &&
-                    channel.Url!.StartsWith("https://", StringComparison.OrdinalIgnoreCase));
+                    IsValidProductViewerSource(channel.Url!));
                 if (match is not null)
                     return match.Url;
             }
