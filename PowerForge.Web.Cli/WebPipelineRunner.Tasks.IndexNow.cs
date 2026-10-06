@@ -7,6 +7,8 @@ using System.Text;
 using System.Text.Json;
 using PowerForge.Web;
 
+using PowerForge.IndexNow;
+
 namespace PowerForge.Web.Cli;
 
 internal static partial class WebPipelineRunner

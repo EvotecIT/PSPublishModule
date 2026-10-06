@@ -361,6 +361,9 @@
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
       },
+      "powerforge.indexnow": {
+        "type": "Project"
+      },
       "powerforge.web": {
         "type": "Project",
         "dependencies": {
