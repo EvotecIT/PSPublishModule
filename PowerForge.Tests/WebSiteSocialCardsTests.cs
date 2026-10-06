@@ -267,6 +267,37 @@ public class WebSiteSocialCardsTests
         }
     }
 
+    [Theory]
+    [InlineData("og_image")]
+    [InlineData("twitter_image")]
+    public void Build_GeneratedCardCollections_KeepSocialImageAliasesInsideCard(string alias)
+    {
+        var root = CreateTempRoot("pf-web-social-card-alias-");
+        try
+        {
+            var imageRoot = Path.Combine(root, "static", "images");
+            Directory.CreateDirectory(imageRoot);
+            File.WriteAllBytes(Path.Combine(imageRoot, "screenshot.png"), Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aYXsAAAAASUVORK5CYII="));
+            var spec = BuildPagesSpec();
+            spec.Social = new SocialSpec
+            {
+                Enabled = true, AutoGenerateCards = true,
+                GeneratedCardCollections = new List<string> { "pages" },
+                GeneratedCardVariant = "panel"
+            };
+            var page = "---\ntitle: Product\nslug: product\nmeta.social_image: /images/screenshot.png\n---\nProduct body.";
+            WritePage(root, "product.md", page);
+            var expected = ExtractOgImage(BuildAndRead(root, spec, Path.Combine("product", "index.html")));
+            WritePage(root, "product.md", page.Replace("meta.social_image:", $"meta.{alias}:", StringComparison.Ordinal));
+            var actual = ExtractOgImage(BuildAndRead(root, spec, Path.Combine("product", "index.html")));
+            Assert.Equal(expected, actual);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
     [Fact]
     public void Build_WithoutGeneratedCardCollections_KeepsPageImage()
     {

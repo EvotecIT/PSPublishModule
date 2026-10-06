@@ -29,7 +29,7 @@ public sealed class SocialSpec
     public int GeneratedCardHeight { get; set; } = 630;
     /// <summary>Optional default style key for generated social cards (home/default/docs/api/blog/contact).</summary>
     public string? GeneratedCardStyle { get; set; }
-    /// <summary>Optional default layout variant for generated social cards (product/spotlight/shelf/reference/editorial/inline-image/connect).</summary>
+    /// <summary>Optional default layout variant for generated social cards (product/panel/spotlight/shelf/reference/editorial/inline-image/connect).</summary>
     public string? GeneratedCardVariant { get; set; }
     /// <summary>Optional named theme applied to generated social cards.</summary>
     public string? GeneratedCardTheme { get; set; }
@@ -64,7 +64,7 @@ public sealed class SocialCardThemeSpec
 {
     /// <summary>Optional style key for this theme (home/default/docs/api/blog/contact).</summary>
     public string? Style { get; set; }
-    /// <summary>Optional layout variant for this theme (product/spotlight/shelf/reference/editorial/inline-image/connect).</summary>
+    /// <summary>Optional layout variant for this theme (product/panel/spotlight/shelf/reference/editorial/inline-image/connect).</summary>
     public string? Variant { get; set; }
     /// <summary>Optional color scheme for this theme (dark/light).</summary>
     public string? ColorScheme { get; set; }

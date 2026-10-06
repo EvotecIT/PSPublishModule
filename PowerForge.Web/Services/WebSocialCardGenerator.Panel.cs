@@ -35,7 +35,7 @@ internal static partial class WebSocialCardGenerator
 
     internal static string ShortenReleaseTag(string value)
     {
-        var match = System.Text.RegularExpressions.Regex.Match(value, @"v?\d+(?:\.\d+)+(?:-[0-9A-Za-z.]+)?", System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+        var match = System.Text.RegularExpressions.Regex.Match(value, @"v?\d+(?:\.\d+)+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?", System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
         if (!match.Success)
             return value;
         return match.Value.StartsWith('v') ? match.Value : "v" + match.Value;

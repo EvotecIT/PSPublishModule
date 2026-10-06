@@ -644,7 +644,43 @@
         "AutoGenerateCards": { "type": "boolean" },
         "GeneratedCardsPath": { "type": "string" },
         "GeneratedCardWidth": { "type": "integer", "minimum": 600, "maximum": 2400 },
-        "GeneratedCardHeight": { "type": "integer", "minimum": 315, "maximum": 1400 }
+        "GeneratedCardHeight": { "type": "integer", "minimum": 315, "maximum": 1400 },
+        "GeneratedCardStyle": { "type": "string" },
+        "GeneratedCardVariant": { "type": "string" },
+        "GeneratedCardTheme": { "type": "string" },
+        "GeneratedCardLogo": { "type": "string" },
+        "GeneratedCardThemes": { "type": "object", "additionalProperties": { "$ref": "#/$defs/SocialCardThemeSpec" } },
+        "GeneratedCardThemesByCollection": { "type": "object", "additionalProperties": { "type": "string" } },
+        "GeneratedCardStylesByCollection": { "type": "object", "additionalProperties": { "type": "string" } },
+        "GeneratedCardVariantsByCollection": { "type": "object", "additionalProperties": { "type": "string" } },
+        "GeneratedCardCollections": { "type": "array", "items": { "type": "string" } },
+        "GeneratedCardColorScheme": { "type": "string" },
+        "GeneratedCardColorSchemesByCollection": { "type": "object", "additionalProperties": { "type": "string" } },
+        "GeneratedCardAllowRemoteMediaFetch": { "type": "boolean" },
+        "GeneratedCardMetrics": { "type": "array", "items": { "$ref": "#/$defs/SocialCardMetricSpec" } }
+      }
+    },
+    "SocialCardThemeSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Style": { "type": "string" },
+        "Variant": { "type": "string" },
+        "ColorScheme": { "type": "string" },
+        "Logo": { "type": "string" },
+        "AllowRemoteMediaFetch": { "type": "boolean" },
+        "Tokens": { "type": "object" },
+        "Metrics": { "type": "array", "items": { "$ref": "#/$defs/SocialCardMetricSpec" } }
+      }
+    },
+    "SocialCardMetricSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Icon": { "type": "string" },
+        "Value": { "type": "string" },
+        "Label": { "type": "string" },
+        "Color": { "type": "string" }
       }
     },
     "StructuredDataSpec": {

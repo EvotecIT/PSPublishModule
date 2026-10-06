@@ -57,6 +57,9 @@ public class WebSocialCardGeneratorTests
     [InlineData("v1.41.0", "v1.41.0")]
     [InlineData("1.2.3", "v1.2.3")]
     [InlineData("2.0.0-preview1", "v2.0.0-preview1")]
+    [InlineData("v1.2.3-rc-1", "v1.2.3-rc-1")]
+    [InlineData("Product-v1.2.3-beta-2", "v1.2.3-beta-2")]
+    [InlineData("v1.2.3+build-7", "v1.2.3+build-7")]
     [InlineData("OfficeIMO-v20260927150127", "OfficeIMO-v20260927150127")]
     public void ShortenReleaseTag_KeepsTheVersion(string tag, string expected)
     {

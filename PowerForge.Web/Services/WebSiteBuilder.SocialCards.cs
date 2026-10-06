@@ -1039,6 +1039,8 @@ public static partial class WebSiteBuilder
             GetMetaString(item.Meta, "social.media"),
             GetMetaString(item.Meta, "social_image"),
             GetMetaString(item.Meta, "social.image"),
+            GetMetaString(item.Meta, "og_image"),
+            GetMetaString(item.Meta, "twitter_image"),
             GetMetaString(item.Meta, "cover_image"),
             GetMetaString(item.Meta, "thumbnail"),
             GetMetaString(item.Meta, "image"));
