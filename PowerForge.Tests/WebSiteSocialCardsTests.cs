@@ -209,6 +209,132 @@ public class WebSiteSocialCardsTests
     }
 
     [Fact]
+    public void Build_GeneratedCardCollections_PreferGeneratedCardOverPageImage()
+    {
+        var root = CreateTempRoot("pf-web-social-card-collections-");
+        try
+        {
+            WritePage(root, "product.md",
+                """
+                ---
+                title: Example Product
+                description: A product page with its own screenshot.
+                slug: product
+                meta.social_image: /images/screenshot.png
+                meta.social_image_width: 1440
+                meta.social_image_height: 960
+                ---
+
+                Product body.
+                """);
+            WritePage(root, "opted-out.md",
+                """
+                ---
+                title: Opted Out
+                description: This page keeps its own image.
+                slug: opted-out
+                meta.social_image: /images/screenshot.png
+                meta.social_card: false
+                ---
+
+                Body.
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.Social = new SocialSpec
+            {
+                Enabled = true,
+                SiteName = "Example Site",
+                AutoGenerateCards = true,
+                GeneratedCardsPath = "/assets/social/generated",
+                GeneratedCardWidth = 1200,
+                GeneratedCardHeight = 630,
+                GeneratedCardCollections = new List<string> { "pages" },
+                GeneratedCardVariantsByCollection = new Dictionary<string, string> { ["pages"] = "panel" }
+            };
+
+            var html = BuildAndRead(root, spec, Path.Combine("product", "index.html"));
+            Assert.Contains("property=\"og:image\" content=\"https://example.test/assets/social/generated/", html, StringComparison.Ordinal);
+            Assert.Contains("property=\"og:image:width\" content=\"1200\"", html, StringComparison.Ordinal);
+            Assert.Contains("property=\"og:image:height\" content=\"630\"", html, StringComparison.Ordinal);
+
+            var optedOut = File.ReadAllText(Path.Combine(root, "_site", "opted-out", "index.html"));
+            Assert.Contains("property=\"og:image\" content=\"https://example.test/images/screenshot.png\"", optedOut, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Theory]
+    [InlineData("og_image")]
+    [InlineData("twitter_image")]
+    public void Build_GeneratedCardCollections_KeepSocialImageAliasesInsideCard(string alias)
+    {
+        var root = CreateTempRoot("pf-web-social-card-alias-");
+        try
+        {
+            var imageRoot = Path.Combine(root, "static", "images");
+            Directory.CreateDirectory(imageRoot);
+            File.WriteAllBytes(Path.Combine(imageRoot, "screenshot.png"), Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aYXsAAAAASUVORK5CYII="));
+            var spec = BuildPagesSpec();
+            spec.Social = new SocialSpec
+            {
+                Enabled = true, AutoGenerateCards = true,
+                GeneratedCardCollections = new List<string> { "pages" },
+                GeneratedCardVariant = "panel"
+            };
+            var page = "---\ntitle: Product\nslug: product\nmeta.social_image: /images/screenshot.png\n---\nProduct body.";
+            WritePage(root, "product.md", page);
+            var expected = ExtractOgImage(BuildAndRead(root, spec, Path.Combine("product", "index.html")));
+            WritePage(root, "product.md", page.Replace("meta.social_image:", $"meta.{alias}:", StringComparison.Ordinal));
+            var actual = ExtractOgImage(BuildAndRead(root, spec, Path.Combine("product", "index.html")));
+            Assert.Equal(expected, actual);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public void Build_WithoutGeneratedCardCollections_KeepsPageImage()
+    {
+        var root = CreateTempRoot("pf-web-social-card-page-image-");
+        try
+        {
+            WritePage(root, "product.md",
+                """
+                ---
+                title: Example Product
+                description: A product page with its own screenshot.
+                slug: product
+                meta.social_image: /images/screenshot.png
+                ---
+
+                Product body.
+                """);
+
+            var spec = BuildPagesSpec();
+            spec.Social = new SocialSpec
+            {
+                Enabled = true,
+                SiteName = "Example Site",
+                AutoGenerateCards = true,
+                GeneratedCardsPath = "/assets/social/generated"
+            };
+
+            var html = BuildAndRead(root, spec, Path.Combine("product", "index.html"));
+            Assert.Contains("property=\"og:image\" content=\"https://example.test/images/screenshot.png\"", html, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
     public void Build_GeneratesSocialCardImage_ForLongCommandLikeContent_WithinSafeLayout()
     {
         var root = CreateTempRoot("pf-web-social-generated-long-");

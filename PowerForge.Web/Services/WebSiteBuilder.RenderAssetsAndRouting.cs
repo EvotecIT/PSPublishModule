@@ -949,11 +949,7 @@ public static partial class WebSiteBuilder
 
     private static (int Width, int Height) ResolveSocialImageDimensions(SiteSpec spec, ContentItem item, string imagePath)
     {
-        var width = GetMetaInt(item.Meta, "social_image_width") ?? GetMetaInt(item.Meta, "social.image.width");
-        var height = GetMetaInt(item.Meta, "social_image_height") ?? GetMetaInt(item.Meta, "social.image.height");
-        if (width is > 0 || height is > 0)
-            return (Math.Max(0, width ?? 0), Math.Max(0, height ?? 0));
-
+        // A generated card has its own size, even when the page also declares the size of its own image.
         if (spec.Social?.AutoGenerateCards == true)
         {
             var generatedPrefix = NormalizeGeneratedCardsPath(spec.Social.GeneratedCardsPath) + "/";
@@ -964,6 +960,11 @@ public static partial class WebSiteBuilder
                 return (Math.Max(0, spec.Social.GeneratedCardWidth), Math.Max(0, spec.Social.GeneratedCardHeight));
             }
         }
+
+        var width = GetMetaInt(item.Meta, "social_image_width") ?? GetMetaInt(item.Meta, "social.image.width");
+        var height = GetMetaInt(item.Meta, "social_image_height") ?? GetMetaInt(item.Meta, "social.image.height");
+        if (width is > 0 || height is > 0)
+            return (Math.Max(0, width ?? 0), Math.Max(0, height ?? 0));
 
         return (Math.Max(0, spec.Social?.ImageWidth ?? 0), Math.Max(0, spec.Social?.ImageHeight ?? 0));
     }

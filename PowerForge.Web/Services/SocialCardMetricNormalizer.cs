@@ -11,7 +11,8 @@ internal static class SocialCardMetricNormalizer
             .Select(static metric => new SocialCardMetricSpec
             {
                 Icon = Trim(metric.Icon, 24),
-                Value = Trim(metric.Value, 16),
+                // Release tags such as "Product-v1.8.2" keep their version instead of being cut at the length limit.
+                Value = Trim(IsReleaseMetric(metric) && metric.Value is not null ? WebSocialCardGenerator.ShortenReleaseTag(metric.Value) : metric.Value, 16),
                 Label = Trim(metric.Label, 24),
                 Color = Trim(metric.Color, 32)
             })
@@ -19,6 +20,10 @@ internal static class SocialCardMetricNormalizer
             .Take(5)
             .ToList();
     }
+
+    private static bool IsReleaseMetric(SocialCardMetricSpec metric)
+        => string.Equals(metric.Icon?.Trim(), "tag", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(metric.Icon?.Trim(), "release", StringComparison.OrdinalIgnoreCase);
 
     internal static string Trim(string? value, int maxLength)
     {

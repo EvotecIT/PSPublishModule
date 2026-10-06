@@ -53,15 +53,18 @@ public static partial class WebSiteBuilder
         string siteName,
         string imageOverride)
     {
-        if (!string.IsNullOrWhiteSpace(imageOverride))
+        if (!string.IsNullOrWhiteSpace(imageOverride) && !PrefersGeneratedSocialCard(spec, item))
             return imageOverride;
 
-        if (spec.Social?.AutoGenerateCards == true && ShouldAutoGenerateSocialCardForPage(item))
+        if (spec.Social?.AutoGenerateCards == true && ShouldAutoGenerateSocialCardForPage(spec, item))
         {
             var generated = TryGenerateSocialCardPath(spec, item, outputRoot, title, description, siteName);
             if (!string.IsNullOrWhiteSpace(generated))
                 return generated;
         }
+
+        if (!string.IsNullOrWhiteSpace(imageOverride))
+            return imageOverride;
 
         if (!string.IsNullOrWhiteSpace(spec.Social?.Image))
             return spec.Social.Image!;
@@ -144,7 +147,8 @@ public static partial class WebSiteBuilder
             return string.Empty;
         if (TryGetMetaBool(item.Meta, "social", out var socialEnabled) && !socialEnabled)
             return string.Empty;
-        if (!string.IsNullOrWhiteSpace(ResolveSocialImageOverride(item)) || !ShouldAutoGenerateSocialCardForPage(item))
+        if ((!string.IsNullOrWhiteSpace(ResolveSocialImageOverride(item)) && !PrefersGeneratedSocialCard(spec, item)) ||
+            !ShouldAutoGenerateSocialCardForPage(spec, item))
             return string.Empty;
 
         var title = GetMetaString(item.Meta, "social_title");
@@ -192,6 +196,9 @@ public static partial class WebSiteBuilder
             ? ResolveSocialCardAssetDataUri(spec, item, inlineImageCandidate, rootPath)
             : string.Empty;
         var metrics = ResolveSocialCardMetrics(spec, item, cardTheme);
+        var chips = ResolveSocialCardChips(item);
+        var accentColor = ResolveSocialCardAccent(item);
+        var siteAddress = ResolveSocialCardSiteAddress(spec, item);
         var themeTokens = MergeSocialCardThemeTokens(ResolveSocialCardSiteThemeTokens(spec, rootPath), cardTheme?.Tokens);
         var themeTokenFingerprint = ComputeThemeTokenFingerprint(themeTokens);
         var metricsFingerprint = ComputeSocialCardMetricsFingerprint(metrics);
@@ -210,6 +217,9 @@ public static partial class WebSiteBuilder
             allowRemoteMediaFetch ? "remote-media-enabled" : "remote-media-disabled",
             themeTokenFingerprint,
             metricsFingerprint,
+            string.Join(",", chips),
+            accentColor,
+            siteAddress,
             logoSource,
             inlineImageSource
         });
@@ -232,9 +242,60 @@ public static partial class WebSiteBuilder
             AllowRemoteMediaFetch = allowRemoteMediaFetch,
             LogoDataUri = logoSource,
             InlineImageDataUri = inlineImageSource,
-            Metrics = metrics
+            Metrics = metrics,
+            Chips = chips,
+            AccentColor = accentColor,
+            SiteAddress = siteAddress
         };
         return new SocialCardGenerationPlan(relativePath, renderOptions);
+    }
+
+    // Short labels shown as chips on the panel layout: explicit meta, then product platforms, then project language and surfaces.
+    private static IReadOnlyList<string> ResolveSocialCardChips(ContentItem item)
+    {
+        var chips = TryGetMetaStringList(item.Meta, "social_card_chips");
+        if (chips.Length == 0)
+            chips = TryGetMetaStringList(item.Meta, "social.chips");
+        if (chips.Length == 0)
+            chips = TryGetMetaStringList(item.Meta, "product_presentation.platforms");
+        if (chips.Length == 0)
+        {
+            var inferred = new List<string>();
+            var language = GetMetaString(item.Meta, "project_github_language");
+            if (!string.IsNullOrWhiteSpace(language))
+                inferred.Add(language.Trim());
+            if (TryGetMetaBool(item.Meta, "project_surface_docs", out var docs) && docs)
+                inferred.Add("Docs");
+            if ((TryGetMetaBool(item.Meta, "project_surface_api_dotnet", out var apiDotNet) && apiDotNet) ||
+                (TryGetMetaBool(item.Meta, "project_surface_api_powershell", out var apiPowerShell) && apiPowerShell))
+                inferred.Add("API reference");
+            if (TryGetMetaBool(item.Meta, "project_surface_examples", out var examples) && examples)
+                inferred.Add("Examples");
+            chips = inferred.ToArray();
+        }
+
+        return chips
+            .Select(static chip => SocialCardMetricNormalizer.Trim(chip, 28))
+            .Where(static chip => !string.IsNullOrWhiteSpace(chip))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(6)
+            .ToArray();
+    }
+
+    private static string ResolveSocialCardAccent(ContentItem item)
+        => FirstNonEmpty(
+               GetMetaString(item.Meta, "social_card_accent"),
+               GetMetaString(item.Meta, "social.accent"),
+               GetMetaString(item.Meta, "brand.accent"))?.Trim() ?? string.Empty;
+
+    private static string ResolveSocialCardSiteAddress(SiteSpec spec, ContentItem item)
+    {
+        var baseUrl = ResolveLanguageBaseUrl(spec, ResolveLocalizationConfig(spec), item.Language);
+        if (string.IsNullOrWhiteSpace(baseUrl))
+            baseUrl = spec.BaseUrl;
+        return Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
+            ? uri.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? uri.Host[4..] : uri.Host
+            : string.Empty;
     }
 
     private static Dictionary<string, object?>? ResolveSocialCardSiteThemeTokens(SiteSpec spec, string? rootPath)
@@ -309,6 +370,20 @@ public static partial class WebSiteBuilder
 
         if (item.Kind == PageKind.Home)
             return "HOME";
+
+        // A project overview says what kind of project it is rather than repeating the section name.
+        var projectSection = GetMetaString(item.Meta, "project_section");
+        if (string.IsNullOrWhiteSpace(projectSection) || string.Equals(projectSection, "overview", StringComparison.OrdinalIgnoreCase))
+        {
+            var projectKind = GetMetaString(item.Meta, "project_github_language").Trim() switch
+            {
+                var language when language.Equals("PowerShell", StringComparison.OrdinalIgnoreCase) => "POWERSHELL MODULE",
+                var language when language.Equals("C#", StringComparison.OrdinalIgnoreCase) => ".NET LIBRARY",
+                _ => string.Empty
+            };
+            if (!string.IsNullOrWhiteSpace(projectKind))
+                return projectKind;
+        }
 
         var normalizedRoute = NormalizePath(route).Trim('/');
         if (normalizedRoute.Contains("examples", StringComparison.OrdinalIgnoreCase))
@@ -499,6 +574,9 @@ public static partial class WebSiteBuilder
         if (metrics.Count >= 5 || meta is null || !TryGetMetaValue(meta, key, out var raw) || raw is null)
             return;
 
+        // Release tags such as "Product-v1.8.2" are cut to their version before the length limit would truncate them.
+        if (string.Equals(icon, "tag", StringComparison.OrdinalIgnoreCase) && raw is string tag)
+            raw = WebSocialCardGenerator.ShortenReleaseTag(tag);
         var value = FormatSocialCardMetricValue(raw, abbreviateNumber);
         if (string.IsNullOrWhiteSpace(value) || string.Equals(value, "0", StringComparison.OrdinalIgnoreCase))
             return;
@@ -788,6 +866,39 @@ public static partial class WebSiteBuilder
         return true;
     }
 
+    private static bool ShouldAutoGenerateSocialCardForPage(SiteSpec? spec, ContentItem item)
+    {
+        if (item is null)
+            return false;
+
+        // Explicit front matter override: meta.social_card: true/false.
+        if (TryGetMetaBool(item.Meta, "social_card", out var overrideValue))
+            return overrideValue;
+
+        if (IsGeneratedCardCollection(spec, item))
+            return true;
+
+        return ShouldAutoGenerateSocialCardForPage(item);
+    }
+
+    // In a configured card collection the generated card wins over a page image, which then appears inside the card.
+    private static bool PrefersGeneratedSocialCard(SiteSpec? spec, ContentItem item)
+    {
+        if (spec?.Social?.AutoGenerateCards != true || item is null)
+            return false;
+        if (TryGetMetaBool(item.Meta, "social_card", out var overrideValue) && !overrideValue)
+            return false;
+        return IsGeneratedCardCollection(spec, item);
+    }
+
+    private static bool IsGeneratedCardCollection(SiteSpec? spec, ContentItem item)
+    {
+        var collections = spec?.Social?.GeneratedCardCollections;
+        return collections is { Count: > 0 } &&
+               !string.IsNullOrWhiteSpace(item.Collection) &&
+               collections.Any(collection => string.Equals(collection?.Trim(), item.Collection.Trim(), StringComparison.OrdinalIgnoreCase));
+    }
+
     private static bool ShouldAutoGenerateSocialCardForPage(ContentItem item)
     {
         if (item is null)
@@ -928,6 +1039,8 @@ public static partial class WebSiteBuilder
             GetMetaString(item.Meta, "social.media"),
             GetMetaString(item.Meta, "social_image"),
             GetMetaString(item.Meta, "social.image"),
+            GetMetaString(item.Meta, "og_image"),
+            GetMetaString(item.Meta, "twitter_image"),
             GetMetaString(item.Meta, "cover_image"),
             GetMetaString(item.Meta, "thumbnail"),
             GetMetaString(item.Meta, "image"));
@@ -952,7 +1065,8 @@ public static partial class WebSiteBuilder
         if (TryGetMetaBool(item.Meta, "social.image_inline", out explicitInline))
             return explicitInline;
 
-        if (string.Equals(variantKey, "inline-image", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(variantKey, "inline-image", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(variantKey, "panel", StringComparison.OrdinalIgnoreCase))
             return true;
 
         return string.Equals(styleKey, "blog", StringComparison.OrdinalIgnoreCase);

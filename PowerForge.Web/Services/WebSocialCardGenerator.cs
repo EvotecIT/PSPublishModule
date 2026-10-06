@@ -1169,6 +1169,7 @@ internal static partial class WebSocialCardGenerator
             "inline-image" => "inline-image",
             "connect" => "connect",
             "contact" => "connect",
+            "panel" => "panel",
             "metrics" => "metrics",
             "stats" => "metrics",
             "statistics" => "metrics",
@@ -1193,7 +1194,9 @@ internal static partial class WebSocialCardGenerator
             candidate = DefaultBadgeForStyle(styleKey, variantKey);
 
         var footer = TrimSingleLine(footerLabel, 120).Trim();
-        if (candidate.Length > 16)
+        // The panel layout prints the badge as an eyebrow line rather than a pill, so longer labels fit.
+        var maxLength = string.Equals(variantKey, "panel", StringComparison.OrdinalIgnoreCase) ? 40 : 16;
+        if (candidate.Length > maxLength)
         {
             if (LooksLikeApiReferenceLabel(candidate) || LooksLikeApiReferenceLabel(footer))
                 candidate = "API";
