@@ -187,6 +187,8 @@ internal static partial class WebPipelineRunner
 
         // productRoute is set when the site generates separate product pages (project-catalog productContentRoot).
         product.Path = productRoute is null ? null : NormalizeProductRoute(product.Path) ?? $"{productRoute}{slug}/";
+        // Lets themes link a product to its project page, or straight to the product page when there is none.
+        product.ProjectPath = productRoute is not null && HasProjectPage(project) ? ResolveProjectHubPath(project, slug) : null;
 
         product.PrimaryAction = NormalizeProductAction(product.PrimaryAction);
         product.SecondaryAction = NormalizeProductAction(product.SecondaryAction);
@@ -902,6 +904,11 @@ internal static partial class WebPipelineRunner
         [JsonPropertyName("projectPage")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? ProjectPage { get; set; }
+
+        /// <summary>The product's project page route, or null when it only has a product page. Computed by the catalog; not an input.</summary>
+        [JsonPropertyName("projectPath")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ProjectPath { get; set; }
 
         [JsonPropertyName("channels")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

@@ -80,6 +80,7 @@ public partial class WebPipelineRunnerProjectCatalogProductTests
             using var normalized = JsonDocument.Parse(File.ReadAllText(catalogPath));
             var product = normalized.RootElement.GetProperty("projects")[0].GetProperty("product");
             Assert.Equal("/products/officeimo/", product.GetProperty("path").GetString());
+            Assert.Equal("/projects/officeimo/", product.GetProperty("projectPath").GetString());
             Assert.Equal("microsoftStore", product.GetProperty("channels")[1].GetProperty("kind").GetString());
         }
         finally
@@ -95,7 +96,7 @@ public partial class WebPipelineRunnerProjectCatalogProductTests
 
         try
         {
-            WriteCatalog(root,
+            var catalogPath = WriteCatalog(root,
                 """
                 {
                   "projects": [
@@ -145,6 +146,11 @@ public partial class WebPipelineRunnerProjectCatalogProductTests
             Assert.Contains("  project_page: false", productPage, StringComparison.Ordinal);
             Assert.DoesNotContain("meta.product_project_path", productPage, StringComparison.Ordinal);
             Assert.Contains("meta.software.download_url: \"https://apps.apple.com/us/app/casaray/id6778025328\"", productPage, StringComparison.Ordinal);
+
+            using var normalized = JsonDocument.Parse(File.ReadAllText(catalogPath));
+            var product = normalized.RootElement.GetProperty("projects")[0].GetProperty("product");
+            Assert.Equal("/products/casaray/", product.GetProperty("path").GetString());
+            Assert.False(product.TryGetProperty("projectPath", out _));
         }
         finally
         {
