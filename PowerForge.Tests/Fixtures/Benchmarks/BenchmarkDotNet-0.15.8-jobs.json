@@ -1,0 +1,292 @@
+{
+  "Title": "BenchmarkDotNet job identity",
+  "HostEnvironmentInfo": {
+    "BenchmarkDotNetVersion": "0.15.8"
+  },
+  "Benchmarks": [
+    {
+      "DisplayInfo": "JpegCalibration.Decode: Control(EvaluateOverhead=False, OutlierMode=DontRemove, Affinity=1111111111111111, EnvironmentVariables=JPEG_BDN_SLOT=Control, PowerPlanMode=00000000-0000-0000-0000-000000000000, InvocationCount=1, IterationCount=1, LaunchCount=1, RunStrategy=ColdStart, UnrollFactor=1, WarmupCount=1) [Case=document-420/nearest]",
+      "Namespace": null,
+      "Type": "JpegCalibration",
+      "Method": "Decode",
+      "MethodTitle": "Decode",
+      "Parameters": "Case=document-420/nearest",
+      "FullName": "JpegCalibration.Decode(Case: \"document-420/nearest\")",
+      "HardwareIntrinsics": "AVX512 BITALG+VBMI2+VNNI+VPOPCNTDQ,AVX512 IFMA+VBMI,AVX512 F+BW+CD+DQ+VL,AVX2+BMI1+BMI2+F16C+FMA+LZCNT+MOVBE,AVX,SSE3+SSSE3+SSE4.1+SSE4.2+POPCNT,X86Base+SSE+SSE2,AES+PCLMUL,AvxVnni VectorSize=256",
+      "Statistics": {
+        "OriginalValues": [
+          2459500
+        ],
+        "N": 1,
+        "Min": 2459500,
+        "LowerFence": 2459500,
+        "Q1": 2459500,
+        "Median": 2459500,
+        "Mean": 2459500,
+        "Q3": 2459500,
+        "UpperFence": 2459500,
+        "Max": 2459500,
+        "InterquartileRange": 0,
+        "LowerOutliers": [],
+        "UpperOutliers": [],
+        "AllOutliers": [],
+        "StandardError": 0,
+        "Variance": 0,
+        "StandardDeviation": 0,
+        "Skewness": "",
+        "Kurtosis": "",
+        "ConfidenceInterval": {
+          "N": 1,
+          "Mean": 2459500,
+          "StandardError": 0,
+          "Level": 12,
+          "Margin": "",
+          "Lower": "",
+          "Upper": ""
+        },
+        "Percentiles": {
+          "P0": 2459500,
+          "P25": 2459500,
+          "P50": 2459500,
+          "P67": 2459500,
+          "P80": 2459500,
+          "P85": 2459500,
+          "P90": 2459500,
+          "P95": 2459500,
+          "P100": 2459500
+        }
+      },
+      "Measurements": [
+        {
+          "IterationMode": "Workload",
+          "IterationStage": "Actual",
+          "LaunchIndex": 1,
+          "IterationIndex": 1,
+          "Operations": 1,
+          "Nanoseconds": 2459500
+        },
+        {
+          "IterationMode": "Workload",
+          "IterationStage": "Result",
+          "LaunchIndex": 1,
+          "IterationIndex": 1,
+          "Operations": 1,
+          "Nanoseconds": 2459500
+        }
+      ]
+    },
+    {
+      "DisplayInfo": "JpegCalibration.Decode: Repeat(EvaluateOverhead=False, OutlierMode=DontRemove, Affinity=1111111111111111, EnvironmentVariables=JPEG_BDN_SLOT=Candidate, PowerPlanMode=00000000-0000-0000-0000-000000000000, InvocationCount=1, IterationCount=1, LaunchCount=1, RunStrategy=ColdStart, UnrollFactor=1, WarmupCount=1) [Case=document-420/nearest]",
+      "Namespace": null,
+      "Type": "JpegCalibration",
+      "Method": "Decode",
+      "MethodTitle": "Decode",
+      "Parameters": "Case=document-420/nearest",
+      "FullName": "JpegCalibration.Decode(Case: \"document-420/nearest\")",
+      "HardwareIntrinsics": "AVX512 BITALG+VBMI2+VNNI+VPOPCNTDQ,AVX512 IFMA+VBMI,AVX512 F+BW+CD+DQ+VL,AVX2+BMI1+BMI2+F16C+FMA+LZCNT+MOVBE,AVX,SSE3+SSSE3+SSE4.1+SSE4.2+POPCNT,X86Base+SSE+SSE2,AES+PCLMUL,AvxVnni VectorSize=256",
+      "Statistics": {
+        "OriginalValues": [
+          2819700
+        ],
+        "N": 1,
+        "Min": 2819700,
+        "LowerFence": 2819700,
+        "Q1": 2819700,
+        "Median": 2819700,
+        "Mean": 2819700,
+        "Q3": 2819700,
+        "UpperFence": 2819700,
+        "Max": 2819700,
+        "InterquartileRange": 0,
+        "LowerOutliers": [],
+        "UpperOutliers": [],
+        "AllOutliers": [],
+        "StandardError": 0,
+        "Variance": 0,
+        "StandardDeviation": 0,
+        "Skewness": "",
+        "Kurtosis": "",
+        "ConfidenceInterval": {
+          "N": 1,
+          "Mean": 2819700,
+          "StandardError": 0,
+          "Level": 12,
+          "Margin": "",
+          "Lower": "",
+          "Upper": ""
+        },
+        "Percentiles": {
+          "P0": 2819700,
+          "P25": 2819700,
+          "P50": 2819700,
+          "P67": 2819700,
+          "P80": 2819700,
+          "P85": 2819700,
+          "P90": 2819700,
+          "P95": 2819700,
+          "P100": 2819700
+        }
+      },
+      "Measurements": [
+        {
+          "IterationMode": "Workload",
+          "IterationStage": "Actual",
+          "LaunchIndex": 1,
+          "IterationIndex": 1,
+          "Operations": 1,
+          "Nanoseconds": 2819700
+        },
+        {
+          "IterationMode": "Workload",
+          "IterationStage": "Result",
+          "LaunchIndex": 1,
+          "IterationIndex": 1,
+          "Operations": 1,
+          "Nanoseconds": 2819700
+        }
+      ]
+    },
+    {
+      "DisplayInfo": "JpegCalibration.Decode: Control(EvaluateOverhead=False, OutlierMode=DontRemove, Affinity=1111111111111111, EnvironmentVariables=JPEG_BDN_SLOT=Control, PowerPlanMode=00000000-0000-0000-0000-000000000000, InvocationCount=1, IterationCount=1, LaunchCount=1, RunStrategy=ColdStart, UnrollFactor=1, WarmupCount=1) [Case=document-420/smooth]",
+      "Namespace": null,
+      "Type": "JpegCalibration",
+      "Method": "Decode",
+      "MethodTitle": "Decode",
+      "Parameters": "Case=document-420/smooth",
+      "FullName": "JpegCalibration.Decode(Case: \"document-420/smooth\")",
+      "HardwareIntrinsics": "AVX512 BITALG+VBMI2+VNNI+VPOPCNTDQ,AVX512 IFMA+VBMI,AVX512 F+BW+CD+DQ+VL,AVX2+BMI1+BMI2+F16C+FMA+LZCNT+MOVBE,AVX,SSE3+SSSE3+SSE4.1+SSE4.2+POPCNT,X86Base+SSE+SSE2,AES+PCLMUL,AvxVnni VectorSize=256",
+      "Statistics": {
+        "OriginalValues": [
+          5653900
+        ],
+        "N": 1,
+        "Min": 5653900,
+        "LowerFence": 5653900,
+        "Q1": 5653900,
+        "Median": 5653900,
+        "Mean": 5653900,
+        "Q3": 5653900,
+        "UpperFence": 5653900,
+        "Max": 5653900,
+        "InterquartileRange": 0,
+        "LowerOutliers": [],
+        "UpperOutliers": [],
+        "AllOutliers": [],
+        "StandardError": 0,
+        "Variance": 0,
+        "StandardDeviation": 0,
+        "Skewness": "",
+        "Kurtosis": "",
+        "ConfidenceInterval": {
+          "N": 1,
+          "Mean": 5653900,
+          "StandardError": 0,
+          "Level": 12,
+          "Margin": "",
+          "Lower": "",
+          "Upper": ""
+        },
+        "Percentiles": {
+          "P0": 5653900,
+          "P25": 5653900,
+          "P50": 5653900,
+          "P67": 5653900,
+          "P80": 5653900,
+          "P85": 5653900,
+          "P90": 5653900,
+          "P95": 5653900,
+          "P100": 5653900
+        }
+      },
+      "Measurements": [
+        {
+          "IterationMode": "Workload",
+          "IterationStage": "Actual",
+          "LaunchIndex": 1,
+          "IterationIndex": 1,
+          "Operations": 1,
+          "Nanoseconds": 5653900
+        },
+        {
+          "IterationMode": "Workload",
+          "IterationStage": "Result",
+          "LaunchIndex": 1,
+          "IterationIndex": 1,
+          "Operations": 1,
+          "Nanoseconds": 5653900
+        }
+      ]
+    },
+    {
+      "DisplayInfo": "JpegCalibration.Decode: Repeat(EvaluateOverhead=False, OutlierMode=DontRemove, Affinity=1111111111111111, EnvironmentVariables=JPEG_BDN_SLOT=Candidate, PowerPlanMode=00000000-0000-0000-0000-000000000000, InvocationCount=1, IterationCount=1, LaunchCount=1, RunStrategy=ColdStart, UnrollFactor=1, WarmupCount=1) [Case=document-420/smooth]",
+      "Namespace": null,
+      "Type": "JpegCalibration",
+      "Method": "Decode",
+      "MethodTitle": "Decode",
+      "Parameters": "Case=document-420/smooth",
+      "FullName": "JpegCalibration.Decode(Case: \"document-420/smooth\")",
+      "HardwareIntrinsics": "AVX512 BITALG+VBMI2+VNNI+VPOPCNTDQ,AVX512 IFMA+VBMI,AVX512 F+BW+CD+DQ+VL,AVX2+BMI1+BMI2+F16C+FMA+LZCNT+MOVBE,AVX,SSE3+SSSE3+SSE4.1+SSE4.2+POPCNT,X86Base+SSE+SSE2,AES+PCLMUL,AvxVnni VectorSize=256",
+      "Statistics": {
+        "OriginalValues": [
+          4679700
+        ],
+        "N": 1,
+        "Min": 4679700,
+        "LowerFence": 4679700,
+        "Q1": 4679700,
+        "Median": 4679700,
+        "Mean": 4679700,
+        "Q3": 4679700,
+        "UpperFence": 4679700,
+        "Max": 4679700,
+        "InterquartileRange": 0,
+        "LowerOutliers": [],
+        "UpperOutliers": [],
+        "AllOutliers": [],
+        "StandardError": 0,
+        "Variance": 0,
+        "StandardDeviation": 0,
+        "Skewness": "",
+        "Kurtosis": "",
+        "ConfidenceInterval": {
+          "N": 1,
+          "Mean": 4679700,
+          "StandardError": 0,
+          "Level": 12,
+          "Margin": "",
+          "Lower": "",
+          "Upper": ""
+        },
+        "Percentiles": {
+          "P0": 4679700,
+          "P25": 4679700,
+          "P50": 4679700,
+          "P67": 4679700,
+          "P80": 4679700,
+          "P85": 4679700,
+          "P90": 4679700,
+          "P95": 4679700,
+          "P100": 4679700
+        }
+      },
+      "Measurements": [
+        {
+          "IterationMode": "Workload",
+          "IterationStage": "Actual",
+          "LaunchIndex": 1,
+          "IterationIndex": 1,
+          "Operations": 1,
+          "Nanoseconds": 4679700
+        },
+        {
+          "IterationMode": "Workload",
+          "IterationStage": "Result",
+          "LaunchIndex": 1,
+          "IterationIndex": 1,
+          "Operations": 1,
+          "Nanoseconds": 4679700
+        }
+      ]
+    }
+  ]
+}

@@ -24,4 +24,10 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\PowerForge.Tests\BenchmarkServicesTests.JobIdentity.cs" Link="BenchmarkServicesTests.JobIdentity.cs" />
+    <EmbeddedResource Include="..\PowerForge.Tests\Fixtures\Benchmarks\BenchmarkDotNet-0.15.8-jobs.json"
+                      LogicalName="PowerForge.Tests.Fixtures.Benchmarks.BenchmarkDotNet-0.15.8-jobs.json" />
+  </ItemGroup>
+
 </Project>
