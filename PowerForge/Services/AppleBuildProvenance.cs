@@ -27,6 +27,10 @@ internal static class AppleBuildProvenance
 
         internal string Revision { get; }
 
+        internal bool SourceDirty { get; set; }
+
+        internal bool RequireCleanSource { get; set; }
+
         internal IReadOnlyDictionary<string, string>
             TrackedFileMutationIdentities { get; }
 
@@ -93,17 +97,19 @@ internal static class AppleBuildProvenance
 
     internal static Snapshot CaptureBuildInputs(
         string sourceRoot,
-        bool excludesGeneratedDirectories)
+        bool excludesGeneratedDirectories,
+        bool useControlledSourceProvenance = false)
     {
-        var snapshot = Capture(sourceRoot);
+        var snapshot = Capture(sourceRoot, useControlledSourceProvenance);
         if (excludesGeneratedDirectories)
         {
             snapshot.MirrorExcludedRootPaths = ResolveMirrorExcludedRootPaths(sourceRoot);
         }
-        RejectIgnoredBuildInputs(
-            sourceRoot,
-            excludesGeneratedDirectories,
-            snapshot.MirrorExcludedRootPaths);
+        if (useControlledSourceProvenance)
+            RejectIgnoredBuildInputs(
+                sourceRoot,
+                excludesGeneratedDirectories,
+                snapshot.MirrorExcludedRootPaths);
         RejectSymbolicLinkBuildInputs(
             sourceRoot,
             excludesGeneratedDirectories,
@@ -114,7 +120,8 @@ internal static class AppleBuildProvenance
     internal static Snapshot CaptureStableBuildInputs(
         string sourceRoot,
         bool excludesGeneratedDirectories,
-        Action inspectBuildGraph)
+        Action inspectBuildGraph,
+        bool useControlledSourceProvenance = false)
     {
         if (inspectBuildGraph is null)
             throw new ArgumentNullException(nameof(inspectBuildGraph));
@@ -131,7 +138,8 @@ internal static class AppleBuildProvenance
                 IsGitMetadataMutation(args, root, comparison));
         var snapshot = CaptureBuildInputs(
             root,
-            excludesGeneratedDirectories);
+            excludesGeneratedDirectories,
+            useControlledSourceProvenance);
         inspectBuildGraph();
         mutationMonitor.ValidateNoChanges(
             () => ValidateUnchanged(snapshot));
@@ -286,24 +294,40 @@ internal static class AppleBuildProvenance
         }
     }
 
-    internal static Snapshot Capture(string sourceRoot)
+    internal static Snapshot Capture(string sourceRoot, bool requireCleanSource = false)
     {
         var root = Path.GetFullPath(sourceRoot);
-        var revision = ResolveLocalSourceRevision(root);
+        var cleanRevision = ResolveLocalSourceRevision(root);
+        var revision = requireCleanSource ? cleanRevision : ResolveWorkingTreeRevision(root);
         if (revision is null)
         {
             throw new InvalidOperationException(
-                $"Apple source provenance is required, but '{root}' is not a readable, clean Git working tree with a full HEAD revision.");
+                $"Apple source revision could not be resolved in '{root}'." +
+                (requireCleanSource ? " Controlled-source mode requires a clean Git working tree." : string.Empty));
         }
         var mutationIdentities = CaptureTrackedFileMutationIdentities(root)
             ?? throw new InvalidOperationException(
                 $"Apple source provenance is required, but tracked file identities in '{root}' could not be captured safely.");
-        return new Snapshot(root, revision, mutationIdentities);
+        return new Snapshot(root, revision, mutationIdentities)
+        {
+            SourceDirty = !string.Equals(cleanRevision, revision, StringComparison.Ordinal),
+            RequireCleanSource = requireCleanSource
+        };
+    }
+
+    private static string? ResolveWorkingTreeRevision(string root)
+    {
+        var git = GitClient.CreateTrustedSystemClient(defaultTimeout: TimeSpan.FromSeconds(10));
+        var head = git.RunRawAsync(root, ["rev-parse", "HEAD"]).GetAwaiter().GetResult();
+        var revision = head.StdOut.Trim().ToLowerInvariant();
+        return head.Succeeded && GitObjectId.IsFull(revision) ? revision : null;
     }
 
     internal static void ValidateUnchanged(Snapshot snapshot)
     {
-        var current = ResolveLocalSourceRevision(snapshot.RootPath);
+        var current = snapshot.RequireCleanSource
+            ? ResolveLocalSourceRevision(snapshot.RootPath)
+            : ResolveWorkingTreeRevision(snapshot.RootPath);
         var currentMutationIdentities = current is null
             ? null
             : CaptureTrackedFileMutationIdentities(snapshot.RootPath);
@@ -422,7 +446,7 @@ internal static class AppleBuildProvenance
         if (!GitObjectId.IsFull(normalized!))
         {
             throw new ArgumentException(
-                "SourceRevision must be a full SHA-1 or SHA-256 Git object ID from a clean working tree.",
+                "SourceRevision must be a full SHA-1 or SHA-256 Git object ID.",
                 nameof(value));
         }
         return normalized;
@@ -600,9 +624,19 @@ internal static class AppleBuildProvenance
                 projectRoot,
                 relativePath.Replace('/', Path.DirectorySeparatorChar)));
             if (!File.Exists(fullPath))
-                return null;
+                continue;
             trackedFiles.Add((relativePath, fullPath));
         }
+
+        // Untracked source is part of an ordinary working-tree build too. Record
+        // its identity so a change during the build remains detectable.
+        var untracked = git.RunRawAsync(projectRoot,
+                ["ls-files", "--others", "--exclude-standard", "-z"])
+            .GetAwaiter().GetResult();
+        if (!untracked.Succeeded)
+            return null;
+        foreach (var relativePath in untracked.StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries))
+            trackedFiles.Add((relativePath, Path.GetFullPath(Path.Combine(projectRoot, relativePath))));
 
         try
         {

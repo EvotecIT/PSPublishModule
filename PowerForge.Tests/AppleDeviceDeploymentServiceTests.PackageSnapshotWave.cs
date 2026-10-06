@@ -23,6 +23,7 @@ public sealed partial class AppleDeviceDeploymentServiceTests
                 new AppleDeviceDeploymentService(runner).BuildAsync(
                     new AppleAppBuildRequest
                     {
+                    UseControlledSourceProvenance = true,
                         ProjectPath = fixture.ProjectPath,
                         Scheme = "CasaRay",
                         DerivedDataPath = fixture.DerivedDataPath,
@@ -66,6 +67,7 @@ public sealed partial class AppleDeviceDeploymentServiceTests
             var result = await new AppleDeviceDeploymentService(runner).DeployAsync(
                 new AppleAppDeviceDeploymentRequest
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectPath = fixture.ProjectPath,
                     Scheme = "CasaRay",
                     ProductName = "CasaRay",
@@ -133,6 +135,7 @@ public sealed partial class AppleDeviceDeploymentServiceTests
             var result = await new AppleDeviceDeploymentService(runner).DeployAsync(
                 new AppleAppDeviceDeploymentRequest
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectPath = fixture.ProjectPath,
                     BuildRoot = fixture.RootPath,
                     BuildMirrorPath = mirrorPath,
@@ -421,6 +424,7 @@ public sealed partial class AppleDeviceDeploymentServiceTests
                 new AppleDeviceDeploymentService(runner).DeployAsync(
                     new AppleAppDeviceDeploymentRequest
                     {
+                    UseControlledSourceProvenance = true,
                         ProjectPath = fixture.ProjectPath,
                         Scheme = "CasaRay",
                         ProductName = "CasaRay",
@@ -461,6 +465,7 @@ public sealed partial class AppleDeviceDeploymentServiceTests
                 new AppleDeviceDeploymentService(runner).DeployAsync(
                     new AppleAppDeviceDeploymentRequest
                     {
+                    UseControlledSourceProvenance = true,
                         ProjectPath = fixture.ProjectPath,
                         Scheme = "CasaRay",
                         ProductName = "CasaRay",
@@ -500,6 +505,7 @@ public sealed partial class AppleDeviceDeploymentServiceTests
             var result = await new AppleDeviceDeploymentService(runner).DeployAsync(
                 new AppleAppDeviceDeploymentRequest
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectPath = fixture.ProjectPath,
                     Scheme = "CasaRay",
                     ProductName = "CasaRay",

@@ -62,7 +62,7 @@ public sealed partial class AppleDeviceDeploymentServiceTests
         finally
         {
             DeleteExternalOutputs(root);
-            root.Delete(recursive: true);
+            AppleDeploymentTestFixture.DeleteRepository(root.FullName);
         }
     }
 }

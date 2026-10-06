@@ -5,6 +5,34 @@ namespace PowerForge.Tests;
 
 public sealed class AppleBuildProvenanceTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CaptureBuildInputs_accepts_dirty_working_tree_and_detects_later_changes(bool mirror)
+    {
+        var root = CreateRepository();
+        try
+        {
+            File.AppendAllText(Path.Combine(root.FullName, "tracked.txt"), "selected edit");
+            var added = Path.Combine(root.FullName, "new-source.txt");
+            File.WriteAllText(added, "selected untracked input");
+
+            var snapshot = AppleBuildProvenance.CaptureBuildInputs(root.FullName, mirror);
+            Assert.True(snapshot.SourceDirty);
+            Assert.Equal(RunGit(root.FullName, "rev-parse", "HEAD").Trim(), snapshot.Revision);
+            AppleBuildProvenance.ValidateUnchanged(snapshot);
+            Assert.Throws<InvalidOperationException>(() =>
+                AppleBuildProvenance.CaptureBuildInputs(root.FullName, mirror, useControlledSourceProvenance: true));
+
+            File.AppendAllText(added, "changed during build");
+            Assert.Throws<InvalidOperationException>(() => AppleBuildProvenance.ValidateUnchanged(snapshot));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void CaptureStableBuildInputs_rejects_a_transient_mutation_during_graph_inspection()
     {

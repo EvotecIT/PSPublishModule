@@ -2,6 +2,15 @@ namespace PowerForge.Tests;
 
 internal static class AppleDeploymentTestFixture
 {
+    internal static void DeleteRepository(string root)
+    {
+        var gitDirectory = Path.Combine(root, ".git");
+        if (Directory.Exists(gitDirectory))
+            foreach (var file in Directory.EnumerateFiles(gitDirectory, "*", SearchOption.AllDirectories))
+                File.SetAttributes(file, File.GetAttributes(file) & ~FileAttributes.ReadOnly);
+        Directory.Delete(root, recursive: true);
+    }
+
     internal static void MaterializeConfiguredBuildProduct(ProcessRunRequest request)
     {
         var outputRoot = TryResolveConfiguredBuildProductDirectory(request);

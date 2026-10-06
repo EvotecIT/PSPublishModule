@@ -140,10 +140,14 @@ internal static partial class Program
                     provenanceRoot,
                     excludesGeneratedDirectories: useBuildMirror,
                     inspectBuildGraph: () =>
-                        AppleBuildProvenance.ValidateXcodeBuildInputsWithinSource(
-                            provenanceRoot,
-                            projectPath,
-                            scheme));
+                    {
+                        if (local.UseControlledSourceProvenance)
+                            AppleBuildProvenance.ValidateXcodeBuildInputsWithinSource(
+                                provenanceRoot,
+                                projectPath,
+                                scheme);
+                    },
+                    useControlledSourceProvenance: local.UseControlledSourceProvenance);
             }
 
             var cliResult = new AppleLocalDeploymentCliResult
@@ -159,6 +163,7 @@ internal static partial class Program
                 Scheme = scheme,
                 DerivedDataPath = derivedDataPath,
                 SourceRevision = planSnapshot?.Revision,
+                SourceDirty = planSnapshot?.SourceDirty,
                 Device = deviceIdentifier ?? device,
                 InstallRoot = resolvedInstallRoot,
                 Launch = launch,
@@ -221,6 +226,7 @@ internal static partial class Program
         {
             var request = new AppleMacAppDeploymentRequest
             {
+                UseControlledSourceProvenance = apple.LocalDeployment.UseControlledSourceProvenance,
                 ProjectPath = cliResult.ProjectPath,
                 IsWorkspace = isWorkspace,
                 Scheme = cliResult.Scheme,
@@ -246,6 +252,7 @@ internal static partial class Program
             var deployment = new AppleMacAppDeploymentService().DeployAsync(request).GetAwaiter().GetResult();
             cliResult.AppPath = deployment.Build.AppPath;
             cliResult.SourceRevision = deployment.Build.SourceRevision;
+            cliResult.SourceDirty = deployment.Build.SourceDirty;
             cliResult.InstalledAppPath = deployment.Install?.InstalledAppPath;
             cliResult.BuildSucceeded = deployment.Build.Succeeded;
             cliResult.InstallSucceeded = deployment.Install?.Succeeded ?? false;
@@ -263,6 +270,7 @@ internal static partial class Program
 
         var deviceRequest = new AppleAppDeviceDeploymentRequest
         {
+            UseControlledSourceProvenance = apple.LocalDeployment.UseControlledSourceProvenance,
             ProjectPath = cliResult.ProjectPath,
             IsWorkspace = isWorkspace,
             Scheme = cliResult.Scheme,
@@ -291,6 +299,7 @@ internal static partial class Program
         var deviceDeployment = new AppleDeviceDeploymentService().DeployAsync(deviceRequest).GetAwaiter().GetResult();
         cliResult.AppPath = deviceDeployment.Build.AppPath;
         cliResult.SourceRevision = deviceDeployment.Build.SourceRevision;
+        cliResult.SourceDirty = deviceDeployment.Build.SourceDirty;
         cliResult.DeviceIdentifier = deviceDeployment.Install?.DeviceIdentifier ??
             AppleDeviceDeploymentService.TryParseDestinationDeviceIdentifier(deviceDeployment.Build.Destination);
         cliResult.BuildSucceeded = deviceDeployment.Build.Succeeded;
