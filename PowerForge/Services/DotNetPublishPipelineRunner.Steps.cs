@@ -793,7 +793,7 @@ public sealed partial class DotNetPublishPipelineRunner
             // Hooks may advance HEAD after planning. Stamp the revision selected
             // at invocation time without requiring a clean working tree.
             string? revision = ReadGitText(plan.ProjectRoot, "rev-parse HEAD");
-            if (!string.IsNullOrWhiteSpace(revision))
+            if (revision is not null && !string.IsNullOrWhiteSpace(revision))
             {
                 properties["SourceRevisionId"] = revision.Trim();
                 properties["IncludeSourceRevisionInInformationalVersion"] = "true";
