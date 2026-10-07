@@ -354,6 +354,11 @@ operating system, CPU, architecture, runtime, SDK, and core counts. Directory
 imports retain that environment instead of flattening it into an unidentified
 combined result.
 
+For JSON exports that encode the job in `DisplayInfo`, the engine identity includes
+the job name and settings. Jobs with different settings stay separate even when
+they share a name. The importer reads the exporter's ampersand-separated parameter
+fields while preserving punctuation and empty values in that format.
+
 ## Cross-Platform Evidence
 
 Do not merge benchmark measurements from different operating systems into one

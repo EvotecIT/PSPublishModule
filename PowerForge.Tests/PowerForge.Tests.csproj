@@ -59,4 +59,8 @@
     </ItemGroup>
     <Copy SourceFiles="@(ProcessOutputFixture)" DestinationFiles="@(ProcessOutputFixture->'$(TargetDir)ProcessOutputPressureFixture/%(RecursiveDir)%(Filename)%(Extension)')" />
   </Target>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Fixtures\Benchmarks\BenchmarkDotNet-0.15.8-jobs.json" />
+  </ItemGroup>
 </Project>
