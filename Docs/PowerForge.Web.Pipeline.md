@@ -1000,7 +1000,7 @@ configuration and target framework in one SDK solution graph:
 }
 ```
 
-This route requires an SDK that supports `.slnx` solutions (.NET 9 or later).
+This route requires an SDK that supports `.slnx` solutions (.NET SDK 9.0.200 or later).
 Shared references build once, and outputs remain beside each project. Separate
 steps handle different target frameworks. `skipIfProjectMissing` omits missing
 optional projects. Build and publish steps always invoke MSBuild; its dependency
