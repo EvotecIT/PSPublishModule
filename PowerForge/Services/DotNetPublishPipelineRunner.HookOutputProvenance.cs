@@ -52,6 +52,12 @@ public sealed partial class DotNetPublishPipelineRunner
             buildStep: publishStep,
             cleanTrackedGeneratedProvenanceState: cleanTrackedGeneratedProvenanceState,
             msiReservationOwner: msiReservationOwner);
+        // Ordinary signing describes the selected working tree; it does not require
+        // that Git HEAD completely identifies those files. Exact-source enforcement
+        // belongs exclusively to the explicitly requested controlled-source mode.
+        if (!plan.UseControlledSourceProvenance)
+            return provenance;
+
         if (string.IsNullOrWhiteSpace(provenance.Revision) ||
             !string.Equals(provenance.Revision, plan.SourceRevision, StringComparison.OrdinalIgnoreCase))
         {

@@ -8,7 +8,93 @@ namespace PowerForge;
 /// </summary>
 public sealed class PowerShellCompilationRegionCandidate
 {
-    /// <summary>Creates immutable region-candidate decision evidence.</summary>
+    /// <summary>Creates region-candidate evidence using the original public constructor contract.</summary>
+    public PowerShellCompilationRegionCandidate(
+        string regionId,
+        string sourceSha256,
+        string sourceDocumentSha256,
+        string sourceName,
+        int sourceLine,
+        string sourcePath,
+        int startOffset,
+        int endOffset,
+        int startLine,
+        int startColumn,
+        int endLine,
+        int endColumn,
+        bool promoted,
+        string decisionCode,
+        string reason,
+        string generatedName,
+        PowerShellCompilationRegionGraph? regionGraph,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals = null,
+        bool requiresLocalOwnershipGuard = false)
+        : this(regionId, sourceSha256, sourceDocumentSha256, sourceName, sourceLine, sourcePath,
+            startOffset, endOffset, startLine, startColumn, endLine, endColumn, promoted, decisionCode,
+            reason, generatedName, regionGraph, continuationLocals, requiresLocalOwnershipGuard, inputLocals: null)
+    {
+    }
+
+    /// <summary>Creates immutable region-candidate decision evidence using the established local-transfer contract.</summary>
+    public PowerShellCompilationRegionCandidate(
+        string regionId,
+        string sourceSha256,
+        string sourceDocumentSha256,
+        string sourceName,
+        int sourceLine,
+        string sourcePath,
+        int startOffset,
+        int endOffset,
+        int startLine,
+        int startColumn,
+        int endLine,
+        int endColumn,
+        bool promoted,
+        string decisionCode,
+        string reason,
+        string generatedName,
+        PowerShellCompilationRegionGraph? regionGraph,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals,
+        bool requiresLocalOwnershipGuard,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? inputLocals)
+        : this(regionId, sourceSha256, sourceDocumentSha256, sourceName, sourceLine, sourcePath,
+            startOffset, endOffset, startLine, startColumn, endLine, endColumn, promoted, decisionCode,
+            reason, generatedName, regionGraph, continuationLocals, requiresLocalOwnershipGuard,
+            inputLocals, terminalTransferContract: null)
+    {
+    }
+
+    /// <summary>Creates immutable region-candidate decision evidence with its closed terminal transfer contract.</summary>
+    public PowerShellCompilationRegionCandidate(
+        string regionId,
+        string sourceSha256,
+        string sourceDocumentSha256,
+        string sourceName,
+        int sourceLine,
+        string sourcePath,
+        int startOffset,
+        int endOffset,
+        int startLine,
+        int startColumn,
+        int endLine,
+        int endColumn,
+        bool promoted,
+        string decisionCode,
+        string reason,
+        string generatedName,
+        PowerShellCompilationRegionGraph? regionGraph,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals,
+        bool requiresLocalOwnershipGuard,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? inputLocals,
+        PowerShellRegionTransferContract? terminalTransferContract)
+        : this(regionId, sourceSha256, sourceDocumentSha256, sourceName, sourceLine, sourcePath,
+            startOffset, endOffset, startLine, startColumn, endLine, endColumn, promoted, decisionCode,
+            reason, generatedName, regionGraph, continuationLocals, requiresLocalOwnershipGuard,
+            inputLocals, terminalTransferContract, controlFlowContract: null)
+    {
+    }
+
+    /// <summary>Creates immutable region-candidate evidence with value-transfer and control-flow contracts.</summary>
     [JsonConstructor]
     public PowerShellCompilationRegionCandidate(
         string regionId,
@@ -28,7 +114,12 @@ public sealed class PowerShellCompilationRegionCandidate
         string reason,
         string generatedName,
         PowerShellCompilationRegionGraph? regionGraph,
-        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals = null)
+        IReadOnlyList<PowerShellCompiledRegionLocal>? continuationLocals,
+        bool requiresLocalOwnershipGuard,
+        IReadOnlyList<PowerShellCompiledRegionLocal>? inputLocals,
+        PowerShellRegionTransferContract? terminalTransferContract,
+        PowerShellRegionControlFlowContract? controlFlowContract,
+        IReadOnlyList<PowerShellCompiledRegionLocalCall>? localCalls = null)
     {
         RegionId = regionId ?? string.Empty;
         SourceSha256 = sourceSha256 ?? string.Empty;
@@ -48,6 +139,11 @@ public sealed class PowerShellCompilationRegionCandidate
         GeneratedName = generatedName ?? string.Empty;
         RegionGraph = regionGraph;
         ContinuationLocals = Array.AsReadOnly((continuationLocals ?? Array.Empty<PowerShellCompiledRegionLocal>()).ToArray());
+        InputLocals = Array.AsReadOnly((inputLocals ?? Array.Empty<PowerShellCompiledRegionLocal>()).ToArray());
+        RequiresLocalOwnershipGuard = requiresLocalOwnershipGuard;
+        TerminalTransferContract = terminalTransferContract;
+        ControlFlowContract = controlFlowContract;
+        LocalCalls = Array.AsReadOnly((localCalls ?? Array.Empty<PowerShellCompiledRegionLocalCall>()).ToArray());
     }
 
     /// <summary>Stable authored region identity.</summary>
@@ -84,6 +180,19 @@ public sealed class PowerShellCompilationRegionCandidate
     public string GeneratedName { get; }
     /// <summary>Canonical lowered graph when the candidate reached lowering; otherwise null.</summary>
     public PowerShellCompilationRegionGraph? RegionGraph { get; }
-    /// <summary>Ordered scalar locals transferred to the continuation, or empty for a terminal candidate.</summary>
+    /// <summary>Ordered locals transferred to the continuation, or empty for a terminal candidate.</summary>
     public IReadOnlyList<PowerShellCompiledRegionLocal> ContinuationLocals { get; }
+
+    /// <summary>Ordered established locals transferred into the candidate.</summary>
+    public IReadOnlyList<PowerShellCompiledRegionLocal> InputLocals { get; }
+
+    /// <summary>Whether a promoted helper requires fresh invocation-local targets and retains the original statements when that proof fails.</summary>
+    public bool RequiresLocalOwnershipGuard { get; }
+
+    /// <summary>Closed terminal Success-output behavior, or null for local continuation transfers.</summary>
+    public PowerShellRegionTransferContract? TerminalTransferContract { get; }
+    /// <summary>Return-or-fallthrough behavior, or null for ordinary transfer regions.</summary>
+    public PowerShellRegionControlFlowContract? ControlFlowContract { get; }
+    /// <summary>Closed local-call results required by this candidate.</summary>
+    public IReadOnlyList<PowerShellCompiledRegionLocalCall> LocalCalls { get; }
 }

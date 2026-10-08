@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "status": "BoundedHostedQualification",
+  "purpose": "Default message and plain input dialogs in unchanged PSScriptTools sources: original versus generated WPF rendering, owned callback and typed result on both Windows hosts. No CLR method gain.",
+  "compilerCommit": "cfda4c015f55fe816c95235c0e2482e56a5efbc1",
+  "sourceRevision": "549fa3e3d769532320054fc0b3c8f42df0452361",
+  "sourceSha256": {
+    "functions/New-WPFMessageBox.ps1": "2f5407426984d6ecefa1e4b4a6ad871002e00cc287ad4575ed2c5c5cba92221d",
+    "functions/Utilities.ps1": "1625373211d326669795cdd8ff2b40381e57147fd07065ca69bbec50cec81592",
+    "functions/Invoke-InputBox.ps1": "0b2abe2596deb67deb953479558adcbbce6bc9292d4f74add75717675a4f2e59",
+    "icons/information.png": "7a559f0efc4262e5d16f5c50e6a2f73faf6bb69a163437b891aeac478fdc375c"
+  },
+  "visualDriverSha256": "e24c215615be0d3a99f26ed2b85e32f522367f8203269646d4963c2fc589add9",
+  "sourceDriver": "ExternalWorkflows/PSScriptTools/WpfDialogs/Observe.ps1",
+  "hosts": [
+    {
+      "targetFramework": "net10.0",
+      "hostVersion": "7.6.6",
+      "wpfAssembly": "PresentationFramework, Version=10.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+      "artifactManifestSha256": "3fbd843d233d29ed5f3b331dea0dc58899388299e8d8f67d06e62db38a930197",
+      "dependencyGraphLockSha256": "ba61b995a343a8296263de1d0534516294f58f7e17619ccf977973f37b035744",
+      "cases": [
+        {
+          "case": "message",
+          "screenshotSha256": "804814718e54da83c99a8e42f27069ac23af62c96636bf89b721cba29ed51383",
+          "resultSha256": "a9fba2c58f8db96e6ff95735832cf5115dc0c59cb7f1abd247c951f98d83f762",
+          "bounds": "450x300",
+          "resultType": "System.Int32",
+          "resultValue": 1
+        },
+        {
+          "case": "input",
+          "screenshotSha256": "c8e5e9486b45c9086602672ae6fa26866cd6df8afdb65dd2b1c05fa5c5cc8254",
+          "resultSha256": "aebbac6358d3c7b973d0e6aad9568ff73036a0ecf6970b3b991631218e576c99",
+          "bounds": "525x225",
+          "resultType": "System.String",
+          "resultValue": "compiler-value"
+        }
+      ]
+    },
+    {
+      "targetFramework": "net472",
+      "hostVersion": "5.1.26100.9444",
+      "wpfAssembly": "PresentationFramework, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+      "artifactManifestSha256": "0871981a47d3d876ded3c7a5c378b4c1dee7bf0430906f9f06c3c9d9367f46ab",
+      "dependencyGraphLockSha256": "290952f0bbe9803089f99841bf18c6607a84a31345759a0736d8f857611d8b07",
+      "cases": [
+        {
+          "case": "message",
+          "screenshotSha256": "14170d3dc43503c17a0da3b9fb1caf6290a80e1251858148d2ce0cd3be6e9e0c",
+          "resultSha256": "00572676d07ecd10586a1fd98e9d849bca5398f4daa6d46f6b6e6d6667e72d60",
+          "bounds": "450x300",
+          "resultType": "System.Int32",
+          "resultValue": 1
+        },
+        {
+          "case": "input",
+          "screenshotSha256": "995e0cab225016de3e1aee5aa960f620e4af594c8ca1a2fe3ffded049cdd3d8c",
+          "resultSha256": "cc6302d64b16657f77872fe579c84fa1ae8385ef93492efc986ebd688c6d262a",
+          "bounds": "525x225",
+          "resultType": "System.String",
+          "resultValue": "compiler-value"
+        }
+      ]
+    }
+  ],
+  "observedContract": [
+    "Original and generated windows were found by the exact owned process ID and title, remained in STA, and exposed the expected text, edit field and OK button through UI Automation.",
+    "PrintWindow flag 0 captured the rendered owned dialog. The original and generated PNG bytes match within each host and case; all four image pairs were visually inspected.",
+    "An owned OK InvokePattern callback returned one typed record; plain input ValuePattern first supplied compiler-value. Original and generated result JSON bytes match, stderr was empty, exit was zero, and every child closed."
+  ],
+  "limits": [
+    "Both workload functions remain hosted; the exact module artifacts emit no CLR methods for these two functions and Strict still rejects their WPF types.",
+    "Only the default OK message and plain input paths are qualified. Cancellation, secure input, alternate/custom buttons, Quiet, other icons/backgrounds, and the other four WPF functions remain unqualified.",
+    "The UTF-8 fixture driver has no BOM, so Windows PowerShell 5.1 renders its Omega sample as mojibake in both original and generated dialogs. This proves matching behavior, not Unicode rendering on that host.",
+    "This is one Windows desktop, STA session and two installed host versions. It does not establish remote/headless, non-Windows, other servicing versions, compiled WPF translation or general UI compatibility."
+  ],
+  "portfolio": {
+    "emitted": 544,
+    "retained": 21,
+    "sourceFunctions": 565,
+    "justifiedHosted": 17,
+    "unresolved": 4,
+    "censusRepeated": false,
+    "reason": "Compiler and pinned module inputs are unchanged; two retained WPF functions gain bounded normal-path visual/callback qualification."
+  }
+}

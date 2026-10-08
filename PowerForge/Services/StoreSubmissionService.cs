@@ -96,7 +96,7 @@ internal sealed partial class StoreSubmissionService : IDisposable
             ? ResolvePackagedAppFiles(target, baseDirectory, request)
             : Array.Empty<string>();
         var desktopPackages = provider == StoreSubmissionProviderKind.DesktopInstaller
-            ? ResolveDesktopPackages(target)
+            ? ResolveDesktopPackages(target, baseDirectory)
             : Array.Empty<StoreSubmissionDesktopPackage>();
 
         var submissionId = string.IsNullOrWhiteSpace(request?.SubmissionId)
@@ -262,8 +262,8 @@ internal sealed partial class StoreSubmissionService : IDisposable
         if (!string.IsNullOrWhiteSpace(accessToken))
             return;
 
-        var tenantId = NormalizeNullable(authentication.TenantId);
-        var clientId = NormalizeNullable(authentication.ClientId);
+        var tenantId = ResolveCredential(authentication.TenantId, authentication.TenantIdEnvVar);
+        var clientId = ResolveCredential(authentication.ClientId, authentication.ClientIdEnvVar);
         var clientSecret = ResolveCredential(authentication.ClientSecret, authentication.ClientSecretEnvVar);
 
         if (string.IsNullOrWhiteSpace(tenantId) ||
@@ -379,9 +379,18 @@ internal sealed partial class StoreSubmissionService : IDisposable
         return resolved;
     }
 
-    private static StoreSubmissionDesktopPackage[] ResolveDesktopPackages(StoreSubmissionTarget target)
+    private static StoreSubmissionDesktopPackage[] ResolveDesktopPackages(StoreSubmissionTarget target, string baseDirectory)
     {
-        var packages = (target.DesktopPackages ?? Array.Empty<StoreSubmissionDesktopPackage>())
+        var configured = target.DesktopPackages ?? Array.Empty<StoreSubmissionDesktopPackage>();
+        if (!string.IsNullOrWhiteSpace(target.DesktopPackagesPath))
+        {
+            if (configured.Length > 0)
+                throw new InvalidOperationException("Define DesktopPackages or DesktopPackagesPath, not both.");
+            var path = Path.GetFullPath(Path.Combine(baseDirectory, target.DesktopPackagesPath!));
+            configured = JsonSerializer.Deserialize(File.ReadAllText(path), ReleaseCatalogJsonContext.Default.StoreSubmissionDesktopPackageArray)
+                ?? throw new InvalidOperationException("DesktopPackagesPath must contain a JSON package array.");
+        }
+        var packages = configured
             .Select(CloneDesktopPackage)
             .ToArray();
 
@@ -437,8 +446,8 @@ internal sealed partial class StoreSubmissionService : IDisposable
         if (!string.IsNullOrWhiteSpace(explicitToken))
             return explicitToken!;
 
-        var tenantId = NormalizeNullable(authentication.TenantId)!;
-        var clientId = NormalizeNullable(authentication.ClientId)!;
+        var tenantId = ResolveCredential(authentication.TenantId, authentication.TenantIdEnvVar)!;
+        var clientId = ResolveCredential(authentication.ClientId, authentication.ClientIdEnvVar)!;
         var clientSecret = ResolveCredential(authentication.ClientSecret, authentication.ClientSecretEnvVar)!;
         var authorityHost = NormalizeAuthorityHost(authentication.AuthorityHost);
         var tokenUrl = provider == StoreSubmissionProviderKind.DesktopInstaller
@@ -766,6 +775,8 @@ internal sealed partial class StoreSubmissionService : IDisposable
         {
             var sellerId = ResolveSellerId(authentication);
             var token = await ResolveAccessTokenAsync(authentication, StoreSubmissionProviderKind.DesktopInstaller, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(plan.SubmissionId))
+                return await ResumeDesktopSubmissionAsync(authentication, plan, token, cancellationToken).ConfigureAwait(false);
             var statusHistory = new List<StoreSubmissionStatusSnapshot>();
 
             var draftStatus = await GetDesktopDraftStatusAsync(plan.ApplicationId, token, sellerId, cancellationToken).ConfigureAwait(false);
@@ -788,6 +799,7 @@ internal sealed partial class StoreSubmissionService : IDisposable
                 return result;
             }
 
+            result.DesktopPackageMutationStarted = true;
             await UpdateDesktopPackagesAsync(plan, token, sellerId, cancellationToken).ConfigureAwait(false);
             await CommitDesktopPackagesAsync(plan.ApplicationId, token, sellerId, cancellationToken).ConfigureAwait(false);
 
@@ -980,8 +992,10 @@ internal sealed partial class StoreSubmissionService : IDisposable
     private static (bool IsReady, string? Details) ParseDesktopDraftStatus(JsonObject payload)
     {
         var data = GetDesktopResponseData(payload, "get desktop Store draft status");
-        var isReady = data["isReady"]?.GetValue<bool>() ?? false;
-        return (isReady, ExtractDesktopApiDetails(payload));
+        var ongoingSubmission = GetOptionalString(data, "ongoingSubmissionId");
+        var isReady = (data["isReady"]?.GetValue<bool>() ?? false) && string.IsNullOrWhiteSpace(ongoingSubmission);
+        return (isReady, string.IsNullOrWhiteSpace(ongoingSubmission)
+            ? ExtractDesktopApiDetails(payload) : "An existing desktop Store submission is still in progress.");
     }
 
     private static (string PublishingStatus, bool HasFailed, string? Details) ParseDesktopSubmissionStatus(JsonObject payload)

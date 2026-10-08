@@ -15,7 +15,7 @@ namespace PowerForge;
 /// </para>
 /// <list type="bullet">
 /// <item><description>Imports the staged module and extracts command metadata via <c>Get-Help</c></description></item>
-/// <item><description>Enriches missing synopsis/description/examples using C# XML docs (<c>*.xml</c>) from the cmdlet assembly</description></item>
+/// <item><description>Refreshes authored binary cmdlet help from C# XML docs (<c>*.xml</c>), retaining external help for members without XML documentation</description></item>
 /// <item><description>Writes markdown pages to <see cref="DocumentationConfiguration.Path"/> and optionally creates external help (MAML) under <c>en-US</c></description></item>
 /// </list>
 /// <para>

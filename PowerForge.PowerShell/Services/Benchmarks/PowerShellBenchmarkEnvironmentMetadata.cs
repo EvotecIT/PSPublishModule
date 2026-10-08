@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Management.Automation;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
@@ -57,9 +58,11 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
             ["profile"] = suite.Profile.ToString(),
             ["cleanup"] = suite.Cleanup.ToString(),
             ["warmupCount"] = suite.WarmupCount.ToString(CultureInfo.InvariantCulture),
+            ["operationTimingBoundary"] = "GuardedScriptBodyV1",
             ["iterationCount"] = suite.IterationCount.ToString(CultureInfo.InvariantCulture),
             ["runOrder"] = suite.RunOrder.ToString(),
             ["memoryCleanup"] = suite.MemoryCleanup.ToString(),
+            ["memorySamplingIntervalMilliseconds"] = suite.MemorySamplingIntervalMilliseconds.ToString(CultureInfo.InvariantCulture),
             ["cooldownMilliseconds"] = suite.CooldownMilliseconds.ToString(CultureInfo.InvariantCulture),
             ["outlierMode"] = suite.OutlierMode.ToString(),
             ["runMode"] = suite.RunMode
@@ -108,8 +111,9 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
     /// <summary>
     /// Captures the typed environment identity used by cross-platform evidence catalogs.
     /// </summary>
+    /// <param name="sourceRoot">Source directory whose global.json selects the CLI SDK.</param>
     /// <returns>Normalized environment identity.</returns>
-    public static BenchmarkEnvironmentInfo BuildEnvironment()
+    public static BenchmarkEnvironmentInfo BuildEnvironment(string? sourceRoot = null)
         => new()
         {
             OsFamily = GetOperatingSystemLabel(),
@@ -119,9 +123,25 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
             ProcessorName = GetProcessorName(),
             LogicalCoreCount = Environment.ProcessorCount,
             RuntimeVersion = RuntimeInformation.FrameworkDescription,
+            DotNetSdkVersion = NormalizeDotNetSdkVersion(ReadProcessValue(
+                "dotnet", new[] { "--version" }, timeoutMilliseconds: 3000, workingDirectory: sourceRoot)),
             Runner = $"PowerShell {PSVersionInfo()}",
             MachineName = Environment.MachineName
         };
+
+    // This is the CLI SDK selected by the benchmark source directory's global.json,
+    // not inferred build provenance for an external assembly. PowerShell-only hosts
+    // and unresolved SDK pins may have no usable SDK and retain an empty identity.
+    internal static string NormalizeDotNetSdkVersion(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+            return string.Empty;
+        string value = output!.Trim();
+        return value.Length <= 128 && Regex.IsMatch(
+            value, @"\A[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?\z", RegexOptions.CultureInvariant)
+            ? value
+            : string.Empty;
+    }
 
     private static void AddMetadata(Dictionary<string, string> metadata, string key, string? value)
     {

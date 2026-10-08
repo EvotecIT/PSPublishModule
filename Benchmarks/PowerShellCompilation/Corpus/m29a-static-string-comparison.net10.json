@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Qualified invocation-owned conversion of direct object parameters to fixed static string-only method arguments.",
+  "baselineCompilerCommit": "c19ead0dbba6a8560fba1d535f827b52771aaa0f",
+  "baselineComparison": "m29a-region-recovery-comparison.net10.json",
+  "baselineComparisonSha256": "126fadb3f2eff86352a7047d62a85502d1a491a21a23f0c171941af5f25efd6c",
+  "baselineRetainedInventorySha256": "2309493f7dd0a021e236c12f507f9a2c45e8630d79ad2088e8c903bfee7eceb6",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 482,
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "baselineEmitted": 252,
+      "candidateEmitted": 253,
+      "candidateExplanationSha256": "81fe2a60f0935e38a8410709b065cb6a72dde4295c29fba1077efb2060c5d280",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": [
+        {
+          "unitId": "45825c5933220f8d83961334",
+          "name": "Get-WinADOrganizationalUnitFromDN",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "baselineEmitted": 63,
+      "candidateEmitted": 63,
+      "candidateExplanationSha256": "0fe9323878dbf15bc173231b8ad447afc5ddf1d9833e9b2cd631e66cc998bee3",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "baselineEmitted": 60,
+      "candidateEmitted": 60,
+      "candidateExplanationSha256": "dff885fe4d0660da2265dd9e9bb43bf7ebe41b9f0c96ea10399850007c2f74d8",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "baselineEmitted": 81,
+      "candidateEmitted": 81,
+      "candidateExplanationSha256": "91cfcccc4915628cfe8c4f8ac62d1041a5d5b61869b63ae5933f55c0fde019d9",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "baselineEmitted": 26,
+      "candidateEmitted": 26,
+      "candidateExplanationSha256": "d5c2988c739a56a9159b7b165dc814e07f8e198e592b75f8015ed688e720415c",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    }
+  ],
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "13127f1612ef18620182eda8c3e4beda2b2dad7af95cc93b37a01d95640f2283"
+  },
+  "workflowSourceHashes": {
+    "Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSSharedGoods/FullModule/Private/Deprecated/ActiveDirectory/Get-WinADOrganizationalUnitFromDN.ps1": "308c3eee5f69de3b56b60121ec985424b3c51fbffeb7f44b7c25bc66f97d7b84"
+  },
+  "validation": {
+    "focusedTests": 6,
+    "focusedDurationSeconds": 13,
+    "focusedTrxSha256": "93bd5a71c5431bad5b9f683fa3f2e8c8c8c7c44a55e8752e5f633a8056398e4c",
+    "testSourceHashes": {
+      "PowerForge.Tests/PowerShellCompilationStaticStringInvocationTests.cs": "64c5f56132ce6b00fe1e1bf3895fdc1422112bbfcc184b12d67f4ec038a09efe"
+    },
+    "net472BuildWarnings": 0,
+    "net472BuildErrors": 0,
+    "net472BuildDurationSeconds": 4.21,
+    "independentReview": "One read-only owner pass: no actionable findings; native access, catch, storage, lowering and invocation owners inspected.",
+    "workflowObservationsPerHost": 8,
+    "conversionObservationsPerHost": 12,
+    "hosts": [
+      "PowerShell 7/net10.0 on Windows",
+      "Windows PowerShell 5.1/net472"
+    ],
+    "newlyExecutedCompleteFunctions": [
+      "Get-WinADOrganizationalUnitFromDN"
+    ],
+    "limits": [
+      "Hybrid retains host-owned conversion and overload selection; not runtime-free CLR string conversion.",
+      "Callback proof covers a real CLR ToString override, not PowerShell ScriptMethod callbacks inspecting or mutating caller locals.",
+      "Optional/params rejection, explicit object declarations and local-qualified reads reviewed statically, without dedicated new artifact cases.",
+      "Full five-packet census is net10.0 only. No live AD/network/admin, Linux, performance, package or release proof."
+    ]
+  },
+  "candidateEmitted": 483,
+  "candidateRetained": 82,
+  "retainedFeatureImpact": {
+    "assignment.target": 1,
+    "binary-module.cmdlet-shape": 2,
+    "command.foreach-object": 2,
+    "command.get-help": 1,
+    "command.get-item": 1,
+    "command.get-location": 1,
+    "command.new-object": 2,
+    "command.out-gridview": 1,
+    "command.out-string": 1,
+    "command.read-host": 1,
+    "command.resolve-path": 1,
+    "command.select-object": 1,
+    "command.set-clipboard": 1,
+    "command.showcontainer": 1,
+    "command.test-connection": 1,
+    "command.write-verbose": 4,
+    "command.write-warning": 2,
+    "control.finally.stream-stop": 2,
+    "expression.conversion": 4,
+    "parameter.default": 1,
+    "parameter.metadata": 3,
+    "parameter.type": 25,
+    "pipeline.lifecycle": 2,
+    "psb2611": 1,
+    "psb2961": 1,
+    "runtime.scope": 2,
+    "scriptblock.typed": 1,
+    "semantic.lowering.missing": 2,
+    "source.type-definition": 5,
+    "syntax.foreachstatement": 1,
+    "syntax.functiondefinition": 1,
+    "syntax.invokememberexpression": 5,
+    "syntax.memberexpression": 3,
+    "syntax.pipeline": 1,
+    "syntax.subexpression": 1,
+    "syntax.switchstatement": 2,
+    "syntax.trystatement": 1,
+    "syntax.typedefinition": 1,
+    "syntax.typeexpression": 2,
+    "syntax.unsupported": 36
+  }
+}

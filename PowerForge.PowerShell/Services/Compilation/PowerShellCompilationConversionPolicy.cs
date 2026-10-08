@@ -4,6 +4,11 @@ namespace PowerForge;
 
 internal static class PowerShellCompilationConversionPolicy
 {
+    /// <summary>Known public Management enum casts resolve in the active host, not the compiler process.</summary>
+    internal static bool IsHostProvidedEnumTypeName(string name)
+        => name.Equals("Microsoft.PowerShell.Commands.PCSystemType", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("Microsoft.PowerShell.Commands.OSProductSuite", StringComparison.OrdinalIgnoreCase);
+
     internal static bool CanLower(
         ConvertExpressionAst conversion,
         string? targetFramework,
@@ -39,6 +44,8 @@ internal static class PowerShellCompilationConversionPolicy
         {
             switch (current)
             {
+                case ArrayExpressionAst:
+                case SubExpressionAst:
                 case NamedBlockAst:
                     return true;
                 case StatementBlockAst:
@@ -51,6 +58,10 @@ internal static class PowerShellCompilationConversionPolicy
                 case SwitchStatementAst:
                 case TryStatementAst:
                 case CatchClauseAst:
+                    continue;
+                case AssignmentStatementAst { Right: ForStatementAst or ForEachStatementAst or WhileStatementAst or DoWhileStatementAst or DoUntilStatementAst }:
+                    // Statements inside a captured loop still discard [void]
+                    // operands; the outer assignment collects only success output.
                     continue;
                 default:
                     return false;

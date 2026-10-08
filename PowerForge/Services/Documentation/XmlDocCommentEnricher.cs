@@ -9,8 +9,8 @@ using System.Xml.Linq;
 namespace PowerForge;
 
 /// <summary>
-/// Enriches help extracted via <c>Get-Help</c> with information from C# XML documentation
-/// files (<c>*.xml</c>) for binary cmdlets.
+/// Refreshes authored binary cmdlet help from C# XML documentation files (<c>*.xml</c>).
+/// Existing external help remains the fallback for members without XML documentation.
 /// </summary>
 internal sealed class XmlDocCommentEnricher
 {
@@ -75,10 +75,12 @@ internal sealed class XmlDocCommentEnricher
                 var typeMember = xml.TryGetMember("T:" + implementingType);
                 if (typeMember is not null)
                 {
-                    if (NeedsSynopsis(cmd.Name, cmd.Synopsis) && !string.IsNullOrWhiteSpace(typeMember.Summary))
+                    if (!string.IsNullOrWhiteSpace(typeMember.Summary))
                         cmd.Synopsis = typeMember.Summary!;
 
-                    if (NeedsText(cmd.Description) || LooksLikeSynopsisOnly(cmd.Description, cmd.Synopsis))
+                    if (!string.IsNullOrWhiteSpace(typeMember.Remarks) ||
+                        !string.IsNullOrWhiteSpace(typeMember.Body) ||
+                        NeedsText(cmd.Description) || LooksLikeSynopsisOnly(cmd.Description, cmd.Synopsis))
                     {
                         var desc = typeMember.Remarks;
                         if (string.IsNullOrWhiteSpace(desc)) desc = typeMember.Body;
@@ -86,9 +88,9 @@ internal sealed class XmlDocCommentEnricher
                         if (!string.IsNullOrWhiteSpace(desc)) cmd.Description = desc!;
                     }
 
-                    if (!HasMeaningfulExamples(cmd.Examples) && typeMember.Examples.Length > 0)
+                    if (typeMember.Examples.Length > 0)
                     {
-                        cmd.Examples ??= new List<DocumentationExampleHelp>();
+                        cmd.Examples = new List<DocumentationExampleHelp>();
                         foreach (var ex in typeMember.Examples)
                         {
                             cmd.Examples.Add(new DocumentationExampleHelp
@@ -138,7 +140,6 @@ internal sealed class XmlDocCommentEnricher
             foreach (var p in cmd.Parameters ?? Enumerable.Empty<DocumentationParameterHelp>())
             {
                 if (p is null) continue;
-                if (!NeedsText(p.Description)) continue;
                 if (string.IsNullOrWhiteSpace(p.Name)) continue;
 
                 var declaringType = string.IsNullOrWhiteSpace(p.DeclaringType)
@@ -242,21 +243,6 @@ internal sealed class XmlDocCommentEnricher
         return candidate.Trim();
     }
 
-    private static bool HasMeaningfulExamples(IReadOnlyList<DocumentationExampleHelp>? examples)
-    {
-        if (examples is null || examples.Count == 0) return false;
-
-        foreach (var ex in examples)
-        {
-            if (ex is null) continue;
-            if (!NeedsText(ex.Introduction)) return true;
-            if (!NeedsText(ex.Code)) return true;
-            if (!NeedsText(ex.Remarks)) return true;
-        }
-
-        return false;
-    }
-
     private static bool NeedsText(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return true;
@@ -275,25 +261,6 @@ internal sealed class XmlDocCommentEnricher
         if (string.IsNullOrWhiteSpace(description)) return true;
         if (string.IsNullOrWhiteSpace(synopsis)) return false;
         return string.Equals(description!.Trim(), synopsis!.Trim(), StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool NeedsSynopsis(string commandName, string? synopsis)
-    {
-        if (NeedsText(synopsis)) return true;
-
-        var name = (commandName ?? string.Empty).Trim();
-        var text = synopsis!.Trim();
-
-        // When no help exists, Get-Help often returns the syntax line as the synopsis.
-        if (!string.IsNullOrWhiteSpace(name) &&
-            text.StartsWith(name, StringComparison.OrdinalIgnoreCase) &&
-            (text.Contains("[<CommonParameters>]", StringComparison.OrdinalIgnoreCase) ||
-             text.Contains(" -", StringComparison.OrdinalIgnoreCase)))
-        {
-            return true;
-        }
-
-        return false;
     }
 
     private sealed class XmlDocFile

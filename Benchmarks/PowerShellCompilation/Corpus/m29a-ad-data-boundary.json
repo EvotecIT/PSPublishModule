@@ -1,0 +1,1204 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Qualify three unchanged hosted AD-data workflows conditional on installed RSAT, with real client-side AD types and offline providers; zero complete pinned-method gains.",
+  "compilerCommit": "4fc8ce12c8ae3dede1a0f58655f06cad799cc5d3",
+  "sources": [
+    {
+      "module": "PSSharedGoods",
+      "function": "Convert-ADGuidToSchema",
+      "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+      "relativePath": "Public/ActiveDirectory/Convert-ADGuidToSchema.ps1",
+      "sourceSha256": "c64a3d92889d23c2dba2d433464b4daa1a2bf7e2de3d63b40c10e91f24b1dca0"
+    },
+    {
+      "module": "PSSharedGoods",
+      "function": "Convert-ADSchemaToGuid",
+      "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+      "relativePath": "Public/ActiveDirectory/Convert-ADSchemaToGuid.ps1",
+      "sourceSha256": "3c864d03e4f64d519cdb41212be88ab9aba6b186658508711f7d231fcd42dbcb"
+    },
+    {
+      "module": "PSSharedGoods",
+      "function": "ConvertTo-ImmutableID",
+      "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+      "relativePath": "Public/Converts/ConvertTo-ImmutableID.ps1",
+      "sourceSha256": "0931d254c96baa69b17cdf19d2ef5d5c30c3c6ce3b49c8bcc62a373570cf3d75"
+    }
+  ],
+  "driver": "ExternalWorkflows/PSSharedGoods/AdData/Observe.ps1",
+  "driverSha256": "0fafc522b2d09d86c8aef61fe0461608680a7c69705c41ad32f34bb462192c32",
+  "dependencyInspection": {
+    "assembly": "Microsoft.ActiveDirectory.Management, Version=10.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+    "sha256": "0df8b9b0b77c652bb65971c3745b2b7e99aa899a0390cddab12142ed96eb1fc7",
+    "installedModuleVersion": "1.0.1.0",
+    "locationKind": "Windows GAC_64",
+    "pinvokeMethods": 22,
+    "exampleMethods": [
+      "UnsafeNativeMethods.NetApiBufferFree",
+      "UnsafeNativeMethods.DsGetDcName",
+      "UnsafeNativeMethods.NetAddServiceAccount"
+    ],
+    "inspection": "Read-only reflection after loading installed RSAT; no provider invocation",
+    "closure": "Pinned PSSharedGoods declares no ActiveDirectory dependency or contained AD RequiredAssembly; catalog excludes assemblies containing PInvoke. No exception or substituted type introduced."
+  },
+  "portfolio": {
+    "emitted": 544,
+    "retained": 21,
+    "functions": 565,
+    "stableUnits": 584,
+    "censusRepeated": false,
+    "reason": "Compiler and pinned portfolio source unchanged."
+  },
+  "hosts": [
+    {
+      "framework": "net10.0",
+      "artifactSha256": "e9974964ce55a7261e36f7c5a0e7c5b3148eb9b2b3edc368dfb08b87684e2995",
+      "dependencyLockSha256": "bc5db1d99dc801630792d3ba7439246d1571e6f6044cd7cc77734fb8c0214928",
+      "artifactCompleteMethods": 4,
+      "workloadDispositions": [
+        {
+          "unitId": "a0408e3e2a73703eebccb9f3",
+          "relativePath": "Fixture.psm1",
+          "name": "Convert-ADGuidToSchema",
+          "kind": "Function",
+          "startLine": 17,
+          "semanticEligible": false,
+          "emittedClrMethod": false,
+          "emittedBinaryCmdlet": false,
+          "retainedHostedSource": true,
+          "usesNativeFunctionBinding": false,
+          "runtimeCommandRegions": 0,
+          "boundaryCrossings": 1,
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "generatedMemberName": "",
+          "dependencyCauses": [],
+          "boundaryCauses": [
+            "Authored source remains on the hosted PowerShell path after artifact shaping.",
+            "The retained function delegates 1 typed region(s) to generated CLR helpers while keeping its PowerShell command surface.",
+            "Promoted initialization helpers require fresh invocation-local targets; regions with existing targets execute their original PowerShell statements in place."
+          ],
+          "diagnosticChain": [
+            {
+              "code": "UnsupportedParameterType",
+              "featureId": "parameter.type",
+              "message": "Parameter '$RootDSE' uses authored type 'Microsoft.ActiveDirectory.Management.ADEntity', which cannot be resolved in the selected compilation environment.",
+              "line": 55,
+              "column": 9
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "Typed indexed mutation requires a one-dimensional array, IList, or dictionary target.",
+              "line": 86,
+              "column": 13
+            }
+          ],
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "regionGraph": {
+            "schemaVersion": 1,
+            "regions": [
+              {
+                "regionId": "region:2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a:1858:1880:Typed",
+                "ordinal": 0,
+                "execution": "Typed",
+                "startOffset": 1858,
+                "endOffset": 1880,
+                "startLine": 59,
+                "startColumn": 5,
+                "endLine": 59,
+                "endColumn": 27,
+                "inputs": [],
+                "outputs": [
+                  "transfer:Local:credentialSplat"
+                ],
+                "mutations": [
+                  "Local:CREDENTIALSPLAT"
+                ],
+                "streams": [],
+                "errors": [],
+                "ordering": "AuthoredSequentialSingleEvaluation",
+                "hostedCommandBoundarySites": 0,
+                "moduleStateReadBoundarySites": 0,
+                "moduleStateWriteBoundarySites": 0,
+                "staticBoundaryCrossings": 0,
+                "staticBoundaryValueTransfers": 0,
+                "staticBoundaryCostUnits": 0
+              }
+            ],
+            "scriptBlocks": [],
+            "hostedCommandBoundarySites": 0,
+            "moduleStateReadBoundarySites": 0,
+            "moduleStateWriteBoundarySites": 0,
+            "staticBoundaryCrossings": 0,
+            "staticBoundaryCostUnits": 0
+          },
+          "promotedTypedRegions": 1,
+          "generatedRegionMemberNames": [
+            "__PowerForgeRegion_d1d7c0b8c398be0bfd42b946"
+          ]
+        },
+        {
+          "unitId": "d2860a525929a8ae28c48cee",
+          "relativePath": "Fixture.psm1",
+          "name": "Convert-ADSchemaToGuid",
+          "kind": "Function",
+          "startLine": 121,
+          "semanticEligible": false,
+          "emittedClrMethod": false,
+          "emittedBinaryCmdlet": false,
+          "retainedHostedSource": true,
+          "usesNativeFunctionBinding": false,
+          "runtimeCommandRegions": 0,
+          "boundaryCrossings": 1,
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "generatedMemberName": "",
+          "dependencyCauses": [],
+          "boundaryCauses": [
+            "Authored source remains on the hosted PowerShell path after artifact shaping.",
+            "The retained function delegates 1 typed region(s) to generated CLR helpers while keeping its PowerShell command surface.",
+            "Promoted initialization helpers require fresh invocation-local targets; regions with existing targets execute their original PowerShell statements in place."
+          ],
+          "diagnosticChain": [
+            {
+              "code": "UnsupportedParameterType",
+              "featureId": "parameter.type",
+              "message": "Parameter '$RootDSE' uses authored type 'Microsoft.ActiveDirectory.Management.ADEntity', which cannot be resolved in the selected compilation environment.",
+              "line": 160,
+              "column": 9
+            }
+          ],
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "regionGraph": {
+            "schemaVersion": 1,
+            "regions": [
+              {
+                "regionId": "region:2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a:6555:6577:Typed",
+                "ordinal": 0,
+                "execution": "Typed",
+                "startOffset": 6555,
+                "endOffset": 6577,
+                "startLine": 164,
+                "startColumn": 5,
+                "endLine": 164,
+                "endColumn": 27,
+                "inputs": [],
+                "outputs": [
+                  "transfer:Local:credentialSplat"
+                ],
+                "mutations": [
+                  "Local:CREDENTIALSPLAT"
+                ],
+                "streams": [],
+                "errors": [],
+                "ordering": "AuthoredSequentialSingleEvaluation",
+                "hostedCommandBoundarySites": 0,
+                "moduleStateReadBoundarySites": 0,
+                "moduleStateWriteBoundarySites": 0,
+                "staticBoundaryCrossings": 0,
+                "staticBoundaryValueTransfers": 0,
+                "staticBoundaryCostUnits": 0
+              }
+            ],
+            "scriptBlocks": [],
+            "hostedCommandBoundarySites": 0,
+            "moduleStateReadBoundarySites": 0,
+            "moduleStateWriteBoundarySites": 0,
+            "staticBoundaryCrossings": 0,
+            "staticBoundaryCostUnits": 0
+          },
+          "promotedTypedRegions": 1,
+          "generatedRegionMemberNames": [
+            "__PowerForgeRegion_6ab219dbaf74fe6bbaf6e2e9"
+          ]
+        },
+        {
+          "unitId": "ef8bc422ff6bedc7181d392a",
+          "relativePath": "Fixture.psm1",
+          "name": "ConvertTo-ImmutableID",
+          "kind": "Function",
+          "startLine": 234,
+          "semanticEligible": false,
+          "emittedClrMethod": false,
+          "emittedBinaryCmdlet": false,
+          "retainedHostedSource": true,
+          "usesNativeFunctionBinding": false,
+          "runtimeCommandRegions": 0,
+          "boundaryCrossings": 1,
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "generatedMemberName": "",
+          "dependencyCauses": [],
+          "boundaryCauses": [
+            "Authored source remains on the hosted PowerShell path after artifact shaping.",
+            "The retained function delegates 1 typed region(s) to generated CLR helpers while keeping its PowerShell command surface."
+          ],
+          "diagnosticChain": [
+            {
+              "code": "UnsupportedParameterType",
+              "featureId": "parameter.type",
+              "message": "Parameter '$User' uses authored type 'Microsoft.ActiveDirectory.Management.ADAccount', which cannot be resolved in the selected compilation environment.",
+              "line": 261,
+              "column": 9
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.memberexpression",
+              "message": "CLR member 'System.Object.ObjectGUID' was not found as one target-compatible readable field or property.",
+              "line": 268,
+              "column": 13
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.memberexpression",
+              "message": "CLR member 'System.Object.ObjectGUID' was not found as one target-compatible readable field or property.",
+              "line": 273,
+              "column": 58
+            }
+          ],
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "regionGraph": {
+            "schemaVersion": 1,
+            "regions": [
+              {
+                "regionId": "region:2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a:12045:12051:Typed",
+                "ordinal": 0,
+                "execution": "Typed",
+                "startOffset": 12045,
+                "endOffset": 12051,
+                "startLine": 276,
+                "startColumn": 5,
+                "endLine": 276,
+                "endColumn": 11,
+                "inputs": [],
+                "outputs": [],
+                "mutations": [],
+                "streams": [],
+                "errors": [],
+                "ordering": "AuthoredSequentialSingleEvaluation",
+                "hostedCommandBoundarySites": 0,
+                "moduleStateReadBoundarySites": 0,
+                "moduleStateWriteBoundarySites": 0,
+                "staticBoundaryCrossings": 0,
+                "staticBoundaryValueTransfers": 0,
+                "staticBoundaryCostUnits": 0
+              }
+            ],
+            "scriptBlocks": [],
+            "hostedCommandBoundarySites": 0,
+            "moduleStateReadBoundarySites": 0,
+            "moduleStateWriteBoundarySites": 0,
+            "staticBoundaryCrossings": 0,
+            "staticBoundaryCostUnits": 0
+          },
+          "promotedTypedRegions": 1,
+          "generatedRegionMemberNames": [
+            "__PowerForgeRegion_ef8c8e7561a291a37c796713"
+          ]
+        }
+      ],
+      "strictCanProceed": false,
+      "strictExplanationSha256": "442456afdf4fd30fe9f09f9588b0a38c6ae3728f3527fd00c45bf51720e18277",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "originalSha256": "3fe10ca6139a3ea09958a05038f5b03e92ad802835959f32821b40ec8bd35860",
+      "generatedSha256": "3fe10ca6139a3ea09958a05038f5b03e92ad802835959f32821b40ec8bd35860",
+      "result": {
+        "hostVersion": "7.6.6",
+        "adAssembly": "Microsoft.ActiveDirectory.Management, Version=10.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+        "adAssemblySha256": "0df8b9b0b77c652bb65971c3745b2b7e99aa899a0390cddab12142ed96eb1fc7",
+        "metadata": [
+          {
+            "name": "Convert-ADGuidToSchema",
+            "adParameterType": "Microsoft.ActiveDirectory.Management.ADEntity"
+          },
+          {
+            "name": "Convert-ADSchemaToGuid",
+            "adParameterType": "Microsoft.ActiveDirectory.Management.ADEntity"
+          },
+          {
+            "name": "ConvertTo-ImmutableID",
+            "adParameterType": "Microsoft.ActiveDirectory.Management.ADAccount"
+          }
+        ],
+        "observations": [
+          {
+            "case": "schema-first",
+            "records": [
+              {
+                "type": "System.String",
+                "value": "Offline schema"
+              }
+            ],
+            "trace": [
+              "controller:offline.invalid",
+              "objects:CN=Schema,DC=offline,DC=invalid|(schemaidguid=*)|dc.offline.invalid",
+              "objects:CN=Configuration,DC=offline,DC=invalid|(&(objectclass=controlAccessRight)(rightsguid=*))|dc.offline.invalid"
+            ],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "schema-cache",
+            "records": [
+              {
+                "type": "System.String",
+                "value": "Offline schema"
+              }
+            ],
+            "trace": [],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "schema-display",
+            "records": [
+              {
+                "type": "System.String",
+                "value": "Offline right display"
+              }
+            ],
+            "trace": [],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "schema-map",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "00000000-0000-0000-0000-000000000000",
+                    "type": "System.String",
+                    "value": "All"
+                  },
+                  {
+                    "key": "12345678-1234-1234-1234-1234567890ab",
+                    "type": "System.String",
+                    "value": "Offline schema"
+                  },
+                  {
+                    "key": "23456789-2345-2345-2345-234567890abc",
+                    "type": "System.String",
+                    "value": "Offline right"
+                  }
+                ]
+              }
+            ],
+            "trace": [],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "schema-missing",
+            "records": [
+              null
+            ],
+            "trace": [],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "guid-first",
+            "records": [
+              {
+                "type": "System.Guid",
+                "value": "12345678-1234-1234-1234-1234567890ab"
+              }
+            ],
+            "trace": [
+              "controller:offline.invalid"
+            ],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "guid-cache",
+            "records": [
+              {
+                "type": "System.Guid",
+                "value": "12345678-1234-1234-1234-1234567890ab"
+              }
+            ],
+            "trace": [],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "guid-string",
+            "records": [
+              {
+                "type": "System.String",
+                "value": "23456789-2345-2345-2345-234567890abc"
+              }
+            ],
+            "trace": [],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "guid-map",
+            "records": [
+              {
+                "type": "System.Collections.Specialized.OrderedDictionary",
+                "entries": [
+                  {
+                    "key": "All",
+                    "type": "System.Guid",
+                    "value": "00000000-0000-0000-0000-000000000000"
+                  },
+                  {
+                    "key": "Offline right",
+                    "type": "System.Guid",
+                    "value": "23456789-2345-2345-2345-234567890abc"
+                  },
+                  {
+                    "key": "Offline right display",
+                    "type": "System.Guid",
+                    "value": "23456789-2345-2345-2345-234567890abc"
+                  },
+                  {
+                    "key": "Offline schema",
+                    "type": "System.Guid",
+                    "value": "12345678-1234-1234-1234-1234567890ab"
+                  },
+                  {
+                    "key": "offlineSchema",
+                    "type": "System.Guid",
+                    "value": "12345678-1234-1234-1234-1234567890ab"
+                  }
+                ]
+              }
+            ],
+            "trace": [],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "guid-missing",
+            "records": [
+              null
+            ],
+            "trace": [],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "schema-failure",
+            "records": [],
+            "trace": [
+              "controller:offline.invalid",
+              "objects:CN=Schema,DC=offline,DC=invalid|(schemaidguid=*)|dc.offline.invalid"
+            ],
+            "caught": {
+              "type": "System.Management.Automation.RuntimeException",
+              "id": "owned offline schema failure",
+              "message": "owned offline schema failure"
+            },
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "account",
+            "records": [
+              {
+                "type": "System.String",
+                "value": "eFY0EjQSNBISNBI0VniQqw=="
+              }
+            ],
+            "trace": [],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "guid-only-defect",
+            "records": [],
+            "trace": [],
+            "caught": {
+              "type": "System.Management.Automation.RuntimeException",
+              "id": "InvokeMethodOnNull,ConvertTo-ImmutableID",
+              "message": "You cannot call a method on a null-valued expression."
+            },
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "no-value",
+            "records": [],
+            "trace": [],
+            "caught": {
+              "type": "System.Management.Automation.ParameterBindingException",
+              "id": "AmbiguousParameterSet,ConvertTo-ImmutableID",
+              "message": "Parameter set cannot be resolved using the specified named parameters. One or more parameters issued cannot be used together or an insufficient number of parameters were provided."
+            },
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "invalid-schema-root",
+            "records": [],
+            "trace": [],
+            "caught": {
+              "type": "System.Management.Automation.ParameterBindingArgumentTransformationException",
+              "id": "ParameterArgumentTransformationError,Convert-ADGuidToSchema",
+              "message": "Cannot process argument transformation on parameter 'RootDSE'. Cannot convert the \"System.Object[]\" value of type \"System.Object[]\" to type \"Microsoft.ActiveDirectory.Management.ADEntity\"."
+            },
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "invalid-guid-root",
+            "records": [],
+            "trace": [],
+            "caught": {
+              "type": "System.Management.Automation.ParameterBindingArgumentTransformationException",
+              "id": "ParameterArgumentTransformationError,Convert-ADSchemaToGuid",
+              "message": "Cannot process argument transformation on parameter 'RootDSE'. Cannot convert the \"System.Object[]\" value of type \"System.Object[]\" to type \"Microsoft.ActiveDirectory.Management.ADEntity\"."
+            },
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "invalid-account",
+            "records": [],
+            "trace": [],
+            "caught": {
+              "type": "System.Management.Automation.ParameterBindingArgumentTransformationException",
+              "id": "ParameterArgumentTransformationError,ConvertTo-ImmutableID",
+              "message": "Cannot process argument transformation on parameter 'User'. Cannot convert the \"System.Object[]\" value of type \"System.Object[]\" to type \"Microsoft.ActiveDirectory.Management.ADAccount\"."
+            },
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          }
+        ]
+      },
+      "generatedSourceHashes": {
+        "2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a": "dff4a74ebbf033bfdded8675518318224d52d20d7cc38770a1517cd843c6905f",
+        "AdData.csproj": "0b41cf79b6f28325ddffe705d0a93600fdf72f2acaa101cc030992f763783212",
+        "CompiledCmdlets.cs": "7fd9a84ecb0db77a0332fa7028c5d12625be502f24502de1ef7d0fc1658f74c3",
+        "CompiledPowerShell.cs": "b116e5e609e2fb5b4ddc519c55d84698c217bc545eed2ecd25c48f514574c26f",
+        "Directory.Build.props": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Build.targets": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Packages.props": "a96e6b8834dbdb32e1410abfdb50d0483c028bba2edd5fed4b6e5cfc583c6e46",
+        "global.json": "1a9972198a8d91eb872d3b4d3f5d6603fa2b04620c9e5c6d057a59f0d0f32992",
+        "ModuleSessionState.g.cs": "c96e42f7ba20fe3819fbe69e936b44e8c8a8fd5141eefa148bff59743bd69981",
+        "NativeLanguageOperations.g.cs": "7f96f823b4489c97ddfcc8182e4828fba533bc986c8feb36263851ef8dbded55",
+        "NativeOutput.g.cs": "48100a5b25ca80ebdf62d8f5df0f4be7ae3ad8c951dec2e69a19d01c98ae10bd",
+        "NuGet.Config": "81afa9a2ee0dd27b21be56f5efed21aa8cf08c8b2d4db4763cbee5cf28fb402e",
+        "PowerForge.TargetContract.json": "90180f20d4060b1d15573552f333e59b81e8c77f1bdfb9e4b9a3da8bdc269c78",
+        "PowerShellHybridRegionHost.g.cs": "678bc094155a8b579acee3a7fed2a73c33f327582cd35311f95a621395e2e4ac",
+        "PowerShellNativeFunctionContext.AccessMutations.g.cs": "9aa4cbc51df123ce356de19afa73f94f08541955bfde3854ee77c33c5f9a52ca",
+        "PowerShellNativeFunctionContext.CommandRegions.g.cs": "96182f77be1aab8c9599412fcd6a89af1244cebeb97937ecf0a6cde68cb9136c",
+        "PowerShellNativeFunctionContext.Compilation.g.cs": "822e2ef82b3ccc4b7de4ad9eb6f44e915ec36c81abc4b9c2b5978230d3dd7a2a",
+        "PowerShellNativeFunctionContext.Conversions.g.cs": "fccc228c95b894808bf99cf6a0b570c5eef8c4367e85259fc9f631b2673043d6",
+        "PowerShellNativeFunctionContext.Declarations.g.cs": "c53589d78033200f4ae59a72baf67b741f59281dfc23ebe7c637ea16382eefb3",
+        "PowerShellNativeFunctionContext.Dictionaries.g.cs": "51f0138b4a97a58a092af7e6dc8b9a4dfdaf233a15b13f396c4f03197df45cc3",
+        "PowerShellNativeFunctionContext.Enumeration.g.cs": "bee5f9239a119cec47f2f392064d3096d0962ab2ce84a9c7758271e0c01c5485",
+        "PowerShellNativeFunctionContext.g.cs": "17cb966a966bab959cf8d58d87eb8c92c4733374cd6f5e944e9c65c00c96efc9",
+        "PowerShellNativeFunctionContext.Indexing.g.cs": "610bec93d533cd485bfa9f680930a6d90de7bc0734bafeca4450facd9f00204e",
+        "PowerShellNativeFunctionContext.Invocations.g.cs": "c96859c7f495a75dfae3504c43ad2e46952e2fe387d6b2595149e76463a529b2",
+        "PowerShellNativeFunctionContext.Members.g.cs": "baeb213b30012cbd52403668f0def2f647ccb1c0625a60369e98fb97aeac4ba7",
+        "PowerShellNativeFunctionContext.Membership.g.cs": "4fb699f522f312e6850daa25673426f0af1844ecb7a59522336aadb2efcea707",
+        "PowerShellNativeFunctionContext.NestedDeclarations.g.cs": "075a2fdcb76a93eddc62fd23ea7d9460b12d8232adcd60050ab824e6882fa7bf",
+        "PowerShellNativeFunctionContext.Operations.g.cs": "0c83401a614ade6a8b24868bcf929592ae16f9d2941cb8f8af03144c067f47e0",
+        "PowerShellNativeFunctionContext.Output.g.cs": "06b1c8e5bd77934f02247b5d0774ff8a2b8d7ca4275e9fd18f40afda1afab050",
+        "PowerShellNativeFunctionContext.Patterns.g.cs": "990a8056b63f05c7103aa627ea8681845e0c1eeab84311312cd3cb394c9f3f92",
+        "PowerShellNativeFunctionContext.ScriptBlocks.g.cs": "b576c61fb1a947d688eec0192be637ff6fa741c58948319770f2712e31685ae8",
+        "PowerShellNativeFunctionContext.StringJoin.g.cs": "1c1e1acedadee610fd3281d709cb09c1a85bc4bd61af5005e8a1f5fcb63f9542",
+        "PowerShellNativeFunctionContext.Switch.g.cs": "d7501e42167b4ad522a6f203398ab14ca3d4c1d36e8524541f1afa3c87288101",
+        "PowerShellNativeFunctionHost.Declared.g.cs": "1960ef3bdf465cd99336fc1f0415c291b7ae7515ef4eb64d159f15ed69c8dc22",
+        "PowerShellNativeFunctionHost.FunctionEnums.g.cs": "b3b4e9f2d5867986cfbbe26dbadf21a1a319b7ec14202fa80cde9637b2d7d5f5",
+        "PowerShellNativeFunctionHost.g.cs": "180e381ea4854f38001ec5fbea4a453c88a6606843c5ea915c5f8f8343c11ca4",
+        "PowerShellNativeFunctionHost.OwnedDeclaration.g.cs": "83ce60b1bc336bc19e589369de8a81a2858277b8216a6c0784ecda328a8d911a",
+        "PowerShellRegionLocalOwnership.g.cs": "29ae75381d0c86b8a0c9c963893cf3754658809321c3a0ee4a1c92cb4680a62d",
+        "source-map.json": "ac5e44d38e8c35c5da6fcd90c68c7dbf9a99c9cbaab6b1584ace916f5ad681a0",
+        "SourceExtent.g.cs": "daf263e4d386070ca90530b6765d52d9f8e0141a63c6f1097eae4d00744472e5",
+        "StatementErrors.g.cs": "4f8430b1a911496884f666ca7a74cbfc9a740803868a1dcb7965309b17bd1a44"
+      }
+    },
+    {
+      "framework": "net472",
+      "artifactSha256": "0b73958eedff246d17e08c589bdaf4ec72a96f37433f7849688a44b68f7c4afc",
+      "dependencyLockSha256": "cfbe7254eb6b439a858b5eaf6d734cc0fe3d95bd5269debaf010d4484a60fe99",
+      "artifactCompleteMethods": 4,
+      "workloadDispositions": [
+        {
+          "unitId": "a0408e3e2a73703eebccb9f3",
+          "relativePath": "Fixture.psm1",
+          "name": "Convert-ADGuidToSchema",
+          "kind": "Function",
+          "startLine": 17,
+          "semanticEligible": false,
+          "emittedClrMethod": false,
+          "emittedBinaryCmdlet": false,
+          "retainedHostedSource": true,
+          "usesNativeFunctionBinding": false,
+          "runtimeCommandRegions": 0,
+          "boundaryCrossings": 1,
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "generatedMemberName": "",
+          "dependencyCauses": [],
+          "boundaryCauses": [
+            "Authored source remains on the hosted PowerShell path after artifact shaping.",
+            "The retained function delegates 1 typed region(s) to generated CLR helpers while keeping its PowerShell command surface.",
+            "Promoted initialization helpers require fresh invocation-local targets; regions with existing targets execute their original PowerShell statements in place."
+          ],
+          "diagnosticChain": [
+            {
+              "code": "UnsupportedParameterType",
+              "featureId": "parameter.type",
+              "message": "Parameter '$RootDSE' uses authored type 'Microsoft.ActiveDirectory.Management.ADEntity', which cannot be resolved in the selected compilation environment.",
+              "line": 55,
+              "column": 9
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "Typed indexed mutation requires a one-dimensional array, IList, or dictionary target.",
+              "line": 86,
+              "column": 13
+            }
+          ],
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "regionGraph": {
+            "schemaVersion": 1,
+            "regions": [
+              {
+                "regionId": "region:2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a:1858:1880:Typed",
+                "ordinal": 0,
+                "execution": "Typed",
+                "startOffset": 1858,
+                "endOffset": 1880,
+                "startLine": 59,
+                "startColumn": 5,
+                "endLine": 59,
+                "endColumn": 27,
+                "inputs": [],
+                "outputs": [
+                  "transfer:Local:credentialSplat"
+                ],
+                "mutations": [
+                  "Local:CREDENTIALSPLAT"
+                ],
+                "streams": [],
+                "errors": [],
+                "ordering": "AuthoredSequentialSingleEvaluation",
+                "hostedCommandBoundarySites": 0,
+                "moduleStateReadBoundarySites": 0,
+                "moduleStateWriteBoundarySites": 0,
+                "staticBoundaryCrossings": 0,
+                "staticBoundaryValueTransfers": 0,
+                "staticBoundaryCostUnits": 0
+              }
+            ],
+            "scriptBlocks": [],
+            "hostedCommandBoundarySites": 0,
+            "moduleStateReadBoundarySites": 0,
+            "moduleStateWriteBoundarySites": 0,
+            "staticBoundaryCrossings": 0,
+            "staticBoundaryCostUnits": 0
+          },
+          "promotedTypedRegions": 1,
+          "generatedRegionMemberNames": [
+            "__PowerForgeRegion_d1d7c0b8c398be0bfd42b946"
+          ]
+        },
+        {
+          "unitId": "d2860a525929a8ae28c48cee",
+          "relativePath": "Fixture.psm1",
+          "name": "Convert-ADSchemaToGuid",
+          "kind": "Function",
+          "startLine": 121,
+          "semanticEligible": false,
+          "emittedClrMethod": false,
+          "emittedBinaryCmdlet": false,
+          "retainedHostedSource": true,
+          "usesNativeFunctionBinding": false,
+          "runtimeCommandRegions": 0,
+          "boundaryCrossings": 1,
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "generatedMemberName": "",
+          "dependencyCauses": [],
+          "boundaryCauses": [
+            "Authored source remains on the hosted PowerShell path after artifact shaping.",
+            "The retained function delegates 1 typed region(s) to generated CLR helpers while keeping its PowerShell command surface.",
+            "Promoted initialization helpers require fresh invocation-local targets; regions with existing targets execute their original PowerShell statements in place."
+          ],
+          "diagnosticChain": [
+            {
+              "code": "UnsupportedParameterType",
+              "featureId": "parameter.type",
+              "message": "Parameter '$RootDSE' uses authored type 'Microsoft.ActiveDirectory.Management.ADEntity', which cannot be resolved in the selected compilation environment.",
+              "line": 160,
+              "column": 9
+            }
+          ],
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "regionGraph": {
+            "schemaVersion": 1,
+            "regions": [
+              {
+                "regionId": "region:2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a:6555:6577:Typed",
+                "ordinal": 0,
+                "execution": "Typed",
+                "startOffset": 6555,
+                "endOffset": 6577,
+                "startLine": 164,
+                "startColumn": 5,
+                "endLine": 164,
+                "endColumn": 27,
+                "inputs": [],
+                "outputs": [
+                  "transfer:Local:credentialSplat"
+                ],
+                "mutations": [
+                  "Local:CREDENTIALSPLAT"
+                ],
+                "streams": [],
+                "errors": [],
+                "ordering": "AuthoredSequentialSingleEvaluation",
+                "hostedCommandBoundarySites": 0,
+                "moduleStateReadBoundarySites": 0,
+                "moduleStateWriteBoundarySites": 0,
+                "staticBoundaryCrossings": 0,
+                "staticBoundaryValueTransfers": 0,
+                "staticBoundaryCostUnits": 0
+              }
+            ],
+            "scriptBlocks": [],
+            "hostedCommandBoundarySites": 0,
+            "moduleStateReadBoundarySites": 0,
+            "moduleStateWriteBoundarySites": 0,
+            "staticBoundaryCrossings": 0,
+            "staticBoundaryCostUnits": 0
+          },
+          "promotedTypedRegions": 1,
+          "generatedRegionMemberNames": [
+            "__PowerForgeRegion_6ab219dbaf74fe6bbaf6e2e9"
+          ]
+        },
+        {
+          "unitId": "ef8bc422ff6bedc7181d392a",
+          "relativePath": "Fixture.psm1",
+          "name": "ConvertTo-ImmutableID",
+          "kind": "Function",
+          "startLine": 234,
+          "semanticEligible": false,
+          "emittedClrMethod": false,
+          "emittedBinaryCmdlet": false,
+          "retainedHostedSource": true,
+          "usesNativeFunctionBinding": false,
+          "runtimeCommandRegions": 0,
+          "boundaryCrossings": 1,
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "generatedMemberName": "",
+          "dependencyCauses": [],
+          "boundaryCauses": [
+            "Authored source remains on the hosted PowerShell path after artifact shaping.",
+            "The retained function delegates 1 typed region(s) to generated CLR helpers while keeping its PowerShell command surface."
+          ],
+          "diagnosticChain": [
+            {
+              "code": "UnsupportedParameterType",
+              "featureId": "parameter.type",
+              "message": "Parameter '$User' uses authored type 'Microsoft.ActiveDirectory.Management.ADAccount', which cannot be resolved in the selected compilation environment.",
+              "line": 261,
+              "column": 9
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.memberexpression",
+              "message": "CLR member 'System.Object.ObjectGUID' was not found as one target-compatible readable field or property.",
+              "line": 268,
+              "column": 13
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.memberexpression",
+              "message": "CLR member 'System.Object.ObjectGUID' was not found as one target-compatible readable field or property.",
+              "line": 273,
+              "column": 58
+            }
+          ],
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "regionGraph": {
+            "schemaVersion": 1,
+            "regions": [
+              {
+                "regionId": "region:2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a:12045:12051:Typed",
+                "ordinal": 0,
+                "execution": "Typed",
+                "startOffset": 12045,
+                "endOffset": 12051,
+                "startLine": 276,
+                "startColumn": 5,
+                "endLine": 276,
+                "endColumn": 11,
+                "inputs": [],
+                "outputs": [],
+                "mutations": [],
+                "streams": [],
+                "errors": [],
+                "ordering": "AuthoredSequentialSingleEvaluation",
+                "hostedCommandBoundarySites": 0,
+                "moduleStateReadBoundarySites": 0,
+                "moduleStateWriteBoundarySites": 0,
+                "staticBoundaryCrossings": 0,
+                "staticBoundaryValueTransfers": 0,
+                "staticBoundaryCostUnits": 0
+              }
+            ],
+            "scriptBlocks": [],
+            "hostedCommandBoundarySites": 0,
+            "moduleStateReadBoundarySites": 0,
+            "moduleStateWriteBoundarySites": 0,
+            "staticBoundaryCrossings": 0,
+            "staticBoundaryCostUnits": 0
+          },
+          "promotedTypedRegions": 1,
+          "generatedRegionMemberNames": [
+            "__PowerForgeRegion_ef8c8e7561a291a37c796713"
+          ]
+        }
+      ],
+      "strictCanProceed": false,
+      "strictExplanationSha256": "66c96969d016ac375a90f922731d435483d5e4d09a009b426f7d4746f2103623",
+      "originalExitCode": 0,
+      "generatedExitCode": 0,
+      "originalSha256": "8fd492f8ec65ca656eddc14bc1b5a0bb21b832a22c0b492ffed1b30883f793f5",
+      "generatedSha256": "8fd492f8ec65ca656eddc14bc1b5a0bb21b832a22c0b492ffed1b30883f793f5",
+      "result": {
+        "hostVersion": "5.1.26100.9444",
+        "adAssembly": "Microsoft.ActiveDirectory.Management, Version=10.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+        "adAssemblySha256": "0df8b9b0b77c652bb65971c3745b2b7e99aa899a0390cddab12142ed96eb1fc7",
+        "metadata": [
+          {
+            "name": "Convert-ADGuidToSchema",
+            "adParameterType": "Microsoft.ActiveDirectory.Management.ADEntity"
+          },
+          {
+            "name": "Convert-ADSchemaToGuid",
+            "adParameterType": "Microsoft.ActiveDirectory.Management.ADEntity"
+          },
+          {
+            "name": "ConvertTo-ImmutableID",
+            "adParameterType": "Microsoft.ActiveDirectory.Management.ADAccount"
+          }
+        ],
+        "observations": [
+          {
+            "case": "schema-first",
+            "records": [
+              {
+                "type": "System.String",
+                "value": "Offline schema"
+              }
+            ],
+            "trace": [
+              "controller:offline.invalid",
+              "objects:CN=Schema,DC=offline,DC=invalid|(schemaidguid=*)|dc.offline.invalid",
+              "objects:CN=Configuration,DC=offline,DC=invalid|(&(objectclass=controlAccessRight)(rightsguid=*))|dc.offline.invalid"
+            ],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "schema-cache",
+            "records": [
+              {
+                "type": "System.String",
+                "value": "Offline schema"
+              }
+            ],
+            "trace": [],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "schema-display",
+            "records": [
+              {
+                "type": "System.String",
+                "value": "Offline right display"
+              }
+            ],
+            "trace": [],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "schema-map",
+            "records": [
+              {
+                "type": "System.Collections.Hashtable",
+                "entries": [
+                  {
+                    "key": "00000000-0000-0000-0000-000000000000",
+                    "type": "System.String",
+                    "value": "All"
+                  },
+                  {
+                    "key": "12345678-1234-1234-1234-1234567890ab",
+                    "type": "System.String",
+                    "value": "Offline schema"
+                  },
+                  {
+                    "key": "23456789-2345-2345-2345-234567890abc",
+                    "type": "System.String",
+                    "value": "Offline right"
+                  }
+                ]
+              }
+            ],
+            "trace": [],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "schema-missing",
+            "records": [
+              null
+            ],
+            "trace": [],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "guid-first",
+            "records": [
+              {
+                "type": "System.Guid",
+                "value": "12345678-1234-1234-1234-1234567890ab"
+              }
+            ],
+            "trace": [
+              "controller:offline.invalid"
+            ],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "guid-cache",
+            "records": [
+              {
+                "type": "System.Guid",
+                "value": "12345678-1234-1234-1234-1234567890ab"
+              }
+            ],
+            "trace": [],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "guid-string",
+            "records": [
+              {
+                "type": "System.String",
+                "value": "23456789-2345-2345-2345-234567890abc"
+              }
+            ],
+            "trace": [],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "guid-map",
+            "records": [
+              {
+                "type": "System.Collections.Specialized.OrderedDictionary",
+                "entries": [
+                  {
+                    "key": "All",
+                    "type": "System.Guid",
+                    "value": "00000000-0000-0000-0000-000000000000"
+                  },
+                  {
+                    "key": "Offline right",
+                    "type": "System.Guid",
+                    "value": "23456789-2345-2345-2345-234567890abc"
+                  },
+                  {
+                    "key": "Offline right display",
+                    "type": "System.Guid",
+                    "value": "23456789-2345-2345-2345-234567890abc"
+                  },
+                  {
+                    "key": "Offline schema",
+                    "type": "System.Guid",
+                    "value": "12345678-1234-1234-1234-1234567890ab"
+                  },
+                  {
+                    "key": "offlineSchema",
+                    "type": "System.Guid",
+                    "value": "12345678-1234-1234-1234-1234567890ab"
+                  }
+                ]
+              }
+            ],
+            "trace": [],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "guid-missing",
+            "records": [
+              null
+            ],
+            "trace": [],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "schema-failure",
+            "records": [],
+            "trace": [
+              "controller:offline.invalid",
+              "objects:CN=Schema,DC=offline,DC=invalid|(schemaidguid=*)|dc.offline.invalid"
+            ],
+            "caught": {
+              "type": "System.Management.Automation.RuntimeException",
+              "id": "owned offline schema failure",
+              "message": "owned offline schema failure"
+            },
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "account",
+            "records": [
+              {
+                "type": "System.String",
+                "value": "eFY0EjQSNBISNBI0VniQqw=="
+              }
+            ],
+            "trace": [],
+            "caught": null,
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "guid-only-defect",
+            "records": [],
+            "trace": [],
+            "caught": {
+              "type": "System.Management.Automation.RuntimeException",
+              "id": "InvokeMethodOnNull,ConvertTo-ImmutableID",
+              "message": "You cannot call a method on a null-valued expression."
+            },
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "no-value",
+            "records": [],
+            "trace": [],
+            "caught": {
+              "type": "System.Management.Automation.ParameterBindingException",
+              "id": "AmbiguousParameterSet,ConvertTo-ImmutableID",
+              "message": "Parameter set cannot be resolved using the specified named parameters."
+            },
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "invalid-schema-root",
+            "records": [],
+            "trace": [],
+            "caught": {
+              "type": "System.Management.Automation.ParameterBindingArgumentTransformationException",
+              "id": "ParameterArgumentTransformationError,Convert-ADGuidToSchema",
+              "message": "Cannot process argument transformation on parameter 'RootDSE'. Cannot convert the \"System.Object[]\" value of type \"System.Object[]\" to type \"Microsoft.ActiveDirectory.Management.ADEntity\"."
+            },
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "invalid-guid-root",
+            "records": [],
+            "trace": [],
+            "caught": {
+              "type": "System.Management.Automation.ParameterBindingArgumentTransformationException",
+              "id": "ParameterArgumentTransformationError,Convert-ADSchemaToGuid",
+              "message": "Cannot process argument transformation on parameter 'RootDSE'. Cannot convert the \"System.Object[]\" value of type \"System.Object[]\" to type \"Microsoft.ActiveDirectory.Management.ADEntity\"."
+            },
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          },
+          {
+            "case": "invalid-account",
+            "records": [],
+            "trace": [],
+            "caught": {
+              "type": "System.Management.Automation.ParameterBindingArgumentTransformationException",
+              "id": "ParameterArgumentTransformationError,ConvertTo-ImmutableID",
+              "message": "Cannot process argument transformation on parameter 'User'. Cannot convert the \"System.Object[]\" value of type \"System.Object[]\" to type \"Microsoft.ActiveDirectory.Management.ADAccount\"."
+            },
+            "callerGuid": "12345678-1234-1234-1234-1234567890ab"
+          }
+        ]
+      },
+      "generatedSourceHashes": {
+        "2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a": "dff4a74ebbf033bfdded8675518318224d52d20d7cc38770a1517cd843c6905f",
+        "AdData.csproj": "d172767d3a45df72272b7b6e7cc3da53366ff288730dae0fcb7b53c20c4f6ba9",
+        "CompiledCmdlets.cs": "7fd9a84ecb0db77a0332fa7028c5d12625be502f24502de1ef7d0fc1658f74c3",
+        "CompiledPowerShell.cs": "fb67a9ca8af826bdfe6b70a92d0589a1f4d4a1305902f8f98c61913ce73d3bce",
+        "Directory.Build.props": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Build.targets": "5c10e0dca89d53fa828e2b8ad817f7ddeccb7775bef36c1e75dba0d87a103ee6",
+        "Directory.Packages.props": "a96e6b8834dbdb32e1410abfdb50d0483c028bba2edd5fed4b6e5cfc583c6e46",
+        "global.json": "1a9972198a8d91eb872d3b4d3f5d6603fa2b04620c9e5c6d057a59f0d0f32992",
+        "ModuleSessionState.g.cs": "c96e42f7ba20fe3819fbe69e936b44e8c8a8fd5141eefa148bff59743bd69981",
+        "NativeLanguageOperations.g.cs": "7f96f823b4489c97ddfcc8182e4828fba533bc986c8feb36263851ef8dbded55",
+        "NativeOutput.g.cs": "48100a5b25ca80ebdf62d8f5df0f4be7ae3ad8c951dec2e69a19d01c98ae10bd",
+        "NuGet.Config": "81afa9a2ee0dd27b21be56f5efed21aa8cf08c8b2d4db4763cbee5cf28fb402e",
+        "PowerForge.TargetContract.json": "50340bf76aea78627ddc1f69c8b49badd286303bafef1aa02f98e1c16a1ab688",
+        "PowerShellHybridRegionHost.g.cs": "678bc094155a8b579acee3a7fed2a73c33f327582cd35311f95a621395e2e4ac",
+        "PowerShellNativeFunctionContext.AccessMutations.g.cs": "9aa4cbc51df123ce356de19afa73f94f08541955bfde3854ee77c33c5f9a52ca",
+        "PowerShellNativeFunctionContext.CommandRegions.g.cs": "96182f77be1aab8c9599412fcd6a89af1244cebeb97937ecf0a6cde68cb9136c",
+        "PowerShellNativeFunctionContext.Compilation.g.cs": "822e2ef82b3ccc4b7de4ad9eb6f44e915ec36c81abc4b9c2b5978230d3dd7a2a",
+        "PowerShellNativeFunctionContext.Conversions.g.cs": "fccc228c95b894808bf99cf6a0b570c5eef8c4367e85259fc9f631b2673043d6",
+        "PowerShellNativeFunctionContext.Declarations.g.cs": "c53589d78033200f4ae59a72baf67b741f59281dfc23ebe7c637ea16382eefb3",
+        "PowerShellNativeFunctionContext.Dictionaries.g.cs": "51f0138b4a97a58a092af7e6dc8b9a4dfdaf233a15b13f396c4f03197df45cc3",
+        "PowerShellNativeFunctionContext.Enumeration.g.cs": "bee5f9239a119cec47f2f392064d3096d0962ab2ce84a9c7758271e0c01c5485",
+        "PowerShellNativeFunctionContext.g.cs": "17cb966a966bab959cf8d58d87eb8c92c4733374cd6f5e944e9c65c00c96efc9",
+        "PowerShellNativeFunctionContext.Indexing.g.cs": "610bec93d533cd485bfa9f680930a6d90de7bc0734bafeca4450facd9f00204e",
+        "PowerShellNativeFunctionContext.Invocations.g.cs": "c96859c7f495a75dfae3504c43ad2e46952e2fe387d6b2595149e76463a529b2",
+        "PowerShellNativeFunctionContext.Members.g.cs": "baeb213b30012cbd52403668f0def2f647ccb1c0625a60369e98fb97aeac4ba7",
+        "PowerShellNativeFunctionContext.Membership.g.cs": "4fb699f522f312e6850daa25673426f0af1844ecb7a59522336aadb2efcea707",
+        "PowerShellNativeFunctionContext.NestedDeclarations.g.cs": "075a2fdcb76a93eddc62fd23ea7d9460b12d8232adcd60050ab824e6882fa7bf",
+        "PowerShellNativeFunctionContext.Operations.g.cs": "0c83401a614ade6a8b24868bcf929592ae16f9d2941cb8f8af03144c067f47e0",
+        "PowerShellNativeFunctionContext.Output.g.cs": "06b1c8e5bd77934f02247b5d0774ff8a2b8d7ca4275e9fd18f40afda1afab050",
+        "PowerShellNativeFunctionContext.Patterns.g.cs": "990a8056b63f05c7103aa627ea8681845e0c1eeab84311312cd3cb394c9f3f92",
+        "PowerShellNativeFunctionContext.ScriptBlocks.g.cs": "b576c61fb1a947d688eec0192be637ff6fa741c58948319770f2712e31685ae8",
+        "PowerShellNativeFunctionContext.StringJoin.g.cs": "1c1e1acedadee610fd3281d709cb09c1a85bc4bd61af5005e8a1f5fcb63f9542",
+        "PowerShellNativeFunctionContext.Switch.g.cs": "d7501e42167b4ad522a6f203398ab14ca3d4c1d36e8524541f1afa3c87288101",
+        "PowerShellNativeFunctionHost.Declared.g.cs": "1960ef3bdf465cd99336fc1f0415c291b7ae7515ef4eb64d159f15ed69c8dc22",
+        "PowerShellNativeFunctionHost.FunctionEnums.g.cs": "b3b4e9f2d5867986cfbbe26dbadf21a1a319b7ec14202fa80cde9637b2d7d5f5",
+        "PowerShellNativeFunctionHost.g.cs": "180e381ea4854f38001ec5fbea4a453c88a6606843c5ea915c5f8f8343c11ca4",
+        "PowerShellNativeFunctionHost.OwnedDeclaration.g.cs": "83ce60b1bc336bc19e589369de8a81a2858277b8216a6c0784ecda328a8d911a",
+        "PowerShellRegionLocalOwnership.g.cs": "29ae75381d0c86b8a0c9c963893cf3754658809321c3a0ee4a1c92cb4680a62d",
+        "source-map.json": "ac5e44d38e8c35c5da6fcd90c68c7dbf9a99c9cbaab6b1584ace916f5ad681a0",
+        "SourceExtent.g.cs": "daf263e4d386070ca90530b6765d52d9f8e0141a63c6f1097eae4d00744472e5",
+        "StatementErrors.g.cs": "4f8430b1a911496884f666ca7a74cbfc9a740803868a1dcb7965309b17bd1a44"
+      }
+    }
+  ],
+  "authoredLimitations": [
+    "ConvertTo-ImmutableID Guid-only path dereferences absent User.ObjectGUID instead of ObjectGUID",
+    "ConvertTo-ImmutableID without a parameter fails ambiguous parameter-set selection"
+  ],
+  "limits": [
+    "Installed Windows RSAT required; no redistributable assembly supplied",
+    "No AD query/write, network connection, credential lookup or password operation",
+    "Providers are module-local functions verified before workload execution",
+    "Client-side AD objects preserve actual SDK type identity; no same-name stand-ins",
+    "Promoted regions are advertised, not individually observed or credited",
+    "Only owned helpers emit complete methods; no pinned compiled execution gain",
+    "Not a portable/self-contained artifact or full module qualification",
+    "net10 generated build retains existing NU1510 warnings"
+  ]
+}

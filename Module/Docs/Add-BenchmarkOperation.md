@@ -21,7 +21,7 @@ Adds an operation handler to the current benchmark engine.
 
 ### EXAMPLE 1
 ```powershell
-Add-BenchmarkOperation -Name 'Name'
+Add-BenchmarkOperation -Name 'Name' -ScriptBlock { }
 ```
 
 

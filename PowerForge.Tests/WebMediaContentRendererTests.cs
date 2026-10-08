@@ -12,8 +12,12 @@ public class WebMediaContentRendererTests
     {
         string result = WebMediaContentRenderer.Render($"<html lang='{language}'><article data-pf-media-scope='content'><h2>Outer</h2><section data-pf-media-scope='content'><h3>Inner</h3><img src='/inner.png' alt='Inside'></section><img src='/a.png' alt='A'><img src='/b.png' alt='B'></article></html>");
         var doc = HtmlParser.ParseWithHtmlAgilityPack(result);
-        Assert.Equal("Outer · A", doc.DocumentNode.SelectSingleNode("//a[@href='/a.png']").GetAttributeValue("data-pf-media-caption", ""));
-        Assert.Equal("Inner · Inside", doc.DocumentNode.SelectSingleNode("//a[@href='/inner.png']").GetAttributeValue("data-pf-media-caption", ""));
+        var outerLink = doc.DocumentNode.SelectSingleNode("//a[@href='/a.png']");
+        var innerLink = doc.DocumentNode.SelectSingleNode("//a[@href='/inner.png']");
+        Assert.NotNull(outerLink);
+        Assert.NotNull(innerLink);
+        Assert.Equal("Outer · A", outerLink.GetAttributeValue("data-pf-media-caption", ""));
+        Assert.Equal("Inner · Inside", innerLink.GetAttributeValue("data-pf-media-caption", ""));
         Assert.Contains(enlarge, result);
         Assert.Contains(view + " (2)", result);
     }
@@ -27,7 +31,9 @@ public class WebMediaContentRendererTests
     {
         string result = WebMediaContentRenderer.Render($"<section data-pf-media-scope='content'>{markup}</section>");
         var doc = HtmlParser.ParseWithHtmlAgilityPack(result);
-        Assert.Equal(fallback, doc.DocumentNode.SelectSingleNode("//a[@data-pf-media]").GetAttributeValue("href", ""));
+        var link = doc.DocumentNode.SelectSingleNode("//a[@data-pf-media]");
+        Assert.NotNull(link);
+        Assert.Equal(fallback, link.GetAttributeValue("href", ""));
         Assert.Contains(markup, result);
         Assert.Equal(result, WebMediaContentRenderer.Render(result));
     }
@@ -49,7 +55,9 @@ public class WebMediaContentRendererTests
         string html = "<html lang='en'><body><article data-pf-media-scope='content'><h2>Setup</h2>" + picture + "<p><img src='next.png' alt='Next'></p>" + code + "</article></body></html>";
         string result = WebMediaContentRenderer.Render(html);
         var doc = HtmlParser.ParseWithHtmlAgilityPack(result);
-        Assert.Equal(2, doc.DocumentNode.SelectNodes("//a[@data-pf-media]").Count);
+        var links = doc.DocumentNode.SelectNodes("//a[@data-pf-media]");
+        Assert.NotNull(links);
+        Assert.Equal(2, links.Count);
         Assert.Contains(picture, result);
         Assert.Contains(code, result);
         Assert.Contains("View images (2)", result);
@@ -68,6 +76,7 @@ public class WebMediaContentRendererTests
         Assert.DoesNotContain("< />/>", result);
         var doc = HtmlParser.ParseWithHtmlAgilityPack(result);
         var link = doc.DocumentNode.SelectSingleNode("//a[@data-pf-media]");
+        Assert.NotNull(link);
         Assert.Single(link.Descendants("img"));
         Assert.Empty(link.Descendants("p"));
         Assert.NotNull(link.SelectSingleNode("following-sibling::p[normalize-space(.)='Following paragraph.']"));
@@ -115,8 +124,14 @@ public class WebMediaContentRendererTests
         Assert.NotNull(doc.DocumentNode.SelectSingleNode("//a[@href='/demos/chart.html']/img"));
         Assert.NotNull(doc.DocumentNode.SelectSingleNode("//a[@href='/product/']/img"));
         var actions = doc.DocumentNode.SelectNodes("//a[@data-pf-media-for]");
+        Assert.NotNull(actions);
         Assert.Equal(2, actions.Count);
-        foreach (var action in actions) Assert.Equal("img", doc.GetElementbyId(action.GetAttributeValue("data-pf-media-for", "")).Name);
+        foreach (var action in actions)
+        {
+            var source = doc.GetElementbyId(action.GetAttributeValue("data-pf-media-for", ""));
+            Assert.NotNull(source);
+            Assert.Equal("img", source.Name);
+        }
         Assert.Equal(result, WebMediaContentRenderer.Render(result));
     }
 
@@ -141,10 +156,17 @@ public class WebMediaContentRendererTests
             </article>
             """);
         var doc = HtmlParser.ParseWithHtmlAgilityPack(result);
-        string Group(string href) => doc.DocumentNode.SelectSingleNode($"//a[@href='{href}']").GetAttributeValue("data-pf-media-group", "");
+        string Group(string href)
+        {
+            var link = doc.DocumentNode.SelectSingleNode($"//a[@href='{href}']");
+            Assert.NotNull(link);
+            return link.GetAttributeValue("data-pf-media-group", "");
+        }
         Assert.NotEqual(Group("/a.png"), Group("/b.png"));
         Assert.Equal(Group("/b.png"), Group("/c.png"));
         Assert.Equal("", Group("/d.png"));
-        Assert.Single(doc.DocumentNode.SelectNodes("//a[@data-pf-media-open-group]"));
+        var groupLinks = doc.DocumentNode.SelectNodes("//a[@data-pf-media-open-group]");
+        Assert.NotNull(groupLinks);
+        Assert.Single(groupLinks);
     }
 }

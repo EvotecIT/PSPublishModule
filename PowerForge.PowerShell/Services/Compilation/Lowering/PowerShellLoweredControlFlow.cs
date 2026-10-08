@@ -34,17 +34,20 @@ internal enum PowerShellLoweredLoopKind
 
 internal sealed class PowerShellLoweredWhileStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredWhileStatement(SourceSpan span, PowerShellLoweredLoopKind kind, PowerShellLoweredExpression condition, PowerShellLoweredStatement[] statements)
+    internal PowerShellLoweredWhileStatement(SourceSpan span, PowerShellLoweredLoopKind kind, PowerShellLoweredExpression condition, PowerShellLoweredStatement[] statements,
+        bool checkHostInterrupts)
         : base(span)
     {
         Kind = kind;
         Condition = condition;
         Statements = statements;
+        CheckHostInterrupts = checkHostInterrupts;
     }
 
     internal PowerShellLoweredLoopKind Kind { get; }
     internal PowerShellLoweredExpression Condition { get; }
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
+    internal bool CheckHostInterrupts { get; }
 }
 
 internal sealed class PowerShellLoweredForStatement : PowerShellLoweredStatement
@@ -55,7 +58,8 @@ internal sealed class PowerShellLoweredForStatement : PowerShellLoweredStatement
         PowerShellLoweredExpression? condition,
         PowerShellLoweredMutationExpression? iterator,
         PowerShellLoweredStatement[] statements,
-        bool declareInitializer)
+        bool declareInitializer,
+        bool checkHostInterrupts)
         : base(span)
     {
         Initializer = initializer;
@@ -63,6 +67,7 @@ internal sealed class PowerShellLoweredForStatement : PowerShellLoweredStatement
         Iterator = iterator;
         Statements = statements;
         DeclareInitializer = declareInitializer;
+        CheckHostInterrupts = checkHostInterrupts;
     }
 
     internal PowerShellLoweredMutationExpression? Initializer { get; }
@@ -70,6 +75,7 @@ internal sealed class PowerShellLoweredForStatement : PowerShellLoweredStatement
     internal PowerShellLoweredMutationExpression? Iterator { get; }
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
     internal bool DeclareInitializer { get; }
+    internal bool CheckHostInterrupts { get; }
 }
 
 internal sealed class PowerShellLoweredForEachStatement : PowerShellLoweredStatement
@@ -79,31 +85,34 @@ internal sealed class PowerShellLoweredForEachStatement : PowerShellLoweredState
         PowerShellSymbolId variable,
         Type elementType,
         PowerShellLoweredExpression collection,
-        bool scalarString,
+        PowerShellForEachEnumerationKind enumerationKind,
         PowerShellLoweredStatement[] statements,
         bool declareVariable,
         PowerShellLoweredExpression? nullCollectionElement,
-        bool systemArray)
+        bool checkHostInterrupts,
+        PowerShellNativeForEachBinding? nativeBinding = null)
         : base(span)
     {
         Variable = variable;
         ElementType = elementType;
         Collection = collection;
-        ScalarString = scalarString;
+        EnumerationKind = enumerationKind;
         Statements = statements;
         DeclareVariable = declareVariable;
         NullCollectionElement = nullCollectionElement;
-        SystemArray = systemArray;
+        CheckHostInterrupts = checkHostInterrupts;
+        NativeBinding = nativeBinding;
     }
 
     internal PowerShellSymbolId Variable { get; }
     internal Type ElementType { get; }
     internal PowerShellLoweredExpression Collection { get; }
-    internal bool ScalarString { get; }
+    internal PowerShellForEachEnumerationKind EnumerationKind { get; }
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
     internal bool DeclareVariable { get; }
     internal PowerShellLoweredExpression? NullCollectionElement { get; }
-    internal bool SystemArray { get; }
+    internal bool CheckHostInterrupts { get; }
+    internal PowerShellNativeForEachBinding? NativeBinding { get; }
 }
 
 internal sealed class PowerShellLoweredSwitchClause
@@ -126,7 +135,9 @@ internal sealed class PowerShellLoweredSwitchStatement : PowerShellLoweredStatem
         PowerShellLoweredSwitchClause[] clauses,
         PowerShellLoweredStatement[]? defaultStatements,
         PowerShellBoundSwitchMatchMode matchMode,
-        bool caseSensitive)
+        bool caseSensitive,
+        PowerShellBoundSwitchInputKind inputKind = PowerShellBoundSwitchInputKind.Scalar,
+        string nativeSourcePath = "", string nativeInputSourceText = "")
         : base(span)
     {
         Value = value;
@@ -134,6 +145,9 @@ internal sealed class PowerShellLoweredSwitchStatement : PowerShellLoweredStatem
         DefaultStatements = defaultStatements is null ? null : new PowerShellImmutableArray<PowerShellLoweredStatement>(defaultStatements);
         MatchMode = matchMode;
         CaseSensitive = caseSensitive;
+        InputKind = inputKind;
+        NativeSourcePath = nativeSourcePath;
+        NativeInputSourceText = nativeInputSourceText;
     }
 
     internal PowerShellLoweredExpression Value { get; }
@@ -141,12 +155,25 @@ internal sealed class PowerShellLoweredSwitchStatement : PowerShellLoweredStatem
     internal PowerShellImmutableArray<PowerShellLoweredStatement>? DefaultStatements { get; }
     internal PowerShellBoundSwitchMatchMode MatchMode { get; }
     internal bool CaseSensitive { get; }
+    internal PowerShellBoundSwitchInputKind InputKind { get; }
+    internal string NativeSourcePath { get; }
+    internal string NativeInputSourceText { get; }
 }
 
 internal sealed class PowerShellLoweredThrowStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredThrowStatement(SourceSpan span, PowerShellLoweredExpression? expression) : base(span) => Expression = expression;
+    internal PowerShellLoweredThrowStatement(SourceSpan span, PowerShellLoweredExpression? expression,
+        bool preserveStatementErrors = false, string sourcePath = "", string sourceText = "") : base(span)
+    {
+        Expression = expression;
+        PreserveStatementErrors = preserveStatementErrors;
+        SourcePath = sourcePath;
+        SourceText = sourceText;
+    }
     internal PowerShellLoweredExpression? Expression { get; }
+    internal bool PreserveStatementErrors { get; }
+    internal string SourcePath { get; }
+    internal string SourceText { get; }
 }
 
 internal sealed class PowerShellLoweredCatchClause
@@ -155,18 +182,22 @@ internal sealed class PowerShellLoweredCatchClause
         Type[] exceptionTypes,
         PowerShellLoweredStatement[] statements,
         string exceptionTemporary,
-        bool unwrapPowerShellRuntimeException)
+        bool unwrapPowerShellRuntimeException,
+        bool excludePowerShellControlFlow = false)
     {
         ExceptionTypes = exceptionTypes;
         Statements = statements;
         ExceptionTemporary = exceptionTemporary;
         UnwrapPowerShellRuntimeException = unwrapPowerShellRuntimeException;
+        ExcludePowerShellControlFlow = excludePowerShellControlFlow;
     }
 
     internal PowerShellImmutableArray<Type> ExceptionTypes { get; }
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
     internal string ExceptionTemporary { get; }
     internal bool UnwrapPowerShellRuntimeException { get; }
+    /// <summary>Pipeline stop and PowerShell flow control unwind the command instead of entering an authored catch.</summary>
+    internal bool ExcludePowerShellControlFlow { get; }
 }
 
 internal sealed class PowerShellLoweredTryStatement : PowerShellLoweredStatement
@@ -175,25 +206,41 @@ internal sealed class PowerShellLoweredTryStatement : PowerShellLoweredStatement
         SourceSpan span,
         PowerShellLoweredStatement[] statements,
         PowerShellLoweredCatchClause[] catches,
-        PowerShellLoweredStatement[]? finallyStatements)
+        PowerShellLoweredStatement[]? finallyStatements,
+        bool preserveStatementErrors = false,
+        string exceptionTemporary = "",
+        string clauseTemporary = "",
+        string recordTemporary = "")
         : base(span)
     {
         Statements = statements;
         Catches = catches;
         FinallyStatements = finallyStatements is null ? null : new PowerShellImmutableArray<PowerShellLoweredStatement>(finallyStatements);
+        PreserveStatementErrors = preserveStatementErrors;
+        ExceptionTemporary = exceptionTemporary;
+        ClauseTemporary = clauseTemporary;
+        RecordTemporary = recordTemporary;
     }
 
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
     internal PowerShellImmutableArray<PowerShellLoweredCatchClause> Catches { get; }
     internal PowerShellImmutableArray<PowerShellLoweredStatement>? FinallyStatements { get; }
+    internal bool PreserveStatementErrors { get; }
+    internal string ExceptionTemporary { get; }
+    internal string ClauseTemporary { get; }
+    internal string RecordTemporary { get; }
 }
 
 internal sealed class PowerShellLoweredBreakStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredBreakStatement(SourceSpan span) : base(span) { }
+    internal PowerShellLoweredBreakStatement(SourceSpan span, SourceSpan? targetLoop = null) : base(span)
+        => TargetLoop = targetLoop;
+    internal SourceSpan? TargetLoop { get; }
 }
 
 internal sealed class PowerShellLoweredContinueStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredContinueStatement(SourceSpan span) : base(span) { }
+    internal PowerShellLoweredContinueStatement(SourceSpan span, SourceSpan? targetLoop = null) : base(span)
+        => TargetLoop = targetLoop;
+    internal SourceSpan? TargetLoop { get; }
 }

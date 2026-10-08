@@ -82,9 +82,9 @@ Apple Watch (Przemyslaw)   AppleWatch-Przemyslaw.coredevice.local   CF0D62D9-4A
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task BuildAsync_builds_xcodebuild_device_command(bool optimizeSwift)
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task BuildAsync_builds_xcodebuild_device_command(bool optimizeSwift, bool dirty)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -97,6 +97,11 @@ Apple Watch (Przemyslaw)   AppleWatch-Przemyslaw.coredevice.local   CF0D62D9-4A
             InitializeGitRepository(root.FullName);
             var revision = AppleBuildProvenance.RequireLocalSourceRevision(
                 root.FullName);
+            if (dirty)
+            {
+                File.AppendAllText(Path.Combine(project.FullName, "project.pbxproj"), "// selected edit");
+                File.WriteAllText(Path.Combine(root.FullName, "NewSource.swift"), "// selected untracked source");
+            }
 
             var result = await service.BuildAsync(new AppleAppBuildRequest
             {
@@ -109,6 +114,7 @@ Apple Watch (Przemyslaw)   AppleWatch-Przemyslaw.coredevice.local   CF0D62D9-4A
             });
 
             Assert.True(result.Succeeded);
+            Assert.Equal(dirty, result.SourceDirty);
             Assert.Equal($"id=3DA86114-A96C-5109-970A-B52EA186B0E9", result.Destination);
             Assert.Equal(Path.Combine(result.DerivedDataPath, "Build", "Products", "Debug-iphoneos", "Tactra.app"), result.AppPath);
             Assert.Single(runner.Requests);
@@ -273,7 +279,7 @@ Apple Watch (Przemyslaw)   AppleWatch-Przemyslaw.coredevice.local   CF0D62D9-4A
                         BuildRoot = root.FullName
                     }));
 
-            Assert.Contains("provenance is required", exception.Message);
+            Assert.Contains("source revision could not be resolved", exception.Message);
             Assert.Empty(runner.Requests);
         }
         finally
@@ -456,6 +462,7 @@ Apple Watch (Przemyslaw)   AppleWatch-Przemyslaw.coredevice.local   CF0D62D9-4A
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 new AppleDeviceDeploymentService(runner).BuildAsync(new AppleAppBuildRequest
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectPath = project.FullName,
                     BuildRoot = root.FullName,
                     Scheme = "CasaRay",
@@ -501,7 +508,8 @@ Apple Watch (Przemyslaw)   AppleWatch-Przemyslaw.coredevice.local   CF0D62D9-4A
                 new AppleDeviceDeploymentService(runner).BuildAsync(
                     new AppleAppBuildRequest
                     {
-                        ProjectPath = project.FullName,
+                        UseControlledSourceProvenance = true,
+                    ProjectPath = project.FullName,
                         Scheme = "CasaRay",
                         Destination = "id=device-1",
                         DerivedDataPath = ExternalOutputPath(root, "DerivedData")
@@ -555,7 +563,8 @@ Apple Watch (Przemyslaw)   AppleWatch-Przemyslaw.coredevice.local   CF0D62D9-4A
                 () => new AppleDeviceDeploymentService(runner).BuildAsync(
                     new AppleAppBuildRequest
                     {
-                        ProjectPath = project.FullName,
+                        UseControlledSourceProvenance = true,
+                    ProjectPath = project.FullName,
                         Scheme = "CasaRay",
                         Destination = "id=device-1",
                         DerivedDataPath = ExternalOutputPath(root, "DerivedData")
@@ -595,6 +604,7 @@ Apple Watch (Przemyslaw)   AppleWatch-Przemyslaw.coredevice.local   CF0D62D9-4A
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 new AppleDeviceDeploymentService(runner).BuildAsync(new AppleAppBuildRequest
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectPath = project.FullName,
                     BuildRoot = root.FullName,
                     Scheme = "CasaRay",

@@ -8,13 +8,23 @@ internal static class PowerShellCompilationGeneratedPackageCatalog
     private const string ResourceName = "PowerForge.PowerShell.Compilation.CompilerPackages.json";
     private static readonly Lazy<PackageIdentity[]> Packages = new(ReadPackages);
 
+    /// <summary>Uses the same reviewed version for generated references and their dependency evidence.</summary>
+    internal static string GetVersion(string id) => Find(id).Version;
+
     internal static PackageIdentity[] Select(
         PowerShellCompilationArtifactKind kind,
         PowerShellCompilationMode mode,
         string? targetFramework)
     {
-        var framework = targetFramework ?? string.Empty;
+        var framework = targetFramework?.Trim();
+        if (framework is null || framework.Length == 0)
+            framework = PowerShellCompilationTargetFrameworkPolicy.Default;
         var selected = new List<PackageIdentity>();
+        if (PowerShellCommandMetadataBuildSupport.RequiresBuildTool(kind, mode))
+        {
+            foreach (var id in PowerShellCommandMetadataBuildSupport.PackageIds)
+                selected.Add(Find(id));
+        }
         if (framework.Equals("net472", StringComparison.OrdinalIgnoreCase) &&
             kind is PowerShellCompilationArtifactKind.Library or PowerShellCompilationArtifactKind.BinaryModule)
         {
@@ -47,10 +57,17 @@ internal static class PowerShellCompilationGeneratedPackageCatalog
 
     private static void AddPowerShellRuntimePackages(ICollection<PackageIdentity> packages, string framework)
     {
-        var sdkVersion = framework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) ? "7.6.5" : "7.4.18";
-        packages.Add(Find("Microsoft.PowerShell.SDK", sdkVersion));
-        packages.Add(Find("System.Security.Cryptography.Xml", "10.0.11"));
+        if (!PowerShellCompilationTargetFrameworkPolicy.IsModern(framework))
+            throw new ArgumentException(
+                $"Generated PowerShell runtime packages require {PowerShellCompilationTargetFrameworkPolicy.Modern}.",
+                nameof(framework));
+        packages.Add(Find("Microsoft.PowerShell.SDK"));
+        packages.Add(Find("System.Security.Cryptography.Xml"));
     }
+
+    private static PackageIdentity Find(string id)
+        => Packages.Value.SingleOrDefault(package => package.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
+           ?? throw new InvalidOperationException($"Compiler package catalog does not contain an immutable identity for '{id}'.");
 
     private static PackageIdentity Find(string id, string version)
         => Packages.Value.SingleOrDefault(package =>
@@ -66,6 +83,8 @@ internal static class PowerShellCompilationGeneratedPackageCatalog
         {
             PropertyNameCaseInsensitive = true
         }) ?? throw new InvalidOperationException("Compiler package catalog is empty.");
+        if (document.Packages.GroupBy(static package => package.Id, StringComparer.OrdinalIgnoreCase).Any(static group => group.Count() > 1))
+            throw new InvalidOperationException("Compiler package catalog must contain one reviewed version per package identity.");
         foreach (var package in document.Packages)
         {
             if (string.IsNullOrWhiteSpace(package.Id) || string.IsNullOrWhiteSpace(package.Version) || string.IsNullOrWhiteSpace(package.ContentHash))

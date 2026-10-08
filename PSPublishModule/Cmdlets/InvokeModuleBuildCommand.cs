@@ -316,7 +316,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     [Parameter(ParameterSetName = ParameterSetConfig)]
     public SwitchParameter NoInteractive { get; set; }
 
-    /// <summary>Suppresses host rendering and log output. Intended for callers that request structured results.</summary>
+    /// <summary>Suppresses progress and informational output while preserving warnings and errors. Intended for callers that request structured results.</summary>
     [Parameter(ParameterSetName = ParameterSetModern)]
     [Parameter(ParameterSetName = ParameterSetConfiguration)]
     [Parameter(ParameterSetName = ParameterSetConfig)]
@@ -482,9 +482,10 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         {
             // best effort only
         }
-        ILogger logger = Quiet.IsPresent
+        ILogger outputLogger = Quiet.IsPresent
             ? new NullLogger { IsVerbose = isVerbose }
             : new SpectreConsoleLogger { IsVerbose = isVerbose };
+        var logger = new CmdletWarningLogger(this, outputLogger);
         var preparation = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
         {
             ParameterSetName = ParameterSetName,
@@ -562,6 +563,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
 
 #pragma warning disable CA1031 // Legacy cmdlet UX: capture and report errors consistently
         BufferedLogger? interactiveBuffer = null;
+        CmdletWarningLogger? interactiveLogger = null;
         ModuleBuildWorkflowResult? workflow = null;
         var logSupport = new BufferedLogSupportService();
         ModuleBuildCompletionOutcome? outcome = null;
@@ -583,16 +585,20 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
 
             workflow = new ModuleBuildWorkflowService(
                 logger,
-                runInteractive: (spec, plan, configLabel) => SpectrePipelineConsoleUi.RunInteractive(
-                    runner: new ModulePipelineRunner(interactiveBuffer = new BufferedLogger { IsVerbose = isVerbose }),
-                    spec: spec,
-                    plan: plan,
-                    configLabel: configLabel),
+                runInteractive: (spec, plan, configLabel) =>
+                {
+                    interactiveBuffer = new BufferedLogger { IsVerbose = isVerbose };
+                    interactiveLogger = new CmdletWarningLogger(this, interactiveBuffer);
+                    return SpectrePipelineConsoleUi.RunInteractive(
+                        runner: new ModulePipelineRunner(interactiveLogger), spec: spec, plan: plan, configLabel: configLabel);
+                },
                 writeSummary: Quiet.IsPresent ? null : SpectrePipelineConsoleUi.WriteSummary)
                 .Execute(preparation, interactive, preparation.ConfigLabel);
         }
 #pragma warning restore CA1031
 
+        logger.RethrowWarningStop();
+        interactiveLogger?.RethrowWarningStop();
         outcome = new ModuleBuildOutcomeService().Evaluate(
             workflow,
             exitCodeMode,
@@ -606,7 +612,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             if (outcome.ShouldEmitErrorRecord && ex is not null)
                 WriteError(new ErrorRecord(ex, outcome.ErrorRecordId, ErrorCategory.NotSpecified, null));
             if (outcome.ShouldReplayBufferedLogs && interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0)
-                logSupport.WriteTail(interactiveBuffer.Entries, logger);
+                logSupport.WriteTail(interactiveBuffer.Entries, outputLogger);
             if (outcome.ShouldWriteInteractiveFailureSummary && workflow?.Plan is not null && ex is not null)
             {
                 try { SpectrePipelineConsoleUi.WriteFailureSummary(workflow.Plan, ex); }

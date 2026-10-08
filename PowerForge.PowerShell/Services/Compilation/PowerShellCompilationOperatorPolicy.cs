@@ -18,6 +18,7 @@ internal static class PowerShellCompilationOperatorPolicy
 
     internal static bool CanLowerBinary(string operation, PowerShellCompilationCapability capabilities)
         => RuntimeIndependentBinary.Contains(operation) ||
+           capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && operation is "As" or "Ias" ||
            capabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageOperators) &&
            PowerShellHostBinary.Contains(operation);
 }

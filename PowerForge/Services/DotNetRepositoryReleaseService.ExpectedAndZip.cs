@@ -24,21 +24,14 @@ public sealed partial class DotNetRepositoryReleaseService {
         return result;
     }
 
-    private static bool IsPackable(string csprojPath) {
-        try {
-            var doc = XDocument.Load(csprojPath);
-            var value = doc.Descendants()
-                .FirstOrDefault(e => e.Name.LocalName.Equals("IsPackable", StringComparison.OrdinalIgnoreCase))
-                ?.Value;
-
-            if (string.IsNullOrWhiteSpace(value)) return true;
-            return !string.Equals(value?.Trim(), "false", StringComparison.OrdinalIgnoreCase);
-        } catch {
-            return true;
-        }
-    }
-
     private string ResolvePackageId(
+        string csprojPath,
+        string fallbackProjectName,
+        DotNetRepositoryReleaseSpec spec,
+        ILogger? logger = null)
+        => ResolveEvaluatedProjectMetadata(csprojPath, fallbackProjectName, spec, logger).PackageId;
+
+    private ProjectMetadataResolution ResolveEvaluatedProjectMetadata(
         string csprojPath,
         string fallbackProjectName,
         DotNetRepositoryReleaseSpec spec,
@@ -67,18 +60,26 @@ public sealed partial class DotNetRepositoryReleaseService {
             targetFramework: null,
             runtimeIdentifier: null,
             packProperties,
-            propertyName: "PackageId",
+            propertyName: "PackageId,IsPackable,PackageVersion",
             fallbackProjectName,
             logger,
-            out var packageId,
+            out _,
             out var stdErr,
             out var stdOut,
             out _);
         if (exitCode != 0) {
             var detail = SummarizeProcessFailureOutput(stdErr, stdOut);
-            throw new InvalidOperationException($"Cannot determine the package id for '{csprojPath}' because MSBuild evaluation failed. {detail}".Trim());
+            throw new InvalidOperationException($"Cannot determine package metadata for '{csprojPath}' because MSBuild evaluation failed. {detail}".Trim());
         }
-        return string.IsNullOrWhiteSpace(packageId) ? fallbackProjectName : packageId!.Trim();
+        var packageId = ExtractMsBuildPropertyValue(stdOut, "PackageId");
+        var isPackable = ExtractMsBuildPropertyValue(stdOut, "IsPackable");
+        if (isPackable is null)
+            throw new InvalidOperationException($"MSBuild did not return IsPackable for '{csprojPath}'.");
+        return new ProjectMetadataResolution(
+            string.IsNullOrWhiteSpace(packageId) ? fallbackProjectName : packageId!.Trim(),
+            string.Equals(isPackable.Trim(), "true", StringComparison.OrdinalIgnoreCase),
+            error: null,
+            packageVersion: ExtractMsBuildPropertyValue(stdOut, "PackageVersion"));
     }
 
     private static string BuildReleaseZipPath(DotNetRepositoryProjectResult project, DotNetRepositoryReleaseSpec spec) {

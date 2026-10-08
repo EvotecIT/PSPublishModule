@@ -1,0 +1,162 @@
+using System.Text;
+
+namespace PowerForge;
+
+internal sealed partial class PowerShellBoundCSharpBackend
+{
+    private readonly List<(SourceSpan Span, string Discard)> _arrayTransferCaptures = new();
+    private void EmitOutputCapture(StringBuilder builder, PowerShellLoweredOutputCaptureStatement capture,
+        int indent, Func<string, string> getTemporaryIdentifier, string? discardHelper,
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+    {
+        var prefix = new string(' ', indent * 4);
+        if (capture.CapturesStableScalarVector)
+        {
+            EmitStableScalarVectorCapture(builder, capture, indent, getTemporaryIdentifier, discardHelper, sourceMap);
+            return;
+        }
+        if (capture.TransfersEnclosingLoop)
+        {
+            var result = getTemporaryIdentifier("completedCapture");
+            builder.Append(prefix).Append("object? ").Append(result).AppendLine(" = null;");
+            string? discard = null;
+            if (capture.Kind == PowerShellOutputCaptureKind.NativeObjectArray)
+            {
+                discard = getTemporaryIdentifier("discardTransferredArray");
+                builder.Append(prefix).Append("bool ").Append(discard).AppendLine(" = false;");
+                _arrayTransferCaptures.Add((capture.Span, discard));
+            }
+            try
+            {
+                EmitCapturedOutputBody(builder, capture.Statements, capture.RecordsTemporary, capture.SinkTemporary,
+                    capture.Target, true, capture.Kind, capture.ShareEmptyArray, indent,
+                    getTemporaryIdentifier, discardHelper, sourceMap, result, discard);
+            }
+            finally
+            {
+                if (capture.Kind == PowerShellOutputCaptureKind.NativeObjectArray)
+                    _arrayTransferCaptures.RemoveAt(_arrayTransferCaptures.Count - 1);
+            }
+            builder.Append(prefix).Append(EmitNativeAssignmentStart(capture.NativeTarget!, capture.Operation))
+                .Append("() => ").Append(result).Append(EmitNativeAssignmentLocation(capture.NativeTarget!)).AppendLine(";");
+            return;
+        }
+        if (capture.NativeTarget is not null)
+        {
+            // The native owner reads a compound destination before evaluating the
+            // compiled loop. Emitting directly into this builder preserves source maps.
+            builder.Append(prefix).Append(EmitNativeAssignmentStart(capture.NativeTarget, capture.Operation)).AppendLine("() =>");
+            builder.Append(prefix).AppendLine("{");
+            indent++;
+            prefix = new string(' ', indent * 4);
+        }
+        EmitCapturedOutputBody(builder, capture.Statements, capture.RecordsTemporary, capture.SinkTemporary,
+            capture.Target, capture.UsesNativeInvocation, capture.Kind, capture.ShareEmptyArray,
+            indent, getTemporaryIdentifier, discardHelper, sourceMap);
+        if (capture.NativeTarget is not null)
+            builder.Append(new string(' ', (indent - 1) * 4)).Append('}')
+                .Append(EmitNativeAssignmentLocation(capture.NativeTarget)).AppendLine(";");
+    }
+
+    /// <summary>Shares output collection between assigned statements and literal statement values.</summary>
+    private void EmitCapturedOutputBody(StringBuilder builder, IEnumerable<PowerShellLoweredStatement> statements,
+        string records, string previous, PowerShellSymbolId? target, bool usesNativeInvocation,
+        PowerShellOutputCaptureKind kind, bool shareEmptyArray, int indent,
+        Func<string, string> getTemporaryIdentifier, string? discardHelper,
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap, string? completedCapture = null, string? discardTransferredArray = null)
+    {
+        var prefix = new string(' ', indent * 4);
+
+
+        builder.Append(prefix).Append("var ").Append(records).AppendLine(" = new global::System.Collections.Generic.List<object?>();");
+        builder.Append(prefix).Append("var ").Append(previous).AppendLine(" = __writeOutput;");
+        var record = getTemporaryIdentifier("capturedRecord");
+        builder.Append(prefix).Append("__writeOutput = ").Append(record)
+            .Append(" => { if (!global::System.Object.ReferenceEquals(").Append(record)
+            .Append(", global::System.Management.Automation.Internal.AutomationNull.Value)) ")
+            .Append(records).Append(".Add(").Append(record).AppendLine("); };");
+        builder.Append(prefix).AppendLine("try");
+        builder.Append(prefix).AppendLine("{");
+        if (usesNativeInvocation)
+        {
+            builder.Append(prefix).AppendLine("    using (__nativeFunction.RedirectOutput(__writeOutput))");
+            builder.Append(prefix).AppendLine("    {");
+        }
+        _outputCaptureDepth++;
+        try
+        {
+            foreach (var statement in statements)
+                EmitStatement(builder, statement, indent + (usesNativeInvocation ? 2 : 1), getTemporaryIdentifier, discardHelper, sourceMap);
+        }
+        finally { _outputCaptureDepth--; }
+        if (usesNativeInvocation)
+            builder.Append(prefix).AppendLine("    }");
+        builder.Append(prefix).Append("    ");
+        var value = usesNativeInvocation ? getTemporaryIdentifier("collapsedCapture") : null;
+        if (completedCapture is not null)
+            builder.Append(completedCapture).Append(" = ");
+        else if (value is not null)
+            builder.Append("object? ").Append(value).Append(" = ");
+        else
+            builder.Append(RenderStorage(target!)).Append(" = ");
+        if (kind == PowerShellOutputCaptureKind.NativeObjectArray)
+            builder.Append(records).Append(".Count == 0 ? ")
+                .Append(shareEmptyArray ? "global::System.Array.Empty<object>()" : "new object?[0]")
+                .Append(" : ").Append(records).AppendLine(".ToArray();");
+        else
+            builder.Append(records).Append(".Count == 0 ? global::System.Management.Automation.Internal.AutomationNull.Value : ").Append(records).Append(".Count == 1 ? ")
+                .Append(records).Append("[0] : ").Append(records).Append(".ToArray()")
+                .AppendLine(";");
+        builder.Append(prefix).Append("    ").Append(records).AppendLine(".Clear();");
+        if (value is not null && completedCapture is null)
+            builder.Append(prefix).Append("    return ").Append(value).AppendLine(";");
+        builder.Append(prefix).AppendLine("}");
+        // PowerShell discards assignment output for RuntimeException, but flushes
+        // pending records when a raw CLR exception escapes (for example MoveNext).
+        builder.Append(prefix).Append("catch (global::System.Management.Automation.RuntimeException) { ")
+            .Append(records).AppendLine(".Clear(); throw; }");
+        if (kind == PowerShellOutputCaptureKind.NativeObjectArray)
+            builder.Append(prefix).Append("catch (global::PowerForge.Generated.Runtime.PowerShellCapturedReturnSignal) { ")
+                .Append(records).AppendLine(".Clear(); throw; }");
+        var flushedRecord = getTemporaryIdentifier("flushedCaptureRecord");
+        builder.Append(prefix).AppendLine("finally");
+        builder.Append(prefix).AppendLine("{");
+        if (discardTransferredArray is not null)
+            builder.Append(prefix).Append("    if (").Append(discardTransferredArray).Append(") ")
+                .Append(records).AppendLine(".Clear();");
+        builder.Append(prefix).Append("    __writeOutput = ").Append(previous).AppendLine(";");
+        builder.Append(prefix).Append("    foreach (var ").Append(flushedRecord).Append(" in ").Append(records)
+            .Append(") ").Append(previous).Append('(').Append(flushedRecord).AppendLine(");");
+        builder.Append(prefix).AppendLine("}");
+    }
+
+    private void EmitStableScalarVectorCapture(
+        StringBuilder builder,
+        PowerShellLoweredOutputCaptureStatement capture,
+        int indent,
+        Func<string, string> getTemporaryIdentifier,
+        string? discardHelper,
+        ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+    {
+        var target = capture.Target ?? throw new InvalidOperationException("A stable vector capture requires a local target.");
+        var elementType = capture.CapturedElementType ??
+            throw new InvalidOperationException("A stable vector capture requires an element type.");
+        var prefix = new string(' ', indent * 4);
+        var elementTypeName = PowerShellCSharpSymbolRenderer.TypeName(elementType);
+        var targetTypeName = elementTypeName + "[]";
+        if (capture.DeclareTarget)
+            builder.Append(prefix).Append(targetTypeName).Append(' ').Append(RenderStorage(target)).AppendLine(" = default!;");
+        builder.Append(prefix).Append("var ").Append(capture.RecordsTemporary)
+            .Append(" = new global::System.Collections.Generic.List<").Append(elementTypeName).AppendLine(">();");
+        var record = getTemporaryIdentifier("capturedVectorRecord");
+        builder.Append(prefix).Append("global::System.Action<object?> ").Append(capture.SinkTemporary)
+            .Append(" = ").Append(record).Append(" => { if (!global::System.Object.ReferenceEquals(")
+            .Append(record).Append(", global::System.Management.Automation.Internal.AutomationNull.Value)) ")
+            .Append(capture.RecordsTemporary).Append(".Add((").Append(elementTypeName).Append(')')
+            .Append(record).AppendLine("!); };");
+        foreach (var statement in capture.Statements)
+            EmitStatement(builder, statement, indent, getTemporaryIdentifier, discardHelper, sourceMap, capture.SinkTemporary);
+        builder.Append(prefix).Append(RenderStorage(target)).Append(" = ")
+            .Append(capture.RecordsTemporary).AppendLine(".ToArray();");
+    }
+}

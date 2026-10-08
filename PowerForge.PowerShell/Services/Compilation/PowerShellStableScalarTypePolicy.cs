@@ -3,6 +3,9 @@ namespace PowerForge;
 /// <summary>Defines CLR values whose scalar identity is stable at runtime-free PowerShell boundaries.</summary>
 internal static class PowerShellStableScalarTypePolicy
 {
+    internal static bool IsSupported(PowerShellTypeFact type)
+        => type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble || IsSupported(type.ClrType);
+
     internal static bool IsSupported(Type type)
     {
         var scalar = Nullable.GetUnderlyingType(type) ?? type;

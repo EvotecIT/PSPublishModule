@@ -198,12 +198,12 @@ public static partial class WebApiDocsGenerator
             _workingTreeChanged = workingTreeChanged;
         }
 
-        public static SourceLinkContext? Create(WebApiDocsOptions options, Assembly assembly, List<string> warnings)
+        public static SourceLinkContext? Create(WebApiDocsOptions options, Assembly assembly, List<string> warnings, string? assemblyPathOverride = null)
         {
             if (string.IsNullOrWhiteSpace(options.SourceUrlPattern) && string.IsNullOrWhiteSpace(options.SourceRootPath))
                 return null;
 
-            var assemblyPath = options.AssemblyPath;
+            var assemblyPath = assemblyPathOverride ?? options.AssemblyPath;
             if (string.IsNullOrWhiteSpace(assemblyPath))
                 assemblyPath = assembly.Location;
             if (string.IsNullOrWhiteSpace(assemblyPath))
@@ -332,8 +332,12 @@ public static partial class WebApiDocsGenerator
             // Roslyn's deterministic source root is virtual, not relative to the checkout.
             // Relativizing it against SourceRootPath leaks ../_/ into repository URLs.
             var portablePath = path.Replace('\\', '/');
-            var isMappedRoot = portablePath.StartsWith("/_/", StringComparison.Ordinal);
-            var resolved = isMappedRoot ? portablePath.Substring(3) : path;
+            // On Windows Roslyn can qualify an absolute #line PathMap with a drive.
+            var mappedRootLength = portablePath.StartsWith("/_/", StringComparison.Ordinal) ? 3
+                : portablePath.Length > 5 && char.IsAsciiLetter(portablePath[0]) &&
+                  portablePath.AsSpan(1, 4).SequenceEqual(":/_/") ? 5 : 0;
+            var isMappedRoot = mappedRootLength != 0;
+            var resolved = isMappedRoot ? portablePath.Substring(mappedRootLength) : path;
             if (!isMappedRoot && !string.IsNullOrWhiteSpace(_sourceRoot))
             {
                 try

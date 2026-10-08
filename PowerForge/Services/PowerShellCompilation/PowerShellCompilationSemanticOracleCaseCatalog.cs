@@ -10,7 +10,6 @@ public static class PowerShellCompilationSemanticOracleCaseCatalog
     private static readonly string[] AllProfiles =
     {
         PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId,
-        PowerShellCompilationSemanticOracleCatalog.PowerShell74ProfileId,
         PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId
     };
 

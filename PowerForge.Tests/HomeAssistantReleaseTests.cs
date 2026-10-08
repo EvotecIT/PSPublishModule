@@ -261,8 +261,11 @@ public sealed class HomeAssistantReleaseTests {
         Assert.Equal(29561117925L, github.ExcludedWorkflowRunId);
     }
 
-    [Fact]
-    public void PrepareStage_DoesNotExecuteRepositoryBuildCommands() {
+    [Theory]
+    [InlineData(null, "0.1.10")]
+    [InlineData(false, "0.1.11")]
+    [InlineData(true, "0.1.11")]
+    public void PrepareStage_PlansFromThePublishedBaselineWithoutExecutingBuildCommands(bool? isPrerelease, string expectedVersion) {
         using var fixture = HomeAssistantFixture.CreatePlugin("0.1.10");
         RunGit(fixture.Root, "init", "-b", "main");
         RunGit(fixture.Root, "config", "user.name", "PowerForge Tests");
@@ -277,7 +280,9 @@ public sealed class HomeAssistantReleaseTests {
                 HeadSha = mergeSha,
                 MergeCommitSha = mergeSha
             },
-            LatestRelease = new HomeAssistantGitHubRelease { TagName = "v0.1.10" }
+            LatestRelease = isPrerelease.HasValue
+                ? new HomeAssistantGitHubRelease { TagName = "v0.1.10", IsPrerelease = isPrerelease.Value }
+                : null
         };
         github.PullRequest.ChangedFiles.Add("src/example.ts");
         var runner = new RecordingProcessRunner(mutateTrackedFile: false);
@@ -298,6 +303,7 @@ public sealed class HomeAssistantReleaseTests {
         });
 
         Assert.Equal(HomeAssistantReleaseAction.Planned, result.Action);
+        Assert.Equal(expectedVersion, result.ReleaseVersion);
         Assert.Empty(runner.Requests);
     }
 
@@ -683,6 +689,8 @@ public sealed class HomeAssistantReleaseTests {
             Assert.Null(request.EnvironmentVariables["GH_TOKEN"]);
             Assert.Null(request.EnvironmentVariables["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]);
             Assert.Null(request.EnvironmentVariables["GITHUB_OUTPUT"]);
+            Assert.Equal("1", request.EnvironmentVariables["GIT_CONFIG_NOSYSTEM"]);
+            Assert.Equal("/dev/null", request.EnvironmentVariables["GIT_CONFIG_GLOBAL"]);
         });
         var exception = Assert.Throws<InvalidOperationException>(() => new HomeAssistantReleaseGitService().EnsureNoTrackedChanges(fixture.Root));
         Assert.Contains("changed tracked files", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -784,7 +792,10 @@ public sealed class HomeAssistantReleaseTests {
 
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default) {
             Requests.Add(request);
-            if (request.Arguments.SequenceEqual(new[] { "run", "pack" })) {
+            var command = request.Arguments;
+            if (command.Take(3).SequenceEqual(new[] { "/d", "/c", "npm" }))
+                command = command.Skip(3).ToArray();
+            if (command.SequenceEqual(new[] { "run", "pack" })) {
                 var release = Path.Combine(request.WorkingDirectory, "release");
                 Directory.CreateDirectory(release);
                 File.WriteAllText(Path.Combine(release, "example.js"), "export const value = 1;\n");

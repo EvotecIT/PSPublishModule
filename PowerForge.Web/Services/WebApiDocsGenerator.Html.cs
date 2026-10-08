@@ -650,7 +650,8 @@ body.pf-api-docs .api-suite-search-filter{
     private static string BuildApiDocsCriticalCss(WebApiDocsOptions options, List<string> warnings) =>
         JoinHtmlFragments(
             ResolveCriticalCss(options, warnings),
-            WrapStyle(ApiDocsLayoutStabilityCss));
+            WrapStyle(ApiDocsLayoutStabilityCss),
+            WrapStyle(ApiDocsResponsiveCss));
 
     private static string ResolveCriticalCss(WebApiDocsOptions options, List<string> warnings)
     {

@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "recordedOn": "2026-09-28",
+  "source": {
+    "workload": "locksmith2",
+    "revision": "f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639",
+    "archiveSha256": "d4f511b16ed95d15bfa37ba06ddfc92709f0412e8669004cb70e3407ae9fc8b9",
+    "sourceFingerprint": "b1e65521a013471cfc80589f0edd062a714f4b498a347685a06d7dce97b1b4ef",
+    "license": "Commons Clause License Condition v1.0",
+    "unchangedFunctionHashes": {
+      "Private/Set/Set-AuthorizedSignatureNotRequired.ps1": "fb0b59b78536ec5e6fafd2fab99d56a9e704abdd7125f89c79eed98740d91002",
+      "Private/Set/Set-EnrollmentAgentEKUExist.ps1": "5a2659785d817aad72a8ea9ec12abe863f7a6350e13b4a978e2c2f753fb482f9",
+      "Private/Set/Set-NoSecurityExtension.ps1": "949467566bffcb0b14df8b7a4d32c92394b21ea30a77164428c1bc8c71ceef74",
+      "Private/Set/Set-RequiresEnrollmentAgentSignature.ps1": "e49d887ed9ad2a08f0d18aa042ed334f4ee7f1dccac9457187701b0cb696cd78"
+    },
+    "classHashes": {
+      "Classes/LS2Principal.ps1": "5b8542654843f25be0218a346780cdd40ec6f236bc73004e228eb960cb49fca1",
+      "Classes/LS2AdcsObject.ps1": "abb27b68cdfe94c111013009ab453aa96a7f67748e2b33abd1e703640a9c93a5",
+      "Classes/LS2Issue.ps1": "736d4440eace31299822b2d8e20863b1c26a7cb9186da235c478910226202e38"
+    }
+  },
+  "fixture": {
+    "sourceFunctionsIncludedUnchanged": 4,
+    "classCopiesHashIdentical": 3,
+    "manifestSha256": "f77352dab0b9017c04145cd2da01e375b87a4cc6b455612652a8159b0bf0fbd2",
+    "moduleSourceSha256": "2941818d06f0518f74893e469d9fe2549a1caa274f7e95aa763e8096f2fcc331",
+    "observerSha256": "7e6ebd5a63933e74c13eecc5af3f7d0bd35419660d43b9076c9141e7a7974b1a"
+  },
+  "generated": {
+    "mode": "Hybrid",
+    "net10ManifestSha256": "a06a84e909f3147c6ecf8ddb12ca92b37505d4dc780abeead7f96c6878b748cd",
+    "net472ManifestSha256": "66c6bfa8c2f89b6f755df3ebd87f01200fad4a0aecbd9127dc6ba29ac1ad8ed6",
+    "compiledCallbacksPerTarget": 4,
+    "uninstalledCallbackBodiesThrow": true,
+    "strict": {
+      "targets": [
+        "net10.0",
+        "net472"
+      ],
+      "canProceed": false,
+      "typedUnits": 0,
+      "rejectedUnits": 4
+    }
+  },
+  "execution": {
+    "hosts": [
+      "PowerShell 7/net10.0 Windows x64",
+      "Windows PowerShell 5.1/net472 Windows x64"
+    ],
+    "originalGeneratedEqualOnEachHost": true,
+    "crossHostResultsEqual": true,
+    "childExitCodesZero": true,
+    "stderrEmpty": true,
+    "newlyExecutedMethods": [
+      "Set-AuthorizedSignatureNotRequired",
+      "Set-EnrollmentAgentEKUExist",
+      "Set-NoSecurityExtension",
+      "Set-RequiresEnrollmentAgentSignature"
+    ],
+    "result": {
+      "type": "LS2AdcsObject",
+      "counts": [
+        3,
+        3,
+        3,
+        3
+      ],
+      "same": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "authorizedNotRequired": [
+        true,
+        false,
+        true,
+        null
+      ],
+      "enrollmentAgentEku": [
+        true,
+        false,
+        false,
+        null
+      ],
+      "noSecurityExtension": [
+        true,
+        false,
+        false,
+        null
+      ],
+      "requiresAgentSignature": [
+        false,
+        true,
+        false,
+        null
+      ]
+    }
+  },
+  "disposition": {
+    "locksmith2EmittedFunctions": 75,
+    "locksmith2TotalFunctions": 100,
+    "gainedSincePriorBaseline": 37,
+    "gainedExecutedOffline": 12,
+    "gainedAnalysisOnly": 25,
+    "newlyExecutedThisRecord": 4,
+    "regressions": 0,
+    "sameInputAssessmentSha256": "8a1ec3fcf619ca56d1e0e9d72d8f108ea9feba5ca69b7fa38ecbf1bda0d80f36"
+  },
+  "residualSourceScreen": {
+    "status": "Prioritization only; no original/generated execution proof for these 25 methods",
+    "groups": {
+      "offlineStateCandidates": [
+        "Set-HasNonStandardOwner",
+        "Set-LinkedGroupOIDPolicy",
+        "Set-LS2RiskRating",
+        "Set-TemplateEnabled"
+      ],
+      "caAndNetworkProviders": [
+        "Set-CAAdministrator",
+        "Set-CAAuditFilter",
+        "Set-CACertificateManager",
+        "Set-CAComputerPrincipal",
+        "Set-CADisableExtensionList",
+        "Set-CAEditFlags",
+        "Set-CAInterfaceFlags",
+        "Set-CAWebEnrollmentEndpoints"
+      ],
+      "identityAclAndPrincipalResolution": [
+        "Set-DangerousCAAdministrator",
+        "Set-DangerousCACertificateManager",
+        "Set-DangerousEditor",
+        "Set-DangerousEnrollee",
+        "Set-LowPrivilegeCAAdministrator",
+        "Set-LowPrivilegeCACertificateManager",
+        "Set-LowPrivilegeEditor",
+        "Set-LowPrivilegeEnrollee",
+        "Set-Owner"
+      ],
+      "groupExpansion": [
+        "Expand-IssueByGroup"
+      ],
+      "publicStoreAclScanners": [
+        "Find-LS2VulnerableCA",
+        "Find-LS2VulnerableObject",
+        "Find-LS2VulnerableTemplate"
+      ]
+    },
+    "notes": [
+      "Offline-state candidates still need function-specific data, script-store and helper closure proof",
+      "CA/provider functions call PSCertutil, Global Catalog or web endpoint providers on their substantive paths",
+      "ACL and identity functions depend on ObjectSecurity, principal/SID translation, resolution or group membership",
+      "Public scanners read issue, principal and AD CS object stores and ACL data; no full scan was run",
+      "A no-provider branch does not prove provider-bearing behavior"
+    ]
+  },
+  "limits": [
+    "LS2AdcsObject constructor bypassed; instances are populated in memory",
+    "Only three template records and one filtered CA record exercised",
+    "No AD, CA, Global Catalog, web endpoint, principal resolution or remediation operation",
+    "Hybrid uses PowerShell-host-backed native callbacks, not runtime-free C#",
+    "Unreviewed dependency resolution for isolated mini-module builds",
+    "No fresh full compiler gate because compiler source and tracked fixtures are unchanged",
+    "PowerShell 7/net10 and Windows PowerShell 5.1/net472 on Windows x64 only"
+  ]
+}

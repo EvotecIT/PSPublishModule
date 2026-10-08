@@ -19,16 +19,25 @@ public sealed partial class PowerShellCompilationAnalyzer
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
         PowerShellCommandSemanticRegistry commandRegistry,
-        string semanticProfileId)
+        string semanticProfileId,
+        PowerShellNativeDependencyTypes? nativeDependencyTypes = null)
     {
-        var documents = sourcePaths.Select(path => PowerShellSourceParser.ParseFile(path, identityRoot)).ToArray();
+        var documents = sourcePaths.Select(path => PowerShellSourceParser.ParseFile(path, identityRoot)
+            .WithNativeDependencyTypes(nativeDependencyTypes ?? PowerShellNativeDependencyTypes.Empty)).ToArray();
         var documentsByPath = documents.ToDictionary(static document => document.Path, PowerShellCompilationPathSafety.PathComparer);
         var sourceDiagnosticsByPath = documents.ToDictionary(
             static document => document.Path,
-            document => PowerShellSourceSemanticValidator.Validate(document, semanticProfileId),
+            document => PowerShellSourceSemanticValidator.Validate(document, semanticProfileId, capabilities, targetFramework),
             PowerShellCompilationPathSafety.PathComparer);
         var targets = new List<SemanticUnitTarget>();
         var compilationDocuments = new List<ParsedSourceDocument>(documents);
+        var moduleDiagnostics = new List<PowerShellSemanticDiagnostic>();
+        var managedModule = capabilities.HasFlag(PowerShellCompilationCapability.RuntimeFreeModuleState)
+            ? PowerShellRuntimeFreeModuleDefinition.Discover(documents, moduleDiagnostics,
+                new PowerShellCommandSemanticResolver(commandRegistry), capabilities) : null;
+        foreach (var document in documents)
+            sourceDiagnosticsByPath[document.Path] = sourceDiagnosticsByPath[document.Path]
+                .Concat(moduleDiagnostics.Where(diagnostic => diagnostic.Span.DocumentId == document.DocumentId)).ToArray();
 
         foreach (var file in structural)
         {
@@ -62,6 +71,13 @@ public sealed partial class PowerShellCompilationAnalyzer
 
             var scriptUnit = file.Units.FirstOrDefault(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
             if (scriptUnit is null) continue;
+            if (managedModule is not null && managedModule.Document.DocumentId == document.DocumentId)
+            {
+                targets.Add(new SemanticUnitTarget(file.FullPath, scriptUnit, document.DocumentId,
+                    managedModule.Initializer.Name, managedModule.Initializer.Extent.StartOffset,
+                    managedModule.Initializer.Extent.EndOffset, synthetic: false));
+                continue;
+            }
             var statements = GetEndStatements(
                     document.SyntaxRoot,
                     excludeFunctionDefinitions: true,
@@ -87,8 +103,9 @@ public sealed partial class PowerShellCompilationAnalyzer
                 synthetic: true));
         }
 
-        var semantic = new PowerShellSemanticCompilationPipeline(commandRegistry, semanticProfileId).Compile(compilationDocuments, targetFramework, capabilities);
-        return structural.Select(file => new PowerShellCompilationFilePlan(
+        var semantic = new PowerShellSemanticCompilationPipeline(commandRegistry, semanticProfileId).Compile(
+            compilationDocuments, targetFramework, capabilities, nativeDependencyTypes);
+        var result = structural.Select(file => new PowerShellCompilationFilePlan(
             file.FullPath,
             file.RelativePath,
             file.Units.Select(unit => ApplySemanticUnitEvidence(
@@ -100,6 +117,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                     ? sourceDiagnostics
                     : Array.Empty<PowerShellSemanticDiagnostic>())).ToArray(),
             file.Diagnostics)).ToArray();
+        AttachLocalCallEvidence(structural, result, targets, semantic);
+        return result;
     }
 
     private static PowerShellCompilationUnitPlan ApplySemanticUnitEvidence(

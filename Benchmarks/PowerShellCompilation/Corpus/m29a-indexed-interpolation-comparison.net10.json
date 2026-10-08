@@ -1,0 +1,1501 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Bounded indexed reads in native interpolated assignment keys and native try-body propagation",
+  "baselineCompilerCommit": "672b533f1bb51f849a0923298475a8a0fdecba23",
+  "baselineComparison": "m29a-instance-reference-comparison.net10.json",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "baselineEmitted": 504,
+  "candidateEmitted": 505,
+  "candidateRetained": 60,
+  "packets": [
+    {
+      "packet": "pssg",
+      "functions": 282,
+      "emitted": 262,
+      "retained": 20,
+      "gains": [
+        {
+          "unitId": "e8d15eaf1b344cb5fb44f80e",
+          "name": "Get-FileMetaData"
+        }
+      ],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "a6e5a0758f5a650bde5f7987b1ba0221752e3180b3133e71c95d587ef3d16a7d",
+      "elapsedSeconds": 23.1
+    },
+    {
+      "packet": "cleanup",
+      "functions": 68,
+      "emitted": 63,
+      "retained": 5,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1",
+      "elapsedSeconds": 13.12
+    },
+    {
+      "packet": "pinf",
+      "functions": 66,
+      "emitted": 63,
+      "retained": 3,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "5e9f5116623536238dd8564152297efd986b979ff6a2ba03d9eff38e38da2264",
+      "elapsedSeconds": 6.42
+    },
+    {
+      "packet": "pst",
+      "functions": 109,
+      "emitted": 90,
+      "retained": 19,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "58f9421a20c0f866af3b63740ecfd6679f2f92004ba59f7f267e50533d715e70",
+      "elapsedSeconds": 11.75
+    },
+    {
+      "packet": "platyps",
+      "functions": 40,
+      "emitted": 27,
+      "retained": 13,
+      "gains": [],
+      "lostMethods": [],
+      "lostRetainedRegions": [],
+      "explanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea",
+      "elapsedSeconds": 13.47
+    }
+  ],
+  "sourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionContext.Declarations.cs": "bf75cfb5377e463fc4c5636ce948ffba779d9e258e7e6cbb19d1b8ff0cb723c8",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellStatementErrorContext.cs": "18c0f89fcace664b27b2327086d3195382d7cd648f10e27bbdd9b2e995f5a19b",
+    "PowerForge.Tests/PowerShellCompilationNativeTargetAssignmentTests.cs": "d4d3824e7374d7acb7511e4483379f1bc3a5e2c52176eee7076d3e0c81c97234",
+    "PowerForge.Tests/PowerShellCompilationIndexedInterpolationTests.cs": "fe133fecb7623f3e9425e4396fe2c8ea88192f385d89fe98a1edd7a7349629d4",
+    "Benchmarks/PowerShellCompilation/Corpus/m29a-indexed-interpolation-probe.ps1": "172d93319d77ba96503db2e3d3ebb050a6259ce8f0722b89045f76e7b162cc0e"
+  },
+  "tests": [
+    {
+      "file": "indexed-focused.trx",
+      "sha256": "6be9564a1b873e9b6a6cf17964510bdbebde9b8055a6305eb4ee6b556866bb7f",
+      "passed": 27,
+      "failed": 2,
+      "total": 29,
+      "start": "2026-09-27T10:29:18.8469493+02:00",
+      "finish": "2026-09-27T10:29:37.4084534+02:00",
+      "stage": "Failed fixture: VersionInfo type data cannot be replaced with Add-Member"
+    },
+    {
+      "file": "indexed-workflow-corrected.trx",
+      "sha256": "9e405da1d3271e6587d9901e6aaef28fc9aed6389550a44449744d57fb0f0e43",
+      "passed": 0,
+      "failed": 2,
+      "total": 2,
+      "start": "2026-09-27T10:30:47.6017197+02:00",
+      "finish": "2026-09-27T10:30:59.6688595+02:00",
+      "stage": "Failed harness: negative interpolation errors reached stderr"
+    },
+    {
+      "file": "indexed-final.trx",
+      "sha256": "330b3c577f333fed9b1fbbae560d790eadccf1b91a83577e56ca4c674b25eda0",
+      "passed": 40,
+      "failed": 2,
+      "total": 42,
+      "start": "2026-09-27T10:31:28.1015307+02:00",
+      "finish": "2026-09-27T10:32:16.1195328+02:00",
+      "stage": "Genuine mismatch: nested key failure continued instead of reaching catch"
+    },
+    {
+      "file": "indexed-native-scope.trx",
+      "sha256": "51a7ede0bd552e25dcb8e6f54675558a7ad330150d1f99bf1c57d65e68b13e8b",
+      "passed": 42,
+      "failed": 0,
+      "total": 42,
+      "start": "2026-09-27T10:33:35.1512578+02:00",
+      "finish": "2026-09-27T10:34:21.5998397+02:00",
+      "stage": "Passed after native try propagation correction"
+    },
+    {
+      "file": "handler-compatibility.trx",
+      "sha256": "6f5c779d1a1d8ffefe4db10b8412745f71b9cdb72a2eb3db3f0a7e35b91c508e",
+      "passed": 16,
+      "failed": 0,
+      "total": 16,
+      "start": "2026-09-27T10:34:55.2702915+02:00",
+      "finish": "2026-09-27T10:35:32.6816251+02:00",
+      "stage": "Passed adjacent native catch, throw and expression-index contracts"
+    },
+    {
+      "file": "reference-compatibility.trx",
+      "sha256": "786f471d62615f226bb3e4cab04ca9b764c13a89adf94af3d179c071c1647d18",
+      "passed": 4,
+      "failed": 0,
+      "total": 4,
+      "start": "2026-09-27T10:38:02.2439253+02:00",
+      "finish": "2026-09-27T10:38:27.2170631+02:00",
+      "stage": "Passed native reference compatibility"
+    }
+  ],
+  "workflow": {
+    "name": "Get-FileMetaData",
+    "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+    "license": "MIT",
+    "sourcePath": "ExternalWorkflows/PSSharedGoods/FullModule/Public/FilesFolders/Get-FileMetaData.ps1",
+    "sourceSha256": "a67f671f26b0b3726029ad14abec15789c3f5a76ace6f8a69ff86c498dcdf6d7"
+  },
+  "review": {
+    "independentReadOnly": "No actionable P0-P3 findings",
+    "scope": "Bounded interpolation admission and native handler owner with surrounding backend/tests",
+    "residuals": [
+      "Offline COM/version providers only; no live Shell.Application proof",
+      "No dedicated callback-after-try matrix; adjacent nested catch suite passed"
+    ]
+  },
+  "net472OwnerBuild": {
+    "elapsedSeconds": 4.11,
+    "succeeded": true,
+    "warnings": 0,
+    "errors": 0
+  },
+  "hosts": {
+    "net10.0": {
+      "host": "pwsh",
+      "version": "7.6.6",
+      "compiledMethods": 2,
+      "units": [
+        {
+          "name": "Get-FileMetaData",
+          "emittedClrMethod": true,
+          "usesNativeFunctionBinding": true,
+          "runtimeCommandRegions": 8
+        },
+        {
+          "name": "Write-IndexedInterpolation",
+          "emittedClrMethod": true,
+          "usesNativeFunctionBinding": true,
+          "runtimeCommandRegions": 0
+        }
+      ],
+      "artifactSha256": "7cde2b6ba66bd63becae84771fddab6128986669771e97a05522ce89f49e9319",
+      "manifestSha256": "0d157156ffd018459498b0758e127fb045d978399ffa178c8b1d466d637d4520",
+      "miniSourceSha256": "4598cdfabf86985bd324cfbb59d0cd240e254a9bdb655c6c366b13cc69cb32f4",
+      "originalGeneratedEqual": true,
+      "observationCount": 29,
+      "observations": [
+        {
+          "id": "version-object",
+          "map": false,
+          "values": [
+            {
+              "type": "System.Management.Automation.PSCustomObject",
+              "fields": [
+                {
+                  "name": "Title",
+                  "type": "System.String",
+                  "value": "owned title"
+                },
+                {
+                  "name": "Name",
+                  "type": "System.String",
+                  "value": "last"
+                },
+                {
+                  "name": "Flag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "TrueFlag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "Attributes",
+                  "type": "System.IO.FileAttributes",
+                  "value": 32
+                },
+                {
+                  "name": "IsReadOnly",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsHidden",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsSystem",
+                  "type": "System.Boolean",
+                  "value": false
+                }
+              ]
+            }
+          ],
+          "warnings": []
+        },
+        {
+          "id": "version-object",
+          "map": true,
+          "values": [
+            {
+              "type": "System.Collections.Specialized.OrderedDictionary",
+              "fields": [
+                {
+                  "name": "Title",
+                  "type": "System.String",
+                  "value": "owned title"
+                },
+                {
+                  "name": "Name",
+                  "type": "System.String",
+                  "value": "last"
+                },
+                {
+                  "name": "Flag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "TrueFlag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "Attributes",
+                  "type": "System.IO.FileAttributes",
+                  "value": 32
+                },
+                {
+                  "name": "IsReadOnly",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsHidden",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsSystem",
+                  "type": "System.Boolean",
+                  "value": false
+                }
+              ]
+            }
+          ],
+          "warnings": []
+        },
+        {
+          "id": "path",
+          "map": false,
+          "values": [
+            {
+              "type": "System.Management.Automation.PSCustomObject",
+              "fields": [
+                {
+                  "name": "Title",
+                  "type": "System.String",
+                  "value": "owned title"
+                },
+                {
+                  "name": "Attributes",
+                  "type": "System.IO.FileAttributes",
+                  "value": 32
+                },
+                {
+                  "name": "IsReadOnly",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsHidden",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsSystem",
+                  "type": "System.Boolean",
+                  "value": false
+                }
+              ]
+            }
+          ],
+          "warnings": []
+        },
+        {
+          "id": "path",
+          "map": true,
+          "values": [
+            {
+              "type": "System.Collections.Specialized.OrderedDictionary",
+              "fields": [
+                {
+                  "name": "Title",
+                  "type": "System.String",
+                  "value": "owned title"
+                },
+                {
+                  "name": "Attributes",
+                  "type": "System.IO.FileAttributes",
+                  "value": 32
+                },
+                {
+                  "name": "IsReadOnly",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsHidden",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsSystem",
+                  "type": "System.Boolean",
+                  "value": false
+                }
+              ]
+            }
+          ],
+          "warnings": []
+        },
+        {
+          "id": "array",
+          "map": false,
+          "values": [
+            {
+              "type": "System.Management.Automation.PSCustomObject",
+              "fields": [
+                {
+                  "name": "Title",
+                  "type": "System.String",
+                  "value": "owned title"
+                },
+                {
+                  "name": "Name",
+                  "type": "System.String",
+                  "value": "last"
+                },
+                {
+                  "name": "Flag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "TrueFlag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "Attributes",
+                  "type": "System.IO.FileAttributes",
+                  "value": 32
+                },
+                {
+                  "name": "IsReadOnly",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsHidden",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsSystem",
+                  "type": "System.Boolean",
+                  "value": false
+                }
+              ]
+            },
+            {
+              "type": "System.Management.Automation.PSCustomObject",
+              "fields": [
+                {
+                  "name": "Title",
+                  "type": "System.String",
+                  "value": "owned title"
+                },
+                {
+                  "name": "Name",
+                  "type": "System.String",
+                  "value": "last"
+                },
+                {
+                  "name": "Flag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "TrueFlag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "Attributes",
+                  "type": "System.IO.FileAttributes",
+                  "value": 32
+                },
+                {
+                  "name": "IsReadOnly",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsHidden",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsSystem",
+                  "type": "System.Boolean",
+                  "value": false
+                }
+              ]
+            }
+          ],
+          "warnings": []
+        },
+        {
+          "id": "array",
+          "map": true,
+          "values": [
+            {
+              "type": "System.Collections.Specialized.OrderedDictionary",
+              "fields": [
+                {
+                  "name": "Title",
+                  "type": "System.String",
+                  "value": "owned title"
+                },
+                {
+                  "name": "Name",
+                  "type": "System.String",
+                  "value": "last"
+                },
+                {
+                  "name": "Flag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "TrueFlag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "Attributes",
+                  "type": "System.IO.FileAttributes",
+                  "value": 32
+                },
+                {
+                  "name": "IsReadOnly",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsHidden",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsSystem",
+                  "type": "System.Boolean",
+                  "value": false
+                }
+              ]
+            },
+            {
+              "type": "System.Collections.Specialized.OrderedDictionary",
+              "fields": [
+                {
+                  "name": "Title",
+                  "type": "System.String",
+                  "value": "owned title"
+                },
+                {
+                  "name": "Name",
+                  "type": "System.String",
+                  "value": "last"
+                },
+                {
+                  "name": "Flag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "TrueFlag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "Attributes",
+                  "type": "System.IO.FileAttributes",
+                  "value": 32
+                },
+                {
+                  "name": "IsReadOnly",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsHidden",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsSystem",
+                  "type": "System.Boolean",
+                  "value": false
+                }
+              ]
+            }
+          ],
+          "warnings": []
+        },
+        {
+          "id": "directory",
+          "map": false,
+          "values": [],
+          "warnings": []
+        },
+        {
+          "id": "directory",
+          "map": true,
+          "values": [],
+          "warnings": []
+        },
+        {
+          "id": "missing",
+          "map": false,
+          "values": [],
+          "warnings": [
+            "Get-FileMetaData - Doesn't exists. Skipping <owned>\\missing.txt."
+          ]
+        },
+        {
+          "id": "missing",
+          "map": true,
+          "values": [],
+          "warnings": [
+            "Get-FileMetaData - Doesn't exists. Skipping <owned>\\missing.txt."
+          ]
+        },
+        {
+          "id": "invalid",
+          "map": false,
+          "values": [],
+          "warnings": [
+            "Get-FileMetaData - Only files are supported. Skipping 7."
+          ]
+        },
+        {
+          "id": "invalid",
+          "map": true,
+          "values": [],
+          "warnings": [
+            "Get-FileMetaData - Only files are supported. Skipping 7."
+          ]
+        },
+        {
+          "id": "null",
+          "map": false,
+          "values": [],
+          "warnings": []
+        },
+        {
+          "id": "null",
+          "map": true,
+          "values": [],
+          "warnings": []
+        },
+        {
+          "id": "pipeline",
+          "count": 2,
+          "names": [
+            "last",
+            "last"
+          ],
+          "flags": [
+            true,
+            true
+          ]
+        },
+        {
+          "id": "assign:none",
+          "records": [],
+          "trace": [
+            "rhs:",
+            "key:"
+          ],
+          "target": 7,
+          "empty": 3,
+          "faults": []
+        },
+        {
+          "id": "assign:key",
+          "records": [
+            "error:NullArray:System.Management.Automation.RuntimeException:InvalidOperation:115:24"
+          ],
+          "trace": [
+            "rhs:",
+            "key:"
+          ],
+          "target": 10,
+          "empty": 3,
+          "faults": [
+            "NullArray:System.Management.Automation.RuntimeException:115:24",
+            "NullArray:System.Management.Automation.RuntimeException:115:24",
+            "NullArray:System.Management.Automation.RuntimeException:115:24"
+          ]
+        },
+        {
+          "id": "assign:rhs",
+          "records": [
+            "error:ScriptMethodRuntimeException:System.Management.Automation.MethodInvocationException:NotSpecified:115:16"
+          ],
+          "trace": [
+            "rhs:"
+          ],
+          "target": 10,
+          "empty": 3,
+          "faults": [
+            "ScriptMethodRuntimeException:System.Management.Automation.MethodInvocationException:115:16",
+            "ScriptMethodRuntimeException:System.Management.Automation.MethodInvocationException:115:16"
+          ]
+        },
+        {
+          "id": "assign:null",
+          "records": [
+            "error:NullArray:System.Management.Automation.RuntimeException:InvalidOperation:115:24"
+          ],
+          "trace": [
+            "rhs:",
+            "key:"
+          ],
+          "target": 10,
+          "empty": 3,
+          "faults": [
+            "NullArray:System.Management.Automation.RuntimeException:115:24",
+            "NullArray:System.Management.Automation.RuntimeException:115:24",
+            "NullArray:System.Management.Automation.RuntimeException:115:24"
+          ]
+        },
+        {
+          "id": "compound:none",
+          "records": [],
+          "trace": [
+            "key:",
+            "rhs:"
+          ],
+          "target": 17,
+          "empty": 3,
+          "faults": []
+        },
+        {
+          "id": "compound:key",
+          "records": [
+            "error:NullArray:System.Management.Automation.RuntimeException:InvalidOperation:113:44"
+          ],
+          "trace": [
+            "key:"
+          ],
+          "target": 10,
+          "empty": 3,
+          "faults": [
+            "NullArray:System.Management.Automation.RuntimeException:113:44",
+            "NullArray:System.Management.Automation.RuntimeException:113:44",
+            "NullArray:System.Management.Automation.RuntimeException:113:44"
+          ]
+        },
+        {
+          "id": "compound:rhs",
+          "records": [
+            "error:ScriptMethodRuntimeException:System.Management.Automation.MethodInvocationException:NotSpecified:113:44"
+          ],
+          "trace": [
+            "key:",
+            "rhs:"
+          ],
+          "target": 10,
+          "empty": 3,
+          "faults": [
+            "ScriptMethodRuntimeException:System.Management.Automation.MethodInvocationException:113:44",
+            "ScriptMethodRuntimeException:System.Management.Automation.MethodInvocationException:113:44"
+          ]
+        },
+        {
+          "id": "compound:null",
+          "records": [
+            "error:NullArray:System.Management.Automation.RuntimeException:InvalidOperation:113:44"
+          ],
+          "trace": [
+            "key:"
+          ],
+          "target": 10,
+          "empty": 3,
+          "faults": [
+            "NullArray:System.Management.Automation.RuntimeException:113:44",
+            "NullArray:System.Management.Automation.RuntimeException:113:44",
+            "NullArray:System.Management.Automation.RuntimeException:113:44"
+          ]
+        },
+        {
+          "id": "increment:none",
+          "records": [
+            10
+          ],
+          "trace": [
+            "key:"
+          ],
+          "target": 11,
+          "empty": 3,
+          "faults": []
+        },
+        {
+          "id": "increment:key",
+          "records": [
+            "error:NullArray:System.Management.Automation.RuntimeException:InvalidOperation:114:57"
+          ],
+          "trace": [
+            "key:"
+          ],
+          "target": 10,
+          "empty": 3,
+          "faults": [
+            "NullArray:System.Management.Automation.RuntimeException:114:57",
+            "NullArray:System.Management.Automation.RuntimeException:114:57",
+            "NullArray:System.Management.Automation.RuntimeException:114:57"
+          ]
+        },
+        {
+          "id": "increment:rhs",
+          "records": [
+            10
+          ],
+          "trace": [
+            "key:"
+          ],
+          "target": 11,
+          "empty": 3,
+          "faults": []
+        },
+        {
+          "id": "increment:null",
+          "records": [
+            "error:NullArray:System.Management.Automation.RuntimeException:InvalidOperation:114:57"
+          ],
+          "trace": [
+            "key:"
+          ],
+          "target": 10,
+          "empty": 3,
+          "faults": [
+            "NullArray:System.Management.Automation.RuntimeException:114:57",
+            "NullArray:System.Management.Automation.RuntimeException:114:57",
+            "NullArray:System.Management.Automation.RuntimeException:114:57"
+          ]
+        },
+        {
+          "id": "rhs-replacement",
+          "records": [],
+          "before": 1,
+          "after": 9
+        },
+        {
+          "id": "empty-version",
+          "count": 1,
+          "keys": [
+            "Title",
+            "Attributes",
+            "IsReadOnly",
+            "IsHidden",
+            "IsSystem"
+          ]
+        }
+      ],
+      "strict": {
+        "rejected": 2,
+        "sha256": "9bfed3b2ad7277b015358680cf96400e59bf868eb0df3a8a0560491b36208d3a",
+        "canProceed": false,
+        "typed": 0
+      }
+    },
+    "net472": {
+      "host": "powershell.exe",
+      "version": "5.1.26100.9444",
+      "compiledMethods": 2,
+      "units": [
+        {
+          "name": "Get-FileMetaData",
+          "emittedClrMethod": true,
+          "usesNativeFunctionBinding": true,
+          "runtimeCommandRegions": 8
+        },
+        {
+          "name": "Write-IndexedInterpolation",
+          "emittedClrMethod": true,
+          "usesNativeFunctionBinding": true,
+          "runtimeCommandRegions": 0
+        }
+      ],
+      "artifactSha256": "7cde2b6ba66bd63becae84771fddab6128986669771e97a05522ce89f49e9319",
+      "manifestSha256": "fcc64f607c8a47bd705685d2d60bdffcc315c036c6be8a182da42ab1b4ad4d47",
+      "miniSourceSha256": "4598cdfabf86985bd324cfbb59d0cd240e254a9bdb655c6c366b13cc69cb32f4",
+      "originalGeneratedEqual": true,
+      "observationCount": 29,
+      "observations": [
+        {
+          "id": "version-object",
+          "map": false,
+          "values": [
+            {
+              "type": "System.Management.Automation.PSCustomObject",
+              "fields": [
+                {
+                  "name": "Title",
+                  "type": "System.String",
+                  "value": "owned title"
+                },
+                {
+                  "name": "Name",
+                  "type": "System.String",
+                  "value": "last"
+                },
+                {
+                  "name": "Flag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "TrueFlag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "Attributes",
+                  "type": "System.IO.FileAttributes",
+                  "value": 32
+                },
+                {
+                  "name": "IsReadOnly",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsHidden",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsSystem",
+                  "type": "System.Boolean",
+                  "value": false
+                }
+              ]
+            }
+          ],
+          "warnings": []
+        },
+        {
+          "id": "version-object",
+          "map": true,
+          "values": [
+            {
+              "type": "System.Collections.Specialized.OrderedDictionary",
+              "fields": [
+                {
+                  "name": "Title",
+                  "type": "System.String",
+                  "value": "owned title"
+                },
+                {
+                  "name": "Name",
+                  "type": "System.String",
+                  "value": "last"
+                },
+                {
+                  "name": "Flag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "TrueFlag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "Attributes",
+                  "type": "System.IO.FileAttributes",
+                  "value": 32
+                },
+                {
+                  "name": "IsReadOnly",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsHidden",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsSystem",
+                  "type": "System.Boolean",
+                  "value": false
+                }
+              ]
+            }
+          ],
+          "warnings": []
+        },
+        {
+          "id": "path",
+          "map": false,
+          "values": [
+            {
+              "type": "System.Management.Automation.PSCustomObject",
+              "fields": [
+                {
+                  "name": "Title",
+                  "type": "System.String",
+                  "value": "owned title"
+                },
+                {
+                  "name": "Attributes",
+                  "type": "System.IO.FileAttributes",
+                  "value": 32
+                },
+                {
+                  "name": "IsReadOnly",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsHidden",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsSystem",
+                  "type": "System.Boolean",
+                  "value": false
+                }
+              ]
+            }
+          ],
+          "warnings": []
+        },
+        {
+          "id": "path",
+          "map": true,
+          "values": [
+            {
+              "type": "System.Collections.Specialized.OrderedDictionary",
+              "fields": [
+                {
+                  "name": "Title",
+                  "type": "System.String",
+                  "value": "owned title"
+                },
+                {
+                  "name": "Attributes",
+                  "type": "System.IO.FileAttributes",
+                  "value": 32
+                },
+                {
+                  "name": "IsReadOnly",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsHidden",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsSystem",
+                  "type": "System.Boolean",
+                  "value": false
+                }
+              ]
+            }
+          ],
+          "warnings": []
+        },
+        {
+          "id": "array",
+          "map": false,
+          "values": [
+            {
+              "type": "System.Management.Automation.PSCustomObject",
+              "fields": [
+                {
+                  "name": "Title",
+                  "type": "System.String",
+                  "value": "owned title"
+                },
+                {
+                  "name": "Name",
+                  "type": "System.String",
+                  "value": "last"
+                },
+                {
+                  "name": "Flag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "TrueFlag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "Attributes",
+                  "type": "System.IO.FileAttributes",
+                  "value": 32
+                },
+                {
+                  "name": "IsReadOnly",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsHidden",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsSystem",
+                  "type": "System.Boolean",
+                  "value": false
+                }
+              ]
+            },
+            {
+              "type": "System.Management.Automation.PSCustomObject",
+              "fields": [
+                {
+                  "name": "Title",
+                  "type": "System.String",
+                  "value": "owned title"
+                },
+                {
+                  "name": "Name",
+                  "type": "System.String",
+                  "value": "last"
+                },
+                {
+                  "name": "Flag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "TrueFlag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "Attributes",
+                  "type": "System.IO.FileAttributes",
+                  "value": 32
+                },
+                {
+                  "name": "IsReadOnly",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsHidden",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsSystem",
+                  "type": "System.Boolean",
+                  "value": false
+                }
+              ]
+            }
+          ],
+          "warnings": []
+        },
+        {
+          "id": "array",
+          "map": true,
+          "values": [
+            {
+              "type": "System.Collections.Specialized.OrderedDictionary",
+              "fields": [
+                {
+                  "name": "Title",
+                  "type": "System.String",
+                  "value": "owned title"
+                },
+                {
+                  "name": "Name",
+                  "type": "System.String",
+                  "value": "last"
+                },
+                {
+                  "name": "Flag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "TrueFlag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "Attributes",
+                  "type": "System.IO.FileAttributes",
+                  "value": 32
+                },
+                {
+                  "name": "IsReadOnly",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsHidden",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsSystem",
+                  "type": "System.Boolean",
+                  "value": false
+                }
+              ]
+            },
+            {
+              "type": "System.Collections.Specialized.OrderedDictionary",
+              "fields": [
+                {
+                  "name": "Title",
+                  "type": "System.String",
+                  "value": "owned title"
+                },
+                {
+                  "name": "Name",
+                  "type": "System.String",
+                  "value": "last"
+                },
+                {
+                  "name": "Flag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "TrueFlag",
+                  "type": "System.Boolean",
+                  "value": true
+                },
+                {
+                  "name": "Attributes",
+                  "type": "System.IO.FileAttributes",
+                  "value": 32
+                },
+                {
+                  "name": "IsReadOnly",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsHidden",
+                  "type": "System.Boolean",
+                  "value": false
+                },
+                {
+                  "name": "IsSystem",
+                  "type": "System.Boolean",
+                  "value": false
+                }
+              ]
+            }
+          ],
+          "warnings": []
+        },
+        {
+          "id": "directory",
+          "map": false,
+          "values": [],
+          "warnings": []
+        },
+        {
+          "id": "directory",
+          "map": true,
+          "values": [],
+          "warnings": []
+        },
+        {
+          "id": "missing",
+          "map": false,
+          "values": [],
+          "warnings": [
+            "Get-FileMetaData - Doesn't exists. Skipping <owned>\\missing.txt."
+          ]
+        },
+        {
+          "id": "missing",
+          "map": true,
+          "values": [],
+          "warnings": [
+            "Get-FileMetaData - Doesn't exists. Skipping <owned>\\missing.txt."
+          ]
+        },
+        {
+          "id": "invalid",
+          "map": false,
+          "values": [],
+          "warnings": [
+            "Get-FileMetaData - Only files are supported. Skipping 7."
+          ]
+        },
+        {
+          "id": "invalid",
+          "map": true,
+          "values": [],
+          "warnings": [
+            "Get-FileMetaData - Only files are supported. Skipping 7."
+          ]
+        },
+        {
+          "id": "null",
+          "map": false,
+          "values": [],
+          "warnings": []
+        },
+        {
+          "id": "null",
+          "map": true,
+          "values": [],
+          "warnings": []
+        },
+        {
+          "id": "pipeline",
+          "count": 2,
+          "names": [
+            "last",
+            "last"
+          ],
+          "flags": [
+            true,
+            true
+          ]
+        },
+        {
+          "id": "assign:none",
+          "records": [],
+          "trace": [
+            "rhs:",
+            "key:"
+          ],
+          "target": 7,
+          "empty": 3,
+          "faults": []
+        },
+        {
+          "id": "assign:key",
+          "records": [
+            "error:NullArray:System.Management.Automation.RuntimeException:InvalidOperation:115:24"
+          ],
+          "trace": [
+            "rhs:",
+            "key:"
+          ],
+          "target": 10,
+          "empty": 3,
+          "faults": [
+            "NullArray:System.Management.Automation.RuntimeException:115:24",
+            "NullArray:System.Management.Automation.RuntimeException:115:24",
+            "NullArray:System.Management.Automation.RuntimeException:115:24"
+          ]
+        },
+        {
+          "id": "assign:rhs",
+          "records": [
+            "error:ScriptMethodRuntimeException:System.Management.Automation.MethodInvocationException:NotSpecified:115:16"
+          ],
+          "trace": [
+            "rhs:"
+          ],
+          "target": 10,
+          "empty": 3,
+          "faults": [
+            "ScriptMethodRuntimeException:System.Management.Automation.MethodInvocationException:115:16",
+            "ScriptMethodRuntimeException:System.Management.Automation.MethodInvocationException:115:16"
+          ]
+        },
+        {
+          "id": "assign:null",
+          "records": [
+            "error:NullArray:System.Management.Automation.RuntimeException:InvalidOperation:115:24"
+          ],
+          "trace": [
+            "rhs:",
+            "key:"
+          ],
+          "target": 10,
+          "empty": 3,
+          "faults": [
+            "NullArray:System.Management.Automation.RuntimeException:115:24",
+            "NullArray:System.Management.Automation.RuntimeException:115:24",
+            "NullArray:System.Management.Automation.RuntimeException:115:24"
+          ]
+        },
+        {
+          "id": "compound:none",
+          "records": [],
+          "trace": [
+            "key:",
+            "rhs:"
+          ],
+          "target": 17,
+          "empty": 3,
+          "faults": []
+        },
+        {
+          "id": "compound:key",
+          "records": [
+            "error:NullArray:System.Management.Automation.RuntimeException:InvalidOperation:113:44"
+          ],
+          "trace": [
+            "key:"
+          ],
+          "target": 10,
+          "empty": 3,
+          "faults": [
+            "NullArray:System.Management.Automation.RuntimeException:113:44",
+            "NullArray:System.Management.Automation.RuntimeException:113:44",
+            "NullArray:System.Management.Automation.RuntimeException:113:44"
+          ]
+        },
+        {
+          "id": "compound:rhs",
+          "records": [
+            "error:ScriptMethodRuntimeException:System.Management.Automation.MethodInvocationException:NotSpecified:113:44"
+          ],
+          "trace": [
+            "key:",
+            "rhs:"
+          ],
+          "target": 10,
+          "empty": 3,
+          "faults": [
+            "ScriptMethodRuntimeException:System.Management.Automation.MethodInvocationException:113:44",
+            "ScriptMethodRuntimeException:System.Management.Automation.MethodInvocationException:113:44"
+          ]
+        },
+        {
+          "id": "compound:null",
+          "records": [
+            "error:NullArray:System.Management.Automation.RuntimeException:InvalidOperation:113:44"
+          ],
+          "trace": [
+            "key:"
+          ],
+          "target": 10,
+          "empty": 3,
+          "faults": [
+            "NullArray:System.Management.Automation.RuntimeException:113:44",
+            "NullArray:System.Management.Automation.RuntimeException:113:44",
+            "NullArray:System.Management.Automation.RuntimeException:113:44"
+          ]
+        },
+        {
+          "id": "increment:none",
+          "records": [
+            10
+          ],
+          "trace": [
+            "key:"
+          ],
+          "target": 11,
+          "empty": 3,
+          "faults": []
+        },
+        {
+          "id": "increment:key",
+          "records": [
+            "error:NullArray:System.Management.Automation.RuntimeException:InvalidOperation:114:57"
+          ],
+          "trace": [
+            "key:"
+          ],
+          "target": 10,
+          "empty": 3,
+          "faults": [
+            "NullArray:System.Management.Automation.RuntimeException:114:57",
+            "NullArray:System.Management.Automation.RuntimeException:114:57",
+            "NullArray:System.Management.Automation.RuntimeException:114:57"
+          ]
+        },
+        {
+          "id": "increment:rhs",
+          "records": [
+            10
+          ],
+          "trace": [
+            "key:"
+          ],
+          "target": 11,
+          "empty": 3,
+          "faults": []
+        },
+        {
+          "id": "increment:null",
+          "records": [
+            "error:NullArray:System.Management.Automation.RuntimeException:InvalidOperation:114:57"
+          ],
+          "trace": [
+            "key:"
+          ],
+          "target": 10,
+          "empty": 3,
+          "faults": [
+            "NullArray:System.Management.Automation.RuntimeException:114:57",
+            "NullArray:System.Management.Automation.RuntimeException:114:57",
+            "NullArray:System.Management.Automation.RuntimeException:114:57"
+          ]
+        },
+        {
+          "id": "rhs-replacement",
+          "records": [],
+          "before": 1,
+          "after": 9
+        },
+        {
+          "id": "empty-version",
+          "count": 1,
+          "keys": [
+            "Title",
+            "Attributes",
+            "IsReadOnly",
+            "IsHidden",
+            "IsSystem"
+          ]
+        }
+      ],
+      "strict": {
+        "rejected": 2,
+        "sha256": "e17a3dafa76c9275200f9e1e672151b1649c2ea23d02ac9ea41eb8ed895cc334",
+        "canProceed": false,
+        "typed": 0
+      }
+    }
+  },
+  "limits": [
+    "Hybrid PowerShell-runtime-backed semantics; Strict untyped keys unchanged",
+    "Bounded literal member/index chains rooted in unqualified variables; commands, multiple statements, traps, method-call roots, qualified roots and null-conditional accesses retain guards",
+    "Owned local files; Shell.Application and VersionInfo supplied by process-local test providers; no real COM, AD, network, administration or installation",
+    "Optional Signature and non-None HashAlgorithm branches not executed; authored string-to-bool behavior preserved",
+    "Convert-ADGuidToSchema remains hosted with authored AD type and cast/member interpolation co-blockers",
+    "No aggregate gate, fresh full net472 portfolio, non-Windows execution, performance benefit, reviewed dependency lock, PR or release"
+  ]
+}

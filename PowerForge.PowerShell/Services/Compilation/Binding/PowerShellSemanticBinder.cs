@@ -11,6 +11,7 @@ internal sealed partial class PowerShellSemanticBinder
     private readonly PowerShellCommandSemanticRegistry _commandRegistry;
     private readonly PowerShellCommandSemanticResolver _commandResolver;
     private readonly PowerShellCompilationSemanticOracleProfile _semanticProfile;
+    private PowerShellRuntimeFreeModuleDefinition? _runtimeFreeModule;
 
     internal PowerShellSemanticBinder()
         : this(PowerShellCommandSemanticRegistry.Default, PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
@@ -43,21 +44,57 @@ internal sealed partial class PowerShellSemanticBinder
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
         IDictionary<string, PowerShellBoundRegionCandidate>? regionCandidates = null,
-        IDictionary<string, PowerShellBoundRegionOpportunity>? regionOpportunities = null)
+        IDictionary<string, PowerShellBoundRegionOpportunity>? regionOpportunities = null,
+        bool requiresNativeInvocation = false)
     {
         var functionDiagnosticStart = diagnostics.Count;
-        ClearFunctionRegionEvidence(
-            regionCandidates,
-            regionOpportunities,
-            document.Path,
-            functionSymbol.Name);
+        ClearFunctionRegionEvidence(regionCandidates, regionOpportunities, document.Path, functionSymbol.Name);
+        var nativeFunctionBinding = PowerShellNativeFunctionBindingPolicy.Select(
+            function, capabilities, targetFramework,
+            requiresNativeInvocation || string.Equals(document.NativeScriptRootName, function.Name, StringComparison.Ordinal),
+            document.NativeDependencyTypes);
+        // Native invocation re-evaluates the authored parameter declaration at import.
+        // Keep an unresolved type out of the emitted method, but let the ordinary
+        // binder discover independent regions inside the retained function first.
+        PowerShellSemanticDiagnostic? unresolvedParameterTypeDiagnostic = null;
+        foreach (var parameter in PowerShellParameterSyntax.GetParameters(function.Body))
+        {
+            if (PowerShellCompilationParameterTypePolicy.FindUnresolvedAuthoredType(parameter) is not { } unresolvedType ||
+                nativeFunctionBinding is not null &&
+                (PowerShellCompilationParameterTypePolicy.IsHostProvidedParameterType(unresolvedType.TypeName.FullName) ||
+                 PowerShellHostedEnumDeclarationPolicy.IsQualifiedParameter(document, unresolvedType, targetFramework, capabilities) ||
+                 document.NativeDependencyTypes.Qualifies(unresolvedType.TypeName, capabilities)))
+                continue;
+            unresolvedParameterTypeDiagnostic = new PowerShellSemanticDiagnostic(
+                PowerShellCompilationFeatureIds.ParameterType,
+                $"Parameter '${parameter.Name.VariablePath.UserPath}' uses authored type '{unresolvedType.TypeName.FullName}', which cannot be resolved in the selected compilation environment.",
+                PowerShellSourceParser.GetSpan(document, unresolvedType.Extent));
+            break;
+        }
+        if (new[] { function.Body.BeginBlock, function.Body.ProcessBlock, function.Body.EndBlock, GetCleanBlock(function.Body) }
+            .FirstOrDefault(block => block?.Traps is { Count: > 0 }) is { } trappedBlock)
+        {
+            RejectUnrepresentedTraps(document, trappedBlock.Traps, diagnostics);
+            if (nativeFunctionBinding is not null) return null;
+        }
+        if (nativeFunctionBinding is null) capabilities &= ~PowerShellCompilationCapability.NativeFunctionBinding;
+        // Command redirections already have target-specific binding diagnostics. Background
+        // pipelines and expression redirections must be stopped before ordinary unwrapping.
+        if (nativeFunctionBinding is null && PowerShellNativeFunctionBindingPolicy.FindNativePipelineOperator(function, includeCommandRedirections: false) is { } nativeOperator)
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2945",
+                "Background pipelines and stream redirection require native invocation binding; this target or function lifecycle does not provide that contract.",
+                PowerShellSourceParser.GetSpan(document, nativeOperator.Extent)));
+            return null;
+        }
         if (!PowerShellOutputTypeSemanticPolicy.TryResolve(
                 function.Body,
                 targetFramework,
                 capabilities,
                 out var outputTypeContract,
                 out var outputTypeErrorNode,
-                out var outputTypeError))
+                out var outputTypeError,
+                document.NativeDependencyTypes))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB1201",
@@ -76,6 +113,21 @@ internal sealed partial class PowerShellSemanticBinder
             : capabilities;
         var parameters = BindParameters(document, function, symbols, diagnostics, targetFramework, bindingCapabilities);
         if (parameters is null) return null;
+        if (_runtimeFreeModule is not null)
+            foreach (var field in _runtimeFreeModule.Fields)
+                symbols.Add("script:" + field.Symbol.Name, new PowerShellSemanticSymbolBinding(field.Symbol, field.Type));
+        if (unresolvedParameterTypeDiagnostic is not null &&
+            (nativeFunctionBinding is not null && PowerShellRuntimeFreePipelineLifecyclePolicy.HasNamedLifecycle(function.Body) ||
+             hasRuntimeFreeLifecycle))
+        {
+            diagnostics.Add(unresolvedParameterTypeDiagnostic);
+            return null;
+        }
+        if (nativeFunctionBinding is not null && PowerShellRuntimeFreePipelineLifecyclePolicy.HasNamedLifecycle(function.Body))
+            return BindNativeLifecycleFunction(document, function, functionSymbol, functions, diagnostics, targetFramework,
+                capabilities, symbols, parameters, nativeFunctionBinding, outputTypeContract.SemanticType,
+                outputTypeContract.MetadataTypeName, functionDiagnosticStart,
+                outputTypeContract.Declarations);
         if (hasRuntimeFreeLifecycle)
             return BindRuntimeFreePipelineLifecycleFunction(
                 document,
@@ -91,14 +143,15 @@ internal sealed partial class PowerShellSemanticBinder
                 parameters,
                 pipelineParameter,
                 functions[function.Name].PipelineLifecycleReturnsCollection,
-                functionDiagnosticStart);
+                functionDiagnosticStart,
+                outputTypeContract.Declarations);
         var authoredStatements = function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
         var localFunctionNames = functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var runtimeTailStart = capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams)
+        var runtimeTailStart = nativeFunctionBinding is null && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams)
             ? PowerShellCommandIslandPolicy.FindRuntimeTailStart(authoredStatements, function.Body, localFunctionNames, capabilities, _commandResolver)
             : -1;
         var runtimeTailOffset = runtimeTailStart >= 0 ? authoredStatements[runtimeTailStart].Extent.StartOffset : (int?)null;
-        var locals = DeclareLocals(document, function, symbols, functions, capabilities, _commandResolver, runtimeTailOffset);
+        var locals = DeclareLocals(document, function, symbols, functions, capabilities, targetFramework, _commandResolver, runtimeTailOffset);
         var parametersByName = parameters.ToDictionary(static parameter => parameter.Symbol.Name, StringComparer.OrdinalIgnoreCase);
 
         var statements = new List<PowerShellBoundStatement>();
@@ -171,16 +224,17 @@ internal sealed partial class PowerShellSemanticBinder
             statements.Add(bound);
             statementBindings.Add(new PowerShellBoundStatementBinding(authoredStatementIndex, authoredStatementIndex, bound));
         }
+        if (functions[function.Name].ClosedCollectionFactory is not null && bodyIsValid &&
+            !capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+            PowerShellClosedLocalCollectionFactoryPolicy.NormalizeBoundReturn(statements, statementBindings);
         var refinedTypes = symbols.Values.ToDictionary(static binding => binding.Symbol.StableKey, static binding => binding.Type, StringComparer.Ordinal);
         locals = locals.Select(local => new PowerShellBoundLocal(local.Symbol, refinedTypes[local.Symbol.StableKey])).ToArray();
-        var numericProjectionIsValid = PowerShellNumericValueProjectionPolicy.Validate(
-                new PowerShellBoundBlock(PowerShellSourceParser.GetSpan(document, function.Body.Extent), statements.ToArray()),
-                locals, diagnostics);
-        if (!numericProjectionIsValid) bodyIsValid = false;
         // A fully bound body may still need its authored PowerShell header after cmdlet shaping.
         // Keep the ordinary terminal-region candidate so that final shaping can retain that header
         // while delegating the proven body through the same region ABI.
-        if (regionCandidates is not null && bodyIsValid && diagnostics.Count == functionDiagnosticStart &&
+        if (regionCandidates is not null && bodyIsValid &&
+            diagnostics.Skip(functionDiagnosticStart).All(static diagnostic =>
+                diagnostic.Code == PowerShellNativeStringPipelineBindingPolicy.DiagnosticCode) &&
             PowerShellBoundRegionCandidateSelector.TryCreate(
                 document, function, functionSymbol, parameters, locals, authoredStatements,
                 statementBindings, -1, out var completeBodyCandidate))
@@ -198,14 +252,40 @@ internal sealed partial class PowerShellSemanticBinder
                 locals,
                 authoredStatements,
                 statementBindings);
-        if (regionCandidates is not null && numericProjectionIsValid &&
+        if (regionCandidates is not null && functionSymbol.Kind == PowerShellSymbolKind.Function &&
+            PowerShellBoundRegionCandidateSelector.TryCreateControlFlowEnvelope(
+                document, function, functionSymbol, parameters, locals, authoredStatements, statementBindings,
+                out var controlFlowCandidate))
+            regionCandidates[controlFlowCandidate.RegionId] = controlFlowCandidate;
+        PowerShellBoundRegionCandidate? guardedPrefixCandidate = null;
+        if (regionCandidates is not null &&
             PowerShellBoundRegionCandidateSelector.TryCreateContinuation(
                 document, function, functionSymbol, parameters, locals, authoredStatements, statementBindings,
                 out var continuationCandidate))
+        {
             regionCandidates[continuationCandidate.RegionId] = continuationCandidate;
+            guardedPrefixCandidate = continuationCandidate;
+        }
+        if (regionCandidates is not null && functionSymbol.Kind == PowerShellSymbolKind.Function &&
+            !bodyIsValid && guardedPrefixCandidate is null &&
+            PowerShellBoundRegionCandidateSelector.TryCreateLaterContinuation(
+                document, function, functionSymbol, parameters, locals, authoredStatements, statementBindings,
+                out var laterContinuationCandidate))
+        {
+            regionCandidates[laterContinuationCandidate.RegionId] = laterContinuationCandidate;
+            guardedPrefixCandidate = laterContinuationCandidate;
+        }
+        if (regionCandidates is not null && (!bodyIsValid || guardedPrefixCandidate is not null))
+            foreach (var detachedContinuationCandidate in
+                     PowerShellBoundRegionCandidateSelector.CreateDetachedContinuations(
+                         document, function, functionSymbol, parameters, locals, authoredStatements,
+                         statementBindings, guardedPrefixCandidate))
+                regionCandidates[detachedContinuationCandidate.RegionId] = detachedContinuationCandidate;
+        if (unresolvedParameterTypeDiagnostic is not null)
+            diagnostics.Add(unresolvedParameterTypeDiagnostic);
         if (!bodyIsValid || diagnostics.Count > functionDiagnosticStart)
         {
-            if (regionCandidates is not null && numericProjectionIsValid && lastFailedStatementIndex >= 0 &&
+            if (regionCandidates is not null && lastFailedStatementIndex >= 0 &&
                 PowerShellBoundRegionCandidateSelector.TryCreate(
                     document,
                     function,
@@ -215,10 +295,20 @@ internal sealed partial class PowerShellSemanticBinder
                     authoredStatements,
                     statementBindings,
                     lastFailedStatementIndex,
-                    out var candidate))
+                    out var candidate) &&
+                !regionCandidates.ContainsKey(candidate.RegionId))
                 regionCandidates[candidate.RegionId] = candidate;
             return null;
         }
+
+        // Closed scalar/vector alternatives are a synthetic region-transfer representation,
+        // not a PowerShell-visible whole-function value. Keep the authored function as the
+        // runtime owner even when every statement bound successfully; promoted region helpers
+        // are compiled independently from the candidates recorded above.
+        // Native invocations keep these slots in PowerShell; the lowerer independently
+        // rejects unbridged storage and does not emit their provisional CLR local types.
+        if (nativeFunctionBinding is null && locals.Any(static local => PowerShellRegionTransferTypePolicy.IsClosedValueAlternative(local.Type)))
+            return null;
 
         var body = new PowerShellBoundBlock(PowerShellSourceParser.GetSpan(document, function.Body.Extent), statements.ToArray());
         var scopeSymbols = parameters.Select(static parameter => parameter.Symbol)
@@ -230,7 +320,7 @@ internal sealed partial class PowerShellSemanticBinder
             parameters,
             locals,
             new PowerShellLexicalScope(functionSymbol, scopeSymbols),
-            PowerShellCommentHelpBinder.Bind(function),
+            PowerShellCommentHelpBinder.Bind(function, functionSymbol),
             PowerShellAdvancedFunctionPolicy.GetAliases(function),
             PowerShellAdvancedFunctionPolicy.GetBodyBinding(function.Body),
             outputTypeContract.SemanticType,
@@ -240,7 +330,9 @@ internal sealed partial class PowerShellSemanticBinder
             PowerShellOutputCardinality.Unknown,
             PowerShellSemanticEffect.None,
             PowerShellRequiredCapability.None,
-            PowerShellExecutionDisposition.Typed);
+            PowerShellExecutionDisposition.Typed,
+            nativeFunctionBinding,
+            outputTypeContract.Declarations);
     }
 
     private PowerShellBoundParameter[]? BindParameters(
@@ -264,7 +356,9 @@ internal sealed partial class PowerShellSemanticBinder
             }
 
             var contract = PowerShellParameterContractBinder.Bind(parameter, targetFramework, capabilities, _semanticProfile.ProfileId);
-            var clrType = parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)
+            var dependencyParameter = parameter.Attributes.OfType<TypeConstraintAst>().Any(constraint =>
+                document.NativeDependencyTypes.Qualifies(constraint.TypeName, capabilities));
+            var clrType = dependencyParameter ? typeof(object) : parameter.StaticType == typeof(System.Management.Automation.SwitchParameter)
                 ? typeof(bool)
                 : parameter.StaticType;
             if (!PowerShellCompilationParameterTypePolicy.CanUseInMethod(clrType, targetFramework, capabilities))
@@ -284,7 +378,8 @@ internal sealed partial class PowerShellSemanticBinder
                     span));
                 invalid = true;
             }
-            if (parameter.DefaultValue is not null && contract.DefaultValue is null)
+            if (parameter.DefaultValue is not null && contract.DefaultValue is null &&
+                !capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     PowerShellCompilationFeatureIds.ParameterDefault,
@@ -305,6 +400,7 @@ internal sealed partial class PowerShellSemanticBinder
                             ? $"Parameter '${name}' has an authored type constraint."
                             : $"Untyped parameter '${name}' preserves the PowerShell host's object-valued parameter contract.");
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Parameter, document.DocumentId, name, span, function.Name + "/parameter/" + name);
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) type = PowerShellTypeFact.Unknown;
             var bound = new PowerShellBoundParameter(symbol, type, contract);
             symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, type));
             parameters.Add(bound);
@@ -322,7 +418,7 @@ internal sealed partial class PowerShellSemanticBinder
                 PowerShellSourceParser.GetSpan(document, function.Extent)));
             invalid = true;
         }
-        if (!PowerShellParameterSemanticValidator.Validate(
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && !PowerShellParameterSemanticValidator.Validate(
                 document,
                 function,
                 parameters.Select(static parameter => parameter.Contract).ToArray(),
@@ -332,387 +428,6 @@ internal sealed partial class PowerShellSemanticBinder
             invalid = true;
         _ = invalid;
         return parameters.ToArray();
-    }
-
-    private PowerShellBoundStatement? BindStatement(
-        ParsedSourceDocument document,
-        StatementAst statement,
-        IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
-        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics,
-        bool isTerminal,
-        string? targetFramework,
-        PowerShellCompilationCapability capabilities,
-        bool allowNonTerminalSuccessOutput = false,
-        Type? nonTerminalSuccessOutputType = null)
-    {
-        if (statement is AssignmentStatementAst assignment)
-        {
-            if (PowerShellRuntimeStateIntrinsicPolicy.TryGetModuleVariableAssignmentName(
-                    assignment,
-                    capabilities,
-                    out var moduleVariableName))
-            {
-                var moduleValue = BindExpression(
-                    document,
-                    assignment.Right,
-                    symbols,
-                    functions,
-                    diagnostics,
-                    targetFramework: targetFramework,
-                    capabilities: capabilities);
-                if (moduleValue is null) return null;
-                if (moduleValue.Type.ClrType == typeof(void))
-                {
-                    diagnostics.Add(new PowerShellSemanticDiagnostic(
-                        PowerShellCompilationFeatureIds.RuntimeScope,
-                        $"Assignment to live module variable '$script:{moduleVariableName}' requires a value-producing typed expression.",
-                        PowerShellSourceParser.GetSpan(document, assignment.Right.Extent)));
-                    return null;
-                }
-                return new PowerShellBoundModuleVariableAssignmentStatement(
-                    PowerShellSourceParser.GetSpan(document, assignment.Extent),
-                    moduleVariableName,
-                    moduleValue);
-            }
-            if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } scopedTarget &&
-                IsRuntimeOwnedScope(scopedTarget.VariablePath.UserPath))
-            {
-                diagnostics.Add(new PowerShellSemanticDiagnostic(
-                    PowerShellCompilationFeatureIds.RuntimeScope,
-                    $"Assignment to runtime-owned scope '${scopedTarget.VariablePath.UserPath}' is outside the bounded runtime-state contract.",
-                    PowerShellSourceParser.GetSpan(document, assignment.Extent)));
-                return null;
-            }
-            if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } automatic &&
-                PowerShellAssignmentTargetPolicy.IsReadOnlyAutomaticVariable(automatic.VariablePath.UserPath))
-            {
-                diagnostics.Add(new PowerShellSemanticDiagnostic(
-                    PowerShellCompilationFeatureIds.AutomaticVariableAssignment,
-                    $"Assignment to read-only automatic variable '${automatic.VariablePath.UserPath}' cannot be preserved by a typed artifact.",
-                    PowerShellSourceParser.GetSpan(document, assignment.Extent)));
-                return null;
-            }
-            if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } discarded &&
-                discarded.VariablePath.UserPath.Equals("null", StringComparison.OrdinalIgnoreCase))
-            {
-                if (assignment.Operator.ToString() != "Equals")
-                {
-                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2405", "The $null discard target supports simple '=' assignment only.", PowerShellSourceParser.GetSpan(document, assignment.Extent)));
-                    return null;
-                }
-                var discardedValue = BindExpression(document, assignment.Right, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
-                return discardedValue is null
-                    ? null
-                    : new PowerShellBoundExpressionStatement(PowerShellSourceParser.GetSpan(document, assignment.Extent), discardedValue, emitsOutput: false);
-            }
-            if (assignment.Left is IndexExpressionAst index)
-            {
-                return PowerShellDictionarySemanticBinder.BindAssignment(
-                    document,
-                    assignment,
-                    index,
-                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
-                    capabilities,
-                    diagnostics);
-            }
-            if (assignment.Left is MemberExpressionAst member)
-            {
-                return PowerShellClrMemberSemanticBinder.BindAssignment(
-                    document,
-                    assignment,
-                    member,
-                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
-                    targetFramework,
-                    capabilities,
-                    diagnostics);
-            }
-            var mutation = PowerShellMutationSemanticBinder.BindAssignment(
-                document,
-                assignment,
-                symbols,
-                (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
-                diagnostics);
-            return mutation is null
-                ? null
-                : new PowerShellBoundAssignmentStatement(
-                    mutation.Span,
-                    mutation.Target,
-                    mutation.Value!,
-                    mutation.Operation,
-                    mutation.NormalizeNullString,
-                    mutation.IntegralSemantics);
-        }
-        if (statement is ReturnStatementAst returnStatement)
-        {
-            var expression = returnStatement.Pipeline is null
-                ? null
-                : BindExpression(document, returnStatement.Pipeline, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
-            return returnStatement.Pipeline is null || expression is not null
-                ? new PowerShellBoundReturnStatement(
-                    PowerShellSourceParser.GetSpan(document, returnStatement.Extent),
-                    expression,
-                    expression is not PowerShellBoundMutationExpression && expression?.Type.ClrType != typeof(void))
-                : null;
-        }
-        if (statement is IfStatementAst ifStatement)
-            return BindIfStatement(document, ifStatement, symbols, functions, diagnostics, targetFramework, capabilities, allowNonTerminalSuccessOutput, nonTerminalSuccessOutputType);
-        if (statement is WhileStatementAst whileStatement)
-            return BindWhileStatement(document, whileStatement, PowerShellBoundLoopKind.While, symbols, functions, diagnostics, targetFramework, capabilities);
-        if (statement is DoWhileStatementAst doWhileStatement)
-            return BindWhileStatement(document, doWhileStatement, PowerShellBoundLoopKind.DoWhile, symbols, functions, diagnostics, targetFramework, capabilities);
-        if (statement is DoUntilStatementAst doUntilStatement)
-            return BindWhileStatement(document, doUntilStatement, PowerShellBoundLoopKind.DoUntil, symbols, functions, diagnostics, targetFramework, capabilities);
-        if (statement is ForStatementAst forStatement)
-            return BindForStatement(document, forStatement, symbols, functions, diagnostics, targetFramework, capabilities);
-        if (statement is ForEachStatementAst forEachStatement)
-            return BindForEachStatement(document, forEachStatement, symbols, functions, diagnostics, targetFramework, capabilities);
-        if (statement is SwitchStatementAst switchStatement)
-            return BindSwitchStatement(document, switchStatement, symbols, functions, diagnostics, targetFramework, capabilities);
-        if (statement is ThrowStatementAst throwStatement)
-        {
-            if (throwStatement.IsRethrow)
-            {
-                if (!PowerShellControlFlowBindingPolicy.HasAncestor<CatchClauseAst>(throwStatement))
-                {
-                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2307", "A bare typed rethrow is valid only inside a catch clause.", PowerShellSourceParser.GetSpan(document, throwStatement.Extent)));
-                    return null;
-                }
-                return new PowerShellBoundThrowStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), null);
-            }
-            if (throwStatement.Pipeline is null) return null;
-            var expression = BindExpression(document, throwStatement.Pipeline, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
-            if (expression is null) return null;
-            if (!typeof(Exception).IsAssignableFrom(expression.Type.ClrType))
-            {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2308", $"Typed throw requires a CLR exception expression; resolved type was '{expression.Type.ClrType.FullName}'.", expression.Span));
-                return null;
-            }
-            return new PowerShellBoundThrowStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), expression);
-        }
-        if (statement is TryStatementAst tryStatement)
-        {
-            if (tryStatement.Finally?.FindAll(static node => node is ReturnStatementAst or BreakStatementAst or ContinueStatementAst, searchNestedScriptBlocks: true).Any() == true)
-            {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2309", "Typed finally blocks cannot alter enclosing return, break, or continue control flow.", PowerShellSourceParser.GetSpan(document, tryStatement.Finally.Extent)));
-                return null;
-            }
-            var baselineSymbols = CloneSymbols(symbols);
-            var trySymbols = CloneSymbols(baselineSymbols);
-            var body = BindBlock(document, tryStatement.Body, trySymbols, functions, diagnostics, targetFramework, capabilities, terminalOutputReturns: isTerminal);
-            if (body is null) return null;
-            var catches = new List<PowerShellBoundCatchClause>();
-            var pathSymbols = new List<IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding>> { trySymbols };
-            foreach (var clause in tryStatement.CatchClauses)
-            {
-                var types = new List<Type>();
-                foreach (var constraint in clause.CatchTypes)
-                {
-                    var type = constraint.TypeName.GetReflectionType();
-                    var supportedPowerShellRuntimeException = type is not null &&
-                                                               (type == typeof(System.Management.Automation.RuntimeException) ||
-                                                                type == typeof(System.Management.Automation.SessionStateUnauthorizedAccessException)) &&
-                                                               capabilities.HasFlag(PowerShellCompilationCapability.PowerShellObjects);
-                    if (type is null || !typeof(Exception).IsAssignableFrom(type) ||
-                        !supportedPowerShellRuntimeException && !PowerShellGeneratedTypePolicy.IsSupported(type, targetFramework))
-                    {
-                        diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2310", $"Typed catch '{constraint.TypeName.FullName}' is outside the generated project reference set.", PowerShellSourceParser.GetSpan(document, constraint.Extent)));
-                        return null;
-                    }
-                    types.Add(type);
-                }
-                var catchSymbols = CloneSymbols(baselineSymbols);
-                ForgetTryMutationsOnCatchEntry(catchSymbols, tryStatement.Body);
-                var catchBody = BindBlock(document, clause.Body, catchSymbols, functions, diagnostics, targetFramework, capabilities, terminalOutputReturns: isTerminal);
-                if (catchBody is null) return null;
-                catches.Add(new PowerShellBoundCatchClause(types.ToArray(), catchBody));
-                pathSymbols.Add(catchSymbols);
-            }
-            var catchAll = catches.FindIndex(static clause => clause.ExceptionTypes.Length == 0);
-            if (catchAll >= 0 && catchAll != catches.Count - 1)
-            {
-                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2311", "A catch-all clause must follow all typed catches on the conservative typed path.", PowerShellSourceParser.GetSpan(document, tryStatement.CatchClauses[catchAll].Extent)));
-                return null;
-            }
-            var flattened = catches.SelectMany((clause, clauseIndex) =>
-                clause.ExceptionTypes.Select(type => new { ClauseIndex = clauseIndex, Type = type })).ToArray();
-            for (var index = 0; index < flattened.Length; index++)
-            {
-                if (flattened.Take(index).Any(previous => previous.Type.IsAssignableFrom(flattened[index].Type)))
-                {
-                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2312", $"Typed catch '{flattened[index].Type.FullName}' is unreachable after a broader earlier catch.", PowerShellSourceParser.GetSpan(document, tryStatement.CatchClauses[flattened[index].ClauseIndex].Extent)));
-                    return null;
-                }
-            }
-            var joinedSymbols = CloneSymbols(baselineSymbols);
-            MergeSymbolValueStates(joinedSymbols, pathSymbols.ToArray());
-            PowerShellBoundBlock? finallyBlock = null;
-            if (tryStatement.Finally is not null)
-            {
-                finallyBlock = BindBlock(document, tryStatement.Finally, joinedSymbols, functions, diagnostics, targetFramework, capabilities);
-                if (finallyBlock is null) return null;
-            }
-            MergeSymbolValueStates(symbols, joinedSymbols);
-            return new PowerShellBoundTryStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), body, catches.ToArray(), finallyBlock);
-        }
-        if (statement is BreakStatementAst { Label: null } breakStatement && PowerShellControlFlowBindingPolicy.HasBreakableAncestor(breakStatement))
-            return new PowerShellBoundBreakStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));
-        if (statement is ContinueStatementAst { Label: null } continueStatement && PowerShellControlFlowBindingPolicy.HasContinuableAncestor(continueStatement))
-            return new PowerShellBoundContinueStatement(PowerShellSourceParser.GetSpan(document, statement.Extent));
-        if (statement is BreakStatementAst labeledBreak && labeledBreak.Label is not null)
-        {
-            diagnostics.Add(new PowerShellSemanticDiagnostic(
-                "PSB2313",
-                "Labeled break is not supported by the typed compiler.",
-                PowerShellSourceParser.GetSpan(document, labeledBreak.Extent)));
-            return null;
-        }
-        if (statement is BreakStatementAst invalidBreak)
-        {
-            diagnostics.Add(new PowerShellSemanticDiagnostic(
-                "PSB2314",
-                "break must be inside a supported loop or scalar switch.",
-                PowerShellSourceParser.GetSpan(document, invalidBreak.Extent)));
-            return null;
-        }
-        if (statement is ContinueStatementAst labeledContinue && labeledContinue.Label is not null)
-        {
-            diagnostics.Add(new PowerShellSemanticDiagnostic(
-                "PSB2315",
-                "Labeled continue is not supported by the typed compiler.",
-                PowerShellSourceParser.GetSpan(document, labeledContinue.Extent)));
-            return null;
-        }
-        if (statement is ContinueStatementAst invalidContinue)
-        {
-            diagnostics.Add(new PowerShellSemanticDiagnostic(
-                "PSB2316",
-                "continue must be inside a supported loop.",
-                PowerShellSourceParser.GetSpan(document, invalidContinue.Extent)));
-            return null;
-        }
-        if (TryBindStatementDiscard(document, statement, symbols, functions, diagnostics, targetFramework, capabilities, out var discard))
-            return discard;
-        if (statement is PipelineAst { PipelineElements.Count: 1 } streamPipeline &&
-            streamPipeline.PipelineElements[0] is CommandAst streamCommand &&
-            PowerShellCommandIslandPolicy.TryGetTargetStreamCommand(
-                streamCommand,
-                capabilities,
-                out var streamKind,
-                out var messageSyntax,
-                out var streamProvider,
-                _commandResolver,
-                functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)))
-        {
-            var expectedType = streamKind == PowerShellStreamCommandKind.Success ? null : typeof(string);
-            var message = BindExpression(document, messageSyntax, symbols, functions, diagnostics, expectedType, targetFramework, capabilities);
-            return message is null
-                ? null
-                : new PowerShellBoundStreamWriteStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), streamKind, streamProvider!, message);
-        }
-        if (statement is PipelineAst mappingPipeline &&
-            TryBindRuntimeFreePipelineEnumeration(
-                document,
-                mappingPipeline,
-                symbols,
-                functions,
-                diagnostics,
-                targetFramework,
-                capabilities,
-                out var enumeration))
-            return enumeration;
-        if (statement is PipelineAst lifecyclePipeline &&
-            IsRuntimeFreePipelineLifecycleInvocation(lifecyclePipeline, functions))
-        {
-            var invocation = BindRuntimeFreePipelineLifecycleInvocation(
-                document,
-                lifecyclePipeline,
-                symbols,
-                functions,
-                diagnostics,
-                targetFramework,
-                capabilities);
-            if (invocation is null) return null;
-            if (!isTerminal)
-            {
-                if (allowNonTerminalSuccessOutput)
-                    return new PowerShellBoundExpressionStatement(
-                        PowerShellSourceParser.GetSpan(document, lifecyclePipeline.Extent),
-                        invocation,
-                        emitsOutput: invocation.Type.ClrType != typeof(void));
-                diagnostics.Add(new PowerShellSemanticDiagnostic(
-                    "PSB2924",
-                    "Runtime-free lifecycle success output must be the terminal result of its enclosing typed function.",
-                    PowerShellSourceParser.GetSpan(document, lifecyclePipeline.Extent)));
-                return null;
-            }
-            return new PowerShellBoundReturnStatement(
-                PowerShellSourceParser.GetSpan(document, lifecyclePipeline.Extent),
-                invocation,
-                emitsValue: invocation.Type.ClrType != typeof(void));
-        }
-        if (statement is PipelineAst pipeline)
-        {
-            var expression = BindExpression(
-                document,
-                pipeline,
-                symbols,
-                functions,
-                diagnostics,
-                allowNonTerminalSuccessOutput ? nonTerminalSuccessOutputType : null,
-                targetFramework,
-                capabilities);
-            if (expression is null) return null;
-            var emitsOutput = expression is not PowerShellBoundMutationExpression && expression.Type.ClrType != typeof(void);
-            if (!isTerminal && emitsOutput && !IsLocalFunctionPipeline(pipeline, functions, capabilities) && !allowNonTerminalSuccessOutput) return null;
-            if (isTerminal && IsLocalFunctionPipeline(pipeline, functions, capabilities))
-                return new PowerShellBoundReturnStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), expression, emitsOutput);
-            return expression is null
-                ? null
-                : new PowerShellBoundExpressionStatement(
-                    PowerShellSourceParser.GetSpan(document, statement.Extent), expression, emitsOutput,
-                    requiresOutputContinuation: emitsOutput && !isTerminal && !allowNonTerminalSuccessOutput);
-        }
-        return null;
-    }
-
-    private PowerShellBoundBlock? BindBlock(
-        ParsedSourceDocument document,
-        StatementBlockAst syntax,
-        IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
-        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics,
-        string? targetFramework,
-        PowerShellCompilationCapability capabilities,
-        bool terminalOutputReturns = false,
-        bool allowNonTerminalSuccessOutput = false,
-        Type? nonTerminalSuccessOutputType = null)
-    {
-        var statements = new List<PowerShellBoundStatement>();
-        for (var index = 0; index < syntax.Statements.Count; index++)
-        {
-            var statement = syntax.Statements[index];
-            var diagnosticCount = diagnostics.Count;
-            var bound = BindStatement(
-                document,
-                statement,
-                symbols,
-                functions,
-                diagnostics,
-                isTerminal: terminalOutputReturns && index == syntax.Statements.Count - 1,
-                targetFramework,
-                capabilities,
-                allowNonTerminalSuccessOutput,
-                nonTerminalSuccessOutputType);
-            if (bound is null)
-            {
-                if (diagnostics.Count == diagnosticCount)
-                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2001", $"Statement '{statement.GetType().Name}' is not yet represented by the bound pipeline.", PowerShellSourceParser.GetSpan(document, statement.Extent)));
-                return null;
-            }
-            statements.Add(bound);
-        }
-        return new PowerShellBoundBlock(PowerShellSourceParser.GetSpan(document, syntax.Extent), statements.ToArray());
     }
 
     private static ScriptBlockAst? FindOwningFunctionBody(Ast syntax)
@@ -756,10 +471,29 @@ internal sealed partial class PowerShellSemanticBinder
     private static PowerShellBoundExpression? BindConditionTruthiness(
         PowerShellBoundExpression condition,
         PowerShellCompilationCapability capabilities,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        ParsedSourceDocument document,
+        Ast syntax, bool nativePostTestCondition = false)
     {
-        if (condition.Type.ClrType == typeof(bool)) return condition;
-        if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions))
+        var nativePosition = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding);
+        if (condition.Type.ClrType == typeof(bool) && !nativePosition) return condition;
+        if (!nativePosition && PowerShellClrTypeSemantics.IsIntegral(condition.Type.ClrType))
+        {
+            var zero = Activator.CreateInstance(condition.Type.ClrType);
+            return new PowerShellBoundBinaryExpression(
+                condition.Span,
+                PowerShellBoundBinaryOperator.NotEqual,
+                condition,
+                new PowerShellBoundLiteralExpression(
+                    condition.Span,
+                    zero,
+                    new PowerShellTypeFact(condition.Type.ClrType, PowerShellTypeFactProvenance.Literal,
+                        "Integral PowerShell truthiness compares the closed value with zero."),
+                    PowerShellValueState.Known),
+                new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred,
+                    "A nonzero integral value is true under PowerShell truthiness."));
+        }
+        if (condition.Type.ClrType != typeof(bool) && !capabilities.HasFlag(PowerShellCompilationCapability.PowerShellLanguageConversions))
         {
             var message = condition is PowerShellBoundMutationExpression { Operation: PowerShellBoundMutationOperator.Assign } mutation
                 ? $"Local variable '${mutation.Target.Name}' may remain unassigned because its assignment occurs only while evaluating a dynamic-truthiness condition."
@@ -767,19 +501,27 @@ internal sealed partial class PowerShellSemanticBinder
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2301", message, condition.Span));
             return null;
         }
+        var span = nativePosition ? PowerShellSourceParser.GetSpan(document, syntax.Extent) : condition.Span;
         return new PowerShellBoundConversionExpression(
-            condition.Span,
+            span,
             new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred, "PowerShell-hosted condition truthiness selects one Boolean result."),
             condition,
-            usePowerShellTruthiness: true);
+            usePowerShellTruthiness: condition.Type.ClrType != typeof(bool),
+            nativeSourcePath: nativePosition ? document.Path : null,
+            nativeSourceText: nativePosition ? PowerShellNativeFunctionBindingPolicy.SourceLines(document, span) : string.Empty,
+            nativePostTestCondition: nativePostTestCondition);
     }
 
-    private static Ast UnwrapExpression(Ast syntax)
+    internal static Ast UnwrapExpression(Ast syntax, bool preservePipeline = false)
     {
         while (true)
         {
             switch (syntax)
             {
+                case PipelineAst pipeline when preservePipeline && PowerShellCommandRegionSemanticBinder.RequiresPipelineSyntax(pipeline):
+                    return pipeline;
+                case CommandExpressionAst command when preservePipeline && command.Redirections.Count > 0:
+                    return command;
                 case PipelineAst pipeline when pipeline.PipelineElements.Count == 1 && pipeline.PipelineElements[0] is CommandExpressionAst command:
                     syntax = command.Expression;
                     continue;

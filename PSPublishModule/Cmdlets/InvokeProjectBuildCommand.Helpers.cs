@@ -11,6 +11,19 @@ namespace PSPublishModule;
 
 public sealed partial class InvokeProjectBuildCommand
 {
+    private void CompleteResult(ProjectBuildResult result)
+    {
+        if (!result.Success && !ExitCode.IsPresent)
+            WriteError(new ErrorRecord(
+                new InvalidOperationException(result.ErrorMessage ?? "Project build failed."),
+                "InvokeProjectBuildFailed",
+                ErrorCategory.InvalidOperation,
+                ConfigPath));
+        WriteObject(result);
+        if (ExitCode.IsPresent)
+            Host.SetShouldExit(result.Success ? 0 : 1);
+    }
+
     private static bool? ResolveRequestedAction(IDictionary? boundParameters, string parameterName)
     {
         if (boundParameters?.Contains(parameterName) != true)

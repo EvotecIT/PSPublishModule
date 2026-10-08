@@ -42,6 +42,12 @@ Invoke-DotNetPublish -ConfigPath '.\powerforge.dotnetpublish.json' -Plan
 Invoke-DotNetPublish -ConfigPath '.\powerforge.dotnetpublish.json' -ExitCode
 ```
 
+Interactive runs use the same Spectre progress layout and step ledger as module and package builds. The ledger preserves completed work and marks later steps skipped after a failure. Publish rows identify each step's selected framework, runtime, and style.
+
+Use `-NoInteractive` for plain console logging, or `-Quiet` to suppress progress and informational output while retaining result objects, warnings and errors. Both options preserve the build workflow. Warnings use the PowerShell warning stream, so `-WarningVariable`, `-WarningAction SilentlyContinue` and `-WarningAction Stop` work in every display mode.
+
+Failures write PowerShell errors in every display mode. Use `-ErrorAction Stop` when subsequent script statements must not run after failure. `-ExitCode` instead returns the result without an error record, sets the PowerShell host exit status to 0 or 1, and permits subsequent statements. Configuration and preparation failures follow the same rule.
+
 ## Fast Run Overrides (No File Edits Needed)
 
 Use overrides for local/CI experiments while keeping base JSON stable:
@@ -122,7 +128,7 @@ Depending on config, the run can emit:
 - Direct `Sign` still works and takes precedence when you want one target to fully define its own signing behavior.
 - Signing uses `TimeoutSeconds` per file, defaulting to 300 seconds, so a stuck `signtool.exe` follows `OnSignFailure` instead of hanging the publish run.
 
-Normal signed publishing uses the selected working tree. It checks the Git working tree for changes and verifies the produced files, signatures, and checksums; it does not attempt to reconstruct every MSBuild or NuGet input in a separate checkout. A clean Git status is not a claim that every compiler input was tracked. Normal mode runs the build phase of `dotnet publish` even when `DotNet.NoBuildInPublish` is `true`, rather than relying solely on prebuilt files from `bin` or `obj`. If a release specifically requires the stronger controlled-checkout input proof and no-build publishing, set `DotNet.UseControlledSourceProvenance` to `true` in the JSON config. It is opt-in and can reject builds that normal signing accepts.
+Normal signed publishing builds the selected working tree, including uncommitted changes. It records Git revision and dirty state as context and verifies the produced files, signatures, and checksums. A dirty checkout does not block signing, and a clean Git status does not claim that every compiler input was tracked. Normal mode runs the build phase of `dotnet publish` even when `DotNet.NoBuildInPublish` is `true`, rather than relying solely on prebuilt files from `bin` or `obj`. If a release specifically requires controlled-checkout input proof and no-build publishing, set `DotNet.UseControlledSourceProvenance` to `true` in the JSON config. This advanced mode is disabled by default.
 
 ## Installer Filters
 
@@ -218,6 +224,46 @@ Normal signed publishing uses the selected working tree. It checks the Git worki
 - Use `MsBuildProperties` for project-specific Store settings that are still too repo-specific to deserve a first-class contract.
 
 ## Submitting To Partner Center
+
+For routine WinGet and MSI Store updates, use the [catalog update profile and
+reusable workflow](PSPublishModule.CatalogUpdates.md). It maps immutable public
+Store downloads, verifies their bytes, preflights both channels and preserves
+independent submission receipts. The lower-level preparation and Store commands
+below remain useful when integrating another release operator.
+
+For an existing signed MSI release, prepare catalog inputs from downloaded release
+assets without rebuilding or reserving another version. Run this on Windows:
+
+```powershell
+powerforge release prepare-catalog --config ./powerforge.release.json `
+    --manifest ./downloads/release-manifest.json --checksums ./downloads/SHA256SUMS.txt `
+    --asset-root ./downloads --out ./catalog
+winget validate ./catalog/Winget/Contoso.App/1.2.3
+wingetcreate submit ./catalog/Winget/Contoso.App/1.2.3
+```
+
+The release config supplies one enabled `Winget.Packages` entry with MSI installer
+selectors. The manifest uses PowerForge release schema version 1. Preparation
+verifies the manifest and installer checksums, Windows Authenticode trust, MSI
+name, version and architecture, and writes three WinGet manifests plus
+`desktop-packages.json`. MSI ProductCode, UpgradeCode and fixed machine scope
+come from the selected packages. The output directory must be new. Installer
+URLs must resolve to immutable, public HTTPS downloads of those same bytes;
+preparation does not test remote availability, embedded payload signatures or
+installation behavior. Qualify those separately before submission.
+
+For a `DesktopInstaller` Store target, set `DesktopPackagesPath` to that generated
+JSON array instead of copying package URLs and switches into the submission
+config. The path is relative to the Store config file. Defining both
+`DesktopPackages` and `DesktopPackagesPath` is rejected. Generated MSI entries
+specify `/qn /norestart` for silent installation.
+
+The first Store product reservation and submission, including age ratings,
+must be created in Partner Center. Later package updates use the existing
+`powerforge store submit` API path. Desktop installer submissions require the
+desktop API scope `https://api.store.microsoft.com/.default`, seller ID and an
+authorized Partner Center application. Keep credentials in environment variables
+or the supported secret source. See [Microsoft's first-submission requirements](https://learn.microsoft.com/en-us/windows/apps/publish/store-submission-api).
 
 - Use `powerforge store submit` after `StorePackages[]` has produced a `*.msixupload` or `*.appxupload` artifact.
 - Keep Store submission in a separate config file, typically `powerforge.store.submit.json` or `Build/store.submit.json`.

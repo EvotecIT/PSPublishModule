@@ -19,6 +19,67 @@ metadata with any table that is committed or shared.
 | `Update-BenchmarkEvidenceCatalog` | Records an independent Windows, Linux, or macOS result lane and exposes missing or incompatible platform evidence. |
 | `Update-BenchmarkDocument` | Replaces one marker-delimited Markdown block from a normalized summary or comparison file. |
 | `Test-BenchmarkGate` | Verifies benchmark summary metrics against a JSON baseline with tolerance rules. |
+| `Test-BenchmarkHistory` | Calibrates and verifies duration limits from accepted independent runs on the same runner environment. |
+
+## Runner-Specific Timing History
+
+Use timing history in a manual, scheduled, or explicitly enabled performance job.
+Keep ordinary correctness checks independent of shared-runner timing variation.
+`Test-BenchmarkHistory` consumes `run-report.json`, including raw samples, from
+the benchmark runner. It does not accept a summary as proof of a complete run.
+
+Accept a known healthy run explicitly:
+
+```powershell
+Test-BenchmarkHistory -ResultPath ./run-report.json -HistoryPath ./history.json `
+    -WorkloadId topology-fixture-v1 -RunnerIdentity dedicated-renderer -Update
+```
+
+Repeat acceptance for at least five independent runs, each with at least five
+successful measured iterations per lane. Then verify a new run without `-Update`:
+
+```powershell
+Test-BenchmarkHistory -ResultPath ./run-report.json -HistoryPath ./history.json `
+    -WorkloadId topology-fixture-v1 -RunnerIdentity dedicated-renderer
+```
+
+Choose a workload version or fixture hash that changes when the measured work
+changes. Choose a stable runner identity for a dedicated machine or comparable
+pool. OS, architecture, CPU, runtime, SDK, runner version, placement and measurement
+policy, profile, cooldown, and each external host's actual affinity and priority
+split calibration automatically. Windows, Linux and macOS histories may
+share one file; they do not share duration thresholds. Missing placement metadata
+cannot establish that processor placement was controlled.
+
+The PowerShell runner records the CLI SDK selected by `dotnet --version` from
+the benchmark source directory, including its `global.json` policy. An absent
+SDK or unresolved pin leaves this field empty. This describes the selected
+toolchain, not the build provenance of an externally supplied DLL; retain
+assembly hashes and build metadata separately when measuring such inputs.
+
+Each lane uses the median of the most recent twenty accepted run medians. Its
+upper limit adds the largest of `-RelativeTolerance` (default ten percent),
+`-AbsoluteToleranceMs` (default zero), or three times the median absolute deviation
+of those run medians. This is an observable noise allowance, not a statistical
+confidence bound or a portable performance guarantee. Adjust tolerances only from
+representative retained runs. The service retains all raw timings when deriving
+a run median, including outliers, and keeps at most five hundred accepted runs.
+
+Insufficient history returns `Calibrating = true` and `Passed = false`.
+`-AllowCalibration` permits that initial state without a terminating error; a
+regression or missing established lane still fails. Failed, skipped, duplicated
+or incomplete measured iterations cannot enter history. Verification never writes
+the file and can read a complete snapshot while an accepted update replaces it.
+`-Update` reports acceptance rather than a passing verification, supports
+`-WhatIf`, and uses the shared lock and atomic writer. Do not automatically accept a
+run after a failed gate. Keep the history file as a local or CI artifact alongside
+the complete run reports used to calibrate it.
+
+Timing history separates reports with different `operationTimingBoundary`
+metadata and different enabled memory-sampling intervals. Measurements of the
+guarded operation body require their own accepted references; earlier measurements
+that included invocation setup cannot qualify that cohort. Legacy reports without
+the boundary field retain their existing identity.
 
 ## Benchmark Specs
 
@@ -208,6 +269,12 @@ Setup, data generation, validation, and metric capture are outside the timed
 operation. Validation and metric failures are still recorded as failed benchmark
 samples so fast but invalid output is visible.
 
+Guard preparation, native-exit tracker setup, and DSL alias installation finish
+before timing starts. Timing stops in `finally` before the wrapper checks exit
+codes and restores caller state. Native failures still fail the sample, and an
+operation that throws retains its elapsed duration. Reports record this boundary
+as `operationTimingBoundary = GuardedScriptBodyV1`.
+
 ## Profiles And Cleanup
 
 `Set-BenchmarkProfile` selects runner behavior. Supported profile values are:
@@ -286,6 +353,11 @@ memory/statistical metrics, user parameters, and typed host details such as the
 operating system, CPU, architecture, runtime, SDK, and core counts. Directory
 imports retain that environment instead of flattening it into an unidentified
 combined result.
+
+For JSON exports that encode the job in `DisplayInfo`, the engine identity includes
+the job name and settings. Jobs with different settings stay separate even when
+they share a name. The importer reads the exporter's ampersand-separated parameter
+fields while preserving punctuation and empty values in that format.
 
 ## Cross-Platform Evidence
 
@@ -407,6 +479,74 @@ Update-BenchmarkDocument `
 ```
 
 The updater fails when the target document or marker block is missing.
+
+## Operation memory measurements
+
+The PowerShell runner records `AllocatedBytes` around the operation handler on
+modern .NET using the process-wide managed allocation counter. Setup, data
+preparation, configured memory cleanup, validation and metric callbacks are outside
+this interval. Host invocation and allocations on other managed threads in the
+same process are included. Run evidence on an idle host; the counter measures
+allocated bytes, not live objects or retained memory. .NET Framework reports a
+missing allocation observation because it has no equivalent counter.
+
+`WorkingSetDeltaBytes` is the signed difference between process working-set
+observations around the operation. It can be negative, includes native and managed
+resident pages, and is neither peak memory nor retained-memory evidence. Unavailable
+process observations remain missing rather than being reported as zero.
+
+Failed operations retain observations captured before failure; validation failures
+retain the completed operation's measurements. Setup failures have no operation
+measurement. Summary metrics contain the arithmetic mean of successful observations
+only when every successful sample has that counter. `Test-BenchmarkGate -Metric
+AllocatedBytes` can compare allocation summaries with a declared baseline; its
+absolute tolerance is expressed in the selected metric's units. Keep these
+machine-dependent gates in opt-in evidence runs.
+
+### Sampled operation memory
+
+Use `Set-BenchmarkPolicy -MemorySamplingIntervalMilliseconds 5` or the same
+`Invoke-BenchmarkSuite` override for opt-in memory observations. Zero disables
+sampling by default; valid enabled intervals are 1 through 1000 milliseconds.
+The runner observes managed-heap estimates and process resident pages at the
+operation boundaries and on a background thread during the operation. Startup,
+shutdown, setup, configured collection and validation stay outside elapsed timing.
+The observer itself allocates and perturbs scheduling; keep these runs separate
+from uninstrumented timing comparisons.
+
+Raw sample metrics retain `BaselineManagedHeapBytes`, `SampledMaxManagedHeapBytes`,
+`SampledManagedHeapDeltaBytes`, `MemorySampleCount` and `MemorySamplingIntervalMs`.
+`GC.GetTotalMemory(false)` estimates managed heap bytes without forcing collection;
+it can include objects awaiting collection. Available resident observations add
+`BaselineWorkingSetBytes`, `SampledMaxWorkingSetBytes`, `SampledWorkingSetDeltaBytes`
+and `WorkingSetSampleCount`. Missing resident observations remain absent rather
+than zero. Failed operations retain their observations. An unexpected observer
+failure fails the sample and records `MemorySamplingFailed`.
+
+The maxima are the largest observed values, not guaranteed peaks. Short operations
+may have only the two boundary observations, and scheduler delays can miss
+transients between samples. Resident values include managed and native pages;
+they do not isolate native allocations or prove retained native memory. Read the
+sample counts and raw values, retain slower cases, and qualify any budget on its
+actual host/workload. Summary values are means of per-operation observations.
+The sampling metric names are reserved only when sampling is enabled.
+
+### Collected managed-heap observations
+
+`PowerForge.BenchmarkManagedMemoryProbe` supports explicit retained-memory evidence.
+Construct it in setup after releasing previous results; call `Capture()` after
+validation and after releasing the current results. Both boundaries force garbage
+collection and wait for pending finalizers, outside the timed operation. The result
+contains `BaselineBytes`, `CollectedBytes` and a signed `DeltaBytes`. Repeated calls
+compare against the same original baseline; a negative delta is meaningful and is
+not clamped away.
+
+Record these values as custom benchmark metrics. They measure the whole process's
+live managed heap, including host state, caches and concurrent managed activity.
+They do not measure native allocations, peak memory or prove a leak in one operation.
+Warm up the workload, keep runs isolated, and compare equivalent repeated runs before
+choosing a budget. Full collection can disturb other work in the process; do not use
+this probe in normal application or correctness timing paths.
 
 ## Gates
 

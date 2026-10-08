@@ -55,13 +55,6 @@ public sealed partial class ModulePipelineRunner
             };
         }
 
-        if (surface.Formatting?.Options is { UpdateProjectRoot: false } &&
-            ModulePipelinePlanningHelpers.HasStandardFormattingConfiguration(surface.Formatting))
-        {
-            surface.Formatting.Options.UpdateProjectRoot = true;
-            _logger.Info("UpdateProjectRoot not explicitly set; enabling because Default* formatting targets are configured (legacy compatibility).");
-        }
-
         if (surface.RefreshManifestOnly)
         {
             if (surface.SignModule) _logger.Info("RefreshPSD1Only enabled: disabling signing for this run.");
@@ -99,8 +92,8 @@ public sealed partial class ModulePipelineRunner
             surface.EnabledArtefacts = Array.Empty<ConfigurationArtefactSegment>();
             surface.EnabledPublishes = Array.Empty<ConfigurationPublishSegment>();
             surface.Delivery = null;
-            surface.ProjectBuilds.RemoveAll(static build => build?.Configuration?.BuildBeforeModule != true);
-            surface.PackageBuilds.RemoveAll(static build => build?.Configuration?.BuildBeforeModule != true);
+            surface.ProjectBuilds.Clear();
+            surface.PackageBuilds.Clear();
             surface.AppleApps.Clear();
             surface.XcodeProjectVersions.Clear();
             surface.Release = null;

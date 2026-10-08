@@ -21,7 +21,7 @@ Submits a TestFlight build to Beta App Review for external testing.
 
 ### EXAMPLE 1
 ```powershell
-Submit-AppStoreConnectTestFlightBuildForReview -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value'
+Submit-AppStoreConnectTestFlightBuildForReview -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value' -Platform 'Value'
 ```
 
 

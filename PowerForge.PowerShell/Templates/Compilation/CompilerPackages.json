@@ -1,6 +1,16 @@
 {
   "packages": [
     {
+      "id": "System.Reflection.Metadata",
+      "version": "10.0.12",
+      "contentHash": "GvhJ5dVmJAw89wCWCyHXaU4A9iZjUtAW/ucshV6EpDW3l7VD8zHSWO14SHVD3m3jSuSE+FcNTrQFquJSQqJVVA=="
+    },
+    {
+      "id": "System.Collections.Immutable",
+      "version": "10.0.12",
+      "contentHash": "tRMzrybcwEEaudfpL9ghzfnSjEVVuhKa5sR86q30mYxXJdcKOLSBkpMFm62CGsbB50diPZta73Pxu8DgjGdDbA=="
+    },
+    {
       "id": "Microsoft.NETFramework.ReferenceAssemblies",
       "version": "1.0.3",
       "contentHash": "vUc9Npcs14QsyOD01tnv/m8sQUnGTGOw1BCmKcv77LBJY7OxhJ+zJF7UD/sCL3lYNFuqmQEVlkfS4Quif6FyYg=="
@@ -12,18 +22,13 @@
     },
     {
       "id": "Microsoft.PowerShell.SDK",
-      "version": "7.4.18",
-      "contentHash": "8A7dueENKUSfjDo2UXptob2nUmrPUi2MrBgdeiu88SpGZ2UYETC8C1r4Mj9b/USMFeD2Yc4JlNA70sduUhRapQ=="
-    },
-    {
-      "id": "Microsoft.PowerShell.SDK",
-      "version": "7.6.5",
-      "contentHash": "QQahpTrSQA0Bip0B+tkusI5SUHRYVbORpTlUZVLMWUwsdO2VVyDdpDDUMMbGZB6dw9JbwMA/B7auMAD3D9Ss/g=="
+      "version": "7.6.6",
+      "contentHash": "daxqvGA8Qx+GX+uthvQWEUwgg++3x9PbA2Ptis4jRBYSKeK1fEwxp72YgXvANeRiAmYeGYx3shwKkO08/AzVeA=="
     },
     {
       "id": "System.Security.Cryptography.Xml",
-      "version": "10.0.11",
-      "contentHash": "TokfVsaU2fmcwvsU6ihLCkseVfwhLX6Tmbl3qh3nOBIqHSX4yqFllpslA+PuHERH/ENu3kwqo4deZiyT0Wvh3Q=="
+      "version": "10.0.12",
+      "contentHash": "T3snzcc04R1JDj2XmzrLyk5fHT0YroBz5o2P+YdyJKYePSMqp8JsrxEJQPvUnK6oozQBvKLki9vnI7uMuWepKQ=="
     }
   ]
 }

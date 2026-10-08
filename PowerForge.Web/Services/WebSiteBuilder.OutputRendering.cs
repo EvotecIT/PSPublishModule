@@ -104,7 +104,7 @@ public static partial class WebSiteBuilder
         var assetMs = measure.ElapsedMilliseconds;
         measure.Restart();
         var localizationConfig = ResolveLocalizationConfig(spec);
-        var canonicalRoute = string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical;
+        var canonicalRoute = ResolveCanonicalRoute(spec, item);
         var canonicalUrl = ResolveAbsolutePublicUrl(spec, localizationConfig, item.Language, canonicalRoute);
         var canonical = string.IsNullOrWhiteSpace(canonicalUrl)
             ? string.Empty
@@ -176,6 +176,7 @@ public static partial class WebSiteBuilder
             PreloadsHtml = preloads,
             CriticalCssHtml = criticalCss,
             CanonicalHtml = canonical,
+            TitleHtml = System.Web.HttpUtility.HtmlEncode(pageTitle),
             DescriptionMetaHtml = descriptionMeta,
             HeadHtml = string.Join(
                 Environment.NewLine,

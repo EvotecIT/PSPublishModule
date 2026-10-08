@@ -89,11 +89,12 @@ internal static partial class Program
             return false;
         }
         PowerShellCompilationTargetContract? target = null;
-        var requestedFramework = TryGetOptionValue(args, "--framework") ?? "net8.0";
-        var semanticProfileId = TryGetOptionValue(args, "--semantic-profile") ??
-                                PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(requestedFramework);
+        var requestedFramework = TryGetOptionValue(args, "--framework") ?? PowerShellCompilationTargetFrameworkPolicy.Default;
+        string semanticProfileId;
         try
         {
+            semanticProfileId = TryGetOptionValue(args, "--semantic-profile") ??
+                                PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(requestedFramework);
             semanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId).ProfileId;
         }
         catch (Exception ex)
@@ -177,7 +178,7 @@ internal static partial class Program
         return new PowerShellCompilationAnalyzer(Array.Empty<PowerShellCompilationCommandProviderContract>(), request.SemanticProfileId).Analyze(
             resolved,
             request.Mode,
-            request.TargetContract?.TargetFramework ?? TryGetOptionValue(args, "--framework") ?? "net8.0",
+            request.TargetContract?.TargetFramework ?? TryGetOptionValue(args, "--framework") ?? PowerShellCompilationTargetFrameworkPolicy.Default,
             request.ResourceMode,
             GetOptionValues(args, "--include-resource"),
             GetOptionValues(args, "--exclude-resource"),
@@ -187,7 +188,7 @@ internal static partial class Program
 
     private static PowerShellCompilationExplanation CreatePowerShellExplanation(string[] args, PowerShellAnalysisRequest request)
     {
-        var targetFramework = request.TargetContract?.TargetFramework ?? TryGetOptionValue(args, "--framework") ?? "net8.0";
+        var targetFramework = request.TargetContract?.TargetFramework ?? TryGetOptionValue(args, "--framework") ?? PowerShellCompilationTargetFrameworkPolicy.Default;
         var resolved = new PowerShellCompilationInputResolver().Resolve(
             request.Path,
             request.Kind,

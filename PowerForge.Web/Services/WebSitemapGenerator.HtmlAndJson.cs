@@ -25,9 +25,10 @@ public static partial class WebSitemapGenerator
     private static readonly Regex TimeTagRegex = new("<time\\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant, HtmlRegexTimeout);
     private static readonly string[] NoIndexMetaNames = { "robots", "googlebot", "bingbot", "slurp" };
 
-    private static WebSitemapEntry BuildEntryFromHtmlFile(string filePath, string route)
+    private static WebSitemapEntry BuildEntryFromHtmlFile(string filePath, string route, string baseUrl)
     {
         var content = TryReadHtmlContent(filePath);
+        var signals = string.IsNullOrWhiteSpace(content) ? default : ReadCanonicalAndPublication(content!, ResolveAbsoluteUrl(baseUrl, route));
         var section = ResolveSectionFromRoute(route);
         var title = string.IsNullOrWhiteSpace(content) ? null : TryReadHtmlTitleFromContent(content!);
         if (string.IsNullOrWhiteSpace(title))
@@ -38,7 +39,9 @@ public static partial class WebSitemapGenerator
             Title = title,
             Section = section,
             LastModified = string.IsNullOrWhiteSpace(content) ? null : TryReadLastModifiedFromHtml(content!),
-            NoIndex = !string.IsNullOrWhiteSpace(content) && HasNoIndexRobots(content!),
+            Canonical = signals.Canonical,
+            PublicationDate = signals.PublicationDate,
+            NoIndex = signals.NoIndex || (!string.IsNullOrWhiteSpace(content) && HasNoIndexRobots(content!)),
             ImageUrls = string.IsNullOrWhiteSpace(content) ? Array.Empty<string>() : ExtractImageUrls(content!),
             VideoUrls = string.IsNullOrWhiteSpace(content) ? Array.Empty<string>() : ExtractVideoUrls(content!)
         };
@@ -350,6 +353,8 @@ public static partial class WebSitemapGenerator
                 Section = GetString(item, "section"),
                 Priority = GetString(item, "priority"),
                 ChangeFrequency = GetString(item, "changefreq") ?? GetString(item, "changeFrequency"),
+                Canonical = GetString(item, "canonical"),
+                PublicationDate = GetString(item, "publicationDate") ?? GetString(item, "datePublished"),
                 LastModified = GetString(item, "lastmod") ??
                                GetString(item, "lastModified") ??
                                GetString(item, "last_modified") ??
@@ -664,7 +669,11 @@ public static partial class WebSitemapGenerator
 
         var context = new TemplateContext
         {
-            LoopLimit = 0
+            LoopLimit = 0,
+            // Allow large maps beyond Scriban's 1 MiB default, while failing oversized renders explicitly.
+            LimitToString = 32 * 1024 * 1024,
+            OnStringLimit = Scriban.ScriptLimitBehavior.Throw,
+            OnOutputLimit = Scriban.ScriptLimitBehavior.Throw
         };
         context.PushGlobal(globals);
 
@@ -705,34 +714,35 @@ public static partial class WebSitemapGenerator
   <meta charset=""utf-8"" />
   <meta name=""viewport"" content=""width=device-width, initial-scale=1"" />
   <meta name=""robots"" content=""noindex"" />
-  <title>{{ title }}</title>
-  {{ if css_href != """" }}<link rel=""stylesheet"" href=""{{ css_href }}"" />{{ end }}
+  <title>{{ title | html.escape }}</title>
+  {{ if css_href != """" }}<link rel=""stylesheet"" href=""{{ css_href | html.escape }}"" />{{ end }}
   <style>
-    body { margin: 0; font-family: Segoe UI, Arial, sans-serif; background: #f8fafc; color: #0f172a; }
-    .pf-sitemap-wrap { max-width: 1080px; margin: 0 auto; padding: 38px 18px 44px; }
-    .pf-sitemap-meta { margin-top: 8px; color: #475569; font-size: 0.92rem; }
+    body { margin: 0; font-family: Segoe UI, Arial, sans-serif; background: var(--pf-bg, #f8fafc); color: var(--pf-ink, #0f172a); }
+    .pf-sitemap-wrap { box-sizing: border-box; max-width: 1080px; margin: 0 auto; padding: 38px 18px 44px; overflow-wrap: anywhere; }
+    .pf-sitemap-wrap h1, .pf-sitemap-group h2 { color: var(--pf-ink, #0f172a); }
+    .pf-sitemap-meta { margin-top: 8px; color: var(--pf-muted, #475569); font-size: 0.92rem; }
     .pf-sitemap-group { margin-top: 28px; }
     .pf-sitemap-group h2 { margin: 0 0 12px; font-size: 1.2rem; }
-    .pf-sitemap-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-    .pf-sitemap-item { border: 1px solid #cbd5e1; border-radius: 12px; padding: 10px 12px; background: #ffffff; }
-    .pf-sitemap-item a { text-decoration: none; font-weight: 600; }
-    .pf-sitemap-path { margin-top: 4px; font-size: 0.83rem; color: #64748b; }
-    .pf-sitemap-desc { margin-top: 6px; font-size: 0.9rem; color: #334155; }
+    .pf-sitemap-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+    .pf-sitemap-item { min-width: 0; border: 1px solid var(--pf-border, #cbd5e1); border-radius: 12px; padding: 10px 12px; background: var(--pf-card, #ffffff); }
+    .pf-sitemap-item a { color: var(--pf-accent, #1d4ed8); text-decoration: none; font-weight: 600; }
+    .pf-sitemap-path { margin-top: 4px; font-size: 0.83rem; color: var(--pf-muted, #64748b); }
+    .pf-sitemap-desc { margin-top: 6px; font-size: 0.9rem; color: var(--pf-ink, #334155); }
   </style>
 </head>
 <body>
   <main class=""pf-sitemap-wrap"">
-    <h1>{{ title }}</h1>
+    <h1>{{ title | html.escape }}</h1>
     <div class=""pf-sitemap-meta"">Generated {{ generated }} ({{ entries.size }} URLs)</div>
     {{ for group in groups }}
       <section class=""pf-sitemap-group"">
-        <h2>{{ group.name }}</h2>
+        <h2>{{ group.name | html.escape }}</h2>
         <ul class=""pf-sitemap-list"">
           {{ for item in group.items }}
             <li class=""pf-sitemap-item"">
-              <a href=""{{ item.url }}"">{{ item.title }}</a>
-              <div class=""pf-sitemap-path"">{{ item.path }}</div>
-              {{ if item.description != """" }}<div class=""pf-sitemap-desc"">{{ item.description }}</div>{{ end }}
+              <a href=""{{ item.url | html.escape }}"">{{ item.title | html.escape }}</a>
+              <div class=""pf-sitemap-path"">{{ item.path | html.escape }}</div>
+              {{ if item.description != """" }}<div class=""pf-sitemap-desc"">{{ item.description | html.escape }}</div>{{ end }}
             </li>
           {{ end }}
         </ul>

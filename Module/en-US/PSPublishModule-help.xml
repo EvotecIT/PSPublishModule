@@ -20624,7 +20624,7 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>NoInteractive</maml:name>
           <maml:description>
-            <maml:para>Disables interactive output mode. Reserved for future UI parity.</maml:para>
+            <maml:para>Disables the interactive Spectre progress view.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -20691,6 +20691,18 @@ because bundle signing follows the source publish target.</maml:para>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Quiet</maml:name>
+          <maml:description>
+            <maml:para>Suppresses progress and informational output while preserving results, warnings and errors.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -20878,7 +20890,7 @@ because bundle signing follows the source publish target.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>NoInteractive</maml:name>
           <maml:description>
-            <maml:para>Disables interactive output mode. Reserved for future UI parity.</maml:para>
+            <maml:para>Disables the interactive Spectre progress view.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -20945,6 +20957,18 @@ because bundle signing follows the source publish target.</maml:para>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Quiet</maml:name>
+          <maml:description>
+            <maml:para>Suppresses progress and informational output while preserving results, warnings and errors.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -21120,7 +21144,7 @@ because bundle signing follows the source publish target.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>NoInteractive</maml:name>
         <maml:description>
-          <maml:para>Disables interactive output mode. Reserved for future UI parity.</maml:para>
+          <maml:para>Disables the interactive Spectre progress view.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -21187,6 +21211,18 @@ because bundle signing follows the source publish target.</maml:para>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Quiet</maml:name>
+        <maml:description>
+          <maml:para>Suppresses progress and informational output while preserving results, warnings and errors.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -22949,7 +22985,7 @@ Defaults to powerforge.json in the project root.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Quiet</maml:name>
           <maml:description>
-            <maml:para>Suppresses host rendering and log output. Intended for callers that request structured results.</maml:para>
+            <maml:para>Suppresses progress and informational output while preserving warnings and errors. Intended for callers that request structured results.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -23340,7 +23376,7 @@ GitHub publish segments declared by the JSON module configuration.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Quiet</maml:name>
           <maml:description>
-            <maml:para>Suppresses host rendering and log output. Intended for callers that request structured results.</maml:para>
+            <maml:para>Suppresses progress and informational output while preserving warnings and errors. Intended for callers that request structured results.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -23634,7 +23670,7 @@ Defaults to powerforge.json in the project root.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Quiet</maml:name>
           <maml:description>
-            <maml:para>Suppresses host rendering and log output. Intended for callers that request structured results.</maml:para>
+            <maml:para>Suppresses progress and informational output while preserving warnings and errors. Intended for callers that request structured results.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -24279,7 +24315,7 @@ GitHub publish segments declared by the JSON module configuration.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>Quiet</maml:name>
         <maml:description>
-          <maml:para>Suppresses host rendering and log output. Intended for callers that request structured results.</maml:para>
+          <maml:para>Suppresses progress and informational output while preserving warnings and errors. Intended for callers that request structured results.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -29576,6 +29612,30 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ExitCode</maml:name>
+          <maml:description>
+            <maml:para>Sets the PowerShell host exit code to zero on success and one on failure.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NoInteractive</maml:name>
+          <maml:description>
+            <maml:para>Disables the interactive Spectre progress view.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Plan</maml:name>
           <maml:description>
             <maml:para>Generate a plan only (no build/publish actions).</maml:para>
@@ -29624,6 +29684,18 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Quiet</maml:name>
+          <maml:description>
+            <maml:para>Suppresses progress and informational output while preserving results, warnings and errors.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>UpdateVersions</maml:name>
           <maml:description>
             <maml:para>Run version update step.</maml:para>
@@ -29658,6 +29730,30 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ExitCode</maml:name>
+        <maml:description>
+          <maml:para>Sets the PowerShell host exit code to zero on success and one on failure.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NoInteractive</maml:name>
+        <maml:description>
+          <maml:para>Disables the interactive Spectre progress view.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -29702,6 +29798,18 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
         <maml:name>PublishNuget</maml:name>
         <maml:description>
           <maml:para>Publish packages to NuGet.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Quiet</maml:name>
+        <maml:description>
+          <maml:para>Suppresses progress and informational output while preserving results, warnings and errors.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -32214,6 +32322,18 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OptimizeSwift</maml:name>
+          <maml:description>
+            <maml:para>Optimize Swift while retaining the selected configuration and compilation conditions.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Platform</maml:name>
           <maml:description>
             <maml:para>Apple platform used to resolve the product directory.</maml:para>
@@ -32460,6 +32580,18 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OptimizeSwift</maml:name>
+        <maml:description>
+          <maml:para>Optimize Swift while retaining the selected configuration and compilation conditions.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -60763,6 +60895,18 @@ Build/powerforge.dotnetpublish.json.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OptimizeSwift</maml:name>
+          <maml:description>
+            <maml:para>Optimize Swift while retaining the selected configuration and compilation conditions.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Platform</maml:name>
           <maml:description>
             <maml:para>Apple platform used to resolve the product directory.</maml:para>
@@ -61029,6 +61173,18 @@ Build/powerforge.dotnetpublish.json.</maml:para>
         <maml:name>Launch</maml:name>
         <maml:description>
           <maml:para>Launch the app after a successful install.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OptimizeSwift</maml:name>
+        <maml:description>
+          <maml:para>Optimize Swift while retaining the selected configuration and compilation conditions.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>

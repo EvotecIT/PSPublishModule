@@ -40,19 +40,20 @@ internal static class SpectreProjectBuildConsoleUi
 
         WriteHeader(console, plan);
         var phases = ResolvePhases(plan);
+        var presentation = SpectreProgressPresentation.Create(console);
         ProjectBuildWorkflowResult? result = null;
         Exception? failure = null;
         SpectreProjectBuildProgressReporter? reporter = null;
 
         SpectreProgressDisplay.Run(
             console,
-            SpectreBuildProgressColumns.CreateStandard(),
+            presentation.CreateColumns(),
             context =>
             {
                 var tasks = phases.ToDictionary(
                     phase => phase,
                     phase => context.AddTask(BuildPendingLabel(phase), maxValue: 100, autoStart: false));
-                reporter = new SpectreProjectBuildProgressReporter(context, tasks);
+                reporter = new SpectreProjectBuildProgressReporter(context, tasks, presentation);
 
                 try
                 {
@@ -119,7 +120,7 @@ internal static class SpectreProjectBuildConsoleUi
     }
 
     private static string BuildPendingLabel(ProjectBuildProgressPhase phase)
-        => $"[grey]{Markup.Escape(GetPhaseName(phase))} — pending[/]";
+        => GetPhaseName(phase) + " — pending";
 
     private static string GetPhaseName(ProjectBuildProgressPhase phase)
         => phase switch
@@ -140,33 +141,39 @@ internal static class SpectreProjectBuildConsoleUi
         private readonly HashSet<ProjectBuildProgressPhase> _failed = new();
         private readonly Dictionary<ProjectBuildProgressPhase, (int Completed, int Total)> _phaseCounts = new();
         private readonly SpectreProgressLedger _ledger;
+        private readonly SpectreProgressPresentation _presentation;
 
         public SpectreProjectBuildProgressReporter(
             ProgressContext context,
-            IReadOnlyDictionary<ProjectBuildProgressPhase, ProgressTask> tasks)
+            IReadOnlyDictionary<ProjectBuildProgressPhase, ProgressTask> tasks,
+            SpectreProgressPresentation presentation)
         {
             _context = context;
             _tasks = tasks;
-            _ledger = new SpectreProgressLedger(context);
+            _presentation = presentation;
+            foreach (var entry in tasks) presentation.Register(entry.Value, entry.Key.ToString());
+            _ledger = new SpectreProgressLedger(context, presentation);
         }
 
         public void PhaseStarted(ProjectBuildProgressPhase phase, int totalItems, string? detail = null)
         {
-            if (!_tasks.TryGetValue(phase, out var task)) return;
+            if (!_tasks.TryGetValue(phase, out var task) || task.IsFinished) return;
             RememberCount(phase, 0, totalItems);
             if (!task.IsStarted) task.StartTask();
             task.Value = 0;
-            task.Description = BuildLabel(phase, detail, 0, totalItems, "cyan");
+            task.Description = BuildLabel(phase, detail, 0, totalItems);
+            _presentation.MarkStarted(task, phase.ToString());
         }
 
         public void PhaseUpdated(ProjectBuildProgressPhase phase, int completedItems, int totalItems, string? detail = null)
         {
-            if (!_tasks.TryGetValue(phase, out var task)) return;
+            if (!_tasks.TryGetValue(phase, out var task) || task.IsFinished) return;
             RememberCount(phase, completedItems, totalItems);
             if (!task.IsStarted) task.StartTask();
             var total = Math.Max(1, totalItems);
             task.Value = Math.Min(100, Math.Max(0, completedItems) * 100d / total);
-            task.Description = BuildLabel(phase, detail, completedItems, totalItems, "cyan");
+            task.Description = BuildLabel(phase, detail, completedItems, totalItems);
+            _presentation.MarkStarted(task, phase.ToString());
         }
 
         public void PhaseCompleted(ProjectBuildProgressPhase phase, string? detail = null)
@@ -174,9 +181,10 @@ internal static class SpectreProjectBuildConsoleUi
             if (!_tasks.TryGetValue(phase, out var task)) return;
             var count = GetTerminalCount(phase, completed: true);
             if (!task.IsStarted) task.StartTask();
-            task.Description = BuildLabel(phase, detail, count.Completed, count.Total, "green", "✓");
+            task.Description = BuildLabel(phase, detail, count.Completed, count.Total);
             task.Value = 100;
             task.StopTask();
+            _presentation.MarkTerminal(task, SpectreProgressLedgerState.Completed);
         }
 
         public void PhaseFailed(ProjectBuildProgressPhase phase, string? detail = null)
@@ -185,9 +193,10 @@ internal static class SpectreProjectBuildConsoleUi
             _failed.Add(phase);
             var count = GetTerminalCount(phase, completed: false);
             if (!task.IsStarted) task.StartTask();
-            task.Description = BuildLabel(phase, detail, count.Completed, count.Total, "red", "x");
+            task.Description = BuildLabel(phase, detail, count.Completed, count.Total);
             task.Value = 100;
             task.StopTask();
+            _presentation.MarkTerminal(task, SpectreProgressLedgerState.Failed);
         }
 
         public void ItemsPlanned(
@@ -225,9 +234,10 @@ internal static class SpectreProjectBuildConsoleUi
                 }
 
                 task.StartTask();
-                task.Description = BuildLabel(entry.Key, success ? "not required" : "skipped after failure", null, null, "grey", "–");
+                task.Description = BuildLabel(entry.Key, success ? "not required" : "skipped after failure", null, null);
                 task.Value = 100;
                 task.StopTask();
+                _presentation.MarkTerminal(task, SpectreProgressLedgerState.Skipped);
             }
 
             _ledger.FinishRemaining(success);
@@ -285,11 +295,8 @@ internal static class SpectreProjectBuildConsoleUi
             ProjectBuildProgressPhase phase,
             string? detail,
             int? completed,
-            int? total,
-            string color,
-            string? status = null)
+            int? total)
         {
-            var prefix = string.IsNullOrWhiteSpace(status) ? string.Empty : status + " ";
             var count = completed.HasValue && total.GetValueOrDefault() > 0
                 ? ProgressCounterFormatter.Format(
                     ProgressCounterFormatter.GetProjectBuildScope(phase),
@@ -297,7 +304,7 @@ internal static class SpectreProjectBuildConsoleUi
                     total.GetValueOrDefault()) + " — "
                 : string.Empty;
             var suffix = string.IsNullOrWhiteSpace(detail) ? string.Empty : $" — {detail}";
-            return $"[{color}]{Markup.Escape(prefix + count + GetPhaseName(phase) + suffix)}[/]";
+            return count + GetPhaseName(phase) + suffix;
         }
     }
 }

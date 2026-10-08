@@ -14,7 +14,6 @@ namespace PowerForge.Web.Cli;
 internal static partial class WebPipelineRunner
 {
     private const long MaxStateFileSizeBytes = 10 * 1024 * 1024;
-    private const int MaxStampFileCount = 1000;
     private static readonly TimeSpan DefaultWatchDebounce = TimeSpan.FromMilliseconds(250);
     private static readonly StringComparison FileSystemPathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase
@@ -34,7 +33,7 @@ internal static partial class WebPipelineRunner
         "privateGallery", "private-gallery", "privateGalleryFeed", "private-gallery-feed", "gallery",
         "portalDocs", "portal-docs", "portalDocsIndex", "portal-docs-index", "docs",
         "map", "maps", "input", "inputs", "sources", "mapFiles", "map-files",
-        "xml", "help", "helpPath", "assembly",
+        "xml", "xmls", "xmlPaths", "help", "helpPath", "assembly", "entries",
         "siteOut", "site-out", "outRoot", "out-root", "projectsOut", "projects-out",
         "changelog", "changelogPath", "changelog-path", "releasesPath", "releases-path",
         "discoverRoot", "discover-root",
@@ -233,8 +232,17 @@ internal static partial class WebPipelineRunner
             if (cacheable)
             {
                 var fingerprintSalt = fast ? $"fast|{PipelineToolFingerprint}" : PipelineToolFingerprint;
-                stepFingerprint = ComputeStepFingerprint(baseDir, step, fingerprintSalt);
-                if (cacheStateLocal!.Entries.TryGetValue(cacheKey, out var cacheEntry) &&
+                try
+                {
+                    stepFingerprint = ComputeStepFingerprint(baseDir, step, fingerprintSalt);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or ArgumentException or BadImageFormatException)
+                {
+                    // Discovery failure must never reuse an old output. Execute the task
+                    // so its normal validation reports the actionable configuration error.
+                    cacheable = false;
+                }
+                if (cacheable && cacheStateLocal!.Entries.TryGetValue(cacheKey, out var cacheEntry) &&
                     string.Equals(cacheEntry.Fingerprint, stepFingerprint, StringComparison.Ordinal) &&
                     !dependencyMiss &&
                     AreExpectedOutputsPresent(expectedOutputs) &&
@@ -261,8 +269,26 @@ internal static partial class WebPipelineRunner
                 }
             }
 
+            var failureProfileOutputIsSafe = true;
             try
             {
+                if ((task.Equals("build", StringComparison.OrdinalIgnoreCase) ||
+                     task.Equals("dotnet-publish", StringComparison.OrdinalIgnoreCase)) &&
+                    GetBool(step, "clean") == true)
+                {
+                    var cleanOutput = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+                    if (!string.IsNullOrWhiteSpace(cleanOutput))
+                        foreach (var input in pipelineSourcePaths)
+                            WebOutputPathGuard.ValidateSourceInput(cleanOutput, input);
+                }
+                // A preceding sitemap step can create index leaves absent during initial validation.
+                if (task.Equals("indexnow", StringComparison.OrdinalIgnoreCase))
+                {
+                    failureProfileOutputIsSafe = false;
+                    ValidateIndexNowOutputPaths(enabledIndexNowSteps, baseDir, pipelineSourcePaths,
+                        profileEnabled || profileWriteOnFail ? profilePath : null, cacheEnabled ? cachePath : null);
+                    failureProfileOutputIsSafe = true;
+                }
                 ExecuteTask(task, step, label, baseDir, fast, effectiveMode, logger, ref lastBuildOutPath, ref lastBuildUpdatedFiles, stepResult);
             }
             catch (Exception ex)
@@ -283,7 +309,7 @@ internal static partial class WebPipelineRunner
                 // - Success: write profile only when profile is enabled (to avoid noise/overhead).
                 // - Failure: write profile when profile is enabled OR profileOnFail is true (default),
                 //   so CI failures still produce actionable artifacts.
-                if (!string.IsNullOrWhiteSpace(profilePath) && (profileEnabled || profileWriteOnFail))
+                if (failureProfileOutputIsSafe && !string.IsNullOrWhiteSpace(profilePath) && (profileEnabled || profileWriteOnFail))
                 {
                     WritePipelineProfile(profilePath, result, logger);
                     result.ProfilePath = profilePath;
@@ -301,7 +327,8 @@ internal static partial class WebPipelineRunner
                     Message = stepResult.Message
                 };
                 cacheUpdated = true;
-                cacheOutputs[cacheKey] = expectedOutputs;
+                cacheOutputs[cacheKey] = task.Equals("sitemap", StringComparison.OrdinalIgnoreCase)
+                    ? GetExpectedStepOutputs(task, step, baseDir, lastBuildOutPath) : expectedOutputs;
             }
             result.Steps.Add(stepResult);
             stepResultsByIndex[stepIndex] = stepResult;

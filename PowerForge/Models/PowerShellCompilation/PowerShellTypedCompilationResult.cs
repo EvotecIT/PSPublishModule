@@ -186,8 +186,17 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Generated C# method name.</summary>
     public string GeneratedName { get; }
 
+    /// <summary>Whether the generated method operates on one managed module instance.</summary>
+    public bool IsInstanceMethod { get; internal set; }
+
+    /// <summary>Whether this private method implements the authored initialization unit.</summary>
+    public bool IsModuleInitializer { get; internal set; }
+
     /// <summary>Resolved CLR return type name.</summary>
     public string ReturnType { get; }
+
+    /// <summary>Inferred CLR type of success records, independent of a void streaming method return; empty when no output is inferred.</summary>
+    public string SuccessOutputType { get; internal set; } = string.Empty;
 
     /// <summary>Authored OutputType metadata, or an empty string when none is declared.</summary>
     public string DeclaredOutputType { get; }
@@ -195,8 +204,14 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Whether the authored output type is also a target-compatible CLR semantic contract.</summary>
     internal bool DeclaredOutputTypeIsSemanticContract { get; set; }
 
+    /// <summary>Authored output metadata attributes in source order.</summary>
+    internal PowerShellOutputTypeDeclaration[] OutputTypeDeclarations { get; set; } = Array.Empty<PowerShellOutputTypeDeclaration>();
+
     /// <summary>Typed method parameters.</summary>
     public PowerShellCompilationParameter[] Parameters { get; }
+
+    /// <summary>Native binding and invocation storage for a compiled function body, when required.</summary>
+    public PowerShellNativeFunctionBinding? NativeFunctionBinding { get; internal set; }
 
     /// <summary>One-based source line of the PowerShell function body.</summary>
     public int SourceLine { get; }
@@ -245,6 +260,12 @@ public sealed class PowerShellCompiledMethod
 
     /// <summary>Whether the generated method expects a cooperative provider cancellation token.</summary>
     public bool RequiresProviderCancellation { get; }
+
+    /// <summary>Whether the generated command requires native statement-error dispatch.</summary>
+    public bool RequiresPowerShellStatementErrors { get; internal set; }
+
+    /// <summary>Whether the generated method accepts the invocation's native loop-stopping callback.</summary>
+    public bool RequiresPowerShellStopping { get; internal set; }
 
     /// <summary>Whether adjacent command statements are dispatched as one PowerShell runtime region.</summary>
     public bool RequiresPowerShellCommandRegions { get; }
@@ -439,6 +460,9 @@ public sealed class PowerShellTypedCompilationResult
 
     /// <summary>Complete generated C# source.</summary>
     public string SourceCode { get; }
+
+    /// <summary>Instance lifetime contract, when this library contains managed module state.</summary>
+    public PowerShellRuntimeFreeModuleContract? RuntimeFreeModule { get; internal set; }
 
     /// <summary>Successfully translated methods.</summary>
     public PowerShellCompiledMethod[] Methods { get; }

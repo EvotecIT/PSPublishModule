@@ -30,6 +30,8 @@ internal sealed class AppleLocalDeploymentCliResult
 
     public string? SourceRevision { get; set; }
 
+    public bool? SourceDirty { get; set; }
+
     public string? Device { get; set; }
 
     public string? InstallRoot { get; set; }

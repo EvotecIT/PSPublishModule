@@ -115,14 +115,11 @@ $process.Id
     [PinnedSemanticHostFact]
     public void DirectProcessEffectsExecuteOnConfiguredExactPowerShellProfiles()
     {
-        var powerShell74Path = Environment.GetEnvironmentVariable("POWERFORGE_PWSH74_PATH");
         var powerShell76Path = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH");
-        Assert.False(string.IsNullOrWhiteSpace(powerShell74Path));
         Assert.False(string.IsNullOrWhiteSpace(powerShell76Path));
         var profiles = new[]
         {
             (PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId, (string?)null),
-            (PowerShellCompilationSemanticOracleCatalog.PowerShell74ProfileId, powerShell74Path),
             (PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, powerShell76Path)
         };
 

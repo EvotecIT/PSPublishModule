@@ -1562,7 +1562,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         public ModuleValidationReport ValidateModule(ModuleValidationSpec spec)
             => throw new InvalidOperationException("Validation is not used in this test.");
 
-        public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget)
+        public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget, IReadOnlyDictionary<string, string[]>? optionalDependencies = null)
         {
             if (BinaryDependencyValidation is null)
                 throw new InvalidOperationException("Binary validation is not used in this test.");

@@ -18,6 +18,55 @@ public class WebSocialCardGeneratorTests
     }
 
     [Fact]
+    public void RenderSvg_PanelLayout_ShowsChipsAddressAndHeadlineStats()
+    {
+        var svg = WebSocialCardGenerator.RenderSvg(new WebSocialCardGenerator.SocialCardRenderOptions
+        {
+            Title = "PSWriteHTML",
+            Description = "Generate HTML reports, dashboards, and emails from PowerShell.",
+            Eyebrow = "Evotec",
+            Badge = "PowerShell module",
+            VariantKey = "panel",
+            AccentColor = "#2563EB",
+            SiteAddress = "evotec.xyz",
+            Chips = new[] { "PowerShell", "Docs", "Examples" },
+            Metrics = new[]
+            {
+                new SocialCardMetricSpec { Icon = "star", Value = "1k", Label = "Stars" },
+                new SocialCardMetricSpec { Icon = "issue", Value = "54", Label = "Issues" },
+                new SocialCardMetricSpec { Icon = "download", Value = "7.6M", Label = "Downloads" },
+                new SocialCardMetricSpec { Icon = "tag", Value = "PSWriteHTML-v1.41.0", Label = "Release" },
+                new SocialCardMetricSpec { Icon = "book", Value = "yes", Label = "Docs" }
+            }
+        });
+
+        Assert.Contains("layout:panel", svg, StringComparison.Ordinal);
+        Assert.Contains(">POWERSHELL MODULE<", svg, StringComparison.Ordinal);
+        Assert.Contains(">PowerShell<", svg, StringComparison.Ordinal);
+        Assert.Contains(">evotec.xyz<", svg, StringComparison.Ordinal);
+        Assert.Contains(">7.6M<", svg, StringComparison.Ordinal);
+        Assert.Contains(">v1.41.0<", svg, StringComparison.Ordinal);
+        Assert.Contains("fill=\"#2563EB\"", svg, StringComparison.Ordinal);
+        // Issue counts and yes/no flags are not headline stats.
+        Assert.DoesNotContain(">54<", svg, StringComparison.Ordinal);
+        Assert.DoesNotContain(">yes<", svg, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("ChartForgeX-v1.8.2", "v1.8.2")]
+    [InlineData("v1.41.0", "v1.41.0")]
+    [InlineData("1.2.3", "v1.2.3")]
+    [InlineData("2.0.0-preview1", "v2.0.0-preview1")]
+    [InlineData("v1.2.3-rc-1", "v1.2.3-rc-1")]
+    [InlineData("Product-v1.2.3-beta-2", "v1.2.3-beta-2")]
+    [InlineData("v1.2.3+build-7", "v1.2.3+build-7")]
+    [InlineData("OfficeIMO-v20260927150127", "OfficeIMO-v20260927150127")]
+    public void ShortenReleaseTag_KeepsTheVersion(string tag, string expected)
+    {
+        Assert.Equal(expected, WebSocialCardGenerator.ShortenReleaseTag(tag));
+    }
+
+    [Fact]
     public void SelectPalette_UsesGenericThemeColorTokens_WhenAvailable()
     {
         var tokens = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)

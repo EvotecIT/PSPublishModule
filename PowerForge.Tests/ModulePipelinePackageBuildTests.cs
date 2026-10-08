@@ -259,8 +259,11 @@ public sealed partial class ModulePipelinePackageBuildTests
         }
     }
 
-    [Fact]
-    public void Run_PreservesDefaultProjectBuildActionsWhenOneDslActionIsOverridden()
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public void Run_ProjectBuildDefaultsDoNotEnableVersionUpdates(bool? build, bool expectedBuild)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -318,7 +321,8 @@ public sealed partial class ModulePipelinePackageBuildTests
                             Name = "JsonPackages",
                             ConfigPath = Path.Combine("Build", "project.build.json"),
                             BuildBeforeModule = true,
-                            PublishNuget = false
+                            Build = build,
+                            PublishNuget = build is null ? null : false
                         }
                     }
                 }
@@ -327,8 +331,8 @@ public sealed partial class ModulePipelinePackageBuildTests
             runner.Run(spec);
 
             var call = Assert.Single(calls);
-            Assert.True(call.Request.UpdateVersions);
-            Assert.True(call.Request.Build);
+            Assert.False(call.Request.UpdateVersions);
+            Assert.Equal(expectedBuild, call.Request.Build);
             Assert.False(call.Request.PublishNuget);
             Assert.False(call.Request.PublishGitHub);
         }
@@ -510,7 +514,7 @@ public sealed partial class ModulePipelinePackageBuildTests
             var result = runner.Run(spec, plan, new RecordingProgressReporter());
 
             Assert.Equal(2, calls.Count);
-            Assert.True(calls[0].Request.UpdateVersions);
+            Assert.False(calls[0].Request.UpdateVersions);
             Assert.True(calls[0].Request.Build);
             Assert.False(calls[0].Request.PublishNuget);
             Assert.False(calls[0].Request.PublishGitHub);
@@ -882,7 +886,9 @@ public sealed partial class ModulePipelinePackageBuildTests
             Assert.True(call.Request.Build);
             Assert.False(call.Request.PublishNuget);
             Assert.False(call.Request.PublishGitHub);
-            Assert.Null(call.Configuration?.CertificateThumbprint);
+            Assert.Equal("ABC123", call.Configuration?.CertificateThumbprint);
+            Assert.True(call.Configuration?.SignAssemblies);
+            Assert.True(call.Configuration?.SignPackages);
         }
         finally
         {
@@ -892,7 +898,7 @@ public sealed partial class ModulePipelinePackageBuildTests
     }
 
     [Fact]
-    public void Run_GateDocumentation_KeepsPreModulePackageBuildWithoutVersionUpdates()
+    public void Run_GateDocumentation_SkipsInlinePackageBuild()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
@@ -977,17 +983,9 @@ public sealed partial class ModulePipelinePackageBuildTests
 
             var result = runner.Run(spec);
 
-            var call = Assert.Single(calls);
             Assert.Equal(ConfigurationGateMode.Documentation, result.Plan.GateMode);
-            Assert.Single(result.ProjectBuildResults);
-            Assert.False(call.Request.UpdateVersions);
-            Assert.True(call.Request.Build);
-            Assert.False(call.Request.PublishNuget);
-            Assert.False(call.Request.PublishGitHub);
-            Assert.Null(call.Configuration?.CertificateThumbprint);
-            Assert.False(call.Configuration?.SignAssemblies);
-            Assert.False(call.Configuration?.SignPackages);
-            Assert.False(call.Configuration?.CreateReleaseZip);
+            Assert.Empty(calls);
+            Assert.Empty(result.ProjectBuildResults);
         }
         finally
         {
@@ -997,7 +995,7 @@ public sealed partial class ModulePipelinePackageBuildTests
     }
 
     [Fact]
-    public void Run_GateDocumentation_ClearsReferencedProjectBuildSigning()
+    public void Run_GateDocumentation_SkipsReferencedProjectBuild()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
@@ -1094,15 +1092,9 @@ public sealed partial class ModulePipelinePackageBuildTests
 
             var result = runner.Run(spec);
 
-            var call = Assert.Single(calls);
             Assert.Equal(ConfigurationGateMode.Documentation, result.Plan.GateMode);
-            Assert.True(call.Request.Build);
-            Assert.False(call.Request.PublishNuget);
-            Assert.False(call.Request.PublishGitHub);
-            Assert.Null(call.Configuration?.CertificateThumbprint);
-            Assert.False(call.Configuration?.SignAssemblies);
-            Assert.False(call.Configuration?.SignPackages);
-            Assert.False(call.Configuration?.CreateReleaseZip);
+            Assert.Empty(calls);
+            Assert.Empty(result.ProjectBuildResults);
         }
         finally
         {

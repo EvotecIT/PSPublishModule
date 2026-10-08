@@ -259,6 +259,11 @@ public sealed class SetBenchmarkPolicyCommand : BenchmarkDslCommand
     [Parameter]
     public PowerShellBenchmarkOutlierMode? OutlierMode { get; set; }
 
+    /// <summary>Opt-in operation memory sampling interval; zero disables sampling.</summary>
+    [Parameter]
+    [ValidateRange(0, 1000)]
+    public int? MemorySamplingIntervalMilliseconds { get; set; }
+
     /// <summary>Optional Windows processor mask, restricted to the process's current mask and one processor group.</summary>
     [Parameter]
     public ulong? ProcessorAffinityMask { get; set; }
@@ -278,7 +283,8 @@ public sealed class SetBenchmarkPolicyCommand : BenchmarkDslCommand
             CooldownMilliseconds,
             OutlierMode?.ToString(),
             ProcessorAffinityMask,
-            ProcessPriority?.ToString());
+            ProcessPriority?.ToString(),
+            MemorySamplingIntervalMilliseconds);
 }
 
 /// <summary>

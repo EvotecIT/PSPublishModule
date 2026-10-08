@@ -1,0 +1,350 @@
+{
+  "SchemaVersion": 1,
+  "Purpose": "Generated non-clean native function registration preserves declaration metadata using fresh compilation data and compiler-owned storage/clause stubs.",
+  "BaselineCommit": "fec94efdff42c4f41e74f134c54e35dfbb201b0d",
+  "SourceAndTestHashes": [
+    {
+      "Path": "PowerForge.PowerShell/Services/Compilation/PowerShellCommandHostRuntimeSource.cs",
+      "Sha256": "0e3302d9b1ce86bdada4f3861e833b9a9aba352abca9fd591a5ceae4e641ff8f"
+    },
+    {
+      "Path": "PowerForge.PowerShell/Services/Compilation/PowerShellNativeFunctionSourceGenerator.cs",
+      "Sha256": "9a8668b41c04bff1120f1521bdadceac9a6c2c61a7b43b9cf1ffaad1b509949f"
+    },
+    {
+      "Path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.Declared.cs",
+      "Sha256": "35f32cf91185110b6064644560206239daaab5d039e32bff423d43630f194bda"
+    },
+    {
+      "Path": "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.cs",
+      "Sha256": "379ecc783ee60cd3190f7a0e227b489e9728c8d01deec8cfdbeee177fbbb3319"
+    },
+    {
+      "Path": "PowerForge.Tests/Fixtures/PowerShellCompilationStatementErrorFixture/NativeAuthoredMetadataFixture.cs",
+      "Sha256": "fd37ecdb31b904efb10bc4f21a147a24217cb2ada3211dfe60932f08ffc62108"
+    },
+    {
+      "Path": "PowerForge.Tests/Fixtures/PowerShellCompilationStatementErrorFixture/NativeAuthoredMetadataProbe.ps1",
+      "Sha256": "144a89e3122a8afe9216cdaaaea687722174470a7d5bbbc7c247234482f4ce36"
+    },
+    {
+      "Path": "PowerForge.Tests/PowerShellCompilationNativeFunctionHostTests.cs",
+      "Sha256": "8b24a0e2dc5682235b81369e6a2ad2ee8cf1814b7b3c1a06516f6d71bd3e3a87"
+    }
+  ],
+  "Validation": {
+    "FocusedRuns": [
+      {
+        "File": "declared-registration-included-runtime.trx",
+        "Sha256": "eb2ff336601bb63ac2b2d4f46450b7d3f937ece5bb178a701aa55f288c3d883a",
+        "Passed": 16,
+        "Failed": 0,
+        "Tests": [
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeDeclarations_PreserveAuthoredMetadataWithIndependentCompiledStorage(framework: \"net472\", host: \"powershell.exe\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:01.2892709"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeLifecycle_PreservesFailuresReturnsBindingAndClean(framework: \"net472\", host: \"powershell.exe\", scriptBlock: True)",
+            "Outcome": "Passed",
+            "Duration": "00:00:03.1200792"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeDeclarations_PreserveAuthoredMetadataWithIndependentCompiledStorage(framework: \"net10.0\", host: \"pwsh\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:01.4660083"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeLifecycle_PreservesDefaultsValidationParameterSetsAndCallbacks(framework: \"net10.0\", host: \"pwsh\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:03.0302063"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeLifecycle_PreservesClauseOrderLiveStorageAndPipelineBinding(framework: \"net10.0\", host: \"pwsh\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:03.0117866"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeLifecycle_PreservesClauseOrderLiveStorageAndPipelineBinding(framework: \"net472\", host: \"powershell.exe\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:04.0964524"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeLifecycle_PreservesFailuresReturnsBindingAndClean(framework: \"net472\", host: \"powershell.exe\", scriptBlock: False)",
+            "Outcome": "Passed",
+            "Duration": "00:00:02.9732052"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeLifecycle_CancellationPreservesFinallyCleanAndRunspaceReuse(framework: \"net10.0\", host: \"pwsh\", scriptBlock: True)",
+            "Outcome": "Passed",
+            "Duration": "00:00:03.7267136"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeLifecycle_PreservesCleanOnlyAndEmptyClauseScheduling(framework: \"net10.0\", host: \"pwsh\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:02.8895347"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeLifecycle_PreservesFailuresReturnsBindingAndClean(framework: \"net10.0\", host: \"pwsh\", scriptBlock: True)",
+            "Outcome": "Passed",
+            "Duration": "00:00:03.2493978"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeLifecycle_PreservesDefaultsValidationParameterSetsAndCallbacks(framework: \"net472\", host: \"powershell.exe\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:02.7113665"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeLifecycle_CancellationPreservesFinallyCleanAndRunspaceReuse(framework: \"net10.0\", host: \"pwsh\", scriptBlock: False)",
+            "Outcome": "Passed",
+            "Duration": "00:00:03.5539640"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeLifecycle_CancellationPreservesFinallyCleanAndRunspaceReuse(framework: \"net472\", host: \"powershell.exe\", scriptBlock: False)",
+            "Outcome": "Passed",
+            "Duration": "00:00:03.0051622"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeLifecycle_CancellationPreservesFinallyCleanAndRunspaceReuse(framework: \"net472\", host: \"powershell.exe\", scriptBlock: True)",
+            "Outcome": "Passed",
+            "Duration": "00:00:03.0767723"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridExecutableExecutesNativeFunctionsInEntryAndContainedDependency",
+            "Outcome": "Passed",
+            "Duration": "00:00:13.7989658"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeLifecycle_PreservesFailuresReturnsBindingAndClean(framework: \"net10.0\", host: \"pwsh\", scriptBlock: False)",
+            "Outcome": "Passed",
+            "Duration": "00:00:03.3653654"
+          }
+        ]
+      },
+      {
+        "File": "declared-registration-storage-and-closure.trx",
+        "Sha256": "ed63dc31542567826045f6e665727b9c3768b2c033296d681dd29d4a1fee666c",
+        "Passed": 34,
+        "Failed": 0,
+        "Tests": [
+          {
+            "Name": "PowerForge.Tests.PowerShellSourceTypeClosureTests.ClassPropertiesAndOverloadedMethodsKeepSeparateConsumerIdentities",
+            "Outcome": "Passed",
+            "Duration": "00:00:00.0160189"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NestedFunctions_PreserveDeclarationScopeMetadataRecursionAndEscape(framework: \"net472\", host: \"powershell.exe\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:02.9668720"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellSourceTypeClosureTests.AuthoredMetadataAndNestedTypeArgumentsRetainTheirSourceDependencies",
+            "Outcome": "Passed",
+            "Duration": "00:00:00.0081225"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellSourceTypeClosureTests.AttributeNameAmbiguityKeepsEveryDeclarationCandidate",
+            "Outcome": "Passed",
+            "Duration": "00:00:00.0016821"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellSourceTypeClosureTests.FunctionHeaderParametersKeepAttributeAndNestedTypeDependencies",
+            "Outcome": "Passed",
+            "Duration": "00:00:00.0821569"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationBoundPipelineTests.NestedFunctions_RetainOwnerWhenDeclarationOrChildCannotCompile(declaration: \"function Read-Child { trap { continue }; 'value' }\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:00.0006518"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeDeclarations_CompileConstraintsAndPreserveFailureContinuation(framework: \"net10.0\", host: \"pwsh\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:03.6683293"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NestedFunctions_PreserveFilterRecordsAndHeaderParameterMetadata(framework: \"net472\", host: \"powershell.exe\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:02.7305593"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.TypedLocalCapture_PreservesFailureContinuationAndPreviousAssignment(framework: \"net10.0\", host: \"pwsh\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:03.4218557"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NestedFunctions_QualifyUnchangedOfflineCloudReportMerge(framework: \"net472\", host: \"powershell.exe\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:04.7369857"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationBoundPipelineTests.NestedFunctions_RetainOwnerWhenDeclarationOrChildCannotCompile(declaration: \"filter Read-Child { trap { continue }; $_ }\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:00.0043697"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.TypedLocalCapture_OuterErrorMergeBypassesConsumedSuccessOutput(framework: \"net10.0\", host: \"pwsh\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:03.2442894"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationBoundPipelineTests.NestedFunctions_RejectRuntimeFreeLoweringOfFilterAndHeaderDeclarations(framework: \"net472\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:00.0298534"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellSourceTypeClosureTests.DeclarationFactsDoNotAuthorizeDetachingMetadataOrRemovingSourceGuard",
+            "Outcome": "Passed",
+            "Duration": "00:00:00.0016790"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.TypedLocalCapture_PreservesRecordShapeAcrossCallPositions(framework: \"net472\", host: \"powershell.exe\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:02.9606827"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NestedFunctions_PreserveDeclarationScopeMetadataRecursionAndEscape(framework: \"net10.0\", host: \"pwsh\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:03.2447552"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationBoundPipelineTests.NestedFunctions_RetainOwnerWhenDeclarationOrChildCannotCompile(declaration: \"function Read-Child { param($__writeOutput) $__wri\"···)",
+            "Outcome": "Passed",
+            "Duration": "00:00:00.0034558"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HybridRegions_PreserveHostedClassIdentityWithoutDetachingItsFunction(framework: \"net10.0\", host: \"pwsh\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:02.6165526"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationBoundPipelineTests.NestedFunctions_RejectRuntimeFreeDynamicDeclarations(framework: \"net10.0\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:00.0100383"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.TypedLocalCapture_PreservesConsumedOutputAndOperandOrder(framework: \"net10.0\", host: \"pwsh\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:03.3453514"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NestedFunctions_QualifyUnchangedOfflineCloudReportMerge(framework: \"net10.0\", host: \"pwsh\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:04.0000330"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeDeclarations_CompileConstraintsAndPreserveFailureContinuation(framework: \"net472\", host: \"powershell.exe\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:03.9845231"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NestedFunctions_QualifyUnchangedOfflineObjectFormattingFilters(framework: \"net472\", host: \"powershell.exe\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:08.3404439"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationBoundPipelineTests.NestedFunctions_RetainOwnerWhenDeclarationOrChildCannotCompile(declaration: \"function Read-Child { dynamicparam { } end { 'valu\"···)",
+            "Outcome": "Passed",
+            "Duration": "00:00:00.0007345"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.TypedLocalCapture_PreservesRecordShapeAcrossCallPositions(framework: \"net10.0\", host: \"pwsh\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:03.4452857"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationBoundPipelineTests.NestedFunctions_RejectRuntimeFreeLoweringOfFilterAndHeaderDeclarations(framework: \"net10.0\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:00.2774559"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.TypedLocalCapture_PreservesConsumedOutputAndOperandOrder(framework: \"net472\", host: \"powershell.exe\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:02.9176941"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.TypedLocalCapture_OuterErrorMergeBypassesConsumedSuccessOutput(framework: \"net472\", host: \"powershell.exe\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:04.1607120"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HybridRegions_PreserveHostedClassIdentityWithoutDetachingItsFunction(framework: \"net472\", host: \"powershell.exe\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:02.1510116"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.TypedLocalCapture_PreservesFailureContinuationAndPreviousAssignment(framework: \"net472\", host: \"powershell.exe\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:02.8954478"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationBoundPipelineTests.NestedFunctions_RejectRuntimeFreeDynamicDeclarations(framework: \"net472\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:00.0006185"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationBoundPipelineTests.NestedFunctions_RetainOwnerWhenDeclarationOrChildCannotCompile(declaration: \"function Read-Child([Missing.Authored.Type]$Value)\"···)",
+            "Outcome": "Passed",
+            "Duration": "00:00:00.0062398"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NestedFunctions_QualifyUnchangedOfflineObjectFormattingFilters(framework: \"net10.0\", host: \"pwsh\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:07.5501689"
+          },
+          {
+            "Name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NestedFunctions_PreserveFilterRecordsAndHeaderParameterMetadata(framework: \"net10.0\", host: \"pwsh\")",
+            "Outcome": "Passed",
+            "Duration": "00:00:03.1734005"
+          }
+        ]
+      }
+    ],
+    "TotalPassed": 50,
+    "TotalFailed": 0,
+    "Net472OwnerBuild": {
+      "Passed": true,
+      "Warnings": 0,
+      "Errors": 0,
+      "Seconds": 4.21
+    },
+    "ClaimedHosts": [
+      "PowerShell 7.6.6 / net10.0 Windows",
+      "Windows PowerShell 5.1.26100.9444 / net472 Windows"
+    ],
+    "ExecutableHost": "net10.0 / Windows x64",
+    "SyntheticAuthoredMetadataRecordsPerHost": 15
+  },
+  "IndependentReview": {
+    "ReadOnly": true,
+    "Findings": 0,
+    "TestsRerunByReviewer": false,
+    "StagedPatchSha256": "bb00ce9b94dfa36ade5df3d41e0514c76b4c7576e500b972586623e7654072e7",
+    "Scope": [
+      "PowerForge.PowerShell/Services/Compilation/PowerShellCommandHostRuntimeSource.cs",
+      "PowerForge.PowerShell/Services/Compilation/PowerShellNativeFunctionSourceGenerator.cs",
+      "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.Declared.cs",
+      "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.cs",
+      "PowerForge.Tests/Fixtures/PowerShellCompilationStatementErrorFixture/NativeAuthoredMetadataFixture.cs",
+      "PowerForge.Tests/Fixtures/PowerShellCompilationStatementErrorFixture/NativeAuthoredMetadataProbe.ps1"
+    ]
+  },
+  "Safety": {
+    "OriginalAstPreserved": true,
+    "FreshCompilationData": true,
+    "CallbacksCoverAllSupportedDeclaredClauses": true,
+    "DynamicParametersAndTrapsRejected": true,
+    "CleanCompatibilityRoutePreserved": true,
+    "AuthoredBodiesInGeneratedStubs": false,
+    "SecurityRejectedPrototypeRetried": false
+  },
+  "Limits": [
+    "source-defined type admission unchanged; runtime-free Strict unchanged",
+    "no new emitted external functions or refreshed full portfolio census",
+    "private PowerShell ABI qualified only on claimed Windows hosts",
+    "authored metadata constructors/default effects and separate module/runspace/reimport identities require future declaration qualification",
+    "clean functions keep their existing reparsed metadata compatibility path",
+    "external reflection workflow is still original-only until lexical declaration qualification"
+  ]
+}

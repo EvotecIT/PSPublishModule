@@ -29,7 +29,7 @@ public sealed class SocialSpec
     public int GeneratedCardHeight { get; set; } = 630;
     /// <summary>Optional default style key for generated social cards (home/default/docs/api/blog/contact).</summary>
     public string? GeneratedCardStyle { get; set; }
-    /// <summary>Optional default layout variant for generated social cards (product/spotlight/shelf/reference/editorial/inline-image/connect).</summary>
+    /// <summary>Optional default layout variant for generated social cards (product/panel/spotlight/shelf/reference/editorial/inline-image/connect).</summary>
     public string? GeneratedCardVariant { get; set; }
     /// <summary>Optional named theme applied to generated social cards.</summary>
     public string? GeneratedCardTheme { get; set; }
@@ -43,6 +43,12 @@ public sealed class SocialSpec
     public Dictionary<string, string>? GeneratedCardStylesByCollection { get; set; }
     /// <summary>Optional per-collection variant overrides for generated social cards.</summary>
     public Dictionary<string, string>? GeneratedCardVariantsByCollection { get; set; }
+    /// <summary>
+    /// Collections whose pages always get a generated card (for example projects and products).
+    /// A page image such as meta.social_image is then shown inside the card instead of replacing it.
+    /// Pages can still opt out with meta.social_card: false.
+    /// </summary>
+    public List<string>? GeneratedCardCollections { get; set; }
     /// <summary>Optional default color scheme for generated social cards (dark/light).</summary>
     public string? GeneratedCardColorScheme { get; set; }
     /// <summary>Optional per-collection color scheme overrides for generated social cards.</summary>
@@ -58,7 +64,7 @@ public sealed class SocialCardThemeSpec
 {
     /// <summary>Optional style key for this theme (home/default/docs/api/blog/contact).</summary>
     public string? Style { get; set; }
-    /// <summary>Optional layout variant for this theme (product/spotlight/shelf/reference/editorial/inline-image/connect).</summary>
+    /// <summary>Optional layout variant for this theme (product/panel/spotlight/shelf/reference/editorial/inline-image/connect).</summary>
     public string? Variant { get; set; }
     /// <summary>Optional color scheme for this theme (dark/light).</summary>
     public string? ColorScheme { get; set; }

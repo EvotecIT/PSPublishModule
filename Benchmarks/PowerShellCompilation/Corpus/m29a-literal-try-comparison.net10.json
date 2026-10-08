@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Native try-valued literal capture; inventory emission separate from execution qualification.",
+  "baselineCompilerCommit": "3e681be86c45c2f0fb3dd56ba1e7ac21abdd5745",
+  "baselineComparison": "m29a-direct-try-comparison.net10.json",
+  "baselineComparisonSha256": "ec44fa4f68a5b1a334d43f393114ab85969d623dd678fce7c154e787070c9985",
+  "baselineRetainedInventorySha256": "0ff4788830bbb4c5cc7745ff9a787e4bee0e115759a54052f8f0be663db11c3e",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 492,
+  "packets": [
+    {
+      "packet": "pssg",
+      "functions": 282,
+      "stableUnits": 286,
+      "baselineEmitted": 257,
+      "candidateEmitted": 257,
+      "candidateExplanationSha256": "8ef94786e70f058bb1db026a57f1b2492567faab6a851d3feca61fe3878b02a5",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "cleanup",
+      "functions": 68,
+      "stableUnits": 69,
+      "baselineEmitted": 63,
+      "candidateEmitted": 63,
+      "candidateExplanationSha256": "2bbf6f6e8e65331279909f4db0ea6c9e8e1e671cb32f7a1ebc09fc8a5e3824e1",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "functions": 66,
+      "stableUnits": 67,
+      "baselineEmitted": 61,
+      "candidateEmitted": 61,
+      "candidateExplanationSha256": "73172aaac03d1c74782e361a0716d2c2d0c14b80abae98e870ef80c8253a8ee2",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "functions": 109,
+      "stableUnits": 121,
+      "baselineEmitted": 84,
+      "candidateEmitted": 84,
+      "candidateExplanationSha256": "bb7f462c3e2d95e8a13d75c4b0bef1d70fe6098c9821d5e99f709c70769ac6c3",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    },
+    {
+      "packet": "platyps",
+      "functions": 40,
+      "stableUnits": 41,
+      "baselineEmitted": 27,
+      "candidateEmitted": 27,
+      "candidateExplanationSha256": "fa72aa42eed85489d239ef71717d76bfaebd13681885e2d658cb61269e1cc9ea",
+      "lostMethods": 0,
+      "lostRetainedRegions": 0,
+      "changes": []
+    }
+  ],
+  "candidateEmitted": 492,
+  "candidateRetained": 73,
+  "compilerSourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellBoundOptimizer.cs": "82e5e210cc1c34a1f5392a6eec00dfbff0c60553b3b767cf9bdde2a05c87e05b",
+    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellImplicitOutputPass.cs": "1668fce929eea6557548d3c83a46d8e7ccb1bbb204011db62dfb5304dba05d75",
+    "PowerForge.PowerShell/Services/Compilation/Analysis/PowerShellSemanticAnalyzer.cs": "984cb60676a54c415b306c1543aa365b67dddb14e87fc4db13d35d94c5317040",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.OutputCapture.cs": "f64f49c94b22c85eff2f1c0feebfef9d3162a35c9def0563d675ca493553d967",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.cs": "c90bf41249d31b3628e94ba35764976abf372a5a45e7d116ca98a60e45ec5d94",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellDictionarySemanticBinder.cs": "547fe700e96e1831820f3a1339c230b9bc5babaccfe2ce1c05e3ee9b8935a9d1",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs": "12c967ade62e121b398e29f153be2b12003e83e63b1141eb3ea4f0977757107a",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellObjectSemanticBinder.cs": "2eb148c61ba37c7f14b8b8d767bbbd71ed28a25dfee26668168eb67294e3e9f1",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Expressions.cs": "a0bcf96d9e2c68b90f9139fa6673aa12ae5224bf3e2365e2f48a4238b427633a",
+    "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.StatementValues.cs": "432194adde210830382197a07fd454e6540fe4f34617a9bd91062d312abd828a",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredTreeEnumerator.cs": "2a959f1f79edda1be8b1ad7955eaa166acf4282cabbaef3d7e94f9f45b65ec4e",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.ClrInterop.cs": "1a73e55ac7b206821c627649615b3e9a9ebdebcd3af098780f26334b5b1abca9",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Context.cs": "c12e752305a47e8446cd309c0dc12790b18f8554a6ee22886a9c6443eb30b578",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.Expressions.cs": "9ff9750787807af61e5ca6ced0e656d18aca9ab4ee149ce8a7ab24443f16a253",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.HostRequirements.cs": "810a75df753ebcfcd92f5d2f1961ab51e571a2c0963102c1940ab5b6dc6cae10",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellTypedLowerer.cs": "d9492651aa5e3503ba0d5b6d89ec1eb49c9cb900499aa9b43b175b1bfeeb5119",
+    "PowerForge.PowerShell/Services/Compilation/Backends/CSharp/PowerShellBoundCSharpBackend.StatementValues.cs": "e6f0af8aaa03735a3480bd43b9ebd1ae6d4e16b249e824c98a837dd4bcca52a5",
+    "PowerForge.PowerShell/Services/Compilation/BoundTree/PowerShellBoundNativeStatementValueExpression.cs": "33f022b875a1b09802b16537e04eaa8de8c8287b18c18214ccd062677224a46f",
+    "PowerForge.PowerShell/Services/Compilation/Lowering/PowerShellLoweredNativeStatementValueExpression.cs": "29919e4df9ae4ae2f58f72c49d7b5f79fd1edcae7362baff565f8a7aa0c233ef"
+  },
+  "testSourceSha256": "f1349fad170e3d0540a9ca1c414a1e6122746ff279b28966162536811539e04f",
+  "executionQualification": {
+    "sourceBaseline": "m29a-literal-try-design-baseline.json",
+    "sourceBaselineSha256": "282be355272227130c529eba218be420b2bb6b7128f68336a489d1054352826a",
+    "probe": "m29a-literal-try-gpo-probe.ps1",
+    "probeSha256": "9cba48bdd5aa7daed20cb448d70bc88fedfad4442e62482e0b064ee75df541f2",
+    "originalGenerated": [
+      {
+        "host": "pwsh",
+        "framework": "net10.0",
+        "observations": 24,
+        "generatedStdoutSha256": "58cda3eb63e268f052c4723c3e736cc4e2aca62dda4bc146df83ce8315b90669",
+        "workloads": [
+          {
+            "name": "ConvertTo-XMLSystemServices",
+            "gitSourceSha256": "dbe9b82c464ffb25c138e31a59f4eea3d304779ca500c746c9789acf39ef23e1",
+            "checkoutSourceSha256": "9650574a6b2257c67df72501f913f562275a90723bc60f409c14a825ecef344c",
+            "compiledMethods": 1,
+            "retainedFunctionBodies": 0,
+            "buildReportSha256": "580f444950ef33181c837416fd865d1cbfb813b35353d41d3549913ee3c88a38",
+            "artifactSha256": "8dd7a71b2921c44d445fe95303fd0e54ba4975024919d73485f0f014240b7641",
+            "generatedSourceSha256": ""
+          },
+          {
+            "name": "ConvertTo-XMLPrinterInternal",
+            "gitSourceSha256": "ed2034c26bf9be93256292f9f3d3f2f2622aa12bcbc62c0d63ef28c412904d65",
+            "checkoutSourceSha256": "c157faa2e8da67292144c19c330eb1b925ce5b7f2a017c3cfae0daf449f75009",
+            "compiledMethods": 1,
+            "retainedFunctionBodies": 0,
+            "buildReportSha256": "652f4b12acd2ef5dd893cb6c225d40d030a826541e624cbbb2084789b8b764fd",
+            "artifactSha256": "b1748dea21d9a145d8469d0773223bf7a924e2e322850728bfb707d092ded2f2",
+            "generatedSourceSha256": ""
+          }
+        ]
+      },
+      {
+        "host": "powershell.exe",
+        "framework": "net472",
+        "observations": 24,
+        "generatedStdoutSha256": "58cda3eb63e268f052c4723c3e736cc4e2aca62dda4bc146df83ce8315b90669",
+        "workloads": [
+          {
+            "name": "ConvertTo-XMLSystemServices",
+            "gitSourceSha256": "dbe9b82c464ffb25c138e31a59f4eea3d304779ca500c746c9789acf39ef23e1",
+            "checkoutSourceSha256": "9650574a6b2257c67df72501f913f562275a90723bc60f409c14a825ecef344c",
+            "compiledMethods": 1,
+            "retainedFunctionBodies": 0,
+            "buildReportSha256": "6ea3be249f21ecfe494af7fcaa471a5a41883ffc77636e1980fac47417d474ad",
+            "artifactSha256": "8dd7a71b2921c44d445fe95303fd0e54ba4975024919d73485f0f014240b7641",
+            "generatedSourceSha256": ""
+          },
+          {
+            "name": "ConvertTo-XMLPrinterInternal",
+            "gitSourceSha256": "ed2034c26bf9be93256292f9f3d3f2f2622aa12bcbc62c0d63ef28c412904d65",
+            "checkoutSourceSha256": "c157faa2e8da67292144c19c330eb1b925ce5b7f2a017c3cfae0daf449f75009",
+            "compiledMethods": 1,
+            "retainedFunctionBodies": 0,
+            "buildReportSha256": "489ab07fd0e1ee6bf512d05e5f41a8aebf65bd3613c13e376133af98358e0230",
+            "artifactSha256": "b1748dea21d9a145d8469d0773223bf7a924e2e322850728bfb707d092ded2f2",
+            "generatedSourceSha256": ""
+          }
+        ]
+      }
+    ],
+    "syntheticObservationsPerHost": 16,
+    "syntheticCompleteMethodsPerHost": 4,
+    "limits": [
+      "Full same-input five-packet census is net10.0 only.",
+      "Focused generated artifacts are Windows PowerShell 5.1/net472 and PowerShell 7/net10.0.",
+      "GpoZaurr source stays external; no GPO, AD, network or administration operation executed.",
+      "Explicit return, trap, escaping loop transfers and unavailable authored catch types remain hosted.",
+      "Direct void conversion in a literal try remains hosted under the existing conversion policy; nested array discard is executed.",
+      "No performance, other-platform, full GpoZaurr module or runtime-free Strict acceptance claimed.",
+      "Aggregate artifact matrix not run; focused capture compatibility, source-map/Strict guards, real workloads, no-loss census and independent review selected."
+    ]
+  },
+  "validation": {
+    "literal-try-final-focused.trx": {
+      "sha256": "ae0d3daa51e17df057c7b6399ed553aa6e777bb3010b2bb82e1b364b0f636b9b",
+      "counters": {
+        "total": "20",
+        "executed": "20",
+        "passed": "18",
+        "failed": "2",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "times": {
+        "creation": "2026-09-27T06:05:08.7978931+02:00",
+        "queuing": "2026-09-27T06:05:08.7978932+02:00",
+        "start": "2026-09-27T06:05:03.5829533+02:00",
+        "finish": "2026-09-27T06:06:05.0428982+02:00"
+      }
+    },
+    "literal-try-final-correction.trx": {
+      "sha256": "643754fb276cacf8832e7daaea2d928751540b2e9bbf72f54aebb4927b8e7c73",
+      "counters": {
+        "total": "4",
+        "executed": "4",
+        "passed": "4",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "times": {
+        "creation": "2026-09-27T06:06:28.2103193+02:00",
+        "queuing": "2026-09-27T06:06:28.2103194+02:00",
+        "start": "2026-09-27T06:06:26.4558308+02:00",
+        "finish": "2026-09-27T06:06:35.2073896+02:00"
+      }
+    },
+    "net472OwnerBuild": {
+      "warnings": 0,
+      "errors": 0,
+      "elapsedSeconds": 1.5
+    },
+    "review": {
+      "freshReadOnlyPass": true,
+      "finding": "Missing method-owned discard helper in embedded capture emission; corrected in the canonical backend.",
+      "targetedConfirmation": "No remaining actionable remediation findings. Supplied direct void example was retained, while the nested array discard is proven emitted/executed."
+    }
+  }
+}

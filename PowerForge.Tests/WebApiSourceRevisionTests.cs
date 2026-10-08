@@ -61,6 +61,14 @@ public sealed class WebApiSourceRevisionTests
             }
             JsonDocument ReadSource() => JsonDocument.Parse(File.ReadAllText(Path.Combine(options.OutputPath, "types", "powerforge-tests-docsfidelity-fixture.json")));
         }
-        finally { Directory.Delete(root, recursive: true); }
+        finally
+        {
+            // Git marks loose object files read-only on Windows.
+            var gitDirectory = Path.Combine(root, ".git");
+            if (Directory.Exists(gitDirectory))
+                foreach (var file in Directory.EnumerateFiles(gitDirectory, "*", SearchOption.AllDirectories))
+                    File.SetAttributes(file, File.GetAttributes(file) & ~FileAttributes.ReadOnly);
+            Directory.Delete(root, recursive: true);
+        }
     }
 }

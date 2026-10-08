@@ -31,6 +31,8 @@ public static partial class WebSiteBuilder
                 Description = entry.Item.Description,
                 Section = entry.Item.Collection,
                 LastModified = FormatSitemapLastModified(entry.Item.LastModifiedUtc),
+                Canonical = entry.Item.Canonical,
+                PublicationDate = entry.Item.Date?.ToString("O", CultureInfo.InvariantCulture),
                 NoIndex = ItemDeclaresNoIndex(spec, entry.Item, outputRoot)
             })
             .ToArray();
@@ -82,6 +84,14 @@ public static partial class WebSiteBuilder
 
         return ResolveOutputRoute(item.OutputPath, primary);
     }
+
+    private static string ResolveCanonicalRoute(SiteSpec spec, ContentItem item)
+        => !string.IsNullOrWhiteSpace(item.Canonical)
+            ? item.Canonical
+            : ResolveOutputFormats(spec, item).Any(format => RendersHtmlPage(format) &&
+                (string.IsNullOrWhiteSpace(format.Suffix) || format.Suffix.Equals("html", StringComparison.OrdinalIgnoreCase)))
+                ? item.OutputPath
+                : ItemRendersHtml(spec, item) ? ResolveSitemapEntryPath(spec, item) : item.OutputPath;
 
     private static bool ItemDeclaresNoIndex(SiteSpec spec, ContentItem item, string outputRoot)
     {

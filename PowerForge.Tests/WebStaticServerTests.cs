@@ -6,7 +6,7 @@ using PowerForge.Web;
 
 namespace PowerForge.Tests;
 
-public class WebStaticServerTests
+public partial class WebStaticServerTests
 {
     [Fact]
     public void GetContentType_RecognizesAnimatedPng()
@@ -35,7 +35,7 @@ public class WebStaticServerTests
 
             var logs = new ConcurrentQueue<string>();
             cts = new CancellationTokenSource();
-            serverTask = Task.Run(() =>
+            serverTask = Task.Factory.StartNew(() =>
             {
                 WebStaticServer.ServeWithPortFallback(
                     root,
@@ -44,7 +44,7 @@ public class WebStaticServerTests
                     cts.Token,
                     message => logs.Enqueue(message),
                     maxPortAttempts: 20);
-            });
+            }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
             var listeningLog = await WaitForLogAsync(
                 logs,
@@ -150,7 +150,7 @@ public class WebStaticServerTests
             var logs = new ConcurrentQueue<string>();
             cts = new CancellationTokenSource();
             var preferredPort = GetFreePortRange(20);
-            serverTask = Task.Run(() =>
+            serverTask = Task.Factory.StartNew(() =>
             {
                 WebStaticServer.ServeWithPortFallback(
                     root,
@@ -159,7 +159,7 @@ public class WebStaticServerTests
                     cts.Token,
                     message => logs.Enqueue(message),
                     maxPortAttempts: 20);
-            });
+            }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
             var listeningLog = await WaitForLogAsync(
                 logs,

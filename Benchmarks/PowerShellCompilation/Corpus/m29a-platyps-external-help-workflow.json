@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "recordedOn": "2026-09-28",
+  "source": {
+    "workload": "platyPS",
+    "revisionKind": "PSGalleryPackageVersion",
+    "version": "0.14.2",
+    "packageSha256": "12176941c2972577d7adbf4877ad6aebcca0920c416b46ef1131e5a5248ec59b",
+    "moduleSourceSha256": "2f884e73e086dd5f1a192ef806141affcb6226fc5052a7e0001860b2033c9b10",
+    "moduleManifestSha256": "cae5bcd4a71958595d3ddae24a9c823aa9725bc4af3c5e888396fb832f8f0f36",
+    "unchangedInputSha256": {
+      "docs/Get-HelpPreview.md": "90c4e0754663aff75ab7f0ad7cd3e74bc646ea2c3beb4a12d4a74667dfe89c43",
+      "docs/New-ExternalHelp.md": "a9f89dd18e072c9f57756d2f17fe037846193468dc0519762c95bc9ef2837432"
+    }
+  },
+  "generated": {
+    "mode": "Hybrid",
+    "kind": "BinaryModule",
+    "resourceMode": "CompleteModule",
+    "completeMethodsPerTarget": 40,
+    "newlyExecutedCompiledMethods": ["New-ExternalHelp", "Get-HelpPreview"],
+    "net10ManifestSha256": "15b409a54fb62e67c501c6474587140e02aa70b0ed2090cbfbbd3af07d5537ff",
+    "net472ManifestSha256": "9381402f86da48987351dce8027889762ae904d53705d14c12790d7fc1d368f5",
+    "compiledCallbacksInstalled": true,
+    "callbackEvidence": "The generated New-ExternalHelp begin/process/end and Get-HelpPreview process bodies throw if their compiled callbacks are not installed; ordinary generated invocations completed.",
+    "dependencyClosureVerified": false,
+    "dependencyPolicy": "Local artifact build used --allow-unreviewed-dependencies; execution is qualified on this host, not for deployment or publication.",
+    "strict": {
+      "canProceed": false,
+      "typedUnits": 0,
+      "rejectedUnits": 41,
+      "net10ExplainSha256": "f24100b18d4ef6c83c6685f8788a4f48ae26a358fa2c5389b465e7fdce5ff795",
+      "net472ExplainSha256": "f029c8ef373a3e759477a22f4a38a233db795da6fef4a8821a688ffb63366778"
+    }
+  },
+  "execution": {
+    "hosts": ["PowerShell 7/net10.0 on Windows", "Windows PowerShell 5.1/net472"],
+    "freshChildRuns": 12,
+    "allChildExitCodesZero": true,
+    "allChildStderrEmpty": true,
+    "originalGeneratedRawJsonEqualWithinEachHost": true,
+    "observerSha256": {
+      "helpGeneration": "f5de60162a60e9f76d5032adfa288d5631cb694448f77bb7645470b3bae9b132",
+      "helpPreview": "965fdb5e35d6daae9737a16699c2654bb4ca7629e77b4f8b311434b0e8283b6e"
+    },
+    "singleDocument": {
+      "file": "platyPS-help.xml",
+      "xmlSha256OnAllFourRuns": "348ff76a82f6ff6aebb3de52b27df0d84b791deedb64b1edc2eb54c018972302",
+      "commandNames": ["Get-HelpPreview"],
+      "observationSha256OnAllFourRuns": "e302fd27513adc5bd4832c802d44f5bb1c28dc516e5a14e3b6b00c8fc16c87b4"
+    },
+    "twoDocuments": {
+      "file": "platyPS-help.xml",
+      "xmlSha256OnAllFourRuns": "40b85759af646aed71aa1f6f8f9d28ec14240dd9e67fc73fdcc11e9a8f8e8bc6",
+      "commandNames": ["Get-HelpPreview", "New-ExternalHelp"],
+      "observationSha256OnAllFourRuns": "cb341d86f8a51fc22aed5419a2c884a9c184b052ffd32e6a378f88dcc867142d"
+    },
+    "preview": {
+      "resultCountOnAllFourRuns": 2,
+      "names": ["Get-HelpPreview", "New-ExternalHelp"],
+      "observationSha256OnAllFourRuns": "94a457dc92aa41e11a7cc5f7848a050b363f31558c57df0b8bd91503585913b4"
+    }
+  },
+  "limits": [
+    "This adds direct execution proof for two previously emission-only methods; the same-input 40/40 complete-method count is unchanged.",
+    "The complete module imports and only the two selected help workflows execute. Other commands and alternate paths are not qualified.",
+    "Input is the exact pinned package documentation. XML output is written only in task-owned directories; preview uses its authored temporary-file and dynamic-module behavior in fresh child processes.",
+    "Error, warning, overwrite refusal, locale, notes/list conversion, pipeline multi-invocation, cancellation and partial-write paths remain unqualified.",
+    "The pinned third-party package and task-local observers are not checked into this repository."
+  ]
+}

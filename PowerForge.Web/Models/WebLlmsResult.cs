@@ -28,6 +28,8 @@ public sealed class WebLlmsResult
 /// <summary>Result payload for sitemap generation.</summary>
 public sealed class WebSitemapResult
 {
+    /// <summary>All generated XML outputs, including partitions and discovery indexes.</summary>
+    public string[] XmlOutputPaths { get; set; } = Array.Empty<string>();
     /// <summary>Path to the sitemap output.</summary>
     public string OutputPath { get; set; } = string.Empty;
     /// <summary>Optional path to the generated news sitemap output.</summary>

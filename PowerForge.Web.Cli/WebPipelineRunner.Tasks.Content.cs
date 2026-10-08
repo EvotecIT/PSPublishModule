@@ -42,6 +42,11 @@ internal static partial class WebPipelineRunner
         var help = ResolvePath(baseDir, GetString(step, "help") ?? GetString(step, "helpPath") ?? GetString(step, "help-path"));
         var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
         var assembly = ResolvePath(baseDir, GetString(step, "assembly"));
+        var assemblies = (GetArrayOfStrings(step, "assemblies") ?? GetArrayOfStrings(step, "assemblyPaths") ?? Array.Empty<string>())
+            .Select(path => ResolvePath(baseDir, path))
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Cast<string>()
+            .ToArray();
         var title = GetString(step, "title");
         var baseUrl = GetString(step, "baseUrl") ?? GetString(step, "base-url") ?? "/api";
         var languageCode = GetString(step, "language") ?? GetString(step, "languageCode") ?? GetString(step, "language-code");
@@ -165,8 +170,8 @@ internal static partial class WebPipelineRunner
 
         if (string.IsNullOrWhiteSpace(outPath))
             throw new InvalidOperationException("apidocs requires out.");
-        if (apiType == ApiDocsType.CSharp && string.IsNullOrWhiteSpace(xml))
-            throw new InvalidOperationException("apidocs requires xml for CSharp.");
+        if (apiType == ApiDocsType.CSharp && string.IsNullOrWhiteSpace(xml) && xmls.Length == 0)
+            throw new InvalidOperationException("apidocs requires xml or xmls for CSharp.");
         if (apiType == ApiDocsType.PowerShell && string.IsNullOrWhiteSpace(help))
             throw new InvalidOperationException("apidocs requires help for PowerShell.");
 
@@ -325,6 +330,7 @@ internal static partial class WebPipelineRunner
                 PowerShellModuleManifestPath = powerShellManifestPath,
                 PowerShellCommandMetadataPath = powerShellCommandMetadataPath,
                 AssemblyPath = assembly,
+                AssemblyPaths = assemblies,
                 OutputPath = outPath,
                 Title = string.IsNullOrWhiteSpace(title) ? "API Reference" : title,
                 BaseUrl = baseUrl,
@@ -1401,7 +1407,8 @@ internal static partial class WebPipelineRunner
             else
                 File.WriteAllText(outPath, existingOutputContent);
             throw new InvalidOperationException(
-                $"Release hub refresh for '{outPath}' was incomplete or returned no releases with warnings; publication requires a complete source.");
+                $"Release hub refresh for '{outPath}' was incomplete or returned no releases with warnings; publication requires a complete source. " +
+                string.Join(" ", result.Warnings));
         }
 
         var note = result.Source != WebChangelogSource.Auto ? $" ({result.Source.ToString().ToLowerInvariant()})" : string.Empty;
@@ -1824,9 +1831,7 @@ internal static partial class WebPipelineRunner
             GetString(step, "news-out"));
         var newsPaths = GetArrayOfStrings(step, "newsPaths") ?? GetArrayOfStrings(step, "news-paths");
         var newsMetadata = GetSitemapNewsMetadata(step);
-        var newsEnabled = !string.IsNullOrWhiteSpace(newsOutput) ||
-                          (newsPaths?.Length ?? 0) > 0 ||
-                          newsMetadata is not null;
+        var newsEnabled = IsSitemapNewsEnabled(step);
         var imageOutput = ResolvePath(baseDir,
             GetString(step, "imageOutput") ??
             GetString(step, "imageOut") ??
@@ -1974,6 +1979,12 @@ internal static partial class WebPipelineRunner
 
         return value.Trim().Replace('_', '-').Trim('/').ToLowerInvariant();
     }
+
+    private static bool IsSitemapNewsEnabled(JsonElement step) =>
+        !string.IsNullOrWhiteSpace(GetString(step, "newsOutput") ?? GetString(step, "newsOut") ??
+            GetString(step, "news-output") ?? GetString(step, "news-out")) ||
+        (GetArrayOfStrings(step, "newsPaths") ?? GetArrayOfStrings(step, "news-paths")) is { Length: > 0 } ||
+        GetSitemapNewsMetadata(step) is not null;
 
     private static WebSitemapNewsOptions? GetSitemapNewsMetadata(JsonElement step)
     {

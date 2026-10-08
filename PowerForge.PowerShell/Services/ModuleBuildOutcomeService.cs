@@ -27,10 +27,7 @@ internal sealed class ModuleBuildOutcomeService
             Succeeded = succeeded,
             ShouldSetExitCode = exitCodeMode,
             ExitCode = succeeded ? 0 : 1,
-            ShouldEmitErrorRecord = !succeeded &&
-                                    !exitCodeMode &&
-                                    workflow?.UsedInteractiveView != true &&
-                                    workflow?.PolicyFailure is null,
+            ShouldEmitErrorRecord = !succeeded && !exitCodeMode,
             ErrorRecordId = useLegacy ? "InvokeModuleBuildDslFailed" : "InvokeModuleBuildPowerForgeFailed",
             ShouldReplayBufferedLogs = !succeeded,
             ShouldWriteInteractiveFailureSummary = !succeeded &&

@@ -15,6 +15,7 @@ internal sealed class PowerShellBenchmarkChildRunnerRequest
     public string RunMode { get; set; } = string.Empty;
     public string RunOrder { get; set; } = string.Empty;
     public string MemoryCleanup { get; set; } = string.Empty;
+    public int MemorySamplingIntervalMilliseconds { get; set; }
     public int CooldownMilliseconds { get; set; }
     public string OutlierMode { get; set; } = string.Empty;
     public string? ProcessorAffinityMask { get; set; }

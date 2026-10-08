@@ -31,7 +31,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string projectPath,
         string publishDirectory,
         string? runtimeIdentifier,
-        bool restoreCompleted)
+        bool restoreCompleted,
+        CancellationToken cancellationToken)
     {
         var arguments = new List<string>
         {
@@ -49,14 +50,15 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             arguments.Add(runtimeIdentifier!);
         }
 
-        var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
+        var run = new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(
                 "dotnet",
                 Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
                 arguments,
                 TimeSpan.FromSeconds(spec.TimeoutSeconds),
-                GetNuGetEnvironment(spec)))
+                GetNuGetEnvironment(spec)), cancellationToken)
             .GetAwaiter()
             .GetResult();
+        cancellationToken.ThrowIfCancellationRequested();
         var output = string.IsNullOrWhiteSpace(run.StdErr)
             ? run.StdOut
             : run.StdOut + Environment.NewLine + run.StdErr;
@@ -66,7 +68,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     private static GeneratedBuildProcessResult RunDotNetRestore(
         PowerShellCompilationBuildSpec spec,
         string projectPath,
-        string? runtimeIdentifier)
+        string? runtimeIdentifier,
+        CancellationToken cancellationToken)
     {
         var arguments = new List<string>
         {
@@ -89,12 +92,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             arguments.Add("--runtime");
             arguments.Add(runtimeIdentifier!);
         }
-        var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
+        var run = new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(
             "dotnet",
             Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
             arguments,
             TimeSpan.FromSeconds(spec.TimeoutSeconds),
-            GetNuGetEnvironment(spec))).GetAwaiter().GetResult();
+            GetNuGetEnvironment(spec)), cancellationToken).GetAwaiter().GetResult();
+        cancellationToken.ThrowIfCancellationRequested();
         var output = string.IsNullOrWhiteSpace(run.StdErr) ? run.StdOut : run.StdOut + Environment.NewLine + run.StdErr;
         return new GeneratedBuildProcessResult(run.ExitCode, output, run.TimedOut);
     }
@@ -112,14 +116,22 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     }
 
     private static string GetPowerShellSdkVersion(string targetFramework)
-        => targetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) ? "7.6.5" : "7.4.18";
+    {
+        if (PowerShellCompilationTargetFrameworkPolicy.IsModern(targetFramework))
+            return PowerShellCompilationGeneratedPackageCatalog.GetVersion("Microsoft.PowerShell.SDK");
+        throw new ArgumentException(
+            $"The generated PowerShell SDK reference requires {PowerShellCompilationTargetFrameworkPolicy.Modern}.",
+            nameof(targetFramework));
+    }
 
     private static string GetSecurityXmlVersion(string targetFramework)
-        => "10.0.11";
+        => PowerShellCompilationGeneratedPackageCatalog.GetVersion("System.Security.Cryptography.Xml");
 
     private static string GetPowerShellReference(string targetFramework)
         => targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase)
-            ? "<PackageReference Include=\"Microsoft.PowerShell.5.ReferenceAssemblies\" Version=\"1.1.0\" PrivateAssets=\"all\" />"
+            ? "<PackageReference Include=\"Microsoft.PowerShell.5.ReferenceAssemblies\" Version=\"1.1.0\" PrivateAssets=\"all\" GeneratePathProperty=\"true\" />" + Environment.NewLine +
+              "    <Reference Include=\"Microsoft.Management.Infrastructure\"><HintPath>$(PkgMicrosoft_PowerShell_5_ReferenceAssemblies)/lib/net4/Microsoft.Management.Infrastructure.dll</HintPath><Private>false</Private></Reference>" + Environment.NewLine +
+              "    <Reference Include=\"System.DirectoryServices\" />"
             : $"<PackageReference Include=\"Microsoft.PowerShell.SDK\" Version=\"{GetPowerShellSdkVersion(targetFramework)}\" PrivateAssets=\"all\" ExcludeAssets=\"runtime\" />{Environment.NewLine}    " +
               $"<PackageReference Include=\"System.Security.Cryptography.Xml\" Version=\"{GetSecurityXmlVersion(targetFramework)}\" PrivateAssets=\"all\" ExcludeAssets=\"runtime\" />";
 

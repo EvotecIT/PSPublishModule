@@ -2502,6 +2502,7 @@ public sealed partial class ModulePipelineHostedOperationsTests
     [Fact]
     public void ValidateModuleImports_UsesInjectedPowerShellRunner()
     {
+        var buildModulePath = Environment.GetEnvironmentVariable("PSModulePath") ?? string.Empty;
         var requests = new List<PowerShellRunRequest>();
         var runner = new RecordingPowerShellRunner(request =>
         {
@@ -2525,6 +2526,7 @@ public sealed partial class ModulePipelineHostedOperationsTests
         Assert.Equal(PowerShellInvocationMode.File, request.InvocationMode);
         Assert.True(request.PreferPwsh);
         Assert.EndsWith(".ps1", request.ScriptPath, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(buildModulePath, Encoding.UTF8.GetString(Convert.FromBase64String(request.Arguments[5])));
     }
 
     [Fact]
@@ -3492,7 +3494,7 @@ public sealed partial class ModulePipelineHostedOperationsTests
         public ModuleValidationReport ValidateModule(ModuleValidationSpec spec)
             => throw new InvalidOperationException("Not used in this test.");
 
-        public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget)
+        public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget, IReadOnlyDictionary<string, string[]>? optionalDependencies = null)
         {
             BinaryDependencyRoots.Add(moduleRoot);
             BinaryDependencyManifestsAvailable.Add(!string.IsNullOrWhiteSpace(modulePath) && File.Exists(modulePath));

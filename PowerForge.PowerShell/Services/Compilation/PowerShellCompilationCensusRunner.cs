@@ -23,7 +23,9 @@ public sealed partial class PowerShellCompilationCensusRunner
     {
         if (paths is null) throw new ArgumentNullException(nameof(paths));
         if (options is null) throw new ArgumentNullException(nameof(options));
-        var targetFramework = string.IsNullOrWhiteSpace(options.TargetFramework) ? "net8.0" : options.TargetFramework!.Trim();
+        var targetFramework = string.IsNullOrWhiteSpace(options.TargetFramework)
+            ? PowerShellCompilationTargetFrameworkPolicy.Default
+            : options.TargetFramework!.Trim();
         var profile = PowerShellCompilationSemanticOracleCatalog.Get(string.IsNullOrWhiteSpace(options.SemanticProfileId)
             ? PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework)
             : options.SemanticProfileId).ProfileId;
@@ -138,16 +140,13 @@ public sealed partial class PowerShellCompilationCensusRunner
             var analysisCapabilities = PowerShellCompilationBuildSpec.GetCapabilities(
                 resolved.Kind,
                 mode);
-            dependencies = resolved.Dependencies;
             var compilationSources = resolved.CompilationSourceFiles
                 .Select(Path.GetFullPath)
                 .ToHashSet(PowerShellCompilationPathSafety.PathComparer);
-            var analyzedCompilation = analyzer.AnalyzeFiles(
-                    PowerShellCompilationMode.Analyze,
-                    resolved.CompilationSourceFiles,
-                    Directory.Exists(path) ? path : Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory(),
-                    targetFramework,
-                    analysisCapabilities);
+            // Use the same locked manifest dependency catalog as explain and build.
+            // Source-only analysis cannot qualify declared native types or explain their blockers.
+            var analyzedCompilation = analyzer.Analyze(resolved, mode, targetFramework);
+            dependencies = analyzedCompilation.Dependencies;
             var runtimeOnlyFiles = resolved.SourceFiles
                 .Where(source => !compilationSources.Contains(Path.GetFullPath(source)))
                 .SelectMany(source => analyzer.Analyze(new PowerShellCompilationSpec(
@@ -162,13 +161,18 @@ public sealed partial class PowerShellCompilationCensusRunner
                 mode,
                 files,
                 targetFramework,
-                dependencies);
+                dependencies,
+                resolved.ModuleManifestPath is null ? null : analyzedCompilation.DependencyGraph,
+                analyzedCompilation.TargetContract);
             var emitted = PowerShellCompilationExplainShaper.Shape(resolved, plan, targetFramework!, profile);
             dispositionLedger = PowerShellCompilationUnitDispositionLedgerBuilder.Create(
                 plan,
                 resolved.Kind,
                 emitted,
-                resolved.SourcePath);
+                resolved.SourcePath,
+                emittedMethods: PowerShellCompilationExplainShaper.GetEmittedMethods(
+                    resolved, plan, emitted, targetFramework!, profile,
+                    Array.Empty<PowerShellCompilationCommandProviderContract>()));
             sourceFiles = resolved.SourceFiles.Length;
             sourceFingerprint = ComputeSourceFingerprint(resolved.SourceFiles, path);
             coverage = BuildCoverageBreakdown(dispositionLedger);
@@ -721,7 +725,9 @@ public sealed partial class PowerShellCompilationCensusRunner
             : StringComparer.Ordinal;
 
     private static string NormalizeTargetFramework(string? targetFramework)
-        => string.IsNullOrWhiteSpace(targetFramework) ? "net8.0" : targetFramework!.Trim();
+        => string.IsNullOrWhiteSpace(targetFramework)
+            ? PowerShellCompilationTargetFrameworkPolicy.Default
+            : targetFramework!.Trim();
 
     private sealed class AnalyzedProduct
     {

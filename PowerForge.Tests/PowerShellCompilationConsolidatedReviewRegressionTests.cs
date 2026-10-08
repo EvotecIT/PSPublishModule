@@ -64,7 +64,8 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     }
 
     [Fact]
-    public void Build_StrictLibraryNormalizesStringArrayNullElementsBeforeValidationAndExecution()
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Build_StrictLibraryPreservesTypedStringArrayElementsForParameterValidation()
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-StringElement { param([ValidateNotNull()][string[]] $Values) return $Values[1] }");
@@ -80,7 +81,15 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         var method = assembly.GetTypes()
             .SelectMany(static type => type.GetMethods(BindingFlags.Public | BindingFlags.Static))
             .Single(static candidate => candidate.Name == "Get_StringElement");
-        Assert.Equal(string.Empty, method.Invoke(null, new object?[] { new string?[] { "ok", null } }));
+        var original = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            ". '" + fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal) +
+            "'; $items = [string[]]::new(2); $items[0] = 'ok'; try { Get-StringElement -Values $items } catch { $_.FullyQualifiedErrorId }");
+        Assert.Equal((0, "ParameterArgumentValidationError,Get-StringElement", string.Empty),
+            (original.ExitCode, original.StandardOutput.Trim(), original.StandardError.Trim()));
+        var failure = Assert.Throws<TargetInvocationException>(() =>
+            method.Invoke(null, new object?[] { new string?[] { "ok", null } }));
+        Assert.Equal("Values", Assert.IsType<ArgumentException>(failure.InnerException).ParamName);
+        Assert.Equal("value", method.Invoke(null, new object?[] { new[] { "ok", "value" } }));
     }
 
     [Fact]
@@ -104,8 +113,6 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(1, result.Manifest!.CompiledMethods);
         Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
-        var generated = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShell.cs"));
-        Assert.Contains("System.Management.Automation.RuntimeException", generated, StringComparison.Ordinal);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run(
             "pwsh",

@@ -205,7 +205,7 @@ public static partial class WebSiteVerifier
                 }
 
                 var baseOutput = ReplaceProjectPlaceholder(collection.Output, projectSlug);
-                var route = BuildRoute(baseOutput, slugPath, spec.TrailingSlash);
+                var route = WebSiteBuilder.ResolveContentRoute(baseOutput, slugPath, spec.TrailingSlash, matter);
                 route = ApplyLanguagePrefixToRoute(spec, localization, route, resolvedLanguage);
                 if (routes.TryGetValue(route, out var existing))
                 {

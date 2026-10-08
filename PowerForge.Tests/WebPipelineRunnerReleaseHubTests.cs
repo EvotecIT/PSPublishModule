@@ -334,6 +334,7 @@ public class WebPipelineRunnerReleaseHubTests
             var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
             Assert.False(result.Success);
             Assert.Contains("publication requires a complete source", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("release-hub source=file but no valid local source was found", result.Steps[0].Message, StringComparison.Ordinal);
             Assert.Equal(previous, File.ReadAllText(outputPath));
         }
         finally

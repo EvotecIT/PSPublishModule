@@ -11,7 +11,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>powerforge-web</ToolCommandName>
     <Description>PowerForge.Web command-line interface for building and serving static sites.</Description>
-    <VersionPrefix>3.0.153</VersionPrefix>
+    <VersionPrefix>3.0.158</VersionPrefix>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <Authors>Przemyslaw Klys</Authors>
     <Company>Evotec Services sp. z o.o.</Company>
@@ -25,13 +25,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\PowerForge.IndexNow\PowerForge.IndexNow.csproj" />
     <ProjectReference Include="..\PowerForge.Web\PowerForge.Web.csproj">
       <GlobalPropertiesToRemove>PublishAot;RuntimeIdentifier;SelfContained</GlobalPropertiesToRemove>
     </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="DBAClientX.SQLite" Version="1.0.9" />
+    <PackageReference Include="DBAClientX.SQLite" Version="1.0.10" />
     <PackageReference Include="NuGet.Versioning" Version="7.9.0" />
   </ItemGroup>
 

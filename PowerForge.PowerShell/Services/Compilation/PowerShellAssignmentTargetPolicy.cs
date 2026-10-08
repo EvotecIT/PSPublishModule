@@ -30,18 +30,73 @@ internal static class PowerShellAssignmentTargetPolicy
         "true"
     };
 
+    private static readonly HashSet<string> RuntimeOwnedAutomaticVariables = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "^",
+        "$",
+        "_",
+        "args",
+        "Error",
+        "Event",
+        "EventArgs",
+        "EventSubscriber",
+        "foreach",
+        "input",
+        "LASTEXITCODE",
+        "Matches",
+        "MyInvocation",
+        "NestedPromptLevel",
+        "null",
+        "PROFILE",
+        "PSBoundParameters",
+        "PSCmdlet",
+        "PSCommandPath",
+        "PSDebugContext",
+        "PSItem",
+        "PSScriptRoot",
+        "PSSenderInfo",
+        "PWD",
+        "StackTrace",
+        "switch",
+        "this"
+    };
+
     /// <summary>Returns the directly assigned local variable, including an explicit typed declaration.</summary>
-    internal static VariableExpressionAst? FindDirectVariable(ExpressionAst left)
-        => left switch
+    internal static VariableExpressionAst? FindDirectVariable(ExpressionAst left, bool nativeAttributes = false)
+    {
+        if (nativeAttributes)
+            while (left is AttributedExpressionAst attributed) left = attributed.Child;
+        return left switch
         {
             VariableExpressionAst variable => variable,
             ConvertExpressionAst { Child: VariableExpressionAst variable } => variable,
             _ => null
         };
+    }
+
+    /// <summary>Checks that an assignment does not introduce an unrepresented variable-constraint transition.</summary>
+    internal static bool PreservesConstraint(ExpressionAst left, PowerShellTypeFact target)
+        => left is not ConvertExpressionAst constraint ||
+           target.Provenance == PowerShellTypeFactProvenance.Explicit && constraint.StaticType == target.ClrType;
 
     /// <summary>Returns whether the name is a non-shadowable PowerShell read-only or constant automatic variable.</summary>
     internal static bool IsReadOnlyAutomaticVariable(string name)
-        => ReadOnlyAutomaticVariables.Contains(name);
+        => ReadOnlyAutomaticVariables.Contains(GetUnscopedVariableName(name));
+
+    /// <summary>Returns whether the name is owned by the PowerShell runtime rather than ordinary local storage.</summary>
+    internal static bool IsAutomaticVariable(string name)
+    {
+        var unscoped = GetUnscopedVariableName(name);
+        return ReadOnlyAutomaticVariables.Contains(unscoped) || RuntimeOwnedAutomaticVariables.Contains(unscoped);
+    }
+
+    /// <summary>Removes PowerShell scope qualifiers without changing provider-drive variable names.</summary>
+    internal static string GetUnscopedVariableName(string name)
+        => name.StartsWith("script:", StringComparison.OrdinalIgnoreCase) ||
+           name.StartsWith("local:", StringComparison.OrdinalIgnoreCase) ||
+           name.StartsWith("global:", StringComparison.OrdinalIgnoreCase) ||
+           name.StartsWith("private:", StringComparison.OrdinalIgnoreCase)
+            ? name.Substring(name.IndexOf(':') + 1) : name;
 
     /// <summary>Returns whether a parameter name collides with an automatic variable that is read-only on the selected runtime.</summary>
     internal static bool IsReadOnlyAutomaticParameter(string name, string? targetFramework)

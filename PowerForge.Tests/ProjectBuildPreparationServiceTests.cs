@@ -4,8 +4,50 @@ namespace PowerForge.Tests;
 
 public sealed class ProjectBuildPreparationServiceTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Prepare_does_not_load_unneeded_publication_credentials(bool planOnly)
+    {
+        var context = new ProjectBuildPreparationService().Prepare(
+            new ProjectBuildConfiguration
+            {
+                Build = true,
+                PlanOnly = planOnly,
+                PublishNuget = planOnly,
+                PublishGitHub = planOnly,
+                PublishApiKey = "publish-only-key",
+                GitHubAccessToken = "publish-only-token"
+            },
+            Directory.GetCurrentDirectory(), null, new ProjectBuildRequestedActions());
+
+        Assert.Null(context.PublishApiKey);
+        Assert.Null(context.GitHubToken);
+        Assert.Null(context.Spec.PublishApiKey);
+    }
+
     [Fact]
-    public void Prepare_enables_full_run_when_no_actions_are_configured()
+    public void Prepare_keeps_private_feed_authentication_for_plan_without_publication()
+    {
+        var source = "https://nuget.pkg.github.com/example/index.json";
+        var context = new ProjectBuildPreparationService().Prepare(
+            new ProjectBuildConfiguration
+            {
+                Build = true,
+                PlanOnly = true,
+                NugetSource = [source],
+                GitHubAccessToken = "feed-read-token",
+                PublishApiKey = "publish-only-key"
+            },
+            Directory.GetCurrentDirectory(), null, new ProjectBuildRequestedActions());
+
+        Assert.Null(context.PublishApiKey);
+        Assert.Equal("feed-read-token", context.Spec.VersionSourceCredential!.Secret);
+        Assert.Equal("feed-read-token", context.Spec.VersionSourceCredentials![source].Secret);
+    }
+
+    [Fact]
+    public void Prepare_defaults_to_build_without_version_changes_or_publication()
     {
         var service = new ProjectBuildPreparationService();
 
@@ -15,13 +57,13 @@ public sealed class ProjectBuildPreparationServiceTests
             null,
             new ProjectBuildRequestedActions());
 
-        Assert.True(context.UpdateVersions);
+        Assert.False(context.UpdateVersions);
         Assert.True(context.Build);
-        Assert.True(context.PublishNuget);
-        Assert.True(context.PublishGitHub);
+        Assert.False(context.PublishNuget);
+        Assert.False(context.PublishGitHub);
         Assert.True(context.HasWork);
         Assert.True(context.Spec.Pack);
-        Assert.True(context.Spec.Publish);
+        Assert.False(context.Spec.Publish);
     }
 
     [Fact]

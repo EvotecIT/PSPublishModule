@@ -49,6 +49,12 @@ public sealed class AppleDeviceInfo
 /// </summary>
 public class AppleAppBuildRequest
 {
+    /// <summary>
+    /// Opts into clean Git source and tracked build-graph verification. Normal
+    /// builds use the selected working tree, including uncommitted changes.
+    /// </summary>
+    public bool UseControlledSourceProvenance { get; set; }
+
     /// <summary>Path to the Xcode project or workspace.</summary>
     public string ProjectPath { get; set; } = string.Empty;
 
@@ -163,8 +169,11 @@ public sealed class AppleAppBuildResult
     /// <summary>Mirror path used for the build, if any.</summary>
     public string? BuildMirrorPath { get; set; }
 
-    /// <summary>Source revision PowerForge bound to the Xcode build.</summary>
+    /// <summary>Git HEAD recorded as context for the build; see SourceDirty.</summary>
     public string SourceRevision { get; set; } = string.Empty;
+
+    /// <summary>Whether the selected source differs from the recorded Git revision.</summary>
+    public bool SourceDirty { get; set; }
 
     /// <summary>Build process result.</summary>
     public ProcessRunResult ProcessResult { get; set; } = new(0, string.Empty, string.Empty, "xcodebuild", TimeSpan.Zero, false);

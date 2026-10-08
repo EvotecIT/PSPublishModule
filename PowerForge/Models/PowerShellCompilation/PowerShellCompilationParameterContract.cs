@@ -11,6 +11,12 @@ public static class PowerShellCompilationCapabilities
         PowerShellCompilationCapability.RuntimeFreeProviderOperations |
         PowerShellCompilationCapability.RuntimeStateIntrinsics;
 
+    /// <summary>Capabilities supplied by a runtime-independent CLR library.</summary>
+    public const PowerShellCompilationCapability TypedLibrary =
+        StaticRuntimeFacts |
+        PowerShellCompilationCapability.ClrPipelineCollectionBinding |
+        PowerShellCompilationCapability.RuntimeFreeModuleState;
+
     /// <summary>Capabilities supplied by generated binary cmdlets.</summary>
     public const PowerShellCompilationCapability BinaryModule =
         PowerShellCompilationCapability.PowerShellStreams |
@@ -22,6 +28,7 @@ public static class PowerShellCompilationCapabilities
         PowerShellCompilationCapability.PowerShellHostTypes |
         PowerShellCompilationCapability.PowerShellLanguageConversions |
         PowerShellCompilationCapability.PowerShellLanguageOperators |
+        PowerShellCompilationCapability.PowerShellStatementErrors |
         PowerShellCompilationCapability.RuntimeStateIntrinsics |
         PowerShellCompilationCapability.UntypedObjectParameters |
         PowerShellCompilationCapability.AdvisoryOutputTypeMetadata;
@@ -30,7 +37,12 @@ public static class PowerShellCompilationCapabilities
     public const PowerShellCompilationCapability HybridModule =
         BinaryModule |
         PowerShellCompilationCapability.PowerShellModuleState |
-        PowerShellCompilationCapability.HybridTypedRegions;
+        PowerShellCompilationCapability.HybridTypedRegions |
+        PowerShellCompilationCapability.NativeFunctionBinding;
+
+    /// <summary>A hosted executable can bind native functions but has no module-state or region owner.</summary>
+    public const PowerShellCompilationCapability HybridExecutable =
+        BinaryModule | PowerShellCompilationCapability.NativeFunctionBinding;
 
     /// <summary>Capabilities supplied by a runtime-independent typed executable.</summary>
     public const PowerShellCompilationCapability TypedExecutable =

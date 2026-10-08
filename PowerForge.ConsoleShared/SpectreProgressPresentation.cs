@@ -141,7 +141,7 @@ internal sealed class SpectreProgressPresentation
                 "servicelifecycle" or "commandhook" => unicode ? "[steelblue1]⚙[/]" : "[steelblue1]AC[/]",
                 "benchmarkextract" or "benchmarkgate" => unicode ? "[orange3]🧪[/]" : "[orange3]TS[/]",
                 "manifest" => unicode ? "[deepskyblue1]📝[/]" : "[deepskyblue1]DC[/]",
-                "msiprepare" or "msibuild" or "bundle" or "storepackage" => unicode ? "[magenta]📦[/]" : "[magenta]PK[/]",
+                "msiprepare" or "msibuild" or "bundle" or "storepackage" or "debianpackage" or "macapppackage" => unicode ? "[magenta]📦[/]" : "[magenta]PK[/]",
                 _ => unicode ? "[grey]•[/]" : "[grey]PF[/]"
             };
         }

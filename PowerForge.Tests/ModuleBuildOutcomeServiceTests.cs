@@ -58,7 +58,7 @@ public sealed class ModuleBuildOutcomeServiceTests
     }
 
     [Fact]
-    public void Evaluate_SuppressesErrorRecordAndRequestsInteractiveSummary_WhenInteractiveFailureNeedsFollowup()
+    public void Evaluate_EmitsErrorRecordAndRequestsInteractiveSummary_WhenInteractiveFailureNeedsFollowup()
     {
         var workflow = new ModuleBuildWorkflowResult
         {
@@ -76,7 +76,7 @@ public sealed class ModuleBuildOutcomeServiceTests
             useLegacy: false,
             elapsed: TimeSpan.FromMilliseconds(250));
 
-        Assert.False(result.ShouldEmitErrorRecord);
+        Assert.True(result.ShouldEmitErrorRecord);
         Assert.True(result.ShouldReplayBufferedLogs);
         Assert.True(result.ShouldWriteInteractiveFailureSummary);
         Assert.False(result.ShouldWriteFailureMessage);

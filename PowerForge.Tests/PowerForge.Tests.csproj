@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" Version="10.0.1" />
+    <PackageReference Include="coverlet.collector" Version="10.1.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0" />
@@ -45,6 +45,12 @@
     <EmbeddedResource Remove="Fixtures\**\*" />
     <None Remove="Fixtures\**\*" />
     <None Include="Fixtures\**\*" Exclude="Fixtures\**\bin\**;Fixtures\**\obj\**" />
+    <None Update="Fixtures\PowerShellCompilationRandomWorkflow\Observe.ps1" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\PowerShellCompilationRandomWorkflow\Cancellation.ps1" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\PowerShellCompilationRegistryWorkflow\*.ps1" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\PowerShellCompilationInventoryWorkflow\*.ps1" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\PowerShellCompilationSavedStateWorkflow\*.ps1" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\PowerShellCompilationReservationWorkflow\*.psm1" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Target Name="CopyProcessOutputPressureFixture" AfterTargets="Build">
@@ -53,4 +59,8 @@
     </ItemGroup>
     <Copy SourceFiles="@(ProcessOutputFixture)" DestinationFiles="@(ProcessOutputFixture->'$(TargetDir)ProcessOutputPressureFixture/%(RecursiveDir)%(Filename)%(Extension)')" />
   </Target>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Fixtures\Benchmarks\BenchmarkDotNet-0.15.8-jobs.json" />
+  </ItemGroup>
 </Project>

@@ -451,7 +451,9 @@ public sealed class ModuleBuildPipeline
             foreach (var file in Directory.EnumerateFiles(current, "*", SearchOption.TopDirectoryOnly))
             {
                 var fileName = Path.GetFileName(file);
-                if (!string.IsNullOrEmpty(fileName) && excludedFileNames.Contains(fileName)) continue;
+                if (!string.IsNullOrEmpty(fileName) &&
+                    (excludedFileNames.Contains(fileName) ||
+                     (fileName.Equals(".git", StringComparison.OrdinalIgnoreCase) && excludedDirectoryNames.Contains(fileName)))) continue;
                 var destFile = Path.Combine(targetDir, fileName);
                 File.Copy(file, destFile, overwrite: true);
             }

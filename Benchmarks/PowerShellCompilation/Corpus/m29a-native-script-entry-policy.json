@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "1af11e96749d5a980e6a8dee982c3fc803abe1b8",
+  "purpose": "Shared native script-entry runtime policy and generated-root binding qualification; executable admission and launcher remain unchanged.",
+  "sourceHashes": {
+    "PowerForge.PowerShell/Services/Compilation/PowerShellCommandHostRuntimeSource.cs": "f6f9caec07f598c51ea2947026a238ad373e1a0239e4c0c4f6964b791d4b9b3c",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.LazyClauses.cs": "018539d2a7b538ee51c238b0d616d6be72a98677efeaef05ea6d429c582588e6",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.OwnedDeclaration.cs": "4fd03fac435daa0baf2e9828ae9c43a1442fdda3e4d14e00586fd3be9e813529",
+    "PowerForge.PowerShell/Services/Compilation/Runtime/PowerShellNativeFunctionHost.ScriptEntry.cs": "709e0229b793467f576e88ff8f1d89095d23b445196e7b72a4ea198d6656ef95",
+    "PowerForge.Tests/Fixtures/PowerShellCompilationStatementErrorFixture/NativeScriptEntryFixture.cs": "b996e32337d928f7835fe4ddbab7d310b6d5fcc50d0bcaa68c255c698f68ab9a",
+    "PowerForge.Tests/Fixtures/PowerShellCompilationStatementErrorFixture/NativeScriptEntryPolicyFixture.cs": "1b2f29f2adc75020a06cb2227cc05cfc6932c7eb9b244b15bd6162f5b356f6b2",
+    "PowerForge.Tests/Fixtures/PowerShellCompilationStatementErrorFixture/NativeScriptEntryPolicyProbe.ps1": "e6096ede0d27ca0e7553b8e4a8ecddf4e15d81152a66b94dc62aae1465707266",
+    "PowerForge.Tests/Fixtures/PowerShellCompilationStatementErrorFixture/NativeScriptEntryProbe.ps1": "d325e04aa6772818e561a32a6793145153c60e21903d9b9f58691bcfb531a22c",
+    "PowerForge.Tests/PowerShellCompilationNativeScriptEntryHostTests.cs": "f0d276b70225f5370ea7f260fed68b2adf814bcdb57d1387f697c7029d698052",
+    "PowerForge.Tests/PowerShellCompilationNativeScriptRootTests.cs": "b9e27be964534499e74524f6db6b82cad387c3a82d6b4ab5cc916da603dd2f94"
+  },
+  "validation": [
+    {
+      "file": "native-policy-final.trx",
+      "sha256": "d2031388f939f602d15299cd64f3f72aa6bf65a204d51675374c02aed5b10e6e",
+      "total": 11,
+      "passed": 11,
+      "failed": 0,
+      "results": [
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_NativeScriptRootMatchesOriginalBindingAndExecution(framework: \"net10.0\", host: \"pwsh\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeScriptEntry_PreservesAuthorizationAndRejectsUnqualifiedSourceAndLanguage(framework: \"net472\", host: \"powershell.exe\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.BasicCommandHost_PreservesOfflineTimeConfigurationAndLooseArguments(framework: \"net10.0\", host: \"pwsh\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.BasicCommandHost_StrictKeepsUnqualifiedBasicSurfaceClosed",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_NativeScriptRootUsesAuthoredStorageAndSourcePositions",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.BasicCommandHost_PreservesOfflineTimeConfigurationAndLooseArguments(framework: \"net472\", host: \"powershell.exe\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_NativeScriptRootMatchesOriginalBindingAndExecution(framework: \"net472\", host: \"powershell.exe\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_NativeScriptRootKeepsUnqualifiedDeclarationOwnersClosed(source: \"#requires -Version 7.0\\n1\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeScriptEntry_PreservesAuthorizationAndRejectsUnqualifiedSourceAndLanguage(framework: \"net10.0\", host: \"pwsh\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_NativeScriptRootKeepsUnqualifiedDeclarationOwnersClosed(source: \"enum Kind { One }\\n1\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_NativeScriptRootKeepsUnqualifiedDeclarationOwnersClosed(source: \"function Helper { 1 }\\nHelper\")",
+          "outcome": "Passed"
+        }
+      ]
+    },
+    {
+      "file": "native-policy.trx",
+      "sha256": "389f02a1cf0c87a7dc1656a6d9fd82a6659dba4a49cb68be9c15b86e39c1aea7",
+      "total": 4,
+      "passed": 2,
+      "failed": 2,
+      "results": [
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_NativeScriptRootMatchesOriginalBindingAndExecution(framework: \"net472\", host: \"powershell.exe\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeScriptEntry_PreservesAuthorizationAndRejectsUnqualifiedSourceAndLanguage(framework: \"net472\", host: \"powershell.exe\")",
+          "outcome": "Failed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeScriptEntry_PreservesAuthorizationAndRejectsUnqualifiedSourceAndLanguage(framework: \"net10.0\", host: \"pwsh\")",
+          "outcome": "Failed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_NativeScriptRootMatchesOriginalBindingAndExecution(framework: \"net10.0\", host: \"pwsh\")",
+          "outcome": "Passed"
+        }
+      ]
+    },
+    {
+      "file": "native-policy-corrected.trx",
+      "sha256": "1ffd407fc239fa1449d4b4883bd60c400f7102a6ce8543157a2f903ced6b35bb",
+      "total": 4,
+      "passed": 4,
+      "failed": 0,
+      "results": [
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_NativeScriptRootMatchesOriginalBindingAndExecution(framework: \"net472\", host: \"powershell.exe\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Compile_NativeScriptRootMatchesOriginalBindingAndExecution(framework: \"net10.0\", host: \"pwsh\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeScriptEntry_PreservesAuthorizationAndRejectsUnqualifiedSourceAndLanguage(framework: \"net10.0\", host: \"pwsh\")",
+          "outcome": "Passed"
+        },
+        {
+          "name": "PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeScriptEntry_PreservesAuthorizationAndRejectsUnqualifiedSourceAndLanguage(framework: \"net472\", host: \"powershell.exe\")",
+          "outcome": "Passed"
+        }
+      ]
+    }
+  ],
+  "independentReview": {
+    "patchSha256": "0f514661188b506b4b54cee63a7323d077e13079b75a296b57e795976b2bd6d1",
+    "result": "No actionable P0-P3 findings",
+    "scope": "Ten staged source/test files and supplied final 11/11 TRX; read-only source inspection, no independent builds or tests"
+  },
+  "design": [
+    "Native command discovery owns ExternalScriptInfo, file decoding and defining-language policy. The runtime hashes the same decoded text it reparses, preserving the defining path.",
+    "Expected SHA256 is lowercase hexadecimal over decoded source text encoded as UTF8, excluding the file BOM.",
+    "Fresh native compilation data avoids modifying cached script clones. The shared lazy clause installer compiles optimized/unoptimized callbacks without initializing parameter attributes early.",
+    "Ordinary call-operator invocation owns authorization and binding exactly once. The runtime does not set SignatureChecked or call authorization manually.",
+    "The generated-root test replaces the handwritten prototype. The remaining fixture only records callback count; production runtime supplies native invocation preparation."
+  ],
+  "observableProof": [
+    "Allowed original/generated invocation performs one authorization, one parameter attribute construction, one default evaluation and one generated callback.",
+    "Denied invocation performs one authorization and zero parameter attribute constructions, defaults or callbacks. Source mismatch and restricted invocation fail before these effects.",
+    "Both Windows hosts preserve four generated-root binding/storage/context cases and terminating validation rejection. Existing basic native-function behavior passes as a sibling."
+  ],
+  "earlierFailures": [
+    "The first run failed 2/4: unavailable Get-FileHash in the isolated Windows PowerShell test state, and duplicate authorization caused by explicit ValidateScriptInfo before ordinary dispatch.",
+    "The probe hashes through System.Security.Cryptography, and ordinary invocation now owns authorization. The corrected run passed 4/4; the final source after prototype removal passed 11/11."
+  ],
+  "limits": [
+    "The helper and native root lowering remain internal to compiler delivery; executable explain/build and packaged launcher do not select this route.",
+    "Synthetic original/generated host qualification only; no new unchanged application, admitted root or complete-function gain.",
+    "Claimed runtime hosts: Windows PowerShell 5.1/net472 and PowerShell 7/net10.0, FullLanguage. WDAC, signed execution policy and broader system/file policy are not live-qualified.",
+    "Artifact source/dependency locks, declaration registration/order, launcher admission, full caller metadata and consequential stream/stop/cleanup qualification remain open.",
+    "Counts unchanged: 544/565 emitted, 21 retained, fifteen justified hosted and six unqualified WPF functions.",
+    "No aggregate gate/census, PR, merge or release."
+  ]
+}

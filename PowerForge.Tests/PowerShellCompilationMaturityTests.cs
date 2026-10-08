@@ -31,7 +31,7 @@ public sealed class PowerShellCompilationMaturityTests
         var target = PowerShellCompilationTargetContractService.Create(
             PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid,
-            "net8.0",
+            "net10.0",
             null,
             false,
             false,
@@ -78,5 +78,5 @@ public sealed class PowerShellCompilationMaturityTests
                     },
                     Array.Empty<PowerShellCompilationDiagnostic>())
             },
-            "net8.0");
+            "net10.0");
 }

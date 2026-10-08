@@ -21,7 +21,7 @@ Uploads and commits an App Store Connect screenshot file to an existing screensh
 
 ### EXAMPLE 1
 ```powershell
-Publish-AppStoreConnectScreenshot -IssuerId 'Value' -KeyId 'Value' -ScreenshotSetId 'Value'
+Publish-AppStoreConnectScreenshot -Path 'C:\Path' -IssuerId 'Value' -KeyId 'Value' -ScreenshotSetId 'Value'
 ```
 
 

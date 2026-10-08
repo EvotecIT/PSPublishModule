@@ -692,7 +692,7 @@ public static partial class WebSiteBuilder
         var description = GetMetaString(item.Meta, "social_description");
         if (string.IsNullOrWhiteSpace(description))
             description = ResolveMetaDescription(spec, item);
-        var canonicalOrOutput = string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical;
+        var canonicalOrOutput = ResolveCanonicalRoute(spec, item);
         var url = ResolveAbsolutePublicUrl(spec, localization, item.Language, canonicalOrOutput);
         var siteName = string.IsNullOrWhiteSpace(spec.Social.SiteName) ? spec.Name : spec.Social.SiteName;
         var imageOverride = ResolveSocialImageOverride(item);
@@ -804,7 +804,7 @@ public static partial class WebSiteBuilder
             }));
         }
 
-        var pageUrl = ResolveAbsolutePublicUrl(spec, localization, item.Language, string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical);
+        var pageUrl = ResolveAbsolutePublicUrl(spec, localization, item.Language, ResolveCanonicalRoute(spec, item));
         if (spec.StructuredData.Website && item.Kind == PageKind.Home)
         {
             var webSiteModel = new Dictionary<string, object?>
@@ -949,11 +949,7 @@ public static partial class WebSiteBuilder
 
     private static (int Width, int Height) ResolveSocialImageDimensions(SiteSpec spec, ContentItem item, string imagePath)
     {
-        var width = GetMetaInt(item.Meta, "social_image_width") ?? GetMetaInt(item.Meta, "social.image.width");
-        var height = GetMetaInt(item.Meta, "social_image_height") ?? GetMetaInt(item.Meta, "social.image.height");
-        if (width is > 0 || height is > 0)
-            return (Math.Max(0, width ?? 0), Math.Max(0, height ?? 0));
-
+        // A generated card has its own size, even when the page also declares the size of its own image.
         if (spec.Social?.AutoGenerateCards == true)
         {
             var generatedPrefix = NormalizeGeneratedCardsPath(spec.Social.GeneratedCardsPath) + "/";
@@ -964,6 +960,11 @@ public static partial class WebSiteBuilder
                 return (Math.Max(0, spec.Social.GeneratedCardWidth), Math.Max(0, spec.Social.GeneratedCardHeight));
             }
         }
+
+        var width = GetMetaInt(item.Meta, "social_image_width") ?? GetMetaInt(item.Meta, "social.image.width");
+        var height = GetMetaInt(item.Meta, "social_image_height") ?? GetMetaInt(item.Meta, "social.image.height");
+        if (width is > 0 || height is > 0)
+            return (Math.Max(0, width ?? 0), Math.Max(0, height ?? 0));
 
         return (Math.Max(0, spec.Social?.ImageWidth ?? 0), Math.Max(0, spec.Social?.ImageHeight ?? 0));
     }

@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Qualify the normal public local-only PSSharedGoods SMB command path without compiling its retained native helper",
+  "compilerBaselineCommit": "e09b037453ad96fa8489abf4b4207184f24a48bc",
+  "source": {
+    "privateFunction": "Get-ComputerSMBInfo",
+    "privateSha256": "3ccd899673eae4228034ce10b2756e6a65a1a7d6a8596910ef6a84bff912760d",
+    "publicFunction": "Get-ComputerSMBShareList",
+    "publicSha256": "29ef551916644583302e8131e5dd0d5d977cd9104670a9cfa546a1e22bdf13c5",
+    "unchanged": true,
+    "fixture": "ExternalWorkflows/PSSharedGoods/SmbInfo/Prepare.ps1",
+    "observer": "ExternalWorkflows/PSSharedGoods/SmbInfo/ObservePublic.ps1",
+    "observerSha256": "28eb42852061de010b2c941a807108a3902ce345c2e334205748cd776b9d0731"
+  },
+  "artifact": {
+    "mode": "Hybrid",
+    "kind": "dll",
+    "frameworks": ["net10.0", "net472"],
+    "completeMethodsPerMiniModule": 1,
+    "emitted": ["Get-ComputerSMBShareList"],
+    "retainedHosted": ["Get-ComputerSMBInfo"],
+    "publicRuntimeCommandRegions": 3,
+    "net10ManifestSha256": "711342a0d4f8813a9f97c7528705cf37a2e372b68ecf4115aec8765b34d7925e",
+    "net472ManifestSha256": "20f57494ecc4318f87cf6c994332dbd9c38c80d5af641f586398d05013ec331c",
+    "net10DllSha256": "58e6aff69b354102369efd319f41d98998ba0bc80be3d07d14823241579c18c3",
+    "net472DllSha256": "2438d767c6fed73c3c3c20c015458a3120bf21e6087d42d3ca5844d3dbe984c4",
+    "generatedModuleSourceSha256": "f28cc75bcf519dff59be552b7f4bc81f9ed59f9835813512ac66cf3b081e3273",
+    "dependencyClosureVerified": false
+  },
+  "explanation": {
+    "net10Sha256": "0984571ab6f6ff4d4fed2431ae72342cb8c04384d7b24e6036e294db9b77d688",
+    "net472Sha256": "d0722ae8bd400a7a2eb2adb49e73230165ea13847e3ac4bba502441f61bb824a",
+    "sameInputPerTarget": "One public complete method and one retained private helper; no compiler source or pinned module-source change in this wave."
+  },
+  "offlineWorkflow": {
+    "preflight": "Fresh child per host loads the exact authored C# declaration and verifies local NetShareEnum returns status zero, five complete entries and successful independent buffer cleanup.",
+    "public": "Fresh original/generated children per host import the pinned mini module with the type absent, invoke its exported public command on the verified local machine with SkipDiskSpace, then compare five results with an independently enumerated local native buffer.",
+    "cases": ["initial all", "repeat", "wildcard", "exact", "missing"],
+    "originalGeneratedPairs": 2,
+    "caseComparisons": 10,
+    "childProcesses": 6,
+    "allExitZeroWithEmptyStderr": true,
+    "noShareNamesPathsOrRemarksPersisted": true,
+    "preflightSha256": {
+      "PowerShell7": "905d0c31c25307254395d762d64bb96467df42ee722e779490e2fd66f12ce97e",
+      "WindowsPowerShell51": "f54ec993c6e013d6491654e0e2e92029babb118d64234eb7108018a302c75598"
+    },
+    "matchingOriginalGeneratedSha256": {
+      "PowerShell7_net10": "11baca5bf2a0b8bf0807abdd60253e504302c6a56c5391db1b0fb7cc5813d8db",
+      "WindowsPowerShell51_net472": "860ab8aee3762dc2a6c82d118f6f43552c4582dc8caae33e354a3a2ea8cdde80"
+    },
+    "sanitizedObservations": {
+      "PowerShell7_net10": {
+        "hostVersion": "7.6.6",
+        "preflight": {"localIdentity": true, "completeLocalEntries": 5},
+        "public": {
+          "authoredTypeLoadedByPublicBegin": true,
+          "completeLocalEntries": 5,
+          "cases": [
+            {"name": "all", "records": 5, "matchesIndependentBaseline": true, "warnings": 0},
+            {"name": "repeat", "records": 5, "matchesIndependentBaseline": true, "warnings": 0},
+            {"name": "wildcard", "records": 5, "matchesIndependentBaseline": true, "warnings": 0},
+            {"name": "exact", "records": 1, "matchesIndependentBaseline": true, "warnings": 0},
+            {"name": "missing", "records": 0, "matchesIndependentBaseline": true, "warnings": 0}
+          ]
+        }
+      },
+      "WindowsPowerShell51_net472": {
+        "hostVersion": "5.1.26100.9444",
+        "preflight": {"localIdentity": true, "completeLocalEntries": 5},
+        "public": {
+          "authoredTypeLoadedByPublicBegin": true,
+          "completeLocalEntries": 5,
+          "cases": [
+            {"name": "all", "records": 5, "matchesIndependentBaseline": true, "warnings": 0},
+            {"name": "repeat", "records": 5, "matchesIndependentBaseline": true, "warnings": 0},
+            {"name": "wildcard", "records": 5, "matchesIndependentBaseline": true, "warnings": 0},
+            {"name": "exact", "records": 1, "matchesIndependentBaseline": true, "warnings": 0},
+            {"name": "missing", "records": 0, "matchesIndependentBaseline": true, "warnings": 0}
+          ]
+        }
+      }
+    },
+    "childReceipts": [
+      {"host": "PowerShell7_net10", "run": "preflight", "exitCode": 0, "stdoutBytes": 0, "stderrBytes": 0, "resultSha256": "905d0c31c25307254395d762d64bb96467df42ee722e779490e2fd66f12ce97e"},
+      {"host": "PowerShell7_net10", "run": "original", "exitCode": 0, "stdoutBytes": 0, "stderrBytes": 0, "resultSha256": "11baca5bf2a0b8bf0807abdd60253e504302c6a56c5391db1b0fb7cc5813d8db"},
+      {"host": "PowerShell7_net10", "run": "generated", "exitCode": 0, "stdoutBytes": 0, "stderrBytes": 0, "resultSha256": "11baca5bf2a0b8bf0807abdd60253e504302c6a56c5391db1b0fb7cc5813d8db"},
+      {"host": "WindowsPowerShell51_net472", "run": "preflight", "exitCode": 0, "stdoutBytes": 0, "stderrBytes": 0, "resultSha256": "f54ec993c6e013d6491654e0e2e92029babb118d64234eb7108018a302c75598"},
+      {"host": "WindowsPowerShell51_net472", "run": "original", "exitCode": 0, "stdoutBytes": 0, "stderrBytes": 0, "resultSha256": "860ab8aee3762dc2a6c82d118f6f43552c4582dc8caae33e354a3a2ea8cdde80"},
+      {"host": "WindowsPowerShell51_net472", "run": "generated", "exitCode": 0, "stdoutBytes": 0, "stderrBytes": 0, "resultSha256": "860ab8aee3762dc2a6c82d118f6f43552c4582dc8caae33e354a3a2ea8cdde80"}
+    ],
+    "compiledCallbackEvidence": "Generated public begin/process stubs throw if callbacks are not installed; normal successful calls exercised the installed native-bound function."
+  },
+  "strict": {
+    "net10": {"exitCode": 1, "typedUnits": 0, "rejectedUnits": 2, "sha256": "ef52ea81d5c22c7b1c5724ce762c21ea24bbb265caab9bdce66a673d0a5f8283"},
+    "net472": {"exitCode": 1, "typedUnits": 0, "rejectedUnits": 2, "sha256": "5b6db6c9f94cbf05981adfe583383090429309888c3c44352ecaddbc9cd61003"}
+  },
+  "limits": [
+    "The private helper remains hosted; no new complete method or typed region execution is credited.",
+    "Only the verified local computer name is passed to NetShareEnum, with SkipDiskSpace; no remote server, UNC open or disk-space call is exercised.",
+    "Preflight confirms the local buffer is complete before the public call, but cannot eliminate a changing-share race between processes.",
+    "Native error and partial-buffer handling, the authored totalentries loop, remote and full-module behavior remain unqualified.",
+    "The local artifact build permits unreviewed dependencies; no distribution, other-platform or performance claim follows."
+  ]
+}

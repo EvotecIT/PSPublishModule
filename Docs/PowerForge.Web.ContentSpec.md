@@ -1000,11 +1000,35 @@ You can also control generated card presentation:
 - `meta.social_card_route`: bottom route label text
 - `meta.social_card_theme`: named generated card theme from `Social.GeneratedCardThemes`
 - `meta.social_card_style`: style key (`home`, `default`, `docs`, `api`, `blog`, `contact`, `examples`, `downloads`, `release`, `feed`, `benchmark`, `code`)
-- `meta.social_card_variant`: layout variant (`product`, `spotlight`, `shelf`, `reference`, `editorial`, `inline-image`, `connect`, `metrics`, `timeline`, `feed`, `code`)
+- `meta.social_card_variant`: layout variant (`product`, `spotlight`, `shelf`, `reference`, `editorial`, `inline-image`, `connect`, `metrics`, `timeline`, `feed`, `code`, `panel`)
 - `meta.social_card_logo`: optional logo path/URL used inside generated cards
 - `meta.social_card_image`: optional inline media path/URL for generated cards
 - `meta.social_card_image_inline`: force/skip inline media rendering for generated cards
 - `meta.social_card_metrics`: optional list/string of metric chips rendered on generated cards
+- `meta.social_card_chips`: short labels for the `panel` layout. The defaults are:
+  - `meta.product_presentation.platforms`
+  - for project pages: the GitHub language plus Docs, API reference and Examples
+- `meta.social_card_accent`: hex colour that replaces the theme accent. It defaults to `meta.brand.accent`, so product cards use the product's colour.
+
+#### Panel cards for projects and products
+
+The `panel` variant gives shared links one consistent look:
+- a left accent bar
+- the logo and site name
+- an uppercase eyebrow, from the badge or the project type ("PowerShell module", ".NET library")
+- a large title that steps down from 54 to 44 px when it is long
+- a short description
+- a row of chips with the site address
+- a right-hand panel that shows the page image (for example a product screenshot) or up to four stats. Stats are stars, forks, downloads and the release version; issue counts and yes/no flags stay out of the panel.
+
+To use it for whole collections:
+
+```json
+"GeneratedCardCollections": [ "projects", "products" ],
+"GeneratedCardVariantsByCollection": { "projects": "panel", "products": "panel" }
+```
+
+`GeneratedCardCollections` makes every page in those collections get a generated card, even when it sets `meta.social_image`. That image is then shown inside the card. A page can opt out with `meta.social_card: false`. Generated cards always report their own size in `og:image:width`/`og:image:height`.
 
 Generated card colors are theme-aware when theme tokens are present:
 - generic theme tokens under `Tokens.color.*` are used as the default palette source
@@ -1210,6 +1234,12 @@ meta.seo_description: "Custom SEO description"
 ```
 
 Each build emits resolved SEO metadata at `_powerforge/seo-preview.json`.
+
+Generated taxonomy term titles include the taxonomy name, such as `Security | Tags`,
+so a category and a tag with the same name have distinct titles. Visible page titles
+retain the term name. Paginated listings keep their landing-page SEO title and append
+a language-neutral page count on later pages, such as `Engineering journal | Example Site (2/3)`.
+This suffix also applies when pagination copies a landing page's `meta.seo_title` override.
 
 ### Crawl policy (robots directives)
 Use route-scoped crawl directives with optional bot-specific overrides:

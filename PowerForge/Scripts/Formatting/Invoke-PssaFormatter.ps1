@@ -1,5 +1,13 @@
-﻿param([string]$SettingsB64,[Parameter(ValueFromRemainingArguments=$true)][string[]]$Files)
+﻿[CmdletBinding(PositionalBinding=$false)]
+param(
+    [Parameter(Position=0)][string]$SettingsB64,
+    [Parameter(Position=1,ValueFromRemainingArguments=$true)][string[]]$Files,
+    [string]$BatchPath,
+    [string]$SessionDirectory,
+    [int]$ParentProcessId
+)
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 try {
     $ModuleRoots = @($env:PSModulePath -split [System.IO.Path]::PathSeparator |
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
@@ -71,6 +79,8 @@ try {
     exit 3
 }
 
+function Invoke-PssaFormattingBatch {
+param([string]$BatchPath, [string]$SettingsB64, [string[]]$Files)
 $settings = $null
 if ($SettingsB64) {
   try {
@@ -99,9 +109,19 @@ function ConvertTo-Hashtable {
   }
   return $InputObject
 }
-if ($null -ne $settings) { $settings = ConvertTo-Hashtable $settings }
+$batches = @([pscustomobject]@{ Files = $Files; Settings = $settings })
+if ($BatchPath) {
+    $batchEntries = Get-Content -LiteralPath $BatchPath -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
+    $batches = @(foreach ($entry in @($batchEntries)) {
+        $batchSettings = $null
+        if ($entry.SettingsJson) { $batchSettings = ConvertFrom-Json -InputObject $entry.SettingsJson }
+        [pscustomobject]@{ Files = $entry.Files; Settings = $batchSettings }
+    })
+}
 
-foreach ($f in $Files) {
+foreach ($batch in $batches) {
+$settings = ConvertTo-Hashtable $batch.Settings
+foreach ($f in $batch.Files) {
   try {
     $text = Get-Content -LiteralPath $f -Raw -ErrorAction Stop
     $formatterErrors = @()
@@ -144,5 +164,30 @@ foreach ($f in $Files) {
   } catch {
     Write-Output ("ERROR::" + $f + "::" + $_.Exception.Message)
   }
+}
+}
+}
+
+if ($SessionDirectory) {
+    $RequestPath = [System.IO.Path]::Combine($SessionDirectory, 'request.json')
+    $StopPath = [System.IO.Path]::Combine($SessionDirectory, 'stop')
+    while (-not [System.IO.File]::Exists($StopPath)) {
+        if ([System.IO.File]::Exists($RequestPath)) {
+            $request = [System.IO.File]::ReadAllText($RequestPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+            [System.IO.File]::Delete($RequestPath)
+            Set-Location -LiteralPath $request.WorkingDirectory -ErrorAction Stop
+            [System.Environment]::CurrentDirectory = $request.WorkingDirectory
+            Invoke-PssaFormattingBatch -BatchPath $request.BatchPath
+            Write-Output ('PSSA_PHASE_DONE::' + $request.Id)
+            continue
+        }
+        try {
+            $parentProcess = [System.Diagnostics.Process]::GetProcessById($ParentProcessId)
+            $parentProcess.Dispose()
+        } catch { break }
+        Start-Sleep -Milliseconds 25
+    }
+} else {
+    Invoke-PssaFormattingBatch -BatchPath $BatchPath -SettingsB64 $SettingsB64 -Files $Files
 }
 exit 0

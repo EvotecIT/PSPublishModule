@@ -171,14 +171,20 @@ the app through an explicit Xcode build setting.
 The `New-AppleAppBuild` and `Publish-AppleAppToDevice` cmdlets expose the same
 behavior through `-OptimizeSwift`.
 
+Local Apple builds use the selected working tree, including uncommitted and
+untracked source. Build and deployment results record `SourceDirty` alongside
+the Git revision; a dirty build is not identified completely by that revision.
+Changes made while a build is running are still detected. Clean Git source and
+tracked build-graph verification are available through the explicit
+`AppleApps.LocalDeployment.UseControlledSourceProvenance` option, which defaults
+to `false`.
+The `New-AppleAppBuild` and `Publish-AppleAppToDevice` cmdlets expose the same
+opt-in through `-UseControlledSourceProvenance`; omitting it keeps normal working-tree builds.
+
 ### Development workflow roadmap
 
 The remaining development work belongs in the shared PowerForge engine:
 
-- [ ] Add an explicit working-tree build mode with a source fingerprint and
-  dirty-state receipt. Keep release and exact-source builds bound to a clean
-  revision. Ordinary ignored build output and unrelated operator evidence must
-  not prevent this development mode from compiling the declared project.
 - [ ] Reuse development DerivedData with an exclusive lease and invalidation
   for project, scheme, configuration, destination, Xcode, and package-lock changes.
   Measure a cold build, an unchanged build, and a one-file edit before selecting

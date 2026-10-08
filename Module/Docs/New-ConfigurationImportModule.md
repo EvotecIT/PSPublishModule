@@ -11,7 +11,7 @@ Creates a configuration for importing PowerShell modules.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationImportModule [-ImportSelf] [-ImportRequiredModules] [-SkipBinaryConflictAnalysis] [-PreferBinaryConflictOrder] [-SkipBinaryDependencyCheck] [<CommonParameters>]
+New-ConfigurationImportModule [-ImportSelf] [-ImportRequiredModules] [-SkipBinaryConflictAnalysis] [-PreferBinaryConflictOrder] [-SkipBinaryDependencyCheck] [-OptionalBinaryDependencies <hashtable>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -32,6 +32,13 @@ Ensures the pipeline imports the module and required dependencies before running
 PS> New-ConfigurationImportModule -ImportSelf
 ```
 
+
+### EXAMPLE 3
+```powershell
+New-ConfigurationImportModule -ImportSelf -OptionalBinaryDependencies @{ 'Connector.dll' = @('AlternativeProvider.dll') }
+```
+
+Only this exact reference is optional. Other missing dependencies and manifest-declared assemblies still fail validation.
 
 ## PARAMETERS
 
@@ -56,6 +63,22 @@ Indicates whether to import the current module itself.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -OptionalBinaryDependencies
+Maps each referring DLL filename to exact optional dependency DLL filenames.
+
+```yaml
+Type: Hashtable
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

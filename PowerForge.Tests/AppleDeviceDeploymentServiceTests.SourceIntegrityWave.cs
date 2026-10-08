@@ -492,6 +492,7 @@ public sealed partial class AppleDeviceDeploymentServiceTests
             var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 new AppleDeviceDeploymentService(runner).BuildAsync(new AppleAppBuildRequest
                 {
+                    UseControlledSourceProvenance = true,
                     ProjectPath = project.FullName,
                     Scheme = "CasaRay",
                     Destination = "id=device-1",

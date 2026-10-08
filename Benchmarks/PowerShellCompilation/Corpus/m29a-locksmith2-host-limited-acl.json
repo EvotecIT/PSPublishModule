@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "recordedOn": "2026-09-28",
+  "source": {
+    "workload": "locksmith2",
+    "revision": "f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639",
+    "archiveSha256": "d4f511b16ed95d15bfa37ba06ddfc92709f0412e8669004cb70e3407ae9fc8b9",
+    "sourceFingerprint": "b1e65521a013471cfc80589f0edd062a714f4b498a347685a06d7dce97b1b4ef",
+    "license": "Commons Clause License Condition v1.0",
+    "unchangedFunctionSha256": {
+      "Private/Set/Set-DangerousEditor.ps1": "2256f28459c2827d8359f5a4eb7b5da87b32fd07f37f0013399d307c106645c6",
+      "Private/Set/Set-LowPrivilegeEditor.ps1": "181e748c6c00d904e428afb6002960b50d40448bc7c34fa5ae3613b008c2028c",
+      "Private/Set/Set-DangerousEnrollee.ps1": "acea9e288843fad42ed0c18891fae771fe21e78855aff8fe75c659b89fc0e343",
+      "Private/Set/Set-LowPrivilegeEnrollee.ps1": "273baa3785565d1ded9586b7df7ebba6c35c54d818975f9b106b804fe4be9cf3",
+      "Private/Convert/Convert-IdentityReferenceToSid.ps1": "0a301e6bb1b026b50aa975aa1471896d7ab94c581f2c98f8d2e9fd4b23305a24",
+      "Private/Test/Test-IsDangerousPrincipal.ps1": "3894d7be6f350fbc962627e655b938d44a06dcc302380bea593fa66814ee2e12",
+      "Private/Test/Test-IsLowPrivilegePrincipal.ps1": "173efd6b5a5e5bcf6eb574531d5005156bcc08378f8e8f3d9e24b646ce99cb43",
+      "Private/Test/Test-IsDangerousAce.ps1": "03b10d5011f4c7a16bd0922cbe115f9a3f1a5ce45b1344aa603949d65e38001a",
+      "Private/Test/Test-IsEnrollmentAce.ps1": "c4fb8a049fb70ad421e64c5653a2c9261132ede6769194aa0dfa6c4467633dde",
+      "Private/Convert/Expand-GroupMembership.ps1": "a0cc1f4b31aa481ebe25861727a829dafa89f65779b59bab8028dd9676013722"
+    },
+    "unchangedDataSha256": {
+      "Private/Data/PrincipalDefinitions.ps1": "d91e0ea54f81c56c79026f45d615ffcfa94a012f68cf41afc8a62e8a667d9986",
+      "Private/Data/AceDefinitions.ps1": "2f9922a6646a950cba5fa18f314b64476ccb5b6f98c13d490b6b72d33ef6f8e8"
+    },
+    "unchangedManifestClassSha256": {
+      "Classes/LS2Principal.ps1": "5b8542654843f25be0218a346780cdd40ec6f236bc73004e228eb960cb49fca1",
+      "Classes/LS2AdcsObject.ps1": "abb27b68cdfe94c111013009ab453aa96a7f67748e2b33abd1e703640a9c93a5",
+      "Classes/LS2Issue.ps1": "736d4440eace31299822b2d8e20863b1c26a7cb9186da235c478910226202e38"
+    }
+  },
+  "fixture": {
+    "tenFunctionTextsVerbatim": true,
+    "bothDataTextsVerbatim": true,
+    "threeClassCopiesHashIdentical": true,
+    "moduleSourceSha256": "3777152b41e04272eca0fb7004bd5efe2502316888fee716e8477c6ecfa8fb71",
+    "moduleManifestSha256": "ff1e038bac446b7dee23a7ef9879289f5026bce8f6e05cad5320ca82de67c310",
+    "observerSha256": "3998daac0fc5ecdf0d73aa735d62580ace20ade1789c285a9d76091aa75b5f4e",
+    "aclBoundary": "One in-memory ActiveDirectorySecurity contains four real ActiveDirectoryAccessRule objects: Everyone Allow and Deny, custom group Allow, and Administrators Allow, all GenericAll. No directory entry or AD host is contacted. Resolve-Principal is an owned call recorder; GC, LDAP and directory-entry commands throw if reached."
+  },
+  "generated": {
+    "mode": "Hybrid",
+    "net10ManifestSha256": "bdb1baa06cf877a3849a42eff592fcc22c7db0681ff4af14840b3aca3ce6653c",
+    "net472ManifestSha256": "1921f75a3c40599ff61b095fc6c921b9bc0c109a651cb11c22f8db352cd4a35d",
+    "compiledMethodsPerTarget": 8,
+    "fourNewSetterMethodsNativeBoundPerTarget": true,
+    "runtimeCommandRegionsPerSetter": 3,
+    "acePredicateHelpersRetainedHosted": ["Test-IsDangerousAce", "Test-IsEnrollmentAce"],
+    "acePredicateRetentionReason": "ActiveDirectoryAccessRule[] is outside the admitted target capability for native parameters on both targets.",
+    "strict": {
+      "targets": ["net10.0", "net472"],
+      "canProceed": false,
+      "typedUnits": 0,
+      "rejectedUnits": 11,
+      "net10ExplainSha256": "621b22aa40de956e494a267268c53e1188aa81daa9840f0960bab3bbfac781f8",
+      "net472ExplainSha256": "53bb2734253e904f7f4fbc89e7d012daba667c3f797efe600902508c796d2887"
+    }
+  },
+  "execution": {
+    "originalGeneratedRawJsonEqualWithinEachHost": true,
+    "allFourChildExitCodesZero": true,
+    "allFourStderrEmpty": true,
+    "powerShell7RawOutputSha256EachRun": "741ea387bcd1660a46e9ba09d7916c592a15c04f6585c864324d4b8e555887fa",
+    "windowsPowerShell51RawOutputSha256EachRun": "9ad70061a2c3b49767bc8c4c3dbdb45480937b3b95eb45bd114a5c099494e9ea",
+    "newMethods": ["Set-DangerousEditor", "Set-LowPrivilegeEditor", "Set-DangerousEnrollee", "Set-LowPrivilegeEnrollee"],
+    "windowsPowerShell51": {
+      "accessMember": true,
+      "accessRuleCount": 4,
+      "allFourSettersReturnSameTemplateReference": true,
+      "nonTemplateFilteredFromEnrollee": true,
+      "dangerousSidInEditorAndEnrollee": ["S-1-1-0"],
+      "lowPrivilegeSidsInEditorAndEnrollee": ["S-1-5-21-1-2-3-1002", "S-1-5-21-1-2-3-2001"],
+      "safeAdministratorAndDenyAceExcluded": true,
+      "cachedGroupMemberIncluded": true,
+      "principalResolutionCalls": ["Everyone", "S-1-5-21-1-2-3-2001", "Everyone", "S-1-5-21-1-2-3-2001"]
+    },
+    "powerShell7": {
+      "accessMember": false,
+      "accessViaMemberCount": 0,
+      "getAccessRulesCount": 4,
+      "allFourSettersReturnSameTemplateReference": true,
+      "positiveAclResult": false,
+      "principalResolutionCalls": 0
+    }
+  },
+  "sameInputAssessment": {
+    "evidenceSha256": "4e5050c94478fff133acb14259bdc7569a80532c21b90b231cb103e5e3d20d49",
+    "completeEmittedFunctions": "75/100",
+    "regressions": 0,
+    "previousBothHostSubstantiveProof": "30/37",
+    "newHostLimitedPositiveMethods": 4,
+    "stillAnalysisOnly": ["Find-LS2VulnerableCA", "Find-LS2VulnerableObject", "Find-LS2VulnerableTemplate"]
+  },
+  "limits": [
+    "Positive ACL classification is proven only for Windows PowerShell 5.1/net472. PowerShell 7/net10 matches its original source's empty result with this in-memory security object; it is not positive ACL qualification.",
+    "The missing PowerShell 7 Access member is an observed source/host prerequisite, not a reason to have the compiler synthesize different semantics or to add an Access member to this fixture.",
+    "This does not establish the shape of every real DirectoryEntry.ObjectSecurity instance. The AD-backed LS2AdcsObject constructor, full module, live AD security, cache misses and remediation remain unqualified.",
+    "The ACE predicate helpers stay hosted and the four emitted Hybrid lifecycle methods still route PowerShell commands; no runtime-free or Strict support is claimed.",
+    "The Commons Clause source and task-local executable observer are not tracked in this repository."
+  ]
+}

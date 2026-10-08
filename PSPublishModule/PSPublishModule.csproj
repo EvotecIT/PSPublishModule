@@ -29,7 +29,7 @@
     <PackageReference Include="Spectre.Console.Json" Version="0.57.2" />
     <PackageReference Include="HtmlForgeX" Version="1.1.0" />
     <PackageReference Include="HtmlForgeX.Markdown" Version="1.1.0" />
-    <PackageReference Include="OfficeIMO.Markdown" Version="3.4.3" />
+    <PackageReference Include="OfficeIMO.Markdown" Version="3.4.4" />
   </ItemGroup>
 
   <ItemGroup Condition=" '$(TargetFramework)' == 'net8.0' ">
@@ -65,6 +65,9 @@
     <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressDisplay.cs" Link="PowerForge.ConsoleShared\SpectreProgressDisplay.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressViewport.cs" Link="PowerForge.ConsoleShared\SpectreProgressViewport.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressLedger.cs" Link="PowerForge.ConsoleShared\SpectreProgressLedger.cs" />
+    <Compile Include="..\PowerForge.ConsoleShared\SpectreDotNetPublishConsoleUi.cs" Link="PowerForge.ConsoleShared\SpectreDotNetPublishConsoleUi.cs" />
+    <Compile Include="..\PowerForge.ConsoleShared\SpectreDotNetPublishConsoleUi.Display.cs" Link="PowerForge.ConsoleShared\SpectreDotNetPublishConsoleUi.Display.cs" />
+    <Compile Include="..\PowerForge.ConsoleShared\SpectreDotNetPublishConsoleUi.Labels.cs" Link="PowerForge.ConsoleShared\SpectreDotNetPublishConsoleUi.Labels.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreModulePipelineConsoleUi.cs" Link="PowerForge.ConsoleShared\SpectreModulePipelineConsoleUi.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreProjectBuildConsoleUi.cs" Link="PowerForge.ConsoleShared\SpectreProjectBuildConsoleUi.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreProjectBuildSummaryWriter.cs" Link="PowerForge.ConsoleShared\SpectreProjectBuildSummaryWriter.cs" />

@@ -40,6 +40,12 @@ Resolves documentation files from an installed module (root or Internals folder)
 
 ### EXAMPLE 1
 ```powershell
+Show-ModuleDocumentation -OutputPath 'C:\Path'
+```
+
+
+### EXAMPLE 2
+```powershell
 Show-ModuleDocumentation -DocsPath 'C:\Path'
 ```
 

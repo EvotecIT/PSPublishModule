@@ -7,6 +7,8 @@ internal enum PowerShellBoundBinaryOperator
     Multiply,
     Divide,
     Remainder,
+    PowerShellScalarFormat,
+    RuntimeFreeScalarFormat,
     Equal,
     NotEqual,
     NullEqual,
@@ -34,7 +36,29 @@ internal enum PowerShellBoundBinaryOperator
     BitwiseExclusiveOr,
     ShiftLeft,
     ShiftRight,
-    IntegralRemainder
+    IntegralRemainder,
+    PromotingAdd,
+    PromotingSubtract,
+    PromotingMultiply,
+    NumericUnionFloatingDivide,
+    NumericUnionFloatingRemainder,
+    NumericUnionNonzeroDivide,
+    NumericUnionNonzeroRemainder,
+    NumericUnionEqual,
+    NumericUnionNotEqual,
+    NumericUnionLessThan,
+    NumericUnionLessThanOrEqual,
+    NumericUnionGreaterThan,
+    NumericUnionGreaterThanOrEqual,
+    NativeStringConcatenate,
+    NativeLike,
+    NativeNotLike,
+    NativeMatch,
+    NativeNotMatch,
+    NativeSplit,
+    NativeReplace,
+    NativeRange,
+    NativeAs
 }
 
 internal enum PowerShellBoundUnaryOperator
@@ -42,7 +66,11 @@ internal enum PowerShellBoundUnaryOperator
     Identity,
     Negate,
     LogicalNot,
-    BitwiseNot
+    BitwiseNot,
+    NormalizeCommandArgument,
+    NativeIdentity,
+    NativeNegate,
+    NativeBitwiseNot
 }
 
 internal sealed class PowerShellBoundBinaryExpression : PowerShellBoundExpression
@@ -52,28 +80,56 @@ internal sealed class PowerShellBoundBinaryExpression : PowerShellBoundExpressio
         PowerShellBoundBinaryOperator operation,
         PowerShellBoundExpression left,
         PowerShellBoundExpression right,
-        PowerShellTypeFact type)
+        PowerShellTypeFact type,
+        bool preserveStatementErrors = false,
+        bool usesNativeInvocation = false,
+        bool nativeIgnoreCase = true,
+        SourceSpan? operatorSpan = null,
+        string? operatorSourceText = null)
         : base(
             span,
             type,
-            PowerShellValueState.Unknown,
-            left.Effects | right.Effects,
-            left.Capabilities | right.Capabilities | GetRequiredCapabilities(operation))
+            operation == PowerShellBoundBinaryOperator.NativeStringConcatenate ? PowerShellValueState.Known : PowerShellValueState.Unknown,
+            left.Effects | right.Effects | (preserveStatementErrors || operation == PowerShellBoundBinaryOperator.PowerShellScalarFormat
+                ? PowerShellSemanticEffect.TerminatingError : PowerShellSemanticEffect.None) |
+                (usesNativeInvocation || operation == PowerShellBoundBinaryOperator.NativeStringConcatenate
+                    ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError
+                    : PowerShellSemanticEffect.None),
+            left.Capabilities | right.Capabilities | GetRequiredCapabilities(operation) |
+                (usesNativeInvocation ? PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost |
+                    PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None) |
+                (preserveStatementErrors ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None))
     {
         Operation = operation;
         Left = left;
         Right = right;
+        PreserveStatementErrors = preserveStatementErrors;
+        UsesNativeInvocation = usesNativeInvocation;
+        NativeIgnoreCase = nativeIgnoreCase;
+        OperatorSpan = operatorSpan;
+        OperatorSourceText = operatorSourceText;
     }
 
     internal PowerShellBoundBinaryOperator Operation { get; }
     internal PowerShellBoundExpression Left { get; }
     internal PowerShellBoundExpression Right { get; }
+    internal bool PreserveStatementErrors { get; }
+    internal bool UsesNativeInvocation { get; }
+    internal bool NativeIgnoreCase { get; }
+    /// <summary>The authored operator token used by native pattern-operation diagnostics.</summary>
+    internal SourceSpan? OperatorSpan { get; }
+    /// <summary>Complete authored operator lines, preserving their original line endings.</summary>
+    internal string? OperatorSourceText { get; }
 
     internal static bool RequiresPowerShellLanguageRuntime(PowerShellBoundBinaryOperator operation)
         => GetRequiredCapabilities(operation).HasFlag(PowerShellRequiredCapability.PowerShellLanguageOperators);
 
     private static PowerShellRequiredCapability GetRequiredCapabilities(PowerShellBoundBinaryOperator operation)
-        => operation is PowerShellBoundBinaryOperator.PowerShellEqualIgnoreCase or
+        => operation == PowerShellBoundBinaryOperator.NativeStringConcatenate
+            ? PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost | PowerShellRequiredCapability.PowerShellStatementErrors
+            : operation == PowerShellBoundBinaryOperator.PowerShellScalarFormat
+            ? PowerShellRequiredCapability.PowerShellStatementErrors
+            : operation is PowerShellBoundBinaryOperator.PowerShellEqualIgnoreCase or
             PowerShellBoundBinaryOperator.PowerShellNotEqualIgnoreCase or
             PowerShellBoundBinaryOperator.PowerShellEqualCaseSensitive or
             PowerShellBoundBinaryOperator.PowerShellNotEqualCaseSensitive
@@ -88,7 +144,10 @@ internal sealed class PowerShellBoundUnaryExpression : PowerShellBoundExpression
         PowerShellBoundUnaryOperator operation,
         PowerShellBoundExpression operand,
         PowerShellTypeFact type)
-        : base(span, type, PowerShellValueState.Unknown, operand.Effects, operand.Capabilities)
+        : base(span, type, PowerShellValueState.Unknown, operand.Effects |
+            (IsNative(operation) ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError : PowerShellSemanticEffect.None), operand.Capabilities |
+            (IsNative(operation) ? PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost | PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None) |
+            (operation == PowerShellBoundUnaryOperator.NormalizeCommandArgument ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None))
     {
         Operation = operation;
         Operand = operand;
@@ -96,21 +155,26 @@ internal sealed class PowerShellBoundUnaryExpression : PowerShellBoundExpression
 
     internal PowerShellBoundUnaryOperator Operation { get; }
     internal PowerShellBoundExpression Operand { get; }
+
+    internal static bool IsNative(PowerShellBoundUnaryOperator operation)
+        => operation is PowerShellBoundUnaryOperator.NativeIdentity or PowerShellBoundUnaryOperator.NativeNegate or PowerShellBoundUnaryOperator.NativeBitwiseNot;
 }
 
 internal sealed class PowerShellBoundTypeTestExpression : PowerShellBoundExpression
 {
-    internal PowerShellBoundTypeTestExpression(SourceSpan span, PowerShellBoundExpression operand, Type targetType, bool negate)
-        : base(span, new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred, "A statically resolved CLR type test returns Boolean."), PowerShellValueState.Known, operand.Effects, operand.Capabilities)
+    internal PowerShellBoundTypeTestExpression(SourceSpan span, PowerShellBoundExpression operand, Type targetType, bool negate, bool usesPowerShellSemantics = false)
+        : base(span, new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred, "A statically resolved CLR type test returns Boolean."), PowerShellValueState.Known, operand.Effects, operand.Capabilities | (usesPowerShellSemantics ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None))
     {
         Operand = operand;
         TargetType = targetType;
         Negate = negate;
+        UsesPowerShellSemantics = usesPowerShellSemantics;
     }
 
     internal PowerShellBoundExpression Operand { get; }
     internal Type TargetType { get; }
     internal bool Negate { get; }
+    internal bool UsesPowerShellSemantics { get; }
 }
 
 internal enum PowerShellBoundRegexOperation
@@ -186,13 +250,17 @@ internal sealed class PowerShellBoundMembershipExpression : PowerShellBoundExpre
         Type elementType,
         bool collectionOnRight,
         bool ignoreCase,
-        bool negate)
+        bool negate,
+        bool usesNativeInvocation = false,
+        bool usesCommandHostInvocation = false)
         : base(
             span,
-            new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred, "The membership operator binds one invariant PowerShell LanguagePrimitives comparison."),
+            new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Inferred, "The membership operator produces one Boolean comparison result."),
             PowerShellValueState.Unknown,
-            left.Effects | right.Effects,
-            left.Capabilities | right.Capabilities | PowerShellRequiredCapability.PowerShellLanguageOperators)
+            left.Effects | right.Effects | (usesNativeInvocation || usesCommandHostInvocation ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError : PowerShellSemanticEffect.None),
+            left.Capabilities | right.Capabilities | PowerShellRequiredCapability.PowerShellLanguageOperators |
+            (usesNativeInvocation ? PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost | PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None) |
+            (usesCommandHostInvocation ? PowerShellRequiredCapability.PowerShellStatementErrors : PowerShellRequiredCapability.None))
     {
         Left = left;
         Right = right;
@@ -200,6 +268,8 @@ internal sealed class PowerShellBoundMembershipExpression : PowerShellBoundExpre
         CollectionOnRight = collectionOnRight;
         IgnoreCase = ignoreCase;
         Negate = negate;
+        UsesNativeInvocation = usesNativeInvocation;
+        UsesCommandHostInvocation = usesCommandHostInvocation;
     }
 
     internal PowerShellBoundExpression Left { get; }
@@ -208,6 +278,8 @@ internal sealed class PowerShellBoundMembershipExpression : PowerShellBoundExpre
     internal bool CollectionOnRight { get; }
     internal bool IgnoreCase { get; }
     internal bool Negate { get; }
+    internal bool UsesNativeInvocation { get; }
+    internal bool UsesCommandHostInvocation { get; }
 }
 
 internal sealed class PowerShellBoundStringSplitExpression : PowerShellBoundExpression
@@ -232,18 +304,29 @@ internal sealed class PowerShellBoundStringSplitExpression : PowerShellBoundExpr
 
 internal sealed class PowerShellBoundStringJoinExpression : PowerShellBoundExpression
 {
-    internal PowerShellBoundStringJoinExpression(SourceSpan span, PowerShellBoundExpression values, PowerShellBoundExpression separator)
+    internal PowerShellBoundStringJoinExpression(SourceSpan span, PowerShellBoundExpression values, PowerShellBoundExpression separator,
+        string? nativeSourcePath = null, string nativeSourceText = "", bool isUnary = false)
         : base(
             span,
-            new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Inferred, "The string join operator binds one String.Join operation."),
+            new PowerShellTypeFact(typeof(string), PowerShellTypeFactProvenance.Inferred, "The join operator produces a string using its selected conversion and enumeration contract."),
             PowerShellValueState.Known,
-            values.Effects | separator.Effects,
-            values.Capabilities | separator.Capabilities)
+            values.Effects | separator.Effects | (nativeSourcePath is not null
+                ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError
+                : PowerShellSemanticEffect.None),
+            values.Capabilities | separator.Capabilities | (nativeSourcePath is not null
+                ? PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost | PowerShellRequiredCapability.PowerShellStatementErrors
+                : PowerShellRequiredCapability.None))
     {
         Values = values;
         Separator = separator;
+        NativeSourcePath = nativeSourcePath;
+        NativeSourceText = nativeSourceText;
+        IsUnary = isUnary;
     }
 
     internal PowerShellBoundExpression Values { get; }
     internal PowerShellBoundExpression Separator { get; }
+    internal string? NativeSourcePath { get; }
+    internal string NativeSourceText { get; }
+    internal bool IsUnary { get; }
 }

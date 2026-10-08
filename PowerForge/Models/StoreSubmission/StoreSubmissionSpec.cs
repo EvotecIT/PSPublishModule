@@ -16,8 +16,10 @@ internal sealed class StoreSubmissionAuthenticationOptions
     public string? SellerId { get; set; }
 
     public string? TenantId { get; set; }
+    public string? TenantIdEnvVar { get; set; }
 
     public string? ClientId { get; set; }
+    public string? ClientIdEnvVar { get; set; }
 
     public string? ClientSecret { get; set; }
 
@@ -83,6 +85,9 @@ internal sealed class StoreSubmissionTarget
     public string MinimumSystemRam { get; set; } = "None";
 
     public StoreSubmissionDesktopPackage[] DesktopPackages { get; set; } = Array.Empty<StoreSubmissionDesktopPackage>();
+
+    /// <summary>JSON package array produced by release prepare-catalog, relative to this configuration.</summary>
+    public string? DesktopPackagesPath { get; set; }
 }
 
 internal sealed class StoreSubmissionRequest
@@ -159,6 +164,9 @@ internal sealed class StoreSubmissionResult
     public bool UploadedPackageArchive { get; set; }
 
     public bool CommittedSubmission { get; set; }
+
+    /// <summary>True before the first desktop package mutation is sent, including an ambiguous HTTP failure.</summary>
+    public bool DesktopPackageMutationStarted { get; set; }
 
     public string? FinalStatus { get; set; }
 

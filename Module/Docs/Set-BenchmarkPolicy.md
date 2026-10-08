@@ -11,7 +11,7 @@ Sets benchmark run policy defaults.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Set-BenchmarkPolicy [-Warmup <Int32>] [-Iteration <Int32>] [-RunMode <string>] [-Order <PowerShellBenchmarkRunOrder>] [-MemoryCleanup <PowerShellBenchmarkMemoryCleanupMode>] [-CooldownMilliseconds <Int32>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [-ProcessorAffinityMask <UInt64>] [-ProcessPriority <ProcessPriorityClass>] [<CommonParameters>]
+Set-BenchmarkPolicy [-Warmup <Int32>] [-Iteration <Int32>] [-RunMode <string>] [-Order <PowerShellBenchmarkRunOrder>] [-MemoryCleanup <PowerShellBenchmarkMemoryCleanupMode>] [-CooldownMilliseconds <Int32>] [-OutlierMode <PowerShellBenchmarkOutlierMode>] [-MemorySamplingIntervalMilliseconds <Int32>] [-ProcessorAffinityMask <UInt64>] [-ProcessPriority <ProcessPriorityClass>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -67,6 +67,22 @@ Type: PowerShellBenchmarkMemoryCleanupMode
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values: None, BeforeIteration
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -MemorySamplingIntervalMilliseconds
+Opt-in operation memory sampling interval; zero disables sampling.
+
+```yaml
+Type: Int32
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
 
 Required: False
 Position: named

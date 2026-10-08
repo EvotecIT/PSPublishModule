@@ -805,6 +805,8 @@ internal static partial class WebPipelineRunner
             node["xmls"] = new JsonArray(selected.XmlPaths.Select(static path => (JsonNode?)path).ToArray());
         if (!string.IsNullOrWhiteSpace(selected.AssemblyPath))
             node["assembly"] = selected.AssemblyPath;
+        if (selected.AssemblyPaths is { Length: > 1 })
+            node["assemblies"] = new JsonArray(selected.AssemblyPaths.Select(static path => (JsonNode?)path).ToArray());
 
         return new ProjectApiDocsPreparedInput
         {
@@ -2762,6 +2764,7 @@ internal static partial class WebPipelineRunner
         public string? XmlPath { get; init; }
         public string[] XmlPaths { get; init; } = Array.Empty<string>();
         public string? AssemblyPath { get; init; }
+        public string[] AssemblyPaths { get; init; } = Array.Empty<string>();
         public bool HasPlaceholderContent { get; init; }
         public string PlaceholderPath { get; init; } = string.Empty;
     }

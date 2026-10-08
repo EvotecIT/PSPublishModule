@@ -510,6 +510,7 @@
             "DefaultDevice": { "type": [ "string", "null" ] },
             "Configuration": { "type": "string", "minLength": 1 },
             "OptimizeSwift": { "type": "boolean", "description": "Optimize all Swift targets while retaining the chosen build configuration, including Debug compilation conditions." },
+            "UseControlledSourceProvenance": { "type": "boolean", "default": false, "description": "Opt into clean Git source and tracked build-graph verification. Normal local builds use working-tree files, including uncommitted changes." },
             "InstallRoot": { "type": "string", "minLength": 1 },
             "Launch": { "type": "boolean" },
             "UseBuildMirror": { "type": "boolean" },

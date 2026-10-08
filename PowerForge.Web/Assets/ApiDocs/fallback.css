@@ -306,8 +306,8 @@ body.pf-api-docs .type-icon-glyph,body.pf-api-docs .chip-icon-glyph{display:bloc
 .sep{color:#475569}
 .current{color:#e6e9f3}
 @media (max-width: 900px){
-  .api-layout{grid-template-columns:1fr}
-  .api-sidebar{position:fixed;left:0;top:0;bottom:0;transform:translateX(-100%);transition:transform .2s ease;z-index:40}
+  .api-layout,.api-layout.sidebar-right{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+  .api-sidebar{position:fixed;left:0;top:0;bottom:0;width:min(300px,calc(100vw - 3rem));height:100vh;height:100dvh;box-sizing:border-box;transform:translateX(-100%);transition:transform .2s ease;z-index:40}
   .api-layout.sidebar-right .api-sidebar{left:auto;right:0;transform:translateX(100%)}
   .api-sidebar.sidebar-open{transform:translateX(0)}
   .sidebar-toggle{display:inline-flex}

@@ -49,6 +49,9 @@ public partial class WebSiteVerifierTests
             var missingRouteWarning = HasMissingRouteWarning(result, cardRoute);
 
             Assert.True(File.Exists(Path.Combine(outputRoot, "index.htm")));
+            var emittedHtml = File.ReadAllText(Path.Combine(outputRoot, "index.htm"));
+            Assert.Contains("<link rel=\"canonical\" href=\"https://example.test/index.htm\"", emittedHtml, StringComparison.Ordinal);
+            Assert.Contains("property=\"og:url\" content=\"https://example.test/index.htm\"", emittedHtml, StringComparison.Ordinal);
             using (var sitemap = System.Text.Json.JsonDocument.Parse(
                        File.ReadAllText(Path.Combine(outputRoot, "_powerforge", "sitemap-entries.json"))))
             {

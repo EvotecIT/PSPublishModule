@@ -107,7 +107,7 @@ public sealed partial class PowerForgeCliAppleDeployTests
         finally
         {
             if (Directory.Exists(tempRoot))
-                Directory.Delete(tempRoot, recursive: true);
+                AppleDeploymentTestFixture.DeleteRepository(tempRoot);
             if (Directory.Exists(credentialRoot))
                 Directory.Delete(credentialRoot, recursive: true);
         }
@@ -141,7 +141,7 @@ public sealed partial class PowerForgeCliAppleDeployTests
               "SchemaVersion": 1,
               "AppleApps": {
                 "ProjectRoot": ".",
-                "AppStoreConnectApiKeyPath": "{{missingKeyPath}}",
+                "AppStoreConnectApiKeyPath": {{JsonSerializer.Serialize(missingKeyPath)}},
                 "AppStoreConnectApiKeyId": "{{keyId}}",
                 "AppStoreConnectApiIssuerId": "{{issuerId}}",
                 "LocalDeployment": {
@@ -176,7 +176,7 @@ public sealed partial class PowerForgeCliAppleDeployTests
         finally
         {
             if (Directory.Exists(tempRoot))
-                Directory.Delete(tempRoot, recursive: true);
+                AppleDeploymentTestFixture.DeleteRepository(tempRoot);
         }
     }
 
@@ -250,7 +250,7 @@ public sealed partial class PowerForgeCliAppleDeployTests
         finally
         {
             if (Directory.Exists(tempRoot))
-                Directory.Delete(tempRoot, recursive: true);
+                AppleDeploymentTestFixture.DeleteRepository(tempRoot);
         }
     }
 
@@ -311,7 +311,7 @@ public sealed partial class PowerForgeCliAppleDeployTests
         finally
         {
             if (Directory.Exists(tempRoot))
-                Directory.Delete(tempRoot, recursive: true);
+                AppleDeploymentTestFixture.DeleteRepository(tempRoot);
         }
     }
 
@@ -372,7 +372,7 @@ public sealed partial class PowerForgeCliAppleDeployTests
         finally
         {
             if (Directory.Exists(tempRoot))
-                Directory.Delete(tempRoot, recursive: true);
+                AppleDeploymentTestFixture.DeleteRepository(tempRoot);
         }
     }
 
@@ -431,7 +431,7 @@ public sealed partial class PowerForgeCliAppleDeployTests
         finally
         {
             if (Directory.Exists(tempRoot))
-                Directory.Delete(tempRoot, recursive: true);
+                AppleDeploymentTestFixture.DeleteRepository(tempRoot);
         }
     }
 
@@ -507,12 +507,16 @@ public sealed partial class PowerForgeCliAppleDeployTests
                 "rev-parse",
                 "HEAD").Trim().ToLowerInvariant();
 
+            File.AppendAllText(Path.Combine(tempRoot, "Sample.xcodeproj", "project.pbxproj"), "// working-tree edit");
+            File.WriteAllText(Path.Combine(tempRoot, "NewSource.swift"), "// untracked source");
+
             var ios = await RunCliAsync(repoRoot, $"\"{GetCliPath(repoRoot)}\" apple-deploy --config \"{configPath}\" --plan --output json");
             Assert.Equal(0, ios.ExitCode);
             using (var document = JsonDocument.Parse(ios.StdOut))
             {
                 var result = document.RootElement.GetProperty("result");
                 Assert.Equal("Sample iOS", result.GetProperty("target").GetString());
+                Assert.True(result.GetProperty("sourceDirty").GetBoolean());
                 Assert.Equal("iOS", result.GetProperty("platform").GetString());
                 Assert.Equal("Plus", result.GetProperty("profile").GetString());
                 Assert.Equal("EvoPhone", result.GetProperty("device").GetString());
@@ -536,24 +540,22 @@ public sealed partial class PowerForgeCliAppleDeployTests
             Assert.Equal("Sample Mac", macResult.GetProperty("target").GetString());
             Assert.Equal("MacCatalyst", macResult.GetProperty("archiveVariant").GetString());
             Assert.Equal("Free", macResult.GetProperty("profile").GetString());
-            Assert.Equal("/Applications", macResult.GetProperty("installRoot").GetString());
+            Assert.Equal(Path.GetFullPath("/Applications"), macResult.GetProperty("installRoot").GetString());
 
             File.WriteAllText(Path.Combine(tempRoot, ".gitignore"), "Local.xcconfig\n");
             RunGit(tempRoot, "add", ".gitignore");
             RunGit(tempRoot, "commit", "-m", "ignore local input");
             File.WriteAllText(Path.Combine(tempRoot, "Local.xcconfig"), "SETTING = local");
 
-            var unsafePlan = await RunCliAsync(
+            var workingTreePlan = await RunCliAsync(
                 repoRoot,
                 $"\"{GetCliPath(repoRoot)}\" apple-deploy --config \"{configPath}\" --plan --output json");
-            Assert.Equal(1, unsafePlan.ExitCode);
-            Assert.Contains("Git-ignored files", unsafePlan.StdErr + unsafePlan.StdOut, StringComparison.Ordinal);
-            Assert.Contains("Local.xcconfig", unsafePlan.StdErr + unsafePlan.StdOut, StringComparison.Ordinal);
+            Assert.Equal(0, workingTreePlan.ExitCode);
         }
         finally
         {
             if (Directory.Exists(tempRoot))
-                Directory.Delete(tempRoot, recursive: true);
+                AppleDeploymentTestFixture.DeleteRepository(tempRoot);
         }
     }
 
@@ -581,6 +583,7 @@ public sealed partial class PowerForgeCliAppleDeployTests
               "AppleApps": {
                 "ProjectRoot": ".",
                 "LocalDeployment": {
+                  "UseControlledSourceProvenance": true,
                   "DefaultPlatform": "iOS",
                   "DefaultDevice": "EvoPhone"
                 },
@@ -617,7 +620,7 @@ public sealed partial class PowerForgeCliAppleDeployTests
         finally
         {
             if (Directory.Exists(tempRoot))
-                Directory.Delete(tempRoot, recursive: true);
+                AppleDeploymentTestFixture.DeleteRepository(tempRoot);
         }
     }
 
@@ -656,6 +659,7 @@ public sealed partial class PowerForgeCliAppleDeployTests
               "AppleApps": {
                 "ProjectRoot": ".",
                 "LocalDeployment": {
+                  "UseControlledSourceProvenance": true,
                   "DefaultPlatform": "iOS",
                   "DefaultDevice": "EvoPhone"
                 },
@@ -686,7 +690,7 @@ public sealed partial class PowerForgeCliAppleDeployTests
         finally
         {
             if (Directory.Exists(tempRoot))
-                Directory.Delete(tempRoot, recursive: true);
+                AppleDeploymentTestFixture.DeleteRepository(tempRoot);
         }
     }
 
@@ -741,7 +745,7 @@ public sealed partial class PowerForgeCliAppleDeployTests
         finally
         {
             if (Directory.Exists(tempRoot))
-                Directory.Delete(tempRoot, recursive: true);
+                AppleDeploymentTestFixture.DeleteRepository(tempRoot);
         }
     }
 
@@ -809,7 +813,7 @@ public sealed partial class PowerForgeCliAppleDeployTests
         finally
         {
             if (Directory.Exists(tempRoot))
-                Directory.Delete(tempRoot, recursive: true);
+                AppleDeploymentTestFixture.DeleteRepository(tempRoot);
         }
     }
 

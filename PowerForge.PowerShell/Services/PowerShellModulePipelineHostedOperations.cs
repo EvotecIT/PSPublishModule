@@ -13,6 +13,7 @@ internal sealed class PowerShellModulePipelineHostedOperations :
     private readonly IPowerShellRunner _runner;
     private readonly ILogger _logger;
     private readonly bool _isWindows;
+    private readonly BinaryDependencyPreflightService _dependencyPreflight;
 
     internal PowerShellModulePipelineHostedOperations(IPowerShellRunner runner, ILogger logger)
         : this(runner, logger, Path.DirectorySeparatorChar == '\\')
@@ -24,6 +25,7 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
         _logger = logger ?? new NullLogger();
         _isWindows = isWindows;
+        _dependencyPreflight = new BinaryDependencyPreflightService(_logger, _runner);
     }
 
     internal PowerShellModulePipelineHostedOperations(ILogger logger)
@@ -77,10 +79,9 @@ internal sealed class PowerShellModulePipelineHostedOperations :
     public ModuleValidationReport ValidateModule(ModuleValidationSpec spec)
         => new ModuleValidationService(_logger, _runner).Run(spec);
 
-    public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget)
+    public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget, IReadOnlyDictionary<string, string[]>? optionalDependencies = null)
     {
-        var service = new BinaryDependencyPreflightService(_logger);
-        var result = service.Analyze(moduleRoot, powerShellEdition, modulePath);
+        var result = _dependencyPreflight.Analyze(moduleRoot, powerShellEdition, modulePath, optionalDependencies);
         if (!result.HasIssues)
             return;
 
@@ -217,13 +218,14 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         ModuleImportValidationTarget[] targets)
     {
         var modulesB64 = EncodeImportModules(modules);
-        var args = new List<string>(5)
+        var args = new List<string>(6)
         {
             modulesB64,
             importRequired ? "1" : "0",
             importSelf ? "1" : "0",
             manifestPath,
-            verbose ? "1" : "0"
+            verbose ? "1" : "0",
+            Convert.ToBase64String(Encoding.UTF8.GetBytes(Environment.GetEnvironmentVariable("PSModulePath") ?? string.Empty))
         };
 
         var script = EmbeddedScripts.Load("Scripts/ModulePipeline/Import-Modules.ps1");

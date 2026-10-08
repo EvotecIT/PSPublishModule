@@ -16,7 +16,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
     {
         if (index.Kind == PowerShellBoundIndexKind.StringDictionary)
             return $"({target} is null ? null : {target}.ContainsKey({key}) ? {target}[{key}] : null)";
-        if (index.Kind == PowerShellBoundIndexKind.OrderedStringDictionary)
+        if (index.Kind is PowerShellBoundIndexKind.OrderedStringDictionary or PowerShellBoundIndexKind.StringHashtable)
             return $"({target} is null ? null : {target}.Contains({key}) ? (string?){target}[{key}] : null)";
         if (index.Kind == PowerShellBoundIndexKind.ObjectDictionary)
             return $"({target} is null ? null : {target}.Contains({key}) ? {target}[{key}] : null)";

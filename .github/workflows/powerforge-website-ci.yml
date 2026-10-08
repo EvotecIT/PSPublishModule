@@ -13,6 +13,11 @@ on:
         required: false
         type: string
         default: ""
+      authenticate_public_github_data:
+        description: Use the read-only job token for public GitHub data in pull-request builds without exposing deployment or package credentials.
+        required: false
+        type: boolean
+        default: false
       runner_labels_json:
         required: false
         type: string
@@ -95,6 +100,9 @@ concurrency:
 jobs:
   website-ci-untrusted:
     if: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
+    permissions:
+      actions: read
+      contents: read
     uses: ./.github/workflows/powerforge-website-run.yml
     with:
       website_root: ${{ inputs.website_root }}
@@ -113,7 +121,7 @@ jobs:
       powerforge_tool_lock_path: ${{ inputs.powerforge_tool_lock_path }}
       powerforge_web_tag: ${{ inputs.powerforge_web_tag }}
       pipeline_mode: ci
-      credential_mode: none
+      credential_mode: ${{ inputs.authenticate_public_github_data && github.event.repository.private == false && github.event.repository.visibility == 'public' && 'public-github' || 'none' }}
       use_playwright_cache: true
       validate_pages_artifact: ${{ inputs.validate_pages_artifact }}
       pages_artifact_path: ${{ inputs.pages_artifact_path }}

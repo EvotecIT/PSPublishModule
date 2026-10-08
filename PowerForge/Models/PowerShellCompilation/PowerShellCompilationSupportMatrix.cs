@@ -78,6 +78,9 @@ public static class PowerShellCompilationSupportMatrixService
         string targetFramework,
         string? runtimeIdentifier)
     {
+        if (!PowerShellCompilationTargetFrameworkPolicy.IsSupported(targetFramework)) return "Unsupported";
+        if (kind == PowerShellCompilationArtifactKind.Executable &&
+            !PowerShellCompilationTargetFrameworkPolicy.IsModern(targetFramework)) return "Unsupported";
         if (string.IsNullOrWhiteSpace(runtimeIdentifier)) return "PortableManaged";
         return kind == PowerShellCompilationArtifactKind.Executable &&
                mode == PowerShellCompilationMode.Strict &&
@@ -93,11 +96,15 @@ public static class PowerShellCompilationSupportMatrixService
     {
         var profiles = new List<PowerShellCompilationSupportProfile>
         {
-            Portable(PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid, "net8.0", PowerShellCompilationRuntimeRequirement.PowerShell),
-            Portable(PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Strict, "net8.0", PowerShellCompilationRuntimeRequirement.PowerShell),
-            Portable(PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Hybrid, "net8.0", PowerShellCompilationRuntimeRequirement.DotNet),
-            Portable(PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict, "net8.0", PowerShellCompilationRuntimeRequirement.DotNet),
-            Portable(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Package, "net8.0", PowerShellCompilationRuntimeRequirement.DotNet)
+            Portable(PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid, PowerShellCompilationTargetFrameworkPolicy.Legacy, PowerShellCompilationRuntimeRequirement.PowerShell),
+            Portable(PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Strict, PowerShellCompilationTargetFrameworkPolicy.Legacy, PowerShellCompilationRuntimeRequirement.PowerShell),
+            Portable(PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Hybrid, PowerShellCompilationTargetFrameworkPolicy.Legacy, PowerShellCompilationRuntimeRequirement.DotNet),
+            Portable(PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict, PowerShellCompilationTargetFrameworkPolicy.Legacy, PowerShellCompilationRuntimeRequirement.DotNet),
+            Portable(PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid, PowerShellCompilationTargetFrameworkPolicy.Modern, PowerShellCompilationRuntimeRequirement.PowerShell),
+            Portable(PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Strict, PowerShellCompilationTargetFrameworkPolicy.Modern, PowerShellCompilationRuntimeRequirement.PowerShell),
+            Portable(PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Hybrid, PowerShellCompilationTargetFrameworkPolicy.Modern, PowerShellCompilationRuntimeRequirement.DotNet),
+            Portable(PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict, PowerShellCompilationTargetFrameworkPolicy.Modern, PowerShellCompilationRuntimeRequirement.DotNet),
+            Portable(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Package, PowerShellCompilationTargetFrameworkPolicy.Modern, PowerShellCompilationRuntimeRequirement.DotNet)
         };
         foreach (var rid in CandidateRuntimeIdentifiers)
         foreach (var deployment in new[]

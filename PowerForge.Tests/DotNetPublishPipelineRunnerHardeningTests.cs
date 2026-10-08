@@ -466,9 +466,9 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             null,
             new object[]
             {
-                Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                Path.Combine(Environment.SystemDirectory, "ping.exe"),
                 Environment.CurrentDirectory,
-                new[] { "/c", "ping", "127.0.0.1", "-n", "6" },
+                new[] { "127.0.0.1", "-n", "6" },
                 TimeSpan.FromSeconds(1),
                 CancellationToken.None
             });
@@ -501,9 +501,9 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             null,
             new object[]
             {
-                Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                Path.Combine(Environment.SystemDirectory, "ping.exe"),
                 Environment.CurrentDirectory,
-                new[] { "/c", "ping", "127.0.0.1", "-n", "30" },
+                new[] { "127.0.0.1", "-n", "30" },
                 TimeSpan.FromSeconds(20),
                 cancellation.Token
             }));

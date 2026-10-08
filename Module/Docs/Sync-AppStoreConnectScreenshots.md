@@ -21,7 +21,7 @@ Syncs local screenshot folders to App Store Connect screenshot sets.
 
 ### EXAMPLE 1
 ```powershell
-Sync-AppStoreConnectScreenshots -IssuerId 'Value' -KeyId 'Value'
+Sync-AppStoreConnectScreenshots -ConfigPath 'C:\Path' -IssuerId 'Value' -KeyId 'Value'
 ```
 
 

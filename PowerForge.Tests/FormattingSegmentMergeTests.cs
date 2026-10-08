@@ -79,7 +79,7 @@ public sealed class FormattingSegmentMergeTests
     }
 
     [Fact]
-    public void Plan_AutoEnablesUpdateProjectRoot_WhenStandardFormattingIsConfigured()
+    public void Plan_LeavesProjectRootUntouched_WhenStandardFormattingIsConfigured()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -115,7 +115,7 @@ public sealed class FormattingSegmentMergeTests
             var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
 
             Assert.NotNull(plan.Formatting);
-            Assert.True(plan.Formatting!.Options.UpdateProjectRoot);
+            Assert.False(plan.Formatting!.Options.UpdateProjectRoot);
         }
         finally
         {

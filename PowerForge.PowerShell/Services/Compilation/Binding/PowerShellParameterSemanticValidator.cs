@@ -5,6 +5,18 @@ namespace PowerForge;
 /// <summary>Owns target-aware parameter and advanced-binding validation during semantic binding.</summary>
 internal static class PowerShellParameterSemanticValidator
 {
+    internal static bool HasSupportedMetadata(
+        ParsedSourceDocument document,
+        FunctionDefinitionAst function,
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities)
+    {
+        var syntax = PowerShellParameterSyntax.Create(function.Body);
+        return syntax.Attributes.OfType<AttributeAst>()
+            .Concat(syntax.Parameters.SelectMany(static parameter => parameter.Attributes.OfType<AttributeAst>()))
+            .All(attribute => IsSupportedMetadata(document, attribute, capabilities, targetFramework));
+    }
+
     internal static bool Validate(
         ParsedSourceDocument document,
         FunctionDefinitionAst function,
@@ -29,6 +41,24 @@ internal static class PowerShellParameterSemanticValidator
             var name = parameter.Name.VariablePath.UserPath;
             var span = PowerShellSourceParser.GetSpan(document, parameter.Extent);
             var hasAuthoredType = parameter.Attributes.OfType<TypeConstraintAst>().Any();
+            if (PowerShellCompilationParameterTypePolicy.FindUnresolvedAuthoredType(parameter) is { } unresolvedType &&
+                !document.NativeDependencyTypes.Qualifies(unresolvedType.TypeName, capabilities))
+            {
+                Add(diagnostics, PowerShellCompilationFeatureIds.ParameterType,
+                    $"Parameter '${name}' uses authored type '{unresolvedType.TypeName.FullName}', which cannot be resolved in the selected compilation environment.",
+                    PowerShellSourceParser.GetSpan(document, unresolvedType.Extent));
+                valid = false;
+            }
+            if (capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) &&
+                capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&
+                !capabilities.HasFlag(PowerShellCompilationCapability.ClrPipelineCollectionBinding) &&
+                PowerShellNativeStringPipelineBindingPolicy.RequiresScriptBinding(contract))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    PowerShellNativeStringPipelineBindingPolicy.DiagnosticCode,
+                    $"String pipeline parameter '${name}' requires native script binding to preserve conversion-pass ordering and callback scope. Retain its binding in Hybrid mode.", span));
+                valid = false;
+            }
             if (!hasAuthoredType && !PowerShellCompilationParameterTypePolicy.CanUseUntypedObject(capabilities))
             {
                 Add(diagnostics, PowerShellCompilationFeatureIds.ParameterType,
@@ -76,14 +106,15 @@ internal static class PowerShellParameterSemanticValidator
         string? targetFramework,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
-        if (IsSupportedMetadata(attribute, capabilities, targetFramework)) return true;
+        if (IsSupportedMetadata(document, attribute, capabilities, targetFramework)) return true;
         Add(diagnostics, PowerShellCompilationFeatureIds.ParameterMetadata,
             $"Parameter metadata syntax node 'AttributeAst' for '[{attribute.TypeName.Name}]' is not supported by this typed target.",
             PowerShellSourceParser.GetSpan(document, attribute.Extent));
         return false;
     }
 
-    private static bool IsSupportedMetadata(AttributeAst attribute, PowerShellCompilationCapability capabilities, string? targetFramework)
+    private static bool IsSupportedMetadata(ParsedSourceDocument document, AttributeAst attribute,
+        PowerShellCompilationCapability capabilities, string? targetFramework)
     {
         if (PowerShellCompileTimeMetadataSemanticPolicy.IsSupported(attribute))
             return true;
@@ -101,7 +132,8 @@ internal static class PowerShellParameterSemanticValidator
                 capabilities,
                 out _,
                 out _,
-                out _);
+                out _,
+                document.NativeDependencyTypes);
         if (PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowNull") ||
             PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowEmptyString") ||
             PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowEmptyCollection") ||

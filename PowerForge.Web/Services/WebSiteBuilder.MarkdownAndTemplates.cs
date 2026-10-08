@@ -17,7 +17,7 @@ public static partial class WebSiteBuilder
         if (cache?.Enabled != true || string.IsNullOrWhiteSpace(cacheRoot))
             return MarkdownRenderer.RenderToHtml(content, markdown, sourcePath, rootPath);
 
-        var key = ComputeCacheKey(content, sourcePath, cache);
+        var key = ComputeCacheKey(content, sourcePath, cache, markdown);
         var cacheFile = Path.Combine(cacheRoot, key + ".html");
         if (File.Exists(cacheFile))
             return MarkdownRenderer.ApplyImageHints(File.ReadAllText(cacheFile), markdown, sourcePath, rootPath);
@@ -314,12 +314,14 @@ public static partial class WebSiteBuilder
         return text.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
-    private static string ComputeCacheKey(string content, string sourcePath, BuildCacheSpec? cache)
+    private static string ComputeCacheKey(string content, string sourcePath, BuildCacheSpec? cache, MarkdownSpec? markdown)
     {
         var mode = cache?.Mode ?? "contenthash";
-        var input = mode.Equals("mtime", StringComparison.OrdinalIgnoreCase)
-            ? $"{sourcePath}|{File.GetLastWriteTimeUtc(sourcePath).Ticks}"
-            : content;
+        var timestamp = mode.Equals("mtime", StringComparison.OrdinalIgnoreCase)
+            ? File.GetLastWriteTimeUtc(sourcePath).Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : string.Empty;
+        var input = $"{typeof(MarkdownRenderer).Module.ModuleVersionId}|{typeof(OfficeIMO.Markdown.MarkdownReader).Module.ModuleVersionId}|" +
+            $"{sourcePath}|{timestamp}|{System.Text.Json.JsonSerializer.Serialize(markdown, WebJson.Options)}|{content}";
 
         using var sha = SHA256.Create();
         var bytes = System.Text.Encoding.UTF8.GetBytes(input);

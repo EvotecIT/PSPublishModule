@@ -41,7 +41,8 @@ public static partial class WebApiDocsGenerator
                 }
             }
 
-            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            foreach (var method in SelectVisibleAssemblyMembers(type,
+                type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static), BuildDocumentationMethodSignature))
             {
                 if (!ShouldIncludeReflectedMethod(method)) continue;
                 model.Methods.Add(new ApiMemberModel
@@ -73,7 +74,8 @@ public static partial class WebApiDocsGenerator
                 });
             }
 
-            foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            foreach (var property in SelectVisibleAssemblyMembers(type,
+                type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static), BuildDocumentationPropertySignature))
             {
                 model.Properties.Add(new ApiMemberModel
                 {
@@ -86,7 +88,8 @@ public static partial class WebApiDocsGenerator
                 });
             }
 
-            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            foreach (var field in SelectVisibleAssemblyMembers(type,
+                type.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static), static member => member.Name))
             {
                 if (field.IsSpecialName) continue;
                 model.Fields.Add(new ApiMemberModel
@@ -96,7 +99,8 @@ public static partial class WebApiDocsGenerator
                 });
             }
 
-            foreach (var evt in type.GetEvents(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            foreach (var evt in SelectVisibleAssemblyMembers(type,
+                type.GetEvents(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static), static member => member.Name))
             {
                 model.Events.Add(new ApiMemberModel
                 {
@@ -109,9 +113,9 @@ public static partial class WebApiDocsGenerator
         }
     }
 
-    private static void EnrichFromAssembly(ApiDocModel doc, Assembly assembly, WebApiDocsOptions options, List<string> warnings)
+    private static void EnrichFromAssembly(ApiDocModel doc, Assembly assembly, WebApiDocsOptions options, List<string> warnings, string assemblyPath)
     {
-        using var sourceLinks = SourceLinkContext.Create(options, assembly, warnings);
+        using var sourceLinks = SourceLinkContext.Create(options, assembly, warnings, assemblyPath);
         var nullability = new NullabilityInfoContext();
         var extensionTargets = new Dictionary<string, List<ApiMemberModel>>(StringComparer.OrdinalIgnoreCase);
         foreach (var type in GetExportedTypesSafe(assembly))
@@ -122,6 +126,7 @@ public static partial class WebApiDocsGenerator
             var fullName = rawFullName.Replace('+', '.');
             if (!doc.Types.TryGetValue(fullName, out var model)) continue;
 
+            RestrictToDeclaredXmlSurface(model, type);
             model.Kind = GetTypeKind(type);
             model.Assembly = type.Assembly.GetName().Name;
             model.IsAbstract = type.IsAbstract;
@@ -144,7 +149,8 @@ public static partial class WebApiDocsGenerator
                 MergeTypeParameters(model.TypeParameters, type.GetGenericArguments().Select(a => a.Name));
             }
 
-            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            foreach (var method in SelectVisibleAssemblyMembers(type,
+                type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static), BuildDocumentationMethodSignature))
             {
                 if (!ShouldIncludeReflectedMethod(method)) continue;
                 var member = FindMethodModel(model.Methods, method);
@@ -203,7 +209,8 @@ public static partial class WebApiDocsGenerator
                     member.Source = sourceLinks.TryGetSource(ctor);
             }
 
-            foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            foreach (var property in SelectVisibleAssemblyMembers(type,
+                type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static), BuildDocumentationPropertySignature))
             {
                 var member = FindPropertyModel(model.Properties, property);
                 if (member is null)
@@ -222,7 +229,8 @@ public static partial class WebApiDocsGenerator
                     member.Source = sourceLinks.TryGetSource(property);
             }
 
-            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            foreach (var field in SelectVisibleAssemblyMembers(type,
+                type.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static), static member => member.Name))
             {
                 if (field.IsSpecialName || field.Name == "value__") continue;
                 var member = FindNamedMember(model.Fields, field.Name);
@@ -242,7 +250,8 @@ public static partial class WebApiDocsGenerator
                     member.Source = sourceLinks.TryGetSource(field);
             }
 
-            foreach (var evt in type.GetEvents(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            foreach (var evt in SelectVisibleAssemblyMembers(type,
+                type.GetEvents(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static), static member => member.Name))
             {
                 var member = FindNamedMember(model.Events, evt.Name);
                 if (member is null)
@@ -273,9 +282,9 @@ public static partial class WebApiDocsGenerator
         }
     }
 
-    private static void RestrictToPublicAssemblySurface(ApiDocModel doc, Assembly assembly)
+    private static void RestrictToPublicAssemblySurface(ApiDocModel doc, IReadOnlyList<Assembly> assemblies)
     {
-        var exportedTypes = GetExportedTypesSafe(assembly)
+        var exportedTypes = assemblies.SelectMany(GetExportedTypesSafe)
             .Where(static type => type is not null)
             .Select(static type => (type!.FullName ?? type.Name).Replace('+', '.'))
             .ToHashSet(StringComparer.Ordinal);
@@ -466,7 +475,7 @@ public static partial class WebApiDocsGenerator
     private static string GetAccessModifier(MethodBase method)
     {
         if (method.IsPublic) return "public";
-        if (method.IsFamily && method.IsAssembly) return "private protected";
+        if (method.IsFamilyAndAssembly) return "private protected";
         if (method.IsFamilyOrAssembly) return "protected internal";
         if (method.IsFamily) return "protected";
         if (method.IsAssembly) return "internal";
@@ -476,7 +485,7 @@ public static partial class WebApiDocsGenerator
     private static string GetAccessModifier(FieldInfo field)
     {
         if (field.IsPublic) return "public";
-        if (field.IsFamily && field.IsAssembly) return "private protected";
+        if (field.IsFamilyAndAssembly) return "private protected";
         if (field.IsFamilyOrAssembly) return "protected internal";
         if (field.IsFamily) return "protected";
         if (field.IsAssembly) return "internal";
@@ -496,18 +505,19 @@ public static partial class WebApiDocsGenerator
         if (method.IsFamilyOrAssembly) return 4;
         if (method.IsFamily) return 3;
         if (method.IsAssembly) return 2;
-        if (method.IsFamily && method.IsAssembly) return 1;
+        if (method.IsFamilyAndAssembly) return 1;
         return 0;
     }
 
     private static List<string> GetMethodModifiers(MethodInfo method)
     {
         var modifiers = new List<string>();
+        var overridesBase = method.IsVirtual && !SameReflectedMember(method.GetBaseDefinition(), method);
         if (method.IsStatic) modifiers.Add("static");
         if (method.IsAbstract) modifiers.Add("abstract");
-        else if (method.IsVirtual && method.GetBaseDefinition() != method) modifiers.Add("override");
-        else if (method.IsVirtual) modifiers.Add("virtual");
-        if (method.IsFinal && method.IsVirtual && method.GetBaseDefinition() != method) modifiers.Add("sealed");
+        else if (overridesBase) modifiers.Add("override");
+        else if (method.IsVirtual && !method.IsFinal) modifiers.Add("virtual");
+        if (method.IsFinal && overridesBase) modifiers.Add("sealed");
         if (IsAsync(method)) modifiers.Add("async");
         return modifiers;
     }

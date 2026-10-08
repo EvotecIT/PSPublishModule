@@ -32,9 +32,10 @@ internal static partial class WebCliCommandHandlers
                     PowerForgeRefOverride = TryGetOptionValue(subArgs, "--powerforge-ref-override") ?? TryGetOptionValue(subArgs, "--powerforgeRefOverride"),
                     PowerForgeToolLockPath = TryGetOptionValue(subArgs, "--powerforge-tool-lock-path") ?? TryGetOptionValue(subArgs, "--powerforgeToolLockPath"),
                     PowerForgeWebTag = TryGetOptionValue(subArgs, "--powerforge-web-tag") ?? TryGetOptionValue(subArgs, "--powerforgeWebTag"),
-                    GitHubToken = Environment.GetEnvironmentVariable("POWERFORGE_REPOSITORY_TOKEN") ??
-                                  Environment.GetEnvironmentVariable("GH_TOKEN") ??
-                                  Environment.GetEnvironmentVariable("GITHUB_TOKEN"),
+                    GitHubToken = ResolveWebsiteRunnerGitHubToken(
+                        Environment.GetEnvironmentVariable("POWERFORGE_REPOSITORY_TOKEN"),
+                        Environment.GetEnvironmentVariable("GH_TOKEN"),
+                        Environment.GetEnvironmentVariable("GITHUB_TOKEN")),
                     RunnerTempPath = Environment.GetEnvironmentVariable("RUNNER_TEMP"),
                     MaintenanceModeNote = HasOption(subArgs, "--maintenance-note") || HasOption(subArgs, "--maintenanceModeNote")
                 },
@@ -90,5 +91,14 @@ internal static partial class WebCliCommandHandlers
             logger.Error(ex.Message);
             return 1;
         }
+    }
+
+    // Untrusted jobs intentionally provide empty PAT variables. Empty values
+    // must not hide the read-only job token used to fetch a public binary engine.
+    internal static string? ResolveWebsiteRunnerGitHubToken(string? repositoryToken, string? cliToken, string? jobToken)
+    {
+        if (!string.IsNullOrWhiteSpace(repositoryToken)) return repositoryToken;
+        if (!string.IsNullOrWhiteSpace(cliToken)) return cliToken;
+        return string.IsNullOrWhiteSpace(jobToken) ? null : jobToken;
     }
 }

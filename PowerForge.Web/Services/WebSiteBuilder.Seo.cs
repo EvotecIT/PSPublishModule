@@ -25,14 +25,13 @@ public static partial class WebSiteBuilder
             {
                 var titleTemplate = ResolveEffectiveSeoTitleTemplate(spec, item);
                 var descriptionTemplate = ResolveEffectiveSeoDescriptionTemplate(spec, item);
-                var canonicalOrOutput = string.IsNullOrWhiteSpace(item.Canonical) ? item.OutputPath : item.Canonical;
+                var canonicalOrOutput = ResolveCanonicalRoute(spec, item);
                 var localization = ResolveLocalizationConfig(spec);
-                var languageBaseUrl = ResolveLanguageBaseUrl(spec, localization, item.Language);
                 return new
                 {
                     sourcePath = item.SourcePath,
                     outputPath = NormalizeRouteForMatch(item.OutputPath),
-                    canonicalUrl = ResolveAbsoluteUrl(languageBaseUrl, canonicalOrOutput),
+                    canonicalUrl = ResolveAbsolutePublicUrl(spec, localization, item.Language, canonicalOrOutput),
                     collection = item.Collection,
                     language = ResolveSeoLanguage(spec, item),
                     project = item.ProjectSlug,
@@ -66,16 +65,26 @@ public static partial class WebSiteBuilder
     {
         var overrideTitle = GetMetaString(item.Meta, "seo_title");
         if (!string.IsNullOrWhiteSpace(overrideTitle))
-            return overrideTitle.Trim();
+            return AddPaginationTitleSuffix(item, overrideTitle.Trim());
 
         var fallback = ResolveSeoTitleDefault(spec, item);
 
         var template = ResolveEffectiveSeoTitleTemplate(spec, item);
         if (string.IsNullOrWhiteSpace(template))
-            return fallback;
+            return AddPaginationTitleSuffix(item, fallback);
 
         var rendered = ApplySeoTemplate(template, spec, item, fallback, ResolveMetaDescriptionDefault(spec, item));
-        return string.IsNullOrWhiteSpace(rendered) ? fallback : rendered;
+        return AddPaginationTitleSuffix(item, string.IsNullOrWhiteSpace(rendered) ? fallback : rendered);
+    }
+
+    private static string AddPaginationTitleSuffix(ContentItem item, string title)
+    {
+        var page = GetMetaInt(item.Meta, PaginationPageMetaKey, 1);
+        if (page <= 1)
+            return title;
+
+        var totalPages = GetMetaInt(item.Meta, PaginationTotalPagesMetaKey, page);
+        return $"{title} ({page.ToString(CultureInfo.InvariantCulture)}/{totalPages.ToString(CultureInfo.InvariantCulture)})";
     }
 
     private static string ResolveMetaDescription(SiteSpec spec, ContentItem item)
@@ -185,10 +194,11 @@ public static partial class WebSiteBuilder
 
     private static string ResolveSeoTitleDefault(SiteSpec spec, ContentItem item)
     {
-        if (!string.IsNullOrWhiteSpace(item.Title))
-            return item.Title.Trim();
-        if (!string.IsNullOrWhiteSpace(spec.Name))
-            return spec.Name.Trim();
-        return "Documentation";
+        var title = !string.IsNullOrWhiteSpace(item.Title) ? item.Title.Trim()
+            : !string.IsNullOrWhiteSpace(spec.Name) ? spec.Name.Trim() : "Documentation";
+        var taxonomy = GetMetaString(item.Meta, "taxonomy");
+        if (item.Kind == PageKind.Term && !string.IsNullOrWhiteSpace(taxonomy))
+            title += " | " + HumanizeSegment(taxonomy);
+        return title;
     }
 }

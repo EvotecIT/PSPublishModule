@@ -92,7 +92,9 @@ public sealed partial class DotNetPublishPipelineRunner
             environment[name] = null;
         }
 
-        string nullDevice = IsWindows() ? "NUL" : "/dev/null";
+        // Git interprets this portable sentinel itself; native Windows ARM64 Git
+        // rejects the Win32 NUL name when reading its configuration.
+        const string nullDevice = "/dev/null";
         environment["GIT_NO_REPLACE_OBJECTS"] = "1";
         environment["GIT_ATTR_NOSYSTEM"] = "1";
         environment["GIT_CONFIG_NOSYSTEM"] = "1";

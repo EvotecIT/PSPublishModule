@@ -4,6 +4,39 @@ This guide documents the CSS hooks used by the built-in API docs templates and
 the JavaScript behaviors they rely on. Use it when creating a custom theme or
 overriding templates via `templateRoot`.
 
+## Documentation inputs and inheritance
+
+For C# references, supply both the XML documentation and its matching assembly.
+The assembly restricts output to the public API and supplies C# signatures.
+For a project built from several assemblies, pass each XML file through `xmls`
+and each matching DLL through `assemblies` in the `apidocs` pipeline step. The
+equivalent library options are `XmlPaths` and `AssemblyPaths`; the existing
+`xml`/`assembly` or `XmlPath`/`AssemblyPath` inputs remain supported. Each XML
+file's `<assembly><name>` must match a supplied DLL. The generator combines the
+public types into one reference and rejects an XML/DLL mismatch.
+XML-only generation remains available, but reports a warning because XML member
+records do not encode accessibility. Treat that warning as a generation limit
+when publishing a reference from XML alone.
+
+With an assembly, implicit `<inheritdoc/>` resolves documented base members and
+implemented interface members, including generic interfaces, properties, and
+events. Documentation supplied through `XmlPaths` shares one inheritance lookup,
+so contract and implementation records can live in separate files. Supply the
+inherited documentation with the inputs for contracts outside the local build.
+Assembly-backed generation also discovers adjacent dependency XML and the
+matching installed .NET reference-pack XML. Those records supply inherited
+summaries without adding dependency or framework types to the reference.
+Pipeline caches account for their bytes and additional `xmls`/`xmlPaths` inputs.
+Unresolved implicit inheritance produces a warning. An explicit `cref` remains supported.
+
+Assembly inspection reads a fresh snapshot on each generation and releases its
+collectible load context afterward. Rebuilding a DLL at the same path updates
+the reference without holding the build output open.
+
+Malformed C# XML or PowerShell help stops generation before replacing existing
+reference files. Correct the input and rerun the generator; an empty reference
+is not a successful recovery from invalid documentation.
+
 ## Cross-package API search
 
 API generation emits `search.json` for types. The `docs` and `sidebar` templates

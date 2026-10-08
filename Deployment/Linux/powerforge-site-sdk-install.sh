@@ -46,8 +46,12 @@ sdk_version=$(jq -er '.sdk.version | select(type == "string")' <<<"$global_json"
 [[ $sdk_version =~ ^10\.0\.[0-9]+$ ]] || fail 'engine requires an unsupported SDK version'
 jq -e '.sdk.rollForward == "disable" and .sdk.allowPrerelease == false' <<<"$global_json" >/dev/null || fail 'engine SDK lock is not exact'
 runtime_channels=${DOTNET_RUNTIME_CHANNELS:-}
+runtime_versions=${DOTNET_RUNTIME_VERSIONS:-}
 for channel in $runtime_channels; do
   [[ $channel == 8.0 || $channel == 10.0 ]] || fail "unsupported additional .NET runtime channel: $channel"
+done
+for version in $runtime_versions; do
+  [[ $version =~ ^(8|10)\.0\.(0|[1-9][0-9]*)$ ]] || fail "unsupported exact .NET runtime version: $version"
 done
 assert_sdk_tree() {
   local sdk_path mode unsafe
@@ -66,10 +70,13 @@ else
   assert_sdk_tree
 fi
 has_runtime() {
-  local required=$1 name version path
+  local required=$1 match=${2:-channel} name version path
   [[ -x $DOTNET_ROOT/dotnet ]] || return 1
   while read -r name version path; do
-    [[ $name == Microsoft.NETCore.App && $version == "$required".* && $path == "[$DOTNET_ROOT/shared/Microsoft.NETCore.App]" ]] && return 0
+    [[ $name == Microsoft.NETCore.App && $path == "[$DOTNET_ROOT/shared/Microsoft.NETCore.App]" ]] || continue
+    if [[ $match == exact && $version == "$required" ]] || [[ $match == channel && $version == "$required".* ]]; then
+      return 0
+    fi
   done < <("$DOTNET_ROOT/dotnet" --list-runtimes)
   return 1
 }
@@ -81,6 +88,11 @@ fi
 runtime_missing=0
 for channel in $runtime_channels; do
   if ! has_runtime "$channel"; then
+    runtime_missing=1
+  fi
+done
+for version in $runtime_versions; do
+  if ! has_runtime "$version" exact; then
     runtime_missing=1
   fi
 done
@@ -101,10 +113,17 @@ fi
 "$DOTNET_ROOT/dotnet" --list-sdks | grep -Fqx "$sdk_version [$DOTNET_ROOT/sdk]" || fail 'exact SDK installation did not complete'
 for channel in $runtime_channels; do
   if ! has_runtime "$channel"; then
-    (umask 022; bash "$scratch/dotnet-install.sh" --channel "$channel" --runtime dotnet --install-dir "$DOTNET_ROOT" --no-path)
+    (umask 022; bash "$scratch/dotnet-install.sh" --channel "$channel" --runtime dotnet --install-dir "$DOTNET_ROOT" --no-path --skip-non-versioned-files)
     assert_sdk_tree
   fi
   has_runtime "$channel" || fail "required .NET $channel runtime installation did not complete"
+done
+for version in $runtime_versions; do
+  if ! has_runtime "$version" exact; then
+    (umask 022; bash "$scratch/dotnet-install.sh" --version "$version" --runtime dotnet --install-dir "$DOTNET_ROOT" --no-path --skip-non-versioned-files)
+    assert_sdk_tree
+  fi
+  has_runtime "$version" exact || fail "required .NET $version runtime installation did not complete"
 done
 chmod -R a+rX "$DOTNET_ROOT"
 printf 'SDK %s and declared runtimes installed\n' "$sdk_version"

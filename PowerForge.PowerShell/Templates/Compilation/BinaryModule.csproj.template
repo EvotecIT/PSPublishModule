@@ -9,6 +9,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <Deterministic>true</Deterministic>
+    <PathMap>$(MSBuildProjectDirectory)=/_/src</PathMap>
+    <DebugType>portable</DebugType>
   </PropertyGroup>
   <ItemGroup>
     {{TARGET_REFERENCE}}

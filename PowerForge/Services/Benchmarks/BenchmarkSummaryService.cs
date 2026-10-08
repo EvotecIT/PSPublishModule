@@ -211,6 +211,13 @@ public sealed class BenchmarkSummaryService
             row.Metrics[metric.Key] = metric.Average(k => k.Value);
         }
 
+        // Aggregate only complete observations. Missing counters remain missing,
+        // rather than making an unavailable host look allocation-free.
+        if (successfulSamples.Length > 0 && successfulSamples.All(sample => sample.AllocatedBytes.HasValue))
+            row.Metrics["AllocatedBytes"] = successfulSamples.Average(sample => (double)sample.AllocatedBytes!.Value);
+        if (successfulSamples.Length > 0 && successfulSamples.All(sample => sample.WorkingSetDeltaBytes.HasValue))
+            row.Metrics["WorkingSetDeltaBytes"] = successfulSamples.Average(sample => (double)sample.WorkingSetDeltaBytes!.Value);
+
         row.MedianMs = GetPrimaryTimingOverride(row.Metrics, "MedianMs") ?? row.MedianMs;
         row.MeanMs = GetPrimaryTimingOverride(row.Metrics, "MeanMs") ?? row.MeanMs;
         row.MinMs = GetPrimaryTimingOverride(row.Metrics, "MinMs") ?? row.MinMs;

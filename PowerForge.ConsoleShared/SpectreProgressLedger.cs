@@ -66,6 +66,7 @@ internal sealed class SpectreProgressLedger
             {
                 entry = new Entry(item);
                 _entries[item.Key] = entry;
+                RefreshTasks();
             }
             else
             {
@@ -74,7 +75,6 @@ internal sealed class SpectreProgressLedger
 
             // Spectre keeps task insertion order. The full plan is materialized
             // before any updates so an out-of-order start cannot move a row.
-            RefreshTasks();
             ApplyUpdate(entry, state, detail);
             _context.Refresh();
         }
@@ -196,7 +196,7 @@ internal sealed class SpectreProgressLedger
             .HideHeaders()
             .AddColumn(new TableColumn("Status").NoWrap().Width(1))
             .AddColumn(new TableColumn("Kind").NoWrap().Width(unicode ? 2 : 3))
-            .AddColumn(new TableColumn("Item").NoWrap())
+            .AddColumn(new TableColumn("Item"))
             .AddColumn(new TableColumn("Result"))
             .AddColumn(new TableColumn("Duration").RightAligned().NoWrap());
 

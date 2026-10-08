@@ -179,6 +179,12 @@ powerforge-web build --config ./MySite/site.json --out ./Artifacts
 powerforge-web serve --path ./Artifacts --port 8080
 ```
 
+The preview serves regular files within the selected root and rejects linked
+files or directories. Missing assets return 404, including assets under `/docs`
+and `/playground`; extensionless routes in those sections can use their SPA
+entry pages. HEAD requests return headers without reading file contents, and
+GET requests stream the file.
+
 ## 7) Pipelines and publish specs
 For repeatable builds, use pipeline or publish specs:
 ```
@@ -195,6 +201,15 @@ Scaffolded CI workflow:
 - Workflow lock resolution also validates that resolved `ref` is a full commit SHA (40/64 hex).
 - It includes workflow concurrency cancelation and NuGet cache reuse by default.
 - Optional canary override via GitHub variables `POWERFORGE_REPOSITORY` / `POWERFORGE_REF`.
+
+Pull-request builds with public GitHub data, such as a release hub, can set
+`authenticate_public_github_data: true` in the reusable CI workflow's `with`
+block. This opt-in is disabled by default and applies only to verified public
+repositories. It supplies the read-only job token for GitHub API requests while
+keeping package, repository PAT, IndexNow and Cloudflare credentials unavailable
+and Git checkout credentials unpersisted. Private repositories retain the
+credential-free pull-request path. Direct callers of the runner workflow using
+`credential_mode: public-github` must also declare read-only job permissions.
 
 Scaffolded maintenance workflow:
 - `./.github/workflows/website-maintenance.yml` runs weekly (`cron`) and on manual dispatch.

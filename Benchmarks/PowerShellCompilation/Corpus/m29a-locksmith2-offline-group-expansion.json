@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "recordedOn": "2026-09-28",
+  "source": {
+    "workload": "locksmith2",
+    "revision": "f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639",
+    "archiveSha256": "d4f511b16ed95d15bfa37ba06ddfc92709f0412e8669004cb70e3407ae9fc8b9",
+    "sourceFingerprint": "b1e65521a013471cfc80589f0edd062a714f4b498a347685a06d7dce97b1b4ef",
+    "license": "Commons Clause License Condition v1.0",
+    "unchangedFunctionSha256": {
+      "Private/Utility/Expand-IssueByGroup.ps1": "bdc56a06913c689aa50f0d69274c6ff47d98575e63e65b658eaa34b21e37f47d",
+      "Private/Convert/Expand-GroupMembership.ps1": "a0cc1f4b31aa481ebe25861727a829dafa89f65779b59bab8028dd9676013722"
+    },
+    "unchangedManifestClassSha256": {
+      "Classes/LS2Principal.ps1": "5b8542654843f25be0218a346780cdd40ec6f236bc73004e228eb960cb49fca1",
+      "Classes/LS2AdcsObject.ps1": "abb27b68cdfe94c111013009ab453aa96a7f67748e2b33abd1e703640a9c93a5",
+      "Classes/LS2Issue.ps1": "736d4440eace31299822b2d8e20863b1c26a7cb9186da235c478910226202e38"
+    }
+  },
+  "fixture": {
+    "moduleManifestSha256": "aee13a3ef5684a1a86166fa513e8e4620ccd6216b9c17b9e4b725b6af56bfb89",
+    "moduleSourceSha256": "0a7f8ea5fd1be3d2887a24770895124533717be9f1c11f2708b3999b487ea12a",
+    "observerSha256": "21d8d5e5920c056e56580f41b4760d4cbbf3f18fec5cc42165a919357b61f1a5",
+    "unchangedFunctionTextsVerbatimInMiniModule": true,
+    "classCopiesHashIdentical": 3,
+    "providerBoundary": "The mini module preloads an in-memory PrincipalStore and ExpandedGroupCache. The observer installs a throwing New-AuthenticatedDirectoryEntry sentinel; all four child runs report zero directory calls."
+  },
+  "generated": {
+    "mode": "Hybrid",
+    "net10ManifestSha256": "3690cd77831b53b73f5a72f3fe2b919a5b4d2ed5a684fc9bf3e5eb8b719da0f2",
+    "net472ManifestSha256": "66a964fca21ff50aa02155d7cc48c7a8653d6971d93feebaedd042817b82a31f",
+    "compiledMethodsPerTarget": 2,
+    "compiledNativeLifecycleCallbacksPerTarget": 2,
+    "runtimeFallbackUnitsPerTarget": 3,
+    "strict": {
+      "targets": ["net10.0", "net472"],
+      "canProceed": false,
+      "typedUnits": 0,
+      "rejectedUnits": 3,
+      "net10ExplainSha256": "52d6802f368e8ff60f79e2e4e8399aa46ed97d3543e05c1e8e63e0e9f64a1e7a",
+      "net472ExplainSha256": "17907113377906a3bfe9f3c428fc1e0f13f24b6b9224e7741b6614e52f5c5a01"
+    }
+  },
+  "execution": {
+    "hosts": ["PowerShell 7/net10.0 Windows x64", "Windows PowerShell 5.1/net472 Windows x64"],
+    "originalGeneratedAndCrossHostRawJsonEqual": true,
+    "allChildExitCodesZero": true,
+    "allStderrEmpty": true,
+    "rawOutputSha256EachRun": "43b9de921cd73f8450b1249e2d10ed8815c8514e9e626278c330fb9f881b8553",
+    "newlyExecutedMethod": "Expand-IssueByGroup",
+    "previouslyEmittedHelperExecuted": "Expand-GroupMembership",
+    "result": {
+      "issueType": "LS2Issue",
+      "noSidMissingPrincipalAndUserReturnOriginalObject": true,
+      "groupMemberSids": ["S-1-5-21-1-2-3-1001", "S-1-5-21-1-2-3-1002"],
+      "groupMemberNames": ["OFFLINE\\Alice", "OFFLINE\\Bob"],
+      "groupOriginalExcludedByDefault": true,
+      "memberIssuesAreNewLS2IssueObjects": true,
+      "clonedRights": ["GenericAll", "GenericAll"],
+      "clonedEnabled": [true, true],
+      "clonedFixMentionsOriginalIdentifier": [true, true],
+      "includeGroupOutputCount": 3,
+      "includeGroupFirstIsOriginalObject": true,
+      "includeGroupMemberCount": 3,
+      "emptyGroupReturnsOriginalWithMemberCount": 0,
+      "directoryCalls": 0
+    }
+  },
+  "disposition": {
+    "locksmith2EmittedFunctions": 75,
+    "locksmith2TotalFunctions": 100,
+    "gainedSincePriorBaseline": 37,
+    "gainedExecutedOffline": 20,
+    "gainedAnalysisOnly": 17,
+    "newlyExecutedThisRecord": 1,
+    "sameInputRegressions": 0,
+    "sameInputAssessmentSha256": "63b97e583ccfa3042e755a27ac5b59f28756d34f495aafde1124b1c26d1e523f"
+  },
+  "limits": [
+    "Membership uses the authored helper's cache-hit path; LDAP cache misses, real group membership and principal resolution were not executed",
+    "The fixture's cached third SID has no PrincipalStore entry: authored MemberCount is three although only two member issues are emitted; original and generated agree",
+    "Only isolated mini-module execution with in-memory principal data and selected LS2Issue cases; no full Locksmith2 import, AD, directory, network or remediation operation",
+    "Native callbacks still use PowerShell for command resolution, script state, object construction and streams; no runtime-free claim",
+    "The mini-module build uses unreviewed dependency resolution; no public dependency lock or release claim",
+    "No broad compiler gate rerun because compiler source and tracked test fixtures did not change"
+  ]
+}

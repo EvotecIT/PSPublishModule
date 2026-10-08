@@ -17,6 +17,8 @@ internal abstract class ProcessExecution : IDisposable
     internal abstract StreamReader StandardError { get; }
     internal abstract void Start();
     internal abstract void KillTree();
+    /// <summary>Joins operating-system scope termination where killing the scope is asynchronous.</summary>
+    internal virtual Task WaitForTreeExitAsync(TimeSpan timeout) => Task.CompletedTask;
     public abstract void Dispose();
 
     internal static ProcessExecution Create(ProcessStartInfo startInfo, bool ownProcessTree)

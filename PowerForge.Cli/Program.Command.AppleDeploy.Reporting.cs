@@ -31,7 +31,8 @@ internal static partial class Program
         if (!string.IsNullOrWhiteSpace(result.Profile))
             logger.Info($"Profile: {result.Profile}");
         if (!string.IsNullOrWhiteSpace(result.SourceRevision))
-            logger.Info($"Source: {result.SourceRevision}");
+            logger.Info($"Source: {result.SourceRevision}" +
+                (result.SourceDirty == true ? " (working tree has uncommitted changes)" : string.Empty));
         if (result.Planned)
         {
             logger.Success("Apple local deployment plan is valid.");

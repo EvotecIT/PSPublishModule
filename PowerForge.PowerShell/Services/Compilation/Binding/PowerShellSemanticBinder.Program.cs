@@ -13,14 +13,27 @@ internal sealed partial class PowerShellSemanticBinder
     internal PowerShellSemanticBindingResult BindWithRegionCandidates(
         IEnumerable<ParsedSourceDocument> documents,
         string? targetFramework = null,
-        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
+        IReadOnlyDictionary<string, PowerShellTypeFact>? analyzedReturnTypes = null)
     {
         if (documents is null) throw new ArgumentNullException(nameof(documents));
         var orderedDocuments = documents.OrderBy(static item => item.DocumentId, StringComparer.Ordinal).ToArray();
         var diagnostics = new List<PowerShellSemanticDiagnostic>();
+        _runtimeFreeModule = capabilities.HasFlag(PowerShellCompilationCapability.RuntimeFreeModuleState)
+            ? PowerShellRuntimeFreeModuleDefinition.Discover(orderedDocuments, diagnostics, _commandResolver, capabilities) : null;
+        if (_runtimeFreeModule is null) capabilities &= ~PowerShellCompilationCapability.RuntimeFreeModuleState;
         var regionCandidates = new Dictionary<string, PowerShellBoundRegionCandidate>(StringComparer.Ordinal);
         var regionOpportunities = new Dictionary<string, PowerShellBoundRegionOpportunity>(StringComparer.Ordinal);
         var declarations = DeclareFunctions(orderedDocuments, diagnostics);
+        declarations = DeclareNativeScriptBlocks(declarations, capabilities, targetFramework);
+        if (_runtimeFreeModule is not null)
+            declarations = declarations.Append(new FunctionDeclaration(_runtimeFreeModule.Document, _runtimeFreeModule.Initializer,
+                new PowerShellSymbolId(PowerShellSymbolKind.ModuleInitializer, _runtimeFreeModule.Document.DocumentId,
+                    _runtimeFreeModule.Initializer.Name, PowerShellSourceParser.GetSpan(_runtimeFreeModule.Document,
+                        _runtimeFreeModule.Initializer.Extent)))).ToArray();
+        var nativeInvocationClosure = PowerShellNativeFunctionBindingPolicy.FindInvocationClosure(
+            declarations.Select(static declaration => declaration.Syntax), capabilities, targetFramework,
+            orderedDocuments.FirstOrDefault()?.NativeDependencyTypes);
         var numericErrorObservedCallees = PowerShellRuntimeExceptionCatchPolicy.FindNumericErrorObservedCallees(orderedDocuments);
         var functionsByName = declarations
             .GroupBy(static declaration => declaration.Syntax.Name, StringComparer.OrdinalIgnoreCase)
@@ -30,6 +43,10 @@ internal sealed partial class PowerShellSemanticBinder
                 static group => group.Key,
                 group => PowerShellLocalCallSemanticBinder.CreateSignature(group.Single().Document, group.Single().Syntax, group.Single().Symbol, targetFramework, capabilities, _semanticProfile.ProfileId),
                 StringComparer.OrdinalIgnoreCase);
+        foreach (var signature in functionsByName.Values)
+            if (!signature.IsPipelineLifecycle && analyzedReturnTypes is not null &&
+                analyzedReturnTypes.TryGetValue(signature.Symbol.StableKey, out var analyzedReturnType))
+                signature.SetAnalyzedReturnType(analyzedReturnType);
         for (var iteration = 0; iteration < functionsByName.Count; iteration++)
         {
             var changed = false;
@@ -72,12 +89,35 @@ internal sealed partial class PowerShellSemanticBinder
                     functionDiagnostics,
                     targetFramework,
                     capabilities,
-                    capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions)
+                    capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions) &&
+                    declaration.Symbol.Kind == PowerShellSymbolKind.Function
                         ? regionCandidates
                         : null,
                     capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions)
                         ? regionOpportunities
-                        : null);
+                        : null,
+                    declaration.Symbol.Kind == PowerShellSymbolKind.NativeScriptBlock || nativeInvocationClosure.Contains(declaration.Syntax.Name));
+                // An unresolved authored parameter keeps the function hosted. Its native
+                // binding may still yield safe prefix regions, while an ordinary hosted
+                // binding can independently prove a detached terminal region. Evaluate
+                // that second view in isolation so neither binding erases the other's
+                // candidates or promotes the unresolved function as a whole.
+                if (bound is null &&
+                    capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions) &&
+                    capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                    functionDiagnostics.Any(static diagnostic => diagnostic.Code == PowerShellCompilationFeatureIds.ParameterType) &&
+                    PowerShellParameterSyntax.GetParameters(declaration.Syntax.Body).Any(static parameter =>
+                        PowerShellCompilationParameterTypePolicy.FindUnresolvedAuthoredType(parameter) is not null))
+                {
+                    var hostedRegions = new Dictionary<string, PowerShellBoundRegionCandidate>(StringComparer.Ordinal);
+                    BindFunction(declaration.Document, declaration.Syntax, declaration.Symbol, functionsByName,
+                        new List<PowerShellSemanticDiagnostic>(), targetFramework,
+                        capabilities & ~PowerShellCompilationCapability.NativeFunctionBinding,
+                        hostedRegions);
+                    foreach (var region in hostedRegions)
+                        if (!regionCandidates.ContainsKey(region.Key))
+                            regionCandidates.Add(region.Key, region.Value);
+                }
                 if (bound is not null && numericErrorObservedCallees.Contains(declaration.Syntax.Name) &&
                     PowerShellRuntimeExceptionCatchPolicy.RequiresNumericErrorWrapping(bound))
                 {
@@ -87,6 +127,8 @@ internal sealed partial class PowerShellSemanticBinder
                         bound.Body.Span));
                     bound = null;
                 }
+                if (bound is not null && !PowerShellRuntimeFreeModuleInitializationPolicy.Validate(bound, functionDiagnostics))
+                    bound = null;
                 if (bound is not null)
                 {
                     functions.Add(bound);
@@ -125,12 +167,12 @@ internal sealed partial class PowerShellSemanticBinder
             declarations.Where(declaration => declaration.Document.DocumentId == document.DocumentId)
                 .Select(static declaration => declaration.Symbol)
                 .OrderBy(static symbol => symbol.StableKey, StringComparer.Ordinal)
-                .ToArray())).ToArray();
+                .ToArray(), document.Text)).ToArray();
 
         var program = new PowerShellBoundProgram(
             boundDocuments,
             functions.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray(),
-            OrderDiagnostics(diagnostics));
+            OrderDiagnostics(diagnostics), targetCapabilities: capabilities, semanticHostFamily: _semanticProfile.Family);
         return new PowerShellSemanticBindingResult(
             program,
             regionCandidates.Values
@@ -138,7 +180,7 @@ internal sealed partial class PowerShellSemanticBinder
                 .ToArray(),
             regionOpportunities.Values
                 .OrderBy(static opportunity => opportunity.RegionFunction.Symbol.StableKey, StringComparer.Ordinal)
-                .ToArray());
+                .ToArray(), _runtimeFreeModule);
     }
 
     private static bool HasTypedFunctionShape(ScriptBlockAst body, PowerShellCompilationCapability capabilities)
@@ -146,7 +188,9 @@ internal sealed partial class PowerShellSemanticBinder
             body.BeginBlock is null &&
             body.ProcessBlock is null &&
             GetCleanBlock(body) is null) ||
-           PowerShellRuntimeFreePipelineLifecyclePolicy.TryGetPipelineParameter(body, capabilities, out _, out _);
+           PowerShellRuntimeFreePipelineLifecyclePolicy.TryGetPipelineParameter(body, capabilities, out _, out _) ||
+           body.DynamicParamBlock is null && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) ||
+           PowerShellNativeFunctionBindingPolicy.SupportsDynamicParameters(body, capabilities);
 
     private static NamedBlockAst? GetCleanBlock(ScriptBlockAst body)
         => body.GetType().GetProperty("CleanBlock")?.GetValue(body) as NamedBlockAst;
@@ -158,13 +202,22 @@ internal sealed class PowerShellSemanticBindingResult
         PowerShellBoundProgram program,
         PowerShellBoundRegionCandidate[] regionCandidates,
         PowerShellBoundRegionOpportunity[] regionOpportunities)
+        : this(program, regionCandidates, regionOpportunities, null) { }
+
+    internal PowerShellSemanticBindingResult(
+        PowerShellBoundProgram program,
+        PowerShellBoundRegionCandidate[] regionCandidates,
+        PowerShellBoundRegionOpportunity[] regionOpportunities,
+        PowerShellRuntimeFreeModuleDefinition? runtimeFreeModule)
     {
         Program = program;
         RegionCandidates = regionCandidates ?? Array.Empty<PowerShellBoundRegionCandidate>();
         RegionOpportunities = regionOpportunities ?? Array.Empty<PowerShellBoundRegionOpportunity>();
+        RuntimeFreeModule = runtimeFreeModule;
     }
 
     internal PowerShellBoundProgram Program { get; }
     internal PowerShellImmutableArray<PowerShellBoundRegionCandidate> RegionCandidates { get; }
     internal PowerShellImmutableArray<PowerShellBoundRegionOpportunity> RegionOpportunities { get; }
+    internal PowerShellRuntimeFreeModuleDefinition? RuntimeFreeModule { get; }
 }

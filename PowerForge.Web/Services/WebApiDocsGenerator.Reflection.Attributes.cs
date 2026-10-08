@@ -14,10 +14,6 @@ namespace PowerForge.Web;
 /// <summary>Generates API documentation artifacts from XML docs.</summary>
 public static partial class WebApiDocsGenerator
 {
-    private static readonly object ApiDocsAssemblyLoadSync = new();
-    private static readonly Dictionary<string, Assembly> ApiDocsLoadedAssemblies = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly Dictionary<string, ApiDocsAssemblyLoadContext> ApiDocsAssemblyLoadContexts = new(StringComparer.OrdinalIgnoreCase);
-
     private static List<string> GetAttributeList(MemberInfo member)
     {
         var list = new List<string>();
@@ -231,14 +227,28 @@ public static partial class WebApiDocsGenerator
     private static string BuildPropertySignature(PropertyInfo property, NullabilityInfoContext nullability)
     {
         var accessors = new List<string>();
-        if (property.GetMethod is not null) accessors.Add("get;");
-        if (property.SetMethod is not null) accessors.Add("set;");
+        var visibleAccessor = GetMostVisibleAccessor(property.GetMethod, property.SetMethod);
+        var propertyAccess = visibleAccessor is null ? string.Empty : GetAccessModifier(visibleAccessor);
+        if (property.GetMethod is not null)
+            accessors.Add(BuildPropertyAccessorSignature(property.GetMethod, "get", propertyAccess));
+        if (property.SetMethod is not null)
+        {
+            var isInitOnly = property.SetMethod.ReturnParameter.GetRequiredCustomModifiers()
+                .Any(type => type.FullName == "System.Runtime.CompilerServices.IsExternalInit");
+            accessors.Add(BuildPropertyAccessorSignature(property.SetMethod, isInitOnly ? "init" : "set", propertyAccess));
+        }
         var prefix = BuildPropertyPrefix(property);
         var parameters = property.GetIndexParameters();
         var displayName = parameters.Length == 0
             ? property.Name
             : $"this[{string.Join(", ", parameters.Select(parameter => BuildParameterSignature(parameter, nullability)))}]";
         return $"{prefix}{GetAnnotatedTypeName(property.PropertyType, property, nullability)} {displayName} {{ {string.Join(" ", accessors)} }}".Trim();
+    }
+
+    private static string BuildPropertyAccessorSignature(MethodInfo accessor, string name, string propertyAccess)
+    {
+        var access = GetAccessModifier(accessor);
+        return access == propertyAccess ? $"{name};" : $"{access} {name};";
     }
 
     private static string BuildFieldSignature(FieldInfo field, NullabilityInfoContext nullability)
@@ -314,41 +324,22 @@ public static partial class WebApiDocsGenerator
         };
     }
 
-    private static Assembly? TryLoadAssembly(string assemblyPath, List<string> warnings)
+    private static Assembly? TryLoadAssembly(string assemblyPath, List<string> warnings, out ApiDocsAssemblyLoadContext? context)
     {
         var fullPath = Path.GetFullPath(assemblyPath);
+        context = null;
         try
         {
-            return LoadAssemblyWithDependencies(fullPath);
+            context = new ApiDocsAssemblyLoadContext(fullPath);
+            using var stream = new MemoryStream(File.ReadAllBytes(fullPath), writable: false);
+            return context.LoadFromStream(stream);
         }
         catch (Exception ex)
         {
-            try
-            {
-                var bytes = File.ReadAllBytes(fullPath);
-                return Assembly.Load(bytes);
-            }
-            catch (Exception ex2)
-            {
-                warnings.Add($"Assembly load failed: {Path.GetFileName(fullPath)} ({ex2.GetType().Name}: {ex2.Message})");
-                warnings.Add($"Primary load error: {ex.GetType().Name}: {ex.Message}");
-                return null;
-            }
-        }
-    }
-
-    private static Assembly LoadAssemblyWithDependencies(string assemblyPath)
-    {
-        lock (ApiDocsAssemblyLoadSync)
-        {
-            if (ApiDocsLoadedAssemblies.TryGetValue(assemblyPath, out var cachedAssembly))
-                return cachedAssembly;
-
-            var loadContext = new ApiDocsAssemblyLoadContext(assemblyPath);
-            var assembly = loadContext.LoadFromAssemblyPath(assemblyPath);
-            ApiDocsLoadedAssemblies[assemblyPath] = assembly;
-            ApiDocsAssemblyLoadContexts[assemblyPath] = loadContext;
-            return assembly;
+            context?.Dispose();
+            context = null;
+            warnings.Add($"Assembly load failed: {Path.GetFileName(fullPath)} ({ex.GetType().Name}: {ex.Message})");
+            return null;
         }
     }
 
@@ -372,19 +363,21 @@ public static partial class WebApiDocsGenerator
         return ApiDocsAssemblyLoadContext.ShouldProbeHostAssemblyPaths(assemblyName);
     }
 
-    private sealed class ApiDocsAssemblyLoadContext : AssemblyLoadContext
+    private sealed class ApiDocsAssemblyLoadContext : AssemblyLoadContext, IDisposable
     {
         private readonly AssemblyDependencyResolver _resolver;
         private readonly IReadOnlyDictionary<string, string> _dependencyPaths;
         private readonly IReadOnlyDictionary<string, string> _hostProbePaths;
 
         internal ApiDocsAssemblyLoadContext(string assemblyPath)
-            : base($"PowerForge.Web.ApiDocs:{Path.GetFileNameWithoutExtension(assemblyPath)}", isCollectible: false)
+            : base($"PowerForge.Web.ApiDocs:{Path.GetFileNameWithoutExtension(assemblyPath)}", isCollectible: true)
         {
             _resolver = new AssemblyDependencyResolver(assemblyPath);
             _dependencyPaths = BuildDependencyPathMap(assemblyPath);
             _hostProbePaths = BuildHostAssemblyPathMap(assemblyPath);
         }
+
+        public void Dispose() => Unload();
 
         protected override Assembly? Load(AssemblyName assemblyName)
         {
@@ -404,7 +397,8 @@ public static partial class WebApiDocsGenerator
             }
 
             var alreadyLoaded = AppDomain.CurrentDomain.GetAssemblies()
-                .FirstOrDefault(existing => AssemblyName.ReferenceMatchesDefinition(existing.GetName(), assemblyName));
+                .FirstOrDefault(existing => GetLoadContext(existing) == Default &&
+                    AssemblyName.ReferenceMatchesDefinition(existing.GetName(), assemblyName));
             if (alreadyLoaded is not null)
                 return alreadyLoaded;
 
@@ -437,7 +431,8 @@ public static partial class WebApiDocsGenerator
 
             try
             {
-                return LoadFromAssemblyPath(candidatePath);
+                using var stream = new MemoryStream(File.ReadAllBytes(candidatePath), writable: false);
+                return LoadFromStream(stream);
             }
             catch (FileNotFoundException)
             {
@@ -1005,7 +1000,9 @@ public static partial class WebApiDocsGenerator
             var paramElement = i < ownParamElements.Count
                 ? ownParamElements[i]
                 : (i < inheritedParamElements.Count ? inheritedParamElements[i] : null);
-            var paramName = paramElement is not null
+            var paramName = ownParamElements.Count == 0 && parameterNames is not null && i < parameterNames.Count
+                ? parameterNames[i]
+                : paramElement is not null
                 ? paramElement.Attribute("name")?.Value ?? $"arg{i + 1}"
                 : (parameterNames != null && i < parameterNames.Count && !string.IsNullOrWhiteSpace(parameterNames[i])
                     ? parameterNames[i]

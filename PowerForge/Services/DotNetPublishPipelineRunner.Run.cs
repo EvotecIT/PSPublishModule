@@ -84,7 +84,7 @@ public sealed partial class DotNetPublishPipelineRunner
             ValidateNativeAotEnvironmentVariables(plan);
             ValidateTrackedGeneratedProvenancePaths(plan);
             ActiveNativeAotPublish.Value = PlanUsesNativeAot(plan);
-            ActiveStrictDotNetEnvironment.Value = plan.NoBuildInPublish ||
+            ActiveStrictDotNetEnvironment.Value = UsesExplicitNoBuildPublish(plan) ||
                 (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>())
                 .Any(static target => target?.Publish?.Sign?.Enabled == true);
             if ((plan.Steps ?? Array.Empty<DotNetPublishStep>())
@@ -146,7 +146,7 @@ public sealed partial class DotNetPublishPipelineRunner
                             // Bind provenance to the project-reference bytes available immediately
                             // after BeforeTargetPublish hooks and make the real no-build publish consume
                             // private snapshots of the bytes proven by the detached rebuild.
-                            bool requiresPublishProvenance = plan.NoBuildInPublish ||
+                            bool requiresPublishProvenance = UsesExplicitNoBuildPublish(plan) ||
                                 (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>()).Any(target =>
                                     target is not null &&
                                     target.Name.Equals(step.TargetName, StringComparison.OrdinalIgnoreCase) &&

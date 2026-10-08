@@ -14,16 +14,23 @@ internal static class PowerShellAdvancedFunctionLifecyclePlanner
         PowerShellTypedCompilationResult typed,
         string? targetFramework)
     {
-        _ = targetFramework;
         var existing = typed.Methods.Select(static method => MethodKey(method.SourcePath, method.SourceName, method.SourceLine))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var isolatedSources = typed.SourcePaths
-            .Where(CanHostLifecycleInIsolation)
-            .Select(Path.GetFullPath)
+        var documents = typed.SourcePaths.Select(PowerShellSourceParser.ParseFile)
+            .ToDictionary(static document => Path.GetFullPath(document.Path), PowerShellCompilationPathSafety.PathComparer);
+        var isolatedSources = documents
+            .Where(static entry => CanHostLifecycleInIsolation(entry.Value))
+            .Select(static entry => entry.Key)
             .ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         var lifecycleMethods = typed.LifecycleSources
             .Where(source => isolatedSources.Contains(Path.GetFullPath(source.SourcePath)))
+            // A hosted lifecycle rebinds the original argument dictionary in its native function.
+            // That cannot preserve parameter or preference mutations made during string conversion.
+            .Where(source => !source.Parameters.Any(parameter => parameter.TypeName == typeof(string).FullName))
+            // A generated cmdlet can expose only metadata represented by the shared binder.
+            // Keep unsupported attributes on the original function instead of narrowing or dropping validation.
             .Where(source => !existing.Contains(MethodKey(source.SourcePath, source.Name, source.SourceLine)))
+            .Where(source => HasSupportedParameterMetadata(documents[Path.GetFullPath(source.SourcePath)], source, targetFramework))
             .OrderBy(static source => source.SourcePath, PowerShellCompilationPathSafety.PathComparer)
             .ThenBy(static source => source.SourceLine)
             .Select(CreateMethod)
@@ -104,9 +111,19 @@ internal static class PowerShellAdvancedFunctionLifecyclePlanner
     private static string MethodKey(string path, string name, int line)
         => Path.GetFullPath(path) + "\0" + name + "\0" + line.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
-    private static bool CanHostLifecycleInIsolation(string sourcePath)
+    private static bool HasSupportedParameterMetadata(ParsedSourceDocument document, PowerShellCompilationLifecycleSource source, string? targetFramework)
     {
-        var document = PowerShellSourceParser.ParseFile(sourcePath);
+        var function = document.SyntaxRoot.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+            .Cast<FunctionDefinitionAst>()
+            .Single(candidate => candidate.Name.Equals(source.Name, StringComparison.OrdinalIgnoreCase) &&
+                candidate.Body.Extent.StartLineNumber == source.SourceLine &&
+                candidate.Body.Extent.StartColumnNumber == source.SourceColumn);
+        return PowerShellParameterSemanticValidator.HasSupportedMetadata(
+            document, function, targetFramework, PowerShellCompilationCapabilities.BinaryModule);
+    }
+
+    private static bool CanHostLifecycleInIsolation(ParsedSourceDocument document)
+    {
         return document.SyntaxRoot.EndBlock is null || document.SyntaxRoot.EndBlock.Statements.All(static statement =>
             statement is FunctionDefinitionAst ||
             statement is PipelineAst { PipelineElements.Count: 1 } pipeline &&

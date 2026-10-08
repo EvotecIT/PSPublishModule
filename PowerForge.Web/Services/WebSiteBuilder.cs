@@ -56,6 +56,7 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(outputPath)) throw new ArgumentException("Output path is required.", nameof(outputPath));
 
         var outDir = Path.GetFullPath(outputPath.Trim().Trim('"'));
+        WebOutputPathGuard.ValidateSite(spec, plan, outDir);
         Directory.CreateDirectory(outDir);
 
         var metaDir = Path.Combine(outDir, "_powerforge");
@@ -581,8 +582,8 @@ public static partial class WebSiteBuilder
                 var srcInfo = new FileInfo(sourcePath);
                 var dstInfo = new FileInfo(destPath);
 
-                // Fast path: same size and destination is at least as new as source.
-                if (srcInfo.Length == dstInfo.Length && dstInfo.LastWriteTimeUtc >= srcInfo.LastWriteTimeUtc)
+                // Equal metadata is not equality: restored assets can preserve older timestamps.
+                if (srcInfo.Length == dstInfo.Length && FileContentsEqual(sourcePath, destPath))
                     return false;
             }
         }

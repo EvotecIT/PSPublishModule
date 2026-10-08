@@ -13,7 +13,7 @@ public sealed class PinnedSemanticHostFactAttribute : FactAttribute
                 Environment.GetEnvironmentVariable("POWERFORGE_REQUIRE_PINNED_SEMANTIC_HOSTS"),
                 "true",
                 StringComparison.OrdinalIgnoreCase))
-            Skip = "Set POWERFORGE_REQUIRE_PINNED_SEMANTIC_HOSTS=true and both exact pwsh paths to run the pinned 93-observation matrix.";
+            Skip = "Set POWERFORGE_REQUIRE_PINNED_SEMANTIC_HOSTS=true and POWERFORGE_PWSH76_PATH to run the exact supported-host matrix.";
     }
 }
 
@@ -161,14 +161,11 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     [PinnedSemanticHostFact]
     public void MinimizedCasesExecuteOnConfiguredExactPowerShellProfiles()
     {
-        var powerShell74Path = Environment.GetEnvironmentVariable("POWERFORGE_PWSH74_PATH");
         var powerShell76Path = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH");
-        Assert.False(string.IsNullOrWhiteSpace(powerShell74Path), "POWERFORGE_PWSH74_PATH is required by the pinned semantic-host lane.");
         Assert.False(string.IsNullOrWhiteSpace(powerShell76Path), "POWERFORGE_PWSH76_PATH is required by the pinned semantic-host lane.");
         var profiles = new List<(string ProfileId, string? HostPath)>
         {
             (PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId, null),
-            (PowerShellCompilationSemanticOracleCatalog.PowerShell74ProfileId, powerShell74Path),
             (PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, powerShell76Path)
         };
         Assert.Equal(

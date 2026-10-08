@@ -407,6 +407,9 @@ internal static partial class WebPipelineRunner
                 ChangeFrequency = GetString(item, "changefreq") ?? GetString(item, "changeFrequency"),
                 Priority = GetString(item, "priority"),
                 LastModified = GetString(item, "lastmod") ?? GetString(item, "lastModified"),
+                Canonical = GetString(item, "canonical"),
+                PublicationDate = GetString(item, "publicationDate") ?? GetString(item, "datePublished") ?? GetString(item, "publication-date"),
+                NoIndex = GetBool(item, "noIndex") ?? GetBool(item, "noindex") ?? false,
                 Alternates = alternates.ToArray(),
                 ImageUrls = GetArrayOfStrings(item, "images") ?? Array.Empty<string>(),
                 VideoUrls = GetArrayOfStrings(item, "videos") ?? Array.Empty<string>()

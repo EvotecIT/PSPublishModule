@@ -6,7 +6,7 @@ namespace PowerForge;
 /// <summary>
 /// Imports existing benchmark artifacts into the common benchmark schema.
 /// </summary>
-public sealed class BenchmarkResultImporter
+public sealed partial class BenchmarkResultImporter
 {
     /// <summary>
     /// Imports a file or directory of benchmark artifacts.
@@ -730,231 +730,6 @@ public sealed class BenchmarkResultImporter
             row.Suite = suite;
     }
 
-    private static bool TryImportBenchmarkDotNetJson(JsonElement root, string path, string? suite, out BenchmarkRunResult result)
-    {
-        result = new BenchmarkRunResult();
-        if (!BenchmarkJson.TryGetPropertyIgnoreCase(root, "Benchmarks", out var benchmarks) || benchmarks.ValueKind != JsonValueKind.Array)
-            return false;
-
-        var environment = GetBenchmarkDotNetEnvironment(root);
-        var samples = new List<BenchmarkSample>();
-        foreach (var benchmark in benchmarks.EnumerateArray())
-        {
-            if (benchmark.ValueKind != JsonValueKind.Object)
-                continue;
-
-            var method = GetString(benchmark, "Method")
-                         ?? GetString(benchmark, "MethodTitle")
-                         ?? GetString(benchmark, "FullName")
-                         ?? GetString(benchmark, "DisplayInfo")
-                         ?? Path.GetFileNameWithoutExtension(path);
-            var statistics = TryGetObject(benchmark, "Statistics");
-            var mean = GetDouble(statistics, "Median") ?? GetDouble(statistics, "Mean");
-            if (mean.HasValue)
-                mean *= 0.000001;
-
-            var variables = ParseBenchmarkDotNetParameters(GetString(benchmark, "Parameters"));
-            AddBenchmarkDotNetIdentityVariables(benchmark, variables, method);
-            var engine = GetBenchmarkDotNetEngine(benchmark);
-            var metrics = ExtractBenchmarkDotNetMetrics(statistics);
-            AddBenchmarkDotNetMemoryMetrics(TryGetObject(benchmark, "Memory"), metrics);
-            double[] originalValues = GetBenchmarkDotNetOriginalValues(statistics);
-            if (originalValues.Length > 0)
-            {
-                for (int index = 0; index < originalValues.Length; index++)
-                {
-                    samples.Add(CreateBenchmarkDotNetSample(
-                        suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path),
-                        method,
-                        engine,
-                        environment.OsFamily,
-                        index,
-                        originalValues[index] * 0.000001,
-                        variables,
-                        metrics));
-                }
-            }
-            else
-            {
-                samples.Add(CreateBenchmarkDotNetSample(
-                    suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path),
-                    method,
-                    engine,
-                    environment.OsFamily,
-                    0,
-                    mean,
-                    variables,
-                    metrics));
-            }
-        }
-
-        if (samples.Count == 0)
-            return false;
-
-        result = BuildImportedResult(suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path), samples);
-        result.Environment = environment;
-        return true;
-    }
-
-    private static BenchmarkSample CreateBenchmarkDotNetSample(
-        string suite,
-        string method,
-        string engine,
-        string os,
-        int iteration,
-        double? durationMs,
-        IDictionary<string, string?> variables,
-        IDictionary<string, double> metrics)
-        => new()
-        {
-            RunId = "import",
-            Suite = suite,
-            Scenario = method,
-            Operation = "Run",
-            Engine = engine,
-            Host = string.Empty,
-            Os = os,
-            RunMode = "import",
-            Iteration = iteration,
-            Status = durationMs.HasValue
-                ? BenchmarkSampleStatus.Succeeded
-                : BenchmarkSampleStatus.Failed,
-            DurationMs = durationMs ?? 0,
-            Reason = durationMs.HasValue
-                ? string.Empty
-                : "BenchmarkDotNet JSON duration could not be parsed.",
-            Variables = new Dictionary<string, string?>(
-                variables,
-                StringComparer.OrdinalIgnoreCase),
-            Metrics = new Dictionary<string, double>(
-                metrics,
-                StringComparer.OrdinalIgnoreCase)
-        };
-
-    private static double[] GetBenchmarkDotNetOriginalValues(JsonElement? statistics)
-    {
-        if (!statistics.HasValue ||
-            statistics.Value.ValueKind != JsonValueKind.Object ||
-            !BenchmarkJson.TryGetPropertyIgnoreCase(
-                statistics.Value,
-                "OriginalValues",
-                out JsonElement values) ||
-            values.ValueKind != JsonValueKind.Array)
-        {
-            return Array.Empty<double>();
-        }
-
-        var result = new List<double>();
-        foreach (JsonElement value in values.EnumerateArray())
-        {
-            double? number = GetDoubleValue(value);
-            if (!number.HasValue ||
-                number.Value < 0 ||
-                double.IsNaN(number.Value) ||
-                double.IsInfinity(number.Value))
-            {
-                return Array.Empty<double>();
-            }
-            result.Add(number.Value);
-        }
-
-        return result.ToArray();
-    }
-
-    private static string BenchmarkDotNetJsonReportFamily(string path)
-    {
-        var directory = Path.GetDirectoryName(Path.GetFullPath(path)) ?? string.Empty;
-        var name = Path.GetFileNameWithoutExtension(path);
-        var reportIndex = name.IndexOf("-report", StringComparison.OrdinalIgnoreCase);
-        return reportIndex < 0
-            ? Path.Combine(directory, name)
-            : Path.Combine(directory, name.Substring(0, reportIndex) + "-report");
-    }
-
-    private static int BenchmarkDotNetJsonReportPreference(string path)
-    {
-        var name = Path.GetFileName(path);
-        if (name.IndexOf("full-compressed", StringComparison.OrdinalIgnoreCase) >= 0) return 30;
-        if (name.IndexOf("full", StringComparison.OrdinalIgnoreCase) >= 0) return 20;
-        if (name.EndsWith("-report.json", StringComparison.OrdinalIgnoreCase)) return 10;
-        return 0;
-    }
-
-    private static bool IsBenchmarkDotNetJsonReport(string path)
-    {
-        try
-        {
-            using var stream = File.OpenRead(path);
-            using var doc = JsonDocument.Parse(stream);
-            return doc.RootElement.ValueKind == JsonValueKind.Object
-                   && BenchmarkJson.TryGetPropertyIgnoreCase(doc.RootElement, "Benchmarks", out var benchmarks)
-                   && benchmarks.ValueKind == JsonValueKind.Array;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-        catch (IOException)
-        {
-            return false;
-        }
-    }
-
-    private static string GetBenchmarkDotNetEngine(JsonElement benchmark)
-    {
-        var job = GetString(benchmark, "Job")
-                  ?? GetString(benchmark, "JobDisplayInfo")
-                  ?? GetString(benchmark, "JobId");
-        if (!string.IsNullOrWhiteSpace(job))
-            return job!;
-
-        if (BenchmarkJson.TryGetPropertyIgnoreCase(benchmark, "Job", out var jobNode) && jobNode.ValueKind == JsonValueKind.Object)
-        {
-            var parts = new[]
-            {
-                GetString(jobNode, "DisplayInfo"),
-                GetString(jobNode, "Id"),
-                GetString(jobNode, "Runtime"),
-                GetString(jobNode, "RuntimeMoniker"),
-                GetString(jobNode, "Platform"),
-                GetString(jobNode, "Jit")
-            }
-            .Where(part => !string.IsNullOrWhiteSpace(part))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-            if (parts.Length > 0)
-                return string.Join("; ", parts);
-        }
-
-        return "BenchmarkDotNet";
-    }
-
-    private static BenchmarkEnvironmentInfo GetBenchmarkDotNetEnvironment(JsonElement root)
-    {
-        if (!BenchmarkJson.TryGetPropertyIgnoreCase(root, "HostEnvironmentInfo", out var hostNode) || hostNode.ValueKind != JsonValueKind.Object)
-            return new BenchmarkEnvironmentInfo();
-
-        var osDescription = GetString(hostNode, "OsVersion")
-                            ?? GetString(hostNode, "OperatingSystem")
-                            ?? string.Empty;
-        return new BenchmarkEnvironmentInfo
-        {
-            OsFamily = BenchmarkPlatformNormalizer.NormalizeFamily(osDescription),
-            OsDescription = osDescription,
-            OsArchitecture = GetString(hostNode, "OsArchitecture") ?? GetString(hostNode, "Architecture") ?? string.Empty,
-            ProcessArchitecture = GetString(hostNode, "ProcessArchitecture") ?? GetString(hostNode, "Architecture") ?? string.Empty,
-            ProcessorName = GetString(hostNode, "ProcessorName") ?? string.Empty,
-            PhysicalProcessorCount = GetInt32(hostNode, "PhysicalProcessorCount"),
-            PhysicalCoreCount = GetInt32(hostNode, "PhysicalCoreCount"),
-            LogicalCoreCount = GetInt32(hostNode, "LogicalCoreCount"),
-            RuntimeVersion = GetString(hostNode, "RuntimeVersion") ?? GetString(hostNode, "Runtime") ?? string.Empty,
-            DotNetSdkVersion = GetString(hostNode, "DotNetCliVersion") ?? string.Empty,
-            Runner = GetString(hostNode, "BenchmarkDotNetCaption")
-                     ?? GetString(hostNode, "BenchmarkDotNetVersion")
-                     ?? "BenchmarkDotNet"
-        };
-    }
-
     private static int? GetInt32(JsonElement node, string propertyName)
     {
         if (!BenchmarkJson.TryGetPropertyIgnoreCase(node, propertyName, out var value))
@@ -967,20 +742,24 @@ public sealed class BenchmarkResultImporter
             : null;
     }
 
-    private static Dictionary<string, string?> ParseBenchmarkDotNetParameters(string? parameterText)
+    private static Dictionary<string, string?> ParseBenchmarkDotNetParameters(string? parameterText, string[]? nativeParameters)
     {
         var variables = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrWhiteSpace(parameterText))
             return variables;
 
-        foreach (var segment in SplitBenchmarkDotNetParameterSegments(parameterText!))
+        bool usePrintInfo = nativeParameters is not null;
+        IEnumerable<string> segments = nativeParameters ?? SplitBenchmarkDotNetParameterSegments(parameterText!);
+        foreach (var segment in segments)
         {
-            var trimmed = segment.Trim();
+            var trimmed = usePrintInfo ? segment : segment.Trim();
             var separator = FindBenchmarkDotNetParameterSeparator(trimmed);
-            if (separator <= 0 || separator >= trimmed.Length - 1)
+            if (separator <= 0 || (!usePrintInfo && separator >= trimmed.Length - 1))
                 continue;
             var name = TrimBenchmarkDotNetParameterToken(trimmed.Substring(0, separator));
-            var value = TrimBenchmarkDotNetParameterToken(trimmed.Substring(separator + 1));
+            var value = usePrintInfo
+                ? trimmed.Substring(separator + 1)
+                : TrimBenchmarkDotNetParameterToken(trimmed.Substring(separator + 1));
             if (!string.IsNullOrWhiteSpace(name))
                 variables[name] = value;
         }

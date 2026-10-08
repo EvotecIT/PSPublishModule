@@ -397,13 +397,13 @@ public sealed class ModulePipelineManifestRefreshTests
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
         {
-            if (FrameworkCompatibility.GetPathStringComparison(root.FullName) != StringComparison.Ordinal)
-                return;
-
             const string moduleName = "TestModule";
             string hookDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Classes")).FullName;
             File.WriteAllText(Path.Combine(hookDirectory, "Initialize.ps1"), "class RuntimeHookClass { }");
             File.WriteAllText(Path.Combine(hookDirectory, "initialize.ps1"), "function Get-CaseDistinctMerged { 'ok' }");
+            // An empty-directory fallback is not proof of case-sensitive storage.
+            if (Directory.GetFiles(hookDirectory, "*.ps1").Length != 2)
+                return;
             File.WriteAllText(Path.Combine(root.FullName, moduleName + ".psm1"), "# bootstrap");
             File.WriteAllText(
                 Path.Combine(root.FullName, moduleName + ".psd1"),
@@ -864,7 +864,7 @@ public sealed class ModulePipelineManifestRefreshTests
         public ModuleValidationReport ValidateModule(ModuleValidationSpec spec)
             => throw new InvalidOperationException("Not used in this test.");
 
-        public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget)
+        public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget, IReadOnlyDictionary<string, string[]>? optionalDependencies = null)
             => throw new InvalidOperationException("Not used in this test.");
 
         public ModuleTestSuiteResult RunModuleTestSuite(ModuleTestSuiteSpec spec)

@@ -3,7 +3,8 @@
   [string]$ImportRequired,
   [string]$ImportSelf,
   [string]$ModulePath,
-  [string]$VerboseFlag
+  [string]$VerboseFlag,
+  [string]$ModuleSearchPathB64
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -41,6 +42,13 @@ function Write-LoaderDiagnostics([System.Exception]$Exception) {
 }
 
 function Reset-PSModulePathForEdition {
+  # Windows PowerShell can reset PSModulePath before this script starts. Carry
+  # the build host's dependency roots explicitly instead of relying on inheritance.
+  $buildPaths = @()
+  if (-not [string]::IsNullOrWhiteSpace($ModuleSearchPathB64)) {
+    $buildSearchPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($ModuleSearchPathB64))
+    $buildPaths = @($buildSearchPath -split [regex]::Escape([string][IO.Path]::PathSeparator))
+  }
   $runningOnWindows = $false
   try {
     $runningOnWindows = [System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT
@@ -48,7 +56,12 @@ function Reset-PSModulePathForEdition {
     $runningOnWindows = ($env:OS -eq 'Windows_NT')
   }
 
-  if (-not $runningOnWindows) { return }
+  if (-not $runningOnWindows) {
+    if ($buildPaths.Count -gt 0) {
+      $env:PSModulePath = (@((Join-Path $PSHOME 'Modules')) + $buildPaths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique) -join [IO.Path]::PathSeparator
+    }
+    return
+  }
 
   $documents = [Environment]::GetFolderPath('MyDocuments')
   if ([string]::IsNullOrWhiteSpace($documents)) {
@@ -68,9 +81,11 @@ function Reset-PSModulePathForEdition {
 
   $psHomeModules = Join-Path $PSHOME 'Modules'
   $paths = @(
+    # Resolve built-in commands using this validation host's own edition.
+    $psHomeModules
+    $buildPaths
     $userModules
     $sharedModules
-    $psHomeModules
   ) |
     Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
     Select-Object -Unique

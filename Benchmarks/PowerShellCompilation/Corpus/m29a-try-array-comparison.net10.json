@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Native try-statement array capture; exact same-input per-function no-loss comparison against accepted constructor/object dispositions.",
+  "baselineCompilerCommit": "4684b2833318393a15f86dcaf98bc3ed4bcf8897",
+  "baselineComparison": "m29a-constructor-object-comparison.net10.json",
+  "baselineComparisonSha256": "476ea0563f79854f95c7aaf1517cc7c5f242c36ebe0a4cdf92ec820d45d1ee83",
+  "fullFunctionBaseline": "m29a-typed-array-comparison.net10.json",
+  "functions": 565,
+  "stableUnits": 584,
+  "baselineEmitted": 428,
+  "candidateEmitted": 429,
+  "lostEmittedMethods": 0,
+  "lostRetainedRegions": 0,
+  "compilerSourceHashes": [
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs",
+      "sha256": "71f259c8d4ba64d1145fd3e29af34258ba615ffc9e5c98fb077e3177efa17726"
+    },
+    {
+      "path": "PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs",
+      "sha256": "351519e19fbaf3c51529b2a44a2d2350faf16e3690abb3aa37f144373dcb6c6b"
+    }
+  ],
+  "packets": [
+    {
+      "packet": "pssg",
+      "stableUnits": 286,
+      "functions": 282,
+      "candidateEmitted": 236,
+      "candidateExplanationSha256": "20ebdf2ca5dcc1147f95888ac5358ca59f7f224b9622f28aa06357764a7579c8",
+      "changes": [
+        {
+          "unitId": "89e675abc58f9c85355b2c36",
+          "name": "Get-SqlQueryColumnInformation",
+          "baselineEmitted": false,
+          "candidateEmitted": true,
+          "baselineRegionMembers": [
+            "__PowerForgeRegion_6f78b885cfe59fbcf9e25a94"
+          ],
+          "candidateRegionMembers": [],
+          "candidateCauses": []
+        }
+      ]
+    },
+    {
+      "packet": "cleanup",
+      "stableUnits": 69,
+      "functions": 68,
+      "candidateEmitted": 52,
+      "candidateExplanationSha256": "bc725ceeb886d787c8c6d1f5a136c17e32c75b001665e233538f28ebf9da5e07",
+      "changes": []
+    },
+    {
+      "packet": "pinf",
+      "stableUnits": 67,
+      "functions": 66,
+      "candidateEmitted": 55,
+      "candidateExplanationSha256": "e637f8c6bb2b52aaebab9f6cf4be7cac71c4bc71c92ac07b5c7725fdad87fe0d",
+      "changes": []
+    },
+    {
+      "packet": "pst",
+      "stableUnits": 121,
+      "functions": 109,
+      "candidateEmitted": 64,
+      "candidateExplanationSha256": "dd8342d69360f050141ae93b1bc6f1060ffb428d425d52ac89777e5bce5588a5",
+      "changes": []
+    },
+    {
+      "packet": "platyps",
+      "stableUnits": 41,
+      "functions": 40,
+      "candidateEmitted": 22,
+      "candidateExplanationSha256": "1f9db57e7ca2680c99fb3c944c4a13bb3ad826381169da53f7c7f279e84df078",
+      "changes": []
+    }
+  ]
+}

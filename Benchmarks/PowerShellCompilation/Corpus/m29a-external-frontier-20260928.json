@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "compilerHead": "f8205838afae5bc84fd8a1f0ee3edb3a14ec4809",
+  "assessment": {
+    "packet": "powerforge-external-powershell-assessment-net10-v1",
+    "targetFramework": "net10.0",
+    "host": "Windows x64, PowerShell 7.6.6",
+    "evidenceSha256": "b1ab48474dcd28ebad7814bc77c5306515a91c9c97be1f31f5920ed2448cf5c6",
+    "workloadsSucceeded": 7,
+    "workloadsTotal": 7,
+    "emittedFunctions": 91,
+    "sourceFunctions": 183,
+    "emittedUnits": 91,
+    "sourceUnits": 196,
+    "promotedRegions": 10,
+    "baselineRegressions": 0,
+    "completeWorkloadExecution": false,
+    "workloads": [
+      { "id": "locksmith", "emittedFunctions": 16, "sourceFunctions": 44, "sourceFingerprint": "7167e1560fb71d98f74030e3d5b6b6897d9195d304dc7d05d7704a3fd0c29131" },
+      { "id": "locksmith2", "emittedFunctions": 38, "sourceFunctions": 100, "sourceFingerprint": "b1e65521a013471cfc80589f0edd062a714f4b498a347685a06d7dce97b1b4ef" },
+      { "id": "get-windows-autopilot-info", "emittedFunctions": 0, "sourceFunctions": 0 },
+      { "id": "getbios", "emittedFunctions": 0, "sourceFunctions": 1 },
+      { "id": "powershell-install-script", "emittedFunctions": 4, "sourceFunctions": 4 },
+      { "id": "scoop-install-script", "emittedFunctions": 23, "sourceFunctions": 24, "sourceFingerprint": "c89d96591e31ba93656cd75ca2a3ff8c068222f38bbfe85f37916c8b7908655c" },
+      { "id": "github-api-client-helpers", "emittedFunctions": 10, "sourceFunctions": 10 }
+    ],
+    "firstVisibleFrontier": [
+      { "feature": "parameter.type", "affectedFunctions": 40, "visibleSoleBlockerFunctions": 35 },
+      { "feature": "parameter.metadata", "affectedFunctions": 25, "visibleSoleBlockerFunctions": 25 },
+      { "feature": "syntax.unsupported", "affectedFunctions": 23, "visibleSoleBlockerFunctions": 13 },
+      { "feature": "scriptblock.typed", "affectedFunctions": 2, "visibleSoleBlockerFunctions": 2 }
+    ],
+    "frontierInterpretation": "The sole-blocker field describes visible current diagnostics, not functions guaranteed to compile after one rule changes. Locksmith2 metadata functions may reveal authored-class parameter or body blockers next."
+  },
+  "manifestAuthoredOutputTypeProbe": {
+    "probe": "m29a-authored-manifest-outputtype-probe.ps1",
+    "probeSha256": "f0beeb0a2b2aa1d96ec1fa73af4f7bbe7a8827c9470a70add158f18019f221a3",
+    "shape": "ScriptsToProcess loads a PowerShell class before a RootModule function; an independently imported binary cmdlet advertises the same class-array name through string-form OutputType metadata.",
+    "results": [
+      { "host": "PowerShell 7.6.6", "sameOutputTypeIdentity": true, "name": "PFAuthoredProbeWidget[]" },
+      { "host": "Windows PowerShell 5.1.26100.9444", "sameOutputTypeIdentity": true, "name": "PFAuthoredProbeWidget[]" }
+    ],
+    "limits": "Synthetic metadata identity only; the binary cmdlet does not implement the original function, and no Locksmith2 class parameter, generated module, or AD operation was executed."
+  }
+}

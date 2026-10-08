@@ -3,7 +3,7 @@
   "pins": [
     {
       "profileId": "PowerForge.Oracle.WindowsPowerShell/5.1",
-      "releaseIdentity": "WindowsPowerShell-5.1.26100.9168/Windows-10.0.26200-x64",
+      "releaseIdentity": "WindowsPowerShell-5.1.26100.9444/Windows-10.0.26300-x64",
       "releaseTag": "",
       "trackedTagPrefix": "",
       "upstreamCommit": "",
@@ -12,50 +12,21 @@
       "hostArtifact": {
         "schemaVersion": 1,
         "executableName": "powershell.exe",
-        "executableSha256": "7600ffe12da441fe89d035b13801e8e91d064bc544a27b19a5cf49f6ab8b18f5",
-        "executableLength": 454656,
+        "executableSha256": "8bb6fa8c283b4d92120b1ef249a9b311b0f804d4cabbe9981159976c8be76a5e",
+        "executableLength": 495616,
         "executableFileVersion": "10.0.26100.8972 (WinBuild.160101.0800)",
         "executableProductVersion": "10.0.26100.8972",
-        "hostVersion": "5.1.26100.9168",
-        "buildVersion": "10.0.26100.9168",
+        "hostVersion": "5.1.26100.9444",
+        "buildVersion": "10.0.26100.9444",
         "gitCommitId": "",
         "powerShellEdition": "Desktop",
         "operatingSystem": "Windows",
-        "operatingSystemVersion": "Microsoft Windows NT 10.0.26200.0",
+        "operatingSystemVersion": "Microsoft Windows NT 10.0.26300.0",
         "architecture": "x64",
         "culture": "en-US",
         "uiCulture": "en-US",
         "featureSwitches": ["DesktopEdition", "FullFramework", "WindowsOnly", "WmiV1Hosted"],
-        "identitySha256": "d8febbf477481d36077197344703382c8d206ce8a9301781886bd862617908b6"
-      },
-      "reviewedCaseIds": ["PowerForge.Semantic/assignment-target", "PowerForge.Semantic/catch-filter", "PowerForge.Semantic/comment-based-help", "PowerForge.Semantic/conversion", "PowerForge.Semantic/dictionary-flow", "PowerForge.Semantic/expandable-scalar", "PowerForge.Semantic/expandable-string", "PowerForge.Semantic/foreach-system-array", "PowerForge.Semantic/function-graph", "PowerForge.Semantic/member-null-propagation", "PowerForge.Semantic/new-object-clr-construction", "PowerForge.Semantic/null-seeded-reference-local", "PowerForge.Semantic/nullable-relational-ordering", "PowerForge.Semantic/operator-arithmetic", "PowerForge.Semantic/operator-comparison", "PowerForge.Semantic/operator-logical", "PowerForge.Semantic/parameter-binding", "PowerForge.Semantic/parameter-default", "PowerForge.Semantic/parameter-metadata", "PowerForge.Semantic/parameter-type", "PowerForge.Semantic/pipeline-enumeration", "PowerForge.Semantic/pipeline-lifecycle", "PowerForge.Semantic/post-test-loop", "PowerForge.Semantic/requires-directive", "PowerForge.Semantic/runtime-language-mode", "PowerForge.Semantic/runtime-process-user-culture-state", "PowerForge.Semantic/runtime-read-only-state", "PowerForge.Semantic/short-circuit-null-refinement", "PowerForge.Semantic/switch-flags", "PowerForge.Semantic/try-terminal-output", "PowerForge.Semantic/typed-generic-list-invocation"]
-    },
-    {
-      "profileId": "PowerForge.Oracle.PowerShell/7.4",
-      "releaseIdentity": "PowerShell-7.4.20-win-x64.zip",
-      "releaseTag": "v7.4.20",
-      "trackedTagPrefix": "v7.4.",
-      "upstreamCommit": "013edf910bbe781f503c27370941ce54d02d3f33",
-      "releaseAssetUri": "https://github.com/PowerShell/PowerShell/releases/download/v7.4.20/PowerShell-7.4.20-win-x64.zip",
-      "releaseAssetSha256": "fb88cd3731847006b157978d6c0a426390d346696d91d1ed85b5e5eb88cb2d40",
-      "hostArtifact": {
-        "schemaVersion": 1,
-        "executableName": "pwsh.exe",
-        "executableSha256": "531688dd8bb58ca620dc324b013a65ce3450acf2af5f1e83252e81a1b561a787",
-        "executableLength": 290600,
-        "executableFileVersion": "7.4.20.500",
-        "executableProductVersion": "7.4.20 SHA: 8861af820f163ac1c8d50a77e19f0f2cdf8d3ebb+8861af820f163ac1c8d50a77e19f0f2cdf8d3ebb",
-        "hostVersion": "7.4.20",
-        "buildVersion": "",
-        "gitCommitId": "7.4.20",
-        "powerShellEdition": "Core",
-        "operatingSystem": "Windows",
-        "operatingSystemVersion": "Microsoft Windows 10.0.26200",
-        "architecture": "X64",
-        "culture": "en-US",
-        "uiCulture": "en-US",
-        "featureSwitches": ["CimCmdlets", "CoreEdition", "CrossPlatform"],
-        "identitySha256": "15767a395a7cb648d56f434ca5049397b870d05f2a2843751fbbf436aabb9e56"
+        "identitySha256": "c7c28e6e6c235001f8396b01bf04e610fe222f79f9653dcaf7f28a07c2e92ed7"
       },
       "reviewedCaseIds": ["PowerForge.Semantic/assignment-target", "PowerForge.Semantic/catch-filter", "PowerForge.Semantic/comment-based-help", "PowerForge.Semantic/conversion", "PowerForge.Semantic/dictionary-flow", "PowerForge.Semantic/expandable-scalar", "PowerForge.Semantic/expandable-string", "PowerForge.Semantic/foreach-system-array", "PowerForge.Semantic/function-graph", "PowerForge.Semantic/member-null-propagation", "PowerForge.Semantic/new-object-clr-construction", "PowerForge.Semantic/null-seeded-reference-local", "PowerForge.Semantic/nullable-relational-ordering", "PowerForge.Semantic/operator-arithmetic", "PowerForge.Semantic/operator-comparison", "PowerForge.Semantic/operator-logical", "PowerForge.Semantic/parameter-binding", "PowerForge.Semantic/parameter-default", "PowerForge.Semantic/parameter-metadata", "PowerForge.Semantic/parameter-type", "PowerForge.Semantic/pipeline-enumeration", "PowerForge.Semantic/pipeline-lifecycle", "PowerForge.Semantic/post-test-loop", "PowerForge.Semantic/requires-directive", "PowerForge.Semantic/runtime-language-mode", "PowerForge.Semantic/runtime-process-user-culture-state", "PowerForge.Semantic/runtime-read-only-state", "PowerForge.Semantic/short-circuit-null-refinement", "PowerForge.Semantic/switch-flags", "PowerForge.Semantic/try-terminal-output", "PowerForge.Semantic/typed-generic-list-invocation"]
     },
@@ -79,12 +50,12 @@
         "gitCommitId": "7.6.6",
         "powerShellEdition": "Core",
         "operatingSystem": "Windows",
-        "operatingSystemVersion": "Microsoft Windows 10.0.26200",
+        "operatingSystemVersion": "Microsoft Windows 10.0.26300",
         "architecture": "X64",
         "culture": "en-US",
         "uiCulture": "en-US",
         "featureSwitches": ["CimCmdlets", "CoreEdition", "CrossPlatform"],
-        "identitySha256": "6ca4af52d6169846bebfdc66e8147a63b0b4626ed99bfc95a7abb1d707bb1c7b"
+        "identitySha256": "3ad88f903764f25086cc99f9c6531d69ad77d1b80a7b34f0a781f7fdca4bc1c9"
       },
       "reviewedCaseIds": ["PowerForge.Semantic/assignment-target", "PowerForge.Semantic/catch-filter", "PowerForge.Semantic/comment-based-help", "PowerForge.Semantic/conversion", "PowerForge.Semantic/dictionary-flow", "PowerForge.Semantic/expandable-scalar", "PowerForge.Semantic/expandable-string", "PowerForge.Semantic/foreach-system-array", "PowerForge.Semantic/function-graph", "PowerForge.Semantic/member-null-propagation", "PowerForge.Semantic/new-object-clr-construction", "PowerForge.Semantic/null-seeded-reference-local", "PowerForge.Semantic/nullable-relational-ordering", "PowerForge.Semantic/operator-arithmetic", "PowerForge.Semantic/operator-comparison", "PowerForge.Semantic/operator-logical", "PowerForge.Semantic/parameter-binding", "PowerForge.Semantic/parameter-default", "PowerForge.Semantic/parameter-metadata", "PowerForge.Semantic/parameter-type", "PowerForge.Semantic/pipeline-enumeration", "PowerForge.Semantic/pipeline-lifecycle", "PowerForge.Semantic/post-test-loop", "PowerForge.Semantic/requires-directive", "PowerForge.Semantic/runtime-language-mode", "PowerForge.Semantic/runtime-process-user-culture-state", "PowerForge.Semantic/runtime-read-only-state", "PowerForge.Semantic/short-circuit-null-refinement", "PowerForge.Semantic/switch-flags", "PowerForge.Semantic/try-terminal-output", "PowerForge.Semantic/typed-generic-list-invocation"]
     }

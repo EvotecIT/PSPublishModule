@@ -21,7 +21,7 @@ Creates an App Store Connect introductory offer for an auto-renewable subscripti
 
 ### EXAMPLE 1
 ```powershell
-New-AppStoreConnectSubscriptionIntroductoryOffer -IssuerId 'Value' -KeyId 'Value' -SubscriptionId 'Value' -Duration 'Value' -OfferMode 'Value'
+New-AppStoreConnectSubscriptionIntroductoryOffer -IssuerId 'Value' -KeyId 'Value' -SubscriptionId 'Value' -Duration 'Value' -OfferMode 'Value' -TerritoryId @('Value')
 ```
 
 

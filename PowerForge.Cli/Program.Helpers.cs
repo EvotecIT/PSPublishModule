@@ -41,6 +41,9 @@ internal static partial class Program
                                 [--target <Name[,Name...]>] [--summary] [--output json]
       powerforge apple-deploy [--config <powerforge.release.json>] [--platform <iOS|iPadOS|watchOS|macOS|tvOS|visionOS>] [--target <name-or-scheme>] [--device <name>|--device-id <id>] [--profile <name>] [--configuration <Debug|Release>] [--install-root </Applications>] [--build-mirror|--no-build-mirror] [--launch|--no-launch] [--plan] [--output json]
       powerforge apple-screenshots <manifest --config <screenshots.json> | manifests --release-config <release.json>> [--capture-provenance <json> --expected-repository <owner/repo> --expected-workflow-ref <workflow-ref> | --version <x.y|x.y.z> --source-commit <sha>] --approved-by <reviewer-or-boundary> --allowed-root <reviewed-capture-root>
+      powerforge apple-simulator run --owner <chat-or-run> --device <UUID> [--state-root <shared-path>] [--device-set <path>] -- <executable> [args...]
+      powerforge apple-simulator status [--state-root <shared-path>] [--output json]
+      powerforge apple-simulator acknowledge --session <session-id> [--state-root <shared-path>]
                         [--app-id <asc-app-id> | --release-config <release.json> [--target <name-or-scheme>]]
                         [--out <manifest.json>] [--xcode-version <value>] [--runtime <value>] [--device <value>]
                         [--theme <value>] [--scenario <value>] [--output json]
@@ -52,6 +55,7 @@ internal static partial class Program
                         [--key-path <AuthKey.p8> --key-id <id> --issuer-id <id>] [--receipt <path>]
                         [--reviewed-plan <path> --confirm] [--output json]
       powerforge store submit [--config <powerforge.store.submit.json>] [--list] [--list-assets] [--target <Name>] [--submission-id <id>] [--plan] [--validate] [--no-commit] [--no-wait] [--output json]
+      powerforge release prepare-catalog --config <release.json> --manifest <release-manifest.json> --checksums <SHA256SUMS.txt> --asset-root <downloads> --out <new-directory> [--output json]
       powerforge run [--config <run.profiles.json>] [--list] [--target <Name>] [--configuration <Release|Debug>] [--framework <tfm>] [--no-build] [--no-restore]
                      [--allow-root <path[,path...]>] [--include-private-tool-packs] [--testimox-root <path>] [--extra-arg <value>] [--output json]
       powerforge workspace validate [--config <workspace.validation.json>] [--list] [--profile <name>] [--configuration <Release|Debug>] [--enable-feature <name[,name...]>] [--disable-feature <name[,name...]>]
@@ -124,6 +128,7 @@ internal static partial class Program
         for (int i = 0; i < args.Length; i++)
         {
             var a = args[i];
+            if (a == "--") break;
             if (a.Equals("-Verbose", StringComparison.OrdinalIgnoreCase) || a.Equals("--verbose", StringComparison.OrdinalIgnoreCase))
             {
                 verbose = true;
@@ -187,6 +192,11 @@ internal static partial class Program
         for (int i = 0; i < args.Length; i++)
         {
             var a = args[i];
+            if (a == "--")
+            {
+                list.AddRange(args.Skip(i));
+                break;
+            }
             if (IsGlobalArg(a)) continue;
 
             if (a.Equals("--view", StringComparison.OrdinalIgnoreCase))

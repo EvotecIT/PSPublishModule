@@ -30,6 +30,12 @@ Add-BenchmarkCaseSource -InputObject @('Value')
 ```
 
 
+### EXAMPLE 2
+```powershell
+Add-BenchmarkCaseSource -ScriptBlock { }
+```
+
+
 ## PARAMETERS
 
 ### -InputObject

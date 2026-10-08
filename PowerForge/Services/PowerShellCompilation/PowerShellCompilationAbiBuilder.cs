@@ -12,13 +12,17 @@ internal static class PowerShellCompilationAbiBuilder
     internal static PowerShellCompilationAbiManifest Create(
         string namespaceName,
         string typeName,
-        IEnumerable<PowerShellCompiledMethod> methods)
+        IEnumerable<PowerShellCompiledMethod> methods,
+        PowerShellRuntimeFreeModuleContract? moduleLifetime = null)
     {
         var manifest = new PowerShellCompilationAbiManifest
         {
             NamespaceName = namespaceName ?? string.Empty,
             TypeName = typeName ?? string.Empty,
-            Methods = methods.OrderBy(static method => method.SourceName, StringComparer.OrdinalIgnoreCase)
+            SchemaVersion = moduleLifetime is null ? 4 : 5,
+            ModuleLifetime = moduleLifetime,
+            Methods = methods.Where(static method => !method.IsModuleInitializer)
+                .OrderBy(static method => method.SourceName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static method => method.GeneratedName, StringComparer.Ordinal)
                 .Select(CreateMethod)
                 .ToArray()
@@ -33,8 +37,24 @@ internal static class PowerShellCompilationAbiBuilder
         AppendRecord(builder, "schema", manifest.SchemaVersion.ToString(CultureInfo.InvariantCulture));
         AppendRecord(builder, "namespace", manifest.NamespaceName);
         AppendRecord(builder, "type", manifest.TypeName);
+        if (manifest.ModuleLifetime is { } lifetime)
+        {
+            AppendRecord(builder, "module-lifetime", lifetime.ConcurrencyPolicy, lifetime.ResetPolicy, lifetime.DisposalPolicy, lifetime.ReentrancyPolicy);
+            AppendRecord(builder, "module-constructor-arities", string.Join(",", lifetime.SupportedParameterCounts
+                .OrderBy(static count => count).Select(static count => count.ToString(CultureInfo.InvariantCulture))));
+            foreach (var field in lifetime.Fields.OrderBy(static field => field.Name, StringComparer.OrdinalIgnoreCase))
+                AppendRecord(builder, "module-field", field.Name, field.TypeName);
+            // Reuse the complete parameter contract normalization, including defaults and validation.
+            var constructor = new PowerShellCompiledMethod(".ctor", ".ctor", "System.Void", lifetime.Parameters, 0);
+            AppendRecord(builder, "module-constructor", GetNormalizedText(new PowerShellCompilationAbiManifest
+            {
+                Methods = new[] { CreateMethod(constructor) }
+            }));
+        }
         foreach (var method in manifest.Methods)
         {
+            if (manifest.SchemaVersion >= 5)
+                AppendRecord(builder, "instance-method", method.ClrName, Boolean(method.IsInstanceMethod));
             AppendRecord(builder, "method",
                 method.PowerShellName,
                 method.ClrName,
@@ -134,7 +154,8 @@ internal static class PowerShellCompilationAbiBuilder
 
     private static PowerShellCompilationAbiMethod CreateMethod(PowerShellCompiledMethod method)
     {
-        var parameters = method.Parameters.Select(parameter => new PowerShellCompilationAbiParameter
+        var parameters = (method.NativeFunctionBinding is null ? method.Parameters : Array.Empty<PowerShellCompilationParameter>())
+            .Select(parameter => new PowerShellCompilationAbiParameter
         {
             PowerShellName = parameter.Name,
             ClrName = PowerShellClrSymbolMapper.MapIdentifier(parameter.Name),
@@ -152,6 +173,8 @@ internal static class PowerShellCompilationAbiBuilder
             AllowEmptyCollection = parameter.AllowEmptyCollection,
             SupportsWildcards = parameter.SupportsWildcards
         }).ToList();
+        if (method.NativeFunctionBinding is not null)
+            AddCompilerParameter(parameters, "__nativeFunction", "PowerForge.Generated.Runtime.PowerShellNativeFunctionContext", "NativeFunctionContext");
         AddCompilerParameters(method, parameters);
         var outputCardinality = string.IsNullOrWhiteSpace(method.OutputCardinality)
             ? GetLegacyCardinality(method.ReturnType)
@@ -168,6 +191,7 @@ internal static class PowerShellCompilationAbiBuilder
         return new PowerShellCompilationAbiMethod
         {
             PowerShellName = method.SourceName,
+            IsInstanceMethod = method.IsInstanceMethod,
             ClrName = method.GeneratedName,
             ReturnType = method.ReturnType,
             OutputCardinality = outputCardinality,
@@ -181,7 +205,7 @@ internal static class PowerShellCompilationAbiBuilder
             NoOutputDistinctFromNull = true,
             Nullable = canProduceNull || IsNullableTypeName(method.ReturnType),
             StreamContract = method.RequiresPowerShellStreams ? "SuccessAndNonSuccessStreams" : "SuccessOutputOnly",
-            ExceptionContract = "ClrDirect",
+            ExceptionContract = method.RequiresPowerShellStatementErrors ? "PowerShellStatementErrors" : "ClrDirect",
             Aliases = method.Aliases.ToArray(),
             IsAdvancedFunction = method.CommandBinding.IsAdvancedFunction,
             PositionalBinding = method.CommandBinding.PositionalBinding,
@@ -197,6 +221,10 @@ internal static class PowerShellCompilationAbiBuilder
         PowerShellCompiledMethod method,
         ICollection<PowerShellCompilationAbiParameter> parameters)
     {
+        if (method.RequiresPowerShellStatementErrors)
+            AddCompilerParameter(parameters, "__statementErrors", "PowerForge.Generated.Runtime.PowerShellStatementErrorContext", "PowerShellStatementErrors");
+        if (method.RequiresPowerShellStopping)
+            AddCompilerParameter(parameters, "__checkLoopInterrupts", "System.Action", "LoopInterruption");
         if (method.RequiresPowerShellStreams)
         {
             AddCompilerParameter(parameters, "__writeOutput", "System.Action<System.Object>", "SuccessStream");
@@ -209,7 +237,7 @@ internal static class PowerShellCompilationAbiBuilder
         }
         if (method.RequiresProviderCancellation)
             AddCompilerParameter(parameters, "__providerCancellationToken", "System.Threading.CancellationToken", "ProviderCancellation");
-        if (method.RequiresPowerShellCommandRegions)
+        if (method.RequiresPowerShellCommandRegions && method.NativeFunctionBinding is null)
         {
             AddCompilerParameter(parameters, "__invokePowerShellRegion", "System.Action<System.String,System.Object[]>", "HostedCommandRegion");
             AddCompilerParameter(parameters, "__invokePowerShellCapture", "System.Func<System.String,System.Object[],System.Object>", "HostedCommandCapture");
@@ -219,14 +247,14 @@ internal static class PowerShellCompilationAbiBuilder
             AddCompilerParameter(parameters, "__shouldProcessTarget", "System.Func<System.String,System.Boolean>", "ShouldProcessTarget");
             AddCompilerParameter(parameters, "__shouldProcessAction", "System.Func<System.String,System.String,System.Boolean>", "ShouldProcessAction");
             AddCompilerParameter(parameters, "__psVersion", "System.Object", "PowerShellVersionState");
-            AddCompilerParameter(parameters, "__whatIfPreference", "System.Boolean", "WhatIfPreference");
+            AddCompilerParameter(parameters, "__whatIfPreference", "System.Object", "WhatIfPreference", nullable: true);
             AddCompilerParameter(parameters, "__runtimeState", "System.Collections.Generic.IReadOnlyDictionary<System.String,System.Object>", "PowerShellRuntimeState");
         }
         if (method.RequiresPowerShellModuleStateRead)
             AddCompilerParameter(parameters, "__readPowerShellModuleVariable", "System.Func<System.String,System.Object>", "PowerShellModuleStateReader");
         if (method.RequiresPowerShellModuleStateWrite)
             AddCompilerParameter(parameters, "__writePowerShellModuleVariable", "System.Action<System.String,System.Object>", "PowerShellModuleStateWriter");
-        if (method.RequiresPowerShellBoundParameters)
+        if (method.RequiresPowerShellBoundParameters && method.NativeFunctionBinding is null)
             AddCompilerParameter(parameters, "__boundParameters", "System.Collections.Generic.ISet<System.String>", "BoundParameterNames");
     }
 
@@ -234,13 +262,15 @@ internal static class PowerShellCompilationAbiBuilder
         ICollection<PowerShellCompilationAbiParameter> parameters,
         string name,
         string typeName,
-        string purpose)
+        string purpose,
+        bool nullable = false)
         => parameters.Add(new PowerShellCompilationAbiParameter
         {
             ClrName = name,
             TypeName = typeName,
             CompilerAdded = true,
             CompilerPurpose = purpose,
+            Nullable = nullable,
             Required = true
         });
 

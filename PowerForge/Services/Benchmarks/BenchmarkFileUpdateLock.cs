@@ -48,18 +48,43 @@ internal static class BenchmarkFileUpdateLock
         {
             EnsureUnixLockPathIsNotSymbolicLink(lockPath);
             UnixFileMode requestedMode = GetUnixLockMode(lockDirectory);
-            var stream = new FileStream(
-                lockPath,
-                new FileStreamOptions
-                {
-                    Mode = FileMode.OpenOrCreate,
-                    Access = FileAccess.ReadWrite,
-                    Share = FileShare.None,
-                    BufferSize = 1,
-                    Options = FileOptions.None,
-                    UnixCreateMode = requestedMode
-                });
-            return stream;
+            FileStream stream;
+            try
+            {
+                // CreateNew is exclusive, so only an inode created by this call
+                // is eligible for permission correction. Never chmod an existing
+                // inode reached through a pathname that another writer can replace.
+                stream = new FileStream(
+                    lockPath,
+                    new FileStreamOptions
+                    {
+                        Mode = FileMode.CreateNew,
+                        Access = FileAccess.ReadWrite,
+                        Share = FileShare.None,
+                        BufferSize = 1,
+                        Options = FileOptions.None,
+                        UnixCreateMode = requestedMode
+                    });
+            }
+            catch (IOException) when (File.Exists(lockPath))
+            {
+                EnsureUnixLockPathIsNotSymbolicLink(lockPath);
+                return new FileStream(lockPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None, bufferSize: 1);
+            }
+            try
+            {
+                // UnixCreateMode is filtered by umask. Restore the directory's
+                // intended writer access only on our exclusively created handle.
+                UnixFileMode actualMode = File.GetUnixFileMode(stream.SafeFileHandle);
+                if ((actualMode & requestedMode) != requestedMode)
+                    File.SetUnixFileMode(stream.SafeFileHandle, actualMode | requestedMode);
+                return stream;
+            }
+            catch
+            {
+                stream.Dispose();
+                throw;
+            }
         }
 #endif
         return new FileStream(

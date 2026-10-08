@@ -6,11 +6,16 @@ namespace PowerForge.Web.Cli;
 internal sealed class WebConsoleLogger
 {
     private readonly bool _useUnicodePrefixes = ShouldUseUnicodePrefixes();
+    private readonly bool _writeToStandardError;
 
-    public void Info(string message) => Console.WriteLine($"{(_useUnicodePrefixes ? "ℹ " : "[INFO]")} {message}");
-    public void Success(string message) => Console.WriteLine($"{(_useUnicodePrefixes ? "✅" : "[OK]")} {message}");
-    public void Warn(string message) => Console.WriteLine($"{(_useUnicodePrefixes ? "⚠️" : "[WARN]")} {message}");
-    public void Error(string message) => Console.WriteLine($"{(_useUnicodePrefixes ? "❌" : "[ERROR]")} {message}");
+    internal WebConsoleLogger(bool writeToStandardError = false) => _writeToStandardError = writeToStandardError;
+
+    public void Info(string message) => Write($"{(_useUnicodePrefixes ? "ℹ " : "[INFO]")} {message}");
+    public void Success(string message) => Write($"{(_useUnicodePrefixes ? "✅" : "[OK]")} {message}");
+    public void Warn(string message) => Write($"{(_useUnicodePrefixes ? "⚠️" : "[WARN]")} {message}");
+    public void Error(string message) => Write($"{(_useUnicodePrefixes ? "❌" : "[ERROR]")} {message}");
+
+    private void Write(string message) => (_writeToStandardError ? Console.Error : Console.Out).WriteLine(message);
 
     private static bool ShouldUseUnicodePrefixes()
     {

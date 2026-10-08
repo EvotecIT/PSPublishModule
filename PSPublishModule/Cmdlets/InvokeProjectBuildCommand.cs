@@ -57,8 +57,32 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
     [Parameter]
     public string? PlanPath { get; set; }
 
+    /// <summary>Disables the interactive Spectre progress view.</summary>
+    [Parameter]
+    public SwitchParameter NoInteractive { get; set; }
+
+    /// <summary>Suppresses progress and informational output while preserving results, warnings and errors.</summary>
+    [Parameter]
+    public SwitchParameter Quiet { get; set; }
+
+    /// <summary>Sets the PowerShell host exit code to zero on success and one on failure.</summary>
+    [Parameter]
+    public SwitchParameter ExitCode { get; set; }
+
     /// <summary>Executes the configured build pipeline.</summary>
     protected override void ProcessRecord()
+    {
+        try
+        {
+            ExecuteWorkflow();
+        }
+        catch (Exception ex) when (ExitCode.IsPresent && ex is not PipelineStoppedException && ex is not ActionPreferenceStopException)
+        {
+            CompleteResult(new ProjectBuildResult { Success = false, ErrorMessage = ex.Message });
+        }
+    }
+
+    private void ExecuteWorkflow()
     {
         var bound = MyInvocation?.BoundParameters;
         var isVerbose = bound?.ContainsKey("Verbose") == true;
@@ -74,17 +98,19 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
             // best effort only
         }
 
-        var interactive = SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
+        var interactive = !Quiet.IsPresent && !NoInteractive.IsPresent &&
+                          SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
         BufferedLogger? interactiveBuffer = null;
-        ILogger logger = interactive
+        ILogger outputLogger = interactive || Quiet.IsPresent || ExitCode.IsPresent
             ? interactiveBuffer = new BufferedLogger { IsVerbose = isVerbose }
             : new CmdletLogger(this, isVerbose);
+        var logger = new CmdletWarningLogger(this, outputLogger);
         var support = new ProjectBuildSupportService(logger);
 
         var configFullPath = ResolveConfigPath(ConfigPath);
         var configDir = Path.GetDirectoryName(configFullPath) ?? SessionState.Path.CurrentFileSystemLocation.Path;
         var config = support.LoadConfig(configFullPath);
-        var preparation = new ProjectBuildPreparationService().Prepare(
+        var preparation = new ProjectBuildPreparationService(logger).Prepare(
             config,
             configDir,
             PlanPath,
@@ -99,7 +125,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
 
         if (!preparation.HasWork)
         {
-            WriteObject(new ProjectBuildResult
+            CompleteResult(new ProjectBuildResult
             {
                 Success = false,
                 ErrorMessage = "Nothing to do. Enable UpdateVersions, Build, PublishNuget, or PublishGitHub."
@@ -126,14 +152,13 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
                     PlanOnly = preparation.PlanOnly || !executeBuild,
                     UpdateVersions = preparation.UpdateVersions,
                     Build = preparation.Build,
-                    SignPackages = preparation.Build &&
-                        preparation.Spec.SignPackages &&
-                        !string.IsNullOrWhiteSpace(preparation.Spec.CertificateThumbprint),
+                    SignPackages = preparation.Spec.Pack && preparation.Spec.SignPackages,
                     PublishNuGet = preparation.PublishNuget,
                     PublishGitHub = preparation.PublishGitHub
                 },
                 progress => workflowService.Execute(config, configDir, preparation, executeBuild, progress: progress));
 
+            logger.RethrowWarningStop();
             var summary = new DotNetRepositoryReleaseSummaryService().CreateSummary(workflow.Result.Release ?? new DotNetRepositoryReleaseResult
             {
                 Success = workflow.Result.Success,
@@ -156,8 +181,13 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         else
         {
             workflow = workflowService.Execute(config, configDir, preparation, executeBuild);
+            logger.RethrowWarningStop();
+            if (!Quiet.IsPresent && interactiveBuffer is not null)
+                new BufferedLogSupportService().WriteTail(
+                    interactiveBuffer.Entries,
+                    new SpectreConsoleLogger { IsVerbose = isVerbose });
         }
 
-        WriteObject(workflow.Result);
+        CompleteResult(workflow.Result);
     }
 }

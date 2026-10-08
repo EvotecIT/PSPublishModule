@@ -49,13 +49,17 @@ internal sealed partial class PowerShellTypedLowerer
         bool requiresPowerShellCommandRegions,
         bool requiresPowerShellRuntimeState,
         bool requiresPowerShellModuleStateRead,
-        bool requiresPowerShellModuleStateWrite)
+        bool requiresPowerShellModuleStateWrite,
+        bool requiresPowerShellStatementErrors = false,
+        bool requiresPowerShellStopping = false)
     {
         var generated = new HashSet<string>(StringComparer.Ordinal)
         {
             requiresProviderCancellation ? "__providerCancellationToken" : string.Empty,
             requiresBoundParameters ? "__boundParameters" : string.Empty
         };
+        if (requiresPowerShellStatementErrors) generated.Add("__statementErrors");
+        if (requiresPowerShellStopping) generated.Add("__checkLoopInterrupts");
         if (requiresPowerShellStreams) generated.UnionWith(StreamHostParameterNames);
         if (requiresPowerShellCommandRegions) generated.UnionWith(CommandRegionHostParameterNames);
         if (requiresPowerShellRuntimeState) generated.UnionWith(RuntimeStateHostParameterNames);
@@ -64,6 +68,7 @@ internal sealed partial class PowerShellTypedLowerer
         generated.Remove(string.Empty);
         return function.Parameters
             .Select(static parameter => PowerShellCSharpSymbolRenderer.Identifier(parameter.Symbol.Name))
+            .Concat(function.Locals.Select(static local => PowerShellCSharpSymbolRenderer.Identifier(local.Symbol.Name)))
             .FirstOrDefault(generated.Contains);
     }
 
@@ -81,7 +86,10 @@ internal sealed partial class PowerShellTypedLowerer
             .Any(static expression => expression.RequiresHostBinding);
 
     private static bool ContainsPowerShellStreamWrite(PowerShellBoundBlock block)
-        => block.Statements.Any(StatementContainsPowerShellStreamWrite);
+        => block.Statements.Any(StatementContainsPowerShellStreamWrite) || block.Statements
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+            .Any(static expression => expression is PowerShellBoundNativeStatementValueExpression);
 
     private static bool ContainsCooperativeProvider(PowerShellBoundBlock block)
         => block.Statements.Any(StatementContainsCooperativeProvider);
@@ -89,8 +97,10 @@ internal sealed partial class PowerShellTypedLowerer
     private static bool StatementContainsCooperativeProvider(PowerShellBoundStatement statement)
         => statement switch
         {
+            PowerShellBoundOutputCaptureStatement capture => ContainsCooperativeProvider(capture.Body),
+            PowerShellBoundStatementErrorBoundary boundary => ContainsCooperativeProvider(boundary.Body),
             PowerShellBoundStreamWriteStatement stream =>
-                stream.Provider.Adapter.Cancellation is
+                stream.Provider?.Adapter.Cancellation is
                     PowerShellCompilationProviderCancellation.Cooperative or
                     PowerShellCompilationProviderCancellation.PostInitializationCooperative or
                     PowerShellCompilationProviderCancellation.ProcessIsolated,
@@ -110,6 +120,9 @@ internal sealed partial class PowerShellTypedLowerer
     private static bool StatementContainsPowerShellStreamWrite(PowerShellBoundStatement statement)
         => statement switch
         {
+            PowerShellBoundOutputCaptureStatement { CapturesStableScalarVector: true } => false,
+            PowerShellBoundOutputCaptureStatement => true,
+            PowerShellBoundStatementErrorBoundary boundary => ContainsPowerShellStreamWrite(boundary.Body),
             PowerShellBoundStreamWriteStatement => true,
             PowerShellBoundIfStatement conditional => conditional.Clauses.Any(clause => ContainsPowerShellStreamWrite(clause.Body)) ||
                 (conditional.ElseBlock is not null && ContainsPowerShellStreamWrite(conditional.ElseBlock)),
@@ -130,7 +143,7 @@ internal sealed partial class PowerShellTypedLowerer
            PowerShellSemanticAnalyzer.EnumerateStatements(block)
                .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
                .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
-               .Any(static expression => expression is PowerShellBoundCommandAvailabilityExpression or PowerShellBoundHostedBooleanCommandExpression);
+               .Any(static expression => expression is PowerShellBoundCommandAvailabilityExpression or PowerShellBoundHostedBooleanCommandExpression or PowerShellBoundNativeCommandExpression);
 
     private static bool ContainsPowerShellModuleStateRead(PowerShellBoundBlock block)
         => PowerShellSemanticAnalyzer.EnumerateStatements(block)

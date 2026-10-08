@@ -95,6 +95,9 @@ internal static class MarkdownRenderer
                     Theme = PrismTheme.GithubAuto
                 }
             };
+            // Preserve the engine's symbolic links until the site-wide xref map
+            // resolves them. Other nonstandard schemes retain the renderer's policy.
+            options.AdditionalAllowedLinkSchemes.Add("xref");
             var html = doc.ToHtmlFragment(options);
             html = ApplyAuthoredImageAttributes(html, authoredImageAttributes);
             html = ApplyImageHints(html, markdown, sourcePath, siteRoot);

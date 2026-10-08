@@ -159,13 +159,13 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
                string.Equals(commandName, "cli", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool TryGetBoundRemovalValue(
+    private bool TryGetBoundRemovalValue(
         CommandAst command,
         IReadOnlyList<string> parameterNames,
         out object? value)
         => TryGetBoundRemovalValue(command, parameterNames, out value, out _);
 
-    private static bool TryGetBoundRemovalValue(
+    private bool TryGetBoundRemovalValue(
         CommandAst command,
         IReadOnlyList<string> parameterNames,
         out object? value,
@@ -175,7 +175,7 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         boundParameterName = null;
         try
         {
-            var binding = StaticParameterBinder.BindCommand(command);
+            var binding = BindCommandCached(command);
             foreach (var parameterName in parameterNames)
             {
                 if (binding.BoundParameters.TryGetValue(parameterName, out var result))
@@ -279,11 +279,11 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         return true;
     }
 
-    private static bool IsPrivateAliasDeclaration(CommandAst command)
+    private bool IsPrivateAliasDeclaration(CommandAst command)
     {
         try
         {
-            var binding = StaticParameterBinder.BindCommand(command);
+            var binding = BindCommandCached(command);
             if (!binding.BoundParameters.TryGetValue("Option", out var result))
                 return false;
 

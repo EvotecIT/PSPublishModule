@@ -1,0 +1,979 @@
+{
+  "schemaVersion": 1,
+  "recordedOn": "2026-09-28",
+  "source": {
+    "workload": "locksmith2",
+    "repository": "https://github.com/jakehildreth/locksmith2",
+    "revision": "f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639",
+    "license": "Commons Clause License Condition v1.0",
+    "archiveSha256": "d4f511b16ed95d15bfa37ba06ddfc92709f0412e8669004cb70e3407ae9fc8b9",
+    "sourceFingerprint": "b1e65521a013471cfc80589f0edd062a714f4b498a347685a06d7dce97b1b4ef",
+    "unchangedClass": "Classes/LS2Issue.ps1",
+    "classSha256": "736d4440eace31299822b2d8e20863b1c26a7cb9186da235c478910226202e38",
+    "unchangedFunction": "Test-IssueExists",
+    "functionSha256": "88242f6cc6d52632a167da36fc4daecc4fd4a7e6f0ea8d96a137245f452f0e64"
+  },
+  "assessment": {
+    "baseline": {
+      "externalEmittedFunctions": 91,
+      "externalTotalFunctions": 183,
+      "locksmith2EmittedFunctions": 38,
+      "locksmith2TotalFunctions": 100,
+      "locksmith2EvidenceSha256": "8e28891bd4f5345a67699d1fea521edff6a2f23bf3c0ddaa83abef5eb638fcb3"
+    },
+    "current": {
+      "externalEmittedFunctions": 128,
+      "externalTotalFunctions": 183,
+      "externalEmittedUnits": 128,
+      "externalTotalUnits": 196,
+      "locksmith2EmittedFunctions": 75,
+      "locksmith2TotalFunctions": 100,
+      "regressions": 0,
+      "completeWorkloadExecutions": 0,
+      "evidenceSha256": "415fecfe0cedd79a74349fa81a0bc35017be8f23a5601be2d473f91d407c52c2"
+    },
+    "gainedMethods": 37,
+    "lostMethods": 0
+  },
+  "functionLedger": [
+    {
+      "path": "Private/Convert/Convert-IdentityReferenceToNTAccount.ps1",
+      "name": "Convert-IdentityReferenceToNTAccount",
+      "unitId": "0ac135d300a6d658a6b066c9",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Convert/Convert-IdentityReferenceToSid.ps1",
+      "name": "Convert-IdentityReferenceToSid",
+      "unitId": "22b4297ced677a664906b4c7",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Convert/Expand-GroupMembership.ps1",
+      "name": "Expand-GroupMembership",
+      "unitId": "1a7e18a7facd3635a1302202",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Convert/Resolve-Principal.ps1",
+      "name": "Resolve-Principal",
+      "unitId": "8f672b6714aa802d5ea9b10b",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Get/Get-AdcsObject.ps1",
+      "name": "Get-AdcsObject",
+      "unitId": "5b1c31a78bc8f871191995c9",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Get/Get-FlattenedIssues.ps1",
+      "name": "Get-FlattenedIssues",
+      "unitId": "8270917130682e574266a549",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Get/Get-ModuleThatLoadedThisFunction.ps1",
+      "name": "Get-ModuleThatLoadedThisFunction",
+      "unitId": "f1c8cbd07ecf522345a51786",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Get/Get-RootDSE.ps1",
+      "name": "Get-RootDSE",
+      "unitId": "e6307470d477dbb4fde2523d",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Get/Get-WebEnrollmentEndpointStatus.ps1",
+      "name": "Get-WebEnrollmentEndpointStatus",
+      "unitId": "09bcc54e0e40d3abb27da076",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 1,
+      "afterRegions": 1
+    },
+    {
+      "path": "Private/Initialize/Initialize-AdcsObjectStore.ps1",
+      "name": "Initialize-AdcsObjectStore",
+      "unitId": "192db9eaa35bccb6460339c6",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Initialize/Initialize-DirectoryConnections.ps1",
+      "name": "Initialize-DirectoryConnections",
+      "unitId": "3a926f9b9b1ac7a77646f457",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Initialize/Initialize-DomainStore.ps1",
+      "name": "Initialize-DomainStore",
+      "unitId": "33cd472a0d85c5be6d6f17ea",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Initialize/Initialize-LS2Scan.ps1",
+      "name": "Initialize-LS2Scan",
+      "unitId": "947668a8c556e2b3d2eeebec",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Initialize/Initialize-PrincipalDefinitions.ps1",
+      "name": "Initialize-PrincipalDefinitions",
+      "unitId": "35103c3060ef616dc4c5a079",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/New/New-AuthenticatedDirectoryEntry.ps1",
+      "name": "New-AuthenticatedDirectoryEntry",
+      "unitId": "078f078c7f315cab8cb089ee",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/New/New-GCSearcher.ps1",
+      "name": "New-GCSearcher",
+      "unitId": "b84b8952e0a7063985907d81",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/New/New-LDAPSearcher.ps1",
+      "name": "New-LDAPSearcher",
+      "unitId": "24f976e24aa4a017948dbc1a",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Get-PrincipalRiskBonus.ps1",
+      "name": "Get-PrincipalRiskBonus",
+      "unitId": "8b86c204ab37443636454f7f",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-AnyPurposeEKUExist.ps1",
+      "name": "Set-AnyPurposeEKUExist",
+      "unitId": "9969683b816438659b7bf63d",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-AuthenticationEKUExist.ps1",
+      "name": "Set-AuthenticationEKUExist",
+      "unitId": "556f883993e631fbecc2edb8",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-AuthorizedSignatureNotRequired.ps1",
+      "name": "Set-AuthorizedSignatureNotRequired",
+      "unitId": "f75ee360150881d4354fffde",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-CAAdministrator.ps1",
+      "name": "Set-CAAdministrator",
+      "unitId": "d6a518ec37d0c0d9a49bdef3",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-CAAuditFilter.ps1",
+      "name": "Set-CAAuditFilter",
+      "unitId": "c81f9c8f9541d54f2c1a3974",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-CACertificateManager.ps1",
+      "name": "Set-CACertificateManager",
+      "unitId": "e777fee16c27e2854ae85978",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-CAComputerPrincipal.ps1",
+      "name": "Set-CAComputerPrincipal",
+      "unitId": "7f91da5c0005f854a9a1b3c5",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-CADisableExtensionList.ps1",
+      "name": "Set-CADisableExtensionList",
+      "unitId": "a59d7833ca341123cb1c36c2",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-CAEditFlags.ps1",
+      "name": "Set-CAEditFlags",
+      "unitId": "6fefeec05e251f14e921771e",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-CAInterfaceFlags.ps1",
+      "name": "Set-CAInterfaceFlags",
+      "unitId": "797a951a8bdd16ff9804cf9b",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-CAWebEnrollmentEndpoints.ps1",
+      "name": "Set-CAWebEnrollmentEndpoints",
+      "unitId": "3b0575770329b836ceb1ad83",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-DangerousCAAdministrator.ps1",
+      "name": "Set-DangerousCAAdministrator",
+      "unitId": "0f89240a7c2d3efa795f5b10",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-DangerousCACertificateManager.ps1",
+      "name": "Set-DangerousCACertificateManager",
+      "unitId": "2f03bba6372ba6817e8340d9",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-DangerousEditor.ps1",
+      "name": "Set-DangerousEditor",
+      "unitId": "bf5cab62bc5b41ef6ff3c175",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-DangerousEnrollee.ps1",
+      "name": "Set-DangerousEnrollee",
+      "unitId": "cf856f2b297549291122762f",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-EnrollmentAgentEKUExist.ps1",
+      "name": "Set-EnrollmentAgentEKUExist",
+      "unitId": "c42bb04b4b2f8f7f220ed1a4",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-HasNonStandardOwner.ps1",
+      "name": "Set-HasNonStandardOwner",
+      "unitId": "61d37763f569ef9da18ded9b",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-IsCATemplate.ps1",
+      "name": "Set-IsCATemplate",
+      "unitId": "750951d3ad039bada6f090c6",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-LinkedGroupOIDPolicy.ps1",
+      "name": "Set-LinkedGroupOIDPolicy",
+      "unitId": "02d89f32f90b7bad9beeede5",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-LowPrivilegeCAAdministrator.ps1",
+      "name": "Set-LowPrivilegeCAAdministrator",
+      "unitId": "8d19e1c858fc2513ceec8cda",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-LowPrivilegeCACertificateManager.ps1",
+      "name": "Set-LowPrivilegeCACertificateManager",
+      "unitId": "3d93e04a9a9d3d490a7a8fc5",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-LowPrivilegeEditor.ps1",
+      "name": "Set-LowPrivilegeEditor",
+      "unitId": "0176297bbc20fde08141b3b4",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-LowPrivilegeEnrollee.ps1",
+      "name": "Set-LowPrivilegeEnrollee",
+      "unitId": "255a133eab1ebdcc6b48c75a",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-LS2RiskRating.ps1",
+      "name": "Set-LS2RiskRating",
+      "unitId": "5901f4235fc0a3a1864ce448",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 1,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-ManagerApprovalNotRequired.ps1",
+      "name": "Set-ManagerApprovalNotRequired",
+      "unitId": "c979f49a8e0a273b7eb45fe0",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-NoSecurityExtension.ps1",
+      "name": "Set-NoSecurityExtension",
+      "unitId": "dc7b18a46be819a119ea322d",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-Owner.ps1",
+      "name": "Set-Owner",
+      "unitId": "5a25f15078bbfe0da85b9e0a",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-RequiresEnrollmentAgentSignature.ps1",
+      "name": "Set-RequiresEnrollmentAgentSignature",
+      "unitId": "3a4cfc154f941295c02b258a",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-SANAllowed.ps1",
+      "name": "Set-SANAllowed",
+      "unitId": "f8f7c4d2411f6babd396dd85",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Set/Set-TemplateEnabled.ps1",
+      "name": "Set-TemplateEnabled",
+      "unitId": "00efb9d4cc81247f34e15abc",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsBA.ps1",
+      "name": "Test-IsBA",
+      "unitId": "af87f5ba0eaec4781b1f214e",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsDA.ps1",
+      "name": "Test-IsDA",
+      "unitId": "a4bdb8bbcef1f6895126d14c",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsDangerousAce.ps1",
+      "name": "Test-IsDangerousAce",
+      "unitId": "7154d9cf9392f5d0e11b17b2",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsDangerousPrincipal.ps1",
+      "name": "Test-IsDangerousPrincipal",
+      "unitId": "6136390ff4c078db40b7fdf1",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsDomainComputer.ps1",
+      "name": "Test-IsDomainComputer",
+      "unitId": "a3aefeeeaf0300ed2bfa591e",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsDomainUser.ps1",
+      "name": "Test-IsDomainUser",
+      "unitId": "cd3590f872bc5fcc170dc10b",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsEA.ps1",
+      "name": "Test-IsEA",
+      "unitId": "7334c25492c5b29439a22f5a",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsEnrollmentAce.ps1",
+      "name": "Test-IsEnrollmentAce",
+      "unitId": "ce4060a337dda5f5eab1234a",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsInteractiveSession.ps1",
+      "name": "Test-IsInteractiveSession",
+      "unitId": "fcf3bd0f1d2d6d1e0ca298ce",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsLatestVersion.ps1",
+      "name": "Test-IsLatestVersion",
+      "unitId": "ad72cbb9d4cf9da229af98e1",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsLocalAdmin.ps1",
+      "name": "Test-IsLocalAdmin",
+      "unitId": "9cde8b7d75187f263ef9cfd2",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsLowPrivilegePrincipal.ps1",
+      "name": "Test-IsLowPrivilegePrincipal",
+      "unitId": "d5afa2271076a9675329cac5",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsModuleAvailable.ps1",
+      "name": "Test-IsModuleAvailable",
+      "unitId": "e2fc9ce3721989f8ef752915",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsModuleLoaded.ps1",
+      "name": "Test-IsModuleLoaded",
+      "unitId": "b2acb2e3190332bc2b0f9255",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsPowerShellCore.ps1",
+      "name": "Test-IsPowerShellCore",
+      "unitId": "61dfffb189e1ddca24c5dd7c",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsStandardOwner.ps1",
+      "name": "Test-IsStandardOwner",
+      "unitId": "d2e96b7834ebeb6f1f6d87e9",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IssueExists.ps1",
+      "name": "Test-IssueExists",
+      "unitId": "416b62bb190feec4fb9e035d",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 1,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsSupportedOS.ps1",
+      "name": "Test-IsSupportedOS",
+      "unitId": "9ad6f43f899d39ef248a7b4d",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsSupportedPS.ps1",
+      "name": "Test-IsSupportedPS",
+      "unitId": "7654d61a993355b950068639",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsUtf8.ps1",
+      "name": "Test-IsUtf8",
+      "unitId": "cad45cb07cc4752b92b457e1",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsWindows.ps1",
+      "name": "Test-IsWindows",
+      "unitId": "b68ce48e567ccd83c264c54f",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-IsWindowsTerminal.ps1",
+      "name": "Test-IsWindowsTerminal",
+      "unitId": "9f5f90cca30515cb5fadbb5c",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Test/Test-PowerShellEnvironment.ps1",
+      "name": "Test-PowerShellEnvironment",
+      "unitId": "29c6cce58bc3446e728f412b",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/UI/Read-Choice.ps1",
+      "name": "Read-Choice",
+      "unitId": "91651f1497d70e86032ac191",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/UI/Show-ConnectionContext.ps1",
+      "name": "Show-ConnectionContext",
+      "unitId": "8d046581c22744161134226e",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/UI/Show-ConnectionDiagnostics.ps1",
+      "name": "Show-ConnectionDiagnostics",
+      "unitId": "15d26af3305ef2fdbb72d652",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/UI/Show-IssueReport.ps1",
+      "name": "Show-IssueReport",
+      "unitId": "6eb500055181840cf45575c7",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/UI/Show-Logo.ps1",
+      "name": "ConvertTo-ConsoleColor",
+      "unitId": "ce3250fa4270c937f4863fa8",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/UI/Show-Logo.ps1",
+      "name": "Get-TrueColorBg",
+      "unitId": "55d1277b63f21a173c9ecd60",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/UI/Show-Logo.ps1",
+      "name": "Get-TrueColorFg",
+      "unitId": "f53af9df7b06f61ffa5ee662",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/UI/Show-PrivilegeContext.ps1",
+      "name": "Show-PrivilegeContext",
+      "unitId": "5bb4cb82571f07a3be179cc7",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Utility/Add-ToIssueStore.ps1",
+      "name": "Add-ToIssueStore",
+      "unitId": "a12b59911c5d42761aa081c5",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Utility/Expand-IssueByGroup.ps1",
+      "name": "Expand-IssueByGroup",
+      "unitId": "d2ffd28a81e14ee3869f66ae",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Utility/Expand-IssueTemplate.ps1",
+      "name": "Expand-IssueTemplate",
+      "unitId": "fd75c33f166b0214c6dfa534",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Utility/Get-AdcsObjectName.ps1",
+      "name": "Get-AdcsObjectName",
+      "unitId": "2c55b0304cc817c13c2b351f",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Utility/Get-ForestNameFromDN.ps1",
+      "name": "Get-ForestNameFromDN",
+      "unitId": "8f9f403109c66bb3256569d7",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Utility/Get-IssueCount.ps1",
+      "name": "Get-IssueCount",
+      "unitId": "556b5c67369dc41b90f59b4c",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Utility/Get-IssueTextOverride.ps1",
+      "name": "Get-IssueTextOverride",
+      "unitId": "e72206f87cc689a0282a317b",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Utility/Install-NeededModule.ps1",
+      "name": "Install-NeededModule",
+      "unitId": "1b23b333be73dcf1ddf86b49",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Utility/Repair-PowerShellEnvironment.ps1",
+      "name": "Repair-PowerShellEnvironment",
+      "unitId": "a08ade00f954c5f8130cd001",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Utility/Resolve-LS2ConnectionContext.ps1",
+      "name": "Resolve-LS2ConnectionContext",
+      "unitId": "69f405c8b589a937b3bcfdb4",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 1,
+      "afterRegions": 1
+    },
+    {
+      "path": "Private/Utility/Update-DollarSignProfile.ps1",
+      "name": "Update-DollarSignProfile",
+      "unitId": "95a32e7b3b795e61e59baa07",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Private/Utility/Update-OutputEncoding.ps1",
+      "name": "Update-OutputEncoding",
+      "unitId": "67b9f0262fcb403b59f3182d",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Public/Find-LS2RiskyPrincipal.ps1",
+      "name": "Find-LS2RiskyPrincipal",
+      "unitId": "03b121d488b86e09c58ba5bf",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Public/Find-LS2VulnerableCA.ps1",
+      "name": "Find-LS2VulnerableCA",
+      "unitId": "8f1339ab1246d5263ab28d45",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 1,
+      "afterRegions": 0
+    },
+    {
+      "path": "Public/Find-LS2VulnerableObject.ps1",
+      "name": "Find-LS2VulnerableObject",
+      "unitId": "3d4ab76cd85ed9f897e47add",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 1,
+      "afterRegions": 0
+    },
+    {
+      "path": "Public/Find-LS2VulnerableTemplate.ps1",
+      "name": "Find-LS2VulnerableTemplate",
+      "unitId": "e22c702d3483193bf695df47",
+      "beforeEmitted": false,
+      "afterEmitted": true,
+      "beforeRegions": 1,
+      "afterRegions": 0
+    },
+    {
+      "path": "Public/Get-LS2Stores.ps1",
+      "name": "Get-LS2Stores",
+      "unitId": "9ebfd8bbaab1683d71818ae5",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Public/Invoke-Locksmith2.ps1",
+      "name": "Invoke-Locksmith2",
+      "unitId": "d531dee9f795af7943386163",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Public/New-LS2Dashboard.ps1",
+      "name": "New-LS2Dashboard",
+      "unitId": "e1d68c27eb940db7a21cc7c8",
+      "beforeEmitted": false,
+      "afterEmitted": false,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Public/Set-LS2Credential.ps1",
+      "name": "Set-LS2Credential",
+      "unitId": "94b31d3f038b8aeed36ef30c",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    },
+    {
+      "path": "Public/Set-LS2Forest.ps1",
+      "name": "Set-LS2Forest",
+      "unitId": "04a8e86b5334fcecbc4bc5ca",
+      "beforeEmitted": true,
+      "afterEmitted": true,
+      "beforeRegions": 0,
+      "afterRegions": 0
+    }
+  ],
+  "offlineProof": {
+    "boundary": "Exact third-party class and function source in an untracked mini module; in-memory issue store only",
+    "compiledMethodsPerTarget": 1,
+    "net10ManifestSha256": "301166cccfc742032bc5456b2dfbf4cc2dbfee11197866c13aacc8e665f3bdc3",
+    "net472ManifestSha256": "bf9aa92312782b46d6df914ed4dcc28c42869ec2459afd03b6db01ea615e8d91",
+    "hosts": [
+      "Windows PowerShell 7/net10.0",
+      "Windows PowerShell 5.1/net472"
+    ],
+    "originalAndGeneratedResult": {
+      "parameterType": "LS2Issue",
+      "itemType": "LS2Issue",
+      "sameType": true,
+      "match": true,
+      "miss": false
+    },
+    "strict": {
+      "canProceed": false,
+      "typedUnits": 0,
+      "rejectedUnits": 1
+    },
+    "focusedTests": {
+      "passed": 7,
+      "failed": 0,
+      "trxSha256": "adffb00b2f381c411ddf4a3c973f65b0ba698594b0514e43382bec8b87842277"
+    },
+    "inheritedCensusTests": {
+      "passed": 30,
+      "failed": 4,
+      "baselineTrxSha256": "30d62e98895852b95d4eb7fe9b8dc8ef8ed66206c46cdc5d6ba2b29fbb8cb772"
+    }
+  },
+  "limits": [
+    "No complete Locksmith2 module execution or AD operation",
+    "36 newly emitted functions have analysis disposition only",
+    "Hybrid native binding requires PowerShell host and locked manifest class source",
+    "Strict remains rejected",
+    "Windows x64 hosts only; no non-Windows, runtime-free, reviewed dependency lock, performance, PR, merge, or release claim"
+  ]
+}

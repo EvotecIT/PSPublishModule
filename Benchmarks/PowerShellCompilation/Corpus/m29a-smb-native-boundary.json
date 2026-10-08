@@ -1,0 +1,647 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Qualify unchanged Get-ComputerSMBInfo hosted local Windows enumeration; no complete pinned method gain.",
+  "compilerCommit": "7d6a26f8f1e9bc58339978be40f71768268e37ea",
+  "source": {
+    "module": "PSSharedGoods",
+    "revision": "2a807a4f11ba458b7bc405ce3674d93838639af1",
+    "files": {
+      "Private/Get-ComputerSMBInfo.ps1": "3ccd899673eae4228034ce10b2756e6a65a1a7d6a8596910ef6a84bff912760d",
+      "Public/Computers/Get-ComputerSMBShareList.ps1": "29ef551916644583302e8131e5dd0d5d977cd9104670a9cfa546a1e22bdf13c5"
+    }
+  },
+  "fixtureSourceHashes": {
+    "Observe.ps1": "f19f43854432e4ecb45a72898d4c14bda1978adb1d26cff2455eb06598df7a43",
+    "Prepare.ps1": "633bedbac1eccb71a8a295552f665764ef3bcc7aaabedacdf8ca13fbc93cc250",
+    "README.md": "8768197b886fd91c424643e15f3ce8207959e7b1716eb72069bc66e4c1a576d3"
+  },
+  "portfolio": {
+    "emitted": 544,
+    "retained": 21,
+    "functions": 565,
+    "stableUnits": 584,
+    "censusRepeated": false,
+    "reason": "Compiler and pinned portfolio unchanged; isolated hosted execution qualification."
+  },
+  "hosts": [
+    {
+      "framework": "net10.0",
+      "artifactSha256": "5aa53261647b462a43a0f3a5c35845ffa6cddf6723fdd6354354c4c529b0871a",
+      "dependencyLockSha256": "f6bc204c208c66c0c7381fc5f0b796b4c15396ca5c2f6704f6275b48a50223d3",
+      "compiledMethods": 1,
+      "workloadDisposition": [
+        {
+          "unitId": "faae663f90bb428f55517fe3",
+          "relativePath": "Fixture.psm1",
+          "name": "Get-ComputerSMBInfo",
+          "kind": "Function",
+          "startLine": 1,
+          "semanticEligible": false,
+          "emittedClrMethod": false,
+          "emittedBinaryCmdlet": false,
+          "retainedHostedSource": true,
+          "usesNativeFunctionBinding": false,
+          "runtimeCommandRegions": 0,
+          "boundaryCrossings": 1,
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "generatedMemberName": "",
+          "dependencyCauses": [],
+          "boundaryCauses": [
+            "Authored source remains on the hosted PowerShell path after artifact shaping.",
+            "The retained function delegates 1 typed region(s) to generated CLR helpers while keeping its PowerShell command surface.",
+            "Promoted initialization helpers require fresh invocation-local targets; regions with existing targets execute their original PowerShell statements in place."
+          ],
+          "diagnosticChain": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'Win32Share.NativeMethods' is not available in the generated project reference set for the requested target.",
+              "line": 46,
+              "column": 12
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.typeexpression",
+              "message": "CLR type literal 'Win32Share.NativeHelpers+SHARE_INFO_1' is not statically available in the generated project reference set for the requested target.",
+              "line": 75,
+              "column": 101
+            }
+          ],
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "regionGraph": {
+            "schemaVersion": 1,
+            "regions": [
+              {
+                "regionId": "region:2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a:1326:1366:Typed",
+                "ordinal": 0,
+                "execution": "Typed",
+                "startOffset": 1326,
+                "endOffset": 1366,
+                "startLine": 42,
+                "startColumn": 5,
+                "endLine": 44,
+                "endColumn": 16,
+                "inputs": [],
+                "outputs": [
+                  "transfer:Local:read",
+                  "transfer:Local:resume",
+                  "transfer:Local:total"
+                ],
+                "mutations": [
+                  "Local:READ",
+                  "Local:RESUME",
+                  "Local:TOTAL"
+                ],
+                "streams": [],
+                "errors": [],
+                "ordering": "AuthoredSequentialSingleEvaluation",
+                "hostedCommandBoundarySites": 0,
+                "moduleStateReadBoundarySites": 0,
+                "moduleStateWriteBoundarySites": 0,
+                "staticBoundaryCrossings": 0,
+                "staticBoundaryValueTransfers": 0,
+                "staticBoundaryCostUnits": 0
+              }
+            ],
+            "scriptBlocks": [],
+            "hostedCommandBoundarySites": 0,
+            "moduleStateReadBoundarySites": 0,
+            "moduleStateWriteBoundarySites": 0,
+            "staticBoundaryCrossings": 0,
+            "staticBoundaryCostUnits": 0
+          },
+          "promotedTypedRegions": 1,
+          "generatedRegionMemberNames": [
+            "__PowerForgeRegion_9666fcc11c4b4df3ce306461"
+          ]
+        }
+      ],
+      "strictCanProceed": false,
+      "strictExplanationSha256": "ac45b875937e104e96b999c21413619c42c17c99f04b768dbca2bf3e3c2b758b",
+      "cases": [
+        {
+          "case": "local",
+          "originalExitCode": 0,
+          "generatedExitCode": 0,
+          "originalSha256": "6c2c4ea2bb8209c281083b56add7a82e3c9b8837e2682c5e75619024112363af",
+          "generatedSha256": "6c2c4ea2bb8209c281083b56add7a82e3c9b8837e2682c5e75619024112363af",
+          "result": {
+            "case": "local",
+            "hostVersion": "7.6.6",
+            "scope": "local null/empty server, SkipDiskSpace; no UNC access",
+            "observations": [
+              {
+                "case": "all",
+                "records": 5,
+                "recordSha256": "b8aba2e5ca6fecf58e0e3db8842766855a75b013ed0844c77452d3b27067daee",
+                "matchesIndependentLocalBaseline": true,
+                "warnings": 0
+              },
+              {
+                "case": "repeat",
+                "records": 5,
+                "recordSha256": "b8aba2e5ca6fecf58e0e3db8842766855a75b013ed0844c77452d3b27067daee",
+                "matchesIndependentLocalBaseline": true,
+                "warnings": 0
+              },
+              {
+                "case": "wildcard",
+                "records": 5,
+                "recordSha256": "b8aba2e5ca6fecf58e0e3db8842766855a75b013ed0844c77452d3b27067daee",
+                "matchesIndependentLocalBaseline": true,
+                "warnings": 0
+              },
+              {
+                "case": "exact",
+                "records": 1,
+                "recordSha256": "6be76b26af4611c3e9ef09201e32420cbb9b6ed79351f0f9b83a10c19e400890",
+                "matchesIndependentLocalBaseline": true,
+                "warnings": 0
+              },
+              {
+                "case": "missing",
+                "records": 0,
+                "recordSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "matchesIndependentLocalBaseline": true,
+                "warnings": 0
+              }
+            ]
+          }
+        },
+        {
+          "case": "assembly-refusal",
+          "originalExitCode": 0,
+          "generatedExitCode": 0,
+          "originalSha256": "7d06b1a5b59126a2803790d60baf1d03af12c779847b489935b24745c2172805",
+          "generatedSha256": "7d06b1a5b59126a2803790d60baf1d03af12c779847b489935b24745c2172805",
+          "result": {
+            "case": "assembly-refusal",
+            "hostVersion": "7.6.6",
+            "scope": "local null/empty server, SkipDiskSpace; no UNC access",
+            "observations": [
+              {
+                "case": "assembly-refusal",
+                "message": "owned SMB assembly refusal",
+                "nativeTypeLoaded": false
+              }
+            ]
+          }
+        }
+      ],
+      "generatedSourceHashes": {
+        "CompiledCmdlets.cs": "24105003a083756ee824493c67aedb0c8ec657442996a0fe85b3e14257ef9c7d",
+        "CompiledPowerShell.cs": "bb7b5639ed8d9776734ce2f178ba0abb6b275d50b9c95ede6419b1352ddd2014",
+        "ModuleSessionState.g.cs": "c96e42f7ba20fe3819fbe69e936b44e8c8a8fd5141eefa148bff59743bd69981",
+        "NativeLanguageOperations.g.cs": "7f96f823b4489c97ddfcc8182e4828fba533bc986c8feb36263851ef8dbded55",
+        "NativeOutput.g.cs": "48100a5b25ca80ebdf62d8f5df0f4be7ae3ad8c951dec2e69a19d01c98ae10bd",
+        "PowerShellHybridRegionHost.g.cs": "678bc094155a8b579acee3a7fed2a73c33f327582cd35311f95a621395e2e4ac",
+        "PowerShellNativeFunctionContext.AccessMutations.g.cs": "9aa4cbc51df123ce356de19afa73f94f08541955bfde3854ee77c33c5f9a52ca",
+        "PowerShellNativeFunctionContext.CommandRegions.g.cs": "96182f77be1aab8c9599412fcd6a89af1244cebeb97937ecf0a6cde68cb9136c",
+        "PowerShellNativeFunctionContext.Compilation.g.cs": "822e2ef82b3ccc4b7de4ad9eb6f44e915ec36c81abc4b9c2b5978230d3dd7a2a",
+        "PowerShellNativeFunctionContext.Conversions.g.cs": "fccc228c95b894808bf99cf6a0b570c5eef8c4367e85259fc9f631b2673043d6",
+        "PowerShellNativeFunctionContext.Declarations.g.cs": "c53589d78033200f4ae59a72baf67b741f59281dfc23ebe7c637ea16382eefb3",
+        "PowerShellNativeFunctionContext.Dictionaries.g.cs": "51f0138b4a97a58a092af7e6dc8b9a4dfdaf233a15b13f396c4f03197df45cc3",
+        "PowerShellNativeFunctionContext.Enumeration.g.cs": "bee5f9239a119cec47f2f392064d3096d0962ab2ce84a9c7758271e0c01c5485",
+        "PowerShellNativeFunctionContext.g.cs": "17cb966a966bab959cf8d58d87eb8c92c4733374cd6f5e944e9c65c00c96efc9",
+        "PowerShellNativeFunctionContext.Indexing.g.cs": "610bec93d533cd485bfa9f680930a6d90de7bc0734bafeca4450facd9f00204e",
+        "PowerShellNativeFunctionContext.Invocations.g.cs": "c96859c7f495a75dfae3504c43ad2e46952e2fe387d6b2595149e76463a529b2",
+        "PowerShellNativeFunctionContext.Members.g.cs": "baeb213b30012cbd52403668f0def2f647ccb1c0625a60369e98fb97aeac4ba7",
+        "PowerShellNativeFunctionContext.Membership.g.cs": "4fb699f522f312e6850daa25673426f0af1844ecb7a59522336aadb2efcea707",
+        "PowerShellNativeFunctionContext.NestedDeclarations.g.cs": "075a2fdcb76a93eddc62fd23ea7d9460b12d8232adcd60050ab824e6882fa7bf",
+        "PowerShellNativeFunctionContext.Operations.g.cs": "0c83401a614ade6a8b24868bcf929592ae16f9d2941cb8f8af03144c067f47e0",
+        "PowerShellNativeFunctionContext.Output.g.cs": "06b1c8e5bd77934f02247b5d0774ff8a2b8d7ca4275e9fd18f40afda1afab050",
+        "PowerShellNativeFunctionContext.Patterns.g.cs": "990a8056b63f05c7103aa627ea8681845e0c1eeab84311312cd3cb394c9f3f92",
+        "PowerShellNativeFunctionContext.ScriptBlocks.g.cs": "b576c61fb1a947d688eec0192be637ff6fa741c58948319770f2712e31685ae8",
+        "PowerShellNativeFunctionContext.StringJoin.g.cs": "1c1e1acedadee610fd3281d709cb09c1a85bc4bd61af5005e8a1f5fcb63f9542",
+        "PowerShellNativeFunctionContext.Switch.g.cs": "d7501e42167b4ad522a6f203398ab14ca3d4c1d36e8524541f1afa3c87288101",
+        "PowerShellNativeFunctionHost.Declared.g.cs": "1960ef3bdf465cd99336fc1f0415c291b7ae7515ef4eb64d159f15ed69c8dc22",
+        "PowerShellNativeFunctionHost.FunctionEnums.g.cs": "b3b4e9f2d5867986cfbbe26dbadf21a1a319b7ec14202fa80cde9637b2d7d5f5",
+        "PowerShellNativeFunctionHost.g.cs": "180e381ea4854f38001ec5fbea4a453c88a6606843c5ea915c5f8f8343c11ca4",
+        "PowerShellNativeFunctionHost.OwnedDeclaration.g.cs": "83ce60b1bc336bc19e589369de8a81a2858277b8216a6c0784ecda328a8d911a",
+        "PowerShellRegionLocalOwnership.g.cs": "29ae75381d0c86b8a0c9c963893cf3754658809321c3a0ee4a1c92cb4680a62d",
+        "SmbBoundary.csproj": "41b23bc11b9474f517440858f22df8ec44439ea7f54bac8c1f560c11e7d81806",
+        "SourceExtent.g.cs": "daf263e4d386070ca90530b6765d52d9f8e0141a63c6f1097eae4d00744472e5",
+        "StatementErrors.g.cs": "4f8430b1a911496884f666ca7a74cbfc9a740803868a1dcb7965309b17bd1a44"
+      },
+      "dependencyLockReviewed": true,
+      "existingCallerDisposition": [
+        {
+          "unitId": "a81cb1550c879149407bf5fa",
+          "relativePath": "Fixture.psm1",
+          "name": "Get-ComputerSMBShareList",
+          "kind": "Function",
+          "startLine": 162,
+          "semanticEligible": true,
+          "emittedClrMethod": true,
+          "emittedBinaryCmdlet": false,
+          "retainedHostedSource": false,
+          "usesNativeFunctionBinding": true,
+          "runtimeCommandRegions": 3,
+          "boundaryCrossings": 4,
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "generatedMemberName": "Get_ComputerSMBShareList",
+          "dependencyCauses": [],
+          "boundaryCauses": [
+            "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+            "The emitted CLR method contains hosted PowerShell command regions.",
+            "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation.",
+            "The emitted CLR method requires the invocation's native PowerShell loop-stopping callback."
+          ],
+          "diagnosticChain": [],
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "regionGraph": {
+            "schemaVersion": 1,
+            "regions": [
+              {
+                "regionId": "region:2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a:6826:11362:Mixed",
+                "ordinal": 0,
+                "execution": "Mixed",
+                "startOffset": 6826,
+                "endOffset": 11362,
+                "startLine": 162,
+                "startColumn": 35,
+                "endLine": 296,
+                "endColumn": 2,
+                "inputs": [
+                  "PowerShellSessionState:*",
+                  "PowerShellSessionVariable:COMPNM",
+                  "PowerShellSessionVariable:COMPUTERNAME",
+                  "PowerShellSessionVariable:PSBOUNDPARAMETERS"
+                ],
+                "outputs": [
+                  "stream:Success"
+                ],
+                "mutations": [
+                  "Local:COMPNM",
+                  "PowerShellSessionState:*",
+                  "PowerShellSessionVariable:PSBOUNDPARAMETERS.*"
+                ],
+                "streams": [
+                  "Success",
+                  "Error",
+                  "Warning",
+                  "Verbose",
+                  "Debug",
+                  "Information",
+                  "Host"
+                ],
+                "errors": [
+                  "ClrException",
+                  "PowerShellErrorRecord",
+                  "PowerShellSessionStateError",
+                  "PowerShellStatementError"
+                ],
+                "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                "hostedCommandBoundarySites": 3,
+                "moduleStateReadBoundarySites": 0,
+                "moduleStateWriteBoundarySites": 0,
+                "staticBoundaryCrossings": 3,
+                "staticBoundaryValueTransfers": 7,
+                "staticBoundaryCostUnits": 10
+              }
+            ],
+            "scriptBlocks": [],
+            "hostedCommandBoundarySites": 3,
+            "moduleStateReadBoundarySites": 0,
+            "moduleStateWriteBoundarySites": 0,
+            "staticBoundaryCrossings": 3,
+            "staticBoundaryCostUnits": 10
+          },
+          "promotedTypedRegions": 0,
+          "generatedRegionMemberNames": []
+        }
+      ],
+      "nativeDeclarationSha256": "b3cdc0d6ffa5347b3fbef8d6a7a270ff9a2a5cd5ba8e860fb29444a013894dac",
+      "buildWarnings": [
+        "CS8321",
+        "NU1510"
+      ]
+    },
+    {
+      "framework": "net472",
+      "artifactSha256": "5064d2af4f3ca11028043636fe70e0a8bb3d1f5db3d65843d82a8aa6e20dd264",
+      "dependencyLockSha256": "069005f6026a55535a84c3336dc938eda4500fac51af5aab8e8e7d6d5912d714",
+      "compiledMethods": 1,
+      "workloadDisposition": [
+        {
+          "unitId": "faae663f90bb428f55517fe3",
+          "relativePath": "Fixture.psm1",
+          "name": "Get-ComputerSMBInfo",
+          "kind": "Function",
+          "startLine": 1,
+          "semanticEligible": false,
+          "emittedClrMethod": false,
+          "emittedBinaryCmdlet": false,
+          "retainedHostedSource": true,
+          "usesNativeFunctionBinding": false,
+          "runtimeCommandRegions": 0,
+          "boundaryCrossings": 1,
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "generatedMemberName": "",
+          "dependencyCauses": [],
+          "boundaryCauses": [
+            "Authored source remains on the hosted PowerShell path after artifact shaping.",
+            "The retained function delegates 1 typed region(s) to generated CLR helpers while keeping its PowerShell command surface.",
+            "Promoted initialization helpers require fresh invocation-local targets; regions with existing targets execute their original PowerShell statements in place."
+          ],
+          "diagnosticChain": [
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.unsupported",
+              "message": "CLR type 'Win32Share.NativeMethods' is not available in the generated project reference set for the requested target.",
+              "line": 46,
+              "column": 12
+            },
+            {
+              "code": "UnsupportedSyntax",
+              "featureId": "syntax.typeexpression",
+              "message": "CLR type literal 'Win32Share.NativeHelpers+SHARE_INFO_1' is not statically available in the generated project reference set for the requested target.",
+              "line": 75,
+              "column": 101
+            }
+          ],
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "regionGraph": {
+            "schemaVersion": 1,
+            "regions": [
+              {
+                "regionId": "region:2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a:1326:1366:Typed",
+                "ordinal": 0,
+                "execution": "Typed",
+                "startOffset": 1326,
+                "endOffset": 1366,
+                "startLine": 42,
+                "startColumn": 5,
+                "endLine": 44,
+                "endColumn": 16,
+                "inputs": [],
+                "outputs": [
+                  "transfer:Local:read",
+                  "transfer:Local:resume",
+                  "transfer:Local:total"
+                ],
+                "mutations": [
+                  "Local:READ",
+                  "Local:RESUME",
+                  "Local:TOTAL"
+                ],
+                "streams": [],
+                "errors": [],
+                "ordering": "AuthoredSequentialSingleEvaluation",
+                "hostedCommandBoundarySites": 0,
+                "moduleStateReadBoundarySites": 0,
+                "moduleStateWriteBoundarySites": 0,
+                "staticBoundaryCrossings": 0,
+                "staticBoundaryValueTransfers": 0,
+                "staticBoundaryCostUnits": 0
+              }
+            ],
+            "scriptBlocks": [],
+            "hostedCommandBoundarySites": 0,
+            "moduleStateReadBoundarySites": 0,
+            "moduleStateWriteBoundarySites": 0,
+            "staticBoundaryCrossings": 0,
+            "staticBoundaryCostUnits": 0
+          },
+          "promotedTypedRegions": 1,
+          "generatedRegionMemberNames": [
+            "__PowerForgeRegion_9666fcc11c4b4df3ce306461"
+          ]
+        }
+      ],
+      "strictCanProceed": false,
+      "strictExplanationSha256": "9e4820f4580a345384c5ad099597ae66156b8ef23d7d686e4a9fd9722c9c9ca5",
+      "cases": [
+        {
+          "case": "local",
+          "originalExitCode": 0,
+          "generatedExitCode": 0,
+          "originalSha256": "93d8669dad3f154eedebc8c55d223159c4bcb623e37a7fd507c5231ec9e90b5f",
+          "generatedSha256": "93d8669dad3f154eedebc8c55d223159c4bcb623e37a7fd507c5231ec9e90b5f",
+          "result": {
+            "case": "local",
+            "hostVersion": "5.1.26100.9444",
+            "scope": "local null/empty server, SkipDiskSpace; no UNC access",
+            "observations": [
+              {
+                "case": "all",
+                "records": 5,
+                "recordSha256": "b8aba2e5ca6fecf58e0e3db8842766855a75b013ed0844c77452d3b27067daee",
+                "matchesIndependentLocalBaseline": true,
+                "warnings": 0
+              },
+              {
+                "case": "repeat",
+                "records": 5,
+                "recordSha256": "b8aba2e5ca6fecf58e0e3db8842766855a75b013ed0844c77452d3b27067daee",
+                "matchesIndependentLocalBaseline": true,
+                "warnings": 0
+              },
+              {
+                "case": "wildcard",
+                "records": 5,
+                "recordSha256": "b8aba2e5ca6fecf58e0e3db8842766855a75b013ed0844c77452d3b27067daee",
+                "matchesIndependentLocalBaseline": true,
+                "warnings": 0
+              },
+              {
+                "case": "exact",
+                "records": 1,
+                "recordSha256": "6be76b26af4611c3e9ef09201e32420cbb9b6ed79351f0f9b83a10c19e400890",
+                "matchesIndependentLocalBaseline": true,
+                "warnings": 0
+              },
+              {
+                "case": "missing",
+                "records": 0,
+                "recordSha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "matchesIndependentLocalBaseline": true,
+                "warnings": 0
+              }
+            ]
+          }
+        },
+        {
+          "case": "assembly-refusal",
+          "originalExitCode": 0,
+          "generatedExitCode": 0,
+          "originalSha256": "4150dade3a64199ad41c0817d6588b31079a1fc0c80c0cc81f4dd587f5cb4807",
+          "generatedSha256": "4150dade3a64199ad41c0817d6588b31079a1fc0c80c0cc81f4dd587f5cb4807",
+          "result": {
+            "case": "assembly-refusal",
+            "hostVersion": "5.1.26100.9444",
+            "scope": "local null/empty server, SkipDiskSpace; no UNC access",
+            "observations": [
+              {
+                "case": "assembly-refusal",
+                "message": "owned SMB assembly refusal",
+                "nativeTypeLoaded": false
+              }
+            ]
+          }
+        }
+      ],
+      "generatedSourceHashes": {
+        "CompiledCmdlets.cs": "24105003a083756ee824493c67aedb0c8ec657442996a0fe85b3e14257ef9c7d",
+        "CompiledPowerShell.cs": "bb7b5639ed8d9776734ce2f178ba0abb6b275d50b9c95ede6419b1352ddd2014",
+        "ModuleSessionState.g.cs": "c96e42f7ba20fe3819fbe69e936b44e8c8a8fd5141eefa148bff59743bd69981",
+        "NativeLanguageOperations.g.cs": "7f96f823b4489c97ddfcc8182e4828fba533bc986c8feb36263851ef8dbded55",
+        "NativeOutput.g.cs": "48100a5b25ca80ebdf62d8f5df0f4be7ae3ad8c951dec2e69a19d01c98ae10bd",
+        "PowerShellHybridRegionHost.g.cs": "678bc094155a8b579acee3a7fed2a73c33f327582cd35311f95a621395e2e4ac",
+        "PowerShellNativeFunctionContext.AccessMutations.g.cs": "9aa4cbc51df123ce356de19afa73f94f08541955bfde3854ee77c33c5f9a52ca",
+        "PowerShellNativeFunctionContext.CommandRegions.g.cs": "96182f77be1aab8c9599412fcd6a89af1244cebeb97937ecf0a6cde68cb9136c",
+        "PowerShellNativeFunctionContext.Compilation.g.cs": "822e2ef82b3ccc4b7de4ad9eb6f44e915ec36c81abc4b9c2b5978230d3dd7a2a",
+        "PowerShellNativeFunctionContext.Conversions.g.cs": "fccc228c95b894808bf99cf6a0b570c5eef8c4367e85259fc9f631b2673043d6",
+        "PowerShellNativeFunctionContext.Declarations.g.cs": "c53589d78033200f4ae59a72baf67b741f59281dfc23ebe7c637ea16382eefb3",
+        "PowerShellNativeFunctionContext.Dictionaries.g.cs": "51f0138b4a97a58a092af7e6dc8b9a4dfdaf233a15b13f396c4f03197df45cc3",
+        "PowerShellNativeFunctionContext.Enumeration.g.cs": "bee5f9239a119cec47f2f392064d3096d0962ab2ce84a9c7758271e0c01c5485",
+        "PowerShellNativeFunctionContext.g.cs": "17cb966a966bab959cf8d58d87eb8c92c4733374cd6f5e944e9c65c00c96efc9",
+        "PowerShellNativeFunctionContext.Indexing.g.cs": "610bec93d533cd485bfa9f680930a6d90de7bc0734bafeca4450facd9f00204e",
+        "PowerShellNativeFunctionContext.Invocations.g.cs": "c96859c7f495a75dfae3504c43ad2e46952e2fe387d6b2595149e76463a529b2",
+        "PowerShellNativeFunctionContext.Members.g.cs": "baeb213b30012cbd52403668f0def2f647ccb1c0625a60369e98fb97aeac4ba7",
+        "PowerShellNativeFunctionContext.Membership.g.cs": "4fb699f522f312e6850daa25673426f0af1844ecb7a59522336aadb2efcea707",
+        "PowerShellNativeFunctionContext.NestedDeclarations.g.cs": "075a2fdcb76a93eddc62fd23ea7d9460b12d8232adcd60050ab824e6882fa7bf",
+        "PowerShellNativeFunctionContext.Operations.g.cs": "0c83401a614ade6a8b24868bcf929592ae16f9d2941cb8f8af03144c067f47e0",
+        "PowerShellNativeFunctionContext.Output.g.cs": "06b1c8e5bd77934f02247b5d0774ff8a2b8d7ca4275e9fd18f40afda1afab050",
+        "PowerShellNativeFunctionContext.Patterns.g.cs": "990a8056b63f05c7103aa627ea8681845e0c1eeab84311312cd3cb394c9f3f92",
+        "PowerShellNativeFunctionContext.ScriptBlocks.g.cs": "b576c61fb1a947d688eec0192be637ff6fa741c58948319770f2712e31685ae8",
+        "PowerShellNativeFunctionContext.StringJoin.g.cs": "1c1e1acedadee610fd3281d709cb09c1a85bc4bd61af5005e8a1f5fcb63f9542",
+        "PowerShellNativeFunctionContext.Switch.g.cs": "d7501e42167b4ad522a6f203398ab14ca3d4c1d36e8524541f1afa3c87288101",
+        "PowerShellNativeFunctionHost.Declared.g.cs": "1960ef3bdf465cd99336fc1f0415c291b7ae7515ef4eb64d159f15ed69c8dc22",
+        "PowerShellNativeFunctionHost.FunctionEnums.g.cs": "b3b4e9f2d5867986cfbbe26dbadf21a1a319b7ec14202fa80cde9637b2d7d5f5",
+        "PowerShellNativeFunctionHost.g.cs": "180e381ea4854f38001ec5fbea4a453c88a6606843c5ea915c5f8f8343c11ca4",
+        "PowerShellNativeFunctionHost.OwnedDeclaration.g.cs": "83ce60b1bc336bc19e589369de8a81a2858277b8216a6c0784ecda328a8d911a",
+        "PowerShellRegionLocalOwnership.g.cs": "29ae75381d0c86b8a0c9c963893cf3754658809321c3a0ee4a1c92cb4680a62d",
+        "SmbBoundary.csproj": "b8117f86fc7585415cbef1287a8bcf9a49066bd01f28965ddea1826e7e452d5c",
+        "SourceExtent.g.cs": "daf263e4d386070ca90530b6765d52d9f8e0141a63c6f1097eae4d00744472e5",
+        "StatementErrors.g.cs": "4f8430b1a911496884f666ca7a74cbfc9a740803868a1dcb7965309b17bd1a44"
+      },
+      "dependencyLockReviewed": true,
+      "existingCallerDisposition": [
+        {
+          "unitId": "a81cb1550c879149407bf5fa",
+          "relativePath": "Fixture.psm1",
+          "name": "Get-ComputerSMBShareList",
+          "kind": "Function",
+          "startLine": 162,
+          "semanticEligible": true,
+          "emittedClrMethod": true,
+          "emittedBinaryCmdlet": false,
+          "retainedHostedSource": false,
+          "usesNativeFunctionBinding": true,
+          "runtimeCommandRegions": 3,
+          "boundaryCrossings": 4,
+          "shapingFallback": false,
+          "omitted": false,
+          "rejected": false,
+          "generatedMemberName": "Get_ComputerSMBShareList",
+          "dependencyCauses": [],
+          "boundaryCauses": [
+            "The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.",
+            "The emitted CLR method contains hosted PowerShell command regions.",
+            "The emitted CLR method uses the PowerShell statement-error host for error identity and continuation.",
+            "The emitted CLR method requires the invocation's native PowerShell loop-stopping callback."
+          ],
+          "diagnosticChain": [],
+          "moduleStateReadBoundaryCrossings": 0,
+          "moduleStateWriteBoundaryCrossings": 0,
+          "regionGraph": {
+            "schemaVersion": 1,
+            "regions": [
+              {
+                "regionId": "region:2ccf6c9fa27c39f049daf487823d685be00bea9184ccca4d96bbd1af3284fb4a:6826:11362:Mixed",
+                "ordinal": 0,
+                "execution": "Mixed",
+                "startOffset": 6826,
+                "endOffset": 11362,
+                "startLine": 162,
+                "startColumn": 35,
+                "endLine": 296,
+                "endColumn": 2,
+                "inputs": [
+                  "PowerShellSessionState:*",
+                  "PowerShellSessionVariable:COMPNM",
+                  "PowerShellSessionVariable:COMPUTERNAME",
+                  "PowerShellSessionVariable:PSBOUNDPARAMETERS"
+                ],
+                "outputs": [
+                  "stream:Success"
+                ],
+                "mutations": [
+                  "Local:COMPNM",
+                  "PowerShellSessionState:*",
+                  "PowerShellSessionVariable:PSBOUNDPARAMETERS.*"
+                ],
+                "streams": [
+                  "Success",
+                  "Error",
+                  "Warning",
+                  "Verbose",
+                  "Debug",
+                  "Information",
+                  "Host"
+                ],
+                "errors": [
+                  "ClrException",
+                  "PowerShellErrorRecord",
+                  "PowerShellSessionStateError",
+                  "PowerShellStatementError"
+                ],
+                "ordering": "AuthoredSequentialSingleEvaluation+PowerShellStreamOrder",
+                "hostedCommandBoundarySites": 3,
+                "moduleStateReadBoundarySites": 0,
+                "moduleStateWriteBoundarySites": 0,
+                "staticBoundaryCrossings": 3,
+                "staticBoundaryValueTransfers": 7,
+                "staticBoundaryCostUnits": 10
+              }
+            ],
+            "scriptBlocks": [],
+            "hostedCommandBoundarySites": 3,
+            "moduleStateReadBoundarySites": 0,
+            "moduleStateWriteBoundarySites": 0,
+            "staticBoundaryCrossings": 3,
+            "staticBoundaryCostUnits": 10
+          },
+          "promotedTypedRegions": 0,
+          "generatedRegionMemberNames": []
+        }
+      ],
+      "nativeDeclarationSha256": "b3cdc0d6ffa5347b3fbef8d6a7a270ff9a2a5cd5ba8e860fb29444a013894dac",
+      "buildWarnings": [
+        "CS8321"
+      ]
+    }
+  ],
+  "observations": 12,
+  "originalGeneratedComparisons": 4,
+  "finalChildrenExitZero": 8,
+  "qualification": "Justified hosted local enumeration on Windows x64 PowerShell 7.6.6/net10 and Windows PowerShell 5.1.26100.9444/net472.",
+  "limits": [
+    "Normal public-caller dispatch unqualified; direct bootstrap uses extracted exact authored C#; compiled caller is exercised only on assembly refusal.",
+    "Private workload retains one advertised region; no individually observed region execution is credited.",
+    "No remote server, UNC access, disk-space query, account change, partial-buffer execution, non-Windows or performance proof.",
+    "Stable local shares required between baseline and workload calls.",
+    "Native source signatures loaded and local calls executed; no arbitrary Add-Type/PInvoke compilation or deployment closure certification."
+  ],
+  "authoredSourceIssues": [
+    {
+      "issue": "Failure returns before buffer-free finally; ERROR_MORE_DATA may carry an allocated buffer.",
+      "evidence": "Pinned source control-flow inspection against Microsoft API contract; not reproduced by provoking partial native buffers."
+    },
+    {
+      "issue": "Enumeration loop uses totalentries hint rather than entriesread count.",
+      "evidence": "Pinned source inspection against API contract; no out-of-bounds buffer execution attempted."
+    }
+  ],
+  "apiContract": "https://learn.microsoft.com/en-us/windows/win32/api/lmshare/nf-lmshare-netshareenum"
+}

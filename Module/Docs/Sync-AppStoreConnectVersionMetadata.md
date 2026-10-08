@@ -21,7 +21,7 @@ Syncs localized App Store version metadata from a JSON configuration file.
 
 ### EXAMPLE 1
 ```powershell
-Sync-AppStoreConnectVersionMetadata -IssuerId 'Value' -KeyId 'Value'
+Sync-AppStoreConnectVersionMetadata -ConfigPath 'C:\Path' -IssuerId 'Value' -KeyId 'Value'
 ```
 
 

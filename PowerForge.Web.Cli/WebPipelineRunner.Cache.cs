@@ -79,6 +79,12 @@ internal static partial class WebPipelineRunner
     {
         if (!IsCacheableTask(task))
             return false;
+        if (task.Equals("build", StringComparison.OrdinalIgnoreCase) &&
+            (GetBool(step, "syncSources") ?? GetBool(step, "sync-sources") ?? false))
+            return false;
+        // Publication eligibility changes with the clock even when every input byte is unchanged.
+        if (task.Equals("sitemap", StringComparison.OrdinalIgnoreCase) && IsSitemapNewsEnabled(step))
+            return false;
         if (task.Equals("apidocs", StringComparison.OrdinalIgnoreCase) &&
             step.GetRawText().Contains("{revision}", StringComparison.OrdinalIgnoreCase))
             return false;
@@ -232,8 +238,7 @@ internal static partial class WebPipelineRunner
                 }
 
                 hash.AppendData(Encoding.UTF8.GetBytes($"d|{path}\n"));
-                // Unlike the bounded input discovery stamp, output integrity
-                // must account for every generated file in a large site.
+                // Integrity must account for every file in a large site.
                 foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
                              .OrderBy(file => file, WebCliHelpers.FileSystemPathComparer))
                 {
@@ -262,6 +267,13 @@ internal static partial class WebPipelineRunner
     {
         if (step.ValueKind != JsonValueKind.Object)
             yield break;
+
+        if (GetString(step, "task") is null || string.Equals(GetString(step, "task"), "apidocs", StringComparison.OrdinalIgnoreCase))
+        {
+            var assembly = ResolvePath(baseDir, GetString(step, "assembly"));
+            if (!string.IsNullOrWhiteSpace(assembly) && File.Exists(assembly))
+                foreach (var input in WebApiDocumentationInputs.Discover(assembly)) yield return input;
+        }
 
         var isLlmsSite = string.Equals(GetString(step, "task"), "llms", StringComparison.OrdinalIgnoreCase) &&
                          string.Equals(
@@ -314,25 +326,22 @@ internal static partial class WebPipelineRunner
                 if (item.ValueKind != JsonValueKind.Object)
                     continue;
 
-                foreach (var nestedProperty in item.EnumerateObject())
-                {
-                    if (!FingerprintPathKeys.Contains(nestedProperty.Name))
-                        continue;
-                    if (nestedProperty.Value.ValueKind != JsonValueKind.String)
-                        continue;
-
-                    var nestedValue = nestedProperty.Value.GetString();
-                    if (string.IsNullOrWhiteSpace(nestedValue) || IsExternalUri(nestedValue))
-                        continue;
-
-                    var nestedResolved = ResolvePath(baseDir, nestedValue);
-                    if (!string.IsNullOrWhiteSpace(nestedResolved))
-                        yield return Path.GetFullPath(nestedResolved);
-                }
+                foreach (var nestedPath in EnumerateFingerprintPaths(baseDir, item))
+                    yield return nestedPath;
             }
         }
 
         var task = GetString(step, "task") ?? string.Empty;
+        if (task.Equals("build", StringComparison.OrdinalIgnoreCase))
+        {
+            var configPath = ResolvePath(baseDir, GetString(step, "config"));
+            if (!string.IsNullOrWhiteSpace(configPath))
+            {
+                var outputPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
+                foreach (var input in WebSiteInputDiscovery.Discover(configPath, outputPath))
+                    yield return input;
+            }
+        }
         if (IsLinkReadTask(task))
         {
             foreach (var path in GetLinkFingerprintPaths(step, baseDir))
@@ -410,42 +419,8 @@ internal static partial class WebPipelineRunner
 
     private static string BuildPathStamp(string path)
     {
-        if (File.Exists(path))
-        {
-            var info = new FileInfo(path);
-            return $"f|{path}|{info.Length}|{info.LastWriteTimeUtc.Ticks}";
-        }
-
-        if (!Directory.Exists(path))
-            return $"m|{path}";
-
-        try
-        {
-            var maxTicks = Directory.GetLastWriteTimeUtc(path).Ticks;
-            var fileCount = 0;
-            var truncated = false;
-            foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
-            {
-                if (fileCount >= MaxStampFileCount)
-                {
-                    truncated = true;
-                    break;
-                }
-
-                fileCount++;
-                var ticks = File.GetLastWriteTimeUtc(file).Ticks;
-                if (ticks > maxTicks)
-                    maxTicks = ticks;
-            }
-
-            return truncated
-                ? $"d|{path}|{fileCount}|{maxTicks}|truncated"
-                : $"d|{path}|{fileCount}|{maxTicks}";
-        }
-        catch
-        {
-            return $"d|{path}|unreadable";
-        }
+        // An unreadable dependency must never produce a reusable fingerprint.
+        return ComputeOutputStamp(new[] { path }) ?? $"unreadable:{Guid.NewGuid():N}";
     }
 
     private static bool IsExternalUri(string value)
@@ -701,11 +676,13 @@ internal static partial class WebPipelineRunner
             case "sitemap":
             {
                 var siteRoot = ResolvePath(baseDir, GetString(step, "siteRoot") ?? GetString(step, "site-root"));
+                if (string.IsNullOrWhiteSpace(siteRoot)) siteRoot = lastBuildOutPath;
                 var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
                 if (string.IsNullOrWhiteSpace(outPath) && !string.IsNullOrWhiteSpace(siteRoot))
                     outPath = Path.Combine(siteRoot, "sitemap.xml");
                 var outputs = new List<string>();
                 outputs.AddRange(ResolveOutputCandidates(baseDir, outPath));
+                var xmlOutputs = new List<string>(outputs);
 
                 var htmlEnabled = GetBool(step, "html") ?? false;
                 var htmlOutput = ResolvePath(baseDir,
@@ -737,16 +714,13 @@ internal static partial class WebPipelineRunner
                     GetString(step, "newsOut") ??
                     GetString(step, "news-output") ??
                     GetString(step, "news-out"));
-                var newsEnabled = !string.IsNullOrWhiteSpace(newsOutput) ||
-                                  (GetArrayOfStrings(step, "newsPaths")?.Length ?? 0) > 0 ||
-                                  (GetArrayOfStrings(step, "news-paths")?.Length ?? 0) > 0 ||
-                                  GetString(step, "newsMetadata") is not null ||
-                                  GetString(step, "news-metadata") is not null;
+                var newsEnabled = IsSitemapNewsEnabled(step);
                 if (newsEnabled)
                 {
                     if (string.IsNullOrWhiteSpace(newsOutput) && !string.IsNullOrWhiteSpace(siteRoot))
                         newsOutput = Path.Combine(siteRoot, "sitemap-news.xml");
                     outputs.AddRange(ResolveOutputCandidates(baseDir, newsOutput));
+                    xmlOutputs.AddRange(ResolveOutputCandidates(baseDir, newsOutput));
                 }
 
                 var imageOutput = ResolvePath(baseDir,
@@ -762,6 +736,7 @@ internal static partial class WebPipelineRunner
                     if (string.IsNullOrWhiteSpace(imageOutput) && !string.IsNullOrWhiteSpace(siteRoot))
                         imageOutput = Path.Combine(siteRoot, "sitemap-images.xml");
                     outputs.AddRange(ResolveOutputCandidates(baseDir, imageOutput));
+                    xmlOutputs.AddRange(ResolveOutputCandidates(baseDir, imageOutput));
                 }
 
                 var videoOutput = ResolvePath(baseDir,
@@ -777,6 +752,7 @@ internal static partial class WebPipelineRunner
                     if (string.IsNullOrWhiteSpace(videoOutput) && !string.IsNullOrWhiteSpace(siteRoot))
                         videoOutput = Path.Combine(siteRoot, "sitemap-videos.xml");
                     outputs.AddRange(ResolveOutputCandidates(baseDir, videoOutput));
+                    xmlOutputs.AddRange(ResolveOutputCandidates(baseDir, videoOutput));
                 }
 
                 var indexOutput = ResolvePath(baseDir,
@@ -785,7 +761,24 @@ internal static partial class WebPipelineRunner
                     GetString(step, "indexOut") ??
                     GetString(step, "index-out"));
                 if (!string.IsNullOrWhiteSpace(indexOutput))
+                {
                     outputs.AddRange(ResolveOutputCandidates(baseDir, indexOutput));
+                    xmlOutputs.AddRange(ResolveOutputCandidates(baseDir, indexOutput));
+                }
+                var baseUrl = GetString(step, "baseUrl") ?? GetString(step, "base-url");
+                try
+                {
+                    var config = ResolvePath(baseDir, GetString(step, "config"));
+                    if (string.IsNullOrWhiteSpace(baseUrl) && !string.IsNullOrWhiteSpace(config) && File.Exists(config))
+                        baseUrl = ResolveSitemapBaseUrl(WebSiteSpecLoader.LoadWithPath(config).Spec,
+                            GetString(step, "language") ?? GetString(step, "lang"));
+                    foreach (var xml in xmlOutputs.Where(File.Exists))
+                        outputs.AddRange(WebLocalSitemapReader.Read(xml, baseUrl, siteRoot, allowMissing: true).InputPaths);
+                }
+                catch (Exception error) when (error is IOException or InvalidOperationException or System.Xml.XmlException or JsonException)
+                {
+                    // Changed/corrupt endpoints invalidate the stored output stamp; execution reports input errors.
+                }
 
                 return outputs
                     .Distinct(StringComparer.OrdinalIgnoreCase)

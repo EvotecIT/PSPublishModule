@@ -25,7 +25,7 @@ internal interface IModulePipelineHostedOperations
 
     ModuleValidationReport ValidateModule(ModuleValidationSpec spec);
 
-    void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget);
+    void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget, IReadOnlyDictionary<string, string[]>? optionalDependencies = null);
 
     ModuleTestSuiteResult RunModuleTestSuite(ModuleTestSuiteSpec spec);
 

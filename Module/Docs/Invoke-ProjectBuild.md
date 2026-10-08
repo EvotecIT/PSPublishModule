@@ -11,7 +11,7 @@ Executes a repository-wide .NET build/release pipeline from a JSON configuration
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Invoke-ProjectBuild -ConfigPath <string> [-UpdateVersions] [-Build] [-PublishNuget] [-PublishGitHub] [-Plan] [-PlanPath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-ProjectBuild -ConfigPath <string> [-UpdateVersions] [-Build] [-PublishNuget] [-PublishGitHub] [-Plan] [-PlanPath <string>] [-NoInteractive] [-Quiet] [-ExitCode] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -61,6 +61,38 @@ Aliases: None
 Possible values:
 
 Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ExitCode
+Sets the PowerShell host exit code to zero on success and one on failure.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -NoInteractive
+Disables the interactive Spectre progress view.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
 Position: named
 Default value: None
 Accept pipeline input: False
@@ -117,6 +149,22 @@ Accept wildcard characters: False
 
 ### -PublishNuget
 Publish packages to NuGet.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Quiet
+Suppresses progress and informational output while preserving results, warnings and errors.
 
 ```yaml
 Type: SwitchParameter

@@ -340,7 +340,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var target = PowerShellCompilationTargetContractService.Create(
             PowerShellCompilationArtifactKind.Executable,
             PowerShellCompilationMode.Strict,
-            "net8.0",
+            "net10.0",
             "win-x64",
             selfContained: true,
             singleFile: true,
@@ -403,7 +403,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         {
             var first = Build("net10.0");
             var second = Build("net10.0");
-            var otherTarget = Build("net8.0");
+            var otherTarget = Build("net10.0");
 
             Assert.True(first.Succeeded, first.Error + Environment.NewLine + first.BuildOutput);
             Assert.False(first.Manifest!.BuildCache!.Hit);

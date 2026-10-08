@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Text.Json;
+using PowerForge.Web;
 using PowerForge.Web.Cli;
 using Xunit;
 
@@ -266,6 +268,69 @@ public class WebPipelineRunnerProjectApiDocsTests
 
             var summary = File.ReadAllText(Path.Combine(root, "summary.json"));
             Assert.Contains("\"generated\": 1", summary, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public void RunPipeline_ProjectApiDocs_ValidatesEveryAssemblyInAProjectBundle()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-apidocs-assemblies-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            WriteCatalog(root,
+                """
+                {"projects":[{"slug":"multi","name":"Multi","mode":"hub-full","surfaces":{"apiDotNet":true}}]}
+                """);
+            var dotNetRoot = Path.Combine(root, "data", "project-api", "multi", "dotnet");
+            Directory.CreateDirectory(dotNetRoot);
+            File.Copy(typeof(PowerForgeFacade).Assembly.Location, Path.Combine(dotNetRoot, "PowerForge.dll"));
+            File.Copy(typeof(WebApiDocsGenerator).Assembly.Location, Path.Combine(dotNetRoot, "PowerForge.Web.dll"));
+            File.WriteAllText(Path.Combine(dotNetRoot, "PowerForge.xml"),
+                """
+                <doc><assembly><name>PowerForge</name></assembly><members>
+                  <member name="T:PowerForge.PowerForgeFacade"><summary>Core facade.</summary></member>
+                  <member name="T:PowerForge.FakeInternalType"><summary>Must be excluded.</summary></member>
+                </members></doc>
+                """);
+            File.WriteAllText(Path.Combine(dotNetRoot, "PowerForge.Web.xml"),
+                """
+                <doc><assembly><name>PowerForge.Web</name></assembly><members>
+                  <member name="T:PowerForge.Web.WebApiDocsGenerator"><summary>Website API generator.</summary></member>
+                </members></doc>
+                """);
+
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath,
+                """
+                {"steps":[{"task":"project-apidocs","catalog":"./data/projects/catalog.json","apiRoot":"./data/project-api","siteRoot":"./_site","template":"docs","format":"html","preferredMode":"dotnet"}]}
+                """);
+
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(result.Success);
+            var indexPath = Path.Combine(root, "_site", "projects", "multi", "api", "index.json");
+            using var index = JsonDocument.Parse(File.ReadAllText(indexPath));
+            var names = index.RootElement.GetProperty("types").EnumerateArray()
+                .Select(type => type.GetProperty("fullName").GetString()).ToArray();
+            Assert.Contains("PowerForge.PowerForgeFacade", names);
+            Assert.Contains("PowerForge.Web.WebApiDocsGenerator", names);
+            Assert.DoesNotContain("PowerForge.FakeInternalType", names);
+
+            File.Copy(Path.Combine(dotNetRoot, "PowerForge.dll"), Path.Combine(dotNetRoot, "RenamedCore.dll"));
+            File.WriteAllText(pipelinePath,
+                """
+                {"steps":[{"task":"apidocs","type":"csharp","xmls":["./data/project-api/multi/dotnet/PowerForge.xml","./data/project-api/multi/dotnet/PowerForge.Web.xml"],"assemblies":["./data/project-api/multi/dotnet/RenamedCore.dll","./data/project-api/multi/dotnet/PowerForge.Web.dll"],"out":"./_site/array-api","template":"docs","format":"html"}]}
+                """);
+            var arraysOnlyResult = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(arraysOnlyResult.Success);
+            using var arraysOnlyIndex = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "_site", "array-api", "index.json")));
+            Assert.Contains(arraysOnlyIndex.RootElement.GetProperty("types").EnumerateArray(),
+                type => type.GetProperty("fullName").GetString() == "PowerForge.Web.WebApiDocsGenerator");
         }
         finally
         {

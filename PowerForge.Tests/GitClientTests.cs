@@ -113,8 +113,10 @@ public sealed class GitClientTests
         Assert.False(captured.EnvironmentVariables!.ContainsKey("PATH"));
         Assert.False(captured.EnvironmentVariables.ContainsKey("GIT_DIR"));
         Assert.Equal("1", captured.EnvironmentVariables["GIT_CONFIG_NOSYSTEM"]);
+        Assert.Equal("/dev/null", captured.EnvironmentVariables["GIT_CONFIG_GLOBAL"]);
         Assert.Equal("0", captured.EnvironmentVariables["GIT_TERMINAL_PROMPT"]);
         Assert.Equal("core.hooksPath", captured.EnvironmentVariables["GIT_CONFIG_KEY_0"]);
+        Assert.Equal("/dev/null", captured.EnvironmentVariables["GIT_CONFIG_VALUE_0"]);
         Assert.Equal("core.fsmonitor", captured.EnvironmentVariables["GIT_CONFIG_KEY_1"]);
     }
 

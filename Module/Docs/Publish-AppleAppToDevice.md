@@ -11,7 +11,7 @@ Builds, installs, and optionally launches an Apple app on a physical device.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Publish-AppleAppToDevice [-ProjectPath] <string> -Scheme <string> [-Workspace] [-ProductName <string>] [-Configuration <string>] [-Platform <ApplePlatform>] [-Destination <string>] [-DeviceIdentifier <string>] [-Device <string>] [-BundleIdentifier <string>] [-Launch] [-DerivedDataPath <string>] [-AppPath <string>] [-XcodeBuild <string>] [-Xcrun <string>] [-AllowProvisioningUpdates] [-UseBuildMirror] [-BuildRoot <string>] [-BuildMirrorPath <string>] [-Rsync <string>] [-AdditionalArgument <string[]>] [-TimeoutMinutes <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Publish-AppleAppToDevice [-ProjectPath] <string> -Scheme <string> [-Workspace] [-ProductName <string>] [-Configuration <string>] [-OptimizeSwift] [-UseControlledSourceProvenance] [-Platform <ApplePlatform>] [-Destination <string>] [-DeviceIdentifier <string>] [-Device <string>] [-BundleIdentifier <string>] [-Launch] [-DerivedDataPath <string>] [-AppPath <string>] [-XcodeBuild <string>] [-Xcrun <string>] [-AllowProvisioningUpdates] [-UseBuildMirror] [-BuildRoot <string>] [-BuildMirrorPath <string>] [-Rsync <string>] [-AdditionalArgument <string[]>] [-TimeoutMinutes <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -21,7 +21,7 @@ Builds, installs, and optionally launches an Apple app on a physical device.
 
 ### EXAMPLE 1
 ```powershell
-Publish-AppleAppToDevice -Scheme 'Value'
+Publish-AppleAppToDevice -ProjectPath 'C:\Path' -Scheme 'Value'
 ```
 
 
@@ -219,6 +219,22 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -OptimizeSwift
+Optimize Swift while retaining the selected configuration and compilation conditions.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -Platform
 Apple platform used to resolve the product directory.
 
@@ -317,6 +333,22 @@ Accept wildcard characters: False
 
 ### -UseBuildMirror
 Mirror the project root to a local folder before running xcodebuild.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -UseControlledSourceProvenance
+Opt into clean Git source and controlled build-input verification. Disabled by default.
 
 ```yaml
 Type: SwitchParameter

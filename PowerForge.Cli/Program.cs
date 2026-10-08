@@ -108,6 +108,8 @@ internal static partial class Program
             return CommandAppleDeploy(filteredArgs, cli, logger);
         case "apple-screenshots":
             return CommandAppleScreenshots(filteredArgs, cli, logger);
+        case "apple-simulator":
+            return CommandAppleSimulator(filteredArgs, logger);
         case "apple-governance":
             return CommandAppleGovernance(filteredArgs, cli, logger);
         case "apple-review-details":

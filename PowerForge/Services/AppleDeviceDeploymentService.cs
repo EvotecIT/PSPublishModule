@@ -208,11 +208,13 @@ public sealed partial class AppleDeviceDeploymentService
             {
                 sourceSnapshot = AppleBuildProvenance.CaptureBuildInputs(
                     sourceRoot,
-                    excludesGeneratedDirectories: true);
-                AppleBuildProvenance.ValidateXcodeBuildInputsWithinSource(
-                    sourceRoot,
-                    projectPath,
-                    request.Scheme);
+                    excludesGeneratedDirectories: true,
+                    useControlledSourceProvenance: request.UseControlledSourceProvenance);
+                if (request.UseControlledSourceProvenance)
+                    AppleBuildProvenance.ValidateXcodeBuildInputsWithinSource(
+                        sourceRoot,
+                        projectPath,
+                        request.Scheme);
                 var mirror = await MirrorBuildRootAsync(
                     projectPath,
                     request,
@@ -231,6 +233,7 @@ public sealed partial class AppleDeviceDeploymentService
                             DerivedDataPath = resultDerivedDataPath,
                             BuildMirrorPath = mirror.MirrorPath,
                             SourceRevision = sourceSnapshot.Revision,
+                            SourceDirty = sourceSnapshot.SourceDirty,
                             ProcessResult = mirror.ProcessResult
                         },
                         productSnapshot: null,
@@ -296,11 +299,13 @@ public sealed partial class AppleDeviceDeploymentService
             {
                 sourceSnapshot = AppleBuildProvenance.CaptureBuildInputs(
                     sourceRoot,
-                    excludesGeneratedDirectories: false);
-                AppleBuildProvenance.ValidateXcodeBuildInputsWithinSource(
-                    sourceRoot,
-                    projectPath,
-                    request.Scheme);
+                    excludesGeneratedDirectories: false,
+                    useControlledSourceProvenance: request.UseControlledSourceProvenance);
+                if (request.UseControlledSourceProvenance)
+                    AppleBuildProvenance.ValidateXcodeBuildInputsWithinSource(
+                        sourceRoot,
+                        projectPath,
+                        request.Scheme);
                 buildInputMonitor = sourceMonitor;
             }
             catch
@@ -419,9 +424,9 @@ public sealed partial class AppleDeviceDeploymentService
 
         try
         {
-            var approvedPackageRevisions =
-                AppleSwiftPackageBuildSnapshot.ReadApprovedRemotePackages(
-                    projectPath);
+            var approvedPackageRevisions = request.UseControlledSourceProvenance
+                ? AppleSwiftPackageBuildSnapshot.ReadApprovedRemotePackages(projectPath)
+                : new Dictionary<string, string>();
             if (approvedPackageRevisions.Count > 0)
             {
                 packageSnapshot = await AppleSwiftPackageBuildSnapshot.CreateAsync(
@@ -528,6 +533,7 @@ public sealed partial class AppleDeviceDeploymentService
                     DerivedDataPath = resultDerivedDataPath,
                     BuildMirrorPath = mirrorPath,
                     SourceRevision = sourceSnapshot.Revision,
+                    SourceDirty = sourceSnapshot.SourceDirty,
                     ProcessResult = result
                 },
                 productSnapshot,

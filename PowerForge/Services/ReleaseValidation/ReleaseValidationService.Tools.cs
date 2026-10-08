@@ -30,7 +30,9 @@ public sealed partial class ReleaseValidationService
             var environment = new Dictionary<string, string?>
             {
                 ["NUGET_PACKAGES"] = Path.Combine(workspace.Root, "packages"),
-                ["DOTNET_CLI_HOME"] = workspace.Root
+                ["DOTNET_CLI_HOME"] = workspace.Root,
+                // A fresh CLI home must not register its temporary global-tool directory in PATH.
+                ["DOTNET_ADD_GLOBAL_TOOLS_TO_PATH"] = "false"
             };
             var values = new Dictionary<string, string>(variables, StringComparer.OrdinalIgnoreCase)
             {

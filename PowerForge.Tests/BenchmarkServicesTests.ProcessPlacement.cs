@@ -93,10 +93,12 @@ New-BenchmarkSuite 'placement' -OutputRoot '{{root.Replace("'", "''")}}' {
         var child = PowerShellBenchmarkHostExecutor.CreateChildRequest(new PowerShellBenchmarkHostRunRequest
         {
             ProcessorAffinityMask = 0x8000000000000001UL,
-            ProcessPriority = ProcessPriorityClass.BelowNormal
+            ProcessPriority = ProcessPriorityClass.BelowNormal,
+            MemorySamplingIntervalMilliseconds = 5
         }, "Current", "pwsh", "result.json", "readme-paths.txt", DateTimeOffset.UtcNow);
         Assert.Equal("8000000000000001", child.ProcessorAffinityMask);
         Assert.Equal("BelowNormal", child.ProcessPriority);
+        Assert.Equal(5, child.MemorySamplingIntervalMilliseconds);
         var suite = new PowerShellBenchmarkSuite { Name = "placement" };
         var run = new BenchmarkRunResult { Metadata = new Dictionary<string, string> { ["processAffinityMask"] = "0xFFFF", ["processPriority"] = "BelowNormal" } };
         var merged = PowerShellBenchmarkResultMerger.Merge(suite, new[] { run }, DateTimeOffset.UtcNow,

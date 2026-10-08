@@ -4,52 +4,52 @@
     "net10.0": {
       "Google.Apis.Auth": {
         "type": "Direct",
-        "requested": "[1.76.0, )",
-        "resolved": "1.76.0",
-        "contentHash": "WzRCykQ0OApOEFdUYYBJ6riIxs+xk635s0KsGb83zJcABa66DCgaAXiWZuZjSqnwA3hjm7u8mmzR4EUHpJ1UfQ==",
+        "requested": "[1.77.0, )",
+        "resolved": "1.77.0",
+        "contentHash": "lcgXlzM+JkX0nKKc7KBwTdiei2IbV20PuTe3cVQ2zOhq0j4IiS9I4xlRQY4igdCMLlmobthz5xtHiPr/wxl0Ew==",
         "dependencies": {
-          "Google.Apis": "1.76.0",
-          "Google.Apis.Core": "1.76.0",
+          "Google.Apis": "1.77.0",
+          "Google.Apis.Core": "1.77.0",
           "System.Management": "7.0.2"
         }
       },
       "HtmlTinkerX": {
         "type": "Direct",
-        "requested": "[3.0.1, )",
-        "resolved": "3.0.1",
-        "contentHash": "EQf3rk3EaTH7afzdJkWF1i0oSx6spniWmxz74C3F0+EcCQ7ZndetWZ34dxz0zLcgFWS+bkkoR+NUWP2Iut2HEA==",
+        "requested": "[3.0.2, )",
+        "resolved": "3.0.2",
+        "contentHash": "1KIr3TYPt4hGKa4nugmZJhYNllWGkL7L/L4rJqvqwDDLzlwlhNG0KZ92QyRiIAce5wyXd11Bm7kpB6DNIwSYrg==",
         "dependencies": {
-          "AngleSharp": "1.7.1",
-          "AngleSharp.Css": "1.0.1",
+          "AngleSharp": "1.8.2",
+          "AngleSharp.Css": "1.1.2",
           "AngleSharp.Diffing": "1.1.1",
           "AngleSharp.Io": "1.1.0",
-          "AngleSharp.Js": "1.0.1",
-          "ChartForgeX": "1.6.0",
-          "HtmlAgilityPack": "1.12.4",
-          "Jint": "4.16.0",
+          "AngleSharp.Js": "1.1.0",
+          "ChartForgeX": "1.8.0",
+          "HtmlAgilityPack": "1.13.0",
+          "Jint": "4.16.3",
           "Microsoft.Playwright": "1.62.0",
-          "NUglify": "1.22.3",
-          "OfficeIMO.Html": "3.2.2",
-          "OfficeIMO.Markdown.Html": "3.2.2",
-          "PreMailer.Net": "2.7.3"
+          "NUglify": "1.23.1",
+          "OfficeIMO.Html": "3.4.3",
+          "OfficeIMO.Markdown.Html": "3.4.3",
+          "PreMailer.Net": "2.7.4"
         }
       },
       "Magick.NET-Q8-AnyCPU": {
         "type": "Direct",
-        "requested": "[14.17.1, )",
-        "resolved": "14.17.1",
-        "contentHash": "qcRjhaQ6XueNp2ZUAXYcDrCWlWWlzw3VatXmhCKXDpG4MABGJJr5+o1KQqOe1EtSZaDS6hQNAh4nU8XjCENDiw==",
+        "requested": "[14.17.2, )",
+        "resolved": "14.17.2",
+        "contentHash": "AIvpBH4fvP3/NUwvWsVj9SxAA6hrU4p5/RNfColyrDn4jipl7loR6y4ZgYLXfBQgjmSEc7m2D2DbkWMnZt+brg==",
         "dependencies": {
-          "Magick.NET.Core": "14.17.1"
+          "Magick.NET.Core": "14.17.2"
         }
       },
       "OfficeIMO.Markdown": {
         "type": "Direct",
-        "requested": "[3.4.3, )",
-        "resolved": "3.4.3",
-        "contentHash": "TjQjJMOvYC0+3WzWrQORBEYqwrQPlU+mcRosD+izmj6dFprup6ioprt30stbJlOQPhPNmiA4RrCkpNsEZb9n6A==",
+        "requested": "[3.4.4, )",
+        "resolved": "3.4.4",
+        "contentHash": "ZDzXqNzGaaI+6959gqZvIcBrYXBFnVjP8ksDRn+xrtVNJ4czcBsCvSr185BOQgp9gA3UJbYIVDD4zVRNshv30g==",
         "dependencies": {
-          "OfficeIMO.Core": "3.4.3"
+          "OfficeIMO.Core": "3.4.4"
         }
       },
       "Scriban": {
@@ -71,13 +71,13 @@
       },
       "AngleSharp": {
         "type": "Transitive",
-        "resolved": "1.7.1",
-        "contentHash": "QBblGpRB3SYD66Mls7fHyl1mWkP93n7ErWDWHc1vd9sPHhdlTkmUoY3CjgfjcWNxGF9m7xjNyztRfErXqoBKOA=="
+        "resolved": "1.8.2",
+        "contentHash": "iRlkfBIhi+gTgTxBlYNT4PlmaiVEy7+qX3BmprAK4cYE1UjfSNFI4mEDyxC1qgtAKYg5rjGYgL3tJlzGF+Ukdg=="
       },
       "AngleSharp.Css": {
         "type": "Transitive",
-        "resolved": "1.0.1",
-        "contentHash": "6S13xNHH+SUGPZd6EO1MhkuDbpEnFroUM6A8DZpLJHQnLRTvtBJb3Ydu65s618E4gWF9FSWmM5jhKk4RIfwT2A==",
+        "resolved": "1.1.2",
+        "contentHash": "7o5yCTuURjxmjy+O5/2EDQihTwnVlbeg9cIO+Zq8zDLt/7AZWebOfIxij+cejBGUBMad95wl5VlY3XFo3VQuCg==",
         "dependencies": {
           "AngleSharp": "[1.5.0, 2.0.0)"
         }
@@ -101,51 +101,51 @@
       },
       "AngleSharp.Js": {
         "type": "Transitive",
-        "resolved": "1.0.1",
-        "contentHash": "8zDsLICrrBFLHPhNyrf8Z+DHfUvBNilnONv1TsbWE4nul/Cfl6svW882Dm3v6pjzFHVKkYqwoPQBKZ0QHSQ60Q==",
+        "resolved": "1.1.0",
+        "contentHash": "5DGuaSi3hxoafNOpqJwqTz4/nIKpniwdF6z/AEf7diQNb5g3JMAR/IzL0JVxsR+3MHrtKNPF4r2BzWOIta0soA==",
         "dependencies": {
-          "AngleSharp": "[1.5.0, 2.0.0)",
+          "AngleSharp": "[1.8.0, 2.0.0)",
           "Jint": "[4.15.3, 5.0.0)"
         }
       },
       "ChartForgeX": {
         "type": "Transitive",
-        "resolved": "1.6.0",
-        "contentHash": "svqljzuw1NkTNNc0DoNFi6whjc9MYRmaVzh0HBI73yZGWh1KofaAE+gtXcsje2cQAWdJMVHnGv1mirccUR8YbQ=="
+        "resolved": "1.8.0",
+        "contentHash": "d0/WWZMkJgUAMyjJ92HOBJPMPo69EY9gItT4p6PKTpme3+t3QonVXInkYiEpGI8oVY8VM37mJeBwklgxTbJK3Q=="
       },
       "Google.Apis": {
         "type": "Transitive",
-        "resolved": "1.76.0",
-        "contentHash": "sIhJW2vT1cXE/yUFp1q1Mv7EUgbGu2uMIcqqv+BgElRdGQApxiYpZ/jG6hFkQB8/AG9kGurJOzLOM9PZ++GEtA==",
+        "resolved": "1.77.0",
+        "contentHash": "zj7MKdZz7lWRM7z2meqh5S9KSf83c1xY8Fa+b1KzYxw9xMugUxcQtwPoxJgFzxKJgLE64dAra0ze++P/Up4k6Q==",
         "dependencies": {
-          "Google.Apis.Core": "1.76.0"
+          "Google.Apis.Core": "1.77.0"
         }
       },
       "Google.Apis.Core": {
         "type": "Transitive",
-        "resolved": "1.76.0",
-        "contentHash": "P2nFbC0SsnUe8sGjhpCLs6CHIWFzURgUS2M9l9aUV1vJjVXpesRbegEYZS/dLKehcgx8twDP7xA5OMGygMD55g==",
+        "resolved": "1.77.0",
+        "contentHash": "7Yj4dpbOLFbxct6x5AFHQEZ25E8/f+5zqW39Q8f/GZknLyuS+uhnt2DIcKQplBNJTK9WNXompbYLWsPRhO6Nmg==",
         "dependencies": {
           "Newtonsoft.Json": "13.0.4"
         }
       },
       "HtmlAgilityPack": {
         "type": "Transitive",
-        "resolved": "1.12.4",
-        "contentHash": "ljqvBabvFwKoLniuoQKO8b5bJfJweKLs4fUNS/V5dsvpo0A8MlJqxxn9XVmP2DaskbUXty6IYaWAi1SArGIMeQ=="
+        "resolved": "1.13.0",
+        "contentHash": "nWZtz9WjSbq6V7TjjYBCmW+D8+BrWs15O6MlPxh55SH4zmenkWHXwu6gYeIarHL3KoHgDyZzTdOM50EdTnR8Xw=="
       },
       "Jint": {
         "type": "Transitive",
-        "resolved": "4.16.0",
-        "contentHash": "YHofgoVtjWzqmG2GsGsp6eYMmcBfGgJOcH+Ki2UdZXNsYgKGnWrK2hSqRSPG/6HqeiipT5YPhzEH+bwxFO+YAQ==",
+        "resolved": "4.16.3",
+        "contentHash": "QRO8CtC9rB/FRgchClX0DEHsBmUSDehIxxEv5QX5qlmujB2HMmOIUMruysKnQA0v+0QtU9cwp0XbiPbpJ3eiwA==",
         "dependencies": {
           "Acornima": "1.7.0"
         }
       },
       "Magick.NET.Core": {
         "type": "Transitive",
-        "resolved": "14.17.1",
-        "contentHash": "4BBbU5l5DmdT9isSNGrIE/0VwAh29SoKMSDMiIvFBDqz6vQfG6EYBFJQOemdCH3xkMfesSzImOVPjnyMf/PIqA=="
+        "resolved": "14.17.2",
+        "contentHash": "KKvR6eBUcfgkZpfHfN/UKRcK/FjHW6NXXoRRf5HJdhFk5bYLEEFuKu6op0zfNo6Msah51Yw42p599pz3A0CDQQ=="
       },
       "Microsoft.Bcl.AsyncInterfaces": {
         "type": "Transitive",
@@ -206,39 +206,39 @@
       },
       "NUglify": {
         "type": "Transitive",
-        "resolved": "1.22.3",
-        "contentHash": "JVrw7wZClUNO9Djp+5dZdu9VFkPVQy4nGPip8y2wLV2BL0v6EZluj6xpdEXTPBETDKw5X+vDQ0J+yjVDeuH1bw=="
+        "resolved": "1.23.1",
+        "contentHash": "knMw/R4h/6FPf+Gu/4XKsp48yVt1d4IokdSOPKXUqfAGUGBjN7+Dp0eHPngzkoS4GYIga9ataXah1tjul/XW5w=="
       },
       "OfficeIMO.Core": {
         "type": "Transitive",
-        "resolved": "3.4.3",
-        "contentHash": "yQruvXZQtCpslAjVkFs1uZt5BhpBouUaRYCvd57J9uAdrSs+fHp/NCQsjVS7WjkLiBFJ92f/ZwzqKx4MUGb1KQ=="
+        "resolved": "3.4.4",
+        "contentHash": "s1MD3wvn2DSj6rPHKrIfq3qzfVefQrrS2hfl7+OZOWvFsWyuZwzCGC3TxVWevQdPwHUKPs5kzJaWY0vRGDHyqw=="
       },
       "OfficeIMO.Html": {
         "type": "Transitive",
-        "resolved": "3.2.2",
-        "contentHash": "Bx5CBZqGDXlnOWUwIpSnvtn3ZcOBSF0Vu9gWTE2BaNoGWY4/KpKr/4ludhB7FRM1lD/OVNYZXoFzdZug4NyryA==",
+        "resolved": "3.4.3",
+        "contentHash": "nLFiUKuV+1aCLp4T1/RTM6aME403D28vW+cvUvU6j+8HXICZz6qDKzVUDclHeuQ/urgQgIyTCcLzRB3USMlc9w==",
         "dependencies": {
           "AngleSharp": "1.7.1",
           "AngleSharp.Css": "1.0.1",
-          "OfficeIMO.Core": "3.2.2"
+          "OfficeIMO.Core": "3.4.3"
         }
       },
       "OfficeIMO.Markdown.Html": {
         "type": "Transitive",
-        "resolved": "3.2.2",
-        "contentHash": "zWh9vLgvQBoZXeJyoCR50fKwCnEpPYo2iaR5NekF4zkt7xVf/4m1yH+ucIGUdwHpCWAy3H4M3D2gLo9pF05oqw==",
+        "resolved": "3.4.3",
+        "contentHash": "cTY/sULL1FksjujRLcrJyEyJ5nzOhImA64E9cnbjlDi4oEAQywUKxzh5seCTvFRWzFfl5iR6HgoVba9F9bJNMw==",
         "dependencies": {
-          "OfficeIMO.Html": "3.2.2",
-          "OfficeIMO.Markdown": "3.2.2"
+          "OfficeIMO.Html": "3.4.3",
+          "OfficeIMO.Markdown": "3.4.3"
         }
       },
       "PreMailer.Net": {
         "type": "Transitive",
-        "resolved": "2.7.3",
-        "contentHash": "p6LB7Qu4ZsPmjiFtWmytiERhopuGxq3Ql/SVuOZueGzfrDNvvSi8sGaDVHVvJt0S+RCHU422TWLu2aMXDE9ejg==",
+        "resolved": "2.7.4",
+        "contentHash": "SrmoWjabHeK4a5mrolGzLMi+z5DMTGzK/Jce0ORs/lGDzvNggDNJF260v4gj5k9aU4LRMp8qILCMCI71t+oa0g==",
         "dependencies": {
-          "AngleSharp": "1.5.1"
+          "AngleSharp": "1.7.2"
         }
       },
       "System.CodeDom": {
@@ -300,52 +300,52 @@
     "net8.0": {
       "Google.Apis.Auth": {
         "type": "Direct",
-        "requested": "[1.76.0, )",
-        "resolved": "1.76.0",
-        "contentHash": "WzRCykQ0OApOEFdUYYBJ6riIxs+xk635s0KsGb83zJcABa66DCgaAXiWZuZjSqnwA3hjm7u8mmzR4EUHpJ1UfQ==",
+        "requested": "[1.77.0, )",
+        "resolved": "1.77.0",
+        "contentHash": "lcgXlzM+JkX0nKKc7KBwTdiei2IbV20PuTe3cVQ2zOhq0j4IiS9I4xlRQY4igdCMLlmobthz5xtHiPr/wxl0Ew==",
         "dependencies": {
-          "Google.Apis": "1.76.0",
-          "Google.Apis.Core": "1.76.0",
+          "Google.Apis": "1.77.0",
+          "Google.Apis.Core": "1.77.0",
           "System.Management": "7.0.2"
         }
       },
       "HtmlTinkerX": {
         "type": "Direct",
-        "requested": "[3.0.1, )",
-        "resolved": "3.0.1",
-        "contentHash": "EQf3rk3EaTH7afzdJkWF1i0oSx6spniWmxz74C3F0+EcCQ7ZndetWZ34dxz0zLcgFWS+bkkoR+NUWP2Iut2HEA==",
+        "requested": "[3.0.2, )",
+        "resolved": "3.0.2",
+        "contentHash": "1KIr3TYPt4hGKa4nugmZJhYNllWGkL7L/L4rJqvqwDDLzlwlhNG0KZ92QyRiIAce5wyXd11Bm7kpB6DNIwSYrg==",
         "dependencies": {
-          "AngleSharp": "1.7.1",
-          "AngleSharp.Css": "1.0.1",
+          "AngleSharp": "1.8.2",
+          "AngleSharp.Css": "1.1.2",
           "AngleSharp.Diffing": "1.1.1",
           "AngleSharp.Io": "1.1.0",
-          "AngleSharp.Js": "1.0.1",
-          "ChartForgeX": "1.6.0",
-          "HtmlAgilityPack": "1.12.4",
-          "Jint": "4.16.0",
+          "AngleSharp.Js": "1.1.0",
+          "ChartForgeX": "1.8.0",
+          "HtmlAgilityPack": "1.13.0",
+          "Jint": "4.16.3",
           "Microsoft.Playwright": "1.62.0",
-          "NUglify": "1.22.3",
-          "OfficeIMO.Html": "3.2.2",
-          "OfficeIMO.Markdown.Html": "3.2.2",
-          "PreMailer.Net": "2.7.3"
+          "NUglify": "1.23.1",
+          "OfficeIMO.Html": "3.4.3",
+          "OfficeIMO.Markdown.Html": "3.4.3",
+          "PreMailer.Net": "2.7.4"
         }
       },
       "Magick.NET-Q8-AnyCPU": {
         "type": "Direct",
-        "requested": "[14.17.1, )",
-        "resolved": "14.17.1",
-        "contentHash": "qcRjhaQ6XueNp2ZUAXYcDrCWlWWlzw3VatXmhCKXDpG4MABGJJr5+o1KQqOe1EtSZaDS6hQNAh4nU8XjCENDiw==",
+        "requested": "[14.17.2, )",
+        "resolved": "14.17.2",
+        "contentHash": "AIvpBH4fvP3/NUwvWsVj9SxAA6hrU4p5/RNfColyrDn4jipl7loR6y4ZgYLXfBQgjmSEc7m2D2DbkWMnZt+brg==",
         "dependencies": {
-          "Magick.NET.Core": "14.17.1"
+          "Magick.NET.Core": "14.17.2"
         }
       },
       "OfficeIMO.Markdown": {
         "type": "Direct",
-        "requested": "[3.4.3, )",
-        "resolved": "3.4.3",
-        "contentHash": "TjQjJMOvYC0+3WzWrQORBEYqwrQPlU+mcRosD+izmj6dFprup6ioprt30stbJlOQPhPNmiA4RrCkpNsEZb9n6A==",
+        "requested": "[3.4.4, )",
+        "resolved": "3.4.4",
+        "contentHash": "ZDzXqNzGaaI+6959gqZvIcBrYXBFnVjP8ksDRn+xrtVNJ4czcBsCvSr185BOQgp9gA3UJbYIVDD4zVRNshv30g==",
         "dependencies": {
-          "OfficeIMO.Core": "3.4.3"
+          "OfficeIMO.Core": "3.4.4"
         }
       },
       "Scriban": {
@@ -367,13 +367,13 @@
       },
       "AngleSharp": {
         "type": "Transitive",
-        "resolved": "1.7.1",
-        "contentHash": "QBblGpRB3SYD66Mls7fHyl1mWkP93n7ErWDWHc1vd9sPHhdlTkmUoY3CjgfjcWNxGF9m7xjNyztRfErXqoBKOA=="
+        "resolved": "1.8.2",
+        "contentHash": "iRlkfBIhi+gTgTxBlYNT4PlmaiVEy7+qX3BmprAK4cYE1UjfSNFI4mEDyxC1qgtAKYg5rjGYgL3tJlzGF+Ukdg=="
       },
       "AngleSharp.Css": {
         "type": "Transitive",
-        "resolved": "1.0.1",
-        "contentHash": "6S13xNHH+SUGPZd6EO1MhkuDbpEnFroUM6A8DZpLJHQnLRTvtBJb3Ydu65s618E4gWF9FSWmM5jhKk4RIfwT2A==",
+        "resolved": "1.1.2",
+        "contentHash": "7o5yCTuURjxmjy+O5/2EDQihTwnVlbeg9cIO+Zq8zDLt/7AZWebOfIxij+cejBGUBMad95wl5VlY3XFo3VQuCg==",
         "dependencies": {
           "AngleSharp": "[1.5.0, 2.0.0)"
         }
@@ -397,51 +397,51 @@
       },
       "AngleSharp.Js": {
         "type": "Transitive",
-        "resolved": "1.0.1",
-        "contentHash": "8zDsLICrrBFLHPhNyrf8Z+DHfUvBNilnONv1TsbWE4nul/Cfl6svW882Dm3v6pjzFHVKkYqwoPQBKZ0QHSQ60Q==",
+        "resolved": "1.1.0",
+        "contentHash": "5DGuaSi3hxoafNOpqJwqTz4/nIKpniwdF6z/AEf7diQNb5g3JMAR/IzL0JVxsR+3MHrtKNPF4r2BzWOIta0soA==",
         "dependencies": {
-          "AngleSharp": "[1.5.0, 2.0.0)",
+          "AngleSharp": "[1.8.0, 2.0.0)",
           "Jint": "[4.15.3, 5.0.0)"
         }
       },
       "ChartForgeX": {
         "type": "Transitive",
-        "resolved": "1.6.0",
-        "contentHash": "svqljzuw1NkTNNc0DoNFi6whjc9MYRmaVzh0HBI73yZGWh1KofaAE+gtXcsje2cQAWdJMVHnGv1mirccUR8YbQ=="
+        "resolved": "1.8.0",
+        "contentHash": "d0/WWZMkJgUAMyjJ92HOBJPMPo69EY9gItT4p6PKTpme3+t3QonVXInkYiEpGI8oVY8VM37mJeBwklgxTbJK3Q=="
       },
       "Google.Apis": {
         "type": "Transitive",
-        "resolved": "1.76.0",
-        "contentHash": "sIhJW2vT1cXE/yUFp1q1Mv7EUgbGu2uMIcqqv+BgElRdGQApxiYpZ/jG6hFkQB8/AG9kGurJOzLOM9PZ++GEtA==",
+        "resolved": "1.77.0",
+        "contentHash": "zj7MKdZz7lWRM7z2meqh5S9KSf83c1xY8Fa+b1KzYxw9xMugUxcQtwPoxJgFzxKJgLE64dAra0ze++P/Up4k6Q==",
         "dependencies": {
-          "Google.Apis.Core": "1.76.0"
+          "Google.Apis.Core": "1.77.0"
         }
       },
       "Google.Apis.Core": {
         "type": "Transitive",
-        "resolved": "1.76.0",
-        "contentHash": "P2nFbC0SsnUe8sGjhpCLs6CHIWFzURgUS2M9l9aUV1vJjVXpesRbegEYZS/dLKehcgx8twDP7xA5OMGygMD55g==",
+        "resolved": "1.77.0",
+        "contentHash": "7Yj4dpbOLFbxct6x5AFHQEZ25E8/f+5zqW39Q8f/GZknLyuS+uhnt2DIcKQplBNJTK9WNXompbYLWsPRhO6Nmg==",
         "dependencies": {
           "Newtonsoft.Json": "13.0.4"
         }
       },
       "HtmlAgilityPack": {
         "type": "Transitive",
-        "resolved": "1.12.4",
-        "contentHash": "ljqvBabvFwKoLniuoQKO8b5bJfJweKLs4fUNS/V5dsvpo0A8MlJqxxn9XVmP2DaskbUXty6IYaWAi1SArGIMeQ=="
+        "resolved": "1.13.0",
+        "contentHash": "nWZtz9WjSbq6V7TjjYBCmW+D8+BrWs15O6MlPxh55SH4zmenkWHXwu6gYeIarHL3KoHgDyZzTdOM50EdTnR8Xw=="
       },
       "Jint": {
         "type": "Transitive",
-        "resolved": "4.16.0",
-        "contentHash": "YHofgoVtjWzqmG2GsGsp6eYMmcBfGgJOcH+Ki2UdZXNsYgKGnWrK2hSqRSPG/6HqeiipT5YPhzEH+bwxFO+YAQ==",
+        "resolved": "4.16.3",
+        "contentHash": "QRO8CtC9rB/FRgchClX0DEHsBmUSDehIxxEv5QX5qlmujB2HMmOIUMruysKnQA0v+0QtU9cwp0XbiPbpJ3eiwA==",
         "dependencies": {
           "Acornima": "1.7.0"
         }
       },
       "Magick.NET.Core": {
         "type": "Transitive",
-        "resolved": "14.17.1",
-        "contentHash": "4BBbU5l5DmdT9isSNGrIE/0VwAh29SoKMSDMiIvFBDqz6vQfG6EYBFJQOemdCH3xkMfesSzImOVPjnyMf/PIqA=="
+        "resolved": "14.17.2",
+        "contentHash": "KKvR6eBUcfgkZpfHfN/UKRcK/FjHW6NXXoRRf5HJdhFk5bYLEEFuKu6op0zfNo6Msah51Yw42p599pz3A0CDQQ=="
       },
       "Microsoft.Bcl.AsyncInterfaces": {
         "type": "Transitive",
@@ -509,39 +509,39 @@
       },
       "NUglify": {
         "type": "Transitive",
-        "resolved": "1.22.3",
-        "contentHash": "JVrw7wZClUNO9Djp+5dZdu9VFkPVQy4nGPip8y2wLV2BL0v6EZluj6xpdEXTPBETDKw5X+vDQ0J+yjVDeuH1bw=="
+        "resolved": "1.23.1",
+        "contentHash": "knMw/R4h/6FPf+Gu/4XKsp48yVt1d4IokdSOPKXUqfAGUGBjN7+Dp0eHPngzkoS4GYIga9ataXah1tjul/XW5w=="
       },
       "OfficeIMO.Core": {
         "type": "Transitive",
-        "resolved": "3.4.3",
-        "contentHash": "yQruvXZQtCpslAjVkFs1uZt5BhpBouUaRYCvd57J9uAdrSs+fHp/NCQsjVS7WjkLiBFJ92f/ZwzqKx4MUGb1KQ=="
+        "resolved": "3.4.4",
+        "contentHash": "s1MD3wvn2DSj6rPHKrIfq3qzfVefQrrS2hfl7+OZOWvFsWyuZwzCGC3TxVWevQdPwHUKPs5kzJaWY0vRGDHyqw=="
       },
       "OfficeIMO.Html": {
         "type": "Transitive",
-        "resolved": "3.2.2",
-        "contentHash": "Bx5CBZqGDXlnOWUwIpSnvtn3ZcOBSF0Vu9gWTE2BaNoGWY4/KpKr/4ludhB7FRM1lD/OVNYZXoFzdZug4NyryA==",
+        "resolved": "3.4.3",
+        "contentHash": "nLFiUKuV+1aCLp4T1/RTM6aME403D28vW+cvUvU6j+8HXICZz6qDKzVUDclHeuQ/urgQgIyTCcLzRB3USMlc9w==",
         "dependencies": {
           "AngleSharp": "1.7.1",
           "AngleSharp.Css": "1.0.1",
-          "OfficeIMO.Core": "3.2.2"
+          "OfficeIMO.Core": "3.4.3"
         }
       },
       "OfficeIMO.Markdown.Html": {
         "type": "Transitive",
-        "resolved": "3.2.2",
-        "contentHash": "zWh9vLgvQBoZXeJyoCR50fKwCnEpPYo2iaR5NekF4zkt7xVf/4m1yH+ucIGUdwHpCWAy3H4M3D2gLo9pF05oqw==",
+        "resolved": "3.4.3",
+        "contentHash": "cTY/sULL1FksjujRLcrJyEyJ5nzOhImA64E9cnbjlDi4oEAQywUKxzh5seCTvFRWzFfl5iR6HgoVba9F9bJNMw==",
         "dependencies": {
-          "OfficeIMO.Html": "3.2.2",
-          "OfficeIMO.Markdown": "3.2.2"
+          "OfficeIMO.Html": "3.4.3",
+          "OfficeIMO.Markdown": "3.4.3"
         }
       },
       "PreMailer.Net": {
         "type": "Transitive",
-        "resolved": "2.7.3",
-        "contentHash": "p6LB7Qu4ZsPmjiFtWmytiERhopuGxq3Ql/SVuOZueGzfrDNvvSi8sGaDVHVvJt0S+RCHU422TWLu2aMXDE9ejg==",
+        "resolved": "2.7.4",
+        "contentHash": "SrmoWjabHeK4a5mrolGzLMi+z5DMTGzK/Jce0ORs/lGDzvNggDNJF260v4gj5k9aU4LRMp8qILCMCI71t+oa0g==",
         "dependencies": {
-          "AngleSharp": "1.5.1"
+          "AngleSharp": "1.7.2"
         }
       },
       "System.CodeDom": {

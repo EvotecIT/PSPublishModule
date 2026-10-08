@@ -11,7 +11,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>powerforge</ToolCommandName>
     <Description>PowerForge command-line interface for building and publishing PowerShell modules.</Description>
-    <VersionPrefix>3.0.153</VersionPrefix>
+    <VersionPrefix>3.0.158</VersionPrefix>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <Authors>Przemyslaw Klys</Authors>
     <Company>Evotec Services sp. z o.o.</Company>
@@ -43,6 +43,9 @@
     <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressDisplay.cs" Link="PowerForge.ConsoleShared\SpectreProgressDisplay.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressViewport.cs" Link="PowerForge.ConsoleShared\SpectreProgressViewport.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressLedger.cs" Link="PowerForge.ConsoleShared\SpectreProgressLedger.cs" />
+    <Compile Include="..\PowerForge.ConsoleShared\SpectreDotNetPublishConsoleUi.cs" Link="PowerForge.ConsoleShared\SpectreDotNetPublishConsoleUi.cs" />
+    <Compile Include="..\PowerForge.ConsoleShared\SpectreDotNetPublishConsoleUi.Display.cs" Link="PowerForge.ConsoleShared\SpectreDotNetPublishConsoleUi.Display.cs" />
+    <Compile Include="..\PowerForge.ConsoleShared\SpectreDotNetPublishConsoleUi.Labels.cs" Link="PowerForge.ConsoleShared\SpectreDotNetPublishConsoleUi.Labels.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreModulePipelineConsoleUi.cs" Link="PowerForge.ConsoleShared\SpectreModulePipelineConsoleUi.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreProjectBuildConsoleUi.cs" Link="PowerForge.ConsoleShared\SpectreProjectBuildConsoleUi.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreProjectBuildSummaryWriter.cs" Link="PowerForge.ConsoleShared\SpectreProjectBuildSummaryWriter.cs" />

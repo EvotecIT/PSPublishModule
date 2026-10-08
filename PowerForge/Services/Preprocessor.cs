@@ -64,8 +64,7 @@ internal sealed class Preprocessor
         }
         if (result.ExitCode == 124)
         {
-            _logger.Warn("Preprocessor: Timeout; skipping.");
-            return list.Select(p => new FormatterResult(p, false, "Skipped: Timeout")).ToArray();
+            _logger.Warn("Preprocessor: Timeout; skipping unfinished files.");
         }
 
         var outputs = new List<FormatterResult>(list.Length);
@@ -96,7 +95,11 @@ internal sealed class Preprocessor
         {
             if (!outputs.Any(o => string.Equals(o.Path, p, StringComparison.OrdinalIgnoreCase)))
             {
-                if (result.ExitCode != 0)
+                if (result.ExitCode == 124)
+                {
+                    outputs.Add(new FormatterResult(p, false, "Skipped: Timeout"));
+                }
+                else if (result.ExitCode != 0)
                 {
                     var reason = ExtractFirstLine(result.StdErr) ?? ExtractFirstLine(result.StdOut);
                     var extra = string.IsNullOrWhiteSpace(reason) ? string.Empty : $": {reason}";

@@ -93,6 +93,7 @@ public static partial class WebDotNetRunner
             throw new ArgumentException("ProjectPath is required.", nameof(options));
         if (string.IsNullOrWhiteSpace(options.OutputPath))
             throw new ArgumentException("OutputPath is required.", nameof(options));
+        WebOutputPathGuard.ValidateProject(options.ProjectPath, options.OutputPath);
 
         var args = new List<string> { "publish", options.ProjectPath, "-o", options.OutputPath };
         if (!string.IsNullOrWhiteSpace(options.Configuration))

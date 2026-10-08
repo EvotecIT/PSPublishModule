@@ -784,7 +784,7 @@ public sealed partial class ModulePipelineRunner
         if (mode is not PackageBuildExecutionMode.PublishNuGet and not PackageBuildExecutionMode.PublishGitHub)
             MarkSynchronizedReleaseLaneAttempted(state, checkpointKey);
         ApplyProjectBuildGateDefaults(configuration, mode, plan.GateMode, plan.ReleaseCheckpoint);
-        var actions = ResolveEffectiveActions(configuration);
+        var actions = ProjectBuildPreparationService.ResolveActions(configuration);
         var request = new ProjectBuildHostRequest
         {
             ConfigPath = configPath,
@@ -847,7 +847,7 @@ public sealed partial class ModulePipelineRunner
         if (mode is not PackageBuildExecutionMode.PublishNuGet and not PackageBuildExecutionMode.PublishGitHub)
             MarkSynchronizedReleaseLaneAttempted(state, checkpointKey);
         ApplyProjectBuildGateDefaults(projectBuildConfig, mode, plan.GateMode, plan.ReleaseCheckpoint);
-        var actions = ResolveEffectiveActions(projectBuildConfig);
+        var actions = ProjectBuildPreparationService.ResolveActions(projectBuildConfig);
         var configPath = Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json");
         var request = new ProjectBuildHostRequest
         {
@@ -893,8 +893,14 @@ public sealed partial class ModulePipelineRunner
         if (gateMode == ConfigurationGateMode.Build &&
             mode is PackageBuildExecutionMode.DependencyBuild or PackageBuildExecutionMode.BuildOnly)
         {
-            if (!releaseCheckpoint)
+            // A certificate alone does not opt an ordinary build into signing.
+            // Explicit assembly/package signing requests still apply without a release checkpoint.
+            if (!releaseCheckpoint && target.SignAssemblies != true && target.SignPackages != true)
+            {
                 target.CertificateThumbprint = null;
+                target.SignAssemblies = false;
+                target.SignPackages = false;
+            }
         }
 
         if (gateMode == ConfigurationGateMode.Documentation &&
@@ -916,7 +922,7 @@ public sealed partial class ModulePipelineRunner
         if (string.IsNullOrWhiteSpace(cfg.ConfigPath))
             return false;
 
-        var actions = ResolveEffectiveActions(LoadProjectBuildConfiguration(ResolvePackageBuildPath(plan.ProjectRoot, cfg.ConfigPath), cfg));
+        var actions = ProjectBuildPreparationService.ResolveActions(LoadProjectBuildConfiguration(ResolvePackageBuildPath(plan.ProjectRoot, cfg.ConfigPath), cfg));
         return destination == PackageBuildPublishDestination.NuGet
             ? actions.PublishNuGet
             : actions.PublishGitHub;
@@ -928,7 +934,7 @@ public sealed partial class ModulePipelineRunner
         PackageBuildPublishDestination destination)
     {
         var cfg = segment.Configuration ?? throw new InvalidOperationException("PackageBuild configuration is missing.");
-        var actions = ResolveEffectiveActions(MapPackageBuildConfiguration(cfg, plan.ProjectRoot));
+        var actions = ProjectBuildPreparationService.ResolveActions(MapPackageBuildConfiguration(cfg, plan.ProjectRoot));
         return destination == PackageBuildPublishDestination.NuGet
             ? actions.PublishNuGet
             : actions.PublishGitHub;
@@ -941,8 +947,8 @@ public sealed partial class ModulePipelineRunner
         => mode switch
         {
             PackageBuildExecutionMode.DependencyBuild when gateMode == ConfigurationGateMode.Documentation => false,
-            PackageBuildExecutionMode.DependencyBuild => actions.UpdateVersions || actions.PublishNuGet || actions.PublishGitHub,
-            PackageBuildExecutionMode.BuildOnly when gateMode == ConfigurationGateMode.Build => actions.UpdateVersions || actions.PublishNuGet || actions.PublishGitHub,
+            PackageBuildExecutionMode.DependencyBuild => actions.UpdateVersions,
+            PackageBuildExecutionMode.BuildOnly when gateMode == ConfigurationGateMode.Build => actions.UpdateVersions,
             PackageBuildExecutionMode.BuildOnly => actions.UpdateVersions,
             _ => false
         };
@@ -964,20 +970,6 @@ public sealed partial class ModulePipelineRunner
 
     private static bool? ResolvePublishGitHub(ProjectBuildEffectiveActions actions, PackageBuildExecutionMode mode)
         => mode == PackageBuildExecutionMode.PublishGitHub && actions.PublishGitHub;
-
-    private static ProjectBuildEffectiveActions ResolveEffectiveActions(ProjectBuildConfiguration config)
-    {
-        var defaultAll = config.UpdateVersions is null &&
-                         config.Build is null &&
-                         config.PublishNuget is null &&
-                         config.PublishGitHub is null;
-
-        return new ProjectBuildEffectiveActions(
-            config.UpdateVersions ?? defaultAll,
-            config.Build ?? defaultAll,
-            config.PublishNuget ?? false,
-            config.PublishGitHub ?? false);
-    }
 
     private static void ValidatePackageBuildOrdering(ModulePipelinePlan plan)
     {
@@ -1191,23 +1183,4 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
-    private readonly struct ProjectBuildEffectiveActions
-    {
-        public ProjectBuildEffectiveActions(
-            bool updateVersions,
-            bool build,
-            bool publishNuGet,
-            bool publishGitHub)
-        {
-            UpdateVersions = updateVersions;
-            Build = build;
-            PublishNuGet = publishNuGet;
-            PublishGitHub = publishGitHub;
-        }
-
-        public bool UpdateVersions { get; }
-        public bool Build { get; }
-        public bool PublishNuGet { get; }
-        public bool PublishGitHub { get; }
-    }
 }

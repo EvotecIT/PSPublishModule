@@ -37,6 +37,8 @@ Use at most one release label. Conflicting labels fail the run rather than guess
 
 If the repository has no GitHub release yet, PowerForge publishes the synchronized metadata version as the initial baseline instead of incrementing past an unreleased version.
 
+For a repository with only prereleases, PowerForge uses the highest published three-part version as the baseline and applies the normal increment. For example, metadata `0.1.5` and a prerelease tagged `v0.1.5` produce stable `v0.1.6` for a product change. Drafts and tags outside the supported three-part version format are excluded. Existing tags and prerelease assets retain their original provenance. Once a stable release exists, GitHub's latest stable release remains the baseline.
+
 Before changing anything, PowerForge confirms that the pull request is merged, its merge SHA matches the event, the checked-out default branch contains that merge, and the PR head has completed checks with accepted conclusions (`success`, `neutral`, or `skipped`). PowerForge excludes the current release run from settling itself. During recovery it excludes a prior failed release check only after the Actions API proves that it came from the same trusted receiver workflow path and release event; other pending or failed checks remain blocking.
 
 The reusable workflow uses GitHub's durable `queue: max` concurrency mode. Every merged-PR trigger waits for the repository release lock instead of replacing an older pending run, so an intermediate `release:minor` or `release:major` decision is not discarded during a merge burst. Each queued trigger applies its own policy to the then-current default branch.
@@ -106,7 +108,7 @@ When a release is required, PowerForge:
 1. synchronizes `manifest.json` and the bounded `[project]` table in `pyproject.toml`, or `package.json` and `package-lock.json`;
 2. creates and pushes a commit containing only the version metadata and source PR/merge trailers, using an explicit repository URL, disabled Git hooks, disabled redirects, and ephemeral authentication;
 3. starts a separate read-only job at that exact commit and runs the plugin npm validation/build or produces the configured integration zip;
-4. rejects any tracked source mutation made by build scripts and transfers only the declared asset;
+4. rejects tracked source, staged, file-mode, or checkout-commit changes made by build scripts and transfers only the declared asset; a plugin may regenerate its checked-in root HACS bundle when its bytes match the packaged asset;
 5. starts a separate privileged publish job that never executes receiver code;
 6. preflights any existing `v<version>` release and tag for the expected PowerForge marker and commit before same-named assets may be replaced;
 7. creates or safely resumes the release with GitHub-generated change and contributor

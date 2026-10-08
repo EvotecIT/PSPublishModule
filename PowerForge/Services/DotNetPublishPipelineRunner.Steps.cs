@@ -342,7 +342,9 @@ public sealed partial class DotNetPublishPipelineRunner
         if (!string.IsNullOrWhiteSpace(runtime)) args.AddRange(new[] { "-r", runtime });
         if (plan.Restore || plan.SkipRestoreRequested) args.Add("--no-restore");
         AppendPublishStyleArgs(args, target.Publish, style);
-        args.AddRange(BuildMsBuildPropertyArgs(BuildPublishMsBuildProperties(plan, target, framework, runtime, style)));
+        var properties = BuildPublishMsBuildProperties(plan, target, framework, runtime, style);
+        ApplyCurrentWorkingTreeRevision(properties, plan);
+        args.AddRange(BuildMsBuildPropertyArgs(properties));
         return args;
     }
 
@@ -382,11 +384,6 @@ public sealed partial class DotNetPublishPipelineRunner
                 ReadPortableInventorySourceProvenance(plan, outputDir, publishStep: publishStep);
         }
 
-        EnsureOutputDirectoryUnlocked(
-            plan,
-            outputDir,
-            contextLabel: $"{target.Name} ({tfm}, {rid}, {style})",
-            serviceName: target.Publish.Service?.ServiceName);
         Directory.CreateDirectory(outputDir);
 
         var lifecycle = target.Publish.Service?.Lifecycle;
@@ -397,6 +394,14 @@ public sealed partial class DotNetPublishPipelineRunner
         {
             ExecuteServiceLifecycleInlineBeforePublish(outputDir, target.Name, target.Publish.Service, lifecycle);
         }
+
+        // The registered service owns the executable lock until the inline stop completes.
+        // Keep the guard after stopping so unrelated/orphaned locks still fail before writes.
+        EnsureOutputDirectoryUnlocked(
+            plan,
+            outputDir,
+            contextLabel: $"{target.Name} ({tfm}, {rid}, {style})",
+            serviceName: target.Publish.Service?.ServiceName);
 
         var stateTransfer = PreserveStateBeforePublish(
             plan,
@@ -522,7 +527,7 @@ public sealed partial class DotNetPublishPipelineRunner
                     rid,
                     tfm,
                     style.ToString(),
-                    plan.SourceRevision,
+                    provenance.Revision ?? string.Empty,
                     ComputePortableConfigurationPolicySha256(
                         target.Name,
                         target.Kind,
@@ -636,6 +641,11 @@ public sealed partial class DotNetPublishPipelineRunner
         return resolved;
     }
 
+    // NoBuildInPublish is a default preference; it is effective only in an explicit build mode.
+    private static bool UsesExplicitNoBuildPublish(DotNetPublishPlan plan)
+        => plan.NoBuildInPublish &&
+           (plan.UseControlledSourceProvenance || plan.SkipBuildRequested || plan.SeparateBuildRequested);
+
     internal static List<string> BuildPublishArguments(
         DotNetPublishPlan plan,
         DotNetPublishTargetPlan target,
@@ -669,7 +679,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (plan.NoRestoreInPublish) publishArgs.Add("--no-restore");
         // Normal publishing rebuilds by default. Explicit skip-build and the
         // project DSL's separate-build mode preserve their no-build contract.
-        if ((plan.UseControlledSourceProvenance || plan.SkipBuildRequested || plan.SeparateBuildRequested) && plan.NoBuildInPublish &&
+        if (UsesExplicitNoBuildPublish(plan) &&
             !TargetUsesPublishMsiVersionProperties(plan, target.Name, framework, runtime, style))
             publishArgs.Add("--no-build");
 
@@ -763,6 +773,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (target is null) throw new ArgumentNullException(nameof(target));
 
         var merged = BuildPublishMsBuildProperties(plan, target, framework, runtime, style);
+        ApplyCurrentWorkingTreeRevision(merged, plan);
         ApplyPublishMsiVersionProperties(
             merged,
             plan,
@@ -773,6 +784,26 @@ public sealed partial class DotNetPublishPipelineRunner
             reserveMonotonicVersions: !string.IsNullOrWhiteSpace(reservationOwner),
             reservationOwner: reservationOwner);
         return merged;
+    }
+
+    private static void ApplyCurrentWorkingTreeRevision(Dictionary<string, string> properties, DotNetPublishPlan plan)
+    {
+        if (!plan.UseControlledSourceProvenance)
+        {
+            // Hooks may advance HEAD after planning. Stamp the revision selected
+            // at invocation time without requiring a clean working tree.
+            string? revision = ReadGitText(plan.ProjectRoot, "rev-parse HEAD");
+            if (revision is not null && !string.IsNullOrWhiteSpace(revision))
+            {
+                properties["SourceRevisionId"] = revision.Trim();
+                properties["IncludeSourceRevisionInInformationalVersion"] = "true";
+            }
+            else
+            {
+                properties.Remove("SourceRevisionId");
+                properties.Remove("IncludeSourceRevisionInInformationalVersion");
+            }
+        }
     }
 
     private static void ApplyPublishMsiVersionProperties(

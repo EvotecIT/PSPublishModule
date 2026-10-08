@@ -112,6 +112,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
     }
 
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void Execute_WhatIfPublish_DoesNotRequirePackageFilesOnDisk()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -142,7 +143,6 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 IncludeSymbols = true,
                 Publish = true,
                 WhatIf = true,
-                PublishApiKey = "dummy",
                 PublishSource = "https://api.nuget.org/v3/index.json",
                 VersionSources = new[] { sourceDir.FullName },
                 SkipDuplicate = true,
@@ -168,6 +168,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
     }
 
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void Execute_WhatIfPublish_OrdersMultiplePlannedPackagesWithoutRequiringArtifacts()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -210,7 +211,6 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 Pack = true,
                 Publish = true,
                 WhatIf = true,
-                PublishApiKey = "dummy",
                 PublishSource = "https://api.nuget.org/v3/index.json",
                 VersionSources = new[] { sourceDirectory.FullName },
                 SkipDuplicate = true,

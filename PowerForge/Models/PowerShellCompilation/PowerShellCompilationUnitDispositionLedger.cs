@@ -181,7 +181,6 @@ public sealed class PowerShellCompilationUnitDisposition
     }
 
     /// <summary>Creates one final unit disposition including partial typed-region evidence.</summary>
-    [JsonConstructor]
     public PowerShellCompilationUnitDisposition(
         string unitId,
         string relativePath,
@@ -206,6 +205,41 @@ public sealed class PowerShellCompilationUnitDisposition
         PowerShellCompilationRegionGraph? regionGraph,
         int promotedTypedRegions,
         IReadOnlyList<string>? generatedRegionMemberNames)
+        : this(unitId, relativePath, name, kind, startLine, semanticEligible, emittedClrMethod, emittedBinaryCmdlet,
+            retainedHostedSource, runtimeCommandRegions, boundaryCrossings, shapingFallback, omitted, rejected,
+            generatedMemberName, dependencyCauses, boundaryCauses, diagnosticChain, moduleStateReadBoundaryCrossings,
+            moduleStateWriteBoundaryCrossings, regionGraph, promotedTypedRegions, generatedRegionMemberNames,
+            usesNativeFunctionBinding: false)
+    {
+    }
+
+    /// <summary>Creates one final unit disposition including native function invocation ownership.</summary>
+    [JsonConstructor]
+    public PowerShellCompilationUnitDisposition(
+        string unitId,
+        string relativePath,
+        string name,
+        PowerShellCompilationUnitKind kind,
+        int startLine,
+        bool semanticEligible,
+        bool emittedClrMethod,
+        bool emittedBinaryCmdlet,
+        bool retainedHostedSource,
+        int runtimeCommandRegions,
+        int boundaryCrossings,
+        bool shapingFallback,
+        bool omitted,
+        bool rejected,
+        string generatedMemberName,
+        IReadOnlyList<string>? dependencyCauses,
+        IReadOnlyList<string>? boundaryCauses,
+        IReadOnlyList<PowerShellCompilationDispositionCause>? diagnosticChain,
+        int moduleStateReadBoundaryCrossings,
+        int moduleStateWriteBoundaryCrossings,
+        PowerShellCompilationRegionGraph? regionGraph,
+        int promotedTypedRegions,
+        IReadOnlyList<string>? generatedRegionMemberNames,
+        bool usesNativeFunctionBinding)
     {
         UnitId = unitId ?? string.Empty;
         RelativePath = relativePath ?? string.Empty;
@@ -216,6 +250,7 @@ public sealed class PowerShellCompilationUnitDisposition
         EmittedClrMethod = emittedClrMethod;
         EmittedBinaryCmdlet = emittedBinaryCmdlet;
         RetainedHostedSource = retainedHostedSource;
+        UsesNativeFunctionBinding = usesNativeFunctionBinding;
         RuntimeCommandRegions = Math.Max(0, runtimeCommandRegions);
         BoundaryCrossings = Math.Max(0, boundaryCrossings);
         PromotedTypedRegions = Math.Max(0, promotedTypedRegions);
@@ -227,6 +262,7 @@ public sealed class PowerShellCompilationUnitDisposition
                 0,
                 BoundaryCrossings - RuntimeCommandRegions -
                 PromotedTypedRegions -
+                (UsesNativeFunctionBinding ? 1 : 0) -
                 (RetainedHostedSource && (EmittedClrMethod || EmittedBinaryCmdlet) ? 1 : 0));
         }
         ShapingFallback = shapingFallback;
@@ -258,6 +294,8 @@ public sealed class PowerShellCompilationUnitDisposition
     public bool EmittedBinaryCmdlet { get; }
     /// <summary>Whether authored source for the unit remains in the delivered hosted payload.</summary>
     public bool RetainedHostedSource { get; }
+    /// <summary>Whether an emitted CLR body uses native PowerShell parameter binding and invocation storage.</summary>
+    public bool UsesNativeFunctionBinding { get; }
     /// <summary>Number of hosted PowerShell command regions inside the emitted implementation.</summary>
     public int RuntimeCommandRegions { get; }
     /// <summary>Number of statically identified typed/hosted boundary crossings.</summary>
@@ -302,7 +340,7 @@ public sealed class PowerShellCompilationUnitDisposition
 
     /// <summary>Whether the delivered unit executes any PowerShell runtime semantics.</summary>
     [JsonIgnore]
-    public bool RuntimeRouted => RetainedHostedSource || RuntimeCommandRegions > 0 || ModuleStateBoundaryCrossings > 0;
+    public bool RuntimeRouted => UsesNativeFunctionBinding || RetainedHostedSource || RuntimeCommandRegions > 0 || ModuleStateBoundaryCrossings > 0;
 
     /// <summary>Stable summary of all final artifact dispositions; dispositions may overlap.</summary>
     [JsonIgnore]
@@ -311,6 +349,7 @@ public sealed class PowerShellCompilationUnitDisposition
         Emitted ? "TypedArtifact" : string.Empty,
         PromotedTypedRegions > 0 ? "TypedRegions" : string.Empty,
         RetainedHostedSource ? "HostedSource" : string.Empty,
+        UsesNativeFunctionBinding ? "NativeFunctionBinding" : string.Empty,
         RuntimeCommandRegions > 0 ? "HostedCommandRegions" : string.Empty,
         ModuleStateBoundaryCrossings > 0 ? "HostedModuleState" : string.Empty,
         Omitted ? "Omitted" : string.Empty,
@@ -335,7 +374,7 @@ public sealed class PowerShellCompilationUnitDispositionLedger
     }
 
     /// <summary>Ledger schema version.</summary>
-    public int SchemaVersion => 4;
+    public int SchemaVersion => 5;
     /// <summary>Deterministically ordered authored-unit dispositions.</summary>
     public IReadOnlyList<PowerShellCompilationUnitDisposition> Entries { get; }
     /// <summary>Runtime delivery causes outside an authored compilation unit, such as manifest hooks.</summary>

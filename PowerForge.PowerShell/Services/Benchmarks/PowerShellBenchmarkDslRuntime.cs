@@ -249,8 +249,26 @@ public static partial class PowerShellBenchmarkDslRuntime
     /// <param name="processorAffinityMask">Optional Windows processor mask.</param>
     /// <param name="processPriority">Optional Windows process priority.</param>
     public static void Policy(int? warmup, int? iteration, string? runMode, string? order, string? memoryCleanup, int? cooldownMilliseconds, string? outlierMode, ulong? processorAffinityMask, string? processPriority)
+        => Policy(warmup, iteration, runMode, order, memoryCleanup, cooldownMilliseconds, outlierMode, processorAffinityMask, processPriority, null);
+
+    /// <summary>Applies execution policy, scoped process placement and optional operation memory sampling.</summary>
+    /// <param name="warmup">Optional warmup count.</param>
+    /// <param name="iteration">Optional measured count.</param>
+    /// <param name="runMode">Optional run label.</param>
+    /// <param name="order">Optional work-item ordering.</param>
+    /// <param name="memoryCleanup">Optional memory cleanup policy.</param>
+    /// <param name="cooldownMilliseconds">Optional delay between samples.</param>
+    /// <param name="outlierMode">Optional outlier policy.</param>
+    /// <param name="processorAffinityMask">Optional Windows processor mask.</param>
+    /// <param name="processPriority">Optional Windows process priority.</param>
+    /// <param name="memorySamplingIntervalMilliseconds">Zero disables sampling; 1 through 1000 enables observed memory maxima.</param>
+    public static void Policy(int? warmup, int? iteration, string? runMode, string? order, string? memoryCleanup, int? cooldownMilliseconds, string? outlierMode, ulong? processorAffinityMask, string? processPriority, int? memorySamplingIntervalMilliseconds)
     {
+        if (memorySamplingIntervalMilliseconds is < 0 or > 1000)
+            throw new ArgumentOutOfRangeException(nameof(memorySamplingIntervalMilliseconds));
         var suite = RequireSuite();
+        if (memorySamplingIntervalMilliseconds.HasValue)
+            suite.MemorySamplingIntervalMilliseconds = memorySamplingIntervalMilliseconds.Value;
         if (warmup.HasValue)
             suite.WarmupCount = Math.Max(0, warmup.Value);
         if (iteration.HasValue)
@@ -507,7 +525,8 @@ param(
     [Parameter(Position=5)] [object] $OutlierMode,
     [Parameter(Position=6)] [object] $MemoryCleanup,
     [Nullable[System.UInt64]] $ProcessorAffinityMask,
-    [string] $ProcessPriority
+    [string] $ProcessPriority,
+    [ValidateRange(0, 1000)] [Nullable[int]] $MemorySamplingIntervalMilliseconds
 )
 $w = $null
 $i = $null
@@ -515,7 +534,7 @@ $c = $null
 if ($PSBoundParameters.ContainsKey('Warmup')) { $w = $Warmup }
 if ($PSBoundParameters.ContainsKey('Iteration')) { $i = $Iteration }
 if ($PSBoundParameters.ContainsKey('CooldownMilliseconds')) { $c = $CooldownMilliseconds }
-$arguments = [object[]]::new(9)
+$arguments = [object[]]::new(10)
 $arguments[0] = $w
 $arguments[1] = $i
 $arguments[2] = $RunMode
@@ -525,6 +544,7 @@ $arguments[5] = $c
 $arguments[6] = [string] $OutlierMode
 $arguments[7] = $ProcessorAffinityMask
 $arguments[8] = $ProcessPriority
+$arguments[9] = $MemorySamplingIntervalMilliseconds
 __PowerForgeBenchmarkDslInvoke -Name 'Policy' -Arguments $arguments
 """;
 
@@ -684,12 +704,17 @@ try {
         var closer = ScriptBlock.Create(EmbeddedScripts
             .Load("Scripts/Benchmarks/Close-BenchmarkBlock.Template.ps1")
             .Replace("__POWERFORGE_SCRIPT_ROOT__", scriptRootLiteral));
+        var captureVariables = CreateInvocationVariables();
+        var timingIdentity = PowerShellBenchmarkCapturedBlocks.CreateIdentity();
+        captureVariables.Add(new PSVariable("__PowerForgeOperationTimerAccessor", timingIdentity.TimerAccessor));
         var output = NativeExitAwareInvokeWrapper.InvokeWithContext(
             functionsToDefine: null,
-            variablesToDefine: CreateInvocationVariables(),
+            variablesToDefine: captureVariables,
             new object[] { closer, new object[] { scriptBlock }, true, typeof(PowerShellNativeExitCodeTracker) });
-        return output.FirstOrDefault()?.BaseObject as ScriptBlock
+        var captured = output.FirstOrDefault()?.BaseObject as ScriptBlock
                ?? throw new InvalidOperationException("Benchmark block capture did not return a script block.");
+        PowerShellBenchmarkCapturedBlocks.Register(captured, timingIdentity);
+        return captured;
     }
 
     private static ScriptBlock PrepareRootScriptBlock(ScriptBlock scriptBlock)
