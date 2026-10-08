@@ -786,7 +786,10 @@ public sealed class HomeAssistantReleaseTests {
 
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default) {
             Requests.Add(request);
-            if (request.Arguments.SequenceEqual(new[] { "run", "pack" })) {
+            var command = request.Arguments;
+            if (command.Take(3).SequenceEqual(new[] { "/d", "/c", "npm" }))
+                command = command.Skip(3).ToArray();
+            if (command.SequenceEqual(new[] { "run", "pack" })) {
                 var release = Path.Combine(request.WorkingDirectory, "release");
                 Directory.CreateDirectory(release);
                 File.WriteAllText(Path.Combine(release, "example.js"), "export const value = 1;\n");
