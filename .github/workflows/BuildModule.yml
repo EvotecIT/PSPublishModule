@@ -255,8 +255,8 @@ jobs:
     # The type of runner that the job will run on
     # Prefer private/self-hosted runners for private repos to reduce hosted spend.
     runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","windows"]' || '["windows-latest"]') }}
-    # Cover the compatibility builds and both PowerShell test suites on a cold runner.
-    timeout-minutes: 30
+    # Cover compatibility builds, Gallery-backed module analysis and both PowerShell suites on a cold runner.
+    timeout-minutes: 60
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -296,7 +296,8 @@ jobs:
 
       - name: Build Module
         shell: pwsh
-        timeout-minutes: 10
+        # Approved-module downloads can exceed ten minutes while the Gallery retries requests.
+        timeout-minutes: 30
         run: .\Build\Build-Project.ps1 -ModuleOnly
 
       - name: Test benchmark history contracts
@@ -433,7 +434,7 @@ jobs:
     # The type of runner that the job will run on
     # Prefer private/self-hosted runners for private repos to reduce hosted spend.
     runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","linux"]' || '["ubuntu-latest"]') }}
-    timeout-minutes: 15
+    timeout-minutes: 60
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -454,7 +455,8 @@ jobs:
             ${{ runner.os }}-nuget-
       - name: Build Module
         shell: pwsh
-        timeout-minutes: 10
+        # Approved-module downloads can exceed ten minutes while the Gallery retries requests.
+        timeout-minutes: 30
         run: .\Build\Build-Project.ps1 -ModuleOnly
 
       - name: Test benchmark history contracts
@@ -519,7 +521,7 @@ jobs:
     # The type of runner that the job will run on
     # Prefer private/self-hosted runners for private repos to reduce hosted spend.
     runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","macOS"]' || '["macos-latest"]') }}
-    timeout-minutes: 15
+    timeout-minutes: 60
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -540,7 +542,8 @@ jobs:
             ${{ runner.os }}-nuget-
       - name: Build Module
         shell: pwsh
-        timeout-minutes: 10
+        # Approved-module downloads can exceed ten minutes while the Gallery retries requests.
+        timeout-minutes: 30
         run: .\Build\Build-Project.ps1 -ModuleOnly
 
       - name: Test benchmark history contracts
