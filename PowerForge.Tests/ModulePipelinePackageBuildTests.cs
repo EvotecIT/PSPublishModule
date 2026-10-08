@@ -898,7 +898,7 @@ public sealed partial class ModulePipelinePackageBuildTests
     }
 
     [Fact]
-    public void Run_GateDocumentation_KeepsPreModulePackageBuildWithoutVersionUpdates()
+    public void Run_GateDocumentation_SkipsInlinePackageBuild()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
@@ -983,17 +983,9 @@ public sealed partial class ModulePipelinePackageBuildTests
 
             var result = runner.Run(spec);
 
-            var call = Assert.Single(calls);
             Assert.Equal(ConfigurationGateMode.Documentation, result.Plan.GateMode);
-            Assert.Single(result.ProjectBuildResults);
-            Assert.False(call.Request.UpdateVersions);
-            Assert.True(call.Request.Build);
-            Assert.False(call.Request.PublishNuget);
-            Assert.False(call.Request.PublishGitHub);
-            Assert.Null(call.Configuration?.CertificateThumbprint);
-            Assert.False(call.Configuration?.SignAssemblies);
-            Assert.False(call.Configuration?.SignPackages);
-            Assert.False(call.Configuration?.CreateReleaseZip);
+            Assert.Empty(calls);
+            Assert.Empty(result.ProjectBuildResults);
         }
         finally
         {
@@ -1003,7 +995,7 @@ public sealed partial class ModulePipelinePackageBuildTests
     }
 
     [Fact]
-    public void Run_GateDocumentation_ClearsReferencedProjectBuildSigning()
+    public void Run_GateDocumentation_SkipsReferencedProjectBuild()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var stagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
@@ -1100,15 +1092,9 @@ public sealed partial class ModulePipelinePackageBuildTests
 
             var result = runner.Run(spec);
 
-            var call = Assert.Single(calls);
             Assert.Equal(ConfigurationGateMode.Documentation, result.Plan.GateMode);
-            Assert.True(call.Request.Build);
-            Assert.False(call.Request.PublishNuget);
-            Assert.False(call.Request.PublishGitHub);
-            Assert.Null(call.Configuration?.CertificateThumbprint);
-            Assert.False(call.Configuration?.SignAssemblies);
-            Assert.False(call.Configuration?.SignPackages);
-            Assert.False(call.Configuration?.CreateReleaseZip);
+            Assert.Empty(calls);
+            Assert.Empty(result.ProjectBuildResults);
         }
         finally
         {
