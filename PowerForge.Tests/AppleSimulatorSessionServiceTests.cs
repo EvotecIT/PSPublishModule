@@ -118,6 +118,18 @@ public sealed class AppleSimulatorSessionServiceTests
     }
 
     [Fact]
+    public async Task Status_propagates_cancellation_when_the_runner_returns_a_canceled_result()
+    {
+        using var fixture = new Fixture();
+        var result = await fixture.Service.RunAsync(fixture.Request());
+        using var cancellation = new CancellationTokenSource();
+        fixture.CancelDiscovery = cancellation;
+        var before = File.ReadAllText(result.ReceiptPath);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fixture.Service.InspectAsync(fixture.StateRoot, cancellation.Token));
+        Assert.Equal(before, File.ReadAllText(result.ReceiptPath));
+    }
+
+    [Fact]
     public async Task Readiness_failure_releases_a_confirmed_boot_without_running_validation()
     {
         using var fixture = new Fixture { FailReadiness = true };
@@ -220,6 +232,7 @@ public sealed class AppleSimulatorSessionServiceTests
         internal bool FailReadiness { get; init; }
         internal bool FailShutdown { get; init; }
         internal string? DiscoveryFailure { get; set; }
+        internal CancellationTokenSource? CancelDiscovery { get; set; }
         internal AppleSimulatorSessionService Service { get; }
 
         internal Fixture()
@@ -242,6 +255,7 @@ public sealed class AppleSimulatorSessionServiceTests
             var command = request.Arguments[3];
             if (command == "list")
             {
+                if (CancelDiscovery is not null) { CancelDiscovery.Cancel(); return Task.FromResult(Result(130)); }
                 if (DiscoveryFailure == "failed") return Task.FromResult(Result(1));
                 if (DiscoveryFailure == "malformed") return Task.FromResult(Result(output: "invalid JSON"));
                 if (DiscoveryFailure == "missing") return Task.FromResult(Result(output: "{\"devices\":{}}"));

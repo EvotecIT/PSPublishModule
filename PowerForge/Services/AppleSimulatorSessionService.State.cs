@@ -28,6 +28,7 @@ public sealed partial class AppleSimulatorSessionService
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception exception)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             status.DeviceState = "Unknown";
             status.DiscoveryError = exception.Message;
             status.NeedsAttention = true;
