@@ -36,7 +36,7 @@ internal static class WebMediaContentRenderer
                 if (image.AncestorsAndSelf().Any(node => node.GetAttributeValue("data-pf-media", "") == "off" ||
                     node.Attributes["hidden"] is not null || node.GetAttributeValue("aria-hidden", "") == "true" ||
                     node.Name is "button" or "pre" or "code" or "template")) continue;
-                var target = image.ParentNode.Name == "picture" ? image.ParentNode : image;
+                var target = image.ParentNode is { Name: "picture" } picture ? picture : image;
                 string src = HttpUtility.HtmlDecode(image.GetAttributeValue("src", "")).Trim();
                 if (src.Length == 0)
                 {
@@ -54,7 +54,7 @@ internal static class WebMediaContentRenderer
                 if (scope.GetAttributeValue("data-pf-media-exclude", "").Split('|').Contains(src, StringComparer.Ordinal)) continue;
                 var existing = image.Ancestors().FirstOrDefault(node => node.Name == "a");
                 if (existing is not null && (mode != "previews" || existing.Attributes["download"] is not null || existing.Attributes["data-pf-media"] is not null || existing.Descendants("img").Count() != 1)) continue;
-                if (existing is null && target.ParentNode.Name == "p" && !string.IsNullOrWhiteSpace(HttpUtility.HtmlDecode(target.ParentNode.InnerText))) continue;
+                if (existing is null && target.ParentNode is { Name: "p" } paragraph && !string.IsNullOrWhiteSpace(HttpUtility.HtmlDecode(paragraph.InnerText))) continue;
                 string id = "pf-content-image-" + sequence + "-" + entries.Count;
                 while (document.GetElementbyId(id) is not null) id += "-preview";
                 string caption = alt;
@@ -104,8 +104,8 @@ internal static class WebMediaContentRenderer
     private static int SourceEnd(HtmlNode node, string html)
     {
         if (node.Name == "img") return StartTagEnd(node, html);
-        return node.EndNode != node && node.EndNode.OuterStartIndex >= 0
-            ? StartTagEnd(node.EndNode, html)
+        return node.EndNode is { } endNode && endNode != node && endNode.OuterStartIndex >= 0
+            ? StartTagEnd(endNode, html)
             : node.OuterStartIndex + node.OuterLength;
     }
 

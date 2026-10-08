@@ -247,7 +247,7 @@
           "DBAClientX.Core": "[1.0.9, )",
           "DBAClientX.SQLite": "[1.0.9, )",
           "Microsoft.Data.Sqlite": "[10.0.12, )",
-          "PowerForge": "[3.0.155, )",
+          "PowerForge": "[3.0.158, )",
           "PowerForgeStudio.Domain": "[1.0.0, )"
         }
       }
