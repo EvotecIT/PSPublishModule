@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -127,10 +128,10 @@ internal sealed class HomeAssistantRepositoryService {
         _ = HomeAssistantSemanticVersion.Parse(version);
         var root = ResolveRoot(repositoryRoot);
         if (snapshot.Kind == HomeAssistantRepositoryKind.LovelacePlugin) {
-            Run(root, "npm", "ci");
-            Run(root, "npm", "test");
-            Run(root, "npm", "run", "check");
-            Run(root, "npm", "run", "pack");
+            RunNpm(root, "ci");
+            RunNpm(root, "test");
+            RunNpm(root, "run", "check");
+            RunNpm(root, "run", "pack");
 
             var primaryAsset = Path.Combine(root, "release", snapshot.HacsFileName!);
             if (!File.Exists(primaryAsset))
@@ -151,7 +152,16 @@ internal sealed class HomeAssistantRepositoryService {
         return Array.Empty<string>();
     }
 
-    private void Run(string workingDirectory, string executable, params string[] arguments) {
+    private void RunNpm(string workingDirectory, params string[] arguments) {
+        var executable = "npm";
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
+            // Windows ships npm as a command shim. Direct process creation only searches
+            // for executables; cmd resolves npm.cmd (or a package manager's npm.exe).
+            // These operands are the fixed build-stage commands above, never user input.
+            executable = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
+            arguments = new[] { "/d", "/c", "npm" }.Concat(arguments).ToArray();
+        }
+
         var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase) {
             ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"] = null,
             ["ACTIONS_ID_TOKEN_REQUEST_URL"] = null,
