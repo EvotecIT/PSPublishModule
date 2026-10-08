@@ -57,6 +57,23 @@ public sealed class WebPipelineProjectSetTests
     }
 
     [Fact]
+    public void Build_ProjectSetRejectsSolutionLevelRuntime()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-project-set-runtime-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, """{"steps":[{"task":"dotnet-build","projects":["First.csproj","Second.csproj"],"runtime":"win-x64"}]}""");
+            var result = WebPipelineRunner.RunPipeline(pipeline, logger: null);
+            Assert.False(result.Success);
+            Assert.Contains("solution-level runtime identifier", result.Steps[0].Message);
+            Assert.Contains("separate project build steps", result.Steps[0].Message);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public void Build_OptionalProjectSetSkipsAllMissingProjects()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-optional-project-set-" + Guid.NewGuid().ToString("N"));

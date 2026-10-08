@@ -4344,7 +4344,13 @@
         "skip-if-project-missing": { "type": "boolean", "description": "Alias of skipIfProjectMissing." }
       },
       "required": ["task"],
-      "anyOf": [{ "required": ["project"] }, { "required": ["projects"] }]
+      "anyOf": [{ "required": ["project"] }, { "required": ["projects"] }],
+      "not": {
+        "anyOf": [
+          { "required": ["project", "projects"] },
+          { "required": ["projects", "runtime"] }
+        ]
+      }
     },
     "DotNetPublishStep": {
       "type": "object",
@@ -4656,4 +4662,3 @@
     }
   }
 }
-

@@ -490,6 +490,7 @@
   api.invalidateIndex = function () {
     indexPromise = null;
     manifestPromise = null;
+    facetsPromise = null;
     shardPromises = Object.create(null);
     cachedShardBytes = 0;
     if (adapter && typeof adapter.invalidateIndex === 'function') adapter.invalidateIndex();

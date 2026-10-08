@@ -8,6 +8,8 @@ public static partial class WebDotNetRunner
     {
         if (!string.IsNullOrWhiteSpace(options.ProjectOrSolution))
             throw new ArgumentException("Specify either Projects or ProjectOrSolution, not both.", nameof(options));
+        if (!string.IsNullOrWhiteSpace(options.Runtime))
+            throw new ArgumentException("Project-set builds do not support a solution-level runtime identifier. Use separate project build steps or configure the runtime in each project.", nameof(options));
         var projects = options.Projects.Select(Path.GetFullPath).Distinct(StringComparer.Ordinal).ToArray();
         foreach (var project in projects)
             if (!File.Exists(project)) throw new FileNotFoundException("Build project was not found.", project);
@@ -25,7 +27,6 @@ public static partial class WebDotNetRunner
                 ProjectOrSolution = solution,
                 Configuration = options.Configuration,
                 Framework = options.Framework,
-                Runtime = options.Runtime,
                 Restore = options.Restore
             });
         }

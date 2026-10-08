@@ -8,7 +8,7 @@ public sealed class WebDotNetBuildOptions
 {
     /// <summary>Project or solution path.</summary>
     public string ProjectOrSolution { get; set; } = string.Empty;
-    /// <summary>Optional project set built together as one solution, sharing restore and dependency builds.</summary>
+    /// <summary>Optional project set built together as one solution, sharing restore and dependency builds. Cannot be combined with <see cref="Runtime"/>.</summary>
     public string[] Projects { get; set; } = Array.Empty<string>();
     /// <summary>Build configuration.</summary>
     public string? Configuration { get; set; }

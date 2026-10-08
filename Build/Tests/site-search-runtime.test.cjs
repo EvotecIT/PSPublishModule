@@ -64,6 +64,18 @@ test('package facets use their small artifact without fetching the manifest', as
   assert.deepEqual(urls, ['https://example.test/search/facets.json']);
 });
 
+test('index invalidation refreshes package facets from the updated catalog', async () => {
+  let projects = ['Example'];
+  let requests = 0;
+  const api = runtime(async () => { requests++; return response({ projects }); });
+  assert.deepEqual(Array.from((await api.facets()).projects), ['Example']);
+  projects = ['Updated'];
+  assert.deepEqual(Array.from((await api.facets()).projects), ['Example']);
+  api.invalidateIndex();
+  assert.deepEqual(Array.from((await api.facets()).projects), ['Updated']);
+  assert.equal(requests, 2);
+});
+
 test('exact overload aliases and filters still produce complete matching results', async () => {
   const entries = [
     { title: 'Create', aliases: ['Document.Create'], url: '/api/create/#stream', collection: 'api', project: 'Example', kind: 'method' },
