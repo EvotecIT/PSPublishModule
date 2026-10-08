@@ -41,6 +41,9 @@ internal static partial class Program
                                 [--target <Name[,Name...]>] [--summary] [--output json]
       powerforge apple-deploy [--config <powerforge.release.json>] [--platform <iOS|iPadOS|watchOS|macOS|tvOS|visionOS>] [--target <name-or-scheme>] [--device <name>|--device-id <id>] [--profile <name>] [--configuration <Debug|Release>] [--install-root </Applications>] [--build-mirror|--no-build-mirror] [--launch|--no-launch] [--plan] [--output json]
       powerforge apple-screenshots <manifest --config <screenshots.json> | manifests --release-config <release.json>> [--capture-provenance <json> --expected-repository <owner/repo> --expected-workflow-ref <workflow-ref> | --version <x.y|x.y.z> --source-commit <sha>] --approved-by <reviewer-or-boundary> --allowed-root <reviewed-capture-root>
+      powerforge apple-simulator run --owner <chat-or-run> --device <UUID> [--state-root <shared-path>] [--device-set <path>] -- <executable> [args...]
+      powerforge apple-simulator status [--state-root <shared-path>] [--output json]
+      powerforge apple-simulator acknowledge --session <session-id> [--state-root <shared-path>]
                         [--app-id <asc-app-id> | --release-config <release.json> [--target <name-or-scheme>]]
                         [--out <manifest.json>] [--xcode-version <value>] [--runtime <value>] [--device <value>]
                         [--theme <value>] [--scenario <value>] [--output json]
