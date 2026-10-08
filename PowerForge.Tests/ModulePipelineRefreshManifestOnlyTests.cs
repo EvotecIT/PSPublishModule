@@ -530,12 +530,8 @@ public sealed class ModulePipelineRefreshManifestOnlyTests
             Assert.True(plan.InstallMissingModules);
             Assert.Null(plan.Formatting);
             Assert.Null(plan.ValidationSettings);
-            var projectBuild = Assert.Single(plan.ProjectBuilds);
-            Assert.Equal("pre-module-project-build", projectBuild.Configuration.Name);
-            Assert.True(projectBuild.Configuration.BuildBeforeModule);
-            var packageBuild = Assert.Single(plan.PackageBuilds);
-            Assert.Equal("pre-module-package-build", packageBuild.Configuration.Name);
-            Assert.True(packageBuild.Configuration.BuildBeforeModule);
+            Assert.Empty(plan.ProjectBuilds);
+            Assert.Empty(plan.PackageBuilds);
             Assert.Empty(plan.Artefacts);
             Assert.Empty(plan.Publishes);
             Assert.Single(plan.ExternalAssets);

@@ -445,8 +445,8 @@ environment variables expose the same primary values, including `POWERFORGE_RELE
 
 The action runs in both Build and Publish modes. Build mode creates and validates the release without publishing it.
 Explicit `SignAssemblies` and `SignPackages` requests apply to local Build mode without requiring a release
-checkpoint. A certificate alone keeps the ordinary Build defaults unsigned. Documentation mode disables package
-signing even when the package configuration requests it.
+checkpoint. A certificate alone keeps the ordinary Build defaults unsigned. Documentation mode skips package builds,
+including their signing and publication steps, even when the package configuration requests them.
 Publish mode continues only after every enabled action succeeds, and publishes the exact validated package and module
 checkpoints without rebuilding them. A missing script, invalid timeout, non-zero exit code, cancellation, or timeout
 fails the release before NuGet, PowerShell Gallery, or GitHub is changed.

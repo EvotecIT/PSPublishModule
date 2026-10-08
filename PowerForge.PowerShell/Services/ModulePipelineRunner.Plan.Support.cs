@@ -92,8 +92,8 @@ public sealed partial class ModulePipelineRunner
             surface.EnabledArtefacts = Array.Empty<ConfigurationArtefactSegment>();
             surface.EnabledPublishes = Array.Empty<ConfigurationPublishSegment>();
             surface.Delivery = null;
-            surface.ProjectBuilds.RemoveAll(static build => build?.Configuration?.BuildBeforeModule != true);
-            surface.PackageBuilds.RemoveAll(static build => build?.Configuration?.BuildBeforeModule != true);
+            surface.ProjectBuilds.Clear();
+            surface.PackageBuilds.Clear();
             surface.AppleApps.Clear();
             surface.XcodeProjectVersions.Clear();
             surface.Release = null;
