@@ -261,8 +261,11 @@ public sealed class HomeAssistantReleaseTests {
         Assert.Equal(29561117925L, github.ExcludedWorkflowRunId);
     }
 
-    [Fact]
-    public void PrepareStage_DoesNotExecuteRepositoryBuildCommands() {
+    [Theory]
+    [InlineData(null, "0.1.10")]
+    [InlineData(false, "0.1.11")]
+    [InlineData(true, "0.1.11")]
+    public void PrepareStage_PlansFromThePublishedBaselineWithoutExecutingBuildCommands(bool? isPrerelease, string expectedVersion) {
         using var fixture = HomeAssistantFixture.CreatePlugin("0.1.10");
         RunGit(fixture.Root, "init", "-b", "main");
         RunGit(fixture.Root, "config", "user.name", "PowerForge Tests");
@@ -277,7 +280,9 @@ public sealed class HomeAssistantReleaseTests {
                 HeadSha = mergeSha,
                 MergeCommitSha = mergeSha
             },
-            LatestRelease = new HomeAssistantGitHubRelease { TagName = "v0.1.10" }
+            LatestRelease = isPrerelease.HasValue
+                ? new HomeAssistantGitHubRelease { TagName = "v0.1.10", IsPrerelease = isPrerelease.Value }
+                : null
         };
         github.PullRequest.ChangedFiles.Add("src/example.ts");
         var runner = new RecordingProcessRunner(mutateTrackedFile: false);
@@ -298,6 +303,7 @@ public sealed class HomeAssistantReleaseTests {
         });
 
         Assert.Equal(HomeAssistantReleaseAction.Planned, result.Action);
+        Assert.Equal(expectedVersion, result.ReleaseVersion);
         Assert.Empty(runner.Requests);
     }
 

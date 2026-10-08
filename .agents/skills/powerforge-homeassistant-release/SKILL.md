@@ -26,6 +26,7 @@ Use PowerForge as the release owner. A receiver repository should contain only t
 - Published releases use GitHub-generated change and contributor notes. PowerForge
   prepends only hidden provenance metadata needed for safe retry and recovery.
 - Treat three-part versions as the public contract. Do not introduce four-part consumer versions.
+- When a repository has only prereleases, use its highest published three-part version as the baseline for the first stable release. Preserve the historical prerelease tags and assets; the normal increment creates a new stable tag.
 
 ## Recover a failed run
 
