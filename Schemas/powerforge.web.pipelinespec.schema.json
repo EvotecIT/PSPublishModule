@@ -2853,6 +2853,16 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "relatedContentManifest": {"type": "string"},
+        "related-content-manifest": {"type": "string"},
+        "relatedContentManifests": {"type": "array", "items": {"type": "string"}},
+        "related-content-manifests": {"type": "array", "items": {"type": "string"}},
+        "psManifestPath": {"type": "string"},
+        "ps-manifest-path": {"type": "string"},
+        "psCommandMetadataPath": {"type": "string"},
+        "ps-command-metadata-path": {"type": "string"},
+        "suiteEntries": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "label": {"type": "string"}, "name": {"type": "string"}, "href": {"type": "string"}, "url": {"type": "string"}, "summary": {"type": "string"}, "description": {"type": "string"}, "order": {"type": "integer"}}, "allOf": [{"anyOf": [{"required": ["label"]}, {"required": ["name"]}]}, {"anyOf": [{"required": ["href"]}, {"required": ["url"]}]}], "additionalProperties": false}},
+        "suite-entries": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "label": {"type": "string"}, "name": {"type": "string"}, "href": {"type": "string"}, "url": {"type": "string"}, "summary": {"type": "string"}, "description": {"type": "string"}, "order": {"type": "integer"}}, "allOf": [{"anyOf": [{"required": ["label"]}, {"required": ["name"]}]}, {"anyOf": [{"required": ["href"]}, {"required": ["url"]}]}], "additionalProperties": false}},
         "task": { "const": "apidocs" },
         "id": { "type": "string" },
         "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
@@ -3967,6 +3977,11 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "sarif": {"type": "boolean"},
+        "sarifPath": {"type": "string"},
+        "sarif-path": {"type": "string"},
+        "sarifOnFail": {"type": "boolean"},
+        "sarif-on-fail": {"type": "boolean"},
         "task": { "const": "audit" },
         "id": { "type": "string" },
         "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
@@ -4073,6 +4088,9 @@
         "renderedCheckConsoleErrors": { "type": "boolean" },
         "renderedCheckConsoleWarnings": { "type": "boolean" },
         "renderedCheckFailedRequests": { "type": "boolean" },
+        "renderedCheckLayout": { "type": "boolean" },
+        "renderedViewports": { "type": "array", "maxItems": 8, "items": { "type": "object", "required": ["width", "height"], "properties": { "width": { "type": "integer", "minimum": 1 }, "height": { "type": "integer", "minimum": 1 } }, "additionalProperties": false } },
+        "renderedLayoutSelectors": { "type": "array", "items": { "type": "string" } },
         "renderedCheckContrast": { "type": "boolean" },
         "renderedContrastMinRatio": { "type": "number", "exclusiveMinimum": 0 },
         "renderedContrastMaxFindings": { "type": "integer", "minimum": 1 },
@@ -4172,6 +4190,12 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "backlogSummaryPath": {"type": "string"},
+        "backlog-summary-path": {"type": "string"},
+        "pageMetricsPath": {"type": "string"},
+        "page-metrics-path": {"type": "string"},
+        "issuesCsvPath": {"type": "string"},
+        "issues-csv-path": {"type": "string"},
         "task": { "const": "seo-doctor" },
         "id": { "type": "string" },
         "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
@@ -4310,6 +4334,7 @@
         "skipModes": { "type": "array", "items": { "type": "string" } },
         "skip-modes": { "type": "array", "items": { "type": "string" } },
         "project": { "type": "string" },
+        "projects": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "Build a project set as one solution, reusing restore and shared dependency builds." },
         "configuration": { "type": "string" },
         "framework": { "type": "string" },
         "runtime": { "type": "string" },
@@ -4318,7 +4343,14 @@
         "skipIfMissingProject": { "type": "boolean", "description": "Alias of skipIfProjectMissing." },
         "skip-if-project-missing": { "type": "boolean", "description": "Alias of skipIfProjectMissing." }
       },
-      "required": ["task", "project"]
+      "required": ["task"],
+      "anyOf": [{ "required": ["project"] }, { "required": ["projects"] }],
+      "not": {
+        "anyOf": [
+          { "required": ["project", "projects"] },
+          { "required": ["projects", "runtime"] }
+        ]
+      }
     },
     "DotNetPublishStep": {
       "type": "object",
@@ -4630,4 +4662,3 @@
     }
   }
 }
-

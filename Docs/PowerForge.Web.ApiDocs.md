@@ -58,7 +58,14 @@ package. Small chunks and compact Bloom hints narrow cold searches; the builder
 retires obsolete generated chunks after refreshing the manifest.
 The shared visible and WebMCP search runtime selects shards for the query,
 ranks exact names and aliases first, and supports `project` and `kind` filters in
-`PowerForgeWebMcpSearch.search`. `PowerForgeWebMcpSearch.facets` lists package names.
+`PowerForgeWebMcpSearch.search`. `PowerForgeWebMcpSearch.facets` lists package names
+from the small `search/facets.json` artifact. Pass an `AbortSignal` as `signal` to
+stop superseded searches before the next request batch. Query loading is limited
+to 64 shards and 8 MiB of decoded JSON; a broader query rejects with
+`SEARCH_QUERY_TOO_BROAD` so the interface can ask for a longer query or a package
+filter. A worker parses and ranks shards from the same runtime asset URL, including
+hashed URLs. Browsers that block workers use the same ranking on the main thread.
+The runtime retains at most 16 MiB of raw shard data for subsequent queries.
 The legacy bounded `search/index.json` remains available; use the manifest-aware
 runtime to search catalogs larger than that single artifact's entry limit.
 
@@ -438,6 +445,22 @@ CLI:
 ```bash
 powerforge-web apidocs --type csharp --xml ./bin/Release/net10.0/MyLib.xml --assembly ./bin/Release/net10.0/MyLib.dll --out ./_site/api --format both --template docs --css /css/api-docs.css --sidebar right --source-root .. --source-url "https://github.com/YourOrg/YourRepo/blob/main/{path}#L{line}"
 ```
+
+### Source fidelity
+
+Use `{revision}` in `sourceUrl` to bind links to the Git HEAD resolved from
+`sourceRoot`, for example `https://github.com/YourOrg/YourRepo/blob/{revision}/{path}#L{line}`.
+Generated source records contain `revision` and `workingTreeChanged`; type pages
+label tracked edits that differ from that revision. Revision URLs are omitted with
+a warning when the Git revision cannot be resolved. Pipeline caching does not skip
+API generation that uses this token.
+
+Portable PDB paths mapped beneath `/_/` resolve relative to the source root.
+Nullable reference annotations, nested generic arguments, and array ranks appear
+in signatures while existing member anchor identities remain stable. Duplicate
+partial-class XML entries merge complementary documentation; the first nonempty
+summary wins, and conflicting summaries produce a warning. Keep the authoritative
+type summary on one partial declaration.
 
 ### PowerShell module help
 

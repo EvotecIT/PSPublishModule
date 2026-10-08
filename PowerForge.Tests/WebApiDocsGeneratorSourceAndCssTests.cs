@@ -65,7 +65,9 @@ public class WebApiDocsGeneratorSourceAndCssTests
         Assert.True(File.Exists(assemblyPath), "PowerForge.Web assembly should exist for source link test.");
         Assert.True(File.Exists(xmlPath), "PowerForge.Web XML docs should exist for source link test.");
 
-        var sourceRoot = Path.GetDirectoryName(assemblyPath) ?? root;
+        // Use a sibling source directory to exercise ../ source paths even when
+        // binaries are routed to an external artifacts directory.
+        var sourceRoot = Path.Combine(ResolveGitRoot(assemblyPath)!, "PowerForge.Tests");
         var outputPath = Path.Combine(root, "api");
         var options = new WebApiDocsOptions
         {
@@ -764,7 +766,8 @@ public class WebApiDocsGeneratorSourceAndCssTests
         }
     }
 
-    private static string? ResolveGitRoot(string path)
+    private static string? ResolveGitRoot(string path,
+        [System.Runtime.CompilerServices.CallerFilePath] string sourceFilePath = "")
     {
         var current = Path.GetDirectoryName(path);
         while (!string.IsNullOrWhiteSpace(current))
@@ -778,7 +781,7 @@ public class WebApiDocsGeneratorSourceAndCssTests
             current = parent;
         }
 
-        return null;
+        return path == sourceFilePath ? null : ResolveGitRoot(sourceFilePath, sourceFilePath);
     }
 
     private static void TryDeleteDirectory(string path)

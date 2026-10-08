@@ -986,6 +986,28 @@ Notes:
 - `imageMaxBytesPerFile` / `imageMaxTotalBytes` define budgets; `imageFailOnBudget` fails the step if budgets are exceeded.
 - `scopeFromBuildUpdated`: when enabled, and `htmlInclude` is not set, limits HTML processing to the HTML files updated by the most recent `build` step (when `siteRoot` matches build `out`). In `powerforge-web pipeline --fast` this is enabled by default; set to `false` to force full-site optimize even in fast mode.
 
+#### dotnet-build project sets
+
+Use `projects` instead of `project` to build several projects with the same
+configuration and target framework in one SDK solution graph:
+
+```json
+{
+  "task": "dotnet-build",
+  "projects": ["../Library/Library.csproj", "../Adapter/Adapter.csproj"],
+  "configuration": "Release",
+  "framework": "net10.0"
+}
+```
+
+This route requires an SDK that supports `.slnx` solutions (.NET SDK 9.0.200 or later).
+Shared references build once, and outputs remain beside each project. Separate
+steps handle different target frameworks. `skipIfProjectMissing` omits missing
+optional projects. Project sets cannot set `runtime` at solution scope; use
+separate `project` build steps or configure the runtime in each project.
+Build and publish steps always invoke MSBuild; its dependency
+graph determines which work can be skipped rather than the pipeline cache.
+
 #### audit
 Runs static (and optional rendered) checks against generated HTML.
 ```json
@@ -1035,6 +1057,7 @@ Notes:
 - Use `noDefaultExclude` to include partial HTML files like `*.scripts.html`.
 - `renderedBaseUrl` lets you run rendered checks against a running server (otherwise a local server is started).
 - `renderedServe`, `renderedHost`, `renderedPort` control the temporary local server used for rendered checks.
+- `renderedCheckLayout` checks horizontal clipping of visible elements matching `renderedLayoutSelectors` (default `main`). `renderedViewports` accepts up to eight `{ "width": 390, "height": 844 }` objects; defaults are 1280x800 and 390x844. Findings use `rendered-horizontal-overflow` in the `rendered-layout` category. Include representative API pages explicitly when they should be covered.
 - `renderedEnsureInstalled` auto-installs Playwright browsers before rendered checks (defaults to `true` in CLI/pipeline when `rendered` is enabled).
 - `scopeFromBuildUpdated`: when enabled, and `include` is not set, limits the audit to the HTML files updated by the most recent `build` step (when `siteRoot` matches build `out`). In `powerforge-web pipeline --fast` this is enabled by default; set to `false` to force full-site audit even in fast mode.
 - `checkAgentContentSecurity` scans the final machine-facing artifacts rather than source templates. It detects invisible Unicode controls, high-confidence agent instruction overrides, remote-script execution patterns, and package installation commands.

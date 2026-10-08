@@ -14,7 +14,7 @@ namespace PowerForge.Web;
 /// <summary>Generates API documentation artifacts from XML docs.</summary>
 public static partial class WebApiDocsGenerator
 {
-    private static XDocument LoadXmlDocumentation(string xmlPath)
+    private static XDocument LoadXmlDocumentation(string xmlPath, List<string> warnings)
     {
         using var stream = File.OpenRead(xmlPath);
         XDocument doc;
@@ -28,7 +28,21 @@ public static partial class WebApiDocsGenerator
         }
         var docElement = doc.Element("doc");
         if (docElement is null) throw new InvalidDataException($"XML documentation requires a doc root: {xmlPath}");
-        if (docElement.Element("members") is null) throw new InvalidDataException($"XML documentation requires a members element: {xmlPath}");
+        var members = docElement.Element("members")
+            ?? throw new InvalidDataException($"XML documentation requires a members element: {xmlPath}");
+        // Consolidate partial declarations before building the shared inheritdoc lookup.
+        var declarations = new Dictionary<string, XElement>(StringComparer.Ordinal);
+        foreach (var member in members.Elements("member").ToArray())
+        {
+            var name = member.Attribute("name")?.Value;
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            if (declarations.TryGetValue(name, out var existing))
+            {
+                MergeDocumentationMember(existing, member, name, xmlPath, warnings);
+                member.Remove();
+            }
+            else declarations.Add(name, member);
+        }
         return doc;
     }
 

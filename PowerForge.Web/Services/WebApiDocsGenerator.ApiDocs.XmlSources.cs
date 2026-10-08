@@ -41,7 +41,7 @@ public static partial class WebApiDocsGenerator
     {
         var combined = new ApiDocModel();
         var documents = xmlPaths.Where(File.Exists)
-            .Select(path => (Path: path, Document: LoadXmlDocumentation(path))).ToArray();
+            .Select(path => (Path: path, Document: LoadXmlDocumentation(path, warnings))).ToArray();
         var members = new Dictionary<string, XElement>(StringComparer.Ordinal);
         var typeOwners = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var source in documents)

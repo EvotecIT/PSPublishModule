@@ -16,94 +16,45 @@ public static partial class WebApiDocsGenerator
         var utcNow = DateTimeOffset.UtcNow;
 
         var gitClient = new GitClient(defaultTimeout: TimeSpan.FromSeconds(10));
-        var repositoryRootCache = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        var freshnessCache = new Dictionary<string, ApiFreshnessModel?>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var type in types)
+        var candidates = types.ToDictionary(type => type, type => GetFreshnessCandidateFiles(type, options));
+        var repositoryRoots = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var filesByRepository = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in candidates.Values.SelectMany(files => files).Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var candidates = GetFreshnessCandidateFiles(type, options);
-            ApiFreshnessModel? best = null;
-            foreach (var candidate in candidates)
+            var directory = Path.GetDirectoryName(file);
+            while (!string.IsNullOrWhiteSpace(directory) && !Directory.Exists(Path.Combine(directory, ".git")) && !File.Exists(Path.Combine(directory, ".git")))
+                directory = Path.GetDirectoryName(directory);
+            if (string.IsNullOrWhiteSpace(directory)) continue;
+            if (!repositoryRoots.TryGetValue(directory, out var repositoryRoot))
             {
-                if (!freshnessCache.TryGetValue(candidate, out var freshness))
-                {
-                    freshness = TryGetGitFreshness(candidate, gitClient, repositoryRootCache, utcNow, newDays, updatedDays);
-                    freshnessCache[candidate] = freshness;
-                }
-
-                if (freshness is null)
-                    continue;
-
-                if (best is null || freshness.LastModifiedUtc > best.LastModifiedUtc)
-                    best = freshness;
+                var topLevel = gitClient.ShowTopLevelAsync(directory).GetAwaiter().GetResult();
+                repositoryRoot = topLevel.Succeeded ? topLevel.StdOut.Trim() : null;
+                repositoryRoots[directory] = repositoryRoot;
             }
-
-            type.Freshness = best;
-        }
-    }
-
-    private static ApiFreshnessModel? TryGetGitFreshness(
-        string filePath,
-        GitClient gitClient,
-        IDictionary<string, string?> repositoryRootCache,
-        DateTimeOffset utcNow,
-        int newDays,
-        int updatedDays)
-    {
-        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
-            return null;
-
-        var fullPath = Path.GetFullPath(filePath);
-        var directory = Path.GetDirectoryName(fullPath);
-        if (string.IsNullOrWhiteSpace(directory))
-            return null;
-
-        if (!repositoryRootCache.TryGetValue(directory, out var repositoryRoot))
-        {
-            var topLevel = gitClient.ShowTopLevelAsync(directory).GetAwaiter().GetResult();
-            repositoryRoot = topLevel.Succeeded
-                ? topLevel.StdOut.Trim()
-                : null;
-            repositoryRootCache[directory] = repositoryRoot;
+            if (string.IsNullOrWhiteSpace(repositoryRoot)) continue;
+            if (!filesByRepository.TryGetValue(repositoryRoot, out var files)) filesByRepository[repositoryRoot] = files = new List<string>();
+            files.Add(file);
         }
 
-        if (string.IsNullOrWhiteSpace(repositoryRoot) || !Directory.Exists(repositoryRoot))
-            return null;
-
-        var relativePath = Path.GetRelativePath(repositoryRoot, fullPath);
-        if (string.IsNullOrWhiteSpace(relativePath) ||
-            relativePath.StartsWith("..", StringComparison.Ordinal))
-            return null;
-
-        var log = gitClient.RunRawAsync(
-                repositoryRoot,
-                new[] { "log", "-1", "--format=%H%n%cI", "--", relativePath.Replace('\\', '/') },
-                TimeSpan.FromSeconds(10))
-            .GetAwaiter()
-            .GetResult();
-        if (!log.Succeeded || string.IsNullOrWhiteSpace(log.StdOut))
-            return null;
-
-        var lines = log.StdOut
-            .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (lines.Length < 2 || !DateTimeOffset.TryParse(lines[1], out var lastModified))
-            return null;
-
-        var ageDays = Math.Max(0, (int)Math.Floor((utcNow - lastModified).TotalDays));
-        var status = ageDays <= newDays
-            ? "new"
-            : ageDays <= updatedDays
-                ? "updated"
-                : "stable";
-
-        return new ApiFreshnessModel
+        var freshness = new Dictionary<string, ApiFreshnessModel>(StringComparer.OrdinalIgnoreCase);
+        foreach (var repository in filesByRepository)
         {
-            Status = status,
-            LastModifiedUtc = lastModified.ToUniversalTime(),
-            CommitSha = string.IsNullOrWhiteSpace(lines[0]) ? null : lines[0].Trim(),
-            AgeDays = ageDays,
-            SourcePath = fullPath
-        };
+            var history = GetGitFreshnessSnapshot(repository.Key, gitClient);
+            foreach (var file in repository.Value)
+            {
+                var relative = Path.GetRelativePath(repository.Key, file).Replace('\\', '/');
+                if (!history.TryGetValue(relative, out var item)) continue;
+                var age = Math.Max(0, (int)Math.Floor((utcNow - item.Modified).TotalDays));
+                freshness[file] = new ApiFreshnessModel
+                {
+                    Status = age <= newDays ? "new" : age <= updatedDays ? "updated" : "stable",
+                    LastModifiedUtc = item.Modified.ToUniversalTime(), CommitSha = item.Commit, AgeDays = age, SourcePath = file
+                };
+            }
+        }
+        foreach (var type in types)
+            type.Freshness = candidates[type].Where(freshness.ContainsKey).Select(file => freshness[file])
+                .OrderByDescending(item => item.LastModifiedUtc).FirstOrDefault();
     }
 
     private static string[] GetFreshnessCandidateFiles(ApiTypeModel type, WebApiDocsOptions options)

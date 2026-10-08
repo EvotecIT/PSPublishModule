@@ -116,6 +116,7 @@ public static partial class WebApiDocsGenerator
     private static void EnrichFromAssembly(ApiDocModel doc, Assembly assembly, WebApiDocsOptions options, List<string> warnings, string assemblyPath)
     {
         using var sourceLinks = SourceLinkContext.Create(options, assembly, warnings, assemblyPath);
+        var nullability = new NullabilityInfoContext();
         var extensionTargets = new Dictionary<string, List<ApiMemberModel>>(StringComparer.OrdinalIgnoreCase);
         foreach (var type in GetExportedTypesSafe(assembly))
         {
@@ -162,7 +163,7 @@ public static partial class WebApiDocsGenerator
                     };
                     model.Methods.Add(member);
                 }
-                FillMethodMember(member, method, type);
+                FillMethodMember(member, method, type, nullability);
                 member.Attributes.Clear();
                 member.Attributes.AddRange(GetAttributeList(method));
                 member.IsExtension = IsExtensionMethod(method);
@@ -201,7 +202,7 @@ public static partial class WebApiDocsGenerator
                     };
                     model.Constructors.Add(member);
                 }
-                FillConstructorMember(member, ctor, type);
+                FillConstructorMember(member, ctor, type, nullability);
                 member.Attributes.Clear();
                 member.Attributes.AddRange(GetAttributeList(ctor));
                 if (sourceLinks is not null)
@@ -221,7 +222,7 @@ public static partial class WebApiDocsGenerator
                     };
                     model.Properties.Add(member);
                 }
-                FillPropertyMember(member, property, type);
+                FillPropertyMember(member, property, type, nullability);
                 member.Attributes.Clear();
                 member.Attributes.AddRange(GetAttributeList(property));
                 if (sourceLinks is not null)
@@ -242,7 +243,7 @@ public static partial class WebApiDocsGenerator
                     };
                     model.Fields.Add(member);
                 }
-                FillFieldMember(member, field, type);
+                FillFieldMember(member, field, type, nullability);
                 member.Attributes.Clear();
                 member.Attributes.AddRange(GetAttributeList(field));
                 if (sourceLinks is not null)
@@ -262,7 +263,7 @@ public static partial class WebApiDocsGenerator
                     };
                     model.Events.Add(member);
                 }
-                FillEventMember(member, evt, type);
+                FillEventMember(member, evt, type, nullability);
                 member.Attributes.Clear();
                 member.Attributes.AddRange(GetAttributeList(evt));
                 if (sourceLinks is not null)
@@ -558,12 +559,12 @@ public static partial class WebApiDocsGenerator
     private static bool IsAsync(MethodInfo method)
         => method.GetCustomAttributes(typeof(System.Runtime.CompilerServices.AsyncStateMachineAttribute), false).Length > 0;
 
-    private static void FillMethodMember(ApiMemberModel member, MethodInfo method, Type declaring)
+    private static void FillMethodMember(ApiMemberModel member, MethodInfo method, Type declaring, NullabilityInfoContext nullability)
     {
         member.Kind = "Method";
         member.DocumentationSignature = BuildDocumentationMethodSignature(method);
-        member.ReturnType = GetReadableTypeName(method.ReturnType);
-        member.Signature = BuildMethodSignature(method);
+        member.ReturnType = GetAnnotatedTypeName(method.ReturnType, method.ReturnParameter, nullability);
+        member.Signature = BuildMethodSignature(method, nullability);
         member.IsStatic = method.IsStatic;
         member.DeclaringType = method.DeclaringType?.FullName?.Replace('+', '.');
         member.IsInherited = method.DeclaringType != declaring;
@@ -576,24 +577,24 @@ public static partial class WebApiDocsGenerator
         var parameters = method.GetParameters();
         if (member.Parameters.Count == 0)
         {
-            member.Parameters = parameters.Select(BuildParameterModel).ToList();
+            member.Parameters = parameters.Select(parameter => BuildParameterModel(parameter, nullability)).ToList();
         }
         else
         {
             for (var i = 0; i < parameters.Length; i++)
             {
                 if (i >= member.Parameters.Count) break;
-                ApplyParameterMetadata(member.Parameters[i], parameters[i]);
+                ApplyParameterMetadata(member.Parameters[i], parameters[i], nullability);
             }
         }
     }
 
-    private static void FillConstructorMember(ApiMemberModel member, ConstructorInfo ctor, Type declaring)
+    private static void FillConstructorMember(ApiMemberModel member, ConstructorInfo ctor, Type declaring, NullabilityInfoContext nullability)
     {
         member.Kind = "Constructor";
         member.IsConstructor = true;
         member.ReturnType = null;
-        member.Signature = BuildConstructorSignature(ctor, declaring);
+        member.Signature = BuildConstructorSignature(ctor, declaring, nullability);
         member.IsStatic = ctor.IsStatic;
         member.DeclaringType = ctor.DeclaringType?.FullName?.Replace('+', '.');
         member.IsInherited = false;
@@ -606,24 +607,24 @@ public static partial class WebApiDocsGenerator
         var parameters = ctor.GetParameters();
         if (member.Parameters.Count == 0)
         {
-            member.Parameters = parameters.Select(BuildParameterModel).ToList();
+            member.Parameters = parameters.Select(parameter => BuildParameterModel(parameter, nullability)).ToList();
         }
         else
         {
             for (var i = 0; i < parameters.Length; i++)
             {
                 if (i >= member.Parameters.Count) break;
-                ApplyParameterMetadata(member.Parameters[i], parameters[i]);
+                ApplyParameterMetadata(member.Parameters[i], parameters[i], nullability);
             }
         }
     }
 
-    private static void FillPropertyMember(ApiMemberModel member, PropertyInfo property, Type declaring)
+    private static void FillPropertyMember(ApiMemberModel member, PropertyInfo property, Type declaring, NullabilityInfoContext nullability)
     {
         member.Kind = "Property";
         member.DocumentationSignature = BuildDocumentationPropertySignature(property);
-        member.ReturnType = GetReadableTypeName(property.PropertyType);
-        member.Signature = BuildPropertySignature(property);
+        member.ReturnType = GetAnnotatedTypeName(property.PropertyType, property, nullability);
+        member.Signature = BuildPropertySignature(property, nullability);
         member.IsStatic = (property.GetMethod ?? property.SetMethod)?.IsStatic == true;
         member.DeclaringType = property.DeclaringType?.FullName?.Replace('+', '.');
         member.IsInherited = property.DeclaringType != declaring;
@@ -638,23 +639,23 @@ public static partial class WebApiDocsGenerator
         var parameters = property.GetIndexParameters();
         if (member.Parameters.Count == 0)
         {
-            member.Parameters = parameters.Select(BuildParameterModel).ToList();
+            member.Parameters = parameters.Select(parameter => BuildParameterModel(parameter, nullability)).ToList();
         }
         else
         {
             for (var i = 0; i < parameters.Length; i++)
             {
                 if (i >= member.Parameters.Count) break;
-                ApplyParameterMetadata(member.Parameters[i], parameters[i]);
+                ApplyParameterMetadata(member.Parameters[i], parameters[i], nullability);
             }
         }
     }
 
-    private static void FillFieldMember(ApiMemberModel member, FieldInfo field, Type declaring)
+    private static void FillFieldMember(ApiMemberModel member, FieldInfo field, Type declaring, NullabilityInfoContext nullability)
     {
         member.Kind = "Field";
-        member.ReturnType = GetReadableTypeName(field.FieldType);
-        member.Signature = BuildFieldSignature(field);
+        member.ReturnType = GetAnnotatedTypeName(field.FieldType, field, nullability);
+        member.Signature = BuildFieldSignature(field, nullability);
         member.IsStatic = field.IsStatic;
         member.DeclaringType = field.DeclaringType?.FullName?.Replace('+', '.');
         member.IsInherited = field.DeclaringType != declaring;
@@ -667,11 +668,11 @@ public static partial class WebApiDocsGenerator
             member.Value = value.ToString();
     }
 
-    private static void FillEventMember(ApiMemberModel member, EventInfo evt, Type declaring)
+    private static void FillEventMember(ApiMemberModel member, EventInfo evt, Type declaring, NullabilityInfoContext nullability)
     {
         member.Kind = "Event";
-        member.ReturnType = evt.EventHandlerType is null ? null : GetReadableTypeName(evt.EventHandlerType);
-        member.Signature = BuildEventSignature(evt);
+        member.ReturnType = evt.EventHandlerType is null ? null : GetAnnotatedTypeName(evt.EventHandlerType, evt, nullability);
+        member.Signature = BuildEventSignature(evt, nullability);
         member.IsStatic = evt.AddMethod?.IsStatic == true;
         member.DeclaringType = evt.DeclaringType?.FullName?.Replace('+', '.');
         member.IsInherited = evt.DeclaringType != declaring;

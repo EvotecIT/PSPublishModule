@@ -18,7 +18,8 @@ public sealed class WebApiDocsInheritanceIntegrityTests
             File.WriteAllText(xml, """
                 <doc><members>
                   <member name="T:PowerForge.Tests.IWebInheritanceContract`1"><summary>Contract type.</summary></member>
-                  <member name="M:PowerForge.Tests.IWebInheritanceContract`1.Run(`0)"><summary>Run inherited summary.</summary><param name="input">Inherited input.</param><returns>Inherited return.</returns></member>
+                  <member name="M:PowerForge.Tests.IWebInheritanceContract`1.Run(`0)"><summary>Run inherited summary.</summary></member>
+                  <member name="M:PowerForge.Tests.IWebInheritanceContract`1.Run(`0)"><param name="input">Inherited input.</param><returns>Inherited return.</returns></member>
                   <member name="P:PowerForge.Tests.IWebInheritanceContract`1.Name"><summary>Inherited name.</summary></member>
                   <member name="E:PowerForge.Tests.IWebInheritanceContract`1.Changed"><summary>Inherited event.</summary></member>
                   <member name="T:PowerForge.Tests.WebInheritanceBase"><summary>Base type.</summary></member>

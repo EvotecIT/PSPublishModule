@@ -344,7 +344,9 @@ public static partial class WebApiDocsGenerator
         {
             ["path"] = source.Path,
             ["line"] = source.Line,
-            ["url"] = source.Url
+            ["url"] = source.Url,
+            ["revision"] = source.Revision,
+            ["workingTreeChanged"] = source.WorkingTreeChanged
         };
     }
 

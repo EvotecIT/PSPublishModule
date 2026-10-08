@@ -52,7 +52,7 @@ public static partial class WebApiDocsGenerator
                     foreach (var path in candidateInputs.OrderBy(path => ReferenceDocumentationPriority(path, ownerName, declaring?.Namespace)))
                     {
                         if (!loadedReferences.Add(path)) continue;
-                        var document = LoadXmlDocumentation(path);
+                        var document = LoadXmlDocumentation(path, warnings);
                         foreach (var inherited in document.Root!.Element("members")!.Elements("member"))
                             if (inherited.Attribute("name")?.Value is { Length: > 0 } id) members.TryAdd(id, inherited);
                         if (members.ContainsKey(candidateId)) break;

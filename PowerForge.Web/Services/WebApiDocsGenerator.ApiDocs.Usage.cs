@@ -339,11 +339,14 @@ public static partial class WebApiDocsGenerator
         using (html.Indent())
         {
             html.Line("<h2>Usage</h2>");
+            var count = usage.ReturnedOrExposedBy.Count + usage.AcceptedByParameters.Count;
+            html.Line($"<details class=\"type-usage-details\"><summary>Explore {count} API references to this type</summary>");
             html.Line("<p class=\"type-usage-summary\">This type appears in these public API surfaces even when no hand-authored example is attached directly to the page.</p>");
             if (usage.ReturnedOrExposedBy.Count > 0)
                 AppendUsageGroup(html, "Returned or exposed by", usage.ReturnedOrExposedBy, baseUrl, slugMap);
             if (usage.AcceptedByParameters.Count > 0)
                 AppendUsageGroup(html, "Accepted by parameters", usage.AcceptedByParameters, baseUrl, slugMap);
+            html.Line("</details>");
         }
         html.Line("</section>");
     }

@@ -179,7 +179,7 @@ public sealed class WebApiDocsOptions
     /// Useful when generated source paths need a stable repo-relative prefix in mixed-repo layouts.
     /// </summary>
     public string? SourcePathPrefix { get; set; }
-    /// <summary>Optional source URL pattern (use {path} and {line}).</summary>
+    /// <summary>Optional source URL pattern (use {path}, {line}, and {revision} for the source repository's current commit).</summary>
     public string? SourceUrlPattern { get; set; }
     /// <summary>
     /// Optional source URL mapping rules used for mixed-source API docs.

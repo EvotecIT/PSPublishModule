@@ -628,6 +628,11 @@ public static partial class WebSiteAuditor
                     }
 
                     renderedPageCount++;
+                    if (options.RenderedCheckLayout)
+                    {
+                        foreach (var finding in FindRenderedLayoutIssues(renderedTarget, engine, options))
+                            AddIssue("error", "rendered-layout", relativePath, finding, "rendered-horizontal-overflow");
+                    }
 
                     if (options.RenderedCheckConsoleErrors && renderedResult.ErrorCount > 0)
                     {
