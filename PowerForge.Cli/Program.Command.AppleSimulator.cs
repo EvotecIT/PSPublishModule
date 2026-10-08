@@ -35,7 +35,11 @@ internal static partial class Program
                 var status = service.InspectAsync(stateRoot, cancellation.Token).GetAwaiter().GetResult();
                 if (json) WriteAppleSimulatorJson("status", !status.NeedsAttention, status.NeedsAttention ? 1 : 0,
                     CliJson.SerializeToElement(status, CliJson.Context.AppleSimulatorSessionStatus));
-                else Console.WriteLine($"Owner: {status.OwnerState}; device: {status.DeviceState ?? "none"}; needs attention: {status.NeedsAttention}; receipt: {status.ReceiptPath}");
+                else
+                {
+                    Console.WriteLine($"Owner: {status.OwnerState}; device: {status.DeviceState ?? "none"}; needs attention: {status.NeedsAttention}; receipt: {status.ReceiptPath}");
+                    if (status.DiscoveryError is not null) logger.Error(status.DiscoveryError);
+                }
                 return status.NeedsAttention ? 1 : 0;
             }
             if (operation == "acknowledge")

@@ -75,8 +75,8 @@ public sealed class AppleSimulatorSessionResult
     public string? CleanupError { get; set; }
     /// <summary>Whether the foreground command exited normally with code zero; bounded log truncation is informational.</summary>
     public bool ValidationSucceeded => CommandResult is { ExitCode: 0, TimedOut: false, StartFailed: false };
-    /// <summary>True only when validation and release both succeeded.</summary>
-    public bool Success => Error is null && ValidationSucceeded && Receipt.CleanupSucceeded;
+    /// <summary>True only when validation and release both succeeded without session cancellation.</summary>
+    public bool Success => Error is null && Receipt.Outcome != "canceled" && ValidationSucceeded && Receipt.CleanupSucceeded;
     /// <summary>Preserves primary failure/cancellation codes; cleanup-only failure returns 1.</summary>
     public int ExitCode => Success ? 0 : CommandResult is { ExitCode: not 0 } ? CommandResult.ExitCode :
         Receipt.Outcome == "canceled" ? 130 : 1;
@@ -95,6 +95,8 @@ public sealed class AppleSimulatorSessionStatus
     public string CommandState { get; set; } = "none";
     /// <summary>Observed device state; null when there is no receipt.</summary>
     public string? DeviceState { get; set; }
-    /// <summary>Whether an incomplete receipt prevents another cooperating session from starting.</summary>
+    /// <summary>Simulator discovery diagnostic; ownership evidence remains available when the device cannot be queried.</summary>
+    public string? DiscoveryError { get; set; }
+    /// <summary>Whether the receipt is incomplete or its current simulator state could not be verified.</summary>
     public bool NeedsAttention { get; set; }
 }

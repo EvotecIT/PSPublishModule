@@ -68,6 +68,12 @@ identity when observed, initial/final states, and release outcome. It does not
 store child arguments, environment, or captured output. An incomplete receipt
 blocks another session from overwriting it. `status` reconciles process identity
 and current simulator state without changing the receipt or stopping a device.
+If discovery fails, status retains the receipt and process identities, reports
+`Unknown` device state and a separate discovery diagnostic, and exits with code 1.
+
+Forced termination can leave descendants even after the recorded command leader
+exits. Inspect and resolve the remaining validation process scope independently;
+the receipt's leader identity alone does not prove that descendants are gone.
 
 After independently resolving an interrupted session, `acknowledge` requires
 its exact session ID, verified owner and recorded validation-process exit, and a

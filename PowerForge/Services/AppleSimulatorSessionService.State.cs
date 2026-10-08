@@ -21,7 +21,17 @@ public sealed partial class AppleSimulatorSessionService
         status.OwnerState = OwnerState(receipt);
         status.CommandState = ProcessState(receipt.CommandProcessId, receipt.CommandProcessStartedUtc);
         status.NeedsAttention = NeedsAttention(receipt);
-        status.DeviceState = await GetDeviceStateAsync(receipt.DeviceId, receipt.DeviceSetPath, TimeSpan.FromSeconds(30), cancellationToken).ConfigureAwait(false);
+        try
+        {
+            status.DeviceState = await GetDeviceStateAsync(receipt.DeviceId, receipt.DeviceSetPath, TimeSpan.FromSeconds(30), cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception exception)
+        {
+            status.DeviceState = "Unknown";
+            status.DiscoveryError = exception.Message;
+            status.NeedsAttention = true;
+        }
         return status;
     }
 

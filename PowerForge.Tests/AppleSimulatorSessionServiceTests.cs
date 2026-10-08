@@ -77,6 +77,46 @@ public sealed class AppleSimulatorSessionServiceTests
         Assert.Equal("Shutdown", fixture.Devices[Device]);
     }
 
+    [Theory]
+    [InlineData(0, 130)]
+    [InlineData(7, 7)]
+    public async Task Cancellation_observed_after_command_result_cannot_report_success(int childExitCode, int expectedExitCode)
+    {
+        using var fixture = new Fixture();
+        using var cancellation = new CancellationTokenSource();
+        fixture.Validation = (_, _) => { cancellation.Cancel(); return Task.FromResult(Result(childExitCode)); };
+        var result = await fixture.Service.RunAsync(fixture.Request(), cancellation.Token);
+        Assert.Equal("canceled", result.Receipt.Outcome);
+        Assert.False(result.Success);
+        Assert.Equal(expectedExitCode, result.ExitCode);
+        Assert.True(result.Receipt.CleanupSucceeded);
+        Assert.Equal("Shutdown", fixture.Devices[Device]);
+    }
+
+    [Theory]
+    [InlineData("failed")]
+    [InlineData("malformed")]
+    [InlineData("missing")]
+    public async Task Status_preserves_interrupted_ownership_evidence_when_simulator_discovery_fails(string failure)
+    {
+        using var fixture = new Fixture();
+        var result = await fixture.Service.RunAsync(fixture.Request());
+        result.Receipt.OwnerProcessStartedUtc = result.Receipt.OwnerProcessStartedUtc.AddTicks(-1);
+        result.Receipt.CompletedAtUtc = null;
+        File.WriteAllText(result.ReceiptPath, JsonSerializer.Serialize(result.Receipt));
+        var before = File.ReadAllText(result.ReceiptPath);
+        fixture.DiscoveryFailure = failure;
+        var status = await fixture.Service.InspectAsync(fixture.StateRoot);
+        Assert.Equal(result.Receipt.SessionId, status.Receipt!.SessionId);
+        Assert.Equal("exited", status.OwnerState);
+        Assert.Equal("none", status.CommandState);
+        Assert.True(status.NeedsAttention);
+        Assert.Equal("Unknown", status.DeviceState);
+        Assert.NotEmpty(status.DiscoveryError!);
+        Assert.Equal(before, File.ReadAllText(result.ReceiptPath));
+        await Assert.ThrowsAnyAsync<Exception>(() => fixture.Service.AcknowledgeAsync(result.Receipt.SessionId, fixture.StateRoot));
+    }
+
     [Fact]
     public async Task Readiness_failure_releases_a_confirmed_boot_without_running_validation()
     {
@@ -179,6 +219,7 @@ public sealed class AppleSimulatorSessionServiceTests
         internal bool FailBootAfterStateChange { get; init; }
         internal bool FailReadiness { get; init; }
         internal bool FailShutdown { get; init; }
+        internal string? DiscoveryFailure { get; set; }
         internal AppleSimulatorSessionService Service { get; }
 
         internal Fixture()
@@ -201,6 +242,9 @@ public sealed class AppleSimulatorSessionServiceTests
             var command = request.Arguments[3];
             if (command == "list")
             {
+                if (DiscoveryFailure == "failed") return Task.FromResult(Result(1));
+                if (DiscoveryFailure == "malformed") return Task.FromResult(Result(output: "invalid JSON"));
+                if (DiscoveryFailure == "missing") return Task.FromResult(Result(output: "{\"devices\":{}}"));
                 var devices = Devices.Select(device => new { udid = device.Key, state = device.Value, isAvailable = true }).ToArray();
                 return Task.FromResult(Result(output: JsonSerializer.Serialize(new { devices = new Dictionary<string, object> { ["iOS-fixture"] = devices } })));
             }
