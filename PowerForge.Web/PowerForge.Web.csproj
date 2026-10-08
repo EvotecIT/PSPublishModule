@@ -30,7 +30,7 @@
 
   <ItemGroup>
     <PackageReference Include="Google.Apis.Auth" Version="1.77.0" />
-    <PackageReference Include="HtmlTinkerX" Version="3.0.1" />
+    <PackageReference Include="HtmlTinkerX" Version="3.0.2" />
     <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="14.17.2" />
     <PackageReference Include="OfficeIMO.Markdown" Version="3.4.4" />
     <PackageReference Include="Scriban" Version="7.5.0" />
