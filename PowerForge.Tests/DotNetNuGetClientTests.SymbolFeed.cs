@@ -9,6 +9,7 @@ namespace PowerForge.Tests;
 public sealed partial class DotNetNuGetClientTests
 {
     [Theory]
+    [Trait("Category", "Integration")]
     [InlineData(201, true)]
     [InlineData(409, false)]
     public async Task PushPackageAsync_RetriesSymbolsThroughAdvertisedEndpoint(int symbolStatus, bool expectedSuccess)
