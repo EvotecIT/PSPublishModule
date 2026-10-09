@@ -4,6 +4,53 @@ namespace PowerForge.Tests;
 
 public sealed class NuGetPackagePublishServiceTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PublishFailure_LogsFullResponseWithoutVerboseOutput(bool explicitPackages)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(
+            Path.GetTempPath(),
+            "pf-nuget-publish-diagnostics-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            var packagePath = Path.Combine(root.FullName, "Sample.1.0.0.nupkg");
+            File.WriteAllText(packagePath, "pkg");
+            const string response = "Pushing Sample.1.0.0.nupkg to the package feed...\n" +
+                "error: Response status code does not indicate success: 403 (Forbidden).";
+            var logger = new BufferedLogger { IsVerbose = false };
+            var service = new NuGetPackagePublishService(
+                logger,
+                _ => new DotNetRepositoryReleaseService.PackagePushResult
+                {
+                    Outcome = DotNetRepositoryReleaseService.PackagePushOutcome.Failed,
+                    Message = response
+                });
+
+            var result = explicitPackages
+                ? service.ExecutePackages(
+                    new[] { packagePath }, "key", "PrivateFeed", skipDuplicate: true)
+                : service.Execute(new NuGetPackagePublishRequest
+                {
+                    Roots = new[] { root.FullName },
+                    ApiKey = "key",
+                    Source = "PrivateFeed"
+                });
+
+            Assert.False(result.Success);
+            Assert.Equal(packagePath, Assert.Single(result.FailedItems));
+            Assert.Equal(response, result.ErrorMessage);
+            Assert.Contains(logger.Entries, entry =>
+                entry.Level == "warn" && entry.Message.Contains(packagePath));
+            Assert.Contains(logger.Entries, entry =>
+                entry.Level == "warn" && entry.Message == response);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
     [Fact]
     public void ExecutePackages_StopsBeforeNextPackageWhenCancellationIsRequested()
     {
