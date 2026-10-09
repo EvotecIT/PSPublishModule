@@ -32,7 +32,7 @@ public sealed class DotNetNuGetPushResult
     public int ExitCode { get; }
 
     /// <summary>
-    /// Gets the captured standard output.
+    /// Gets the captured standard output, including earlier push diagnostics when a companion requires a separate attempt.
     /// </summary>
     public string StdOut { get; }
 
@@ -62,7 +62,9 @@ public sealed class DotNetNuGetPushResult
     public string? ErrorMessage { get; }
 
     /// <summary>
-    /// Gets a value indicating whether the push completed successfully.
+    /// Gets a value indicating whether the push completed successfully or a permitted duplicate was confirmed.
     /// </summary>
-    public bool Succeeded => ExitCode == 0 && !TimedOut;
+    public bool Succeeded => (ExitCode == 0 || SkippedDuplicate) && !TimedOut;
+
+    internal bool SkippedDuplicate { get; set; }
 }

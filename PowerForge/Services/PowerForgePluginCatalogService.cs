@@ -335,7 +335,7 @@ internal sealed class PowerForgePluginCatalogService
                     }
 
                     entry.PushResults = pushResults.ToArray();
-                    var failedPush = entry.PushResults.FirstOrDefault(push => push.ExitCode != 0 || push.TimedOut);
+                    var failedPush = entry.PushResults.FirstOrDefault(push => !push.Succeeded);
                     if (failedPush is not null)
                     {
                         throw new InvalidOperationException(

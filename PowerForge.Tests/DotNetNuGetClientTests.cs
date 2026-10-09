@@ -3,7 +3,7 @@ using PowerForge;
 
 namespace PowerForge.Tests;
 
-public sealed class DotNetNuGetClientTests
+public sealed partial class DotNetNuGetClientTests
 {
     [Fact]
     public async Task PushPackageAsync_UsesResponseFileAndCleansItUp()
@@ -47,7 +47,6 @@ public sealed class DotNetNuGetClientTests
                     "secret",
                     "--source",
                     "https://api.nuget.org/v3/index.json",
-                    "--skip-duplicate",
                     "--no-symbols"
                 ]),
                 responseFileContent);
@@ -155,8 +154,10 @@ public sealed class DotNetNuGetClientTests
         }
     }
 
-    [Fact]
-    public async Task PushPackageAsync_UsesPackageDirectoryWithinConfigurationHierarchy()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task PushPackageAsync_UsesPackageDirectoryWithinConfigurationHierarchy(int primaryExitCode)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var packageDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "artifacts", "packages"));
@@ -168,13 +169,15 @@ public sealed class DotNetNuGetClientTests
         ProcessRunRequest? captured = null;
         string? pushedPackagePath = null;
         string? pushedSource = null;
+        var attempts = 0;
         var processRunner = new StubProcessRunner(request =>
         {
             captured = request;
             var responseFileLines = File.ReadAllLines(request.Arguments.Single()[1..]);
             pushedPackagePath = responseFileLines[2];
             pushedSource = responseFileLines[6];
-            return new ProcessRunResult(0, "ok", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+            var exitCode = attempts++ == 0 ? primaryExitCode : 0;
+            return new ProcessRunResult(exitCode, "ok", exitCode == 1 ? "error: Package already exists and cannot be modified." : string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
         });
         var client = new DotNetNuGetClient(
             processRunner,
@@ -194,7 +197,8 @@ public sealed class DotNetNuGetClientTests
             Assert.True(result.Succeeded);
             Assert.NotNull(captured);
             Assert.Equal(packageDirectory.FullName, captured!.WorkingDirectory);
-            Assert.Equal(packagePath, pushedPackagePath);
+            Assert.Equal(primaryExitCode == 0 ? packagePath : symbolPackagePath, pushedPackagePath);
+            Assert.Equal(primaryExitCode == 0 ? 1 : 2, attempts);
             Assert.Equal(Path.Combine(root.FullName, "feed"), pushedSource);
         }
         finally
@@ -232,8 +236,7 @@ public sealed class DotNetNuGetClientTests
                     "--api-key",
                     "secret value",
                     "--source",
-                    source,
-                    "--skip-duplicate"
+                    source
                 ]),
                 responseFileContent);
             Assert.True(result.Succeeded);
