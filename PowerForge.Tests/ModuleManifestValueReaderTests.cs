@@ -6,6 +6,22 @@ namespace PowerForge.Tests;
 
 public sealed class ModuleManifestValueReaderTests
 {
+    [Theory]
+    [InlineData("`u{004D}odule.psm1", "Module.psm1")]
+    [InlineData("Emoji `u{1F600}", "Emoji 😀")]
+    [InlineData("quote `\" and literal ``", "quote \" and literal `")]
+    public void ReadTopLevelStringFromText_DecodesPowerShellLiteralEscapes(string literal, string expected)
+        => Assert.Equal(expected, ModuleManifestValueReader.ReadTopLevelStringFromText("@{ RootModule = \"" + literal + "\" }", "RootModule"));
+
+    [Theory]
+    [InlineData("`u{110000}")]
+    [InlineData("`u")]
+    [InlineData("`u{D800}")]
+    [InlineData("`u{invalid}")]
+    [InlineData("`u{004D")]
+    public void ReadTopLevelStringFromText_RejectsInvalidUnicodeEscapes(string literal)
+        => Assert.Null(ModuleManifestValueReader.ReadTopLevelStringFromText("@{ Description = \"" + literal + "\" }", "Description"));
+
     [Fact]
     public void ReadTopLevelStringOrArrayFromText_IgnoresNestedMetadataWithSameKey()
     {

@@ -1032,7 +1032,7 @@ public class WebApiDocsGeneratorContractTests
 
         var cssPath = Path.Combine(root, "css", "api.css");
         Directory.CreateDirectory(Path.GetDirectoryName(cssPath)!);
-        var fallbackCssPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "PowerForge.Web", "Assets", "ApiDocs", "fallback.css"));
+        var fallbackCssPath = GetApiFallbackCssPath();
         Assert.True(File.Exists(fallbackCssPath), "Expected embedded API fallback CSS to exist for contract validation.");
         File.WriteAllText(cssPath, File.ReadAllText(fallbackCssPath));
 
@@ -1283,9 +1283,9 @@ public class WebApiDocsGeneratorContractTests
         }
     }
 
-    private static string GetApiFallbackCssPath()
+    private static string GetApiFallbackCssPath([System.Runtime.CompilerServices.CallerFilePath] string sourcePath = "")
     {
-        var fallbackCssPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "PowerForge.Web", "Assets", "ApiDocs", "fallback.css"));
+        var fallbackCssPath = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourcePath)!, "..", "PowerForge.Web", "Assets", "ApiDocs", "fallback.css"));
         Assert.True(File.Exists(fallbackCssPath), "Expected embedded API fallback CSS to exist for contract validation.");
         return fallbackCssPath;
     }

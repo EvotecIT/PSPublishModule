@@ -186,8 +186,8 @@ public static partial class WebApiDocsGenerator
         var encoded = System.Web.HttpUtility.HtmlEncode(text);
         var linked = CrefTokenRegex.Replace(encoded, match =>
         {
-            var name = match.Groups["name"].Value;
-            return LinkifyType(name, baseUrl, slugMap);
+            var name = System.Web.HttpUtility.HtmlDecode(match.Groups["name"].Value);
+            return LinkifyCref(name, baseUrl, slugMap);
         });
         linked = HrefTokenRegex.Replace(linked, match =>
         {
@@ -243,6 +243,24 @@ public static partial class WebApiDocsGenerator
         {
             return string.Empty;
         }
+    }
+
+    private static string LinkifyCref(string cref, string baseUrl, IReadOnlyDictionary<string, string> slugMap)
+    {
+        var name = cref.Length > 2 && cref[1] == ':' ? cref.Substring(2) : cref;
+        var parameters = name.IndexOf('(');
+        var isMember = parameters >= 0 || (cref.Length > 2 && cref[1] == ':' && "MPFE".IndexOf(cref[0]) >= 0);
+        if (!isMember)
+            return LinkifyType(name, baseUrl, slugMap);
+        if (parameters >= 0)
+            name = name.Substring(0, parameters);
+        var memberDot = name.LastIndexOf('.');
+        var owner = memberDot > 0 ? name.Substring(0, memberDot).Replace("+", ".") : string.Empty;
+        var label = System.Web.HttpUtility.HtmlEncode(GetCrefDisplayName(cref));
+        if (!slugMap.TryGetValue(owner, out var slug) && !slugMap.TryGetValue(GetDisplayTypeName(owner), out slug))
+            return label;
+        var href = System.Web.HttpUtility.HtmlAttributeEncode(BuildDocsTypeUrl(baseUrl, slug));
+        return $"<a href=\"{href}\">{label}</a>";
     }
 
     private static string LinkifyType(string? name, string baseUrl, IReadOnlyDictionary<string, string> slugMap)

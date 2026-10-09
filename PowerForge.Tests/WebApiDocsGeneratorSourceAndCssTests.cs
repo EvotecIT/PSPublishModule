@@ -888,6 +888,26 @@ public class WebApiDocsGeneratorSourceAndCssTests
         }
     }
 
+    [Theory]
+    [InlineData("@{ Description = 'The package guide.' }", "The package guide.")]
+    [InlineData("@{\n<#\nDescription = 'An old comment.'\n#>\nPrivateData = @{ Description = 'Nested data.' }\nDescription = 'The package guide.'\n}", "The package guide.")]
+    [InlineData("@{\nDescription = \"Builds `\"reports`\" from scripts.\"\n}", "Builds \"reports\" from scripts.")]
+    public void ModuleOverviewDescriptionReadsTheTopLevelLiteral(string manifest, string expected)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-manifest-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var path = Path.Combine(root, "Fixture.psd1");
+            File.WriteAllText(path, manifest);
+            Assert.Equal(expected, WebApiDocsGenerator.TryReadModuleManifestDescription(path));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static string? ResolveGitRoot(string path,
         [System.Runtime.CompilerServices.CallerFilePath] string sourceFilePath = "")
     {
