@@ -108,7 +108,8 @@ internal sealed class PublishConfigurationFactory
             repositoryUri = endpoint.PSResourceGetUri;
             repositorySourceUri = endpoint.PowerShellGetSourceUri;
             repositoryPublishUri = endpoint.PowerShellGetPublishUri;
-            if (repositoryApiVersion == RepositoryApiVersion.Auto && useProviderEndpointDefaults)
+            if (repositoryApiVersion == RepositoryApiVersion.Auto && useProviderEndpointDefaults &&
+                string.IsNullOrWhiteSpace(request.RepositoryUri))
                 repositoryApiVersion = RepositoryApiVersion.V3;
         }
 

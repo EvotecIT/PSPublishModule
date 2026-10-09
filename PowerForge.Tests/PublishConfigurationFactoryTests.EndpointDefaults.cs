@@ -5,6 +5,68 @@ namespace PowerForge.Tests;
 public sealed partial class PublishConfigurationFactoryTests
 {
     [Theory]
+    [InlineData("https://company.jfrog.io/artifactory/api/nuget/feed")]
+    [InlineData("https://company.jfrog.io/artifactory/api/nuget/v3/feed/index.json")]
+    public void Jfrog_explicit_repository_uri_retains_auto_protocol_selection(string repositoryUri)
+    {
+        var repository = new PublishConfigurationFactory().Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "JFrog", JFrogBaseUri = "https://company.jfrog.io/artifactory", JFrogRepository = "feed",
+            RepositoryUri = repositoryUri
+        }).Configuration.Repository!;
+        Assert.Equal(RepositoryApiVersion.Auto, repository.ApiVersion);
+        Assert.Equal(repositoryUri, ModulePublishDependencyPolicy.ReadUri(repository));
+        Assert.Equal(repositoryUri, ModulePublishDependencyPolicy.PSResourceGetRegistrationUri(repository));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Jfrog_single_override_leaves_the_other_operation_at_repository_uri(bool sourceOverride)
+    {
+        const string target = "https://packages.example.test/override/index.json";
+        var repository = new PublishConfigurationFactory().Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "JFrog", JFrogBaseUri = "https://company.jfrog.io/artifactory", JFrogRepository = "feed",
+            RepositorySourceUri = sourceOverride ? target : null,
+            RepositoryPublishUri = sourceOverride ? null : target
+        }).Configuration.Repository!;
+        Assert.False(repository.UseProviderEndpointDefaults);
+        Assert.Equal(sourceOverride ? target : repository.Uri, ModulePublishDependencyPolicy.ReadUri(repository));
+        Assert.Equal(sourceOverride ? repository.Uri : target, ModulePublishDependencyPolicy.PSResourceGetRegistrationUri(repository));
+        Assert.True(ModulePublishDependencyPolicy.HasSeparateEndpoints(repository));
+    }
+
+    [Theory]
+    [InlineData(PrivateGalleryProvider.JFrog, false)]
+    [InlineData(PrivateGalleryProvider.JFrog, true)]
+    [InlineData(PrivateGalleryProvider.GitHubPackages, false)]
+    [InlineData(PrivateGalleryProvider.GitHubPackages, true)]
+    [InlineData(PrivateGalleryProvider.NuGet, false)]
+    [InlineData(PrivateGalleryProvider.NuGet, true)]
+    public void Normalized_profiles_preserve_independent_single_endpoint_overrides(PrivateGalleryProvider provider, bool sourceOverride)
+    {
+        const string target = "https://packages.example.test/override/index.json";
+        const string repositoryUri = "https://packages.example.test/default/index.json";
+        var profile = ModuleRepositoryProfileStore.Normalize(new ModuleRepositoryProfile
+        {
+            Name = "Company", Provider = provider, RepositoryName = "Company", RepositoryUri = repositoryUri,
+            RepositorySourceUri = sourceOverride ? target : string.Empty, RepositoryPublishUri = sourceOverride ? string.Empty : target,
+            GitHubOwner = "Company", JFrogBaseUri = "https://company.jfrog.io/artifactory", JFrogRepository = "feed"
+        });
+        var repository = new PublishConfigurationFactory().Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "ApiKey", RepositoryProfile = profile, RepositoryName = profile.RepositoryName,
+            RepositoryUri = profile.RepositoryUri, RepositorySourceUri = profile.RepositorySourceUri,
+            RepositoryPublishUri = profile.RepositoryPublishUri
+        }).Configuration.Repository!;
+        Assert.False(repository.UseProviderEndpointDefaults);
+        Assert.Equal(sourceOverride ? target : repositoryUri, ModulePublishDependencyPolicy.ReadUri(repository));
+        Assert.Equal(sourceOverride ? repositoryUri : target, ModulePublishDependencyPolicy.PSResourceGetRegistrationUri(repository));
+        Assert.True(ModulePublishDependencyPolicy.HasSeparateEndpoints(repository));
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void Jfrog_defaults_and_explicit_equal_overrides_survive_json_roundtrip(bool explicitOverrides)

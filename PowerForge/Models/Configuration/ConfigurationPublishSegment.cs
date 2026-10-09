@@ -124,9 +124,11 @@ public sealed class PublishRepositoryConfiguration
 
     /// <summary>
     /// Identifies provider-generated legacy SourceUri/PublishUri defaults. Preset factories set this
-    /// so managed reads and PSResourceGet use Uri; explicit endpoint configurations leave it false.
+    /// so managed reads and PSResourceGet use Uri; explicit endpoint configurations set it false.
+    /// When omitted, exact legacy Azure/JFrog preset endpoint triples retain their original behavior.
     /// </summary>
-    public bool UseProviderEndpointDefaults { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public bool? UseProviderEndpointDefaults { get; set; }
 
     /// <summary>
     /// When true, marks the repository as trusted (avoids prompts). Default: true.

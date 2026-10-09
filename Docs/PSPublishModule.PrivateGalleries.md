@@ -439,6 +439,12 @@ When editing preset JSON to supply endpoint overrides, set
 `RepositoryApiVersion` for the upload protocol if it cannot be inferred from
 the URL; the managed read checks infer their own protocol.
 
+Saved Azure Artifacts and JFrog preset JSON without `UseProviderEndpointDefaults`
+retains its original v3 behavior when its URLs match the provider's canonical
+v3 and legacy v2 endpoints for the same feed. Explicit `false` disables this
+compatibility inference. A source-only override keeps uploads at `RepositoryUri`;
+a publish-only override keeps reads at `RepositoryUri`.
+
 ## Skipping Repository Dependency Checks
 
 Use `-SkipDependenciesCheck` when dependency availability is guaranteed outside

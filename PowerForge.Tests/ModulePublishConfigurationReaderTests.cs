@@ -4,6 +4,34 @@ namespace PowerForge.Tests;
 
 public sealed class ModulePublishConfigurationReaderTests
 {
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Saved_provider_presets_preserve_legacy_defaults_only_when_provenance_is_absent(bool azure, bool explicitFalse)
+    {
+        var endpoints = PrivateGalleryRepositoryEndpoints.Create(azure ? PrivateGalleryProvider.AzureArtifacts : PrivateGalleryProvider.JFrog,
+            azureDevOpsOrganization: "company", azureArtifactsFeed: "feed", repositoryName: "Company",
+            jfrogBaseUri: "https://company.jfrog.io/artifactory", jfrogRepository: "feed");
+        var json = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(new
+        {
+            Segments = new[] { new ConfigurationPublishSegment { Configuration = new PublishConfiguration {
+                Repository = new PublishRepositoryConfiguration { Uri = endpoints.PSResourceGetUri,
+                    SourceUri = endpoints.PowerShellGetSourceUri, PublishUri = endpoints.PowerShellGetPublishUri,
+                    ApiVersion = RepositoryApiVersion.V3 } } } }
+        }))!;
+        if (explicitFalse)
+            json["Segments"]![0]!["Configuration"]!["Repository"]!["UseProviderEndpointDefaults"] = false;
+        var repository = Assert.Single(new ModulePublishConfigurationReader().ReadFromJson(json.ToJsonString())).Repository!;
+        Assert.Equal(explicitFalse ? false : (bool?)null, repository.UseProviderEndpointDefaults);
+        Assert.Equal(explicitFalse ? endpoints.PowerShellGetSourceUri : endpoints.PSResourceGetUri,
+            ModulePublishDependencyPolicy.ReadUri(repository));
+        Assert.Equal(explicitFalse ? endpoints.PowerShellGetPublishUri : endpoints.PSResourceGetUri,
+            ModulePublishDependencyPolicy.PSResourceGetRegistrationUri(repository));
+        Assert.False(ModulePublishDependencyPolicy.HasSeparateEndpoints(repository));
+    }
+
     [Fact]
     public void Explicit_equal_endpoint_overrides_do_not_infer_provider_defaults()
     {
@@ -14,7 +42,7 @@ public sealed class ModulePublishConfigurationReaderTests
                 "PublishUri": "https://packages.example.test/target/index.json" }
             } }] }
             """)).Repository!;
-        Assert.False(repository.UseProviderEndpointDefaults);
+        Assert.Null(repository.UseProviderEndpointDefaults);
         Assert.Equal(repository.SourceUri, ModulePublishDependencyPolicy.ReadUri(repository));
         Assert.Equal(repository.PublishUri, ModulePublishDependencyPolicy.PSResourceGetRegistrationUri(repository));
         Assert.False(ModulePublishDependencyPolicy.HasSeparateEndpoints(repository));
