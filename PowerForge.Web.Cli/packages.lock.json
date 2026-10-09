@@ -66,8 +66,8 @@
       },
       "ChartForgeX": {
         "type": "Transitive",
-        "resolved": "1.8.0",
-        "contentHash": "d0/WWZMkJgUAMyjJ92HOBJPMPo69EY9gItT4p6PKTpme3+t3QonVXInkYiEpGI8oVY8VM37mJeBwklgxTbJK3Q=="
+        "resolved": "1.8.1",
+        "contentHash": "3hdaT3iRXlKtoSjTLd+4xZ7ZnbQ8VjwCYGHB0/oU2rmi/Y4TdAW/Rckw/mkjlVb6KpIie4Cbso7TbIXycGFW5A=="
       },
       "DBAClientX.Core": {
         "type": "Transitive",
@@ -107,18 +107,18 @@
       },
       "HtmlTinkerX": {
         "type": "Transitive",
-        "resolved": "3.0.2",
-        "contentHash": "1KIr3TYPt4hGKa4nugmZJhYNllWGkL7L/L4rJqvqwDDLzlwlhNG0KZ92QyRiIAce5wyXd11Bm7kpB6DNIwSYrg==",
+        "resolved": "3.0.3",
+        "contentHash": "dlCYamfo0TLNFeF8QyWoTDDzrFPb2YKChGgPHf4oT5tP9ZbHaYIfczkHlRwAOG5QGnOMGBLnqykPm+GfpO9LWw==",
         "dependencies": {
           "AngleSharp": "1.8.2",
           "AngleSharp.Css": "1.1.2",
           "AngleSharp.Diffing": "1.1.1",
           "AngleSharp.Io": "1.1.0",
           "AngleSharp.Js": "1.1.0",
-          "ChartForgeX": "1.8.0",
+          "ChartForgeX": "1.8.1",
           "HtmlAgilityPack": "1.13.0",
           "Jint": "4.16.3",
-          "Microsoft.Playwright": "1.62.0",
+          "Microsoft.Playwright": "1.63.0",
           "NUglify": "1.23.1",
           "OfficeIMO.Html": "3.4.3",
           "OfficeIMO.Markdown.Html": "3.4.3",
@@ -171,8 +171,8 @@
       },
       "Microsoft.Playwright": {
         "type": "Transitive",
-        "resolved": "1.62.0",
-        "contentHash": "cos6dmHPcMpS6bXw2WEgoXb8KXwMhs3c5L0P/cUf2rdUpjVA3g3u+KiSpVp2VCzsXymRpy2tFHqm+Wnz7s5VhQ==",
+        "resolved": "1.63.0",
+        "contentHash": "O9F45Tt5vjauIo7mTTgQtahigL7cfRLvBMpErLJfdvgCnQ14yue5BmRASNnfNBWRBni4Mqp2YiD1eFGIO4nUUw==",
         "dependencies": {
           "Microsoft.Bcl.AsyncInterfaces": "6.0.0",
           "System.ComponentModel.Annotations": "5.0.0"
@@ -368,10 +368,10 @@
         "type": "Project",
         "dependencies": {
           "Google.Apis.Auth": "[1.77.0, )",
-          "HtmlTinkerX": "[3.0.2, )",
+          "HtmlTinkerX": "[3.0.3, )",
           "Magick.NET-Q8-AnyCPU": "[14.17.2, )",
           "OfficeIMO.Markdown": "[3.4.4, )",
-          "PowerForge": "[3.0.158, )",
+          "PowerForge": "[3.0.159, )",
           "Scriban": "[7.5.0, )",
           "YamlDotNet": "[18.1.0, )"
         }
