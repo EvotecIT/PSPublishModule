@@ -10,11 +10,9 @@ public sealed class DotNetRepositoryReleaseSymbolPackageReviewTests
     [Fact]
     public void ClassifyNuGetPushOutcome_DoesNotTreatLocalSkipDuplicateWarningAsSkipped()
     {
-        var result = DotNetRepositoryReleaseService.ClassifyNuGetPushOutcome(
-            exitCode: 0,
-            skipDuplicate: true,
-            stdErr: "The option to skip duplicates is not currently supported for this type of push.",
-            stdOut: "Your package was pushed.");
+        var result = DotNetRepositoryReleaseService.ClassifyNuGetPushOutcome(new DotNetNuGetPushResult(
+            0, "Your package was pushed.", "The option to skip duplicates is not currently supported for this type of push.",
+            "dotnet", TimeSpan.Zero, false, null));
 
         Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.Published, result.Outcome);
     }

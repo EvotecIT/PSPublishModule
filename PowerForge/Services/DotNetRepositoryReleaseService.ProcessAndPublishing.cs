@@ -242,32 +242,13 @@ public sealed partial class DotNetRepositoryReleaseService
         return lines[lines.Length - 1];
     }
 
-    internal static PackagePushResult ClassifyNuGetPushOutcome(int exitCode, bool skipDuplicate, string stdErr, string stdOut)
+    internal static PackagePushResult ClassifyNuGetPushOutcome(DotNetNuGetPushResult push)
     {
-        var combined = string.Join(Environment.NewLine, stdErr, stdOut).Trim();
-
-        if (exitCode != 0)
-        {
-            return new PackagePushResult
-            {
-                Outcome = PackagePushOutcome.Failed,
-                Message = combined
-            };
-        }
-
-        if (skipDuplicate && LooksLikeSkippedDuplicate(combined))
-        {
-            return new PackagePushResult
-            {
-                Outcome = PackagePushOutcome.SkippedDuplicate,
-                Message = combined
-            };
-        }
-
         return new PackagePushResult
         {
-            Outcome = PackagePushOutcome.Published,
-            Message = combined
+            Outcome = !push.Succeeded ? PackagePushOutcome.Failed
+                : push.SkippedDuplicate ? PackagePushOutcome.SkippedDuplicate : PackagePushOutcome.Published,
+            Message = string.Join(Environment.NewLine, push.StdOut, push.StdErr).Trim()
         };
     }
 
@@ -360,7 +341,7 @@ public sealed partial class DotNetRepositoryReleaseService
             .PushPackageAsync(request, cancellationToken)
             .GetAwaiter()
             .GetResult();
-        return ClassifyNuGetPushOutcome(push.ExitCode, request.SkipDuplicate, push.StdErr, push.StdOut);
+        return ClassifyNuGetPushOutcome(push);
     }
 
     /// <summary>
@@ -602,13 +583,18 @@ public sealed partial class DotNetRepositoryReleaseService
             .Replace("$", "%24")
             .Replace("@", "%40");
 
-    private static bool LooksLikeSkippedDuplicate(string text)
+    internal static bool LooksLikeSkippedDuplicate(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
             return false;
 
+        // A bare HTTP 409 also covers namespace and other upload rejections. Use the final error
+        // when present so a later companion failure cannot be hidden by an earlier duplicate.
+        var lastError = text.Replace("\r\n", "\n").Split('\n')
+            .LastOrDefault(line => line.TrimStart().StartsWith("error:", StringComparison.OrdinalIgnoreCase));
+        if (lastError is not null)
+            text = lastError;
         return text.IndexOf("already exists", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               text.IndexOf("409 (Conflict)", StringComparison.OrdinalIgnoreCase) >= 0 ||
                text.IndexOf("cannot be modified", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
