@@ -50,6 +50,8 @@ internal static class CloudflareRouteProfileResolver
         ValidateCloudflarePolicy(spec.Cloudflare);
         foreach (var path in spec.Cloudflare?.AlwaysPurgePaths ?? Array.Empty<string>())
             CloudflareIncrementalCachePurger.ResolveAlwaysPurgeUrl(baseUrl, path);
+        if (spec.Cloudflare is not null)
+            ValidateImmutablePaths(spec.Cloudflare, baseUrl);
 
         return new CloudflareSiteRouteProfile
         {
@@ -85,6 +87,27 @@ internal static class CloudflareRouteProfileResolver
             return;
         if (policy.Cache.EdgeTtlSeconds is < 1 or > 31536000)
             throw new InvalidOperationException("Cloudflare.Cache.EdgeTtlSeconds must be between 1 and 31536000.");
+    }
+
+    private static void ValidateImmutablePaths(CloudflareSitePolicySpec policy, string baseUrl)
+    {
+        policy.ImmutablePaths = (policy.ImmutablePaths ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (policy.ImmutablePaths.Length == 0)
+            return;
+
+        var basePath = Uri.TryCreate(baseUrl, UriKind.Absolute, out var baseUri) ? baseUri.AbsolutePath : "/";
+        try
+        {
+            CloudflareResponseHeaderPolicyBuilder.NormalizeImmutablePaths(policy.ImmutablePaths, basePath);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new InvalidOperationException(ex.Message, ex);
+        }
     }
 
     private static string[] BuildVerifyPaths(SiteSpec spec)

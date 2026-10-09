@@ -16,6 +16,14 @@ public sealed class CloudflareSitePolicySpec
     public string[] AlwaysPurgePaths { get; set; } = Array.Empty<string>();
 
     /// <summary>
+    /// Site-relative Cloudflare wildcard patterns for content-addressed files whose URL changes whenever their bytes change.
+    /// Successful responses matching a pattern receive <c>Cache-Control: public, max-age=31536000, immutable</c>
+    /// through the managed response-header policy. Each pattern must end in a literal file extension; list only
+    /// fingerprinted names (for example <c>/app/_framework/*.*.wasm</c>) because a browser copy cannot be purged.
+    /// </summary>
+    public string[] ImmutablePaths { get; set; } = Array.Empty<string>();
+
+    /// <summary>
     /// When set, PowerForge manages the zone's Smart Tiered Cache setting as part of the recoverable site policy.
     /// Leave null to preserve the operator-managed zone setting.
     /// </summary>
