@@ -165,7 +165,10 @@ internal static class CloudflareResponseHeaderPolicyBuilder
                 nameof(rawPath));
         }
 
-        return CloudflareCachePolicyBuilder.CombineBasePath(basePath, path);
+        var scopedPath = CloudflareCachePolicyBuilder.CombineBasePath(basePath, path);
+        if (CloudflareCachePolicyBuilder.EncodeUriPathForExpression(scopedPath).Contains("**", StringComparison.Ordinal))
+            throw new ArgumentException("Cloudflare immutable paths cannot contain consecutive wildcard characters, including percent-encoded asterisks.", nameof(rawPath));
+        return scopedPath;
     }
 
     private static void AddHeader(JsonObject headers, string name, bool enabled, string? value)

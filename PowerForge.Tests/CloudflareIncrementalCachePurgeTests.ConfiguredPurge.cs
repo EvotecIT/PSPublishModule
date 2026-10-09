@@ -36,11 +36,13 @@ public sealed partial class CloudflareIncrementalCachePurgeTests
             startInfo.ArgumentList.Add(RepoPath(
                 ".github", "actions", "powerforge-cloudflare-site-policy",
                 "Invoke-PowerForgeCloudflareConfiguredPurge.ps1"));
+            startInfo.Environment["GITHUB_WORKSPACE"] = root;
+            startInfo.Environment["GITHUB_ACTION_PATH"] = RepoPath(".github", "actions", "powerforge-cloudflare-site-policy");
             startInfo.Environment["POWERFORGE_CLOUDFLARE_API_TOKEN"] = "test-token";
             startInfo.Environment["POWERFORGE_CLOUDFLARE_CLI_PROJECT"] = RepoPath("PowerForge.Web.Cli", "PowerForge.Web.Cli.csproj");
             startInfo.Environment["POWERFORGE_CLOUDFLARE_DRY_RUN"] = "true";
             startInfo.Environment["POWERFORGE_CLOUDFLARE_HOSTNAME"] = string.Empty;
-            startInfo.Environment["POWERFORGE_CLOUDFLARE_SITE_CONFIG"] = siteConfig;
+            startInfo.Environment["POWERFORGE_CLOUDFLARE_SITE_CONFIG"] = "site.json";
             startInfo.Environment["POWERFORGE_CLOUDFLARE_ZONE_ID"] = ZoneId;
             DotNetTestProcessEnvironment.DisableBuildServers(startInfo);
 

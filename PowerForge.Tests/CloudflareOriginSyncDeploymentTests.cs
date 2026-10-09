@@ -51,15 +51,5 @@ public sealed class CloudflareOriginSyncDeploymentTests
     }
 
     private static string ReadRepoFile(params string[] relativePath)
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        for (var i = 0; i < 12 && current is not null; i++)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "PowerForge", "PowerForge.csproj")))
-                return File.ReadAllText(Path.Combine([current.FullName, .. relativePath]));
-            current = current.Parent;
-        }
-
-        throw new DirectoryNotFoundException("Unable to locate repository root.");
-    }
+        => File.ReadAllText(Path.Combine([RepoRootLocator.Find(), .. relativePath]));
 }

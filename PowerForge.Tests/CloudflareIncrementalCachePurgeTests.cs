@@ -725,7 +725,7 @@ public sealed partial class CloudflareIncrementalCachePurgeTests
 
     private static string RepoPath(params string[] segments)
     {
-        var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        var root = RepoRootLocator.Find();
         return Path.Combine([root, .. segments]);
     }
 

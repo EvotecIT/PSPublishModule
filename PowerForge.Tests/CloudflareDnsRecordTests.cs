@@ -277,13 +277,7 @@ public sealed class CloudflareDnsRecordTests
     };
 
     private static string ReadRepoFile(params string[] segments)
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        while (current is not null && !File.Exists(Path.Combine(current.FullName, "PSPublishModule.sln")))
-            current = current.Parent;
-        Assert.NotNull(current);
-        return File.ReadAllText(Path.Combine([current!.FullName, .. segments]));
-    }
+        => File.ReadAllText(Path.Combine([RepoRootLocator.Find(), .. segments]));
 
     private sealed class SequenceHandler(params HttpResponseMessage[] responses) : HttpMessageHandler
     {

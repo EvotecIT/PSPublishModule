@@ -93,6 +93,25 @@ public sealed class CloudflareImmutableBrowserCacheTests
         Assert.Contains("Invalid Cloudflare immutable path", exception.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("/app/**/*.js")]
+    [InlineData("/app/**.*.wasm")]
+    [InlineData("/app/%2A%2a.js")]
+    [InlineData("/app/*%2A.js")]
+    [InlineData("/app/%2a*.js")]
+    public void Apply_ShouldRejectConsecutiveWildcardsBeforeRequestingRules(string pattern)
+    {
+        var handler = new SequenceHandler();
+        using var client = NewClient(handler);
+        var result = CloudflareResponseHeaderPolicyManager.Apply(
+            "0123456789abcdef0123456789abcdef", "synthetic-token", "example.com", "Example",
+            new AgentSecurityHeadersSpec { Enabled = false }, dryRun: false, client, immutablePaths: [pattern]);
+
+        Assert.False(result.Success);
+        Assert.Contains("consecutive wildcard", result.Message, StringComparison.Ordinal);
+        Assert.Empty(handler.Requests);
+    }
+
     [Fact]
     public void BuildManagedRules_ShouldBoundImmutablePatternCount()
     {

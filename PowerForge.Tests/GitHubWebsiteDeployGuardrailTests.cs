@@ -205,14 +205,5 @@ public sealed class GitHubWebsiteDeployGuardrailTests
         => File.ReadAllText(GetRepoPath(relativePath));
 
     private static string GetRepoPath(params string[] relativePath)
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        for (var i = 0; i < 12 && current is not null; i++)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "PowerForge", "PowerForge.csproj")))
-                return Path.Combine([current.FullName, .. relativePath]);
-            current = current.Parent;
-        }
-        throw new DirectoryNotFoundException("Unable to locate repository root.");
-    }
+        => Path.Combine([RepoRootLocator.Find(), .. relativePath]);
 }

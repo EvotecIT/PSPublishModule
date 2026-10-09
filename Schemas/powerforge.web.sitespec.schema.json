@@ -159,7 +159,7 @@
       "description": "Site-relative Cloudflare wildcard patterns for content-addressed files. Successful matching responses receive 'Cache-Control: public, max-age=31536000, immutable'. '*' matches any characters, including '/'. Each pattern must end in a literal non-HTML file extension.",
       "maxItems": 32,
       "uniqueItems": true,
-      "items": { "type": "string", "minLength": 2, "pattern": "^/[^?#\\\\\"\\s]*\\.[A-Za-z0-9]+$" }
+      "items": { "type": "string", "minLength": 2, "pattern": "^/(?!.*(?:\\*|%2[Aa]){2})[^?#\\\\\"\\s]*\\.[A-Za-z0-9]+$" }
     },
     "CloudflareCacheSpec": {
       "type": "object",
