@@ -75,7 +75,7 @@ public sealed partial class ModulePublisher
         PublishRepositoryConfiguration? repoConfig,
         string? baseDirectory)
     {
-        var source = FirstNonEmpty(repoConfig?.PublishUri, repoConfig?.Uri, repoConfig?.SourceUri);
+        var source = ModulePublishDependencyPolicy.PublishUri(repoConfig);
         if (string.IsNullOrWhiteSpace(source))
             source = ResolveDefaultManagedRepositorySource(repositoryName);
         else
@@ -93,7 +93,7 @@ public sealed partial class ModulePublisher
         PublishRepositoryConfiguration? repoConfig,
         string? baseDirectory)
     {
-        var source = FirstNonEmpty(repoConfig?.Uri, repoConfig?.SourceUri, repoConfig?.PublishUri);
+        var source = ModulePublishDependencyPolicy.ReadUri(repoConfig);
         if (string.IsNullOrWhiteSpace(source))
             source = ResolveDefaultManagedRepositorySource(repositoryName);
         else
@@ -146,9 +146,6 @@ public sealed partial class ModulePublisher
 
         return repoConfig?.Credential;
     }
-
-    private static string? FirstNonEmpty(params string?[] values)
-        => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))?.Trim();
 
     private bool EnsureManagedVersionIsGreaterThanRepository(
         ManagedModuleRepository repository,

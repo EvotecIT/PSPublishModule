@@ -248,6 +248,7 @@ internal sealed class PowerShellModuleCompilationReleaseContract
                     publish.Configuration.ReplaceExistingAssets,
                     publish.Configuration.UseAsDependencyVersionSource,
                     publish.Configuration.PublishRequiredModules,
+                    publish.Configuration.SkipDependenciesCheck,
                     publish.Configuration.RequiredModuleSourceRepository,
                     publish.Configuration.RequiredModuleSourceRepositoryUri,
                     repository = publish.Configuration.Repository is null ? null : new

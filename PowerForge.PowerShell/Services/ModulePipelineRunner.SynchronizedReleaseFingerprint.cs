@@ -295,6 +295,7 @@ public sealed partial class ModulePipelineRunner
             publish.ReplaceExistingAssets.ToString(),
             publish.UseAsDependencyVersionSource.ToString(),
             publish.PublishRequiredModules.ToString(),
+            publish.SkipDependenciesCheck.ToString(),
             NormalizeModuleRepositoryFingerprintSource(publish.RequiredModuleSourceRepository, plan.ProjectRoot),
             NormalizeModuleRepositoryFingerprintSource(publish.RequiredModuleSourceRepositoryUri, plan.ProjectRoot),
             publish.Force.ToString());

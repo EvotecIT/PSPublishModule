@@ -12,6 +12,11 @@ internal sealed class PublishConfigurationFactory
     {
         if (request is null)
             throw new ArgumentNullException(nameof(request));
+        ModulePublishDependencyPolicy.Validate(new PublishConfiguration
+        {
+            PublishRequiredModules = request.PublishRequiredModules,
+            SkipDependenciesCheck = request.SkipDependenciesCheck
+        }, request.Tool);
         if (request.ReplaceExistingAssets && !request.ReuseExistingRelease)
         {
             throw new ArgumentException(
@@ -100,7 +105,13 @@ internal sealed class PublishConfigurationFactory
             repositoryUri = endpoint.PSResourceGetUri;
             repositorySourceUri = endpoint.PowerShellGetSourceUri;
             repositoryPublishUri = endpoint.PowerShellGetPublishUri;
-            if (repositoryApiVersion == RepositoryApiVersion.Auto)
+            if (repositoryApiVersion == RepositoryApiVersion.Auto &&
+                !ModulePublishDependencyPolicy.HasSeparateEndpoints(new PublishRepositoryConfiguration
+                {
+                    Uri = repositoryUri,
+                    SourceUri = repositorySourceUri,
+                    PublishUri = repositoryPublishUri
+                }))
                 repositoryApiVersion = RepositoryApiVersion.V3;
         }
 
@@ -267,6 +278,7 @@ internal sealed class PublishConfigurationFactory
                 ReplaceExistingAssets = request.ReuseExistingRelease && request.ReplaceExistingAssets,
                 UseAsDependencyVersionSource = request.UseAsDependencyVersionSource,
                 PublishRequiredModules = request.PublishRequiredModules,
+                SkipDependenciesCheck = request.SkipDependenciesCheck,
                 RequiredModuleSourceRepository = string.IsNullOrWhiteSpace(request.RequiredModuleSourceRepository)
                     ? "PSGallery"
                     : request.RequiredModuleSourceRepository!.Trim(),

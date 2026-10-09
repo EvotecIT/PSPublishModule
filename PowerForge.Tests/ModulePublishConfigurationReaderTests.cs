@@ -5,6 +5,22 @@ namespace PowerForge.Tests;
 public sealed class ModulePublishConfigurationReaderTests
 {
     [Fact]
+    public void ReadFromJson_preserves_dependency_skip_and_separate_endpoints()
+    {
+        var configuration = Assert.Single(new ModulePublishConfigurationReader().ReadFromJson("""
+            { "Segments": [{ "Type": "GalleryNuget", "Configuration": {
+              "Tool": "PSResourceGet", "SkipDependenciesCheck": true,
+              "Repository": { "SourceUri": "https://packages.example.test/virtual/index.json",
+                              "PublishUri": "https://packages.example.test/local/index.json" }
+            } }] }
+            """));
+
+        Assert.True(configuration.SkipDependenciesCheck);
+        Assert.Equal("https://packages.example.test/virtual/index.json", configuration.Repository?.SourceUri);
+        Assert.Equal("https://packages.example.test/local/index.json", configuration.Repository?.PublishUri);
+    }
+
+    [Fact]
     public void ReadFromJson_ResolvesRepositoryAndGitHubPublishSegments()
     {
         const string json = """

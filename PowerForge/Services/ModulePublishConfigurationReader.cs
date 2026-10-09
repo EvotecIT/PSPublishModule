@@ -72,6 +72,7 @@ public sealed class ModulePublishConfigurationReader
             Repository = CloneRepository(configuration.Repository),
             Force = configuration.Force,
             PublishRequiredModules = configuration.PublishRequiredModules,
+            SkipDependenciesCheck = configuration.SkipDependenciesCheck,
             RequiredModuleSourceRepository = configuration.RequiredModuleSourceRepository,
             RequiredModuleSourceRepositoryUri = configuration.RequiredModuleSourceRepositoryUri,
             OverwriteTagName = configuration.OverwriteTagName,

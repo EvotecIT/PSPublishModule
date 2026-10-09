@@ -138,6 +138,9 @@ internal sealed class PublishConfigurationRequest
     /// <summary>Whether missing manifest RequiredModules should be published to the target repository first.</summary>
     public bool PublishRequiredModules { get; set; }
 
+    /// <summary>Skip publish-time dependency availability checks without changing dependency metadata.</summary>
+    public bool SkipDependenciesCheck { get; set; }
+
     /// <summary>Repository used as the source for publishing missing RequiredModules.</summary>
     public string? RequiredModuleSourceRepository { get; set; }
 

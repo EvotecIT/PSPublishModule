@@ -26,6 +26,42 @@ public sealed class PublishConfigurationFactoryTests
     }
 
     [Fact]
+    public void Create_maps_dependency_skip_without_changing_dependency_mirroring()
+    {
+        var segment = new PublishConfigurationFactory().Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "ApiKey",
+            Type = PublishDestination.PowerShellGallery,
+            Tool = PublishTool.PSResourceGet,
+            SkipDependenciesCheck = true
+        });
+
+        Assert.True(segment.Configuration.SkipDependenciesCheck);
+        Assert.False(segment.Configuration.PublishRequiredModules);
+    }
+
+    [Theory]
+    [InlineData(RepositoryApiVersion.Auto)]
+    [InlineData(RepositoryApiVersion.V2)]
+    public void Create_jfrog_split_feed_preserves_upload_protocol_selection(RepositoryApiVersion apiVersion)
+    {
+        var segment = new PublishConfigurationFactory().Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = "JFrog",
+            Tool = PublishTool.PSResourceGet,
+            JFrogBaseUri = "https://company.jfrog.io/artifactory",
+            JFrogRepository = "powershell-local",
+            RepositorySourceUri = "https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json",
+            RepositoryPublishUri = "https://company.jfrog.io/artifactory/api/nuget/powershell-local",
+            RepositoryApiVersion = apiVersion
+        });
+
+        Assert.Equal(apiVersion, segment.Configuration.Repository?.ApiVersion);
+        Assert.Equal("https://company.jfrog.io/artifactory/api/nuget/powershell-local", segment.Configuration.Repository?.PublishUri);
+        Assert.Contains("powershell-virtual", segment.Configuration.Repository?.SourceUri);
+    }
+
+    [Fact]
     public void Create_requires_explicit_release_reuse_before_asset_replacement()
     {
         var factory = new PublishConfigurationFactory();

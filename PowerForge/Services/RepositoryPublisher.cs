@@ -214,9 +214,7 @@ public sealed class RepositoryPublisher
                 timeout: TimeSpan.FromMinutes(2));
         }
 
-        var uri = string.IsNullOrWhiteSpace(repo.Uri)
-            ? (string.IsNullOrWhiteSpace(repo.PublishUri) ? repo.SourceUri : repo.PublishUri)
-            : repo.Uri;
+        var uri = ModulePublishDependencyPolicy.PSResourceGetRegistrationUri(repo);
 
         if (string.IsNullOrWhiteSpace(uri))
             throw new InvalidOperationException($"Repository '{repositoryName}' is missing Uri/PublishUri/SourceUri for PSResourceGet registration.");
