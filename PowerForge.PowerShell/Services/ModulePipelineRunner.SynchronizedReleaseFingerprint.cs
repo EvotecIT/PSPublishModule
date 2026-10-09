@@ -279,6 +279,7 @@ public sealed partial class ModulePipelineRunner
             NormalizeModuleRepositoryFingerprintSource(repository?.Uri, plan.ProjectRoot),
             NormalizeModuleRepositoryFingerprintSource(repository?.SourceUri, plan.ProjectRoot),
             NormalizeModuleRepositoryFingerprintSource(repository?.PublishUri, plan.ProjectRoot),
+            repository?.UseProviderEndpointDefaults.ToString(),
             repository?.ApiVersion.ToString(),
             repository?.Trusted.ToString(),
             repository?.Priority?.ToString(),

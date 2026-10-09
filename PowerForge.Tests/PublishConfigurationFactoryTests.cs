@@ -2,7 +2,7 @@ using PowerForge;
 
 namespace PowerForge.Tests;
 
-public sealed class PublishConfigurationFactoryTests
+public sealed partial class PublishConfigurationFactoryTests
 {
     [Fact]
     [Trait("Category", "PowerShellCompilation")]

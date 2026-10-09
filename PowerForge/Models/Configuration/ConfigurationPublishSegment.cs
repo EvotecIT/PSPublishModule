@@ -123,6 +123,12 @@ public sealed class PublishRepositoryConfiguration
     public string? PublishUri { get; set; }
 
     /// <summary>
+    /// Identifies provider-generated legacy SourceUri/PublishUri defaults. Preset factories set this
+    /// so managed reads and PSResourceGet use Uri; explicit endpoint configurations leave it false.
+    /// </summary>
+    public bool UseProviderEndpointDefaults { get; set; }
+
+    /// <summary>
     /// When true, marks the repository as trusted (avoids prompts). Default: true.
     /// </summary>
     public bool Trusted { get; set; } = true;

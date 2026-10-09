@@ -51,6 +51,9 @@ internal sealed class PublishConfigurationRequest
     /// <summary>PowerShellGet publish URI for repositories that expose separate source and publish endpoints.</summary>
     public string? RepositoryPublishUri { get; set; }
 
+    /// <summary>Resolved profile supplying repository defaults, when profile binding is used.</summary>
+    public ModuleRepositoryProfile? RepositoryProfile { get; set; }
+
     /// <summary>JFrog Artifactory base URI used with <see cref="JFrogRepository"/> to derive repository endpoints.</summary>
     public string? JFrogBaseUri { get; set; }
 

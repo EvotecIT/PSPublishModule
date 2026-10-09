@@ -182,7 +182,9 @@ try {
     # Reuse stable registrations, never another publisher's owned temporary alias.
     $matching = @($registeredRepositories | Where-Object {
       (Get-RepositoryName $_) -notmatch '^PowerForgePublish-[0-9a-f]{32}$' -and
-      [string]::Equals((Get-RepositoryUri $_), (Normalize-RepositoryUri $Uri), [System.StringComparison]::Ordinal)
+      [string]::Equals((Get-RepositoryUri $_), (Normalize-RepositoryUri $Uri), [System.StringComparison]::Ordinal) -and
+      ([string]::IsNullOrWhiteSpace($ApiVersion) -or
+        [string]::Equals([string]$_.ApiVersion, $ApiVersion, [System.StringComparison]::OrdinalIgnoreCase))
     })
     if ($matching.Count -gt 0) {
       $resolvedName = Get-RepositoryName $matching[0]

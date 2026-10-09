@@ -260,6 +260,7 @@ internal sealed class PowerShellModuleCompilationReleaseContract
                         publish.Configuration.Repository.Trusted,
                         publish.Configuration.Repository.Priority,
                         publish.Configuration.Repository.ApiVersion,
+                        publish.Configuration.Repository.UseProviderEndpointDefaults,
                         publish.Configuration.Repository.EnsureRegistered,
                         publish.Configuration.Repository.UnregisterAfterUse,
                         credentialUserName = publish.Configuration.Repository.Credential?.UserName,

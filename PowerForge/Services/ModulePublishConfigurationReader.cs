@@ -94,6 +94,7 @@ public sealed class ModulePublishConfigurationReader
             Uri = repository.Uri,
             SourceUri = repository.SourceUri,
             PublishUri = repository.PublishUri,
+            UseProviderEndpointDefaults = repository.UseProviderEndpointDefaults,
             Trusted = repository.Trusted,
             Priority = repository.Priority,
             ApiVersion = repository.ApiVersion,

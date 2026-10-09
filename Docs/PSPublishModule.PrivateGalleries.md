@@ -430,8 +430,12 @@ For split feeds, `RepositoryUri` supplies the default for either endpoint when
 its explicit override is absent. A configuration that specifies one endpoint
 uses that endpoint for both operations only when `RepositoryUri` is absent.
 When `RepositoryUri` is set, each override applies to its corresponding operation.
-Provider presets with equal source/publish URLs retain their v3 `RepositoryUri`
-for managed reads and single-feed PSResourceGet registration. Set
+Provider presets mark their generated legacy source/publish URLs with
+`UseProviderEndpointDefaults` and retain their v3 `RepositoryUri` for managed
+reads and single-feed PSResourceGet registration. Explicit endpoint settings,
+including equal source and publish URLs, take precedence over `RepositoryUri`.
+When editing preset JSON to supply endpoint overrides, set
+`UseProviderEndpointDefaults` to `false`. Set
 `RepositoryApiVersion` for the upload protocol if it cannot be inferred from
 the URL; the managed read checks infer their own protocol.
 

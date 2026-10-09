@@ -337,6 +337,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
         var repositoryUri = RepositoryUri;
         var repositorySourceUri = RepositorySourceUri;
         var repositoryPublishUri = RepositoryPublishUri;
+        PowerForge.ModuleRepositoryProfile? repositoryProfile = null;
         var requiredModuleSourceRepository = RequiredModuleSourceRepository;
         var requiredModuleSourceRepositoryUri = RequiredModuleSourceRepositoryUri;
 
@@ -351,6 +352,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
         if (ParameterSetName == "Profile")
         {
             var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(ProfileName);
+            repositoryProfile = profile;
             type = PowerForge.PublishDestination.PowerShellGallery;
             repositoryName = profile.RepositoryName;
             tool = profile.Tool switch
@@ -423,6 +425,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             RepositoryUri = repositoryUri,
             RepositorySourceUri = repositorySourceUri,
             RepositoryPublishUri = repositoryPublishUri,
+            RepositoryProfile = repositoryProfile,
             JFrogBaseUri = JFrogBaseUri,
             JFrogRepository = JFrogRepository,
             RepositoryTrusted = repositoryTrusted,

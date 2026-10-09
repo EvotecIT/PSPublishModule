@@ -118,10 +118,51 @@ public sealed partial class ModulePublisherManagedModuleTests
         {
             Uri = endpoints.PSResourceGetUri,
             SourceUri = endpoints.PowerShellGetSourceUri,
-            PublishUri = endpoints.PowerShellGetPublishUri
+            PublishUri = endpoints.PowerShellGetPublishUri,
+            UseProviderEndpointDefaults = true
         };
         Assert.Equal(endpoints.PSResourceGetUri, ModulePublishDependencyPolicy.ReadUri(repository));
         Assert.False(ModulePublishDependencyPolicy.HasSeparateEndpoints(repository));
         Assert.Equal(endpoints.PSResourceGetUri, ModulePublishDependencyPolicy.PSResourceGetRegistrationUri(repository));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Preset_protocol_defaults_survive_deferred_secret_and_path_copies(bool azureArtifacts)
+    {
+        using var root = new TemporaryDirectory();
+        var manifest = WriteDependencyModule(root.Path);
+        File.WriteAllText(Path.Combine(root.Path, "publish.key"), "synthetic-key");
+        var configuration = new PublishConfigurationFactory().Create(new PublishConfigurationRequest
+        {
+            ParameterSetName = azureArtifacts ? "AzureArtifacts" : "JFrog",
+            AzureDevOpsOrganization = "company", AzureArtifactsFeed = "feed",
+            JFrogBaseUri = azureArtifacts ? null : "https://company.jfrog.io/artifactory",
+            JFrogRepository = azureArtifacts ? null : "feed",
+            Tool = PublishTool.PSResourceGet, SkipDependenciesCheck = true
+        }).Configuration;
+        configuration.Enabled = true;
+        configuration.Force = true;
+        configuration.ApiKey = "";
+        configuration.ApiKeyFilePath = "publish.key";
+        var registrationSeen = false;
+        var runner = new StubPowerShellRunner(request =>
+        {
+            var script = File.ReadAllText(request.ScriptPath!);
+            if (script.Contains("PFPSRG::REPO::CREATED", StringComparison.Ordinal))
+            {
+                Assert.Equal(configuration.Repository!.Uri, request.Arguments[1]);
+                Assert.Equal("0", request.Arguments[5]);
+                registrationSeen = true;
+                return new PowerShellRunResult(0, "PFPSRG::REPO::CREATED::0", "", "pwsh");
+            }
+            Assert.Contains("PFPSRG::PUBLISH::OK", script);
+            return new PowerShellRunResult(0, "PFPSRG::PUBLISH::OK", "", "pwsh");
+        });
+        var result = new ModulePublisher(new NullLogger(), runner).Publish(configuration, CreatePlan(root.Path),
+            new ModuleBuildResult(root.Path, manifest, new ExportSet([], [], [])), []);
+        Assert.True(result.Succeeded);
+        Assert.True(registrationSeen);
     }
 }

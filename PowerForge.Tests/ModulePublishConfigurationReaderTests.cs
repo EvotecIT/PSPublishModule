@@ -5,6 +5,22 @@ namespace PowerForge.Tests;
 public sealed class ModulePublishConfigurationReaderTests
 {
     [Fact]
+    public void Explicit_equal_endpoint_overrides_do_not_infer_provider_defaults()
+    {
+        var repository = Assert.Single(new ModulePublishConfigurationReader().ReadFromJson("""
+            { "Segments": [{ "Type": "GalleryNuget", "Configuration": {
+              "Repository": { "Uri": "https://packages.example.test/default/index.json",
+                "SourceUri": "https://packages.example.test/target/index.json",
+                "PublishUri": "https://packages.example.test/target/index.json" }
+            } }] }
+            """)).Repository!;
+        Assert.False(repository.UseProviderEndpointDefaults);
+        Assert.Equal(repository.SourceUri, ModulePublishDependencyPolicy.ReadUri(repository));
+        Assert.Equal(repository.PublishUri, ModulePublishDependencyPolicy.PSResourceGetRegistrationUri(repository));
+        Assert.False(ModulePublishDependencyPolicy.HasSeparateEndpoints(repository));
+    }
+
+    [Fact]
     public void ReadFromJson_preserves_dependency_skip_and_separate_endpoints()
     {
         var configuration = Assert.Single(new ModulePublishConfigurationReader().ReadFromJson("""

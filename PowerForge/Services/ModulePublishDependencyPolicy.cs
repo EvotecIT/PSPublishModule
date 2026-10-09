@@ -24,9 +24,9 @@ internal static class ModulePublishDependencyPolicy
     // Preserve the single-endpoint registration contract used by provider presets.
     // For a split feed, PSResourceGet registers only the upload endpoint; reads use the managed client.
     internal static string? PSResourceGetRegistrationUri(PublishRepositoryConfiguration repository)
-        => HasSeparateEndpoints(repository)
-            ? PublishUri(repository)
-            : FirstNonEmpty(repository.Uri, repository.PublishUri, repository.SourceUri);
+        => HasLegacyProtocolEndpoints(repository)
+            ? FirstNonEmpty(repository.Uri, repository.PublishUri, repository.SourceUri)
+            : PublishUri(repository);
 
     internal static bool HasSeparateEndpoints(PublishRepositoryConfiguration? repository)
     {
@@ -38,9 +38,10 @@ internal static class ModulePublishDependencyPolicy
                !string.Equals(read.TrimEnd('/'), publish.TrimEnd('/'), StringComparison.Ordinal);
     }
 
-    // Provider presets carry one feed as a v3 Uri and equal legacy source/publish URLs.
+    // Preset provenance is explicit; equal caller overrides are not preset defaults.
     private static bool HasLegacyProtocolEndpoints(PublishRepositoryConfiguration? repository)
-        => !string.IsNullOrWhiteSpace(repository?.SourceUri) &&
+        => repository?.UseProviderEndpointDefaults == true &&
+           !string.IsNullOrWhiteSpace(repository.SourceUri) &&
            !string.IsNullOrWhiteSpace(repository?.PublishUri) &&
            string.Equals(repository!.SourceUri!.Trim().TrimEnd('/'),
                repository.PublishUri!.Trim().TrimEnd('/'), StringComparison.Ordinal);
