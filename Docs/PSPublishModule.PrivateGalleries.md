@@ -414,9 +414,11 @@ New-ConfigurationPublish `
 ```
 
 `ManagedModule` supports the same split. With `PSResourceGet`, PowerForge uses
-its managed NuGet client for read checks. It reuses an existing upload endpoint
-registration or creates and removes a temporary publish alias, preserving the
-consumer registration. With `EnsureRepositoryRegistered` disabled, register
+its managed NuGet client for read checks. It reuses a stable upload endpoint
+registration or creates and removes its own temporary publish alias, preserving
+the consumer registration. Overlapping publishes use separate temporary aliases
+so one operation's cleanup cannot remove another's registration.
+With `EnsureRepositoryRegistered` disabled, register
 `RepositoryName` against the upload endpoint beforehand. Version preflight
 requires no split-feed registration.
 The read checks support NuGet v2, NuGet v3, and

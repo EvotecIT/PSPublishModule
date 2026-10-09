@@ -179,8 +179,9 @@ try {
   $created = $false
 
   if ($TemporaryFlag -eq '1') {
-    # Publishing must preserve consumer aliases and existing upload settings.
+    # Reuse stable registrations, never another publisher's owned temporary alias.
     $matching = @($registeredRepositories | Where-Object {
+      (Get-RepositoryName $_) -notmatch '^PowerForgePublish-[0-9a-f]{32}$' -and
       [string]::Equals((Get-RepositoryUri $_), (Normalize-RepositoryUri $Uri), [System.StringComparison]::Ordinal)
     })
     if ($matching.Count -gt 0) {
@@ -229,7 +230,9 @@ try {
       }
     }
   } else {
-    Assert-NoRepositoryUriConflict -TargetName $Name -TargetUri $Uri -ExistingRepository $existing -Repositories $registeredRepositories
+    if ($TemporaryFlag -ne '1') {
+      Assert-NoRepositoryUriConflict -TargetName $Name -TargetUri $Uri -ExistingRepository $existing -Repositories $registeredRepositories
+    }
 
     $params = $commonParams.Clone()
     $params.Uri = $Uri

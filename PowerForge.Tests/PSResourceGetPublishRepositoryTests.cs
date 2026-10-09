@@ -5,9 +5,11 @@ namespace PowerForge.Tests;
 public sealed class PSResourceGetPublishRepositoryTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Acquire_publish_repository_preserves_existing_consumer_and_upload_settings(bool existingUpload)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void Acquire_publish_repository_preserves_existing_consumer_and_upload_settings(bool existingUpload, bool activePublisher)
     {
         using var root = new TemporaryDirectory();
         var statePath = Path.Combine(root.Path, "registrations.json");
@@ -18,6 +20,11 @@ public sealed class PSResourceGetPublishRepositoryTests
             }
             if (__EXISTING__) {
               $script:repositories.Upload = @{ Name = 'Upload'; Uri = 'https://feed.test/local/index.json'; Trusted = $false; Priority = 23 }
+            }
+            if (__ACTIVE__) {
+              $script:repositories['PowerForgePublish-11111111111111111111111111111111'] = @{
+                Name = 'PowerForgePublish-11111111111111111111111111111111'; Uri = 'https://feed.test/local/index.json'; Trusted = $true; Priority = 1
+              }
             }
             function Write-State { [IO.File]::WriteAllText('__STATE__', ($script:repositories | ConvertTo-Json -Depth 8)) }
             Write-State
@@ -33,6 +40,7 @@ public sealed class PSResourceGetPublishRepositoryTests
               Write-State
             }
             """.Replace("__EXISTING__", existingUpload ? "$true" : "$false")
+                .Replace("__ACTIVE__", activePublisher ? "$true" : "$false")
                 .Replace("__STATE__", statePath.Replace("'", "''"));
         var client = new PSResourceGetClient(new RegistrationFixtureRunner(root.Path, fixture), new NullLogger());
 
@@ -44,6 +52,12 @@ public sealed class PSResourceGetPublishRepositoryTests
         Assert.False(consumer.GetProperty("Trusted").GetBoolean());
         Assert.Equal(19, consumer.GetProperty("Priority").GetInt32());
         Assert.Equal(!existingUpload, acquired.Created);
+        if (activePublisher)
+        {
+            Assert.NotEqual("PowerForgePublish-11111111111111111111111111111111", acquired.Name);
+            Assert.Equal("https://feed.test/local/index.json", state.RootElement
+                .GetProperty("PowerForgePublish-11111111111111111111111111111111").GetProperty("Uri").GetString());
+        }
         if (existingUpload)
         {
             Assert.Equal("Upload", acquired.Name);
