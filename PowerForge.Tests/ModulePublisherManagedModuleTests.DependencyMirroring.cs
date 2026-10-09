@@ -29,7 +29,7 @@ public sealed partial class ModulePublisherManagedModuleTests
         {
             var script = File.ReadAllText(request.ScriptPath!);
             if (script.Contains("PFPSRG::REPO::CREATED", StringComparison.Ordinal))
-                return new PowerShellRunResult(0, "PFPSRG::REPO::CREATED::0", "", "pwsh");
+                return new PowerShellRunResult(0, "PFPSRG::REPO::CREATED::0\nPFPSRG::REPO::NAME::" + Convert.ToBase64String(Encoding.UTF8.GetBytes("ExistingUpload")), "", "pwsh");
             Assert.Contains("PFPSRG::PUBLISH::OK", script);
             Assert.Equal("push-key", request.Arguments[3]);
             Assert.Equal("publisher", request.Arguments[7]);
@@ -70,7 +70,7 @@ public sealed partial class ModulePublisherManagedModuleTests
         {
             var script = File.ReadAllText(request.ScriptPath!);
             if (script.Contains("PFPSRG::REPO::CREATED", StringComparison.Ordinal))
-                return new PowerShellRunResult(0, "PFPSRG::REPO::CREATED::0", "", "pwsh");
+                return new PowerShellRunResult(0, "PFPSRG::REPO::CREATED::0\nPFPSRG::REPO::NAME::" + Convert.ToBase64String(Encoding.UTF8.GetBytes("ExistingUpload")), "", "pwsh");
             if (script.Contains("Find-PSResource", StringComparison.Ordinal))
             {
                 var repository = Encoding.UTF8.GetString(Convert.FromBase64String(request.Arguments[2]));

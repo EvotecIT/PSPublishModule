@@ -146,11 +146,14 @@ public sealed partial class ModulePublisher
             throw new ArgumentNullException(nameof(plan));
         }
         if (!publish.Enabled ||
-            publish.Destination != PublishDestination.PowerShellGallery ||
-            publish.Force && !allowExistingExactVersion)
+            publish.Destination != PublishDestination.PowerShellGallery)
         {
             return ModulePublishVersionPreflightResult.Available;
         }
+
+        ModulePublishDependencyPolicy.Validate(publish, publish.Tool);
+        if (publish.Force && !allowExistingExactVersion)
+            return ModulePublishVersionPreflightResult.Available;
 
         var (repositoryName, repoConfig) = ResolveRepository(publish);
         repoConfig = NormalizeRepositoryPaths(repoConfig, plan.ProjectRoot);
@@ -175,6 +178,7 @@ public sealed partial class ModulePublisher
             try
             {
                 return ValidateVersionForPublishWithTool(
+                    publish,
                     PublishTool.PSResourceGet,
                     plan,
                     repositoryName,
@@ -184,6 +188,7 @@ public sealed partial class ModulePublisher
             catch (PowerShellToolNotAvailableException)
             {
                 return ValidateVersionForPublishWithTool(
+                    publish,
                     PublishTool.PowerShellGet,
                     plan,
                     repositoryName,
@@ -193,6 +198,7 @@ public sealed partial class ModulePublisher
         }
 
         return ValidateVersionForPublishWithTool(
+            publish,
             publish.Tool,
             plan,
             repositoryName,
@@ -201,17 +207,20 @@ public sealed partial class ModulePublisher
     }
 
     private ModulePublishVersionPreflightResult ValidateVersionForPublishWithTool(
+        PublishConfiguration publish,
         PublishTool tool,
         ModulePipelinePlan plan,
         string repositoryName,
         PublishRepositoryConfiguration? repoConfig,
         bool allowExistingExactVersion)
     {
+        ModulePublishDependencyPolicy.Validate(publish, tool);
         var repositoryCreated = false;
         var readCredential = _repositoryPublisher.ResolveCredentialForRepository(repoConfig);
         try
         {
-            if (repoConfig is not null && repoConfig.EnsureRegistered && HasRepositoryUris(repoConfig))
+            if (!ModulePublishDependencyPolicy.HasSeparateEndpoints(repoConfig) &&
+                repoConfig is not null && repoConfig.EnsureRegistered && HasRepositoryUris(repoConfig))
             {
                 repositoryCreated = EnsureRepositoryRegistered(tool, repositoryName, repoConfig);
             }

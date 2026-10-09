@@ -414,16 +414,22 @@ New-ConfigurationPublish `
 ```
 
 `ManagedModule` supports the same split. With `PSResourceGet`, PowerForge uses
-its managed NuGet client for read checks and registers the upload endpoint for
-the native publish operation. The read checks support NuGet v2, NuGet v3, and
+its managed NuGet client for read checks. It reuses an existing upload endpoint
+registration or creates and removes a temporary publish alias, preserving the
+consumer registration. With `EnsureRepositoryRegistered` disabled, register
+`RepositoryName` against the upload endpoint beforehand. Version preflight
+requires no split-feed registration.
+The read checks support NuGet v2, NuGet v3, and
 local feeds; they do not use PSResourceGet-specific repository protocols such as
 container registries. `PowerShellGet` uses its separate source and publish
 locations and performs its own dependency checks.
 
 For split feeds, `RepositoryUri` supplies the default for either endpoint when
 its explicit override is absent. A configuration that specifies one endpoint
-continues to use that endpoint for both operations. Provider presets retain
-their existing single-feed PSResourceGet registration URL. Set
+uses that endpoint for both operations only when `RepositoryUri` is absent.
+When `RepositoryUri` is set, each override applies to its corresponding operation.
+Provider presets with equal source/publish URLs retain their v3 `RepositoryUri`
+for managed reads and single-feed PSResourceGet registration. Set
 `RepositoryApiVersion` for the upload protocol if it cannot be inferred from
 the URL; the managed read checks infer their own protocol.
 

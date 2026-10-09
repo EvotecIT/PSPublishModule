@@ -3,7 +3,8 @@
   [string]$Uri,
   [string]$TrustedFlag,
   [string]$Priority,
-  [string]$ApiVersion
+  [string]$ApiVersion,
+  [string]$TemporaryFlag
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -177,6 +178,20 @@ function Test-RepositoryMatches {
 try {
   $created = $false
 
+  if ($TemporaryFlag -eq '1') {
+    # Publishing must preserve consumer aliases and existing upload settings.
+    $matching = @($registeredRepositories | Where-Object {
+      [string]::Equals((Get-RepositoryUri $_), (Normalize-RepositoryUri $Uri), [System.StringComparison]::Ordinal)
+    })
+    if ($matching.Count -gt 0) {
+      $resolvedName = Get-RepositoryName $matching[0]
+      Write-Output ('PFPSRG::REPO::NAME::' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($resolvedName)))
+      Write-Output 'PFPSRG::REPO::CREATED::0'
+      exit 0
+    }
+    if ($null -ne $existing) { throw "Temporary publish repository name '$Name' is already registered." }
+  }
+
   if ($isPSGallery) {
     if ($existing) {
       Set-PSResourceRepository @commonParams | Out-Null
@@ -234,6 +249,9 @@ try {
     }
   }
 
+  if ($TemporaryFlag -eq '1') {
+    Write-Output ('PFPSRG::REPO::NAME::' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Name)))
+  }
   Write-Output ('PFPSRG::REPO::CREATED::' + ($(if ($created) { '1' } else { '0' })))
   exit 0
 } catch {

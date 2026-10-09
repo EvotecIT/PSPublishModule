@@ -79,11 +79,11 @@ public sealed partial class ModulePublisherManagedModuleTests
             {
                 Assert.Equal(publishFeed.Path, request.Arguments[1]);
                 registrations++;
-                return new PowerShellRunResult(0, "PFPSRG::REPO::CREATED::0", "", "pwsh");
+                return new PowerShellRunResult(0, "PFPSRG::REPO::CREATED::0\nPFPSRG::REPO::NAME::" + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("ExistingUpload")), "", "pwsh");
             }
             if (script.Contains("PFPSRG::PUBLISH::OK", StringComparison.Ordinal))
             {
-                Assert.Equal("Local", request.Arguments[2]);
+                Assert.Equal("ExistingUpload", request.Arguments[2]);
                 Assert.Equal("1", request.Arguments[5]);
                 Assert.Equal("0", request.Arguments[6]);
                 Assert.Contains("RequiredVersion = '1.2.0'", File.ReadAllText(Path.Combine(request.Arguments[0], "PSPublishModule.psd1")));
@@ -148,7 +148,6 @@ public sealed partial class ModulePublisherManagedModuleTests
         TestPackageFactory.Create(Path.Combine(readFeed.Path, "PSPublishModule.3.0.13.nupkg"), "PSPublishModule", "3.0.13");
         var publish = DependencyPublish(readFeed.Path, publishFeed.Path, false);
         publish.Tool = tool;
-        publish.Repository!.EnsureRegistered = false;
         var publisher = new ModulePublisher(new NullLogger(), new StubPowerShellRunner(_ => throw new Exception("Version lookup must use the consumer feed.")));
 
         var result = publisher.ValidateVersionForPublish(publish, CreatePlan(root.Path), allowExistingExactVersion: true);

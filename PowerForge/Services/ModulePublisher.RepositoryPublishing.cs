@@ -83,12 +83,6 @@ public sealed partial class ModulePublisher
         Action<string, string>? finalizeRepositoryModule)
     {
         ModulePublishDependencyPolicy.Validate(publish, tool);
-        if (publish.PublishRequiredModules && tool == PublishTool.PowerShellGet)
-        {
-            throw new InvalidOperationException(
-                "PublishRequiredModules requires PSResourceGet or ManagedModule because dependency mirroring saves and republishes dependency graphs before publishing the main module. Select a supported tool or disable PublishRequiredModules.");
-        }
-
         var readCredential = tool == PublishTool.ManagedModule
             ? ResolveManagedReadCredential(repoConfig)
             : _repositoryPublisher.ResolveCredentialForRepository(repoConfig);
@@ -98,6 +92,8 @@ public sealed partial class ModulePublisher
         string? temporaryPublishPath = null;
         string? temporaryPackagePath = null;
         var repositoryCreated = false;
+        var temporaryRepository = false;
+        var uploadRepositoryName = repositoryName;
         PublishRepositoryConfiguration? repositoryForPublish = repoConfig is null
             ? null
             : CloneRepositoryForPublish(repoConfig, publishCredential);
@@ -117,8 +113,18 @@ public sealed partial class ModulePublisher
 
             if (tool != PublishTool.ManagedModule && repoConfig is not null && repoConfig.EnsureRegistered && HasRepositoryUris(repoConfig))
             {
-                repositoryCreated = EnsureRepositoryRegistered(tool, repositoryName, repoConfig);
+                if (tool == PublishTool.PSResourceGet && ModulePublishDependencyPolicy.HasSeparateEndpoints(repoConfig))
+                {
+                    (uploadRepositoryName, repositoryCreated) = _psResourceGet.AcquirePublishRepository(
+                        ModulePublishDependencyPolicy.PublishUri(repoConfig)!, repoConfig.Trusted, repoConfig.Priority, repoConfig.ApiVersion);
+                    temporaryRepository = repositoryCreated;
+                }
+                else
+                {
+                    repositoryCreated = EnsureRepositoryRegistered(tool, repositoryName, repoConfig);
+                }
                 repositoryForPublish = CloneRegisteredRepository(repoConfig, publishCredential);
+                repositoryForPublish.Name = uploadRepositoryName;
             }
 
             if (!publish.Force)
@@ -190,7 +196,7 @@ public sealed partial class ModulePublisher
                         mirrorRequiredModule: ManagedRequiredModuleRepositoryValidator.CanResolveSourceRepository(publish, repositoryName)
                             ? null
                             : _requiredModuleRepositoryValidator.CreateMirroringCallback(
-                                publish, repositoryName, readCredential, repositoryForPublish, remoteSideEffectObserved));
+                                publish, uploadRepositoryName, readCredential, repositoryForPublish, remoteSideEffectObserved));
                 }
                 else
                 {
@@ -210,7 +216,7 @@ public sealed partial class ModulePublisher
                 {
                     Path = modulePath,
                     IsNupkg = false,
-                    RepositoryName = repositoryName,
+                    RepositoryName = uploadRepositoryName,
                     Tool = tool,
                     ApiKey = string.IsNullOrWhiteSpace(publish.ApiKey) ? null : publish.ApiKey,
                     Repository = repositoryForPublish,
@@ -228,15 +234,15 @@ public sealed partial class ModulePublisher
         }
         finally
         {
-            if (repositoryCreated && repoConfig is { UnregisterAfterUse: true })
+            if (repositoryCreated && (temporaryRepository || repoConfig is { UnregisterAfterUse: true }))
             {
                 try
                 {
-                    UnregisterRepository(tool, repositoryName);
+                    UnregisterRepository(tool, uploadRepositoryName);
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warn($"Failed to unregister repository '{repositoryName}': {ex.Message}");
+                    _logger.Warn($"Failed to unregister repository '{uploadRepositoryName}': {ex.Message}");
                 }
             }
 
