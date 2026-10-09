@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <VersionPrefix>3.0.160</VersionPrefix>
+    <VersionPrefix>3.0.161</VersionPrefix>
     <Description>Host-independent IndexNow URL submission, batching, retries, and checkpoint normalization.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
