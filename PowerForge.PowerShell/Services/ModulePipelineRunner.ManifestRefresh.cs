@@ -28,9 +28,35 @@ public sealed partial class ModulePipelineRunner
         RefreshManifestPathFromPlan(
             plan,
             manifestPath,
-            plan.RequiredModules ?? Array.Empty<RequiredModuleReference>(),
+            ResolveProjectRequiredModules(plan, manifestPath),
             plan.ExternalModuleDependencies ?? Array.Empty<string>(),
             preserveCompiledRootModule: false);
+    }
+
+    private static RequiredModuleReference[] ResolveProjectRequiredModules(
+        ModulePipelinePlan plan,
+        string manifestPath)
+    {
+        // Source loaders still call donor functions before they are merged into a release.
+        // Preserve explicitly declared source dependencies only while they remain approved donors.
+        var approvedNames = new HashSet<string>(plan.ApprovedModules, StringComparer.OrdinalIgnoreCase);
+        var resolutions = plan.ApprovedModuleResolutions
+            .ToDictionary(static resolution => resolution.Name, StringComparer.OrdinalIgnoreCase);
+        var sourceDonors = ModuleManifestValueReader.ReadRequiredModules(manifestPath)
+            .Where(module => approvedNames.Contains(module.ModuleName))
+            .Select(module => resolutions.TryGetValue(module.ModuleName, out var resolution) &&
+                              (!string.IsNullOrWhiteSpace(resolution.Constraint.ModuleVersion) ||
+                               !string.IsNullOrWhiteSpace(resolution.Constraint.RequiredVersion) ||
+                               !string.IsNullOrWhiteSpace(resolution.Constraint.MaximumVersion) ||
+                               !string.IsNullOrWhiteSpace(resolution.Constraint.Guid))
+                ? resolution.Constraint
+                : module);
+
+        return (plan.RequiredModules ?? Array.Empty<RequiredModuleReference>())
+            .Concat(sourceDonors)
+            .GroupBy(static module => module.ModuleName, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .ToArray();
     }
 
     private void RefreshManifestPathFromPlan(
