@@ -248,6 +248,7 @@ internal sealed class PowerShellModuleCompilationReleaseContract
                     publish.Configuration.ReplaceExistingAssets,
                     publish.Configuration.UseAsDependencyVersionSource,
                     publish.Configuration.PublishRequiredModules,
+                    publish.Configuration.SkipDependenciesCheck,
                     publish.Configuration.RequiredModuleSourceRepository,
                     publish.Configuration.RequiredModuleSourceRepositoryUri,
                     repository = publish.Configuration.Repository is null ? null : new
@@ -259,6 +260,7 @@ internal sealed class PowerShellModuleCompilationReleaseContract
                         publish.Configuration.Repository.Trusted,
                         publish.Configuration.Repository.Priority,
                         publish.Configuration.Repository.ApiVersion,
+                        publish.Configuration.Repository.UseProviderEndpointDefaults,
                         publish.Configuration.Repository.EnsureRegistered,
                         publish.Configuration.Repository.UnregisterAfterUse,
                         credentialUserName = publish.Configuration.Repository.Credential?.UserName,

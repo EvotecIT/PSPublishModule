@@ -389,6 +389,97 @@ Install-ManagedModule `
 The profile is non-secret. The credential stays in a prompt, environment
 variable, CI secret, or local secret file.
 
+## Separate Consumer And Upload Feeds
+
+An Artifactory local repository can receive your module uploads while a virtual
+repository exposes that local repository together with a PowerShell Gallery
+proxy. Dependencies belong in the consumer feed even when they are absent from
+the upload repository.
+
+Set `RepositorySourceUri` to the feed consumers use and `RepositoryPublishUri`
+to the upload destination. PSPublishModule checks existing module versions and
+`RequiredModules` against the source URI, then uploads to the publish URI:
+
+```powershell
+New-ConfigurationPublish `
+    -RepositoryName 'CompanyModules' `
+    -Type PowerShellGallery `
+    -RepositorySourceUri 'https://company.jfrog.io/artifactory/api/nuget/v3/powershell-virtual/index.json' `
+    -RepositoryPublishUri 'https://company.jfrog.io/artifactory/api/nuget/powershell-local' `
+    -Tool PSResourceGet `
+    -FilePath "$env:USERPROFILE/.secrets/nuget-api-key.txt" `
+    -RepositoryCredentialUserName 'publisher' `
+    -RepositoryCredentialSecretEnvironmentVariable 'JFROG_ACCESS_TOKEN' `
+    -Enabled
+```
+
+`ManagedModule` supports the same split. With `PSResourceGet`, PowerForge uses
+its managed NuGet client for read checks. It reuses a stable upload endpoint
+registration or creates and removes its own temporary publish alias, preserving
+the consumer registration. Overlapping publishes use separate temporary aliases
+so one operation's cleanup cannot remove another's registration.
+With `EnsureRepositoryRegistered` disabled, register
+`RepositoryName` against the upload endpoint beforehand. Version preflight
+requires no split-feed registration.
+The read checks support NuGet v2, NuGet v3, and
+local feeds; they do not use PSResourceGet-specific repository protocols such as
+container registries. `PowerShellGet` uses its separate source and publish
+locations and performs its own dependency checks.
+
+For split feeds, `RepositoryUri` supplies the default for either endpoint when
+its explicit override is absent. A configuration that specifies one endpoint
+uses that endpoint for both operations only when `RepositoryUri` is absent.
+When `RepositoryUri` is set, each override applies to its corresponding operation.
+Provider presets mark their generated legacy source/publish URLs with
+`UseProviderEndpointDefaults` and retain their v3 `RepositoryUri` for managed
+reads and single-feed PSResourceGet registration. Explicit endpoint settings,
+including equal source and publish URLs, take precedence over `RepositoryUri`.
+When editing preset JSON to supply endpoint overrides, set
+`UseProviderEndpointDefaults` to `false`. Set
+`RepositoryApiVersion` for the upload protocol if it cannot be inferred from
+the URL; the managed read checks infer their own protocol.
+
+Saved Azure Artifacts and JFrog preset JSON without `UseProviderEndpointDefaults`
+retains its original v3 behavior when its URLs match the provider's canonical
+v3 and legacy v2 endpoints for the same feed. Explicit `false` disables this
+compatibility inference. A source-only override keeps uploads at `RepositoryUri`;
+a publish-only override keeps reads at `RepositoryUri`.
+
+## Skipping Repository Dependency Checks
+
+Use `-SkipDependenciesCheck` when dependency availability is guaranteed outside
+the publish-time lookup, for example when a release process validates the
+consumer feed separately:
+
+```powershell
+New-ConfigurationPublish `
+    -RepositoryName 'CompanyModules' `
+    -Type PowerShellGallery `
+    -RepositoryUri 'https://company.jfrog.io/artifactory/api/nuget/powershell-local' `
+    -Tool PSResourceGet `
+    -FilePath "$env:USERPROFILE/.secrets/nuget-api-key.txt" `
+    -SkipDependenciesCheck `
+    -Enabled
+```
+
+This skips only repository availability checks. `RequiredModules` stays in the
+manifest, package dependency metadata stays in the NuGet package, and manifest
+validation and module version checks still run. Consumers need a feed that can
+resolve the declared dependencies when they install the module.
+PSResourceGet's manifest validation still requires the declared modules to be
+available locally on the publishing machine.
+
+The switch supports `PSResourceGet` and `ManagedModule`. `PowerShellGet` rejects
+it because its publish command has no equivalent bypass. `Auto` rejects it if
+it falls back to PowerShellGet. Combining it with `PublishRequiredModules` also
+fails because mirroring requires dependency lookup. In JSON configuration, set
+`SkipDependenciesCheck` to `true` in the publish segment's `Configuration`.
+
+Prefer the split source/publish configuration when the virtual feed is
+available. `ExternalModuleDependencies` describes modules supplied separately by
+the environment; it is unsuitable for dependencies you expect the installer to
+download automatically.
+
 ## Publishing Missing RequiredModules
 
 Private feeds often start empty. If your module manifest contains
@@ -411,18 +502,24 @@ New-ConfigurationPublish `
     -Enabled
 ```
 
-Dependency mirroring requires `PSResourceGet`. If a configuration uses
+Dependency mirroring supports `PSResourceGet` and `ManagedModule`. If a configuration uses
 `-PublishRequiredModules -Tool PowerShellGet`, the publish run fails early with
 a clear error instead of silently skipping dependency mirroring.
+
+With split feeds, PSResourceGet can still acquire missing dependencies from a
+registered `RequiredModuleSourceRepository` name. ManagedModule uses PSGallery,
+an explicit `RequiredModuleSourceRepositoryUri`, or a URL/local path. Repository
+authentication and a separate publish API key retain their distinct roles
+during dependency uploads.
 
 Behavior:
 
 1. PSPublishModule reads the built module manifest.
-2. It checks each `RequiredModules` entry in the target repository.
+2. It checks each `RequiredModules` entry in the consumer repository.
 3. It skips modules listed in `PSData.ExternalModuleDependencies`.
 4. For missing entries, it finds a compatible version in
    `RequiredModuleSourceRepository`.
-5. It saves that dependency locally and publishes it to the target repository
+5. It saves that dependency locally and publishes it to the upload repository
    using the target publish credential.
 6. It verifies the dependency is now present, then publishes the main module.
 

@@ -90,7 +90,9 @@ public sealed class ManagedModuleRepository
     private static bool IsNuGetV2Path(string path)
     {
         var normalized = (path ?? string.Empty).TrimEnd('/');
-        return normalized.EndsWith("/api/v2", StringComparison.OrdinalIgnoreCase) ||
+        return System.Text.RegularExpressions.Regex.IsMatch(normalized, @"/api/nuget/[^/]+$",
+                   System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant) ||
+               normalized.EndsWith("/api/v2", StringComparison.OrdinalIgnoreCase) ||
                normalized.EndsWith("/api/v2/items/psscript", StringComparison.OrdinalIgnoreCase) ||
                normalized.EndsWith("/nuget/v2", StringComparison.OrdinalIgnoreCase) ||
                normalized.EndsWith("/v2", StringComparison.OrdinalIgnoreCase);

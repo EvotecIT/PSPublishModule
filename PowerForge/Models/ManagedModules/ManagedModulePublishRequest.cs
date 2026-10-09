@@ -58,6 +58,11 @@ public sealed class ManagedModulePublishRequest
     public RepositoryCredential? PublishCredential { get; set; }
 
     /// <summary>
+    /// Optional NuGet push API key, supplied separately from repository authentication.
+    /// </summary>
+    public string? ApiKey { get; set; }
+
+    /// <summary>
     /// Optional package authors override.
     /// </summary>
     public string? Authors { get; set; }

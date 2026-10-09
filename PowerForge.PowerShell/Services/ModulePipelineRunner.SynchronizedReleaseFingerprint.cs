@@ -279,6 +279,7 @@ public sealed partial class ModulePipelineRunner
             NormalizeModuleRepositoryFingerprintSource(repository?.Uri, plan.ProjectRoot),
             NormalizeModuleRepositoryFingerprintSource(repository?.SourceUri, plan.ProjectRoot),
             NormalizeModuleRepositoryFingerprintSource(repository?.PublishUri, plan.ProjectRoot),
+            repository?.UseProviderEndpointDefaults.ToString(),
             repository?.ApiVersion.ToString(),
             repository?.Trusted.ToString(),
             repository?.Priority?.ToString(),
@@ -295,6 +296,7 @@ public sealed partial class ModulePipelineRunner
             publish.ReplaceExistingAssets.ToString(),
             publish.UseAsDependencyVersionSource.ToString(),
             publish.PublishRequiredModules.ToString(),
+            publish.SkipDependenciesCheck.ToString(),
             NormalizeModuleRepositoryFingerprintSource(publish.RequiredModuleSourceRepository, plan.ProjectRoot),
             NormalizeModuleRepositoryFingerprintSource(publish.RequiredModuleSourceRepositoryUri, plan.ProjectRoot),
             publish.Force.ToString());

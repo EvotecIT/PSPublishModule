@@ -62,18 +62,20 @@ public static class PrivateGalleryRepositoryEndpoints
             var publishUri = NormalizeEndpointValue(repositoryPublishUri);
             var psResourceUri = NormalizeEndpointValue(repositoryUri);
             var baseUri = NormalizeEndpointValue(jfrogBaseUri);
+            var hasEndpointOverride = sourceUri is not null || publishUri is not null;
 
             if (!string.IsNullOrWhiteSpace(remoteRepository) && !string.IsNullOrWhiteSpace(baseUri))
             {
                 var normalizedBase = baseUri!.TrimEnd('/');
-                sourceUri ??= $"{normalizedBase}/api/nuget/{Uri.EscapeDataString(remoteRepository!)}";
-                publishUri ??= sourceUri;
                 psResourceUri ??= $"{normalizedBase}/api/nuget/v3/{Uri.EscapeDataString(remoteRepository!)}/index.json";
+                var legacyUri = $"{normalizedBase}/api/nuget/{Uri.EscapeDataString(remoteRepository!)}";
+                sourceUri ??= hasEndpointOverride ? psResourceUri : legacyUri;
+                publishUri ??= hasEndpointOverride ? psResourceUri : legacyUri;
             }
             else if (!string.IsNullOrWhiteSpace(psResourceUri))
             {
                 sourceUri ??= psResourceUri;
-                publishUri ??= sourceUri;
+                publishUri ??= psResourceUri;
             }
 
             if (string.IsNullOrWhiteSpace(psResourceUri))
@@ -86,7 +88,7 @@ public static class PrivateGalleryRepositoryEndpoints
                 null,
                 remoteRepository ?? resolvedRepositoryName!,
                 sourceUri ?? psResourceUri!,
-                publishUri ?? sourceUri ?? psResourceUri!,
+                publishUri ?? psResourceUri!,
                 psResourceUri!,
                 baseUri,
                 remoteRepository);
@@ -112,7 +114,7 @@ public static class PrivateGalleryRepositoryEndpoints
                 null,
                 owner!,
                 sourceUri,
-                NormalizeEndpointValue(repositoryPublishUri) ?? sourceUri,
+                NormalizeEndpointValue(repositoryPublishUri) ?? serviceIndex,
                 serviceIndex,
                 null,
                 null);
@@ -152,10 +154,33 @@ public static class PrivateGalleryRepositoryEndpoints
             null,
             NormalizeOptional(repository) ?? genericName!,
             genericSourceUri,
-            NormalizeEndpointValue(repositoryPublishUri) ?? genericSourceUri,
+            NormalizeEndpointValue(repositoryPublishUri) ?? normalizedRepositoryUri!,
             normalizedRepositoryUri!,
             null,
             NormalizeOptional(repository));
+    }
+
+    // Upgrade saved preset JSON without treating arbitrary equal overrides as provider defaults.
+    internal static bool HasLegacyProtocolEndpointDefaults(PublishRepositoryConfiguration repository)
+    {
+        var source = NormalizeEndpointValue(repository.SourceUri);
+        if (source is null || !string.Equals(source, NormalizeEndpointValue(repository.PublishUri), StringComparison.Ordinal) ||
+            !Uri.TryCreate(NormalizeEndpointValue(repository.Uri), UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp) ||
+            uri.Query.Length != 0 || uri.Fragment.Length != 0)
+            return false;
+
+        string? legacyPath = null;
+        if (uri.Host.Equals("pkgs.dev.azure.com", StringComparison.OrdinalIgnoreCase) &&
+            uri.AbsolutePath.EndsWith("/nuget/v3/index.json", StringComparison.Ordinal))
+            legacyPath = uri.AbsolutePath.Substring(0, uri.AbsolutePath.Length - "/v3/index.json".Length) + "/v2";
+        else
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(uri.AbsolutePath, @"^(.*)/api/nuget/v3/([^/]+)/index\.json$");
+            if (match.Success)
+                legacyPath = match.Groups[1].Value + "/api/nuget/" + match.Groups[2].Value;
+        }
+        return legacyPath is not null && string.Equals(source, uri.GetLeftPart(UriPartial.Authority) + legacyPath, StringComparison.Ordinal);
     }
 
     private static bool IsPowerShellGallery(string? repositoryName, string? repositoryUri)

@@ -78,6 +78,12 @@ public sealed class PublishConfiguration
     /// </summary>
     public bool PublishRequiredModules { get; set; }
 
+    /// <summary>
+    /// Skip repository availability checks for RequiredModules while retaining manifest and package dependencies.
+    /// Supported by PSResourceGet and ManagedModule; cannot be combined with PublishRequiredModules.
+    /// </summary>
+    public bool SkipDependenciesCheck { get; set; }
+
     /// <summary>Repository used as the source when <see cref="PublishRequiredModules"/> mirrors dependencies.</summary>
     public string? RequiredModuleSourceRepository { get; set; } = "PSGallery";
 
@@ -105,16 +111,24 @@ public sealed class PublishRepositoryConfiguration
     public string? Uri { get; set; }
 
     /// <summary>
-    /// Repository source URI (PowerShellGet Register-PSRepository -SourceLocation).
+    /// Repository read URI for version and dependency checks. It may point to a virtual consumer feed.
     /// When not set, <see cref="Uri"/> is used.
     /// </summary>
     public string? SourceUri { get; set; }
 
     /// <summary>
-    /// Repository publish URI (PowerShellGet Register-PSRepository -PublishLocation).
+    /// Repository upload URI. It may differ from the read URI when publishing to a local feed.
     /// When not set, <see cref="Uri"/> is used.
     /// </summary>
     public string? PublishUri { get; set; }
+
+    /// <summary>
+    /// Identifies provider-generated legacy SourceUri/PublishUri defaults. Preset factories set this
+    /// so managed reads and PSResourceGet use Uri; explicit endpoint configurations set it false.
+    /// When omitted, exact legacy Azure/JFrog preset endpoint triples retain their original behavior.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public bool? UseProviderEndpointDefaults { get; set; }
 
     /// <summary>
     /// When true, marks the repository as trusted (avoids prompts). Default: true.

@@ -108,12 +108,24 @@ public sealed class RepositoryPublisher
         bool createdRepository = false;
         bool unregisteredRepository = false;
         var repositoryParameter = repositorySpecified ? repositoryName : null;
+        var temporaryRepository = false;
 
         try
         {
             if (repoConfig is not null && repoConfig.EnsureRegistered && HasRepositoryUris(repoConfig))
             {
-                createdRepository = EnsureRepositoryRegistered(tool, repositoryName, repoConfig);
+                if (tool == PublishTool.PSResourceGet && ModulePublishDependencyPolicy.HasSeparateEndpoints(repoConfig))
+                {
+                    var acquired = _psResourceGet.AcquirePublishRepository(
+                        ModulePublishDependencyPolicy.PublishUri(repoConfig)!, repoConfig.Trusted, repoConfig.Priority, repoConfig.ApiVersion);
+                    repositoryParameter = acquired.Name;
+                    createdRepository = acquired.Created;
+                    temporaryRepository = acquired.Created;
+                }
+                else
+                {
+                    createdRepository = EnsureRepositoryRegistered(tool, repositoryName, repoConfig);
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(request.DestinationPath))
@@ -160,11 +172,11 @@ public sealed class RepositoryPublisher
         }
         finally
         {
-            if (createdRepository && repoConfig is not null && repoConfig.UnregisterAfterUse)
+            if (createdRepository && (temporaryRepository || repoConfig is { UnregisterAfterUse: true }))
             {
                 try
                 {
-                    UnregisterRepository(tool, repositoryName);
+                    UnregisterRepository(tool, repositoryParameter ?? repositoryName);
                     unregisteredRepository = true;
                 }
                 catch (Exception ex)
@@ -214,9 +226,7 @@ public sealed class RepositoryPublisher
                 timeout: TimeSpan.FromMinutes(2));
         }
 
-        var uri = string.IsNullOrWhiteSpace(repo.Uri)
-            ? (string.IsNullOrWhiteSpace(repo.PublishUri) ? repo.SourceUri : repo.PublishUri)
-            : repo.Uri;
+        var uri = ModulePublishDependencyPolicy.PSResourceGetRegistrationUri(repo);
 
         if (string.IsNullOrWhiteSpace(uri))
             throw new InvalidOperationException($"Repository '{repositoryName}' is missing Uri/PublishUri/SourceUri for PSResourceGet registration.");

@@ -54628,7 +54628,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryPublishUri</maml:name>
           <maml:description>
-            <maml:para>Repository publish URI (PowerShellGet PublishLocation).</maml:para>
+            <maml:para>Repository upload URI, such as an Artifactory local feed. Can differ from RepositorySourceUri.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -54640,7 +54640,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositorySourceUri</maml:name>
           <maml:description>
-            <maml:para>Repository source URI (PowerShellGet SourceLocation).</maml:para>
+            <maml:para>Repository read URI for version and dependency checks, such as an Artifactory virtual feed.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -54701,6 +54701,19 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <maml:name>ReuseExistingRelease</maml:name>
           <maml:description>
             <maml:para>Explicitly reuse an existing GitHub release when its tag is already occupied.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipDependenciesCheck</maml:name>
+          <maml:description>
+            <maml:para>Skip RequiredModules availability checks in the repository without removing dependencies from the package.&#xD;
+Requires PSResourceGet or ManagedModule and cannot be combined with PublishRequiredModules.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -54997,7 +55010,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryPublishUri</maml:name>
           <maml:description>
-            <maml:para>Repository publish URI (PowerShellGet PublishLocation).</maml:para>
+            <maml:para>Repository upload URI, such as an Artifactory local feed. Can differ from RepositorySourceUri.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -55009,7 +55022,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositorySourceUri</maml:name>
           <maml:description>
-            <maml:para>Repository source URI (PowerShellGet SourceLocation).</maml:para>
+            <maml:para>Repository read URI for version and dependency checks, such as an Artifactory virtual feed.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -55070,6 +55083,19 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <maml:name>ReuseExistingRelease</maml:name>
           <maml:description>
             <maml:para>Explicitly reuse an existing GitHub release when its tag is already occupied.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipDependenciesCheck</maml:name>
+          <maml:description>
+            <maml:para>Skip RequiredModules availability checks in the repository without removing dependencies from the package.&#xD;
+Requires PSResourceGet or ManagedModule and cannot be combined with PublishRequiredModules.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -55419,7 +55445,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryPublishUri</maml:name>
           <maml:description>
-            <maml:para>Repository publish URI (PowerShellGet PublishLocation).</maml:para>
+            <maml:para>Repository upload URI, such as an Artifactory local feed. Can differ from RepositorySourceUri.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -55431,7 +55457,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositorySourceUri</maml:name>
           <maml:description>
-            <maml:para>Repository source URI (PowerShellGet SourceLocation).</maml:para>
+            <maml:para>Repository read URI for version and dependency checks, such as an Artifactory virtual feed.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -55484,6 +55510,19 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipDependenciesCheck</maml:name>
+          <maml:description>
+            <maml:para>Skip RequiredModules availability checks in the repository without removing dependencies from the package.&#xD;
+Requires PSResourceGet or ManagedModule and cannot be combined with PublishRequiredModules.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -55774,6 +55813,19 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipDependenciesCheck</maml:name>
+          <maml:description>
+            <maml:para>Skip RequiredModules availability checks in the repository without removing dependencies from the package.&#xD;
+Requires PSResourceGet or ManagedModule and cannot be combined with PublishRequiredModules.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Tool</maml:name>
           <maml:description>
             <maml:para>Publishing tool/provider used for repository publishing. Ignored for GitHub publishing.</maml:para>
@@ -55970,6 +56022,19 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipDependenciesCheck</maml:name>
+          <maml:description>
+            <maml:para>Skip RequiredModules availability checks in the repository without removing dependencies from the package.&#xD;
+Requires PSResourceGet or ManagedModule and cannot be combined with PublishRequiredModules.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -56341,7 +56406,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>RepositoryPublishUri</maml:name>
         <maml:description>
-          <maml:para>Repository publish URI (PowerShellGet PublishLocation).</maml:para>
+          <maml:para>Repository upload URI, such as an Artifactory local feed. Can differ from RepositorySourceUri.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -56353,7 +56418,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>RepositorySourceUri</maml:name>
         <maml:description>
-          <maml:para>Repository source URI (PowerShellGet SourceLocation).</maml:para>
+          <maml:para>Repository read URI for version and dependency checks, such as an Artifactory virtual feed.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -56414,6 +56479,19 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <maml:name>ReuseExistingRelease</maml:name>
         <maml:description>
           <maml:para>Explicitly reuse an existing GitHub release when its tag is already occupied.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SkipDependenciesCheck</maml:name>
+        <maml:description>
+          <maml:para>Skip RequiredModules availability checks in the repository without removing dependencies from the package.&#xD;
+Requires PSResourceGet or ManagedModule and cannot be combined with PublishRequiredModules.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>

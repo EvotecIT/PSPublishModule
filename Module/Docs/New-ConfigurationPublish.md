@@ -11,27 +11,27 @@ Provides a way to configure publishing to PowerShell Gallery, GitHub, JFrog Arti
 ## SYNTAX
 ### ApiFromFile (Default)
 ```powershell
-New-ConfigurationPublish -Type <PublishDestination> [-FilePath <string>] [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <Int32>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [-ReuseExistingRelease] [-ReplaceExistingAssets] [-UseAsDependencyVersionSource] [-PublishRequiredModules] [-RequiredModuleSourceRepository <string>] [-RequiredModuleSourceRepositoryUri <string>] [<CommonParameters>]
+New-ConfigurationPublish -Type <PublishDestination> [-FilePath <string>] [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <Int32>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [-ReuseExistingRelease] [-ReplaceExistingAssets] [-UseAsDependencyVersionSource] [-PublishRequiredModules] [-SkipDependenciesCheck] [-RequiredModuleSourceRepository <string>] [-RequiredModuleSourceRepositoryUri <string>] [<CommonParameters>]
 ```
 
 ### ApiKey
 ```powershell
-New-ConfigurationPublish -Type <PublishDestination> [-ApiKey <string>] [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <Int32>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [-ReuseExistingRelease] [-ReplaceExistingAssets] [-UseAsDependencyVersionSource] [-PublishRequiredModules] [-RequiredModuleSourceRepository <string>] [-RequiredModuleSourceRepositoryUri <string>] [<CommonParameters>]
+New-ConfigurationPublish -Type <PublishDestination> [-ApiKey <string>] [-UserName <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <Int32>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-Enabled] [-OverwriteTagName <string>] [-Force] [-ID <string>] [-DoNotMarkAsPreRelease] [-GenerateReleaseNotes] [-ReuseExistingRelease] [-ReplaceExistingAssets] [-UseAsDependencyVersionSource] [-PublishRequiredModules] [-SkipDependenciesCheck] [-RequiredModuleSourceRepository <string>] [-RequiredModuleSourceRepositoryUri <string>] [<CommonParameters>]
 ```
 
 ### JFrog
 ```powershell
-New-ConfigurationPublish -JFrogBaseUri <string> -JFrogRepository <string> [-Type <PublishDestination>] [-FilePath <string>] [-ApiKey <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <Int32>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-JFrogPlatformUri <string>] [-JFrogOidcProvider <string>] [-JFrogOidcTokenId <string>] [-JFrogOidcTokenIdEnvironmentVariable <string>] [-JFrogOidcProviderType <JFrogOidcProviderType>] [-Enabled] [-Force] [-ID <string>] [-UseAsDependencyVersionSource] [-PublishRequiredModules] [-RequiredModuleSourceRepository <string>] [-RequiredModuleSourceRepositoryUri <string>] [<CommonParameters>]
+New-ConfigurationPublish -JFrogBaseUri <string> -JFrogRepository <string> [-Type <PublishDestination>] [-FilePath <string>] [-ApiKey <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryUri <string>] [-RepositorySourceUri <string>] [-RepositoryPublishUri <string>] [-RepositoryTrusted <bool>] [-RepositoryPriority <Int32>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-JFrogPlatformUri <string>] [-JFrogOidcProvider <string>] [-JFrogOidcTokenId <string>] [-JFrogOidcTokenIdEnvironmentVariable <string>] [-JFrogOidcProviderType <JFrogOidcProviderType>] [-Enabled] [-Force] [-ID <string>] [-UseAsDependencyVersionSource] [-PublishRequiredModules] [-SkipDependenciesCheck] [-RequiredModuleSourceRepository <string>] [-RequiredModuleSourceRepositoryUri <string>] [<CommonParameters>]
 ```
 
 ### AzureArtifacts
 ```powershell
-New-ConfigurationPublish -AzureDevOpsOrganization <string> -AzureArtifactsFeed <string> [-AzureDevOpsProject <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryTrusted <bool>] [-RepositoryPriority <Int32>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-Enabled] [-Force] [-ID <string>] [-UseAsDependencyVersionSource] [-PublishRequiredModules] [-RequiredModuleSourceRepository <string>] [-RequiredModuleSourceRepositoryUri <string>] [<CommonParameters>]
+New-ConfigurationPublish -AzureDevOpsOrganization <string> -AzureArtifactsFeed <string> [-AzureDevOpsProject <string>] [-RepositoryName <string>] [-Tool <PublishTool>] [-RepositoryTrusted <bool>] [-RepositoryPriority <Int32>] [-RepositoryApiVersion <RepositoryApiVersion>] [-EnsureRepositoryRegistered <bool>] [-UnregisterRepositoryAfterPublish] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-Enabled] [-Force] [-ID <string>] [-UseAsDependencyVersionSource] [-PublishRequiredModules] [-SkipDependenciesCheck] [-RequiredModuleSourceRepository <string>] [-RequiredModuleSourceRepositoryUri <string>] [<CommonParameters>]
 ```
 
 ### Profile
 ```powershell
-New-ConfigurationPublish -ProfileName <string> [-FilePath <string>] [-ApiKey <string>] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-Enabled] [-Force] [-ID <string>] [-PublishRequiredModules] [-RequiredModuleSourceRepository <string>] [-RequiredModuleSourceRepositoryUri <string>] [<CommonParameters>]
+New-ConfigurationPublish -ProfileName <string> [-FilePath <string>] [-ApiKey <string>] [-RepositoryCredentialUserName <string>] [-RepositoryCredentialSecret <string>] [-RepositoryCredentialSecretFilePath <string>] [-RepositoryCredentialSecretEnvironmentVariable <string>] [-Enabled] [-Force] [-ID <string>] [-PublishRequiredModules] [-SkipDependenciesCheck] [-RequiredModuleSourceRepository <string>] [-RequiredModuleSourceRepositoryUri <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -569,7 +569,7 @@ Accept wildcard characters: False
 ```
 
 ### -RepositoryPublishUri
-Repository publish URI (PowerShellGet PublishLocation).
+Repository upload URI, such as an Artifactory local feed. Can differ from RepositorySourceUri.
 
 ```yaml
 Type: String
@@ -585,7 +585,7 @@ Accept wildcard characters: False
 ```
 
 ### -RepositorySourceUri
-Repository source URI (PowerShellGet SourceLocation).
+Repository read URI for version and dependency checks, such as an Artifactory virtual feed.
 
 ```yaml
 Type: String
@@ -670,6 +670,23 @@ Explicitly reuse an existing GitHub release when its tag is already occupied.
 ```yaml
 Type: SwitchParameter
 Parameter Sets: ApiFromFile, ApiKey
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -SkipDependenciesCheck
+Skip RequiredModules availability checks in the repository without removing dependencies from the package.
+Requires PSResourceGet or ManagedModule and cannot be combined with PublishRequiredModules.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: ApiFromFile, ApiKey, JFrog, AzureArtifacts, Profile
 Aliases: None
 Possible values:
 

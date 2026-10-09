@@ -46,6 +46,7 @@ public sealed class ManagedModulePublishService
             publishRepository,
             package.PackagePath,
             request.PublishCredential ?? request.Credential,
+            request.ApiKey,
             request.Force,
             cancellationToken).ConfigureAwait(false);
 

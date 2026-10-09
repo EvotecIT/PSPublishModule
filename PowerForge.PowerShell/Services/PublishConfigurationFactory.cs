@@ -12,6 +12,11 @@ internal sealed class PublishConfigurationFactory
     {
         if (request is null)
             throw new ArgumentNullException(nameof(request));
+        ModulePublishDependencyPolicy.Validate(new PublishConfiguration
+        {
+            PublishRequiredModules = request.PublishRequiredModules,
+            SkipDependenciesCheck = request.SkipDependenciesCheck
+        }, request.Tool);
         if (request.ReplaceExistingAssets && !request.ReuseExistingRelease)
         {
             throw new ArgumentException(
@@ -81,12 +86,15 @@ internal sealed class PublishConfigurationFactory
         var repositorySourceUri = request.RepositorySourceUri;
         var repositoryPublishUri = request.RepositoryPublishUri;
         var repositoryApiVersion = request.RepositoryApiVersion;
+        var useProviderEndpointDefaults = UsesProviderEndpointDefaults(request.RepositoryProfile);
 
         if (isAzureArtifacts && hasJFrogShortcut)
             throw new ArgumentException("JFrogBaseUri/JFrogRepository cannot be combined with the Azure Artifacts preset.", nameof(request));
 
         if (hasJFrogShortcut)
         {
+            useProviderEndpointDefaults = string.IsNullOrWhiteSpace(request.RepositorySourceUri) &&
+                string.IsNullOrWhiteSpace(request.RepositoryPublishUri);
             var endpoint = PrivateGalleryRepositoryEndpoints.Create(
                 PrivateGalleryProvider.JFrog,
                 repositoryName: repositoryName,
@@ -100,7 +108,8 @@ internal sealed class PublishConfigurationFactory
             repositoryUri = endpoint.PSResourceGetUri;
             repositorySourceUri = endpoint.PowerShellGetSourceUri;
             repositoryPublishUri = endpoint.PowerShellGetPublishUri;
-            if (repositoryApiVersion == RepositoryApiVersion.Auto)
+            if (repositoryApiVersion == RepositoryApiVersion.Auto && useProviderEndpointDefaults &&
+                string.IsNullOrWhiteSpace(request.RepositoryUri))
                 repositoryApiVersion = RepositoryApiVersion.V3;
         }
 
@@ -230,6 +239,7 @@ internal sealed class PublishConfigurationFactory
                 Uri = repositoryUri,
                 SourceUri = repositorySourceUri,
                 PublishUri = repositoryPublishUri,
+                UseProviderEndpointDefaults = useProviderEndpointDefaults,
                 Trusted = request.RepositoryTrusted,
                 Priority = request.RepositoryPriority,
                 ApiVersion = repositoryApiVersion,
@@ -267,6 +277,7 @@ internal sealed class PublishConfigurationFactory
                 ReplaceExistingAssets = request.ReuseExistingRelease && request.ReplaceExistingAssets,
                 UseAsDependencyVersionSource = request.UseAsDependencyVersionSource,
                 PublishRequiredModules = request.PublishRequiredModules,
+                SkipDependenciesCheck = request.SkipDependenciesCheck,
                 RequiredModuleSourceRepository = string.IsNullOrWhiteSpace(request.RequiredModuleSourceRepository)
                     ? "PSGallery"
                     : request.RequiredModuleSourceRepository!.Trim(),
@@ -356,6 +367,22 @@ internal sealed class PublishConfigurationFactory
 
         return candidate.TrimEnd('/') + "/";
     }
+
+    internal static bool UsesProviderEndpointDefaults(ModuleRepositoryProfile? profile)
+    {
+        if (profile?.Provider != PrivateGalleryProvider.JFrog ||
+            string.IsNullOrWhiteSpace(profile.JFrogBaseUri) || string.IsNullOrWhiteSpace(profile.JFrogRepository))
+            return false;
+
+        var defaults = PrivateGalleryRepositoryEndpoints.Create(PrivateGalleryProvider.JFrog,
+            repositoryName: profile.RepositoryName, jfrogBaseUri: profile.JFrogBaseUri, jfrogRepository: profile.JFrogRepository);
+        return SameEndpoint(profile.RepositoryUri, defaults.PSResourceGetUri) &&
+            SameEndpoint(profile.RepositorySourceUri, defaults.PowerShellGetSourceUri) &&
+            SameEndpoint(profile.RepositoryPublishUri, defaults.PowerShellGetPublishUri);
+    }
+
+    private static bool SameEndpoint(string? left, string? right)
+        => string.Equals(left?.Trim().TrimEnd('/'), right?.Trim().TrimEnd('/'), StringComparison.Ordinal);
 
     private static bool IsMicrosoftArtifactRegistryPublishTarget(PublishConfigurationRequest request)
         => MicrosoftArtifactRegistryRepository.IsDefaultUri(request.RepositoryUri) ||

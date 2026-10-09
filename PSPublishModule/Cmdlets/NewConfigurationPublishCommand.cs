@@ -123,13 +123,13 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "JFrog")]
     public string? RepositoryUri { get; set; }
 
-    /// <summary>Repository source URI (PowerShellGet SourceLocation).</summary>
+    /// <summary>Repository read URI for version and dependency checks, such as an Artifactory virtual feed.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "JFrog")]
     public string? RepositorySourceUri { get; set; }
 
-    /// <summary>Repository publish URI (PowerShellGet PublishLocation).</summary>
+    /// <summary>Repository upload URI, such as an Artifactory local feed. Can differ from RepositorySourceUri.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
     [Parameter(ParameterSetName = "JFrog")]
@@ -294,6 +294,17 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
     [Parameter(ParameterSetName = "JFrog")]
     public SwitchParameter PublishRequiredModules { get; set; }
 
+    /// <summary>
+    /// Skip RequiredModules availability checks in the repository without removing dependencies from the package.
+    /// Requires PSResourceGet or ManagedModule and cannot be combined with PublishRequiredModules.
+    /// </summary>
+    [Parameter(ParameterSetName = "ApiKey")]
+    [Parameter(ParameterSetName = "ApiFromFile")]
+    [Parameter(ParameterSetName = "AzureArtifacts")]
+    [Parameter(ParameterSetName = "JFrog")]
+    [Parameter(ParameterSetName = "Profile")]
+    public SwitchParameter SkipDependenciesCheck { get; set; }
+
     /// <summary>Repository used as the source for publishing missing RequiredModules. Defaults to PSGallery.</summary>
     [Parameter(ParameterSetName = "ApiKey")]
     [Parameter(ParameterSetName = "ApiFromFile")]
@@ -326,6 +337,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
         var repositoryUri = RepositoryUri;
         var repositorySourceUri = RepositorySourceUri;
         var repositoryPublishUri = RepositoryPublishUri;
+        PowerForge.ModuleRepositoryProfile? repositoryProfile = null;
         var requiredModuleSourceRepository = RequiredModuleSourceRepository;
         var requiredModuleSourceRepositoryUri = RequiredModuleSourceRepositoryUri;
 
@@ -340,6 +352,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
         if (ParameterSetName == "Profile")
         {
             var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(ProfileName);
+            repositoryProfile = profile;
             type = PowerForge.PublishDestination.PowerShellGallery;
             repositoryName = profile.RepositoryName;
             tool = profile.Tool switch
@@ -412,6 +425,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             RepositoryUri = repositoryUri,
             RepositorySourceUri = repositorySourceUri,
             RepositoryPublishUri = repositoryPublishUri,
+            RepositoryProfile = repositoryProfile,
             JFrogBaseUri = JFrogBaseUri,
             JFrogRepository = JFrogRepository,
             RepositoryTrusted = repositoryTrusted,
@@ -441,6 +455,7 @@ public sealed class NewConfigurationPublishCommand : PSCmdlet
             ReplaceExistingAssets = ReplaceExistingAssets.IsPresent,
             UseAsDependencyVersionSource = UseAsDependencyVersionSource.IsPresent,
             PublishRequiredModules = PublishRequiredModules.IsPresent,
+            SkipDependenciesCheck = SkipDependenciesCheck.IsPresent,
             RequiredModuleSourceRepository = requiredModuleSourceRepository,
             RequiredModuleSourceRepositoryUri = requiredModuleSourceRepositoryUri,
             Verbose = MyInvocation.BoundParameters.ContainsKey("Verbose")
