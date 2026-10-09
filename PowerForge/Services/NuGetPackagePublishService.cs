@@ -104,9 +104,13 @@ internal sealed class NuGetPackagePublishService
                 default:
                     result.Success = false;
                     result.FailedItems.Add(package);
-                    _logger.Verbose($"dotnet nuget push failed for {package}.");
+                    _logger.Warn($"dotnet nuget push failed for {package}.");
                     if (pushResult.Message is string message && message.Length > 0)
-                        _logger.Verbose(message);
+                    {
+                        _logger.Warn(message);
+                        if (string.IsNullOrWhiteSpace(result.ErrorMessage))
+                            result.ErrorMessage = message;
+                    }
                     break;
             }
         }
@@ -269,10 +273,10 @@ internal sealed class NuGetPackagePublishService
                         item,
                         ProjectBuildProgressItemState.Failed,
                         pushResult.Message);
-                    _logger.Verbose($"dotnet nuget push failed for {package}.");
+                    _logger.Warn($"dotnet nuget push failed for {package}.");
                     if (pushResult.Message is string message && message.Length > 0)
                     {
-                        _logger.Verbose(message);
+                        _logger.Warn(message);
                         if (string.IsNullOrWhiteSpace(result.ErrorMessage))
                             result.ErrorMessage = message;
                     }
