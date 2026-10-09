@@ -145,10 +145,10 @@ public static partial class WebApiDocsGenerator
             list.Add(("derived-types", "Derived Types"));
         if (!string.IsNullOrWhiteSpace(type.Remarks))
             list.Add(("remarks", "Remarks"));
-        if (hasUsage)
-            list.Add(("usage", "Usage"));
         if (hasRelatedContent)
             list.Add(("guides-and-samples", "Guides & Samples"));
+        if (hasUsage)
+            list.Add(("usage", "Usage"));
         if (type.TypeParameters.Count > 0)
             list.Add(("type-parameters", "Type Parameters"));
         if (type.Examples.Count > 0)
@@ -186,8 +186,8 @@ public static partial class WebApiDocsGenerator
         var encoded = System.Web.HttpUtility.HtmlEncode(text);
         var linked = CrefTokenRegex.Replace(encoded, match =>
         {
-            var name = match.Groups["name"].Value;
-            return LinkifyType(name, baseUrl, slugMap);
+            var name = System.Web.HttpUtility.HtmlDecode(match.Groups["name"].Value);
+            return LinkifyCref(name, baseUrl, slugMap);
         });
         linked = HrefTokenRegex.Replace(linked, match =>
         {
@@ -219,11 +219,7 @@ public static partial class WebApiDocsGenerator
     internal static string StripCrefTokens(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-        var cleaned = CrefTokenRegex.Replace(text, match =>
-        {
-            var name = match.Groups["name"].Value;
-            return GetDisplayTypeName(name);
-        });
+        var cleaned = CrefTokenRegex.Replace(text, match => GetCrefDisplayName(match.Groups["name"].Value));
         cleaned = HrefTokenRegex.Replace(cleaned, match =>
         {
             var href = TryDecodeHrefToken(match.Groups["url"].Value);
@@ -247,6 +243,24 @@ public static partial class WebApiDocsGenerator
         {
             return string.Empty;
         }
+    }
+
+    private static string LinkifyCref(string cref, string baseUrl, IReadOnlyDictionary<string, string> slugMap)
+    {
+        var name = cref.Length > 2 && cref[1] == ':' ? cref.Substring(2) : cref;
+        var parameters = name.IndexOf('(');
+        var isMember = parameters >= 0 || (cref.Length > 2 && cref[1] == ':' && "MPFE".IndexOf(cref[0]) >= 0);
+        if (!isMember)
+            return LinkifyType(name, baseUrl, slugMap);
+        if (parameters >= 0)
+            name = name.Substring(0, parameters);
+        var memberDot = name.LastIndexOf('.');
+        var owner = memberDot > 0 ? name.Substring(0, memberDot).Replace("+", ".") : string.Empty;
+        var label = System.Web.HttpUtility.HtmlEncode(GetCrefDisplayName(cref));
+        if (!slugMap.TryGetValue(owner, out var slug) && !slugMap.TryGetValue(GetDisplayTypeName(owner), out slug))
+            return label;
+        var href = System.Web.HttpUtility.HtmlAttributeEncode(BuildDocsTypeUrl(baseUrl, slug));
+        return $"<a href=\"{href}\">{label}</a>";
     }
 
     private static string LinkifyType(string? name, string baseUrl, IReadOnlyDictionary<string, string> slugMap)
@@ -274,13 +288,16 @@ public static partial class WebApiDocsGenerator
     {
         var suffix = link.Line > 0 ? $":{link.Line}" : string.Empty;
         var displayPath = NormalizeSourceDisplayPath(link.Path);
-        var label = System.Web.HttpUtility.HtmlEncode($"{displayPath}{suffix}");
+        // Show the file name; the repository path is the tooltip and the link target.
+        var fileName = displayPath.Split('/').LastOrDefault() ?? displayPath;
+        var label = System.Web.HttpUtility.HtmlEncode($"{fileName}{suffix}");
+        var title = System.Web.HttpUtility.HtmlAttributeEncode($"{displayPath}{suffix}");
         if (!string.IsNullOrWhiteSpace(link.Url))
         {
             var href = System.Web.HttpUtility.HtmlAttributeEncode(link.Url);
-            return $"<a href=\"{href}\" target=\"_blank\" rel=\"noopener\">{label}</a>";
+            return $"<a class=\"source-link\" href=\"{href}\" title=\"{title}\" target=\"_blank\" rel=\"noopener\">{label}</a>";
         }
-        return $"<code>{label}</code>";
+        return $"<code class=\"source-link\" title=\"{title}\">{label}</code>";
     }
 
     private static string NormalizeSourceDisplayPath(string path)
@@ -292,7 +309,8 @@ public static partial class WebApiDocsGenerator
         if (string.IsNullOrWhiteSpace(normalized))
             return string.Empty;
 
-        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var parts = TrimLeadingRelativeSegments(normalized)
+            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (parts.Length >= 2 && string.Equals(parts[0], parts[1], StringComparison.OrdinalIgnoreCase))
             return string.Join("/", parts.Skip(1));
 
@@ -350,6 +368,22 @@ public static partial class WebApiDocsGenerator
         };
     }
 
+    // Member crefs carry a parameter list whose dots and commas would otherwise leave fragments
+    // such as "PdfOptions)"; show them as Type.Member instead.
+    private static string GetCrefDisplayName(string cref)
+    {
+        if (string.IsNullOrWhiteSpace(cref)) return cref;
+        var name = cref.Length > 2 && cref[1] == ':' ? cref.Substring(2) : cref;
+        // Tokens usually arrive without the M:/P: prefix; a parameter list still marks a method.
+        var parameters = name.IndexOf('(');
+        var isMember = parameters >= 0 || (cref.Length > 2 && cref[1] == ':' && "MPFE".IndexOf(cref[0]) >= 0);
+        if (parameters >= 0) name = name.Substring(0, parameters);
+        if (!isMember) return GetDisplayTypeName(name);
+        var memberDot = name.LastIndexOf('.');
+        if (memberDot <= 0) return name;
+        var member = name.Substring(memberDot + 1).Replace("#ctor", GetDisplayTypeName(name.Substring(0, memberDot)));
+        return GetDisplayTypeName(name.Substring(0, memberDot)) + "." + GenericArityRegex.Replace(member, string.Empty);
+    }
     private static string GetDisplayTypeName(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return name;

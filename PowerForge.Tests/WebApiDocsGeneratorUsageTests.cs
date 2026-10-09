@@ -29,6 +29,9 @@ public class WebApiDocsGeneratorUsageTests
                 <member name="M:{producerType}.Create({targetType})">
                   <summary>Creates or returns a target.</summary>
                 </member>
+                <member name="M:{producerType}.Create({targetType},System.String)">
+                  <summary>Creates a named target.</summary>
+                </member>
                 <member name="M:{producerType}.Use({targetType})">
                   <summary>Consumes a target.</summary>
                 </member>
@@ -65,6 +68,8 @@ public class WebApiDocsGeneratorUsageTests
             Assert.Contains("ApiUsageProducer.Create", html, StringComparison.Ordinal);
             Assert.Contains("ApiUsageProducer.Target", html, StringComparison.Ordinal);
             Assert.Contains("ApiUsageProducer.Use", html, StringComparison.Ordinal);
+            // Both Create overloads return and accept the target; each group lists the member once.
+            Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(html, ">ApiUsageProducer\\.Create</a>").Count);
 
             var targetJsonPath = Path.Combine(outputPath, "types", "apiusagetarget.json");
             Assert.True(File.Exists(targetJsonPath), "Expected target type JSON page to be generated.");
@@ -165,6 +170,8 @@ public sealed class ApiUsageProducer
 
     public ApiUsageTarget Create(ApiUsageTarget input) => input;
 
+    public ApiUsageTarget Create(ApiUsageTarget input, string name) => input;
+
     public void Use(ApiUsageTarget target)
     {
         _ = target;
@@ -180,6 +187,8 @@ namespace ApiUsageCollision.First
     public sealed class Producer
     {
         public ApiUsageTarget Create(ApiUsageTarget input) => input;
+
+    public ApiUsageTarget Create(ApiUsageTarget input, string name) => input;
     }
 }
 
@@ -188,5 +197,7 @@ namespace ApiUsageCollision.Second
     public sealed class Producer
     {
         public ApiUsageTarget Create(ApiUsageTarget input) => input;
+
+    public ApiUsageTarget Create(ApiUsageTarget input, string name) => input;
     }
 }

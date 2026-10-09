@@ -642,11 +642,8 @@ public static partial class WebApiDocsGenerator
         var cref = el.Attribute("cref")?.Value;
         if (!string.IsNullOrWhiteSpace(cref))
         {
-            var cleaned = cref;
-            var colonIdx = cleaned.IndexOf(':');
-            if (colonIdx >= 0 && colonIdx + 1 < cleaned.Length)
-                cleaned = cleaned.Substring(colonIdx + 1);
-            return $"[[cref:{cleaned}]]";
+            // Retain the member kind so parameterless methods and properties remain distinguishable from types.
+            return $"[[cref:{cref}]]";
         }
 
         var langword = el.Attribute("langword")?.Value;
