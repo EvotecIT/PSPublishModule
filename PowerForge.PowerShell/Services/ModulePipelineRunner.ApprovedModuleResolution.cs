@@ -248,11 +248,12 @@ public sealed partial class ModulePipelineRunner
                         $"Approved module '{resolution.Name}' {selectedVersion} was downloaded from '{repository}', but its manifest was not found in the temporary source.");
                 }
 
+                var manifestGuid = ValidateApprovedModuleManifestIdentity(modulePath, resolution.Constraint);
                 sources.Add(new ApprovedModuleSource(
                     resolution.Name,
                     selectedVersion,
                     modulePath,
-                    selected.Guid,
+                    manifestGuid,
                     moduleSearchRoot: temporaryRoot));
             }
         }
@@ -281,7 +282,9 @@ public sealed partial class ModulePipelineRunner
         bool matchPrereleaseByBaseVersion = false)
     {
         var matchingCandidates = (candidates ?? Array.Empty<PSResourceInfo>())
-            .Where(candidate => candidate is not null && ModuleGuidMatches(candidate.Guid, constraint.Guid))
+            // Gallery searches can omit GUID metadata; verify identity from the saved manifest.
+            .Where(candidate => candidate is not null &&
+                                (string.IsNullOrWhiteSpace(candidate.Guid) || ModuleGuidMatches(candidate.Guid, constraint.Guid)))
             .Where(candidate => constraint is not ResolvedRequiredModuleReference resolved ||
                                 string.IsNullOrWhiteSpace(resolved.ResolvedVersion) ||
                                 string.Equals(ModulePublisher.GetRepositoryVersionText(candidate), resolved.ResolvedVersion, StringComparison.OrdinalIgnoreCase))
@@ -297,6 +300,19 @@ public sealed partial class ModulePipelineRunner
         => constraint is ResolvedRequiredModuleReference resolved &&
            !string.IsNullOrWhiteSpace(resolved.ResolvedVersion) &&
            resolved.ResolvedVersion!.IndexOf('-') > 0;
+
+    internal static string? ValidateApprovedModuleManifestIdentity(string modulePath, RequiredModuleReference constraint)
+    {
+        var manifestPath = Path.Combine(modulePath, constraint.ModuleName + ".psd1");
+        ManifestEditor.TryGetTopLevelString(manifestPath, "GUID", out var manifestGuid);
+        if (!ModuleGuidMatches(manifestGuid, constraint.Guid))
+        {
+            throw new InvalidOperationException(
+                $"Approved module '{constraint.ModuleName}' has manifest GUID '{manifestGuid ?? "<missing>"}', but GUID '{constraint.Guid}' is required.");
+        }
+
+        return manifestGuid;
+    }
 
     private static bool ModuleGuidMatches(string? candidateGuid, string? requiredGuid)
     {
