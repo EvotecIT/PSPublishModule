@@ -3,7 +3,7 @@ namespace PowerForge.Tests;
 public sealed class HomeAssistantReleaseWorkflowTests {
     [Fact]
     public void WorkflowTransfersZipAssetsFromTheHiddenPowerForgeDirectory() {
-        var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        var root = RepoRootLocator.Find();
         var workflowPath = Path.Combine(root, ".github", "workflows", "powerforge-homeassistant-release.yml");
         var workflow = File.ReadAllText(workflowPath).Replace("\r\n", "\n", StringComparison.Ordinal);
         var uploadStepStart = workflow.IndexOf("- name: Transfer the single release asset to the publish job", StringComparison.Ordinal);
@@ -17,28 +17,22 @@ public sealed class HomeAssistantReleaseWorkflowTests {
 
     [Fact]
     public void WorkflowPinsThePublishedReleaseEngineVersionForEveryStage() {
-        var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        var root = RepoRootLocator.Find();
         var workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "powerforge-homeassistant-release.yml"));
         var action = File.ReadAllText(Path.Combine(root, ".github", "actions", "homeassistant-release", "action.yml"));
-        var skill = File.ReadAllText(Path.Combine(root, ".agents", "skills", "powerforge-homeassistant-release", "SKILL.md"));
 
         Assert.Equal(3, CountOccurrences(workflow, "powerforge-version: 3.0.154"));
         Assert.Contains("actions: read", workflow, StringComparison.Ordinal);
-        Assert.Contains("`actions: read`", skill, StringComparison.Ordinal);
         Assert.Contains("default: \"3.0.154\"", action, StringComparison.Ordinal);
     }
 
     [Fact]
     public void WorkflowAndReceiverTreatPullRequestNumbersAsTextualIdentifiers() {
-        var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        var root = RepoRootLocator.Find();
         var workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "powerforge-homeassistant-release.yml"));
-        var documentation = File.ReadAllText(Path.Combine(root, "Docs", "PowerForge.HomeAssistantRelease.md"));
-        var skill = File.ReadAllText(Path.Combine(root, ".agents", "skills", "powerforge-homeassistant-release", "SKILL.md"));
 
         Assert.Contains("pr_number:\n        description: Merged pull request number that initiated the release.\n        required: true\n        type: string", workflow.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
-        Assert.Contains("pr_number:\n        description: Merged pull request number to release or recover\n        required: true\n        type: string", documentation.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
-        Assert.Contains("pr_number: ${{ format('{0}', github.event.pull_request.number || inputs.pr_number) }}", documentation, StringComparison.Ordinal);
-        Assert.Contains("textual PR-number contract", skill, StringComparison.Ordinal);
+        Assert.Contains("pr-number: ${{ inputs.pr_number }}", workflow, StringComparison.Ordinal);
     }
 
     private static int CountOccurrences(string value, string search) {

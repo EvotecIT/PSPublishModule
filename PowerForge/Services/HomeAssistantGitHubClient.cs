@@ -136,20 +136,20 @@ internal sealed class HomeAssistantGitHubClient : IHomeAssistantGitHubClient {
         throw new InvalidOperationException("Release baseline search exceeded 1,000 GitHub releases.");
     }
 
-    public HomeAssistantGitHubRelease? FindReleaseByMarker(string marker) {
-        if (string.IsNullOrWhiteSpace(marker)) throw new ArgumentException("Release marker is required.", nameof(marker));
+    public HomeAssistantGitHubRelease? FindReleaseByMergeCommit(string mergeCommitSha) {
+        if (string.IsNullOrWhiteSpace(mergeCommitSha)) throw new ArgumentException("Merge commit SHA is required.", nameof(mergeCommitSha));
         for (var page = 1; page <= 10; page++) {
             var releases = GetArray($"/repos/{_owner}/{_repository}/releases?per_page=100&page={page}");
             foreach (var release in releases.OfType<JsonObject>()) {
                 var parsed = ParseRelease(release);
-                if (parsed.Body.IndexOf(marker, StringComparison.Ordinal) >= 0)
+                if (HomeAssistantReleasePolicy.FindSourceMarker(parsed.Body, mergeCommitSha) is not null)
                     return parsed;
             }
 
             if (releases.Count < 100) return null;
         }
 
-        throw new InvalidOperationException("Release marker search exceeded 1,000 GitHub releases.");
+        throw new InvalidOperationException("Source merge release search exceeded 1,000 GitHub releases.");
     }
 
     public HomeAssistantGitHubRelease? GetReleaseByTag(string tagName) {
@@ -169,6 +169,13 @@ internal sealed class HomeAssistantGitHubClient : IHomeAssistantGitHubClient {
         }
 
         return string.IsNullOrWhiteSpace(sha) ? null : sha;
+    }
+
+    public string GetCommitMessage(string commitSha) {
+        var value = GetObject($"/repos/{_owner}/{_repository}/git/commits/{Uri.EscapeDataString(commitSha)}");
+        if (!string.Equals(GetString(value, "sha"), commitSha, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("GitHub returned a different commit for release provenance.");
+        return GetString(value, "message");
     }
 
     private HomeAssistantGitHubRelease? TryGetRelease(string path) {

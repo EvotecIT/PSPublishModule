@@ -172,14 +172,16 @@ public sealed class HomeAssistantReleaseTests {
         Assert.EndsWith(Path.Combine("custom_components", "example"), snapshot.IntegrationDirectory, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void ReleaseService_ReusesVerifiedSourceMarkerWithoutPublishingAgain() {
+    [Theory]
+    [InlineData(42)]
+    [InlineData(43)]
+    public void ReleaseService_ReusesVerifiedMergeWithoutPublishingAgain(int requestingPullRequest) {
         using var fixture = HomeAssistantFixture.CreateIntegration("0.2.7");
         const string mergeSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         var marker = HomeAssistantReleasePolicy.BuildMarker(42, mergeSha);
         var github = new FakeGitHubClient {
             PullRequest = new HomeAssistantPullRequest {
-                Number = 42,
+                Number = requestingPullRequest,
                 Merged = true,
                 HeadSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                 MergeCommitSha = mergeSha
@@ -204,7 +206,7 @@ public sealed class HomeAssistantReleaseTests {
             Owner = "EvotecIT",
             Repository = "example",
             Token = "token",
-            PullRequestNumber = 42,
+            PullRequestNumber = requestingPullRequest,
             MergeCommitSha = mergeSha,
             Apply = true
         });
@@ -438,8 +440,10 @@ public sealed class HomeAssistantReleaseTests {
         Assert.Contains("no PowerForge release commit belongs", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void ReleaseService_AheadVersionResumesOnlyThePreparedMetadataCommit() {
+    [Theory]
+    [InlineData(42)]
+    [InlineData(43)]
+    public void ReleaseService_AheadVersionResumesOnlyThePreparedMetadataCommit(int requestingPullRequest) {
         using var fixture = HomeAssistantFixture.CreateIntegration("0.2.6");
         RunGit(fixture.Root, "init", "-b", "main");
         RunGit(fixture.Root, "config", "user.name", "PowerForge Tests");
@@ -458,8 +462,9 @@ public sealed class HomeAssistantReleaseTests {
             mergeSha);
 
         var github = new FakeGitHubClient {
+            CommitMessage = RunGit(fixture.Root, "show", "-s", "--format=%B", preparedCommit).StdOut,
             PullRequest = new HomeAssistantPullRequest {
-                Number = 42,
+                Number = requestingPullRequest,
                 Merged = true,
                 HeadSha = mergeSha,
                 MergeCommitSha = mergeSha
@@ -467,19 +472,20 @@ public sealed class HomeAssistantReleaseTests {
             LatestRelease = new HomeAssistantGitHubRelease { TagName = "v0.2.6" }
         };
         github.PullRequest.ChangedFiles.Add("custom_components/example/sensor.py");
+        var publisher = new RecordingPublisher(github);
         var service = new HomeAssistantReleaseService(
             new NullLogger(),
             repository,
             new HomeAssistantReleaseGitService(),
             github,
-            new RecordingPublisher());
+            publisher);
 
         var result = service.Prepare(new HomeAssistantReleasePrepareSpec {
             RepositoryRoot = fixture.Root,
             Owner = "EvotecIT",
             Repository = "example",
             Token = "token",
-            PullRequestNumber = 42,
+            PullRequestNumber = requestingPullRequest,
             MergeCommitSha = mergeSha,
             Apply = true
         });
@@ -488,6 +494,19 @@ public sealed class HomeAssistantReleaseTests {
         Assert.Equal("0.2.7", result.ReleaseVersion);
         Assert.Equal(preparedCommit, result.ReleaseCommitSha);
         Assert.Empty(RunGit(fixture.Root, "status", "--porcelain").StdOut);
+
+        var published = service.Publish(new HomeAssistantReleasePublishSpec {
+            Owner = "EvotecIT",
+            Repository = "example",
+            Token = "token",
+            PullRequestNumber = requestingPullRequest,
+            MergeCommitSha = mergeSha,
+            ReleaseVersion = result.ReleaseVersion!,
+            ReleaseCommitSha = preparedCommit
+        });
+
+        Assert.Equal(HomeAssistantReleaseAction.Published, published.Action);
+        Assert.Contains(HomeAssistantReleasePolicy.BuildMarker(42, mergeSha), publisher.CapturedRequest!.ReleaseNotes, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -611,8 +630,29 @@ public sealed class HomeAssistantReleaseTests {
         Assert.Equal(0, publisher.PublishCalls);
     }
 
-    [Fact]
-    public void PublishStage_OnlyPermitsReplacementOnThePreflightVerifiedRelease() {
+    [Theory]
+    [InlineData("Source-PR: #42\nSource-Merge: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")]
+    [InlineData("Source-PR: #42\nSource-PR: #43\nSource-Merge: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    public void PublishStage_RejectsContradictoryPreparedProvenanceBeforeMutation(string trailers) {
+        const string mergeSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        var github = new FakeGitHubClient {
+            PullRequest = new HomeAssistantPullRequest { Number = 43, Merged = true, MergeCommitSha = mergeSha },
+            CommitMessage = "Release v0.2.7\n\n" + trailers
+        };
+        var publisher = new RecordingPublisher(github);
+        var service = new HomeAssistantReleaseService(new NullLogger(), new HomeAssistantRepositoryService(), new HomeAssistantReleaseGitService(), github, publisher);
+
+        Assert.Throws<InvalidOperationException>(() => service.Publish(new HomeAssistantReleasePublishSpec {
+            Owner = "EvotecIT", Repository = "example", Token = "token", PullRequestNumber = 43,
+            MergeCommitSha = mergeSha, ReleaseVersion = "0.2.7", ReleaseCommitSha = "cccccccccccccccccccccccccccccccccccccccc"
+        }));
+        Assert.Equal(0, publisher.PublishCalls);
+    }
+
+    [Theory]
+    [InlineData(42)]
+    [InlineData(43)]
+    public void PublishStage_OnlyPermitsReplacementOnThePreflightVerifiedRelease(int requestingPullRequest) {
         using var fixture = HomeAssistantFixture.CreateZipIntegration("0.2.7");
         var snapshot = new HomeAssistantRepositoryService().Inspect(fixture.Root);
         var asset = Assert.Single(new HomeAssistantRepositoryService().BuildAssets(snapshot, fixture.Root, "0.2.7"));
@@ -630,7 +670,7 @@ public sealed class HomeAssistantReleaseTests {
         };
         var github = new FakeGitHubClient {
             PullRequest = new HomeAssistantPullRequest {
-                Number = 42,
+                Number = requestingPullRequest,
                 Merged = true,
                 HeadSha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                 MergeCommitSha = mergeSha
@@ -651,7 +691,7 @@ public sealed class HomeAssistantReleaseTests {
             Owner = "EvotecIT",
             Repository = "example",
             Token = "write-token",
-            PullRequestNumber = 42,
+            PullRequestNumber = requestingPullRequest,
             MergeCommitSha = mergeSha,
             ReleaseVersion = "0.2.7",
             ReleaseCommitSha = releaseCommit,
@@ -734,6 +774,7 @@ public sealed class HomeAssistantReleaseTests {
         internal HomeAssistantGitHubRelease? LatestRelease { get; set; }
         internal HomeAssistantGitHubRelease? TagRelease { get; set; }
         internal string? TagCommitSha { get; set; }
+        internal string CommitMessage { get; set; } = string.Empty;
         internal long? ExcludedWorkflowRunId { get; private set; }
 
         public HomeAssistantPullRequest GetPullRequest(int number) => PullRequest;
@@ -742,9 +783,10 @@ public sealed class HomeAssistantReleaseTests {
             return new HomeAssistantCheckSummary { Total = 1 };
         }
         public HomeAssistantGitHubRelease? GetLatestRelease() => LatestRelease;
-        public HomeAssistantGitHubRelease? FindReleaseByMarker(string marker) => MarkerRelease;
+        public HomeAssistantGitHubRelease? FindReleaseByMergeCommit(string mergeCommitSha) => MarkerRelease;
         public HomeAssistantGitHubRelease? GetReleaseByTag(string tagName) => TagRelease ?? MarkerRelease;
         public string? GetTagCommitSha(string tagName) => TagCommitSha;
+        public string GetCommitMessage(string commitSha) => CommitMessage;
     }
 
     private sealed class RecordingPublisher : IHomeAssistantReleasePublisher {
@@ -761,6 +803,7 @@ public sealed class HomeAssistantReleaseTests {
         public GitHubReleasePublishResult Publish(GitHubReleasePublishRequest request) {
             PublishCalls++;
             CapturedRequest = request;
+            var reused = _github?.MarkerRelease is not null;
             foreach (var asset in request.AssetFilePaths) {
                 if (!asset.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) continue;
                 using var archive = ZipFile.OpenRead(asset);
@@ -769,7 +812,13 @@ public sealed class HomeAssistantReleaseTests {
                 CapturedManifestVersion = JsonNode.Parse(reader.ReadToEnd())!["version"]!.GetValue<string>();
             }
 
-            if (_github?.MarkerRelease is not null) {
+            if (_github is not null) {
+                _github.MarkerRelease ??= new HomeAssistantGitHubRelease {
+                    TagName = request.TagName,
+                    Body = request.ReleaseNotes ?? string.Empty,
+                    HtmlUrl = "https://github.example/releases/" + request.TagName
+                };
+                _github.TagCommitSha = request.Commitish;
                 foreach (var asset in request.AssetFilePaths) {
                     var name = Path.GetFileName(asset);
                     _github.MarkerRelease.AssetNames.Add(name);
@@ -777,7 +826,7 @@ public sealed class HomeAssistantReleaseTests {
                 }
             }
 
-            return new GitHubReleasePublishResult { Succeeded = true, ReusedExistingRelease = _github?.MarkerRelease is not null };
+            return new GitHubReleasePublishResult { Succeeded = true, ReusedExistingRelease = reused };
         }
     }
 
