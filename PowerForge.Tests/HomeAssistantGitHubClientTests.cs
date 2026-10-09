@@ -4,6 +4,39 @@ using System.Text;
 namespace PowerForge.Tests;
 
 public sealed class HomeAssistantGitHubClientTests {
+    [Theory]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    [InlineData("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")]
+    public void GetCommitMessage_RequiresTheExactReleaseCommit(string returnedSha) {
+        const string expectedSha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        const string message = "Release v0.2.7\n\nSource-PR: #42\nSource-Merge: cccccccccccccccccccccccccccccccccccccccc";
+        using var httpClient = CreateHttpClient(System.Text.Json.JsonSerializer.Serialize(new { sha = returnedSha, message }));
+        var client = CreateClient(httpClient);
+
+        if (returnedSha == expectedSha)
+            Assert.Equal(message, client.GetCommitMessage(expectedSha));
+        else
+            Assert.Throws<InvalidOperationException>(() => client.GetCommitMessage(expectedSha));
+    }
+
+    [Fact]
+    public void FindReleaseByMergeCommit_MatchesLegacyProvenanceAndSkipsOtherMerges() {
+        const string sourceMerge = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        var expectedMarker = HomeAssistantReleasePolicy.BuildMarker(42, sourceMerge);
+        using var httpClient = CreateHttpClient(System.Text.Json.JsonSerializer.Serialize(new[] {
+            new { tag_name = "v0.2.8", body = HomeAssistantReleasePolicy.BuildMarker(43, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb") },
+            new { tag_name = "v0.2.7", body = expectedMarker }
+        }));
+        var client = CreateClient(httpClient);
+
+        var release = client.FindReleaseByMergeCommit(sourceMerge);
+
+        Assert.NotNull(release);
+        Assert.Equal("v0.2.7", release.TagName);
+        Assert.Equal(expectedMarker, release.Body);
+        Assert.Null(client.FindReleaseByMergeCommit(sourceMerge + "b"));
+    }
+
     [Fact]
     public void GetCheckSummary_ExcludesOnlyChecksFromTheCurrentGitHubActionsRun() {
         const long workflowRunId = 29561117925L;

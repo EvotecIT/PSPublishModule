@@ -47,12 +47,11 @@ public sealed class HomeAssistantReleaseService {
         var github = _github ?? new HomeAssistantGitHubClient(spec.Owner, spec.Repository, spec.Token, spec.ApiBaseUrl);
         var pullRequest = GetValidatedPullRequest(github, spec.PullRequestNumber, spec.MergeCommitSha);
         var mergeCommitSha = pullRequest.MergeCommitSha;
-        var marker = HomeAssistantReleasePolicy.BuildMarker(pullRequest.Number, mergeCommitSha);
-        var existingSourceRelease = github.FindReleaseByMarker(marker);
+        var existingSourceRelease = github.FindReleaseByMergeCommit(mergeCommitSha);
         HomeAssistantGitHubRelease? incompleteSourceRelease = null;
 
         if (existingSourceRelease is not null) {
-            VerifyReleaseProvenance(github, existingSourceRelease, expectedCommitSha: null, marker);
+            VerifyReleaseProvenance(github, existingSourceRelease, expectedCommitSha: null, mergeCommitSha);
             try {
                 VerifyReleaseAsset(existingSourceRelease);
                 return CreateResult(
@@ -64,7 +63,7 @@ public sealed class HomeAssistantReleaseService {
                     github.GetTagCommitSha(existingSourceRelease.TagName),
                     existingSourceRelease.HtmlUrl,
                     HomeAssistantReleasePolicy.ReadRequiredAsset(existingSourceRelease.Body),
-                    "The source pull request already has a verified PowerForge release.");
+                    "The merged source already has a verified PowerForge release.");
             } catch (HomeAssistantReleaseAssetException ex) {
                 incompleteSourceRelease = existingSourceRelease;
                 _logger.Warn($"{ex.Message} PowerForge will rebuild the exact tagged commit before replacing the asset.");
@@ -75,7 +74,6 @@ public sealed class HomeAssistantReleaseService {
         _git.EnsureContainsMerge(root, mergeCommitSha);
         var preparedReleaseCommit = _git.FindPreparedReleaseCommit(
             root,
-            pullRequest.Number,
             mergeCommitSha,
             _repository.GetVersionMetadataFiles(snapshot, root));
         var increment = HomeAssistantReleasePolicy.Resolve(pullRequest.Labels, pullRequest.ChangedFiles, spec.Increment);
@@ -98,8 +96,8 @@ public sealed class HomeAssistantReleaseService {
             if (comparison > 0) {
                 if (string.IsNullOrWhiteSpace(preparedReleaseCommit)) {
                     throw new InvalidOperationException(
-                        $"Repository version {currentVersion} is ahead of {latestRelease.TagName}, but no PowerForge release commit belongs to pull request #{pullRequest.Number}. " +
-                        "Finish or rerun the pull request that prepared the ahead version before releasing this pull request.");
+                        $"Repository version {currentVersion} is ahead of {latestRelease.TagName}, but no PowerForge release commit belongs to merge {mergeCommitSha}. " +
+                        "Finish or rerun the merged source that prepared the ahead version before releasing another merge.");
                 }
 
                 releaseCommit = preparedReleaseCommit;
@@ -124,7 +122,7 @@ public sealed class HomeAssistantReleaseService {
         }
 
         var tagName = "v" + releaseVersion;
-        PreflightTargetTag(github, tagName, releaseCommit, marker);
+        PreflightTargetTag(github, tagName, releaseCommit, mergeCommitSha);
         if (!spec.Apply) {
             return CreateResult(
                 snapshot,
@@ -241,7 +239,8 @@ public sealed class HomeAssistantReleaseService {
         var existing = github.GetReleaseByTag(tagName);
 
         if (existing is not null) {
-            VerifyReleaseProvenance(github, existing, spec.ReleaseCommitSha, marker);
+            VerifyReleaseProvenance(github, existing, spec.ReleaseCommitSha, pullRequest.MergeCommitSha);
+            marker = HomeAssistantReleasePolicy.FindSourceMarker(existing.Body, pullRequest.MergeCommitSha)!;
             var recordedAsset = HomeAssistantReleasePolicy.ReadRequiredAsset(existing.Body) ?? string.Empty;
             if (!string.Equals(recordedAsset, spec.RequiredAssetName, StringComparison.OrdinalIgnoreCase)) {
                 throw new InvalidOperationException(
@@ -262,6 +261,12 @@ public sealed class HomeAssistantReleaseService {
                 _logger.Warn($"{ex.Message} The verified release asset will be replaced.");
             }
         } else {
+            // A different stack layer may finish the first publication after
+            // the original job pushed metadata but failed before release creation.
+            var preparedSourcePr = HomeAssistantReleasePolicy.ReadPreparedSourcePullRequest(
+                github.GetCommitMessage(spec.ReleaseCommitSha), pullRequest.MergeCommitSha);
+            if (preparedSourcePr.HasValue)
+                marker = HomeAssistantReleasePolicy.BuildMarker(preparedSourcePr.Value, pullRequest.MergeCommitSha);
             var tagCommit = github.GetTagCommitSha(tagName);
             if (!string.IsNullOrWhiteSpace(tagCommit) &&
                 !string.Equals(tagCommit, spec.ReleaseCommitSha, StringComparison.OrdinalIgnoreCase)) {
@@ -298,7 +303,7 @@ public sealed class HomeAssistantReleaseService {
             throw new InvalidOperationException($"GitHub release publication did not succeed for {tagName}.");
 
         var published = WaitForRelease(github, tagName);
-        VerifyReleaseProvenance(github, published, spec.ReleaseCommitSha, marker);
+        VerifyReleaseProvenance(github, published, spec.ReleaseCommitSha, pullRequest.MergeCommitSha);
         VerifyReleaseAsset(published);
         return CreatePublishResult(
             HomeAssistantReleaseAction.Published,
@@ -343,10 +348,10 @@ public sealed class HomeAssistantReleaseService {
         IHomeAssistantGitHubClient github,
         string tagName,
         string? expectedCommitSha,
-        string marker) {
+        string mergeCommitSha) {
         var targetRelease = github.GetReleaseByTag(tagName);
         if (targetRelease is not null) {
-            VerifyReleaseProvenance(github, targetRelease, expectedCommitSha, marker);
+            VerifyReleaseProvenance(github, targetRelease, expectedCommitSha, mergeCommitSha);
             return;
         }
 
@@ -424,8 +429,8 @@ public sealed class HomeAssistantReleaseService {
         IHomeAssistantGitHubClient github,
         HomeAssistantGitHubRelease release,
         string? expectedCommitSha,
-        string marker) {
-        if (release.Body.IndexOf(marker, StringComparison.Ordinal) < 0)
+        string mergeCommitSha) {
+        if (HomeAssistantReleasePolicy.FindSourceMarker(release.Body, mergeCommitSha) is null)
             throw new InvalidOperationException($"GitHub release {release.TagName} does not contain the expected PowerForge source marker.");
         if (release.IsDraft || release.IsPrerelease)
             throw new InvalidOperationException($"GitHub release {release.TagName} must be a published stable release, not a draft or prerelease.");

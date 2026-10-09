@@ -122,8 +122,9 @@ The version commit is pushed with `GITHUB_TOKEN`, so GitHub does not recursively
 
 Rerun the failed release job before making manual changes. The workflow is designed to resume after a version push, release creation, or partial asset upload:
 
-- a release with the same source PR/merge marker is verified and returned;
-- repository metadata ahead of the latest release is resumed only when its reachable commit trailer proves that it belongs to the requested pull request;
+- a release for the same source merge commit is verified and returned, including when another PR in a merged stack triggered the job;
+- the original PR number remains in release provenance, while all stack layers sharing that merge commit reuse one verified release;
+- repository metadata ahead of the latest release is resumed only when its reachable, version-only commit trailer proves that it belongs to the requested merge;
 - an existing release is reused or modified only after its source marker and exact tag commit are verified;
 - a missing historical asset is rebuilt by the read-only job from a fresh checkout of the recorded tag commit, never from newer default-branch source;
 - mismatched tag targets, foreign prepared versions, and build-time tracked mutations fail closed.

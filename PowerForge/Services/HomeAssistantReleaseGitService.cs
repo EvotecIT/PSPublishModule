@@ -33,7 +33,6 @@ internal sealed class HomeAssistantReleaseGitService {
 
     internal string? FindPreparedReleaseCommit(
         string repositoryRoot,
-        int pullRequestNumber,
         string mergeCommitSha,
         IReadOnlyCollection<string> allowedVersionFiles) {
         if (string.IsNullOrWhiteSpace(mergeCommitSha)) throw new ArgumentException("Merge commit SHA is required.", nameof(mergeCommitSha));
@@ -45,7 +44,7 @@ internal sealed class HomeAssistantReleaseGitService {
             "log",
             "HEAD",
             "--fixed-strings",
-            $"--grep=Source-PR: #{pullRequestNumber}",
+            $"--grep=Source-Merge: {mergeCommitSha}",
             "--format=%H");
         if (!result.Succeeded) return null;
         var allowed = new HashSet<string>(
@@ -59,7 +58,9 @@ internal sealed class HomeAssistantReleaseGitService {
             var messageLines = message.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(value => value.Trim())
                 .ToArray();
-            if (!messageLines.Contains($"Source-PR: #{pullRequestNumber}", StringComparer.Ordinal) ||
+            const string sourcePrPrefix = "Source-PR: #";
+            if (!messageLines.Any(value => value.StartsWith(sourcePrPrefix, StringComparison.Ordinal) &&
+                    int.TryParse(value.Substring(sourcePrPrefix.Length), out var sourcePr) && sourcePr > 0) ||
                 !messageLines.Contains($"Source-Merge: {mergeCommitSha}", StringComparer.OrdinalIgnoreCase)) {
                 continue;
             }

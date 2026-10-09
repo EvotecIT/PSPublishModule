@@ -63,9 +63,10 @@ internal interface IHomeAssistantGitHubClient {
     HomeAssistantPullRequest GetPullRequest(int number);
     HomeAssistantCheckSummary GetCheckSummary(string commitSha, long? excludedWorkflowRunId);
     HomeAssistantGitHubRelease? GetLatestRelease();
-    HomeAssistantGitHubRelease? FindReleaseByMarker(string marker);
+    HomeAssistantGitHubRelease? FindReleaseByMergeCommit(string mergeCommitSha);
     HomeAssistantGitHubRelease? GetReleaseByTag(string tagName);
     string? GetTagCommitSha(string tagName);
+    string GetCommitMessage(string commitSha);
 }
 
 internal interface IHomeAssistantReleasePublisher {
