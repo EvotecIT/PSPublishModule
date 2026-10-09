@@ -55,6 +55,7 @@ public sealed partial class ModulePublisherManagedModuleTests
         using var root = new TemporaryDirectory();
         using var readFeed = new TemporaryDirectory();
         using var upload = new TemporaryDirectory();
+        TestPackageFactory.Create(Path.Combine(readFeed.Path, "Company.Transitive.2.0.0.nupkg"), "Company.Transitive", "2.0.0");
         if (alreadyAvailable)
             TestPackageFactory.Create(Path.Combine(readFeed.Path, "Company.Core.1.2.0.nupkg"), "Company.Core", "1.2.0");
         var manifest = WriteDependencyModule(root.Path);
@@ -79,8 +80,7 @@ public sealed partial class ModulePublisherManagedModuleTests
                     return new PowerShellRunResult(0, string.Join("::", new[] { "PFPSRG::ITEM", "Company.Core", "1.2.0", "InternalUpstream", "Test", "Dependency", Guid.Empty.ToString(), "" }
                         .Select((value, index) => index == 0 ? value : Convert.ToBase64String(Encoding.UTF8.GetBytes(value)))), "", "pwsh");
                 }
-                Assert.Contains("Local", repository);
-                return new PowerShellRunResult(1, "", "Package with name 'Company.Core' could not be found in repository 'Local'.", "pwsh");
+                throw new InvalidOperationException("Dependency queries must use the consumer feed, not the upload repository: " + repository);
             }
             if (script.Contains("Save-PSResource", StringComparison.Ordinal))
             {
@@ -88,9 +88,18 @@ public sealed partial class ModulePublisherManagedModuleTests
                 var savedModule = Directory.CreateDirectory(Path.Combine(request.Arguments[3], "Company.Core", "1.2.0")).FullName;
                 File.WriteAllText(Path.Combine(savedModule, "Company.Core.psd1"), "@{ ModuleVersion = '1.2.0'; RootModule = 'Company.Core.psm1' }");
                 File.WriteAllText(Path.Combine(savedModule, "Company.Core.psm1"), "");
-                return new PowerShellRunResult(0, "", "", "pwsh");
+                var transitiveModule = Directory.CreateDirectory(Path.Combine(request.Arguments[3], "Company.Transitive", "2.0.0")).FullName;
+                File.WriteAllText(Path.Combine(transitiveModule, "Company.Transitive.psd1"), "@{ ModuleVersion = '2.0.0'; RootModule = 'Company.Transitive.psm1' }");
+                File.WriteAllText(Path.Combine(transitiveModule, "Company.Transitive.psm1"), "");
+                var savedItems = string.Join(Environment.NewLine, new[]
+                {
+                    SavedItem("Company.Core", "1.2.0"),
+                    SavedItem("Company.Transitive", "2.0.0")
+                });
+                return new PowerShellRunResult(0, savedItems, "", "pwsh");
             }
             Assert.Contains("PFPSRG::PUBLISH::OK", script);
+            Assert.False(File.Exists(Path.Combine(request.Arguments[0], "Company.Transitive.psd1")), "A transitive dependency available through the consumer feed must not be uploaded again.");
             if (File.Exists(Path.Combine(request.Arguments[0], "Company.Core.psd1")))
             {
                 dependencyUploads++;
@@ -105,6 +114,10 @@ public sealed partial class ModulePublisherManagedModuleTests
         Assert.True(result.Succeeded);
         Assert.Equal(alreadyAvailable ? 0 : 1, sourceQueries);
         Assert.Equal(alreadyAvailable ? 0 : 1, dependencyUploads);
+
+        static string SavedItem(string name, string version)
+            => "PFPSRG::SAVE::ITEM::" + Convert.ToBase64String(Encoding.UTF8.GetBytes(name)) + "::" +
+               Convert.ToBase64String(Encoding.UTF8.GetBytes(version));
     }
 
     private sealed class ProtectedSplitFeedHandler(string upload) : HttpMessageHandler

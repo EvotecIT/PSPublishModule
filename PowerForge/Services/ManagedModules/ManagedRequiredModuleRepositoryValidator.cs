@@ -26,7 +26,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
         Action? remoteSideEffectObserved = null,
         ManagedModuleRepository? publishRepository = null,
         CancellationToken cancellationToken = default,
-        Action<RequiredModuleReference>? mirrorRequiredModule = null)
+        Action<RequiredModuleReference, Func<string, string, bool>>? mirrorRequiredModule = null)
         => ValidateAsync(publish, targetRepository, targetCredential, targetPublishCredential, plan, buildResult, remoteSideEffectObserved, publishRepository ?? targetRepository, cancellationToken, mirrorRequiredModule).GetAwaiter().GetResult();
 
     private async Task ValidateAsync(
@@ -39,7 +39,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
         Action? remoteSideEffectObserved,
         ManagedModuleRepository publishRepository,
         CancellationToken cancellationToken,
-        Action<RequiredModuleReference>? mirrorRequiredModule)
+        Action<RequiredModuleReference, Func<string, string, bool>>? mirrorRequiredModule)
     {
         if (publish is null) throw new ArgumentNullException(nameof(publish));
         if (targetRepository is null) throw new ArgumentNullException(nameof(targetRepository));
@@ -93,7 +93,10 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
                 {
                     if (mirrorRequiredModule is not null)
                     {
-                        mirrorRequiredModule(requiredModule);
+                        mirrorRequiredModule(requiredModule, (name, version) =>
+                            TargetContainsExactVersionAsync(
+                                targetRepository, targetCredential, name, version, cancellationToken)
+                                .GetAwaiter().GetResult());
                     }
                     else
                     {

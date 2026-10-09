@@ -152,7 +152,7 @@ internal sealed class RequiredModuleRepositoryValidator
             ? "PSGallery"
             : publish.RequiredModuleSourceRepository!.Trim();
 
-    internal Action<RequiredModuleReference> CreateMirroringCallback(
+    internal Action<RequiredModuleReference, Func<string, string, bool>> CreateMirroringCallback(
         PublishConfiguration publish,
         string repositoryName,
         RepositoryCredential? credential,
@@ -162,9 +162,10 @@ internal sealed class RequiredModuleRepositoryValidator
         var sourceRepositoryName = ResolveRequiredModuleSourceRepository(publish);
         var sourceCredential = ResolveRequiredModuleSourceCredential(sourceRepositoryName, repositoryName, credential);
         var mirroredPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        return requiredModule => _publisher.PublishRequiredModule(
+        return (requiredModule, targetContainsPackage) => _publisher.PublishRequiredModule(
             requiredModule, sourceRepositoryName, repositoryName, publish.ApiKey,
-            repositoryForPublish, sourceCredential, credential, mirroredPackages, remoteSideEffectObserved);
+            repositoryForPublish, sourceCredential, credential, mirroredPackages, remoteSideEffectObserved,
+            targetContainsPackage);
     }
 
     private static RepositoryCredential? ResolveRequiredModuleSourceCredential(
