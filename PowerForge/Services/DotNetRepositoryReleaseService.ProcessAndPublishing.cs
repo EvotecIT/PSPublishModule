@@ -242,32 +242,13 @@ public sealed partial class DotNetRepositoryReleaseService
         return lines[lines.Length - 1];
     }
 
-    internal static PackagePushResult ClassifyNuGetPushOutcome(int exitCode, bool skipDuplicate, string stdErr, string stdOut)
+    internal static PackagePushResult ClassifyNuGetPushOutcome(DotNetNuGetPushResult push)
     {
-        var combined = string.Join(Environment.NewLine, stdOut, stdErr).Trim();
-
-        if (skipDuplicate && LooksLikeSkippedDuplicate(combined))
-        {
-            return new PackagePushResult
-            {
-                Outcome = PackagePushOutcome.SkippedDuplicate,
-                Message = combined
-            };
-        }
-
-        if (exitCode != 0)
-        {
-            return new PackagePushResult
-            {
-                Outcome = PackagePushOutcome.Failed,
-                Message = combined
-            };
-        }
-
         return new PackagePushResult
         {
-            Outcome = PackagePushOutcome.Published,
-            Message = combined
+            Outcome = !push.Succeeded ? PackagePushOutcome.Failed
+                : push.SkippedDuplicate ? PackagePushOutcome.SkippedDuplicate : PackagePushOutcome.Published,
+            Message = string.Join(Environment.NewLine, push.StdOut, push.StdErr).Trim()
         };
     }
 
@@ -360,9 +341,7 @@ public sealed partial class DotNetRepositoryReleaseService
             .PushPackageAsync(request, cancellationToken)
             .GetAwaiter()
             .GetResult();
-        if (push.TimedOut)
-            return new PackagePushResult { Outcome = PackagePushOutcome.Failed, Message = string.Join(Environment.NewLine, push.StdOut, push.StdErr).Trim() };
-        return ClassifyNuGetPushOutcome(push.ExitCode, request.SkipDuplicate, push.StdErr, push.StdOut);
+        return ClassifyNuGetPushOutcome(push);
     }
 
     /// <summary>

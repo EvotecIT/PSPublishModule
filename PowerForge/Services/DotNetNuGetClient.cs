@@ -82,8 +82,8 @@ public sealed partial class DotNetNuGetClient
                 // Strict push stops at an existing primary package. Continue the requested companion
                 // separately, retaining the complete primary response and the companion's final error.
                 var companion = await PushPackageAsync(new DotNetNuGetPushRequest(
-                    symbolsPath, request.ApiKey, request.Source, request.SkipDuplicate,
-                    request.WorkingDirectory, request.Timeout, suppressCompanionSymbols: true), cancellationToken).ConfigureAwait(false);
+                    symbolsPath, request.ApiKey, pushContext.Value.Source, request.SkipDuplicate,
+                    pushContext.Value.WorkingDirectory, request.Timeout, suppressCompanionSymbols: false), cancellationToken).ConfigureAwait(false);
                 return new DotNetNuGetPushResult(
                     companion.ExitCode,
                     string.Join(Environment.NewLine, processResult.StdOut, processResult.StdErr, companion.StdOut),

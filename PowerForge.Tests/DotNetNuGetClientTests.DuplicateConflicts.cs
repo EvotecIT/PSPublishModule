@@ -53,6 +53,8 @@ public sealed partial class DotNetNuGetClientTests
     [InlineData(0, "Your package was pushed.", "", true)]
     [InlineData(1, "", "error: 409 (Package already exists and cannot be modified).", true)]
     [InlineData(1, "", "error: 409 (This package ID has been reserved).", false)]
+    [InlineData(127, "", "The executable could not be started.", false)]
+    [InlineData(130, "", "The operation was canceled.", false)]
     public async Task PushPackageAsync_PublishesCompanionAfterConfirmedPrimaryDuplicate(int symbolExitCode, string symbolOut, string symbolError, bool expectedSuccess)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-push-symbol-" + Guid.NewGuid().ToString("N")));
@@ -67,8 +69,8 @@ public sealed partial class DotNetNuGetClientTests
             attempts.Add(lines[2]);
             if (attempts.Count == 1)
                 return new ProcessRunResult(1, $"Pushing {package}...", "error: 409 (Package already exists and cannot be modified).", request.FileName, TimeSpan.Zero, false);
-            Assert.Contains("--no-symbols", lines);
-            return new ProcessRunResult(symbolExitCode, $"Pushing {symbols}...\n{symbolOut}", symbolError, request.FileName, TimeSpan.Zero, false);
+            Assert.DoesNotContain("--no-symbols", lines);
+            return new ProcessRunResult(symbolExitCode, symbolExitCode is 127 or 130 ? symbolOut : $"Pushing {symbols}...\n{symbolOut}", symbolError, request.FileName, TimeSpan.Zero, false);
         });
         try
         {
@@ -76,7 +78,7 @@ public sealed partial class DotNetNuGetClientTests
                 .PushPackageAsync(new DotNetNuGetPushRequest(package, "test-key", "https://example.test", true));
             Assert.Equal(new[] { package, symbols }, attempts);
             Assert.Equal(expectedSuccess, result.Succeeded);
-            var aggregate = DotNetRepositoryReleaseService.ClassifyNuGetPushOutcome(result.ExitCode, true, result.StdErr, result.StdOut);
+            var aggregate = DotNetRepositoryReleaseService.ClassifyNuGetPushOutcome(result);
             Assert.Equal(expectedSuccess, aggregate.Outcome != DotNetRepositoryReleaseService.PackagePushOutcome.Failed);
             var outcomes = DotNetRepositoryReleaseService.ClassifyPublishedArtifacts(new[] { package, symbols }, aggregate, true);
             Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate, outcomes[package]);

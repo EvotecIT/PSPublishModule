@@ -289,8 +289,10 @@ public sealed class Two : IPluginContract {}
         }
     }
 
-    [Fact]
-    public void PackPackages_CollectsOutputsAndPushesProducedPackages()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PackPackages_CollectsOutputsAndPushesProducedPackages(bool duplicate)
     {
         var root = CreateSandbox();
         try
@@ -322,7 +324,7 @@ public sealed class Two : IPluginContract {}
                 pushPackage: request =>
                 {
                     pushedPackages.Add(request.PackagePath);
-                    return new DotNetNuGetPushResult(0, "ok", string.Empty, "dotnet", TimeSpan.FromMilliseconds(1), timedOut: false, errorMessage: null);
+                    return new DotNetNuGetPushResult(duplicate ? 1 : 0, "ok", string.Empty, "dotnet", TimeSpan.FromMilliseconds(1), timedOut: false, errorMessage: null) { SkippedDuplicate = duplicate };
                 });
 
             var plan = service.PlanPackages(

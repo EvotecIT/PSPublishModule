@@ -301,7 +301,7 @@ internal static partial class Program
                 foreach (var symbolPath in entry.SymbolPackagePaths ?? Array.Empty<string>())
                     cmdLogger.Info($"    symbols: {symbolPath}");
                 foreach (var push in entry.PushResults ?? Array.Empty<DotNetNuGetPushResult>())
-                    cmdLogger.Info($"    push: {(push.ExitCode == 0 && !push.TimedOut ? "ok" : "failed")} {push.Executable}");
+                    cmdLogger.Info($"    push: {(push.Succeeded ? "ok" : "failed")} {push.Executable}");
             }
 
             return 0;

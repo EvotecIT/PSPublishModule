@@ -415,13 +415,11 @@ public sealed class DotNetRepositoryReleaseServiceTests
     }
 
     [Fact]
-    public void ClassifyNuGetPushOutcome_ReturnsSkippedDuplicate_WhenDotNetReportsExistingPackage()
+    public void ClassifyNuGetPushOutcome_ReturnsSkippedDuplicate_WhenClientAcceptsExistingPackage()
     {
-        var result = DotNetRepositoryReleaseService.ClassifyNuGetPushOutcome(
-            exitCode: 0,
-            skipDuplicate: true,
-            stdErr: string.Empty,
-            stdOut: "Package 'DbaClientX.SqlServer.0.1.0.nupkg' already exists and cannot be modified. The server returned 409 (Conflict).");
+        var result = DotNetRepositoryReleaseService.ClassifyNuGetPushOutcome(new DotNetNuGetPushResult(
+            1, "Package 'Sample.1.0.0.nupkg' already exists and cannot be modified.", string.Empty,
+            "dotnet", TimeSpan.Zero, false, null) { SkippedDuplicate = true });
 
         Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate, result.Outcome);
     }
@@ -429,11 +427,8 @@ public sealed class DotNetRepositoryReleaseServiceTests
     [Fact]
     public void ClassifyNuGetPushOutcome_ReturnsPublished_WhenDotNetReportsSuccessfulUpload()
     {
-        var result = DotNetRepositoryReleaseService.ClassifyNuGetPushOutcome(
-            exitCode: 0,
-            skipDuplicate: true,
-            stdErr: string.Empty,
-            stdOut: "Your package was pushed.");
+        var result = DotNetRepositoryReleaseService.ClassifyNuGetPushOutcome(new DotNetNuGetPushResult(
+            0, "Your package was pushed.", string.Empty, "dotnet", TimeSpan.Zero, false, null));
 
         Assert.Equal(DotNetRepositoryReleaseService.PackagePushOutcome.Published, result.Outcome);
     }
