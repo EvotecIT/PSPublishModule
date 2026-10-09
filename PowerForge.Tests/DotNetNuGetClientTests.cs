@@ -3,7 +3,7 @@ using PowerForge;
 
 namespace PowerForge.Tests;
 
-public sealed class DotNetNuGetClientTests
+public sealed partial class DotNetNuGetClientTests
 {
     [Fact]
     public async Task PushPackageAsync_UsesResponseFileAndCleansItUp()
@@ -47,7 +47,6 @@ public sealed class DotNetNuGetClientTests
                     "secret",
                     "--source",
                     "https://api.nuget.org/v3/index.json",
-                    "--skip-duplicate",
                     "--no-symbols"
                 ]),
                 responseFileContent);
@@ -232,8 +231,7 @@ public sealed class DotNetNuGetClientTests
                     "--api-key",
                     "secret value",
                     "--source",
-                    source,
-                    "--skip-duplicate"
+                    source
                 ]),
                 responseFileContent);
             Assert.True(result.Succeeded);

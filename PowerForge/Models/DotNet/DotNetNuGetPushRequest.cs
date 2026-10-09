@@ -11,7 +11,7 @@ public sealed class DotNetNuGetPushRequest
     /// <param name="packagePath">Package path to push. Relative paths are resolved from <paramref name="workingDirectory" /> when supplied, or from the current process directory otherwise.</param>
     /// <param name="apiKey">API key passed to the feed.</param>
     /// <param name="source">Feed source URL, name, or local path. Explicit relative paths are resolved from <paramref name="workingDirectory" />.</param>
-    /// <param name="skipDuplicate">When true, passes <c>--skip-duplicate</c>.</param>
+    /// <param name="skipDuplicate">When true, confirmed duplicate uploads are treated as successful.</param>
     /// <param name="workingDirectory">Optional NuGet configuration and process context.</param>
     /// <param name="timeout">Optional timeout override.</param>
     public DotNetNuGetPushRequest(
@@ -38,7 +38,7 @@ public sealed class DotNetNuGetPushRequest
     /// <param name="packagePath">Package path to push. Relative paths are resolved from <paramref name="workingDirectory" /> when supplied, or from the current process directory otherwise.</param>
     /// <param name="apiKey">API key passed to the feed.</param>
     /// <param name="source">Feed source URL, name, or local path. Explicit relative paths are resolved from <paramref name="workingDirectory" />.</param>
-    /// <param name="skipDuplicate">When true, passes <c>--skip-duplicate</c>.</param>
+    /// <param name="skipDuplicate">When true, confirmed duplicate uploads are treated as successful.</param>
     /// <param name="workingDirectory">Optional NuGet configuration and process context.</param>
     /// <param name="timeout">Optional timeout override.</param>
     /// <param name="suppressCompanionSymbols">When true, passes <c>--no-symbols</c>.</param>
@@ -77,7 +77,7 @@ public sealed class DotNetNuGetPushRequest
     public string Source { get; }
 
     /// <summary>
-    /// Gets a value indicating whether <c>--skip-duplicate</c> should be passed.
+    /// Gets a value indicating whether a confirmed existing package version is accepted as a successful push.
     /// </summary>
     public bool SkipDuplicate { get; }
 

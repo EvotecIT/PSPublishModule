@@ -70,6 +70,28 @@ public sealed partial class DotNetNuGetClient
                     request.Timeout ?? _defaultTimeout),
                 cancellationToken).ConfigureAwait(false);
 
+            var transcript = string.Join(Environment.NewLine, processResult.StdOut, processResult.StdErr);
+            bool duplicate = request.SkipDuplicate && !processResult.TimedOut &&
+                DotNetRepositoryReleaseService.LooksLikeSkippedDuplicate(transcript);
+            var symbolsPath = Path.ChangeExtension(pushContext.Value.PackagePath, ".snupkg");
+            if (duplicate && !request.SuppressCompanionSymbols &&
+                request.PackagePath.EndsWith(".nupkg", StringComparison.OrdinalIgnoreCase) &&
+                File.Exists(symbolsPath) &&
+                processResult.StdOut.IndexOf(Path.GetFileName(symbolsPath), StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                // Strict push stops at an existing primary package. Continue the requested companion
+                // separately, retaining the complete primary response and the companion's final error.
+                var companion = await PushPackageAsync(new DotNetNuGetPushRequest(
+                    symbolsPath, request.ApiKey, request.Source, request.SkipDuplicate,
+                    request.WorkingDirectory, request.Timeout, suppressCompanionSymbols: true), cancellationToken).ConfigureAwait(false);
+                return new DotNetNuGetPushResult(
+                    companion.ExitCode,
+                    string.Join(Environment.NewLine, processResult.StdOut, processResult.StdErr, companion.StdOut),
+                    companion.StdErr, companion.Executable, processResult.Duration + companion.Duration,
+                    companion.TimedOut, companion.ErrorMessage)
+                { SkippedDuplicate = companion.Succeeded };
+            }
+
             return new DotNetNuGetPushResult(
                 processResult.ExitCode,
                 processResult.StdOut,
@@ -77,9 +99,10 @@ public sealed partial class DotNetNuGetClient
                 processResult.Executable,
                 processResult.Duration,
                 processResult.TimedOut,
-                processResult.ExitCode == 0 && !processResult.TimedOut
+                (processResult.ExitCode == 0 || duplicate) && !processResult.TimedOut
                     ? null
-                    : FirstLine(processResult.StdErr) ?? FirstLine(processResult.StdOut) ?? $"dotnet nuget push failed with exit code {processResult.ExitCode}.");
+                    : FirstLine(processResult.StdErr) ?? FirstLine(processResult.StdOut) ?? $"dotnet nuget push failed with exit code {processResult.ExitCode}.")
+            { SkippedDuplicate = duplicate };
         }
         finally
         {
@@ -219,8 +242,8 @@ public sealed partial class DotNetNuGetClient
             source
         };
 
-        if (request.SkipDuplicate)
-            lines.Add("--skip-duplicate");
+        // The CLI's --skip-duplicate masks every HTTP 409, including reserved namespaces.
+        // Keep the full server response and apply the requested duplicate policy ourselves.
         if (request.SuppressCompanionSymbols)
             lines.Add("--no-symbols");
 
