@@ -28,9 +28,47 @@ public sealed partial class ModulePipelineRunner
         RefreshManifestPathFromPlan(
             plan,
             manifestPath,
-            plan.RequiredModules ?? Array.Empty<RequiredModuleReference>(),
+            ResolveProjectRequiredModules(plan, manifestPath),
             plan.ExternalModuleDependencies ?? Array.Empty<string>(),
             preserveCompiledRootModule: false);
+    }
+
+    private static RequiredModuleReference[] ResolveProjectRequiredModules(
+        ModulePipelinePlan plan,
+        string manifestPath)
+    {
+        // Source loaders still call donor functions before they are merged into a release.
+        // Preserve explicitly declared source dependencies only while they remain approved donors.
+        var approvedNames = new HashSet<string>(plan.ApprovedModules, StringComparer.OrdinalIgnoreCase);
+        var resolutions = plan.ApprovedModuleResolutions
+            .ToDictionary(static resolution => resolution.Name, StringComparer.OrdinalIgnoreCase);
+        var sourceDonors = ModuleManifestValueReader.ReadRequiredModules(manifestPath)
+            .Where(module => approvedNames.Contains(module.ModuleName))
+            .Select(module => resolutions.TryGetValue(module.ModuleName, out var resolution)
+                ? MergeSourceDonorConstraint(module, resolution.Constraint)
+                : module);
+
+        // A runtime declaration owns the source dependency when it also names an approved donor.
+        return (plan.RequiredModules ?? Array.Empty<RequiredModuleReference>())
+            .Concat(sourceDonors)
+            .GroupBy(static module => module.ModuleName, StringComparer.OrdinalIgnoreCase)
+            .Select(static group => group.First())
+            .ToArray();
+    }
+
+    private static RequiredModuleReference MergeSourceDonorConstraint(
+        RequiredModuleReference source,
+        RequiredModuleReference approved)
+    {
+        var hasApprovedVersion = !string.IsNullOrWhiteSpace(approved.ModuleVersion) ||
+                                 !string.IsNullOrWhiteSpace(approved.RequiredVersion) ||
+                                 !string.IsNullOrWhiteSpace(approved.MaximumVersion);
+        return new RequiredModuleReference(
+            source.ModuleName,
+            moduleVersion: hasApprovedVersion ? approved.ModuleVersion : source.ModuleVersion,
+            requiredVersion: hasApprovedVersion ? approved.RequiredVersion : source.RequiredVersion,
+            maximumVersion: hasApprovedVersion ? approved.MaximumVersion : source.MaximumVersion,
+            guid: string.IsNullOrWhiteSpace(approved.Guid) ? source.Guid : approved.Guid);
     }
 
     private void RefreshManifestPathFromPlan(
