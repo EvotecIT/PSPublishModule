@@ -16,6 +16,40 @@ public sealed class ApprovedModuleRepositoryIdentityTests
         Assert.Same(candidate, ModulePipelineRunner.SelectApprovedModuleRepositoryCandidate(constraint, new[] { candidate }));
     }
 
+    [Fact]
+    public void RepositorySelectionPrefersKnownMatchingIdentityWithinVersionRange()
+    {
+        const string donorGuid = "11111111-1111-1111-1111-111111111111";
+        var constraint = new RequiredModuleReference("Approved.Donor", moduleVersion: "1.0.0", guid: donorGuid);
+        var known = new PSResourceInfo("Approved.Donor", "2.0.0", "PSGallery", null, null, guid: donorGuid);
+        var unknown = new PSResourceInfo("Approved.Donor", "3.0.0", "PSGallery", null, null);
+
+        Assert.Same(known, ModulePipelineRunner.SelectApprovedModuleRepositoryCandidate(constraint, new[] { known, unknown }));
+    }
+
+    [Fact]
+    public void RepositorySelectionAllowsUnknownIdentityWhenKnownVersionIsOutsideConstraint()
+    {
+        const string donorGuid = "11111111-1111-1111-1111-111111111111";
+        var constraint = new RequiredModuleReference("Approved.Donor", requiredVersion: "3.0.0", guid: donorGuid);
+        var known = new PSResourceInfo("Approved.Donor", "2.0.0", "PSGallery", null, null, guid: donorGuid);
+        var unknown = new PSResourceInfo("Approved.Donor", "3.0.0", "PSGallery", null, null);
+
+        Assert.Same(unknown, ModulePipelineRunner.SelectApprovedModuleRepositoryCandidate(constraint, new[] { known, unknown }));
+    }
+
+    [Fact]
+    public void RepositorySelectionDoesNotDowngradeResolvedLatestVersionForKnownIdentity()
+    {
+        const string donorGuid = "11111111-1111-1111-1111-111111111111";
+        var constraint = new ResolvedRequiredModuleReference(
+            "Approved.Donor", "3.0.0", null, null, donorGuid, "3.0.0", "3.0.0", false);
+        var known = new PSResourceInfo("Approved.Donor", "2.0.0", "PSGallery", null, null, guid: donorGuid);
+        var latest = new PSResourceInfo("Approved.Donor", "3.0.0", "PSGallery", null, null);
+
+        Assert.Same(latest, ModulePipelineRunner.SelectApprovedModuleRepositoryCandidate(constraint, new[] { known, latest }));
+    }
+
     [Theory]
     [InlineData("11111111-1111-1111-1111-111111111111", "11111111-1111-1111-1111-111111111111", true)]
     [InlineData("22222222-2222-2222-2222-222222222222", "11111111-1111-1111-1111-111111111111", false)]

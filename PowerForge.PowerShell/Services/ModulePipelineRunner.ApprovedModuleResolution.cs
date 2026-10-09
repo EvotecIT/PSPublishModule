@@ -289,6 +289,18 @@ public sealed partial class ModulePipelineRunner
                                 string.IsNullOrWhiteSpace(resolved.ResolvedVersion) ||
                                 string.Equals(ModulePublisher.GetRepositoryVersionText(candidate), resolved.ResolvedVersion, StringComparison.OrdinalIgnoreCase))
             .ToArray();
+        if (System.Guid.TryParse(constraint.Guid, out _))
+        {
+            // Prefer a repository identity already known to match before downloading an unknown identity.
+            var knownIdentity = RequiredModuleRepositoryPublisher.SelectRequiredModuleVersionForPublish(
+                constraint,
+                matchingCandidates.Where(static candidate => !string.IsNullOrWhiteSpace(candidate.Guid)).ToArray(),
+                allowPrerelease,
+                matchPrereleaseByBaseVersion);
+            if (knownIdentity is not null)
+                return knownIdentity;
+        }
+
         return RequiredModuleRepositoryPublisher.SelectRequiredModuleVersionForPublish(
             constraint,
             matchingCandidates,
