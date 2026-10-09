@@ -109,9 +109,7 @@ public static partial class WebApiDocsGenerator
             detailBody.Line("</section>");
         }
 
-        if (usage?.HasEntries == true)
-            AppendUsageSection(detailBody, usage, baseUrl, slugMap);
-
+        // Authored guides come before the generated usage index, which can run to hundreds of entries.
         if (relatedContent?.Entries.Count > 0)
         {
             AppendRelatedContentSection(
@@ -124,6 +122,9 @@ public static partial class WebApiDocsGenerator
                 "Authored walkthroughs and practical samples linked to this API.",
                 "h2");
         }
+
+        if (usage?.HasEntries == true)
+            AppendUsageSection(detailBody, usage, baseUrl, slugMap);
 
         if (type.TypeParameters.Count > 0)
         {

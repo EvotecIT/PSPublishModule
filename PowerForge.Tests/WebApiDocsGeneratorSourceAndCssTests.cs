@@ -766,6 +766,66 @@ public class WebApiDocsGeneratorSourceAndCssTests
         }
     }
 
+    [Fact]
+    public void GenerateDocsHtml_LocatesTypeSourceFromDeclaredMembersAndShowsFileName()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-type-source-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var assemblyPath = typeof(PowerForge.Tests.ApiDocsSourceFixtures.SourceFixtureDerived).Assembly.Location;
+        var xmlPath = Path.Combine(root, "fixtures.xml");
+        File.WriteAllText(xmlPath,
+            $"""
+            <doc>
+              <assembly><name>{Path.GetFileNameWithoutExtension(assemblyPath)}</name></assembly>
+              <members>
+                <member name="T:PowerForge.Tests.ApiDocsSourceFixtures.SourceFixtureBase"><summary>Base.</summary></member>
+                <member name="T:PowerForge.Tests.ApiDocsSourceFixtures.SourceFixtureDerived"><summary>Derived.</summary></member>
+                <member name="T:PowerForge.Tests.ApiDocsSourceFixtures.SourceFixturePartial"><summary>Partial.</summary></member>
+              </members>
+            </doc>
+            """);
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            AssemblyPath = assemblyPath,
+            OutputPath = outputPath,
+            SourceRootPath = ResolveGitRoot(assemblyPath),
+            SourceUrlPattern = "https://example.invalid/blob/main/{path}#L{line}",
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api"
+        };
+        options.IncludeNamespacePrefixes.Add("PowerForge.Tests.ApiDocsSourceFixtures");
+
+        try
+        {
+            WebApiDocsGenerator.Generate(options);
+            string TypeSource(string slug)
+            {
+                var html = File.ReadAllText(Path.Combine(outputPath, slug, "index.html"));
+                var row = System.Text.RegularExpressions.Regex.Match(html, "class=\"[^\"]*type-meta-source[^\"]*\"");
+                Assert.True(row.Success, $"Expected a source row on {slug}.");
+                return html.Substring(row.Index, Math.Min(600, html.Length - row.Index));
+            }
+
+            var derived = TypeSource("powerforge-tests-apidocssourcefixtures-sourcefixturederived");
+            Assert.Contains(">SourceFixtureDerived.cs:", derived, StringComparison.Ordinal);
+            Assert.Contains("title=\"PowerForge.Tests/ApiDocsSourceFixtures/SourceFixtureDerived.cs:", derived, StringComparison.Ordinal);
+            Assert.Contains("https://example.invalid/blob/main/PowerForge.Tests/ApiDocsSourceFixtures/SourceFixtureDerived.cs#L", derived, StringComparison.Ordinal);
+            Assert.DoesNotContain("SourceFixtureBase.cs", derived, StringComparison.Ordinal);
+            Assert.DoesNotContain("../", derived, StringComparison.Ordinal);
+
+            var partial = TypeSource("powerforge-tests-apidocssourcefixtures-sourcefixturepartial");
+            Assert.Contains(">SourceFixturePartial.cs:", partial, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static string? ResolveGitRoot(string path,
         [System.Runtime.CompilerServices.CallerFilePath] string sourceFilePath = "")
     {

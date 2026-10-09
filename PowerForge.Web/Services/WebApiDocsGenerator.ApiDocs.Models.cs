@@ -261,28 +261,40 @@ public static partial class WebApiDocsGenerator
 
         public ApiSourceLink? TryGetSource(Type type)
         {
-            foreach (var ctor in type.GetConstructors(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+            // Only members declared by the type locate its source: inherited members from the
+            // same assembly would otherwise point a derived type at its base class file.
+            const BindingFlags declared = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
+            var candidates = type.GetConstructors(declared).Select(TryGetSource)
+                .Concat(type.GetMethods(declared).Where(static method => !method.IsSpecialName).Select(TryGetSource))
+                .Concat(type.GetProperties(declared).Select(TryGetSource))
+                .Concat(type.GetEvents(declared).Select(TryGetSource));
+
+            // Partial types span several files; prefer the file named after the type.
+            ApiSourceLink? first = null;
+            var fileStem = GetSourceFileStem(type);
+            foreach (var link in candidates)
             {
-                var link = TryGetSource(ctor);
-                if (link is not null) return link;
+                if (link is null) continue;
+                first ??= link;
+                if (IsTypeSourceFile(link.Path, fileStem)) return link;
             }
-            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
-            {
-                if (method.IsSpecialName) continue;
-                var link = TryGetSource(method);
-                if (link is not null) return link;
-            }
-            foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
-            {
-                var link = TryGetSource(property);
-                if (link is not null) return link;
-            }
-            foreach (var evt in type.GetEvents(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
-            {
-                var link = TryGetSource(evt);
-                if (link is not null) return link;
-            }
-            return null;
+            return first;
+        }
+
+        internal static string GetSourceFileStem(Type type)
+        {
+            var name = type.Name;
+            var arity = name.IndexOf('`');
+            return arity > 0 ? name[..arity] : name;
+        }
+
+        internal static bool IsTypeSourceFile(string? path, string fileStem)
+        {
+            if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(fileStem))
+                return false;
+            var fileName = Path.GetFileNameWithoutExtension(path.Replace('\\', '/').Split('/').Last());
+            return fileName.Equals(fileStem, StringComparison.OrdinalIgnoreCase) ||
+                   fileName.StartsWith(fileStem + ".", StringComparison.OrdinalIgnoreCase);
         }
 
         public ApiSourceLink? TryGetSource(MethodBase method)

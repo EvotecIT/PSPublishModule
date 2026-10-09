@@ -145,10 +145,10 @@ public static partial class WebApiDocsGenerator
             list.Add(("derived-types", "Derived Types"));
         if (!string.IsNullOrWhiteSpace(type.Remarks))
             list.Add(("remarks", "Remarks"));
-        if (hasUsage)
-            list.Add(("usage", "Usage"));
         if (hasRelatedContent)
             list.Add(("guides-and-samples", "Guides & Samples"));
+        if (hasUsage)
+            list.Add(("usage", "Usage"));
         if (type.TypeParameters.Count > 0)
             list.Add(("type-parameters", "Type Parameters"));
         if (type.Examples.Count > 0)
@@ -274,13 +274,16 @@ public static partial class WebApiDocsGenerator
     {
         var suffix = link.Line > 0 ? $":{link.Line}" : string.Empty;
         var displayPath = NormalizeSourceDisplayPath(link.Path);
-        var label = System.Web.HttpUtility.HtmlEncode($"{displayPath}{suffix}");
+        // Show the file name; the repository path is the tooltip and the link target.
+        var fileName = displayPath.Split('/').LastOrDefault() ?? displayPath;
+        var label = System.Web.HttpUtility.HtmlEncode($"{fileName}{suffix}");
+        var title = System.Web.HttpUtility.HtmlAttributeEncode($"{displayPath}{suffix}");
         if (!string.IsNullOrWhiteSpace(link.Url))
         {
             var href = System.Web.HttpUtility.HtmlAttributeEncode(link.Url);
-            return $"<a href=\"{href}\" target=\"_blank\" rel=\"noopener\">{label}</a>";
+            return $"<a class=\"source-link\" href=\"{href}\" title=\"{title}\" target=\"_blank\" rel=\"noopener\">{label}</a>";
         }
-        return $"<code>{label}</code>";
+        return $"<code class=\"source-link\" title=\"{title}\">{label}</code>";
     }
 
     private static string NormalizeSourceDisplayPath(string path)
@@ -292,7 +295,8 @@ public static partial class WebApiDocsGenerator
         if (string.IsNullOrWhiteSpace(normalized))
             return string.Empty;
 
-        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var parts = TrimLeadingRelativeSegments(normalized)
+            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (parts.Length >= 2 && string.Equals(parts[0], parts[1], StringComparison.OrdinalIgnoreCase))
             return string.Join("/", parts.Skip(1));
 
