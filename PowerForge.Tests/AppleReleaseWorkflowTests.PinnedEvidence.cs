@@ -87,7 +87,7 @@ public sealed partial class AppleReleaseWorkflowTests
         }
         finally
         {
-            if (Directory.Exists(parent)) Directory.Delete(parent, recursive: true);
+            DeletePinnedEvidenceDirectory(parent);
         }
     }
 
@@ -224,7 +224,7 @@ public sealed partial class AppleReleaseWorkflowTests
         }
         finally
         {
-            if (Directory.Exists(parent)) Directory.Delete(parent, recursive: true);
+            DeletePinnedEvidenceDirectory(parent);
         }
     }
 
@@ -249,7 +249,7 @@ public sealed partial class AppleReleaseWorkflowTests
                 """
                 param([string] $Consumer, [string] $Support)
                 $ErrorActionPreference = 'Stop'
-                $script:gitPath = '/usr/bin/git'
+                $script:gitPath = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
                 $consumer = [IO.Path]::GetFullPath($Consumer)
                 function Invoke-GitText { param([string]$Root,[string[]]$Arguments); $o=@(& $script:gitPath -c core.quotePath=false -C $Root @Arguments 2>&1); if($LASTEXITCODE -ne 0){throw 'git failed'}; return ($o -join [Environment]::NewLine).Trim() }
                 . $Support
@@ -282,7 +282,7 @@ public sealed partial class AppleReleaseWorkflowTests
         }
         finally
         {
-            if (Directory.Exists(parent)) Directory.Delete(parent, recursive: true);
+            DeletePinnedEvidenceDirectory(parent);
         }
     }
 
@@ -380,7 +380,7 @@ public sealed partial class AppleReleaseWorkflowTests
                 """
                 param([string] $Consumer, [string] $Support)
                 $ErrorActionPreference = 'Stop'
-                $script:gitPath = '/usr/bin/git'
+                $script:gitPath = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
                 $script:allowedConsumerEvidencePaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
                 $script:validatedCaptureProvenance = [pscustomobject]@{
                     captureRunId = '42'; repository = 'EvotecIT/TestApp';
@@ -503,7 +503,7 @@ public sealed partial class AppleReleaseWorkflowTests
         }
         finally
         {
-            if (Directory.Exists(parent)) Directory.Delete(parent, recursive: true);
+            DeletePinnedEvidenceDirectory(parent);
         }
     }
 
@@ -521,6 +521,7 @@ public sealed partial class AppleReleaseWorkflowTests
             File.WriteAllText(Path.Combine(sandbox, "screenshots.json"),
                 """{ "AppId": "123", "Platform": "IOS", "Quality": { "ApprovalManifestPath": "missing.approval.json" } }""");
 
+            Run("git", sandbox, "init").EnsureSuccess();
             var harness = Path.Combine(parent, "remote-screenshot-harness.ps1");
             File.WriteAllText(harness,
                 """
@@ -528,6 +529,8 @@ public sealed partial class AppleReleaseWorkflowTests
                 $ErrorActionPreference = 'Stop'
                 $consumer = [IO.Path]::GetFullPath($Consumer)
                 $script:allowedConsumerEvidencePaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+                $script:gitPath = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+                function Invoke-GitText { param([string]$Root,[string[]]$Arguments); $o=@(& $script:gitPath -c core.quotePath=false -C $Root @Arguments 2>&1); if($LASTEXITCODE -ne 0){throw 'git failed'}; return ($o -join [Environment]::NewLine).Trim() }
                 function Get-OptionValue { param([string]$Option); $i=[Array]::IndexOf($ArgumentList,$Option); if($i -ge 0 -and $i+1 -lt $ArgumentList.Count){return $ArgumentList[$i+1]}; return $null }
                 function Resolve-OptionPath { param([string]$Value); if([IO.Path]::IsPathRooted($Value)){return [IO.Path]::GetFullPath($Value)}; return [IO.Path]::GetFullPath((Join-Path $consumer $Value)) }
                 function Resolve-PathFromBase { param([string]$BasePath,[string]$Value); if([IO.Path]::IsPathRooted($Value)){return [IO.Path]::GetFullPath($Value)}; return [IO.Path]::GetFullPath((Join-Path $BasePath $Value)) }
@@ -553,7 +556,7 @@ public sealed partial class AppleReleaseWorkflowTests
         }
         finally
         {
-            if (Directory.Exists(parent)) Directory.Delete(parent, recursive: true);
+            DeletePinnedEvidenceDirectory(parent);
         }
     }
 
@@ -619,7 +622,7 @@ public sealed partial class AppleReleaseWorkflowTests
                 $$"""
                 param([string] $Consumer, [string] $Support)
                 $ErrorActionPreference = 'Stop'
-                $script:gitPath = '/usr/bin/git'
+                $script:gitPath = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
                 $script:allowedConsumerEvidencePaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
                 $consumer = [IO.Path]::GetFullPath($Consumer)
                 $env:POWERFORGE_APPLE_RECEIPT_AUTH_KEY_PATH = '{{authenticationKeyPath.Replace("'", "''", StringComparison.Ordinal)}}'
@@ -674,7 +677,16 @@ public sealed partial class AppleReleaseWorkflowTests
         }
         finally
         {
-            if (Directory.Exists(parent)) Directory.Delete(parent, recursive: true);
+            DeletePinnedEvidenceDirectory(parent);
         }
     }
+
+    private static void DeletePinnedEvidenceDirectory(string path)
+    {
+        if (!Directory.Exists(path)) return;
+        foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+            File.SetAttributes(file, File.GetAttributes(file) & ~FileAttributes.ReadOnly);
+        Directory.Delete(path, recursive: true);
+    }
+
 }
