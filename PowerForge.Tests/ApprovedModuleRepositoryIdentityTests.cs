@@ -33,7 +33,7 @@ public sealed class ApprovedModuleRepositoryIdentityTests
 
             if (accepted)
             {
-                Assert.Equal(manifestGuid, ModulePipelineRunner.ValidateApprovedModuleManifestIdentity(root.FullName, constraint));
+                Assert.Equal(manifestGuid, ModulePipelineRunner.ValidateApprovedModuleManifestIdentity(root.FullName, constraint).Guid);
             }
             else
             {
@@ -42,6 +42,28 @@ public sealed class ApprovedModuleRepositoryIdentityTests
                 Assert.Contains("Approved.Donor", error.Message);
                 Assert.Contains(requiredGuid!, error.Message);
             }
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DownloadedManifestPreservesCanonicalNameForCaseInsensitiveDeclarations()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string expectedGuid = "11111111-1111-1111-1111-111111111111";
+            File.WriteAllText(Path.Combine(root.FullName, "Approved.Donor.psd1"),
+                $"@{{ RootModule = 'Approved.Donor.psm1'; ModuleVersion = '2.0.0'; GUID = '{expectedGuid}' }}");
+            var constraint = new RequiredModuleReference("approved.donor", requiredVersion: "2.0.0", guid: expectedGuid);
+
+            var identity = ModulePipelineRunner.ValidateApprovedModuleManifestIdentity(root.FullName, constraint);
+
+            Assert.Equal("Approved.Donor", identity.Name);
+            Assert.Equal(expectedGuid, identity.Guid);
         }
         finally
         {

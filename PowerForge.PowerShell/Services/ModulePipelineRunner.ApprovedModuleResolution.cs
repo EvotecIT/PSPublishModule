@@ -248,12 +248,12 @@ public sealed partial class ModulePipelineRunner
                         $"Approved module '{resolution.Name}' {selectedVersion} was downloaded from '{repository}', but its manifest was not found in the temporary source.");
                 }
 
-                var manifestGuid = ValidateApprovedModuleManifestIdentity(modulePath, resolution.Constraint);
+                var identity = ValidateApprovedModuleManifestIdentity(modulePath, resolution.Constraint);
                 sources.Add(new ApprovedModuleSource(
-                    resolution.Name,
+                    identity.Name,
                     selectedVersion,
                     modulePath,
-                    manifestGuid,
+                    identity.Guid,
                     moduleSearchRoot: temporaryRoot));
             }
         }
@@ -301,9 +301,12 @@ public sealed partial class ModulePipelineRunner
            !string.IsNullOrWhiteSpace(resolved.ResolvedVersion) &&
            resolved.ResolvedVersion!.IndexOf('-') > 0;
 
-    internal static string? ValidateApprovedModuleManifestIdentity(string modulePath, RequiredModuleReference constraint)
+    internal static (string Name, string? Guid) ValidateApprovedModuleManifestIdentity(string modulePath, RequiredModuleReference constraint)
     {
-        var manifestPath = Path.Combine(modulePath, constraint.ModuleName + ".psd1");
+        var manifestName = constraint.ModuleName + ".psd1";
+        var manifestPath = Directory.EnumerateFiles(modulePath)
+            .FirstOrDefault(path => string.Equals(Path.GetFileName(path), manifestName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new FileNotFoundException($"Approved module manifest '{manifestName}' was not found in '{modulePath}'.");
         ManifestEditor.TryGetTopLevelString(manifestPath, "GUID", out var manifestGuid);
         if (!ModuleGuidMatches(manifestGuid, constraint.Guid))
         {
@@ -311,7 +314,7 @@ public sealed partial class ModulePipelineRunner
                 $"Approved module '{constraint.ModuleName}' has manifest GUID '{manifestGuid ?? "<missing>"}', but GUID '{constraint.Guid}' is required.");
         }
 
-        return manifestGuid;
+        return (Path.GetFileNameWithoutExtension(manifestPath), manifestGuid);
     }
 
     private static bool ModuleGuidMatches(string? candidateGuid, string? requiredGuid)
