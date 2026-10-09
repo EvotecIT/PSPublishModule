@@ -219,11 +219,7 @@ public static partial class WebApiDocsGenerator
     internal static string StripCrefTokens(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-        var cleaned = CrefTokenRegex.Replace(text, match =>
-        {
-            var name = match.Groups["name"].Value;
-            return GetDisplayTypeName(name);
-        });
+        var cleaned = CrefTokenRegex.Replace(text, match => GetCrefDisplayName(match.Groups["name"].Value));
         cleaned = HrefTokenRegex.Replace(cleaned, match =>
         {
             var href = TryDecodeHrefToken(match.Groups["url"].Value);
@@ -354,6 +350,22 @@ public static partial class WebApiDocsGenerator
         };
     }
 
+    // Member crefs carry a parameter list whose dots and commas would otherwise leave fragments
+    // such as "PdfOptions)"; show them as Type.Member instead.
+    private static string GetCrefDisplayName(string cref)
+    {
+        if (string.IsNullOrWhiteSpace(cref)) return cref;
+        var name = cref.Length > 2 && cref[1] == ':' ? cref.Substring(2) : cref;
+        // Tokens usually arrive without the M:/P: prefix; a parameter list still marks a method.
+        var parameters = name.IndexOf('(');
+        var isMember = parameters >= 0 || (cref.Length > 2 && cref[1] == ':' && "MPFE".IndexOf(cref[0]) >= 0);
+        if (parameters >= 0) name = name.Substring(0, parameters);
+        if (!isMember) return GetDisplayTypeName(name);
+        var memberDot = name.LastIndexOf('.');
+        if (memberDot <= 0) return name;
+        var member = name.Substring(memberDot + 1).Replace("#ctor", GetDisplayTypeName(name.Substring(0, memberDot)));
+        return GetDisplayTypeName(name.Substring(0, memberDot)) + "." + GenericArityRegex.Replace(member, string.Empty);
+    }
     private static string GetDisplayTypeName(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return name;

@@ -749,7 +749,7 @@ public static partial class WebApiDocsGenerator
         var signature = !string.IsNullOrWhiteSpace(member.Signature)
             ? member.Signature
             : BuildSignature(member, sectionLabel);
-        var search = $"{member.Name} {signature} {member.Summary} {member.ParameterSetName}".Trim();
+        var search = $"{member.Name} {signature} {StripCrefTokens(member.Summary)} {member.ParameterSetName}".Trim();
         var searchAttr = System.Web.HttpUtility.HtmlEncode(search);
         var inherited = member.IsInherited ? "true" : "false";
         var inheritedNote = member.IsInherited && !string.IsNullOrWhiteSpace(member.DeclaringType)

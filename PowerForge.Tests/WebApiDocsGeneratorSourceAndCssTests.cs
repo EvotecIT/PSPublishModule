@@ -826,6 +826,68 @@ public class WebApiDocsGeneratorSourceAndCssTests
         }
     }
 
+    [Fact]
+    public void GenerateDocsHtml_OverviewUsesAssemblyDescriptionAndLinksGuideAndPackage()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-overview-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        var assemblyPath = typeof(PowerForge.Tests.ApiDocsSourceFixtures.SourceFixtureDerived).Assembly.Location;
+        var xmlPath = Path.Combine(root, "fixtures.xml");
+        File.WriteAllText(xmlPath,
+            $"""
+            <doc>
+              <assembly><name>{Path.GetFileNameWithoutExtension(assemblyPath)}</name></assembly>
+              <members>
+                <member name="T:PowerForge.Tests.ApiDocsSourceFixtures.SourceFixtureDerived"><summary>Join with <see cref="M:System.String.Join(System.String,System.String[])"/> first.</summary></member>
+                <member name="P:PowerForge.Tests.ApiDocsSourceFixtures.SourceFixtureDerived.Prompt"><summary>Prompt shown by <see cref="T:PowerForge.Tests.ApiDocsSourceFixtures.SourceFixtureDerived"/>.</summary></member>
+              </members>
+            </doc>
+            """);
+        var outputPath = Path.Combine(root, "api");
+        var options = new WebApiDocsOptions
+        {
+            XmlPath = xmlPath,
+            AssemblyPath = assemblyPath,
+            OutputPath = outputPath,
+            Format = "html",
+            Template = "docs",
+            BaseUrl = "/api/fixtures",
+            DocsHomeUrl = "/docs/fixtures/",
+            PackageId = "PowerForge.Fixtures"
+        };
+        options.QuickStartTypeNames.Add("SourceFixtureDerived");
+        options.IncludeNamespacePrefixes.Add("PowerForge.Tests.ApiDocsSourceFixtures");
+
+        try
+        {
+            WebApiDocsGenerator.Generate(options);
+            var html = File.ReadAllText(Path.Combine(outputPath, "index.html"));
+            var lead = WebApiDocsGenerator.TryReadAssemblyDescription(assemblyPath) ?? "Complete API documentation auto-generated from source documentation.";
+            Assert.Contains($"<p class=\"lead\">{System.Web.HttpUtility.HtmlEncode(lead)}</p>", html, StringComparison.Ordinal);
+            Assert.Equal("PowerForge.Web static-site engine and reusable website build components.",
+                WebApiDocsGenerator.TryReadAssemblyDescription(typeof(WebApiDocsGenerator).Assembly.Location));
+            Assert.Contains("href=\"/docs/fixtures/\">Read the guide</a>", html, StringComparison.Ordinal);
+            Assert.Contains("href=\"https://www.nuget.org/packages/PowerForge.Fixtures\"", html, StringComparison.Ordinal);
+            Assert.Contains("dotnet add package PowerForge.Fixtures", html, StringComparison.Ordinal);
+            // Method crefs in quick-start summaries read as Type.Member, not a parameter-list fragment.
+            Assert.Contains("Join with String.Join first.", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("String[])", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("[[cref:", html, StringComparison.Ordinal);
+            var typePage = File.ReadAllText(Path.Combine(outputPath, "powerforge-tests-apidocssourcefixtures-sourcefixturederived", "index.html"));
+            Assert.DoesNotContain("[[cref:", typePage, StringComparison.Ordinal);
+            Assert.Null(WebApiDocsGenerator.TryReadAssemblyDescription(Path.Combine(root, "missing.dll")));
+
+            var manifestPath = Path.Combine(root, "Module.psd1");
+            File.WriteAllText(manifestPath, "@{\n    ModuleVersion = '1.0.0'\n    Description = 'Builds ''reports'' from scripts.'\n}\n");
+            Assert.Equal("Builds 'reports' from scripts.", WebApiDocsGenerator.TryReadModuleManifestDescription(manifestPath));
+        }
+        finally
+        {
+            TryDeleteDirectory(root);
+        }
+    }
+
     private static string? ResolveGitRoot(string path,
         [System.Runtime.CompilerServices.CallerFilePath] string sourceFilePath = "")
     {

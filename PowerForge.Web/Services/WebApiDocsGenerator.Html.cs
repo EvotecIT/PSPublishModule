@@ -1307,7 +1307,12 @@ body.pf-api-docs .api-suite-search-filter{
             {
                 html.Line("<p class=\"ev-eyebrow\">API Reference</p>");
                 html.Line($"<h1>{System.Web.HttpUtility.HtmlEncode(overviewTitle)}</h1>");
-                html.Line("<p class=\"lead\">Complete API documentation auto-generated from source documentation.</p>");
+                // The package's own description says what it is for; the generic line is the fallback.
+                var lead = (options.Type == ApiDocsType.PowerShell
+                    ? TryReadModuleManifestDescription(options.PowerShellModuleManifestPath)
+                    : TryReadAssemblyDescription(options.AssemblyPath)) ?? "Complete API documentation auto-generated from source documentation.";
+                html.Line($"<p class=\"lead\">{System.Web.HttpUtility.HtmlEncode(lead)}</p>");
+                AppendOverviewActions(html, options, baseUrl);
             }
             html.Line("</header>");
             html.Line("<div class=\"api-overview-main api-overview-main--full\">");
@@ -1373,6 +1378,102 @@ body.pf-api-docs .api-suite-search-filter{
         }
         html.Line("</div>");
         return html.ToString().TrimEnd();
+    }
+
+    private static void AppendOverviewActions(HtmlFragmentBuilder html, WebApiDocsOptions options, string baseUrl)
+    {
+        var docsHomeUrl = string.IsNullOrWhiteSpace(options.DocsHomeUrl) ? null : NormalizeDocsHomeUrl(options.DocsHomeUrl, baseUrl);
+        var packageId = string.IsNullOrWhiteSpace(options.PackageId) ? null : options.PackageId.Trim();
+        if (docsHomeUrl is null && packageId is null)
+            return;
+
+        html.Line("<div class=\"api-overview-actions\">");
+        using (html.Indent())
+        {
+            if (docsHomeUrl is not null)
+                html.Line($"<a class=\"api-overview-action api-overview-action--guide\" href=\"{System.Web.HttpUtility.HtmlAttributeEncode(docsHomeUrl)}\">Read the guide</a>");
+            if (packageId is not null)
+            {
+                // PowerShell modules ship through the PowerShell Gallery; .NET packages through NuGet.
+                var isModule = options.Type == ApiDocsType.PowerShell;
+                var packageHref = (isModule ? "https://www.powershellgallery.com/packages/" : "https://www.nuget.org/packages/") + Uri.EscapeDataString(packageId);
+                var gallery = isModule ? "PowerShell Gallery" : "NuGet";
+                var install = isModule ? $"Install-Module {packageId}" : $"dotnet add package {packageId}";
+                html.Line($"<a class=\"api-overview-action api-overview-action--package\" href=\"{System.Web.HttpUtility.HtmlAttributeEncode(packageHref)}\" rel=\"noopener\">{System.Web.HttpUtility.HtmlEncode(packageId)} on {gallery}</a>");
+                html.Line($"<code class=\"api-overview-install\">{System.Web.HttpUtility.HtmlEncode(install)}</code>");
+            }
+        }
+        html.Line("</div>");
+    }
+
+    /// <summary>Reads the module manifest's <c>Description</c> value without running it, or returns null.</summary>
+    /// <param name="manifestPath">Path to the PowerShell module manifest (.psd1).</param>
+    /// <returns>The description, or null when the manifest has none or cannot be read.</returns>
+    public static string? TryReadModuleManifestDescription(string? manifestPath)
+    {
+        if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath))
+            return null;
+
+        try
+        {
+            var match = Regex.Match(File.ReadAllText(manifestPath), "(?m)^\\s*Description\\s*=\\s*(?:'(?<single>(?:[^']|'')*)'|\"(?<double>[^\"]*)\")", RegexOptions.CultureInvariant, RegexTimeout);
+            if (!match.Success)
+                return null;
+            var description = match.Groups["single"].Success ? match.Groups["single"].Value.Replace("''", "'") : match.Groups["double"].Value;
+            return string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or RegexMatchTimeoutException)
+        {
+            Trace.TraceWarning($"Module manifest description read failed for {manifestPath}: {ex.GetType().Name}: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>Reads the assembly's <see cref="AssemblyDescriptionAttribute"/> without loading it, or returns null.</summary>
+    /// <param name="assemblyPath">Path to the assembly file.</param>
+    /// <returns>The trimmed description, or null when the file has none or cannot be read.</returns>
+    public static string? TryReadAssemblyDescription(string? assemblyPath)
+    {
+        if (string.IsNullOrWhiteSpace(assemblyPath) || !File.Exists(assemblyPath))
+            return null;
+
+        try
+        {
+            using var stream = File.OpenRead(assemblyPath);
+            using var peReader = new System.Reflection.PortableExecutable.PEReader(stream);
+            if (!peReader.HasMetadata)
+                return null;
+
+            var reader = peReader.GetMetadataReader();
+            foreach (var handle in reader.GetAssemblyDefinition().GetCustomAttributes())
+            {
+                var attribute = reader.GetCustomAttribute(handle);
+                if (attribute.Constructor.Kind != System.Reflection.Metadata.HandleKind.MemberReference)
+                    continue;
+
+                var constructor = reader.GetMemberReference((System.Reflection.Metadata.MemberReferenceHandle)attribute.Constructor);
+                if (constructor.Parent.Kind != System.Reflection.Metadata.HandleKind.TypeReference)
+                    continue;
+
+                var type = reader.GetTypeReference((System.Reflection.Metadata.TypeReferenceHandle)constructor.Parent);
+                if (reader.GetString(type.Name) != "AssemblyDescriptionAttribute" ||
+                    reader.GetString(type.Namespace) != "System.Reflection")
+                    continue;
+
+                // Blob layout: prolog (0x0001), then one serialized string argument.
+                var blob = reader.GetBlobReader(attribute.Value);
+                if (blob.ReadUInt16() != 1)
+                    return null;
+                var description = blob.ReadSerializedString();
+                return string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+            }
+        }
+        catch (Exception ex) when (ex is IOException or BadImageFormatException or InvalidOperationException)
+        {
+            Trace.TraceWarning($"Assembly description read failed for {assemblyPath}: {ex.GetType().Name}: {ex.Message}");
+        }
+
+        return null;
     }
 
     private static void AppendOverviewNamespaceGroup(

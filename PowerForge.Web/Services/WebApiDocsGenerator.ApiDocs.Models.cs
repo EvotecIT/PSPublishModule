@@ -269,16 +269,19 @@ public static partial class WebApiDocsGenerator
                 .Concat(type.GetProperties(declared).Select(TryGetSource))
                 .Concat(type.GetEvents(declared).Select(TryGetSource));
 
-            // Partial types span several files; prefer the file named after the type.
+            // Partial types span several files; prefer Type.cs, then Type.Part.cs, then any declared member.
             ApiSourceLink? first = null;
+            ApiSourceLink? part = null;
             var fileStem = GetSourceFileStem(type);
             foreach (var link in candidates)
             {
                 if (link is null) continue;
                 first ??= link;
-                if (IsTypeSourceFile(link.Path, fileStem)) return link;
+                var rank = GetTypeSourceFileRank(link.Path, fileStem);
+                if (rank == 2) return link;
+                if (rank == 1) part ??= link;
             }
-            return first;
+            return part ?? first;
         }
 
         internal static string GetSourceFileStem(Type type)
@@ -288,13 +291,14 @@ public static partial class WebApiDocsGenerator
             return arity > 0 ? name[..arity] : name;
         }
 
-        internal static bool IsTypeSourceFile(string? path, string fileStem)
+        // 2: Type.cs, 1: Type.Part.cs, 0: any other file.
+        internal static int GetTypeSourceFileRank(string? path, string fileStem)
         {
             if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(fileStem))
-                return false;
+                return 0;
             var fileName = Path.GetFileNameWithoutExtension(path.Replace('\\', '/').Split('/').Last());
-            return fileName.Equals(fileStem, StringComparison.OrdinalIgnoreCase) ||
-                   fileName.StartsWith(fileStem + ".", StringComparison.OrdinalIgnoreCase);
+            if (fileName.Equals(fileStem, StringComparison.OrdinalIgnoreCase)) return 2;
+            return fileName.StartsWith(fileStem + ".", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
         }
 
         public ApiSourceLink? TryGetSource(MethodBase method)
