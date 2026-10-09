@@ -21,9 +21,9 @@ public sealed class HomeAssistantReleaseWorkflowTests {
         var workflow = File.ReadAllText(Path.Combine(root, ".github", "workflows", "powerforge-homeassistant-release.yml"));
         var action = File.ReadAllText(Path.Combine(root, ".github", "actions", "homeassistant-release", "action.yml"));
 
-        Assert.Equal(3, CountOccurrences(workflow, "powerforge-version: 3.0.154"));
+        Assert.Equal(3, CountOccurrences(workflow, "powerforge-version: 3.0.160"));
         Assert.Contains("actions: read", workflow, StringComparison.Ordinal);
-        Assert.Contains("default: \"3.0.154\"", action, StringComparison.Ordinal);
+        Assert.Contains("default: \"3.0.160\"", action, StringComparison.Ordinal);
     }
 
     [Fact]
