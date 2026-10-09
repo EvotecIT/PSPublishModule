@@ -488,6 +488,12 @@ Dependency mirroring supports `PSResourceGet` and `ManagedModule`. If a configur
 `-PublishRequiredModules -Tool PowerShellGet`, the publish run fails early with
 a clear error instead of silently skipping dependency mirroring.
 
+With split feeds, PSResourceGet can still acquire missing dependencies from a
+registered `RequiredModuleSourceRepository` name. ManagedModule uses PSGallery,
+an explicit `RequiredModuleSourceRepositoryUri`, or a URL/local path. Repository
+authentication and a separate publish API key retain their distinct roles
+during dependency uploads.
+
 Behavior:
 
 1. PSPublishModule reads the built module manifest.

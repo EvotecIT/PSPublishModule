@@ -21,6 +21,7 @@ public sealed partial class ModulePublisher
     private readonly RequiredModuleRepositoryPublisher _requiredModuleRepositoryPublisher;
     private readonly RequiredModuleRepositoryValidator _requiredModuleRepositoryValidator;
     private readonly ManagedRequiredModuleRepositoryValidator _managedRequiredModuleRepositoryValidator;
+    private readonly ManagedModuleRepositoryClient _managedRepositoryClient;
 
     /// <summary>
     /// Creates a new publisher using the provided logger and the default out-of-process PowerShell runner.
@@ -48,7 +49,8 @@ public sealed partial class ModulePublisher
         _psResourceGet = new PSResourceGetClient(runner, _logger);
         _requiredModuleRepositoryPublisher = new RequiredModuleRepositoryPublisher(_logger, _psResourceGet, _repositoryPublisher);
         _requiredModuleRepositoryValidator = new RequiredModuleRepositoryValidator(_logger, _psResourceGet, _requiredModuleRepositoryPublisher);
-        _managedRequiredModuleRepositoryValidator = new ManagedRequiredModuleRepositoryValidator(_logger);
+        _managedRepositoryClient = new ManagedModuleRepositoryClient(_logger, client);
+        _managedRequiredModuleRepositoryValidator = new ManagedRequiredModuleRepositoryValidator(_logger, _managedRepositoryClient);
         _powerShellGet = new PowerShellGetClient(runner, _logger);
         _gitHub = new GitHubReleasePublisher(_logger);
         _powerShellGalleryFeed = new PowerShellGalleryVersionFeedClient(_logger, client);

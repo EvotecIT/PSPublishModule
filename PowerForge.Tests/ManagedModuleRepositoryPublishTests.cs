@@ -8,6 +8,24 @@ namespace PowerForge.Tests;
 public sealed class ManagedModuleRepositoryPublishTests
 {
     [Fact]
+    public async Task PublishPackageAsync_redacts_separate_push_api_key_from_repository_errors()
+    {
+        using var temp = new TemporaryDirectory();
+        var packagePath = Path.Combine(temp.Path, "Company.Tools.1.0.0.nupkg");
+        File.WriteAllBytes(packagePath, TestPackageFactory.CreateBytes("Company.Tools", "1.0.0"));
+        using var client = new HttpClient(new PublishFailureHandler("push-key"));
+        var repositoryClient = new ManagedModuleRepositoryClient(new NullLogger(), client);
+
+        var error = await Assert.ThrowsAsync<ManagedModuleRepositoryException>(() => repositoryClient.PublishPackageAsync(
+            new ManagedModuleRepository("Private", "https://example.test/api/v2"), packagePath,
+            new RepositoryCredential { UserName = "publisher", Secret = "read-token" },
+            apiKey: "push-key", force: false, CancellationToken.None));
+
+        Assert.Contains("[REDACTED]", error.Message);
+        Assert.DoesNotContain("push-key", error.Message);
+    }
+
+    [Fact]
     public async Task PublishPackageAsync_reports_repository_reason_and_redacts_api_key()
     {
         using var temp = new TemporaryDirectory();

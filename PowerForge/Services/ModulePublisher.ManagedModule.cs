@@ -45,7 +45,7 @@ public sealed partial class ModulePublisher
         bool skipDependenciesCheck,
         Action? remotePublishAttempted)
     {
-        var managedResult = new ManagedModulePublishService(_logger).PublishAsync(
+        var managedResult = new ManagedModulePublishService(_logger, _managedRepositoryClient).PublishAsync(
                 new ManagedModulePublishRequest
                 {
                     ModulePath = modulePath,
@@ -56,6 +56,7 @@ public sealed partial class ModulePublisher
                     OutputDirectory = temporaryPackagePath,
                     Credential = readCredential,
                     PublishCredential = publishCredential,
+                    ApiKey = publish.ApiKey,
                     SkipDependenciesCheck = skipDependenciesCheck,
                     SkipModuleManifestValidate = false,
                     Force = publish.Force,
@@ -139,7 +140,9 @@ public sealed partial class ModulePublisher
         PublishConfiguration publish,
         PublishRepositoryConfiguration? repoConfig)
     {
-        _ = ResolveManagedReadCredential(repoConfig);
+        var credential = ResolveManagedReadCredential(repoConfig);
+        if (credential is not null)
+            return credential;
 
         if (!string.IsNullOrWhiteSpace(publish.ApiKey))
             return new RepositoryCredential { Secret = publish.ApiKey };
@@ -163,7 +166,7 @@ public sealed partial class ModulePublisher
         var exactVersionExists = false;
         try
         {
-            var versions = new ManagedModuleRepositoryClient(_logger)
+            var versions = _managedRepositoryClient
                 .GetVersionsAsync(repository, moduleName, includePrerelease: true, credential: credential)
                 .GetAwaiter()
                 .GetResult();

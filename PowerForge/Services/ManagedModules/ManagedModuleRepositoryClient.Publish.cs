@@ -19,12 +19,21 @@ public sealed partial class ManagedModuleRepositoryClient
     /// <param name="force">Overwrite local duplicates when supported by the repository.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Package publish result.</returns>
-    public async Task<ManagedModulePackagePublishResult> PublishPackageAsync(
+    public Task<ManagedModulePackagePublishResult> PublishPackageAsync(
         ManagedModuleRepository repository,
         string packagePath,
         RepositoryCredential? credential = null,
         bool force = false,
         CancellationToken cancellationToken = default)
+        => PublishPackageAsync(repository, packagePath, credential, apiKey: null, force, cancellationToken);
+
+    internal async Task<ManagedModulePackagePublishResult> PublishPackageAsync(
+        ManagedModuleRepository repository,
+        string packagePath,
+        RepositoryCredential? credential,
+        string? apiKey,
+        bool force,
+        CancellationToken cancellationToken)
     {
         if (repository is null)
             throw new ArgumentNullException(nameof(repository));
@@ -34,8 +43,8 @@ public sealed partial class ManagedModuleRepositoryClient
         return repository.Kind switch
         {
             ManagedModuleRepositoryKind.LocalFolder => PublishLocalPackage(repository, packagePath, force),
-            ManagedModuleRepositoryKind.NuGetV3 => await PublishNuGetPackageAsync(repository, packagePath, credential, cancellationToken).ConfigureAwait(false),
-            ManagedModuleRepositoryKind.NuGetV2 => await PublishNuGetPackageAsync(repository, packagePath, credential, cancellationToken).ConfigureAwait(false),
+            ManagedModuleRepositoryKind.NuGetV3 => await PublishNuGetPackageAsync(repository, packagePath, credential, apiKey, cancellationToken).ConfigureAwait(false),
+            ManagedModuleRepositoryKind.NuGetV2 => await PublishNuGetPackageAsync(repository, packagePath, credential, apiKey, cancellationToken).ConfigureAwait(false),
             _ => throw new NotSupportedException($"Repository kind '{repository.Kind}' is not supported.")
         };
     }
@@ -111,6 +120,7 @@ public sealed partial class ManagedModuleRepositoryClient
         ManagedModuleRepository repository,
         string packagePath,
         RepositoryCredential? credential,
+        string? apiKey,
         CancellationToken cancellationToken)
     {
         var package = Path.GetFullPath(packagePath.Trim().Trim('"'));
@@ -122,6 +132,11 @@ public sealed partial class ManagedModuleRepositoryClient
             () =>
             {
                 var request = CreateRequest(HttpMethod.Put, new Uri(publishAddress), credential, "application/json");
+                if (!string.IsNullOrWhiteSpace(apiKey))
+                {
+                    request.Headers.Remove("X-NuGet-ApiKey");
+                    request.Headers.Add("X-NuGet-ApiKey", apiKey);
+                }
                 // NuGet-compatible endpoints and intermediaries can reset HTTP/2 multipart uploads.
                 request.Version = HttpVersion.Version11;
 #if !NET472
@@ -157,7 +172,8 @@ public sealed partial class ManagedModuleRepositoryClient
                     response,
                     $"Unable to publish package '{package}'.",
                     credential,
-                    cancellationToken)
+                    cancellationToken,
+                    apiKey)
                 .ConfigureAwait(false);
         }
 

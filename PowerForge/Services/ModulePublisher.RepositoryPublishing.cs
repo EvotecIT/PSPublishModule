@@ -95,9 +95,6 @@ public sealed partial class ModulePublisher
         var publishCredential = tool == PublishTool.ManagedModule
             ? ResolveManagedPublishCredential(publish, repoConfig)
             : readCredential;
-        var mirrorPublishCredential = tool == PublishTool.PSResourceGet && !string.IsNullOrWhiteSpace(publish.ApiKey)
-            ? new RepositoryCredential { Secret = publish.ApiKey }
-            : publishCredential;
         string? temporaryPublishPath = null;
         string? temporaryPackagePath = null;
         var repositoryCreated = false;
@@ -184,12 +181,16 @@ public sealed partial class ModulePublisher
                         publish,
                         CreateManagedReadRepository(repositoryName, repoConfig, plan.ProjectRoot),
                         readCredential,
-                        mirrorPublishCredential,
+                        publishCredential,
                         plan,
                         buildResult,
                         remoteSideEffectObserved,
                         publishRepository: CreateManagedPublishRepository(repositoryName, repoConfig, plan.ProjectRoot),
-                        cancellationToken: cancellationToken);
+                        cancellationToken: cancellationToken,
+                        mirrorRequiredModule: ManagedRequiredModuleRepositoryValidator.CanResolveSourceRepository(publish, repositoryName)
+                            ? null
+                            : _requiredModuleRepositoryValidator.CreateMirroringCallback(
+                                publish, repositoryName, readCredential, repositoryForPublish, remoteSideEffectObserved));
                 }
                 else
                 {

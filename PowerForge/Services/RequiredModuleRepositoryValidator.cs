@@ -152,6 +152,21 @@ internal sealed class RequiredModuleRepositoryValidator
             ? "PSGallery"
             : publish.RequiredModuleSourceRepository!.Trim();
 
+    internal Action<RequiredModuleReference> CreateMirroringCallback(
+        PublishConfiguration publish,
+        string repositoryName,
+        RepositoryCredential? credential,
+        PublishRepositoryConfiguration? repositoryForPublish,
+        Action? remoteSideEffectObserved)
+    {
+        var sourceRepositoryName = ResolveRequiredModuleSourceRepository(publish);
+        var sourceCredential = ResolveRequiredModuleSourceCredential(sourceRepositoryName, repositoryName, credential);
+        var mirroredPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return requiredModule => _publisher.PublishRequiredModule(
+            requiredModule, sourceRepositoryName, repositoryName, publish.ApiKey,
+            repositoryForPublish, sourceCredential, credential, mirroredPackages, remoteSideEffectObserved);
+    }
+
     private static RepositoryCredential? ResolveRequiredModuleSourceCredential(
         string sourceRepositoryName,
         string targetRepositoryName,
