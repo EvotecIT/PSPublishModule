@@ -10,8 +10,6 @@ internal static partial class ModuleBootstrapperGenerator
     private const string ScriptPreambleEndMarker = "# PowerForge script preamble end";
     private const string ScriptPayloadStartMarker = "# PowerForge script payload begin";
     private const string ScriptPayloadEndMarker = "# PowerForge script payload end";
-    private const string ExportStartMarker = "# PowerForge exports begin";
-    private const string ExportEndMarker = "# PowerForge exports end";
     private const string DeferredPayloadStartMarker = "$PowerForgeMergedScriptPayloadBase64 = @'";
     private const string DeferredPayloadEndMarker = "'@";
 
@@ -56,8 +54,7 @@ internal static partial class ModuleBootstrapperGenerator
         if (!string.IsNullOrWhiteSpace(authoritativeExportBlock))
         {
             // Preserve the module-import cleanup after the export section.
-            inlinedBootstrapper = ReplaceMarkedSection(inlinedBootstrapper,
-                ExportStartMarker, ExportEndMarker, authoritativeExportBlock, psm1Path);
+            inlinedBootstrapper = ModuleMergeComposer.ReplaceExportBlock(inlinedBootstrapper, authoritativeExportBlock);
         }
 
         WritePowerShellFile(psm1Path, inlinedBootstrapper);

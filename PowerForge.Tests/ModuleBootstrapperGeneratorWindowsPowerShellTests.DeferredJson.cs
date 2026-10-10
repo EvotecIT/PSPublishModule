@@ -3,10 +3,12 @@ using PowerForge;
 public sealed partial class ModuleBootstrapperGeneratorWindowsPowerShellTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
     [Trait("Category", "Integration")]
-    public void GeneratedDesktopModuleResolvesDeferredJsonAndUnregistersOnRemoval(bool useAssemblyLoadContext)
+    public void GeneratedDesktopModuleResolvesDeferredJsonAndUnregistersOnRemoval(bool useAssemblyLoadContext, bool useDevelopmentSelection)
     {
         if (!OperatingSystem.IsWindows()) return;
         var host = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
@@ -78,7 +80,10 @@ namespace DemoModule {
             File.WriteAllText(Path.Combine(publicScripts, "Payload.ps1"), "# Valid script payload.");
             ModuleBootstrapperGenerator.Generate(root, "DemoModule",
                 new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
-                new[] { "DemoModule.dll" }, handleRuntimes: false, useAssemblyLoadContext: useAssemblyLoadContext);
+                new[] { "DemoModule.dll" }, handleRuntimes: false, useAssemblyLoadContext: useAssemblyLoadContext,
+                developmentBinaries: useDevelopmentSelection ? new ModuleDevelopmentBinaryBootstrapperOptions(
+                    ModuleDevelopmentBinaryMode.Environment, Path.Combine(root, "MissingDevelopmentBinaries"),
+                    "PF_DEFERRED_JSON_DEV", "PF_DEFERRED_JSON_CONFIGURATION", new[] { "net8.0" }, new[] { "net472" }) : null);
             var script = Path.Combine(root, "Validate-DeferredJson.ps1");
             File.WriteAllText(script, """
 $ErrorActionPreference = 'Stop'

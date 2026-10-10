@@ -88,10 +88,7 @@ internal static partial class ModuleMergeComposer
             return;
 
         var existing = File.ReadAllText(psm1Path);
-        ExtractTrailingExportBlock(existing, out var withoutExportBlock);
-        withoutExportBlock = withoutExportBlock.TrimEnd();
-
-        var builder = new StringBuilder(withoutExportBlock);
+        var builder = new StringBuilder();
         foreach (var script in generatedScriptContents)
         {
             if (builder.Length > 0)
@@ -111,7 +108,7 @@ internal static partial class ModuleMergeComposer
             builder.Append(exportBlock);
         }
 
-        WriteMergedPsm1(psm1Path, builder.ToString());
+        WriteMergedPsm1(psm1Path, ReplaceExportBlock(existing, builder.ToString()));
     }
 
     internal static string PrependFunctions(string[] functions, string content)
@@ -640,6 +637,26 @@ internal static partial class ModuleMergeComposer
         updated = updated.Replace("$PSScriptRoot, \"..\",", "$PSScriptRoot,");
         updated = updated.Replace("$PSScriptRoot,\"..\",", "$PSScriptRoot,");
         return updated;
+    }
+
+    /// <summary>Replaces generated exports without discarding import cleanup that follows them.</summary>
+    internal static string ReplaceExportBlock(string content, string exportBlock)
+    {
+        const string startMarker = "# PowerForge exports begin";
+        const string endMarker = "# PowerForge exports end";
+        var start = content.IndexOf(startMarker, System.StringComparison.Ordinal);
+        if (start >= 0)
+        {
+            var insertion = start + startMarker.Length;
+            var end = content.IndexOf(endMarker, insertion, System.StringComparison.Ordinal);
+            if (end < 0) throw new InvalidDataException("Generated export section has no end marker.");
+            return content.Substring(0, insertion) + System.Environment.NewLine + exportBlock.TrimEnd() +
+                   System.Environment.NewLine + content.Substring(end);
+        }
+
+        ExtractTrailingExportBlock(content, out var body);
+        return body.TrimEnd() + System.Environment.NewLine + System.Environment.NewLine +
+               exportBlock.TrimEnd() + System.Environment.NewLine;
     }
 
     internal static string ExtractTrailingExportBlock(string content, out string body)
