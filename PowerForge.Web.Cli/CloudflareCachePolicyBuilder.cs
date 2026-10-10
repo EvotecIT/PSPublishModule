@@ -253,7 +253,7 @@ internal static class CloudflareCachePolicyBuilder
         return path;
     }
 
-    private static string CombineBasePath(string basePath, string path)
+    internal static string CombineBasePath(string basePath, string path)
     {
         if (basePath == "/")
             return path;

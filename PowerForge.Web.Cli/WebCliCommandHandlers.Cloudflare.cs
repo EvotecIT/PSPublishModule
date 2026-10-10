@@ -394,7 +394,8 @@ internal static partial class WebCliCommandHandlers
             basePath: basePath,
             agentReadiness: siteProfile.AgentReadiness,
             cache: siteProfile.Cloudflare?.Cache,
-            smartTieredCache: siteProfile.Cloudflare?.SmartTieredCache);
+            smartTieredCache: siteProfile.Cloudflare?.SmartTieredCache,
+            immutablePaths: siteProfile.Cloudflare?.ImmutablePaths);
         if (!result.Success)
             return Fail(result.Message, outputJson, logger, command);
 

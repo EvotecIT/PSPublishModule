@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Text.Json.Nodes;
 using PowerForge.Web;
@@ -18,7 +19,8 @@ internal static class CloudflareResponseHeaderPolicyManager
         bool dryRun,
         HttpClient? httpClient = null,
         string? basePath = null,
-        AgentReadinessSpec? agentReadiness = null)
+        AgentReadinessSpec? agentReadiness = null,
+        IReadOnlyCollection<string>? immutablePaths = null)
     {
         if (!CloudflareCachePolicyManager.TryValidateInputs(zoneId, apiToken, ref hostname, ref policyName, out var error))
             return new CloudflareManagedRulesetResult { Message = error };
@@ -26,7 +28,7 @@ internal static class CloudflareResponseHeaderPolicyManager
         JsonArray managedRules;
         try
         {
-            managedRules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(hostname, policyName, securityHeaders, basePath, agentReadiness);
+            managedRules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(hostname, policyName, securityHeaders, basePath, agentReadiness, immutablePaths);
         }
         catch (ArgumentException ex)
         {

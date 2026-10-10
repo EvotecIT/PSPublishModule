@@ -1,6 +1,6 @@
 # Cloudflare Site Policy, Purge, and Verification
 
-Last updated: 2026-08-13
+Last updated: 2026-10-09
 
 PowerForge.Web owns the repeatable Cloudflare policy for static sites behind the
 Cloudflare proxy. It can:
@@ -43,7 +43,7 @@ The command manages two Cloudflare ruleset phases and, when configured, the
 zone's Smart Tiered Cache setting:
 
 - `http_request_cache_settings`: three cache rules followed by a negotiated Markdown bypass
-- `http_response_headers_transform`: zero to five response-header rules (site-wide security, homepage discovery links, API Catalog media type/CORS, JSON discovery media type/CORS, and Markdown artifact media type/CORS, as configured)
+- `http_response_headers_transform`: zero to six response-header rules (site-wide security, homepage discovery links, API Catalog media type/CORS, JSON discovery media type/CORS, Markdown artifact media type/CORS, and immutable browser caching for `Cloudflare.ImmutablePaths`, as configured)
 
 Rules outside the site's managed description prefix retain their relative
 order. The negotiated Markdown bypass runs last, after preserved operator
@@ -137,6 +137,59 @@ representation when an application uses query parameters for behavior rather
 than cache busting. Strong ETags remain enabled. PowerForge does not infer
 immutability from filename shape. Generated `_headers` grants a long immutable
 policy only to exact asset paths whose content hash PowerForge created.
+
+### Immutable browser caching for fingerprinted files
+
+When an origin ignores generated `_headers`, a site can use Cloudflare to set
+browser caching for explicitly named public content-addressed files whose URL changes
+whenever their bytes change:
+
+```json
+{
+  "Cloudflare": {
+    "ImmutablePaths": [
+      "/app/_framework/*.*.wasm",
+      "/app/_framework/*.*.js",
+      "/app/_framework/*.*.dat"
+    ]
+  }
+}
+```
+
+`site-policy apply` then manages one additional response-header rule that sets
+`Cache-Control: public, max-age=31536000, immutable` on matching responses:
+
+```json
+{
+  "description": "PowerForge [example.com/]: Example: immutable browser cache",
+  "expression": "(http.host eq \"example.com\" and http.response.code eq 200 and not http.response.content_type.media_type in {\"text/html\" \"application/xhtml+xml\"} and (http.request.uri.path wildcard \"/app/_framework/*.*.wasm\" or http.request.uri.path wildcard \"/app/_framework/*.*.js\" or http.request.uri.path wildcard \"/app/_framework/*.*.dat\"))",
+  "action": "rewrite",
+  "action_parameters": {
+    "headers": {
+      "Cache-Control": { "operation": "set", "value": "public, max-age=31536000, immutable" }
+    }
+  },
+  "enabled": true
+}
+```
+
+The rule uses the Transform Rules phase to set the complete browser cache
+header, including the `immutable` directive. Only non-HTML, non-XHTML `200`
+responses are rewritten. An HTML fallback at an asset URL keeps its existing
+policy, and a `404` for a
+fingerprinted URL requested before the origin serves it is never pinned in a
+browser. Edge caching and the incremental-purge policy fingerprint are
+unchanged. The rule uses the existing Transform Rules permission; no additional
+token scope is required. Removing every pattern removes the managed rule on the
+next apply.
+
+Patterns use Cloudflare's case-insensitive `wildcard` operator, where `*`
+matches any characters including `/`. Paths are relative to the site's base
+path, must end in a literal non-HTML file extension, and are limited to 32
+patterns within the 4096-character expression limit. List only public fingerprinted
+names: a browser copy cannot be purged. For .NET WebAssembly output, the
+`*.*.ext` shape matches `dotnet.native.<hash>.js` and `<Assembly>.<hash>.wasm`
+but deliberately not the unfingerprinted `dotnet.js` loader.
 
 Large documentation navigation trees do not produce one expression clause per
 directory. PowerForge represents trailing-slash and `.html` routes compactly and

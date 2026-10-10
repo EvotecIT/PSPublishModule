@@ -9,13 +9,16 @@ namespace PowerForge.Web.Cli;
 internal static class CloudflareResponseHeaderPolicyBuilder
 {
     private const int MaxHeaderValueLength = 4096;
+    private const int MaxImmutablePaths = 32;
+    internal const string ImmutableCacheControl = "public, max-age=31536000, immutable";
 
     internal static JsonArray BuildManagedRules(
         string hostname,
         string policyName,
         AgentSecurityHeadersSpec? securityHeaders,
         string? basePath = null,
-        AgentReadinessSpec? agentReadiness = null)
+        AgentReadinessSpec? agentReadiness = null,
+        IReadOnlyCollection<string>? immutablePaths = null)
     {
         hostname = CloudflareCachePolicyBuilder.NormalizeHostname(hostname);
         policyName = CloudflareCachePolicyBuilder.NormalizePolicyName(policyName, hostname);
@@ -95,7 +98,78 @@ internal static class CloudflareResponseHeaderPolicyBuilder
             });
         }
 
+        var immutablePatterns = NormalizeImmutablePaths(immutablePaths, basePath);
+        if (immutablePatterns.Length > 0)
+        {
+            var clauses = immutablePatterns.Select(pattern =>
+                $"http.request.uri.path wildcard \"{CloudflareCachePolicyBuilder.EscapeExpressionString(CloudflareCachePolicyBuilder.EncodeUriPathForExpression(pattern))}\"");
+            // Only successful asset responses become immutable. Missing assets can return either
+            // an error status or a status-200 HTML fallback; neither should be pinned in a browser.
+            var immutableExpression = $"(http.host eq \"{hostname}\" and http.response.code eq 200 and " +
+                $"not http.response.content_type.media_type in {{\"text/html\" \"application/xhtml+xml\"}} and ({string.Join(" or ", clauses)}))";
+            CloudflareCachePolicyBuilder.ValidateExpressionLength("immutable browser cache", immutableExpression);
+            rules.Add(new JsonObject
+            {
+                ["description"] = $"{descriptionPrefix} immutable browser cache",
+                ["expression"] = immutableExpression,
+                ["action"] = "rewrite",
+                ["action_parameters"] = new JsonObject
+                {
+                    ["headers"] = new JsonObject
+                    {
+                        ["Cache-Control"] = new JsonObject { ["operation"] = "set", ["value"] = ImmutableCacheControl }
+                    }
+                },
+                ["enabled"] = true
+            });
+        }
+
         return rules;
+    }
+
+    /// <summary>
+    /// Validates explicit content-addressed path patterns. Cloudflare's <c>wildcard</c> operator lets <c>*</c>
+    /// match any characters, including <c>/</c>; PowerForge never infers immutability from file names.
+    /// </summary>
+    internal static string[] NormalizeImmutablePaths(IReadOnlyCollection<string>? immutablePaths, string? basePath)
+    {
+        var normalizedBasePath = CloudflareCachePolicyBuilder.NormalizeBasePath(basePath);
+        var patterns = (immutablePaths ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => NormalizeImmutablePath(path, normalizedBasePath))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (patterns.Length > MaxImmutablePaths)
+            throw new ArgumentException($"Cloudflare.ImmutablePaths supports at most {MaxImmutablePaths} patterns.", nameof(immutablePaths));
+        return patterns;
+    }
+
+    private static string NormalizeImmutablePath(string rawPath, string basePath)
+    {
+        var path = rawPath.Trim();
+        var fileName = path[(path.LastIndexOf('/') + 1)..];
+        var extensionIndex = fileName.LastIndexOf('.');
+        var extension = extensionIndex >= 0 ? fileName[(extensionIndex + 1)..] : string.Empty;
+        if (!path.StartsWith("/", StringComparison.Ordinal) ||
+            path.Contains("//", StringComparison.Ordinal) ||
+            path.Contains("..", StringComparison.Ordinal) ||
+            path.IndexOfAny(['?', '#', '\\', '"']) >= 0 ||
+            path.Any(char.IsControl) ||
+            path.Any(char.IsWhiteSpace) ||
+            extension.Length == 0 ||
+            !extension.All(char.IsAsciiLetterOrDigit) ||
+            extension.Equals("html", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals("htm", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                $"Invalid Cloudflare immutable path '{rawPath}'. Patterns must be absolute site paths ending in a literal non-HTML file extension, such as '/app/_framework/*.*.wasm'.",
+                nameof(rawPath));
+        }
+
+        var scopedPath = CloudflareCachePolicyBuilder.CombineBasePath(basePath, path);
+        if (CloudflareCachePolicyBuilder.EncodeUriPathForExpression(scopedPath).Contains("**", StringComparison.Ordinal))
+            throw new ArgumentException("Cloudflare immutable paths cannot contain consecutive wildcard characters, including percent-encoded asterisks.", nameof(rawPath));
+        return scopedPath;
     }
 
     private static void AddHeader(JsonObject headers, string name, bool enabled, string? value)
