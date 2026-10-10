@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using PowerForge;
 
-public sealed class ModuleBootstrapperGeneratorWindowsPowerShellTests
+public sealed partial class ModuleBootstrapperGeneratorWindowsPowerShellTests
 {
     [Fact]
     [Trait("Category", "Integration")]
@@ -95,7 +95,7 @@ if ($errors.Count -gt 0) {
 
     [Fact]
     [Trait("Category", "Integration")]
-    public void GeneratedDesktopResolverStopsAfterBootstrapAndDoesNotReenterForMissingPowerShellResources()
+    public void GeneratedDesktopResolverRemainsScopedAfterBootstrapAndDoesNotReenterForMissingPowerShellResources()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -146,13 +146,15 @@ $module = Get-Module DemoModule
 $resolverState = & $module { $PowerForgeDesktopAssemblyResolverState }
 if ($null -eq $resolverState -or
     $resolverState.PSObject.Properties.Name -notcontains 'Registered' -or
-    $resolverState.Registered) {
-    throw 'The Desktop assembly resolver remained registered after bootstrap.'
+    -not $resolverState.Registered -or $resolverState.BootstrapActive) {
+    throw 'The Desktop assembly resolver did not enter its scoped runtime state.'
 }
 try {
     Get-Item -LiteralPath (Join-Path $PSScriptRoot 'missing-file') -ErrorAction Stop
 } catch [System.Management.Automation.ItemNotFoundException] {
 }
+Remove-Module DemoModule
+if ($resolverState.Registered) { throw 'The Desktop resolver remained registered after module removal.' }
 'RESOLVER_BOUNDED_OK'
 """);
 
@@ -390,7 +392,7 @@ $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'DemoModule.psm1') -Force
 $module = Get-Module DemoModule
 $resolverState = & $module { $PowerForgeDesktopAssemblyResolverState }
-if ($resolverState.Registered) { throw 'The Desktop resolver remained registered after bootstrap.' }
+if ($null -ne $resolverState -and $resolverState.BootstrapActive) { throw 'The Desktop resolver retained unrestricted bootstrap resolution.' }
 if ([DemoModule.Initialize]::Read() -ne 'nested-dependency') { throw 'The deferred nested dependency was unavailable.' }
 'NESTED_DEPENDENCY_PRELOADED'
 """);

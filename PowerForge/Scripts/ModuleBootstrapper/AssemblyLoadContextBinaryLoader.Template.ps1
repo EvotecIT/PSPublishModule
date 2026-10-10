@@ -111,7 +111,4 @@ if ($PSEdition -ne 'Core' -and $PowerForgeDesktopBinaryLoaded) {
 }
 if ($PSEdition -ne 'Core' -and $null -ne $PowerForgeDesktopAssemblyResolverState) {
     $PowerForgeDesktopAssemblyResolverState.BootstrapActive = $false
-    if ($null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
-        & $UnregisterPowerForgeDesktopAssemblyResolver
-    }
 }

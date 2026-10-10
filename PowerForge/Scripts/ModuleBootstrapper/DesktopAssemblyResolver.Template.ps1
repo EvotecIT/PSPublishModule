@@ -35,31 +35,57 @@ if ($PSEdition -ne 'Core' -and $PowerForgeDesktopAssemblyRoots.Count -gt 0) {
     $PowerForgeDesktopAssemblyResolverState = [pscustomobject]@{
         BootstrapActive = $true
         Registered      = $false
+        Resolving       = $false
     }
 
     $PowerForgeDesktopAssemblyResolver = [System.ResolveEventHandler] {
         param([object] $Sender, [ResolveEventArgs] $EventArgs)
 
+        if ($null -eq $EventArgs -or $PowerForgeDesktopAssemblyResolverState.Resolving) {
+            return $null
+        }
+        $PowerForgeDesktopAssemblyResolverState.Resolving = $true
         try {
-            if ($null -eq $EventArgs) {
-                return $null
-            }
 
             # AssemblyResolve is AppDomain-wide on Windows PowerShell. During the
-            # bounded preload/import window the CLR can omit RequestingAssembly
-            # while reconciling netstandard dependency versions. Outside that
-            # window, only service requests attributable to this module's private
-            # Lib folder.
+            # CLR can omit RequestingAssembly when reconciling dependency versions,
+            # including calls made after import. Runtime requests without a caller
+            # must match a reference declared by an assembly in this module's Lib.
             if ($null -eq $EventArgs.RequestingAssembly -or
                 [string]::IsNullOrWhiteSpace($EventArgs.RequestingAssembly.Location)) {
                 if (-not $PowerForgeDesktopAssemblyResolverState.BootstrapActive) {
-                    return $null
+                    $PowerForgeDeclaredModuleReference = $false
+                    foreach ($PowerForgeLoadedAssembly in [AppDomain]::CurrentDomain.GetAssemblies()) {
+                        if ($PowerForgeLoadedAssembly.IsDynamic -or
+                            [string]::IsNullOrWhiteSpace($PowerForgeLoadedAssembly.Location)) { continue }
+                        $PowerForgeLoadedAssemblyPath = [IO.Path]::GetFullPath($PowerForgeLoadedAssembly.Location)
+                        $PowerForgeLoadedFromModuleRoot = $false
+                        foreach ($PowerForgeDesktopAssemblyRootPrefix in $PowerForgeDesktopAssemblyRootPrefixes) {
+                            if ($PowerForgeLoadedAssemblyPath.StartsWith($PowerForgeDesktopAssemblyRootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                                $PowerForgeLoadedFromModuleRoot = $true
+                                break
+                            }
+                        }
+                        if (-not $PowerForgeLoadedFromModuleRoot) { continue }
+                        foreach ($PowerForgeModuleReference in $PowerForgeLoadedAssembly.GetReferencedAssemblies()) {
+                            if ([string]::Equals($PowerForgeModuleReference.FullName, $EventArgs.Name, [StringComparison]::OrdinalIgnoreCase)) {
+                                $PowerForgeDeclaredModuleReference = $true
+                                break
+                            }
+                        }
+                        if ($PowerForgeDeclaredModuleReference) { break }
+                    }
+                    if (-not $PowerForgeDeclaredModuleReference) { return $null }
                 }
             } else {
                 $PowerForgeRequestingAssemblyPath = [IO.Path]::GetFullPath($EventArgs.RequestingAssembly.Location)
-                $PowerForgeRequestFromModuleRoot = @($PowerForgeDesktopAssemblyRootPrefixes | Where-Object {
-                    $PowerForgeRequestingAssemblyPath.StartsWith($_, [StringComparison]::OrdinalIgnoreCase)
-                }).Count -gt 0
+                $PowerForgeRequestFromModuleRoot = $false
+                foreach ($PowerForgeDesktopAssemblyRootPrefix in $PowerForgeDesktopAssemblyRootPrefixes) {
+                    if ($PowerForgeRequestingAssemblyPath.StartsWith($PowerForgeDesktopAssemblyRootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                        $PowerForgeRequestFromModuleRoot = $true
+                        break
+                    }
+                }
                 if (-not $PowerForgeRequestFromModuleRoot) {
                     return $null
                 }
@@ -97,6 +123,8 @@ if ($PSEdition -ne 'Core' -and $PowerForgeDesktopAssemblyRoots.Count -gt 0) {
             return $null
         } catch {
             return $null
+        } finally {
+            $PowerForgeDesktopAssemblyResolverState.Resolving = $false
         }
     }.GetNewClosure()
 

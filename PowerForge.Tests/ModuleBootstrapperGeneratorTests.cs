@@ -130,10 +130,8 @@ public partial class ModuleBootstrapperGeneratorTests
             Assert.Contains("$PowerForgeAssemblyCandidate.StartsWith($PowerForgeDesktopAssemblyRootPrefix, [StringComparison]::OrdinalIgnoreCase)", bootstrapper);
             Assert.Contains("[AppDomain]::CurrentDomain.remove_AssemblyResolve($PowerForgeResolverForRemoval)", bootstrapper);
             Assert.Contains("$ExecutionContext.SessionState.Module.OnRemove", bootstrapper);
-            Assert.True(
-                bootstrapper.LastIndexOf("& $UnregisterPowerForgeDesktopAssemblyResolver", StringComparison.Ordinal) >
-                bootstrapper.LastIndexOf("$PowerForgeDesktopAssemblyResolverState.BootstrapActive = $false", StringComparison.Ordinal),
-                "The Desktop resolver must be removed after the bounded bootstrap window.");
+            Assert.Contains("$PowerForgeDesktopAssemblyResolverState.Resolving = $true", bootstrapper);
+            Assert.Contains("$PowerForgeDesktopAssemblyResolverState.Resolving = $false", bootstrapper);
             Assert.DoesNotContain("ProcessArchitecture", bootstrapper);
         }
         finally
