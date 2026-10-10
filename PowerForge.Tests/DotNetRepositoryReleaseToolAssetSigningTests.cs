@@ -6,6 +6,7 @@ namespace PowerForge.Tests;
 public sealed class DotNetRepositoryReleaseToolAssetSigningTests
 {
     [Theory]
+    [Trait("Category", "DotNetPublishPrGate")]
     [InlineData(DotNetRepositoryPackStrategy.PerProject, "Always", "8.0.100")]
     [InlineData(DotNetRepositoryPackStrategy.MSBuild, "Always", "8.0.100")]
     [InlineData(DotNetRepositoryPackStrategy.PerProject, "Always", "10.0.100")]
