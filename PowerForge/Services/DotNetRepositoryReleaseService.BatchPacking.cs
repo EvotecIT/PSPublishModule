@@ -107,9 +107,9 @@ public sealed partial class DotNetRepositoryReleaseService
             if (forceBatchRebuild)
                 logger.Info("MSBuild batch freshness could not prove every intermediate output was removed; using the Rebuild safety target.");
 
-            WritePackTraversalProject(traversalPath, projects, spec, outputPath, forceBatchRebuild);
-
             var shouldSignAssemblies = signAssemblies is not null && !string.IsNullOrWhiteSpace(spec.CertificateThumbprint);
+            WritePackTraversalProject(traversalPath, projects, spec, outputPath, forceBatchRebuild,
+                usePreparedToolPublishOutput: shouldSignAssemblies && spec.SignDependencyAssemblies);
             int exitCode;
             string stdErr;
             string stdOut;
@@ -227,7 +227,8 @@ public sealed partial class DotNetRepositoryReleaseService
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         DotNetRepositoryReleaseSpec spec,
         string outputPath,
-        bool forceRebuild = false)
+        bool forceRebuild = false,
+        bool usePreparedToolPublishOutput = false)
     {
         var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
         var buildProperties = $"Configuration={EscapeMsBuildPropertyValue(configuration)}";
@@ -239,6 +240,10 @@ public sealed partial class DotNetRepositoryReleaseService
             "NoBuild=true",
             "BuildProjectReferences=false"
         };
+        // Retain the SDK's no-build reference/resource preparation, then compute
+        // package items without copying over the signed staging files.
+        if (usePreparedToolPublishOutput)
+            packProperties.Add(PreparedToolPublishTargetsProperty);
         if (spec.IncludeSymbols)
         {
             packProperties.Add("IncludeSymbols=true");
