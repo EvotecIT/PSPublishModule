@@ -415,7 +415,7 @@ public sealed partial class ModulePipelineRunner
         }
 
         var current = File.ReadAllText(psm1Path);
-        var previousExportBlock = ModuleMergeComposer.ExtractTrailingExportBlock(current, out var body);
+        var previousExportBlock = ModuleMergeComposer.ExtractTrailingExportBlock(current, out _);
         if (string.IsNullOrWhiteSpace(previousExportBlock)) {
             throw new InvalidDataException($"Merged module entry script '{Path.GetFileName(psm1Path)}' does not contain an authoritative export block.");
         }
@@ -429,7 +429,7 @@ public sealed partial class ModulePipelineRunner
             exports,
             conditionalExportDependencies,
             plan.ModuleName);
-        var synchronized = body.TrimEnd() + Environment.NewLine + Environment.NewLine + exportBlock.TrimEnd() + Environment.NewLine;
+        var synchronized = ModuleMergeComposer.ReplaceExportBlock(current, exportBlock);
         ModuleMergeComposer.WriteMergedPsm1(psm1Path, synchronized);
     }
 

@@ -190,7 +190,10 @@ internal static partial class ModuleBootstrapperGenerator
         var lines = content.Replace("\r\n", "\n").Split('\n');
         return string.Join(
             "\r\n",
-            lines.Select(line => line.Length == 0 ? string.Empty : prefix + line));
+            lines.Select(line => line.Length == 0 ? string.Empty :
+                // PowerShell here-string terminators must remain at column zero.
+                line.StartsWith("'@", StringComparison.Ordinal) || line.StartsWith("\"@", StringComparison.Ordinal)
+                    ? line : prefix + line));
     }
 
     private static string BuildDevelopmentAssemblyLoadContextSource(AssemblyLoadContextLoaderIdentity identity)

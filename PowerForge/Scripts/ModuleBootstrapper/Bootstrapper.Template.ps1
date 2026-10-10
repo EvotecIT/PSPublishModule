@@ -6,8 +6,19 @@
 # PowerForge script preamble end
 
 {{ModuleRootCaptureBlock}}
+$UnregisterPowerForgeDesktopAssemblyResolver = $null
+$PowerForgeModuleImportCompleted = $false
+try {
 {{BinaryLoaderBlock}}
 # PowerForge script payload begin
 {{ScriptLoaderBlock}}
 # PowerForge script payload end
+# PowerForge exports begin
 {{ExportBlock}}
+# PowerForge exports end
+    $PowerForgeModuleImportCompleted = $true
+} finally {
+    if (-not $PowerForgeModuleImportCompleted -and $null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
+        & $UnregisterPowerForgeDesktopAssemblyResolver
+    }
+}

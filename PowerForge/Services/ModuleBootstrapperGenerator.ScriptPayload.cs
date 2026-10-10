@@ -51,19 +51,10 @@ internal static partial class ModuleBootstrapperGenerator
             deferredScriptPayload,
             psm1Path);
 
-        var generatedExportBlock = ModuleMergeComposer.ExtractTrailingExportBlock(inlinedBootstrapper, out var bootstrapperWithoutExportBlock);
-        if (string.IsNullOrWhiteSpace(generatedExportBlock))
-        {
-            throw new InvalidOperationException(
-                $"Cannot inline merged scripts because '{Path.GetFileName(psm1Path)}' does not contain a generated export block.");
-        }
-
         if (!string.IsNullOrWhiteSpace(authoritativeExportBlock))
         {
-            inlinedBootstrapper = bootstrapperWithoutExportBlock.TrimEnd() +
-                                  Environment.NewLine + Environment.NewLine +
-                                  authoritativeExportBlock.TrimEnd() +
-                                  Environment.NewLine;
+            // Preserve the module-import cleanup after the export section.
+            inlinedBootstrapper = ModuleMergeComposer.ReplaceExportBlock(inlinedBootstrapper, authoritativeExportBlock);
         }
 
         WritePowerShellFile(psm1Path, inlinedBootstrapper);
