@@ -649,7 +649,9 @@ public sealed partial class GitHubReleasePublisher
                 expectedTagCommitSha,
                 requirePublishedStableRelease,
                 verifiedAssetIds,
-                requireExactAssetSet: replaceExistingAssets || !reusedExistingRelease,
+                // Published-release workflows can attach their own assets while this publisher uploads.
+                // Only explicit replacement recovery owns the complete release asset set.
+                requireExactAssetSet: replaceExistingAssets,
                 cancellationToken);
         }
 

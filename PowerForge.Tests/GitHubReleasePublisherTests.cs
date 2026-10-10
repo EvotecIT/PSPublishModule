@@ -6,7 +6,7 @@ using System.Text.Json.Nodes;
 
 namespace PowerForge.Tests;
 
-public sealed class GitHubReleasePublisherTests
+public sealed partial class GitHubReleasePublisherTests
 {
     [Fact]
     public async Task PublishRelease_SendsMetadataWithGeneratedReleaseNotes()
