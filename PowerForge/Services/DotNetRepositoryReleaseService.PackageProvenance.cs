@@ -56,12 +56,15 @@ public sealed partial class DotNetRepositoryReleaseService
         DotNetRepositoryReleaseSpec spec,
         IReadOnlyList<string> packagePaths,
         ILogger logger,
-        out string error)
+        out string error,
+        bool usePreparedToolPublishOutput,
+        string? packageOutputPath)
     {
         foreach (var project in projects)
         {
             var projectPackages = FilterPackages(packagePaths, project.PackageId, project.NewVersion!);
-            if (!TryValidateProjectPackagePayloads(project, spec, projectPackages, logger, out error))
+            if (!TryValidateProjectPackagePayloads(project, spec, projectPackages, logger, out error,
+                    usePreparedToolPublishOutput, packageOutputPath))
                 return false;
         }
 
@@ -77,7 +80,9 @@ public sealed partial class DotNetRepositoryReleaseService
         DotNetRepositoryReleaseSpec spec,
         IReadOnlyList<string> packagePaths,
         ILogger logger,
-        out string error)
+        out string error,
+        bool usePreparedToolPublishOutput = false,
+        string? packageOutputPath = null)
     {
         error = string.Empty;
         if (packagePaths.Count == 0)
@@ -117,13 +122,18 @@ public sealed partial class DotNetRepositoryReleaseService
             project.ProjectName,
             logger,
             payloadNames.ToArray());
+        // Separately timestamped signatures can differ across the build and
+        // prepared-publish copies. Include only staging freshly prepared by this
+        // pack operation, evaluated with the same PackageOutputPath as packing.
         var packToolIntermediateAssemblies = ResolvePackToolIntermediateAssemblyPaths(
             project.CsprojPath,
             projectDirectory,
             configuration,
             project.ProjectName,
             logger,
-            payloadNames.ToArray());
+            payloadNames.ToArray(),
+            usePreparedToolPublishOutput,
+            packageOutputPath);
         var outputHashes = BuildOutputHashLookup(outputDirectories, payloadNames, packToolIntermediateAssemblies);
 
         foreach (var packagePath in packagesWithPayloads)

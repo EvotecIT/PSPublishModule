@@ -206,7 +206,9 @@ public sealed partial class DotNetRepositoryReleaseService
                 result.SymbolPackages.AddRange(symbolPackages);
             }
 
-            if (!TryValidatePackagePayloads(projects, spec, result.Packages, logger, out var validationError))
+            if (!TryValidatePackagePayloads(projects, spec, result.Packages, logger, out var validationError,
+                    usePreparedToolPublishOutput: shouldSignAssemblies && spec.SignDependencyAssemblies,
+                    packageOutputPath: outputPath))
             {
                 result.Success = false;
                 result.ErrorMessage = validationError;

@@ -115,6 +115,13 @@ public sealed class DotNetRepositoryReleaseToolSigningTests
                                  path.EndsWith("Sample.Runtime.dll", StringComparison.OrdinalIgnoreCase)))
                     {
                         using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.None);
+                        // Separate timestamped signatures can differ for otherwise
+                        // identical build, intermediate and prepared-publish copies.
+                        if (path.EndsWith("Sample.Tool.dll", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var signatureIdentity = Guid.NewGuid().ToByteArray();
+                            stream.Write(signatureIdentity, 0, signatureIdentity.Length);
+                        }
                         stream.Write(marker, 0, marker.Length);
                     }
                 },
@@ -146,6 +153,14 @@ public sealed class DotNetRepositoryReleaseToolSigningTests
                 using var packagedAssembly = new MemoryStream();
                 entryStream.CopyTo(packagedAssembly);
                 Assert.Equal(marker, packagedAssembly.ToArray().TakeLast(marker.Length).ToArray());
+                if (entryName == "Sample.Tool.dll")
+                {
+                    var expectedPrimarySuffix = signDependencyAssemblies
+                        ? Path.Combine(usePackConditionedPublishDirectory ? "conditioned-publish" : "publish", "Sample.Tool.dll")
+                        : Path.Combine("obj", "Release", "net8.0", "Sample.Tool.dll");
+                    var expectedPrimary = Assert.Single(signedPaths, path => path.EndsWith(expectedPrimarySuffix, StringComparison.OrdinalIgnoreCase));
+                    Assert.Equal(File.ReadAllBytes(expectedPrimary), packagedAssembly.ToArray());
+                }
             }
         }
         finally

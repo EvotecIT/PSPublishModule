@@ -329,7 +329,9 @@ public sealed partial class DotNetRepositoryReleaseService
         result.Duration += packageDiscoveryWatch.Elapsed;
         logger.Success($"{project.ProjectName}: package discovery found {result.Packages.Count} package(s) and {result.SymbolPackages.Count} symbol package(s) in {FormatDuration(packageDiscoveryWatch.Elapsed)}.");
 
-        if (!TryValidateProjectPackagePayloads(project, spec, result.Packages, logger, out var validationError))
+        if (!TryValidateProjectPackagePayloads(project, spec, result.Packages, logger, out var validationError,
+                usePreparedToolPublishOutput: shouldSignAssemblies && spec.SignDependencyAssemblies,
+                packageOutputPath: outputPath))
         {
             result.ErrorMessage = validationError;
             return result;
