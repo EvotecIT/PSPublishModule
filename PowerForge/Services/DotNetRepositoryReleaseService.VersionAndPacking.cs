@@ -12,6 +12,11 @@ namespace PowerForge;
 
 public sealed partial class DotNetRepositoryReleaseService
 {
+    // Compute package items without recopying signed staging files. The SDK keeps
+    // its no-build prerequisites for references and satellite resources, while
+    // ComputeFilesToPublish includes PrepareForPublish itself.
+    private const string PreparedToolPublishTargetsProperty = "_CorePublishTargets=ComputeFilesToPublish";
+
     private string ResolveVersion(
         DotNetRepositoryProjectResult project,
         string? expectedVersion,
@@ -291,7 +296,8 @@ public sealed partial class DotNetRepositoryReleaseService
             }
         }
 
-        var exitCode = RunDotnetPack(project.CsprojPath, csprojDir, configuration, outputPath, project.ProjectName, logger, noBuild: true, includeSymbols: spec.IncludeSymbols, out var stdErr, out var stdOut, out var duration);
+        var exitCode = RunDotnetPack(project.CsprojPath, csprojDir, configuration, outputPath, project.ProjectName, logger, noBuild: true, includeSymbols: spec.IncludeSymbols,
+            usePreparedToolPublishOutput: shouldSignAssemblies && spec.SignDependencyAssemblies, out var stdErr, out var stdOut, out var duration);
         result.Duration += duration;
         if (exitCode != 0)
         {
@@ -362,6 +368,7 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
         ILogger logger,
         bool noBuild,
         bool includeSymbols,
+        bool usePreparedToolPublishOutput,
         out string stdErr,
         out string stdOut,
         out TimeSpan duration)
@@ -383,6 +390,8 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
 
 #if NET472
         var args = new List<string> { "pack", csproj, "--configuration", configuration };
+        if (usePreparedToolPublishOutput)
+            args.Add("-p:" + PreparedToolPublishTargetsProperty);
         if (noBuild)
         {
             args.Add("--no-build");
@@ -405,6 +414,8 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
         psi.ArgumentList.Add(csproj);
         psi.ArgumentList.Add("--configuration");
         psi.ArgumentList.Add(configuration);
+        if (usePreparedToolPublishOutput)
+            psi.ArgumentList.Add("-p:" + PreparedToolPublishTargetsProperty);
         if (noBuild)
         {
             psi.ArgumentList.Add("--no-build");
