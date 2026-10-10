@@ -25,12 +25,19 @@ internal static class BoundProjectVersionService
         string projectPath,
         string originalContent,
         string updatedContent,
+        string plannedContent,
         string resolvedVersion,
         IReadOnlyList<ProjectVersionBindingFileUpdate> bindings,
         IReadOnlyList<ProjectVersionBinding>? configuredBindings)
     {
-        var originalElements = VersionElement.Matches(originalContent).Cast<Match>().ToArray();
-        if (!originalElements.Any(element => VersionReference.IsMatch(element.Value)) || bindings.Count == 0)
+        if (bindings.Count == 0)
+            return updatedContent;
+
+        var project = XDocument.Parse(originalContent);
+        var composedProject = XDocument.Parse(updatedContent);
+        ValidateComposition(projectPath, plannedContent, composedProject, resolvedVersion);
+        var originalElements = FindVersionElements(originalContent);
+        if (!originalElements.Any(element => VersionReference.IsMatch(element.Value)))
             return updatedContent;
 
         var propsPath = FindImportedProps(repositoryRoot, projectPath);
@@ -42,8 +49,6 @@ internal static class BoundProjectVersionService
         if (binding is null)
             return updatedContent;
 
-        var project = XDocument.Parse(originalContent);
-        var composedProject = XDocument.Parse(updatedContent);
         var props = XDocument.Parse(binding.Update.UpdatedContent);
         if (HasCustomImports(project) || HasImports(props))
             return updatedContent;
@@ -63,7 +68,7 @@ internal static class BoundProjectVersionService
                 throw new InvalidOperationException($"Project '{projectPath}' version property ownership changed during binding composition; bound references cannot be restored safely.");
 
             var definitions = props.Descendants()
-                .Where(element => element.Parent?.Name.LocalName == "PropertyGroup" &&
+                .Where(element => IsEvaluationProperty(element) &&
                     string.Equals(element.Name.LocalName, propertyName, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
             if (definitions.Length != 1 || definitions[0].Parent?.Parent != props.Root || definitions[0].AncestorsAndSelf().Any(element =>
@@ -77,21 +82,15 @@ internal static class BoundProjectVersionService
         if (preserved.Count == 0)
             return updatedContent;
 
-        var updatedElements = VersionElement.Matches(updatedContent).Cast<Match>().ToArray();
+        var updatedElements = FindVersionElements(updatedContent);
         // A project binding may edit other metadata, but adding, removing or moving version
         // consumers makes ordinal restoration ambiguous. Reject that composition atomically.
-        ValidateVersionLayout(projectPath, project, composedProject, originalElements, updatedElements);
         var restored = new StringBuilder(updatedContent.Length);
         var offset = 0;
         for (var index = 0; index < updatedElements.Length; index++)
         {
             var element = updatedElements[index];
             restored.Append(updatedContent, offset, element.Index - offset);
-            // The editor updates both literal consumers and reference consumers. A composed
-            // binding must not change either planned value before the file transaction runs.
-            if (originalElements[index].Groups["value"].Length > 0 &&
-                !string.Equals(element.Groups["value"].Value.Trim(), resolvedVersion, StringComparison.Ordinal))
-                throw new InvalidOperationException($"Updated project version element does not match resolved version '{resolvedVersion}' for '{projectPath}'.");
             if (preserved.TryGetValue(index, out var reference))
                 restored.Append(reference);
             else
@@ -103,32 +102,59 @@ internal static class BoundProjectVersionService
     }
 
     private static bool HasPropertyDefinition(XDocument project, string propertyName) => project.Descendants().Any(element =>
-        element.Parent?.Name.LocalName == "PropertyGroup" &&
+        IsEvaluationProperty(element) &&
         string.Equals(element.Name.LocalName, propertyName, StringComparison.OrdinalIgnoreCase));
+
+    private static Match[] FindVersionElements(string content)
+    {
+        var versionStarts = FindPropertyOffsets(content, "Version");
+        versionStarts.UnionWith(FindPropertyOffsets(content, "PackageVersion"));
+        return VersionElement.Matches(content).Cast<Match>().Where(match => versionStarts.Contains(match.Index)).ToArray();
+    }
+
+    private static bool IsEvaluationProperty(XElement element) => element.Parent?.Name.LocalName == "PropertyGroup" &&
+        !element.Ancestors().Any(ancestor => ancestor.Name.LocalName == "Target");
 
     private static bool HasImports(XDocument project) => project.Descendants().Any(element =>
         string.Equals(element.Name.LocalName, "Import", StringComparison.OrdinalIgnoreCase) &&
         (element.Parent == project.Root || element.Parent?.Name.LocalName == "ImportGroup"));
 
     private static bool HasCustomImports(XDocument project) => HasImports(project) ||
-        HasPropertyDefinition(project, "DirectoryBuildPropsPath") || HasPropertyDefinition(project, "ImportDirectoryBuildProps");
+        HasPropertyDefinition(project, "DirectoryBuildPropsPath") || HasPropertyDefinition(project, "ImportDirectoryBuildProps") ||
+        ((string?)project.Root?.Attribute("Sdk"))?.Split(';').Any(name =>
+            !string.Equals(name.Trim(), "Microsoft.NET.Sdk", StringComparison.OrdinalIgnoreCase)) == true ||
+        project.Root?.Elements().Any(element => element.Name.LocalName == "Sdk" &&
+            (!string.Equals((string?)element.Attribute("Name"), "Microsoft.NET.Sdk", StringComparison.OrdinalIgnoreCase) ||
+             element.Attributes().Any(attribute => attribute.Name.LocalName != "Name"))) == true;
 
-    private static void ValidateVersionLayout(
-        string projectPath, XDocument original, XDocument updated, Match[] originalMatches, Match[] updatedMatches)
+    private static void ValidateComposition(
+        string projectPath, string plannedContent, XDocument updated, string resolvedVersion)
     {
-        static bool IsVersion(XElement element) =>
-            string.Equals(element.Name.LocalName, "Version", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(element.Name.LocalName, "PackageVersion", StringComparison.OrdinalIgnoreCase);
+        static bool IsVersion(XElement element) => IsEvaluationProperty(element) &&
+            new[] { "Version", "PackageVersion", "VersionPrefix", "VersionSuffix" }.Contains(element.Name.LocalName, StringComparer.OrdinalIgnoreCase);
         static IEnumerable<string> Location(XElement element) => element.AncestorsAndSelf().Reverse()
             .Select(ancestor => ancestor.Name.LocalName.ToUpperInvariant() + "\0" + (string?)ancestor.Attribute("Condition"));
 
+        // Preserve the actual plan: a release without an expected/aligned version
+        // deliberately leaves the project's version ownership unchanged.
+        var original = XDocument.Parse(plannedContent);
         var originalElements = original.Descendants().Where(IsVersion).ToArray();
         var updatedElements = updated.Descendants().Where(IsVersion).ToArray();
-        if (originalElements.Length != updatedElements.Length || originalMatches.Length != updatedMatches.Length ||
-            originalElements.Where((element, index) => !Location(element).SequenceEqual(Location(updatedElements[index]), StringComparer.Ordinal)).Any() ||
-            originalMatches.Where((element, index) => !string.Equals(element.Groups["tag"].Value,
-                updatedMatches[index].Groups["tag"].Value, StringComparison.OrdinalIgnoreCase)).Any())
+        if (originalElements.Length != updatedElements.Length ||
+            originalElements.Where((element, index) => !Location(element).SequenceEqual(Location(updatedElements[index]), StringComparer.Ordinal)).Any())
             throw new InvalidOperationException($"Project '{projectPath}' version element layout changed during binding composition; bound references cannot be restored safely.");
+        for (var index = 0; index < originalElements.Length; index++)
+        {
+            var plannedValue = originalElements[index].Value.Trim();
+            var composedValue = updatedElements[index].Value.Trim();
+            if (string.Equals(plannedValue, composedValue, StringComparison.Ordinal) ||
+                (plannedValue.Length == 0 &&
+                 (originalElements[index].Name.LocalName.Equals("Version", StringComparison.OrdinalIgnoreCase) ||
+                  originalElements[index].Name.LocalName.Equals("PackageVersion", StringComparison.OrdinalIgnoreCase)) &&
+                 string.Equals(composedValue, resolvedVersion, StringComparison.Ordinal)))
+                continue;
+            throw new InvalidOperationException($"Updated project version element does not match resolved version '{resolvedVersion}' for '{projectPath}'.");
+        }
     }
 
     private static bool IsPropertyBound(
@@ -139,7 +165,7 @@ internal static class BoundProjectVersionService
             return false;
         var propertyStarts = FindPropertyOffsets(originalProps, propertyName);
         var propertyElements = Regex.Matches(originalProps,
-            @"<" + Regex.Escape(propertyName) + @"\b[^>]*(?:/\s*>|>[^<]*</" + Regex.Escape(propertyName) + @"\s*>)",
+            @"<" + Regex.Escape(propertyName) + @"(?=[\s/>])[^>]*(?:/\s*>|>[^<]*</" + Regex.Escape(propertyName) + @"\s*>)",
             MatchOptions, RegexTimeout).Cast<Match>().Where(match => propertyStarts.Contains(match.Index)).ToArray();
         foreach (var binding in bindings)
         {
@@ -174,7 +200,7 @@ internal static class BoundProjectVersionService
         }
         var document = XDocument.Parse(content, LoadOptions.SetLineInfo);
         return new HashSet<int>(document.Descendants()
-            .Where(element => element.Parent?.Name.LocalName == "PropertyGroup" &&
+            .Where(element => IsEvaluationProperty(element) &&
                 string.Equals(element.Name.LocalName, propertyName, StringComparison.OrdinalIgnoreCase))
             .Select(element =>
             {
