@@ -31,16 +31,18 @@ public sealed partial class ManagedModuleRepositoryClient
         HttpResponseMessage response,
         string detail,
         RepositoryCredential? credential,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? apiKey = null)
     {
-        var responseDetail = await ReadRepositoryResponseDetailAsync(response, credential, cancellationToken).ConfigureAwait(false);
+        var responseDetail = await ReadRepositoryResponseDetailAsync(response, credential, cancellationToken, apiKey).ConfigureAwait(false);
         return CreateRepositoryHttpException(repository, operation, response.StatusCode, detail, responseDetail);
     }
 
     private async Task<string?> ReadRepositoryResponseDetailAsync(
         HttpResponseMessage response,
         RepositoryCredential? credential,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? apiKey = null)
     {
         var values = new List<string>();
         if (!string.IsNullOrWhiteSpace(response.ReasonPhrase))
@@ -71,6 +73,8 @@ public sealed partial class ManagedModuleRepositoryClient
 
         var detail = RedactRepositoryCredential(string.Join(" ", values), credential);
         detail = RedactRepositoryCredential(detail, _options.ProxyCredential);
+        if (!string.IsNullOrEmpty(apiKey))
+            detail = detail.Replace(apiKey!, "[REDACTED]");
         var normalized = NormalizeRepositoryResponseDetail(detail);
         if (normalized.Length <= MaximumRepositoryResponseDetailLength)
             return normalized;

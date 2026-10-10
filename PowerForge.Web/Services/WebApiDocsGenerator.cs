@@ -303,7 +303,7 @@ public static partial class WebApiDocsGenerator
     private static readonly Regex WhitespaceRegex = new("\\s+", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex SlugNonAlnumRegex = new("[^a-z0-9]+", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex SlugDashRegex = new("-{2,}", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
-    private static readonly Regex CrefTokenRegex = new("\\[\\[cref:(?<name>[^\\]]+)\\]\\]", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
+    private static readonly Regex CrefTokenRegex = new("\\[\\[cref:(?<name>(?:[^\\]]|\\](?!\\]))+)\\]\\]", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex HrefTokenRegex = new("\\[\\[href:(?<url>[^|\\]]+)\\|(?<label>[^\\]]*)\\]\\]", RegexOptions.Compiled | RegexOptions.CultureInvariant, RegexTimeout);
     private static readonly Regex AboutTokenRegex = new("\\babout_[A-Za-z0-9_.-]+\\b", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase, RegexTimeout);
     private static readonly Regex CultureFolderRegex = new(

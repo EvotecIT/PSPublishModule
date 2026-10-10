@@ -33,7 +33,8 @@ internal sealed class RequiredModuleRepositoryPublisher
         RepositoryCredential? sourceCredential,
         RepositoryCredential? targetCredential,
         ISet<string>? mirroredPackages = null,
-        Action? remoteSideEffectObserved = null)
+        Action? remoteSideEffectObserved = null,
+        Func<string, string, bool>? targetContainsPackage = null)
     {
         if (requiredModule is null) throw new ArgumentNullException(nameof(requiredModule));
         if (string.IsNullOrWhiteSpace(requiredModule.ModuleName)) throw new ArgumentException("Required module name is required.", nameof(requiredModule));
@@ -96,7 +97,8 @@ internal sealed class RequiredModuleRepositoryPublisher
                     continue;
                 }
 
-                if (TargetRepositoryContainsPackage(targetRepositoryNameValue, targetCredential, package))
+                if (targetContainsPackage?.Invoke(package.Name, package.Version) ??
+                    TargetRepositoryContainsPackage(targetRepositoryNameValue, targetCredential, package))
                 {
                     _logger.Info($"Skipping required module package '{package.Name}' {package.Version} because it already exists in repository '{targetRepositoryNameValue}'.");
                     mirroredPackages?.Add(packageKey);

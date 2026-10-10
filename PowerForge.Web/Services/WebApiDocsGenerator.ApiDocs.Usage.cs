@@ -339,7 +339,7 @@ public static partial class WebApiDocsGenerator
         using (html.Indent())
         {
             html.Line("<h2>Usage</h2>");
-            var count = usage.ReturnedOrExposedBy.Count + usage.AcceptedByParameters.Count;
+            var count = DistinctUsageEntries(usage.ReturnedOrExposedBy).Count + DistinctUsageEntries(usage.AcceptedByParameters).Count;
             html.Line($"<details class=\"type-usage-details\"><summary>Explore {count} API references to this type</summary>");
             html.Line("<p class=\"type-usage-summary\">This type appears in these public API surfaces even when no hand-authored example is attached directly to the page.</p>");
             if (usage.ReturnedOrExposedBy.Count > 0)
@@ -351,6 +351,13 @@ public static partial class WebApiDocsGenerator
         html.Line("</section>");
     }
 
+    // Overloads read identically in the usage index; list each visible member once.
+    private static List<ApiTypeUsageEntry> DistinctUsageEntries(IReadOnlyList<ApiTypeUsageEntry> entries)
+        => entries
+            .GroupBy(static entry => (entry.OwnerType.FullName, entry.Member.Name, entry.Member.DisplayName, Kind: GetUsageKindLabel(entry), entry.ParameterName))
+            .Select(static group => group.First())
+            .ToList();
+
     private static void AppendUsageGroup(
         HtmlFragmentBuilder html,
         string heading,
@@ -361,14 +368,16 @@ public static partial class WebApiDocsGenerator
         if (html is null || entries.Count == 0)
             return;
 
+        var visible = DistinctUsageEntries(entries);
+
         html.Line("<div class=\"usage-group\">");
         using (html.Indent())
         {
-            html.Line($"<h3>{System.Web.HttpUtility.HtmlEncode(heading)}</h3>");
+            html.Line($"<h3>{System.Web.HttpUtility.HtmlEncode(heading)} <span class=\"usage-count\">{visible.Count}</span></h3>");
             html.Line("<ul class=\"usage-list\">");
             using (html.Indent())
             {
-                foreach (var entry in entries)
+                foreach (var entry in visible)
                 {
                     var href = BuildDocsTypeUrl(baseUrl, entry.OwnerType.Slug) + "#" + entry.AnchorId;
                     var safeHref = System.Web.HttpUtility.HtmlAttributeEncode(href);

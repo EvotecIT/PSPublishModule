@@ -1,9 +1,59 @@
+using System.Net;
 using PowerForge;
 
 namespace PowerForge.Tests;
 
 public sealed class ManagedRequiredModuleRepositoryValidatorTests
 {
+    [Fact]
+    public void Validate_mirrors_dependency_graph_to_write_endpoint_and_verifies_through_read_endpoint()
+    {
+        using var source = new TemporaryDirectory();
+        using var destination = new TemporaryDirectory();
+        TestPackageFactory.Create(Path.Combine(source.Path, "Company.Core.1.0.0.nupkg"), "Company.Core", "1.0.0",
+            dependencies: new[] { new TestDependency("Company.Dependency", "[1.0.0]", targetFramework: null) });
+        TestPackageFactory.Create(Path.Combine(source.Path, "Company.Dependency.1.0.0.nupkg"), "Company.Dependency", "1.0.0");
+        using var handler = new AggregateReadHandler(destination.Path);
+        using var client = new HttpClient(handler);
+        var validator = new ManagedRequiredModuleRepositoryValidator(new NullLogger(), new ManagedModuleRepositoryClient(new NullLogger(), client));
+        var publish = new PublishConfiguration
+        {
+            PublishRequiredModules = true,
+            RequiredModuleSourceRepository = "Source",
+            RequiredModuleSourceRepositoryUri = source.Path
+        };
+        var plan = CreatePlan(new RequiredModuleReference("Company.Core", requiredVersion: "1.0.0"));
+        var buildResult = new ModuleBuildResult(source.Path, Path.Combine(source.Path, "missing.psd1"),
+            new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+        validator.Validate(publish, new ManagedModuleRepository("ConsumerFeed", "https://feed.test/v3/index.json"),
+            targetCredential: null, targetPublishCredential: null, plan, buildResult,
+            publishRepository: new ManagedModuleRepository("UploadFeed", destination.Path));
+
+        Assert.True(LocalPackageExists(destination.Path, "Company.Core", "1.0.0"));
+        Assert.True(LocalPackageExists(destination.Path, "Company.Dependency", "1.0.0"));
+        Assert.Contains("/flat/company.core/index.json", handler.Paths);
+        Assert.Contains("/flat/company.dependency/index.json", handler.Paths);
+    }
+
+    [Fact]
+    public void Validate_rejects_mirroring_when_only_write_endpoint_is_psgallery()
+    {
+        using var readFeed = new TemporaryDirectory();
+        var validator = new ManagedRequiredModuleRepositoryValidator(new NullLogger());
+        var plan = CreatePlan(new RequiredModuleReference("Company.Core", requiredVersion: "1.0.0"));
+        var buildResult = new ModuleBuildResult(readFeed.Path, Path.Combine(readFeed.Path, "missing.psd1"),
+            new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()));
+
+        var error = Assert.Throws<InvalidOperationException>(() => validator.Validate(
+            new PublishConfiguration { PublishRequiredModules = true },
+            new ManagedModuleRepository("ConsumerFeed", readFeed.Path),
+            targetCredential: null, targetPublishCredential: null, plan, buildResult,
+            publishRepository: new ManagedModuleRepository("UploadFeed", "https://www.powershellgallery.com/api/v2")));
+
+        Assert.Contains("Refusing to mirror dependencies to PSGallery", error.Message);
+    }
+
     [Fact]
     public void Validate_treats_missing_local_target_repository_as_empty_when_mirroring()
     {
@@ -132,6 +182,30 @@ public sealed class ManagedRequiredModuleRepositoryValidatorTests
 
         Assert.Contains("PSGallery", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("private repository", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class AggregateReadHandler(string destination) : HttpMessageHandler
+    {
+        internal List<string> Paths { get; } = new();
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Assert.Equal(HttpMethod.Get, request.Method);
+            var path = request.RequestUri!.AbsolutePath;
+            Paths.Add(path);
+            if (path == "/v3/index.json")
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("{\"version\":\"3.0.0\",\"resources\":[{\"@id\":\"https://feed.test/flat/\",\"@type\":\"PackageBaseAddress/3.0.0\"}]}")
+                });
+
+            var packageId = path.Split('/')[2];
+            var exists = LocalPackageExists(destination, packageId, "1.0.0");
+            return Task.FromResult(new HttpResponseMessage(exists ? HttpStatusCode.OK : HttpStatusCode.NotFound)
+            {
+                Content = new StringContent(exists ? "{\"versions\":[\"1.0.0\"]}" : "{}")
+            });
+        }
     }
 
     private static ModulePipelinePlan CreatePlan(params RequiredModuleReference[] requiredModules)

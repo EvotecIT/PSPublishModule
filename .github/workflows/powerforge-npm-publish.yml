@@ -1,0 +1,182 @@
+name: Publish a qualified npm archive
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: Artifact in this workflow run containing exactly one qualified tgz.
+        required: true
+        type: string
+      package-name:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      sha256:
+        description: SHA256 recorded by the job that built and qualified the archive.
+        required: true
+        type: string
+      quality-run-id:
+        description: Successful default-branch quality run for the caller's exact commit.
+        required: true
+        type: string
+      quality-workflow:
+        type: string
+        default: quality.yml
+      environment-name:
+        description: Existing protected release environment, restricted to the default branch.
+        required: true
+        type: string
+      publish:
+        description: Publish when true; otherwise validate and perform npm's dry run.
+        type: boolean
+        default: false
+      bootstrap:
+        description: First publication only; requires the environment's NPM_BOOTSTRAP_TOKEN secret.
+        type: boolean
+        default: false
+    secrets:
+      NPM_BOOTSTRAP_TOKEN:
+        description: Named forwarding for the release environment secret; it may be empty outside bootstrap.
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: npm-publish-${{ github.repository }}-${{ inputs.package-name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment-name }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NPM_PACKAGE: ${{ inputs.package-name }}
+      NPM_VERSION: ${{ inputs.version }}
+      NPM_SHA256: ${{ inputs.sha256 }}
+      NPM_EXECUTE: ${{ inputs.publish }}
+      NPM_BOOTSTRAP: ${{ inputs.bootstrap }}
+      QUALITY_RUN: ${{ inputs.quality-run-id }}
+      QUALITY_WORKFLOW: ${{ inputs.quality-workflow }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      SOURCE_PRIVATE: ${{ github.event.repository.private }}
+      RELEASE_ENVIRONMENT: ${{ inputs.environment-name }}
+      NPM_CONFIG_REGISTRY: https://registry.npmjs.org
+    steps:
+      - name: Require successful quality checks for this default-branch commit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:GITHUB_EVENT_NAME -ne 'workflow_dispatch' -or
+              $env:GITHUB_REF -ne "refs/heads/$env:DEFAULT_BRANCH") {
+              throw 'npm publication requires a deliberate default-branch dispatch.'
+          }
+          $environmentPath = [Uri]::EscapeDataString($env:RELEASE_ENVIRONMENT)
+          $environmentJson = & gh api "repos/$env:GITHUB_REPOSITORY/environments/$environmentPath"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot read the protected release environment.' }
+          $environment = $environmentJson | ConvertFrom-Json
+          $policiesJson = & gh api "repos/$env:GITHUB_REPOSITORY/environments/$environmentPath/deployment-branch-policies"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot read release deployment policies.' }
+          $policies = $policiesJson | ConvertFrom-Json
+          if (-not $environment.deployment_branch_policy.custom_branch_policies -or
+              $policies.total_count -ne 1 -or $policies.branch_policies[0].type -ne 'branch' -or
+              $policies.branch_policies[0].name -cne $env:DEFAULT_BRANCH) {
+              throw 'The release environment must allow only the exact default branch, without tags or patterns.'
+          }
+          if ($env:QUALITY_RUN -notmatch '^\d+$') { throw 'Invalid quality run ID.' }
+          $runJson = & gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:QUALITY_RUN"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot read the quality run.' }
+          $run = $runJson | ConvertFrom-Json
+          if ($run.head_sha -ne $env:GITHUB_SHA -or $run.head_branch -ne $env:DEFAULT_BRANCH -or
+              $run.event -ne 'push' -or $run.status -ne 'completed' -or $run.conclusion -ne 'success' -or
+              ($run.path -split '@', 2)[0] -ne ".github/workflows/$env:QUALITY_WORKFLOW") {
+              throw 'The supplied quality run does not qualify this default-branch commit.'
+          }
+
+      - name: Download the qualified archive
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ runner.temp }}/npm-release
+
+      - name: Setup Node for npm Trusted Publishing
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+          registry-url: ${{ inputs.bootstrap && inputs.publish && 'https://registry.npmjs.org' || '' }}
+
+      - name: Install the qualified npm CLI
+        env:
+          NODE_AUTH_TOKEN: ''
+        run: npm install --global npm@11.21.0 --no-audit --no-fund
+
+      - name: Verify archive identity and publish the same bytes
+        shell: pwsh
+        env:
+          NODE_AUTH_TOKEN: ${{ inputs.bootstrap && inputs.publish && secrets.NPM_BOOTSTRAP_TOKEN || '' }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (@('true', 'false') -cnotcontains $env:SOURCE_PRIVATE) {
+              throw 'Source repository visibility is required before publication.'
+          }
+          $requireProvenance = $env:SOURCE_PRIVATE -eq 'false'
+          if ($env:NPM_SHA256 -notmatch '^[a-fA-F0-9]{64}$' -or
+              $env:NPM_VERSION -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') {
+              throw 'A three-part version and SHA256 are required.'
+          }
+          $archives = @(Get-ChildItem -LiteralPath "$env:RUNNER_TEMP/npm-release" -File -Recurse -Filter '*.tgz')
+          if ($archives.Count -ne 1) { throw 'Expected exactly one npm archive.' }
+          $archive = $archives[0].FullName
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $env:NPM_SHA256) {
+              throw 'Archive SHA256 differs from the qualified build.'
+          }
+          $manifestJson = & tar -xOf $archive package/package.json
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot read the packed package manifest.' }
+          $manifest = $manifestJson | ConvertFrom-Json
+          if ($manifest.name -cne $env:NPM_PACKAGE -or $manifest.version -cne $env:NPM_VERSION -or
+              $manifest.private -eq $true -or
+              $manifest.repository.url -cne "git+https://github.com/$env:GITHUB_REPOSITORY.git") {
+              throw 'Packed package identity or source repository does not match the release.'
+          }
+          $integrity = 'sha512-' + [Convert]::ToBase64String(
+              [Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($archive)))
+          if ($env:NPM_BOOTSTRAP -eq 'true') {
+              if ($env:NPM_EXECUTE -ne 'true' -or [string]::IsNullOrWhiteSpace($env:NODE_AUTH_TOKEN)) {
+                  throw 'Bootstrap requires an explicit publication and the environment NPM_BOOTSTRAP_TOKEN secret.'
+              }
+              $packageUrl = 'https://registry.npmjs.org/' + [Uri]::EscapeDataString($env:NPM_PACKAGE)
+              $existing = Invoke-WebRequest -Uri $packageUrl -SkipHttpErrorCheck -Headers @{
+                  Authorization = "Bearer $env:NODE_AUTH_TOKEN"
+              }
+              if ($existing.StatusCode -ne 404) {
+                  throw 'Bootstrap requires an authenticated registry check confirming that the package does not exist.'
+              }
+          }
+          $publishArgs = @('publish', $archive, '--ignore-scripts', "--provenance=$($requireProvenance.ToString().ToLowerInvariant())", '--access', 'public',
+              '--registry', 'https://registry.npmjs.org')
+          if ($env:NPM_EXECUTE -ne 'true') { $publishArgs += '--dry-run' }
+          & npm @publishArgs
+          if ($LASTEXITCODE -ne 0) { throw 'npm publication or dry run failed.' }
+          if ($env:NPM_EXECUTE -eq 'true') {
+              $verified = $false
+              for ($attempt = 0; $attempt -lt 10; $attempt++) {
+                  $distJson = & npm view "$env:NPM_PACKAGE@$env:NPM_VERSION" dist --json --registry https://registry.npmjs.org
+                  if ($LASTEXITCODE -eq 0) {
+                      $dist = $distJson | ConvertFrom-Json
+                      if ($dist.integrity -cne $integrity) { throw 'Published archive integrity does not match.' }
+                      if (-not $requireProvenance -or $dist.attestations.provenance) { $verified = $true; break }
+                  }
+                  Start-Sleep -Seconds 4
+              }
+              if (-not $verified) {
+                  throw 'npm accepted publication, but required registry verification is incomplete. Inspect the registry before retrying.'
+              }
+          }
+          "Package: $env:NPM_PACKAGE@$env:NPM_VERSION`nSHA256: $env:NPM_SHA256`nPublished: $env:NPM_EXECUTE`nProvenance required: $requireProvenance" >> $env:GITHUB_STEP_SUMMARY

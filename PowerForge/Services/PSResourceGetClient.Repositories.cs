@@ -18,22 +18,44 @@ public sealed partial class PSResourceGetClient
         int? priority = null,
         RepositoryApiVersion apiVersion = RepositoryApiVersion.Auto,
         TimeSpan? timeout = null)
+        => ParseRepositoryCreated(EnsureRepositoryRegistration(name, uri, trusted, priority, apiVersion, timeout, temporary: false).StdOut);
+
+    /// <summary>Reuses an existing upload URI registration or creates a temporary alias without changing other registrations.</summary>
+    internal (string Name, bool Created) AcquirePublishRepository(
+        string uri,
+        bool trusted,
+        int? priority,
+        RepositoryApiVersion apiVersion)
+    {
+        var name = "PowerForgePublish-" + Guid.NewGuid().ToString("N");
+        var result = EnsureRepositoryRegistration(name, uri, trusted, priority, apiVersion, null, temporary: true);
+        foreach (var line in SplitLines(result.StdOut))
+        {
+            if (line.StartsWith("PFPSRG::REPO::NAME::", StringComparison.Ordinal))
+                return (Decode(line.Substring("PFPSRG::REPO::NAME::".Length)), ParseRepositoryCreated(result.StdOut));
+        }
+        throw new InvalidOperationException("PSResourceGet did not report the acquired publish repository name.");
+    }
+
+    private PowerShellRunResult EnsureRepositoryRegistration(
+        string name, string uri, bool trusted, int? priority,
+        RepositoryApiVersion apiVersion, TimeSpan? timeout, bool temporary)
     {
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Name is required.", nameof(name));
         if (string.IsNullOrWhiteSpace(uri)) throw new ArgumentException("Uri is required.", nameof(uri));
 
         var script = BuildEnsureRepositoryScript();
-        var args = new List<string>(5)
+        var args = new List<string>(6)
         {
             name.Trim(),
             uri.Trim(),
             trusted ? "1" : "0",
             priority.HasValue ? priority.Value.ToString() : string.Empty,
-            apiVersion == RepositoryApiVersion.Auto ? string.Empty : apiVersion.ToString()
+            apiVersion == RepositoryApiVersion.Auto ? string.Empty : apiVersion.ToString(),
+            temporary ? "1" : "0"
         };
 
         var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(2));
-        var created = ParseRepositoryCreated(result.StdOut);
 
         if (result.ExitCode != 0)
         {
@@ -47,7 +69,7 @@ public sealed partial class PSResourceGetClient
             throw new InvalidOperationException(full);
         }
 
-        return created;
+        return result;
     }
 
     /// <summary>

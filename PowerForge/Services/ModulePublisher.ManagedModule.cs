@@ -45,7 +45,7 @@ public sealed partial class ModulePublisher
         bool skipDependenciesCheck,
         Action? remotePublishAttempted)
     {
-        var managedResult = new ManagedModulePublishService(_logger).PublishAsync(
+        var managedResult = new ManagedModulePublishService(_logger, _managedRepositoryClient).PublishAsync(
                 new ManagedModulePublishRequest
                 {
                     ModulePath = modulePath,
@@ -56,6 +56,7 @@ public sealed partial class ModulePublisher
                     OutputDirectory = temporaryPackagePath,
                     Credential = readCredential,
                     PublishCredential = publishCredential,
+                    ApiKey = publish.ApiKey,
                     SkipDependenciesCheck = skipDependenciesCheck,
                     SkipModuleManifestValidate = false,
                     Force = publish.Force,
@@ -75,7 +76,7 @@ public sealed partial class ModulePublisher
         PublishRepositoryConfiguration? repoConfig,
         string? baseDirectory)
     {
-        var source = FirstNonEmpty(repoConfig?.PublishUri, repoConfig?.Uri, repoConfig?.SourceUri);
+        var source = ModulePublishDependencyPolicy.PublishUri(repoConfig);
         if (string.IsNullOrWhiteSpace(source))
             source = ResolveDefaultManagedRepositorySource(repositoryName);
         else
@@ -93,7 +94,7 @@ public sealed partial class ModulePublisher
         PublishRepositoryConfiguration? repoConfig,
         string? baseDirectory)
     {
-        var source = FirstNonEmpty(repoConfig?.Uri, repoConfig?.SourceUri, repoConfig?.PublishUri);
+        var source = ModulePublishDependencyPolicy.ReadUri(repoConfig);
         if (string.IsNullOrWhiteSpace(source))
             source = ResolveDefaultManagedRepositorySource(repositoryName);
         else
@@ -139,16 +140,15 @@ public sealed partial class ModulePublisher
         PublishConfiguration publish,
         PublishRepositoryConfiguration? repoConfig)
     {
-        _ = ResolveManagedReadCredential(repoConfig);
+        var credential = ResolveManagedReadCredential(repoConfig);
+        if (credential is not null)
+            return credential;
 
         if (!string.IsNullOrWhiteSpace(publish.ApiKey))
             return new RepositoryCredential { Secret = publish.ApiKey };
 
         return repoConfig?.Credential;
     }
-
-    private static string? FirstNonEmpty(params string?[] values)
-        => values.FirstOrDefault(static value => !string.IsNullOrWhiteSpace(value))?.Trim();
 
     private bool EnsureManagedVersionIsGreaterThanRepository(
         ManagedModuleRepository repository,
@@ -166,7 +166,7 @@ public sealed partial class ModulePublisher
         var exactVersionExists = false;
         try
         {
-            var versions = new ManagedModuleRepositoryClient(_logger)
+            var versions = _managedRepositoryClient
                 .GetVersionsAsync(repository, moduleName, includePrerelease: true, credential: credential)
                 .GetAwaiter()
                 .GetResult();

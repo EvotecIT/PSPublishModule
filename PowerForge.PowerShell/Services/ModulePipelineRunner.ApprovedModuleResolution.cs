@@ -248,11 +248,12 @@ public sealed partial class ModulePipelineRunner
                         $"Approved module '{resolution.Name}' {selectedVersion} was downloaded from '{repository}', but its manifest was not found in the temporary source.");
                 }
 
+                var identity = ValidateApprovedModuleManifestIdentity(modulePath, resolution.Constraint);
                 sources.Add(new ApprovedModuleSource(
-                    resolution.Name,
+                    identity.Name,
                     selectedVersion,
                     modulePath,
-                    selected.Guid,
+                    identity.Guid,
                     moduleSearchRoot: temporaryRoot));
             }
         }
@@ -281,11 +282,25 @@ public sealed partial class ModulePipelineRunner
         bool matchPrereleaseByBaseVersion = false)
     {
         var matchingCandidates = (candidates ?? Array.Empty<PSResourceInfo>())
-            .Where(candidate => candidate is not null && ModuleGuidMatches(candidate.Guid, constraint.Guid))
+            // Gallery searches can omit GUID metadata; verify identity from the saved manifest.
+            .Where(candidate => candidate is not null &&
+                                (string.IsNullOrWhiteSpace(candidate.Guid) || ModuleGuidMatches(candidate.Guid, constraint.Guid)))
             .Where(candidate => constraint is not ResolvedRequiredModuleReference resolved ||
                                 string.IsNullOrWhiteSpace(resolved.ResolvedVersion) ||
                                 string.Equals(ModulePublisher.GetRepositoryVersionText(candidate), resolved.ResolvedVersion, StringComparison.OrdinalIgnoreCase))
             .ToArray();
+        if (System.Guid.TryParse(constraint.Guid, out _))
+        {
+            // Prefer a repository identity already known to match before downloading an unknown identity.
+            var knownIdentity = RequiredModuleRepositoryPublisher.SelectRequiredModuleVersionForPublish(
+                constraint,
+                matchingCandidates.Where(static candidate => !string.IsNullOrWhiteSpace(candidate.Guid)).ToArray(),
+                allowPrerelease,
+                matchPrereleaseByBaseVersion);
+            if (knownIdentity is not null)
+                return knownIdentity;
+        }
+
         return RequiredModuleRepositoryPublisher.SelectRequiredModuleVersionForPublish(
             constraint,
             matchingCandidates,
@@ -297,6 +312,22 @@ public sealed partial class ModulePipelineRunner
         => constraint is ResolvedRequiredModuleReference resolved &&
            !string.IsNullOrWhiteSpace(resolved.ResolvedVersion) &&
            resolved.ResolvedVersion!.IndexOf('-') > 0;
+
+    internal static (string Name, string? Guid) ValidateApprovedModuleManifestIdentity(string modulePath, RequiredModuleReference constraint)
+    {
+        var manifestName = constraint.ModuleName + ".psd1";
+        var manifestPath = Directory.EnumerateFiles(modulePath)
+            .FirstOrDefault(path => string.Equals(Path.GetFileName(path), manifestName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new FileNotFoundException($"Approved module manifest '{manifestName}' was not found in '{modulePath}'.");
+        ManifestEditor.TryGetTopLevelString(manifestPath, "GUID", out var manifestGuid);
+        if (!ModuleGuidMatches(manifestGuid, constraint.Guid))
+        {
+            throw new InvalidOperationException(
+                $"Approved module '{constraint.ModuleName}' has manifest GUID '{manifestGuid ?? "<missing>"}', but GUID '{constraint.Guid}' is required.");
+        }
+
+        return (Path.GetFileNameWithoutExtension(manifestPath), manifestGuid);
+    }
 
     private static bool ModuleGuidMatches(string? candidateGuid, string? requiredGuid)
     {

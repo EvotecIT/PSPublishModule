@@ -474,6 +474,11 @@ internal static class ModuleManifestTextParser
 
         for (var i = start + 1; i < text.Length; i++)
         {
+            if (quote == '"' && text[i] == '`' && i + 1 < text.Length)
+            {
+                i++;
+                continue;
+            }
             if (text[i] != quote)
                 continue;
 
@@ -518,7 +523,9 @@ internal static class ModuleManifestTextParser
 
             if (inDoubleQuote)
             {
-                if (ch == '"' && !(i + 1 < text.Length && text[i + 1] == '"'))
+                if (ch == '`' && i + 1 < text.Length)
+                    i++;
+                else if (ch == '"' && !(i + 1 < text.Length && text[i + 1] == '"'))
                     inDoubleQuote = false;
                 else if (ch == '"' && i + 1 < text.Length && text[i + 1] == '"')
                     i++;
@@ -725,6 +732,39 @@ internal static class ModuleManifestTextParser
 
         unquoted = unquoted.Substring(1, unquoted.Length - 2)
             .Replace(new string(quote, 2), quote.ToString());
+        if (quote == '"' && unquoted.IndexOf('`') >= 0)
+        {
+            var decoded = new System.Text.StringBuilder(unquoted.Length);
+            for (var i = 0; i < unquoted.Length; i++)
+            {
+                var ch = unquoted[i];
+                if (ch == '`' && i + 1 < unquoted.Length)
+                {
+                    if (unquoted[i + 1] == 'u')
+                    {
+                        if (i + 3 >= unquoted.Length || unquoted[i + 2] != '{')
+                            return false;
+                        var end = unquoted.IndexOf('}', i + 3);
+                        if (end < 0 ||
+                            !int.TryParse(unquoted.Substring(i + 3, end - i - 3), System.Globalization.NumberStyles.AllowHexSpecifier,
+                                System.Globalization.CultureInfo.InvariantCulture, out var codePoint) ||
+                            codePoint < 0 || codePoint > 0x10ffff || codePoint is >= 0xd800 and <= 0xdfff)
+                            return false;
+                        decoded.Append(char.ConvertFromUtf32(codePoint));
+                        i = end;
+                        continue;
+                    }
+                    ch = unquoted[++i] switch
+                    {
+                        '0' => '\0', 'a' => '\a', 'b' => '\b', 'e' => '\u001b',
+                        'f' => '\f', 'n' => '\n', 'r' => '\r', 't' => '\t', 'v' => '\v',
+                        var escaped => escaped
+                    };
+                }
+                decoded.Append(ch);
+            }
+            unquoted = decoded.ToString();
+        }
         return true;
     }
 }

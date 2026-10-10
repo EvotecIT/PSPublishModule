@@ -1307,7 +1307,12 @@ body.pf-api-docs .api-suite-search-filter{
             {
                 html.Line("<p class=\"ev-eyebrow\">API Reference</p>");
                 html.Line($"<h1>{System.Web.HttpUtility.HtmlEncode(overviewTitle)}</h1>");
-                html.Line("<p class=\"lead\">Complete API documentation auto-generated from source documentation.</p>");
+                // The package's own description says what it is for; the generic line is the fallback.
+                var lead = (options.Type == ApiDocsType.PowerShell
+                    ? TryReadModuleManifestDescription(options.PowerShellModuleManifestPath)
+                    : TryReadAssemblyDescription(options.AssemblyPath)) ?? "Complete API documentation auto-generated from source documentation.";
+                html.Line($"<p class=\"lead\">{System.Web.HttpUtility.HtmlEncode(lead)}</p>");
+                AppendOverviewActions(html, options, baseUrl);
             }
             html.Line("</header>");
             html.Line("<div class=\"api-overview-main api-overview-main--full\">");
@@ -1373,6 +1378,32 @@ body.pf-api-docs .api-suite-search-filter{
         }
         html.Line("</div>");
         return html.ToString().TrimEnd();
+    }
+
+    private static void AppendOverviewActions(HtmlFragmentBuilder html, WebApiDocsOptions options, string baseUrl)
+    {
+        var docsHomeUrl = string.IsNullOrWhiteSpace(options.DocsHomeUrl) ? null : NormalizeDocsHomeUrl(options.DocsHomeUrl, baseUrl);
+        var packageId = string.IsNullOrWhiteSpace(options.PackageId) ? null : options.PackageId.Trim();
+        if (docsHomeUrl is null && packageId is null)
+            return;
+
+        html.Line("<div class=\"api-overview-actions\">");
+        using (html.Indent())
+        {
+            if (docsHomeUrl is not null)
+                html.Line($"<a class=\"api-overview-action api-overview-action--guide\" href=\"{System.Web.HttpUtility.HtmlAttributeEncode(docsHomeUrl)}\">Read the guide</a>");
+            if (packageId is not null)
+            {
+                // PowerShell modules ship through the PowerShell Gallery; .NET packages through NuGet.
+                var isModule = options.Type == ApiDocsType.PowerShell;
+                var packageHref = (isModule ? "https://www.powershellgallery.com/packages/" : "https://www.nuget.org/packages/") + Uri.EscapeDataString(packageId);
+                var gallery = isModule ? "PowerShell Gallery" : "NuGet";
+                var install = isModule ? $"Install-Module {packageId}" : $"dotnet add package {packageId}";
+                html.Line($"<a class=\"api-overview-action api-overview-action--package\" href=\"{System.Web.HttpUtility.HtmlAttributeEncode(packageHref)}\" rel=\"noopener\">{System.Web.HttpUtility.HtmlEncode(packageId)} on {gallery}</a>");
+                html.Line($"<code class=\"api-overview-install\">{System.Web.HttpUtility.HtmlEncode(install)}</code>");
+            }
+        }
+        html.Line("</div>");
     }
 
     private static void AppendOverviewNamespaceGroup(

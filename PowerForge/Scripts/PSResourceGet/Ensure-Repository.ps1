@@ -3,7 +3,8 @@
   [string]$Uri,
   [string]$TrustedFlag,
   [string]$Priority,
-  [string]$ApiVersion
+  [string]$ApiVersion,
+  [string]$TemporaryFlag
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -177,6 +178,23 @@ function Test-RepositoryMatches {
 try {
   $created = $false
 
+  if ($TemporaryFlag -eq '1') {
+    # Reuse stable registrations, never another publisher's owned temporary alias.
+    $matching = @($registeredRepositories | Where-Object {
+      (Get-RepositoryName $_) -notmatch '^PowerForgePublish-[0-9a-f]{32}$' -and
+      [string]::Equals((Get-RepositoryUri $_), (Normalize-RepositoryUri $Uri), [System.StringComparison]::Ordinal) -and
+      ([string]::IsNullOrWhiteSpace($ApiVersion) -or
+        [string]::Equals([string]$_.ApiVersion, $ApiVersion, [System.StringComparison]::OrdinalIgnoreCase))
+    })
+    if ($matching.Count -gt 0) {
+      $resolvedName = Get-RepositoryName $matching[0]
+      Write-Output ('PFPSRG::REPO::NAME::' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($resolvedName)))
+      Write-Output 'PFPSRG::REPO::CREATED::0'
+      exit 0
+    }
+    if ($null -ne $existing) { throw "Temporary publish repository name '$Name' is already registered." }
+  }
+
   if ($isPSGallery) {
     if ($existing) {
       Set-PSResourceRepository @commonParams | Out-Null
@@ -214,7 +232,9 @@ try {
       }
     }
   } else {
-    Assert-NoRepositoryUriConflict -TargetName $Name -TargetUri $Uri -ExistingRepository $existing -Repositories $registeredRepositories
+    if ($TemporaryFlag -ne '1') {
+      Assert-NoRepositoryUriConflict -TargetName $Name -TargetUri $Uri -ExistingRepository $existing -Repositories $registeredRepositories
+    }
 
     $params = $commonParams.Clone()
     $params.Uri = $Uri
@@ -234,6 +254,9 @@ try {
     }
   }
 
+  if ($TemporaryFlag -eq '1') {
+    Write-Output ('PFPSRG::REPO::NAME::' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Name)))
+  }
   Write-Output ('PFPSRG::REPO::CREATED::' + ($(if ($created) { '1' } else { '0' })))
   exit 0
 } catch {

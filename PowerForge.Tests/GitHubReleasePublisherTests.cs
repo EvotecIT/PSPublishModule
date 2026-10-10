@@ -6,7 +6,7 @@ using System.Text.Json.Nodes;
 
 namespace PowerForge.Tests;
 
-public sealed class GitHubReleasePublisherTests
+public sealed partial class GitHubReleasePublisherTests
 {
     [Fact]
     public async Task PublishRelease_SendsMetadataWithGeneratedReleaseNotes()
@@ -345,8 +345,10 @@ public sealed class GitHubReleasePublisherTests
         }
     }
 
-    [Fact]
-    public async Task PublishRelease_NewReleaseRejectsConcurrentSameNameAsset()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PublishRelease_NewReleaseRejectsConcurrentSameNameAsset(bool replaceExistingAssets)
     {
         var listener = new HttpListener();
         var port = GetAvailablePort();
@@ -389,6 +391,7 @@ public sealed class GitHubReleasePublisherTests
                         Token = "token",
                         ApiBaseUrl = apiBaseUrl,
                         TagName = "v1.2.3",
+                        ReplaceExistingAssets = replaceExistingAssets,
                         AssetFilePaths = [assetPath]
                     }));
             await server.WaitAsync(TimeSpan.FromSeconds(10));

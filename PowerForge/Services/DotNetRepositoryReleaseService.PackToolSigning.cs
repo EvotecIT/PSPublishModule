@@ -14,16 +14,20 @@ public sealed partial class DotNetRepositoryReleaseService
         string? packageOutputPath,
         ILogger logger,
         out TimeSpan duration,
-        out string error)
+        out string error,
+        out HashSet<DotNetRepositoryProjectResult> onlyPackToolProjects)
     {
         duration = TimeSpan.Zero;
         error = string.Empty;
+        onlyPackToolProjects = new HashSet<DotNetRepositoryProjectResult>();
         var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
         var packProperties = CreatePackToolStagingGlobalProperties(packageOutputPath);
         var plans = new List<PackToolPublishPlan>();
 
         foreach (var project in projects)
         {
+            var onlyPackToolFrameworks = true;
+            var hasPackToolFramework = false;
             var workingDirectory = Path.GetDirectoryName(project.CsprojPath) ?? string.Empty;
             foreach (var targetFramework in ResolveConfiguredTargetFrameworks(
                          project.CsprojPath,
@@ -48,7 +52,10 @@ public sealed partial class DotNetRepositoryReleaseService
                 }
 
                 if (!bool.TryParse(packAsToolValue?.Trim(), out var packAsTool) || !packAsTool)
+                {
+                    onlyPackToolFrameworks = false;
                     continue;
+                }
 
                 if (!TryRejectRidSpecificPackTool(
                         project,
@@ -104,7 +111,11 @@ public sealed partial class DotNetRepositoryReleaseService
                     workingDirectory,
                     targetFramework,
                     resolvedPublishDirectory));
+                hasPackToolFramework = true;
             }
+
+            if (onlyPackToolFrameworks && hasPackToolFramework)
+                onlyPackToolProjects.Add(project);
         }
 
         if (!TryValidateDistinctPackToolPublishDirectories(plans, out error))

@@ -23,8 +23,11 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
         RepositoryCredential? targetPublishCredential,
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
-        Action? remoteSideEffectObserved = null)
-        => ValidateAsync(publish, targetRepository, targetCredential, targetPublishCredential, plan, buildResult, remoteSideEffectObserved).GetAwaiter().GetResult();
+        Action? remoteSideEffectObserved = null,
+        ManagedModuleRepository? publishRepository = null,
+        CancellationToken cancellationToken = default,
+        Action<RequiredModuleReference, Func<string, string, bool>>? mirrorRequiredModule = null)
+        => ValidateAsync(publish, targetRepository, targetCredential, targetPublishCredential, plan, buildResult, remoteSideEffectObserved, publishRepository ?? targetRepository, cancellationToken, mirrorRequiredModule).GetAwaiter().GetResult();
 
     private async Task ValidateAsync(
         PublishConfiguration publish,
@@ -34,26 +37,35 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
         ModulePipelinePlan plan,
         ModuleBuildResult buildResult,
         Action? remoteSideEffectObserved,
-        CancellationToken cancellationToken = default)
+        ManagedModuleRepository publishRepository,
+        CancellationToken cancellationToken,
+        Action<RequiredModuleReference, Func<string, string, bool>>? mirrorRequiredModule)
     {
         if (publish is null) throw new ArgumentNullException(nameof(publish));
         if (targetRepository is null) throw new ArgumentNullException(nameof(targetRepository));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (buildResult is null) throw new ArgumentNullException(nameof(buildResult));
 
+        ModulePublishDependencyPolicy.Validate(publish, PublishTool.ManagedModule);
+        if (publish.SkipDependenciesCheck)
+        {
+            _logger.Info("Skipping RequiredModules repository availability checks; manifest and package dependencies are retained.");
+            return;
+        }
+
         var requiredModules = ModulePublisher.GetRequiredModulesForPublish(buildResult, plan);
         if (requiredModules.Length == 0)
             return;
 
         if (publish.PublishRequiredModules &&
-            IsPowerShellGalleryRepository(targetRepository))
+            (IsPowerShellGalleryRepository(targetRepository) || IsPowerShellGalleryRepository(publishRepository)))
         {
             throw new InvalidOperationException(
                 "PublishRequiredModules is only supported for private repository targets. Refusing to mirror dependencies to PSGallery.");
         }
 
         var externalModuleDependencies = RequiredModuleRepositoryValidator.GetExternalModulesForPublish(buildResult, plan);
-        var source = publish.PublishRequiredModules
+        var source = publish.PublishRequiredModules && mirrorRequiredModule is null
             ? ResolveSourceRepository(publish, targetRepository, plan.ProjectRoot)
             : null;
         var sourceCredential = ReferenceEquals(source, targetRepository) ? targetCredential : null;
@@ -79,19 +91,31 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
 
                 if (publish.PublishRequiredModules)
                 {
-                    await MirrorPackageAsync(
-                        requiredModule.ModuleName,
-                        range,
-                        source!,
-                        sourceCredential,
-                        targetRepository,
-                        targetCredential,
-                        targetPublishCredential,
-                        cacheDirectory,
-                        mirroredPackages,
-                        visitingPackages,
-                        remoteSideEffectObserved,
-                        cancellationToken).ConfigureAwait(false);
+                    if (mirrorRequiredModule is not null)
+                    {
+                        mirrorRequiredModule(requiredModule, (name, version) =>
+                            TargetContainsExactVersionAsync(
+                                targetRepository, targetCredential, name, version, cancellationToken)
+                                .GetAwaiter().GetResult());
+                    }
+                    else
+                    {
+                        await MirrorPackageAsync(
+                            requiredModule.ModuleName,
+                            range,
+                            source!,
+                            sourceCredential,
+                            targetRepository,
+                            targetCredential,
+                            targetPublishCredential,
+                            publish.ApiKey,
+                            publishRepository,
+                            cacheDirectory,
+                            mirroredPackages,
+                            visitingPackages,
+                            remoteSideEffectObserved,
+                            cancellationToken).ConfigureAwait(false);
+                    }
 
                     if (await TargetContainsMatchingVersionAsync(targetRepository, targetCredential, requiredModule.ModuleName, range, cancellationToken).ConfigureAwait(false))
                         continue;
@@ -118,7 +142,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
 
         var message = $"Required module dependency check failed for repository '{targetRepository.Name}'. Missing or incompatible: {string.Join(", ", missing)}.";
         if (!publish.PublishRequiredModules)
-            message += $" Enable PublishRequiredModules to mirror missing dependencies from '{ResolveSourceRepositoryName(publish)}' before publish.";
+            message += $" Configure RepositorySourceUri for the consumer feed, enable PublishRequiredModules to mirror missing dependencies from '{ResolveSourceRepositoryName(publish)}', or explicitly use SkipDependenciesCheck to skip availability validation.";
 
         throw new InvalidOperationException(message);
     }
@@ -131,6 +155,8 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
         ManagedModuleRepository targetRepository,
         RepositoryCredential? targetCredential,
         RepositoryCredential? targetPublishCredential,
+        string? apiKey,
+        ManagedModuleRepository publishRepository,
         string cacheDirectory,
         ISet<string> mirroredPackages,
         ISet<string> visitingPackages,
@@ -171,6 +197,8 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
                     targetRepository,
                     targetCredential,
                     targetPublishCredential,
+                    apiKey,
+                    publishRepository,
                     cacheDirectory,
                     mirroredPackages,
                     visitingPackages,
@@ -180,9 +208,10 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
 
             remoteSideEffectObserved?.Invoke();
             var publish = await _repositoryClient.PublishPackageAsync(
-                targetRepository,
+                publishRepository,
                 download.PackagePath,
                 targetPublishCredential,
+                apiKey,
                 force: false,
                 cancellationToken).ConfigureAwait(false);
             if (!publish.Published && !publish.Duplicate)

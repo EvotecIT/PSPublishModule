@@ -38,6 +38,13 @@ internal sealed class RequiredModuleRepositoryValidator
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (buildResult is null) throw new ArgumentNullException(nameof(buildResult));
 
+        ModulePublishDependencyPolicy.Validate(publish, PublishTool.PSResourceGet);
+        if (publish.SkipDependenciesCheck)
+        {
+            _logger.Info("Skipping RequiredModules repository availability checks; manifest and package dependencies are retained.");
+            return;
+        }
+
         var requiredModules = ModulePublisher.GetRequiredModulesForPublish(buildResult, plan);
         if (requiredModules.Length == 0)
             return;
@@ -66,8 +73,7 @@ internal sealed class RequiredModuleRepositoryValidator
             var versions = FindRequiredModuleVersionsInRepository(
                 repositoryName,
                 credential,
-                requiredModule,
-                treatNotFoundAsEmpty: publish.PublishRequiredModules);
+                requiredModule);
 
             if (!ModulePublisher.HasMatchingRequiredModuleVersion(requiredModule, versions))
             {
@@ -87,8 +93,7 @@ internal sealed class RequiredModuleRepositoryValidator
                     versions = FindRequiredModuleVersionsInRepository(
                         repositoryName,
                         credential,
-                        requiredModule,
-                        treatNotFoundAsEmpty: false);
+                        requiredModule);
                     if (ModulePublisher.HasMatchingRequiredModuleVersion(requiredModule, versions))
                         continue;
                 }
@@ -101,7 +106,7 @@ internal sealed class RequiredModuleRepositoryValidator
         {
             var message = $"Required module dependency check failed for repository '{repositoryName}'. Missing or incompatible: {string.Join(", ", missing)}.";
             if (!publish.PublishRequiredModules)
-                message += $" Enable PublishRequiredModules to mirror missing dependencies from '{sourceRepositoryName}' before publish.";
+                message += $" Configure RepositorySourceUri for the consumer feed, enable PublishRequiredModules to mirror missing dependencies from '{sourceRepositoryName}', or explicitly use SkipDependenciesCheck to skip availability validation.";
 
             throw new InvalidOperationException(message);
         }
@@ -110,8 +115,7 @@ internal sealed class RequiredModuleRepositoryValidator
     private IReadOnlyList<string> FindRequiredModuleVersionsInRepository(
         string repositoryName,
         RepositoryCredential? credential,
-        RequiredModuleReference requiredModule,
-        bool treatNotFoundAsEmpty)
+        RequiredModuleReference requiredModule)
     {
         try
         {
@@ -132,10 +136,9 @@ internal sealed class RequiredModuleRepositoryValidator
         }
         catch (Exception ex)
         {
-            if (treatNotFoundAsEmpty &&
-                ModulePublisher.IsRepositoryPackageNotFound(requiredModule.ModuleName, ex))
+            if (ModulePublisher.IsRepositoryPackageNotFound(requiredModule.ModuleName, ex))
             {
-                _logger.Info($"Required dependency '{requiredModule.ModuleName}' is not present in repository '{repositoryName}' and will be mirrored.");
+                _logger.Info($"Required dependency '{requiredModule.ModuleName}' is not present in repository '{repositoryName}'.");
                 return Array.Empty<string>();
             }
 
@@ -148,6 +151,22 @@ internal sealed class RequiredModuleRepositoryValidator
         => string.IsNullOrWhiteSpace(publish.RequiredModuleSourceRepository)
             ? "PSGallery"
             : publish.RequiredModuleSourceRepository!.Trim();
+
+    internal Action<RequiredModuleReference, Func<string, string, bool>> CreateMirroringCallback(
+        PublishConfiguration publish,
+        string repositoryName,
+        RepositoryCredential? credential,
+        PublishRepositoryConfiguration? repositoryForPublish,
+        Action? remoteSideEffectObserved)
+    {
+        var sourceRepositoryName = ResolveRequiredModuleSourceRepository(publish);
+        var sourceCredential = ResolveRequiredModuleSourceCredential(sourceRepositoryName, repositoryName, credential);
+        var mirroredPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return (requiredModule, targetContainsPackage) => _publisher.PublishRequiredModule(
+            requiredModule, sourceRepositoryName, repositoryName, publish.ApiKey,
+            repositoryForPublish, sourceCredential, credential, mirroredPackages, remoteSideEffectObserved,
+            targetContainsPackage);
+    }
 
     private static RepositoryCredential? ResolveRequiredModuleSourceCredential(
         string sourceRepositoryName,

@@ -86,6 +86,7 @@ public static class AzureArtifactsRepositoryEndpoints
             Uri = repositoryUri,
             SourceUri = endpoint.PowerShellGetSourceUri,
             PublishUri = endpoint.PowerShellGetPublishUri,
+            UseProviderEndpointDefaults = true,
             Trusted = trusted,
             Priority = priority,
             ApiVersion = resolvedApiVersion,

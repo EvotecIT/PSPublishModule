@@ -505,7 +505,7 @@
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Add-BenchmarkAxis -Name 'Name'</dev:code>
+        <dev:code>Add-BenchmarkAxis -Name 'Name' -Values @('Value')</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -762,6 +762,13 @@
           <maml:para></maml:para>
         </dev:remarks>
       </command:example>
+      <command:example>
+        <maml:title>EXAMPLE 2</maml:title>
+        <dev:code>Add-BenchmarkCaseSource -ScriptBlock { }</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
     </command:examples>
     <command:relatedLinks />
   </command:command>
@@ -1011,7 +1018,7 @@
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Add-BenchmarkEngine -Name 'Name'</dev:code>
+        <dev:code>Add-BenchmarkEngine -Name 'Name' -ScriptBlock { }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -1193,7 +1200,7 @@
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Add-BenchmarkMetric -Name 'Name'</dev:code>
+        <dev:code>Add-BenchmarkMetric -Name 'Name' -ScriptBlock { }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -1284,7 +1291,7 @@
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Add-BenchmarkOperation -Name 'Name'</dev:code>
+        <dev:code>Add-BenchmarkOperation -Name 'Name' -ScriptBlock { }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -1399,7 +1406,7 @@
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Add-BenchmarkReadmeBlock -Block 'Value'</dev:code>
+        <dev:code>Add-BenchmarkReadmeBlock -Path 'C:\Path' -Block 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -1886,14 +1893,14 @@
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Assert-BenchmarkValue -Actual 'Value'</dev:code>
+        <dev:code>Assert-BenchmarkValue -Actual 'Value' -Expected 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>EXAMPLE 2</maml:title>
-        <dev:code>Assert-BenchmarkValue -NotNull</dev:code>
+        <dev:code>Assert-BenchmarkValue -Actual 'Value' -NotNull</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -3827,7 +3834,7 @@ It can also export a post-conversion report so you can validate what remains inc
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Export-AppStoreConnectGovernance -IssuerId 'Value' -KeyId 'Value' -AppId 'Value'</dev:code>
+        <dev:code>Export-AppStoreConnectGovernance -Path 'C:\Path' -IssuerId 'Value' -KeyId 'Value' -AppId 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -6568,7 +6575,7 @@ Command-name and DSC-resource-name searches inspect package contents and remain 
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Get-AppStoreConnectGovernancePlan -IssuerId 'Value' -KeyId 'Value'</dev:code>
+        <dev:code>Get-AppStoreConnectGovernancePlan -ConfigPath 'C:\Path' -IssuerId 'Value' -KeyId 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -9057,14 +9064,14 @@ Command-name and DSC-resource-name searches inspect package contents and remain 
       </command:example>
       <command:example>
         <maml:title>EXAMPLE 2</maml:title>
-        <dev:code>Get-BenchmarkInput -Bool</dev:code>
+        <dev:code>Get-BenchmarkInput -Name 'Name' -Bool</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
       </command:example>
       <command:example>
         <maml:title>EXAMPLE 3</maml:title>
-        <dev:code>Get-BenchmarkInput -Int</dev:code>
+        <dev:code>Get-BenchmarkInput -Name 'Name' -Int</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -11675,6 +11682,20 @@ It is useful when building “portable” scripts/modules where you want to dete
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
+        <dev:code>Get-ModuleDocumentation -Name 'Name'</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>EXAMPLE 2</maml:title>
+        <dev:code>Get-ModuleDocumentation -All</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>EXAMPLE 3</maml:title>
         <dev:code>Get-ModuleDocumentation -DocsPath 'C:\Path'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -19746,6 +19767,18 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MemorySamplingIntervalMilliseconds</maml:name>
+          <maml:description>
+            <maml:para>Optional operation memory sampling interval override; zero disables sampling.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="Operations">
           <maml:name>Operation</maml:name>
           <maml:description>
@@ -20032,6 +20065,18 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MemorySamplingIntervalMilliseconds</maml:name>
+          <maml:description>
+            <maml:para>Optional operation memory sampling interval override; zero disables sampling.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="Operations">
           <maml:name>Operation</maml:name>
           <maml:description>
@@ -20314,6 +20359,18 @@ The destination is flattened (no Module/Version subfolders).</maml:para>
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>PowerShellBenchmarkMemoryCleanupMode</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MemorySamplingIntervalMilliseconds</maml:name>
+        <maml:description>
+          <maml:para>Optional operation memory sampling interval override; zero disables sampling.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -32178,7 +32235,7 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-AppleAppArchive -Scheme 'Value'</dev:code>
+        <dev:code>New-AppleAppArchive -ProjectPath 'C:\Path' -Scheme 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -32417,6 +32474,18 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           <maml:name>UseBuildMirror</maml:name>
           <maml:description>
             <maml:para>Mirror the project root to a local folder before running xcodebuild.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>UseControlledSourceProvenance</maml:name>
+          <maml:description>
+            <maml:para>Opt into clean Git source and controlled build-input verification. Disabled by default.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -32689,6 +32758,18 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>UseControlledSourceProvenance</maml:name>
+        <maml:description>
+          <maml:para>Opt into clean Git source and controlled build-input verification. Disabled by default.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>Workspace</maml:name>
         <maml:description>
           <maml:para>ProjectPath points to a workspace instead of a project.</maml:para>
@@ -32747,7 +32828,7 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-AppleAppBuild -Scheme 'Value'</dev:code>
+        <dev:code>New-AppleAppBuild -ProjectPath 'C:\Path' -Scheme 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -33622,7 +33703,7 @@ because App Store Connect price points are territory-specific.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-AppStoreConnectSubscriptionIntroductoryOffer -IssuerId 'Value' -KeyId 'Value' -SubscriptionId 'Value' -Duration 'Value' -OfferMode 'Value'</dev:code>
+        <dev:code>New-AppStoreConnectSubscriptionIntroductoryOffer -IssuerId 'Value' -KeyId 'Value' -SubscriptionId 'Value' -Duration 'Value' -OfferMode 'Value' -TerritoryId @('Value')</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -34050,7 +34131,7 @@ because App Store Connect price points are territory-specific.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-BenchmarkSuite -Name 'Name'</dev:code>
+        <dev:code>New-BenchmarkSuite -Name 'Name' -ScriptBlock { }</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -47467,6 +47548,18 @@ This is primarily used by test and documentation steps that execute PowerShell c
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>OptionalBinaryDependencies</maml:name>
+          <maml:description>
+            <maml:para>Maps each referring DLL filename to exact optional dependency DLL filenames.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>PreferBinaryConflictOrder</maml:name>
           <maml:description>
             <maml:para>Reorders RequiredModules using a conflict-aware heuristic before manifest refresh and import validation.</maml:para>
@@ -47525,6 +47618,18 @@ This is primarily used by test and documentation steps that execute PowerShell c
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>OptionalBinaryDependencies</maml:name>
+        <maml:description>
+          <maml:para>Maps each referring DLL filename to exact optional dependency DLL filenames.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+        <dev:type>
+          <maml:name>Hashtable</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -47598,6 +47703,13 @@ This is primarily used by test and documentation steps that execute PowerShell c
         <dev:code>New-ConfigurationImportModule -ImportSelf</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Declare an alternative provider reference as optional</maml:title>
+        <dev:code>New-ConfigurationImportModule -ImportSelf -OptionalBinaryDependencies @{ 'Connector.dll' = @('AlternativeProvider.dll') }</dev:code>
+        <dev:remarks>
+          <maml:para>Only this exact reference is optional. Other missing dependencies and manifest-declared assemblies still fail validation.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>
@@ -54628,7 +54740,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryPublishUri</maml:name>
           <maml:description>
-            <maml:para>Repository publish URI (PowerShellGet PublishLocation).</maml:para>
+            <maml:para>Repository upload URI, such as an Artifactory local feed. Can differ from RepositorySourceUri.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -54640,7 +54752,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositorySourceUri</maml:name>
           <maml:description>
-            <maml:para>Repository source URI (PowerShellGet SourceLocation).</maml:para>
+            <maml:para>Repository read URI for version and dependency checks, such as an Artifactory virtual feed.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -54701,6 +54813,19 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <maml:name>ReuseExistingRelease</maml:name>
           <maml:description>
             <maml:para>Explicitly reuse an existing GitHub release when its tag is already occupied.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipDependenciesCheck</maml:name>
+          <maml:description>
+            <maml:para>Skip RequiredModules availability checks in the repository without removing dependencies from the package.&#xD;
+Requires PSResourceGet or ManagedModule and cannot be combined with PublishRequiredModules.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -54997,7 +55122,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryPublishUri</maml:name>
           <maml:description>
-            <maml:para>Repository publish URI (PowerShellGet PublishLocation).</maml:para>
+            <maml:para>Repository upload URI, such as an Artifactory local feed. Can differ from RepositorySourceUri.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -55009,7 +55134,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositorySourceUri</maml:name>
           <maml:description>
-            <maml:para>Repository source URI (PowerShellGet SourceLocation).</maml:para>
+            <maml:para>Repository read URI for version and dependency checks, such as an Artifactory virtual feed.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -55070,6 +55195,19 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <maml:name>ReuseExistingRelease</maml:name>
           <maml:description>
             <maml:para>Explicitly reuse an existing GitHub release when its tag is already occupied.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipDependenciesCheck</maml:name>
+          <maml:description>
+            <maml:para>Skip RequiredModules availability checks in the repository without removing dependencies from the package.&#xD;
+Requires PSResourceGet or ManagedModule and cannot be combined with PublishRequiredModules.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -55419,7 +55557,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryPublishUri</maml:name>
           <maml:description>
-            <maml:para>Repository publish URI (PowerShellGet PublishLocation).</maml:para>
+            <maml:para>Repository upload URI, such as an Artifactory local feed. Can differ from RepositorySourceUri.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -55431,7 +55569,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositorySourceUri</maml:name>
           <maml:description>
-            <maml:para>Repository source URI (PowerShellGet SourceLocation).</maml:para>
+            <maml:para>Repository read URI for version and dependency checks, such as an Artifactory virtual feed.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -55484,6 +55622,19 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipDependenciesCheck</maml:name>
+          <maml:description>
+            <maml:para>Skip RequiredModules availability checks in the repository without removing dependencies from the package.&#xD;
+Requires PSResourceGet or ManagedModule and cannot be combined with PublishRequiredModules.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -55774,6 +55925,19 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipDependenciesCheck</maml:name>
+          <maml:description>
+            <maml:para>Skip RequiredModules availability checks in the repository without removing dependencies from the package.&#xD;
+Requires PSResourceGet or ManagedModule and cannot be combined with PublishRequiredModules.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Tool</maml:name>
           <maml:description>
             <maml:para>Publishing tool/provider used for repository publishing. Ignored for GitHub publishing.</maml:para>
@@ -55970,6 +56134,19 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>SkipDependenciesCheck</maml:name>
+          <maml:description>
+            <maml:para>Skip RequiredModules availability checks in the repository without removing dependencies from the package.&#xD;
+Requires PSResourceGet or ManagedModule and cannot be combined with PublishRequiredModules.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -56341,7 +56518,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>RepositoryPublishUri</maml:name>
         <maml:description>
-          <maml:para>Repository publish URI (PowerShellGet PublishLocation).</maml:para>
+          <maml:para>Repository upload URI, such as an Artifactory local feed. Can differ from RepositorySourceUri.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -56353,7 +56530,7 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>RepositorySourceUri</maml:name>
         <maml:description>
-          <maml:para>Repository source URI (PowerShellGet SourceLocation).</maml:para>
+          <maml:para>Repository read URI for version and dependency checks, such as an Artifactory virtual feed.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -56414,6 +56591,19 @@ For PAT/basic-auth feeds, use repository credentials only. Add -FilePath or -Api
         <maml:name>ReuseExistingRelease</maml:name>
         <maml:description>
           <maml:para>Explicitly reuse an existing GitHub release when its tag is already occupied.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>SkipDependenciesCheck</maml:name>
+        <maml:description>
+          <maml:para>Skip RequiredModules availability checks in the repository without removing dependencies from the package.&#xD;
+Requires PSResourceGet or ManagedModule and cannot be combined with PublishRequiredModules.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -59567,7 +59757,7 @@ The generated config can be executed with Invoke-DotNetPublish -ConfigPath ....<
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>New-ManagedScriptFileInfo -Description 'Value'</dev:code>
+        <dev:code>New-ManagedScriptFileInfo -Path 'C:\Path' -Description 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -60999,6 +61189,18 @@ Build/powerforge.dotnetpublish.json.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>UseControlledSourceProvenance</maml:name>
+          <maml:description>
+            <maml:para>Opt into clean Git source and controlled build-input verification. Disabled by default.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Workspace</maml:name>
           <maml:description>
             <maml:para>ProjectPath points to a workspace instead of a project.</maml:para>
@@ -61286,6 +61488,18 @@ Build/powerforge.dotnetpublish.json.</maml:para>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>UseControlledSourceProvenance</maml:name>
+        <maml:description>
+          <maml:para>Opt into clean Git source and controlled build-input verification. Disabled by default.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>Workspace</maml:name>
         <maml:description>
           <maml:para>ProjectPath points to a workspace instead of a project.</maml:para>
@@ -61344,7 +61558,7 @@ Build/powerforge.dotnetpublish.json.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Publish-AppleAppToDevice -Scheme 'Value'</dev:code>
+        <dev:code>Publish-AppleAppToDevice -ProjectPath 'C:\Path' -Scheme 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -61842,7 +62056,7 @@ Build/powerforge.dotnetpublish.json.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Publish-AppStoreConnectScreenshot -IssuerId 'Value' -KeyId 'Value' -ScreenshotSetId 'Value'</dev:code>
+        <dev:code>Publish-AppStoreConnectScreenshot -Path 'C:\Path' -IssuerId 'Value' -KeyId 'Value' -ScreenshotSetId 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -62243,7 +62457,7 @@ Build/powerforge.dotnetpublish.json.</maml:para>
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Publish-AppStoreConnectTestFlightBuild -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value'</dev:code>
+        <dev:code>Publish-AppStoreConnectTestFlightBuild -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value' -Platform 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -64396,7 +64610,7 @@ When running in CI, prefer using a certificate from the Windows certificate stor
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Register-ManagedModuleRepository -Name 'Name'</dev:code>
+        <dev:code>Register-ManagedModuleRepository -Name 'Name' -Uri 'https://example.com'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -69411,7 +69625,7 @@ The default is false so normal publishing cannot mutate an older release.</maml:
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Set-AppStoreConnectVersionBuild -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value'</dev:code>
+        <dev:code>Set-AppStoreConnectVersionBuild -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value' -Platform 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -70336,6 +70550,18 @@ The default is false so normal publishing cannot mutate an older release.</maml:
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MemorySamplingIntervalMilliseconds</maml:name>
+          <maml:description>
+            <maml:para>Opt-in operation memory sampling interval; zero disables sampling.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>Order</maml:name>
           <maml:description>
             <maml:para>Work-item ordering strategy.</maml:para>
@@ -70464,6 +70690,18 @@ The default is false so normal publishing cannot mutate an older release.</maml:
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>PowerShellBenchmarkMemoryCleanupMode</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MemorySamplingIntervalMilliseconds</maml:name>
+        <maml:description>
+          <maml:para>Opt-in operation memory sampling interval; zero disables sampling.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -73632,6 +73870,13 @@ GitHub: PG_GITHUB_TOKEN or GITHUB_TOKEN; Azure DevOps: PG_AZDO_PAT or AZURE_DEVO
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
+        <dev:code>Show-ModuleDocumentation -OutputPath 'C:\Path'</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>EXAMPLE 2</maml:title>
         <dev:code>Show-ModuleDocumentation -DocsPath 'C:\Path'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
@@ -74426,7 +74671,7 @@ the cmdlet resolves the next patch version. When an exact version is provided, i
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Submit-AppStoreConnectTestFlightBuildForReview -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value'</dev:code>
+        <dev:code>Submit-AppStoreConnectTestFlightBuildForReview -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value' -Platform 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -74899,7 +75144,7 @@ the cmdlet resolves the next patch version. When an exact version is provided, i
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Submit-AppStoreConnectVersionForReview -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value'</dev:code>
+        <dev:code>Submit-AppStoreConnectVersionForReview -IssuerId 'Value' -KeyId 'Value' -AppId 'Value' -VersionString 'Value' -BuildNumber 'Value' -Platform 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -75092,7 +75337,7 @@ the cmdlet resolves the next patch version. When an exact version is provided, i
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Sync-AppStoreConnectAppInfoMetadata -IssuerId 'Value' -KeyId 'Value'</dev:code>
+        <dev:code>Sync-AppStoreConnectAppInfoMetadata -ConfigPath 'C:\Path' -IssuerId 'Value' -KeyId 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -75314,7 +75559,7 @@ the cmdlet resolves the next patch version. When an exact version is provided, i
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Sync-AppStoreConnectGovernance -IssuerId 'Value' -KeyId 'Value'</dev:code>
+        <dev:code>Sync-AppStoreConnectGovernance -ConfigPath 'C:\Path' -IssuerId 'Value' -KeyId 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -75555,7 +75800,7 @@ the cmdlet resolves the next patch version. When an exact version is provided, i
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Sync-AppStoreConnectScreenshots -IssuerId 'Value' -KeyId 'Value'</dev:code>
+        <dev:code>Sync-AppStoreConnectScreenshots -ConfigPath 'C:\Path' -IssuerId 'Value' -KeyId 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -75748,7 +75993,7 @@ the cmdlet resolves the next patch version. When an exact version is provided, i
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Sync-AppStoreConnectVersionMetadata -IssuerId 'Value' -KeyId 'Value'</dev:code>
+        <dev:code>Sync-AppStoreConnectVersionMetadata -ConfigPath 'C:\Path' -IssuerId 'Value' -KeyId 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -76082,7 +76327,7 @@ the cmdlet resolves the next patch version. When an exact version is provided, i
     <command:examples>
       <command:example>
         <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Test-AppleAppReleaseDrift -IssuerId 'Value' -KeyId 'Value'</dev:code>
+        <dev:code>Test-AppleAppReleaseDrift -Path 'C:\Path' -IssuerId 'Value' -KeyId 'Value'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -77390,6 +77635,319 @@ the cmdlet resolves the next patch version. When an exact version is provided, i
       <command:example>
         <maml:title>Verify a benchmark summary against a baseline</maml:title>
         <dev:code>Test-BenchmarkGate -SummaryPath .\Build\Benchmarks\summary.json -BaselinePath .\Build\Benchmarks\baseline.json -Metric MedianMs</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>Test-BenchmarkHistory</command:name>
+      <command:verb>Test</command:verb>
+      <command:noun>BenchmarkHistory</command:noun>
+      <maml:description>
+        <maml:para>Checks duration medians against accepted history from the same workload and runner environment.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Checks duration medians against accepted history from the same workload and runner environment.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Test-BenchmarkHistory</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AbsoluteToleranceMs</maml:name>
+          <maml:description>
+            <maml:para>Minimum absolute duration allowance in milliseconds.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AllowCalibration</maml:name>
+          <maml:description>
+            <maml:para>Return an uncalibrated report without a terminating error; regressions still fail.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>HistoryPath</maml:name>
+          <maml:description>
+            <maml:para>Local accepted timing history JSON path.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MinimumRuns</maml:name>
+          <maml:description>
+            <maml:para>Minimum independent accepted runs required per lane.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>MinimumSamples</maml:name>
+          <maml:description>
+            <maml:para>Minimum independent measured iterations required per lane.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RelativeTolerance</maml:name>
+          <maml:description>
+            <maml:para>Minimum relative duration allowance in addition to measured noise.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+          <dev:type>
+            <maml:name>Double</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ResultPath</maml:name>
+          <maml:description>
+            <maml:para>Normalized run report including raw measured samples and environment metadata.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RunnerIdentity</maml:name>
+          <maml:description>
+            <maml:para>Stable runner pool or dedicated machine identity.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Update</maml:name>
+          <maml:description>
+            <maml:para>Explicitly accept this run for calibration instead of verifying it.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WindowSize</maml:name>
+          <maml:description>
+            <maml:para>Maximum recent accepted comparable runs used.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+          <dev:type>
+            <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WorkloadId</maml:name>
+          <maml:description>
+            <maml:para>Stable workload version or fixture hash.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>AbsoluteToleranceMs</maml:name>
+        <maml:description>
+          <maml:para>Minimum absolute duration allowance in milliseconds.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+        <dev:type>
+          <maml:name>Double</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>AllowCalibration</maml:name>
+        <maml:description>
+          <maml:para>Return an uncalibrated report without a terminating error; regressions still fail.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>HistoryPath</maml:name>
+        <maml:description>
+          <maml:para>Local accepted timing history JSON path.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MinimumRuns</maml:name>
+        <maml:description>
+          <maml:para>Minimum independent accepted runs required per lane.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>MinimumSamples</maml:name>
+        <maml:description>
+          <maml:para>Minimum independent measured iterations required per lane.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RelativeTolerance</maml:name>
+        <maml:description>
+          <maml:para>Minimum relative duration allowance in addition to measured noise.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Double</command:parameterValue>
+        <dev:type>
+          <maml:name>Double</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ResultPath</maml:name>
+        <maml:description>
+          <maml:para>Normalized run report including raw measured samples and environment metadata.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RunnerIdentity</maml:name>
+        <maml:description>
+          <maml:para>Stable runner pool or dedicated machine identity.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Update</maml:name>
+        <maml:description>
+          <maml:para>Explicitly accept this run for calibration instead of verifying it.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WindowSize</maml:name>
+        <maml:description>
+          <maml:para>Maximum recent accepted comparable runs used.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
+        <dev:type>
+          <maml:name>Int32</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WorkloadId</maml:name>
+        <maml:description>
+          <maml:para>Stable workload version or fixture hash.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.BenchmarkHistoryResult</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Verify a run without changing accepted history</maml:title>
+        <dev:code>Test-BenchmarkHistory -ResultPath ./run-report.json -HistoryPath ./history.json -WorkloadId topology-v1 -RunnerIdentity windows-renderer</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
