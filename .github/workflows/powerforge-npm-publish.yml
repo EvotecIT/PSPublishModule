@@ -36,6 +36,10 @@ on:
         description: First publication only; requires the environment's NPM_BOOTSTRAP_TOKEN secret.
         type: boolean
         default: false
+    secrets:
+      NPM_BOOTSTRAP_TOKEN:
+        description: Named forwarding for the release environment secret; it may be empty outside bootstrap.
+        required: true
 
 permissions:
   contents: read

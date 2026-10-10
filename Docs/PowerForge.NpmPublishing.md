@@ -39,7 +39,18 @@ Create the GitHub release environment before using the workflow. Configure its
 custom deployment policy to allow exactly the default branch, with no tags or
 wildcard patterns. The publisher verifies that policy before processing the
 archive. Store `NPM_BOOTSTRAP_TOKEN` only as a secret of that environment; do not
-pass a repository secret from the caller. Bind the same environment name in npm's
+create a repository-level copy. The caller must forward its exact name:
+
+```yaml
+secrets:
+  NPM_BOOTSTRAP_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
+```
+
+GitHub supplies the called job's environment value through this mapping, even
+when the secret exists only in the environment. The required declaration checks
+forwarding presence; the publisher also checks for a value when bootstrap is
+selected. Outside bootstrap, the secret can be empty and is not used.
+Bind the same environment name in npm's
 trust settings so a branch cannot replace the caller and reuse its publishing
 identity.
 
