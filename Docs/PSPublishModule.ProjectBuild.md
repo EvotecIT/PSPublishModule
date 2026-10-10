@@ -307,7 +307,9 @@ its original spelling and whitespace, while literal versions update normally. A 
 an empty shared property and compose other project metadata updates. A composed version value that
 conflicts with the resolved version, or a binding that changes version-property ownership or the
 consuming version-element layout, fails the release before any files change. Nested conditional
-definitions of a shared property do not satisfy the unconditional-owner requirement.
+definitions of a shared property do not satisfy the unconditional-owner requirement. Items and tasks
+that share a property's name do not override its ownership. After changed bindings are applied,
+evaluated package identities are refreshed even when a preserved reference leaves the project file unchanged.
 
 ```json
 "AlignPackageVersions": true,

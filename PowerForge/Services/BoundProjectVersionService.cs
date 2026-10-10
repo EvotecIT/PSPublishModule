@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Xml;
 using System.Xml.Linq;
 
 namespace PowerForge;
@@ -44,8 +45,7 @@ internal static class BoundProjectVersionService
         var project = XDocument.Parse(originalContent);
         var composedProject = XDocument.Parse(updatedContent);
         var props = XDocument.Parse(binding.Update.UpdatedContent);
-        if (HasCustomImports(project) ||
-            props.Descendants().Any(element => element.Name.LocalName == "Import"))
+        if (HasCustomImports(project) || HasImports(props))
             return updatedContent;
         var preserved = new Dictionary<int, string>();
         for (var index = 0; index < originalElements.Length; index++)
@@ -57,11 +57,9 @@ internal static class BoundProjectVersionService
             if (!IsPropertyBound(repositoryRoot, propsPath, propertyName, binding.Update.OriginalContent, configuredBindings, comparison))
                 continue;
             // A project-local definition takes precedence over its automatically imported props.
-            if (project.Descendants().Any(element =>
-                string.Equals(element.Name.LocalName, propertyName, StringComparison.OrdinalIgnoreCase)))
+            if (HasPropertyDefinition(project, propertyName))
                 continue;
-            if (HasCustomImports(composedProject) || composedProject.Descendants().Any(element =>
-                string.Equals(element.Name.LocalName, propertyName, StringComparison.OrdinalIgnoreCase)))
+            if (HasCustomImports(composedProject) || HasPropertyDefinition(composedProject, propertyName))
                 throw new InvalidOperationException($"Project '{projectPath}' version property ownership changed during binding composition; bound references cannot be restored safely.");
 
             var definitions = props.Descendants()
@@ -104,10 +102,16 @@ internal static class BoundProjectVersionService
         return restored.ToString();
     }
 
-    private static bool HasCustomImports(XDocument project) => project.Descendants().Any(element =>
-        string.Equals(element.Name.LocalName, "Import", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(element.Name.LocalName, "DirectoryBuildPropsPath", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(element.Name.LocalName, "ImportDirectoryBuildProps", StringComparison.OrdinalIgnoreCase));
+    private static bool HasPropertyDefinition(XDocument project, string propertyName) => project.Descendants().Any(element =>
+        element.Parent?.Name.LocalName == "PropertyGroup" &&
+        string.Equals(element.Name.LocalName, propertyName, StringComparison.OrdinalIgnoreCase));
+
+    private static bool HasImports(XDocument project) => project.Descendants().Any(element =>
+        string.Equals(element.Name.LocalName, "Import", StringComparison.OrdinalIgnoreCase) &&
+        (element.Parent == project.Root || element.Parent?.Name.LocalName == "ImportGroup"));
+
+    private static bool HasCustomImports(XDocument project) => HasImports(project) ||
+        HasPropertyDefinition(project, "DirectoryBuildPropsPath") || HasPropertyDefinition(project, "ImportDirectoryBuildProps");
 
     private static void ValidateVersionLayout(
         string projectPath, XDocument original, XDocument updated, Match[] originalMatches, Match[] updatedMatches)
@@ -133,9 +137,10 @@ internal static class BoundProjectVersionService
     {
         if (bindings is null)
             return false;
+        var propertyStarts = FindPropertyOffsets(originalProps, propertyName);
         var propertyElements = Regex.Matches(originalProps,
             @"<" + Regex.Escape(propertyName) + @"\b[^>]*(?:/\s*>|>[^<]*</" + Regex.Escape(propertyName) + @"\s*>)",
-            MatchOptions, RegexTimeout);
+            MatchOptions, RegexTimeout).Cast<Match>().Where(match => propertyStarts.Contains(match.Index)).ToArray();
         foreach (var binding in bindings)
         {
             if (!string.Equals(Path.GetFullPath(Path.Combine(root, binding.Path.Trim())), propsPath, comparison))
@@ -149,6 +154,33 @@ internal static class BoundProjectVersionService
             }
         }
         return false;
+    }
+
+    private static HashSet<int> FindPropertyOffsets(string content, string propertyName)
+    {
+        // XML roles identify actual properties; source offsets retain the binding's
+        // text interval without mistaking items, tasks or comments for definitions.
+        var lineStarts = new List<int> { 0 };
+        for (var index = 0; index < content.Length; index++)
+        {
+            if (content[index] == '\r')
+            {
+                if (index + 1 < content.Length && content[index + 1] == '\n')
+                    index++;
+                lineStarts.Add(index + 1);
+            }
+            else if (content[index] == '\n')
+                lineStarts.Add(index + 1);
+        }
+        var document = XDocument.Parse(content, LoadOptions.SetLineInfo);
+        return new HashSet<int>(document.Descendants()
+            .Where(element => element.Parent?.Name.LocalName == "PropertyGroup" &&
+                string.Equals(element.Name.LocalName, propertyName, StringComparison.OrdinalIgnoreCase))
+            .Select(element =>
+            {
+                var position = (IXmlLineInfo)element;
+                return lineStarts[position.LineNumber - 1] + position.LinePosition - 2;
+            }));
     }
 
     private static string? FindImportedProps(string repositoryRoot, string projectPath)
