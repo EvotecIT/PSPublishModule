@@ -136,9 +136,10 @@ public sealed partial class DotNetRepositoryReleaseService
                     return result;
                 }
 
+                var onlyPackToolProjects = new HashSet<DotNetRepositoryProjectResult>();
                 if (spec.SignDependencyAssemblies)
                 {
-                    if (!TryPreparePackToolPublishOutputs(projects, spec, outputPath, logger, out var preparationDuration, out var preparationError))
+                    if (!TryPreparePackToolPublishOutputs(projects, spec, outputPath, logger, out var preparationDuration, out var preparationError, out onlyPackToolProjects))
                     {
                         result.Duration += preparationDuration;
                         result.ErrorMessage = preparationError;
@@ -148,7 +149,7 @@ public sealed partial class DotNetRepositoryReleaseService
                     result.Duration += preparationDuration;
                 }
 
-                var signing = SignBatchBuildOutputs(projects, spec, outputPath, logger, signAssemblies!);
+                var signing = SignBatchBuildOutputs(projects, spec, outputPath, logger, signAssemblies!, onlyPackToolProjects);
                 result.Duration += signing.Duration;
                 if (!signing.Success)
                 {
@@ -298,7 +299,8 @@ public sealed partial class DotNetRepositoryReleaseService
         DotNetRepositoryReleaseSpec spec,
         string packageOutputPath,
         ILogger logger,
-        Action<DotNetReleaseBuildAssemblySigningRequest> signAssemblies)
+        Action<DotNetReleaseBuildAssemblySigningRequest> signAssemblies,
+        ISet<DotNetRepositoryProjectResult> onlyPackToolProjects)
     {
         var result = new DotNetPackResult();
         var watch = Stopwatch.StartNew();
@@ -325,7 +327,8 @@ public sealed partial class DotNetRepositoryReleaseService
                         logger,
                         includePatterns,
                         spec.SignDependencyAssemblies,
-                        packageOutputPath));
+                        packageOutputPath),
+                    recursiveBuildOutputs: !onlyPackToolProjects.Contains(project));
                 if (signingPlan.Files.Length == 0 && !spec.SignDependencyAssemblies)
                 {
                     var evaluatedIncludePatterns = ResolveAssemblySigningIncludePatterns(project, spec, csprojDir, configuration, logger);
