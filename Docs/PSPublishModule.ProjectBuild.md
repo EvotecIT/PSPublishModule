@@ -296,6 +296,37 @@ Overview
   NuGet and GitHub prechecks are evaluated before any real publish starts.
 
 Example configuration
+For packages that share a version property in `Directory.Build.props`, bind that property to the
+coordinated release version. Project `Version` and `PackageVersion` entries that reference the bound
+property keep their references. The shared property is updated once, alongside the other version
+bindings in the same file transaction. A conflicting resolved version fails before source edits.
+This preservation applies to one unconditional property in the nearest automatically imported
+`Directory.Build.props`; custom imports, additional SDKs and project-local evaluation-time definitions
+retain ordinary project version updates. Properties inside targets are execution-time assignments.
+Consuming projects may reference that property from multiple conditional groups. Each reference keeps
+its original spelling and whitespace, while literal versions update normally. A binding may initialize
+an empty shared property and compose other project metadata updates. A composed version value that
+conflicts with the resolved version, or a binding that changes version-property ownership or the
+consuming version-element layout, fails the release before any files change. Nested conditional
+definitions of a shared property do not satisfy the unconditional-owner requirement. Items and tasks
+that share a property's name do not override its ownership. Shared property names follow MSBuild naming
+rules. Composition is checked against the actual planned project for literal versions, empty version
+elements, prefix/suffix values and projects whose version already matches the release. When no expected
+or aligned version is configured, metadata bindings keep the existing project or inherited version.
+After changed bindings are applied, evaluated package identities are refreshed even when a preserved
+reference leaves the project file unchanged.
+
+```json
+"AlignPackageVersions": true,
+"VersionBindings": [
+  {
+    "Path": "Directory.Build.props",
+    "Project": "ExampleSuite.Core",
+    "Pattern": "(?<=<ProductVersion>)\\d+\\.\\d+\\.\\d+(?=</ProductVersion>)"
+  }
+]
+```
+
 ```
 {
   "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/project.build.schema.json",

@@ -2,7 +2,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class CsprojVersionEditorTests
+public sealed partial class CsprojVersionEditorTests
 {
     [Fact]
     public void TryGetVersion_ReadsPrereleaseVersion()
@@ -120,8 +120,13 @@ public sealed class CsprojVersionEditorTests
         var updated = CsprojVersionEditor.UpdateVersionText(content, "2.0.0-rc.1", out _);
 
         Assert.Contains("<VersionPrefix>2.0.0</VersionPrefix>", updated, StringComparison.Ordinal);
-        Assert.Equal(1, CountOccurrences(updated, "<VersionSuffix>", StringComparison.Ordinal));
-        Assert.Contains("<VersionSuffix>rc.1</VersionSuffix>", updated, StringComparison.Ordinal);
+        var suffixes = System.Xml.Linq.XDocument.Parse(updated).Descendants("VersionSuffix").ToArray();
+        Assert.All(suffixes, suffix => Assert.Equal("rc.1", suffix.Value));
+        Assert.Single(suffixes, suffix => suffix.Attribute("Condition") is null);
+        var condition = System.Xml.Linq.XElement.Parse(suffixElement).Attribute("Condition")?.Value;
+        Assert.Equal(condition is null ? 1 : 2, suffixes.Length);
+        if (condition is not null)
+            Assert.Contains(suffixes, suffix => suffix.Attribute("Condition")?.Value == condition);
     }
 
     [Fact]

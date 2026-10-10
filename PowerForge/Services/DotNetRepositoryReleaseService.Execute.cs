@@ -354,8 +354,11 @@ public sealed partial class DotNetRepositoryReleaseService
                         root,
                         result.ResolvedVersionsByProject,
                         spec.VersionBindings,
-                        plannedProjectContents)
+                        plannedProjectContents).ToArray()
                     : Array.Empty<ProjectVersionBindingFileUpdate>();
+
+                ComposeProjectVersionUpdates(root, packable, pendingVersionUpdates,
+                    versionBindingPlan, spec.VersionBindings, pathComparer);
                 spec.HasPendingVersionBindingChanges = spec.WhatIf && versionBindingPlan.Any(static item => item.HasChanges);
 
                 if (spec.WhatIf)
@@ -374,10 +377,17 @@ public sealed partial class DotNetRepositoryReleaseService
                         .ToArray();
                     new RepositoryTextFileTransactionService().Apply(fileUpdates);
 
+                    // Imported bindings may change package identity even when restoring a
+                    // shared version reference leaves the project file byte-identical.
+                    var metadataProjects = versionBindingPlan.Any(static item => item.HasChanges)
+                        ? (IEnumerable<DotNetRepositoryProjectResult>)packable
+                        : pendingVersionUpdates.Select(static item => item.Key);
+                    foreach (var project in metadataProjects)
+                        project.PackageId = ResolvePackageId(project.CsprojPath, project.ProjectName, spec);
+
                     foreach (var pendingUpdate in pendingVersionUpdates)
                     {
                         var project = pendingUpdate.Key;
-                        project.PackageId = ResolvePackageId(project.CsprojPath, project.ProjectName, spec);
                         if (!string.IsNullOrWhiteSpace(project.OldVersion))
                             _logger.Success($"{project.ProjectName}: {project.OldVersion} -> {project.NewVersion}");
                         else
