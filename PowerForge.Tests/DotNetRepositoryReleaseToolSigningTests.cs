@@ -55,7 +55,8 @@ public sealed class DotNetRepositoryReleaseToolSigningTests
             if (signDependencyAssemblies)
             {
                 var obsoletePublishDirectory = usePackConditionedPublishDirectory
-                    ? "$(PackageOutputPath)\\conditioned-publish\\"
+                    // PackageOutputPath is unset during the initial build.
+                    ? "$(MSBuildProjectDirectory)/../packages/conditioned-publish/"
                     : "$(OutputPath)publish\\";
                 projectLines.Add($"    <ObsoletePublishDir>{obsoletePublishDirectory}</ObsoletePublishDir>");
             }
