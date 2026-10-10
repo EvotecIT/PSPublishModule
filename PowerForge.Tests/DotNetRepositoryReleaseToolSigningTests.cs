@@ -126,6 +126,7 @@ public sealed class DotNetRepositoryReleaseToolSigningTests
                 Assert.Contains(signedPaths, path => path.EndsWith(Path.Combine(expectedPublishDirectory, "Sample.Dependency.dll"), StringComparison.OrdinalIgnoreCase));
                 Assert.Contains(signedPaths, path => path.EndsWith(Path.Combine("runtimes", "win-x64", "lib", "net8.0", "Sample.Runtime.dll"), StringComparison.OrdinalIgnoreCase));
                 Assert.DoesNotContain(signedPaths, path => path.EndsWith("Obsolete.Rid.Dependency.dll", StringComparison.OrdinalIgnoreCase));
+                Assert.DoesNotContain(signedPaths, path => path.EndsWith("Obsolete.Dependency.dll", StringComparison.OrdinalIgnoreCase));
             }
             else
                 Assert.DoesNotContain(signedPaths, path => path.EndsWith("Sample.Dependency.dll", StringComparison.OrdinalIgnoreCase));
