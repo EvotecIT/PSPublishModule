@@ -11,32 +11,48 @@ quality workflow for the exact default-branch commit being released. Publication
 requires a deliberate `workflow_dispatch` on that branch. `publish` defaults to
 `false`, which validates the archive and runs `npm publish --dry-run`.
 
-Required inputs are `artifact-name`, `package-name`, `version`, `sha256` and
-`quality-run-id`. `quality-workflow` defaults to `quality.yml`. Pin the reusable
-workflow to a reviewed commit and grant the caller `contents: read`, `actions:
+Required inputs are `artifact-name`, `package-name`, `version`, `sha256`,
+`quality-run-id` and `environment-name`. `quality-workflow` defaults to
+`quality.yml`. Pin the reusable workflow to a reviewed commit and grant the
+caller `contents: read`, `actions:
 read` and `id-token: write`.
 
 The archive must contain `package/package.json` with the requested name/version
 and `repository.url` equal to `git+https://github.com/<owner>/<repository>.git` for
 the calling repository. The publisher checks the downloaded SHA256, publishes
 that archive with lifecycle scripts disabled, then verifies the public SHA512
-integrity and provenance. It does not change versions, commit files, create tags,
+integrity. Public source repositories also require npm provenance; private source
+repositories explicitly disable provenance because npm does not support it for
+that source visibility. The release summary records the applied requirement.
+The workflow does not change versions, commit files, create tags,
 publish GitHub releases or dispatch downstream repositories.
 
 ## npm setup
 
 Configure the trusted publisher for the package on npm with the calling GitHub
-organization, repository and **calling workflow filename**. Do not register
-`powerforge-npm-publish.yml` as the calling workflow. Permit direct `npm publish`
+organization, repository, **calling workflow filename** and release environment.
+Do not register `powerforge-npm-publish.yml` as the calling workflow. Permit direct `npm publish`
 when that is the intended release mode. GitHub OIDC supplies the short-lived
 publishing identity for ordinary releases without a stored npm token.
 
+Create the GitHub release environment before using the workflow. Configure its
+custom deployment policy to allow exactly the default branch, with no tags or
+wildcard patterns. The publisher verifies that policy before processing the
+archive. Store `NPM_BOOTSTRAP_TOKEN` only as a secret of that environment; do not
+pass a repository secret from the caller. Bind the same environment name in npm's
+trust settings so a branch cannot replace the caller and reuse its publishing
+identity.
+
+The allowed branch also needs a trusted update boundary. Use environment-required
+reviewers where the GitHub plan supports them, or restrict default-branch updates
+to release maintainers. An environment name in YAML alone provides no protection.
+
 The package must already exist before npm allows trusted-publisher configuration.
 For a new package, the first qualified publication uses `publish: true`,
-`bootstrap: true` and the optional `bootstrap-token` secret. A package owner
+`bootstrap: true` and the environment `NPM_BOOTSTRAP_TOKEN` secret. A package owner
 creates a short-lived granular token with package-write scope and bypass 2FA for
-unattended publication, then supplies it through the caller's GitHub secret
-settings. The workflow loads it only for that explicit first-publication
+unattended publication, then supplies it through the caller's GitHub environment
+secret settings. The workflow loads it only for that explicit first-publication
 mode and requires an authenticated package lookup to return 404. Existing public
 or private packages, registry failures and missing credentials fail the bootstrap
 check.
