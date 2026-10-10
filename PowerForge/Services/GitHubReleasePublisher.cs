@@ -165,8 +165,9 @@ public sealed partial class GitHubReleasePublisher
                 expectedReleaseBodyMarker,
                 expectedTagCommitSha,
                 requirePublishedStableRelease,
+                release.IsDraft,
                 release.ReusedExistingRelease,
-                replaceExistingAssets,
+                replaceExistingAssets && release.ReusedExistingRelease,
                 result.ReplacedExistingAssets,
                 result.UploadedAssets,
                 progress,
@@ -387,6 +388,7 @@ public sealed partial class GitHubReleasePublisher
         string? expectedReleaseBodyMarker,
         string? expectedTagCommitSha,
         bool requirePublishedStableRelease,
+        bool isDraft,
         bool reusedExistingRelease,
         bool replaceExistingAssets,
         List<string> replacedExistingAssets,
@@ -650,8 +652,8 @@ public sealed partial class GitHubReleasePublisher
                 requirePublishedStableRelease,
                 verifiedAssetIds,
                 // Published-release workflows can attach their own assets while this publisher uploads.
-                // Only explicit replacement recovery owns the complete release asset set.
-                requireExactAssetSet: replaceExistingAssets,
+                // Fresh drafts and explicit replacement recovery retain an exclusive asset set.
+                requireExactAssetSet: replaceExistingAssets || (isDraft && !reusedExistingRelease),
                 cancellationToken);
         }
 
