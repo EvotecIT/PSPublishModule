@@ -296,6 +296,24 @@ Overview
   NuGet and GitHub prechecks are evaluated before any real publish starts.
 
 Example configuration
+For packages that share a version property in `Directory.Build.props`, bind that property to the
+coordinated release version. Project `Version` and `PackageVersion` entries that reference the bound
+property keep their references. The shared property is updated once, alongside the other version
+bindings in the same file transaction. A conflicting resolved version fails before source edits.
+This preservation applies to one unconditional property in the nearest automatically imported
+`Directory.Build.props`; custom imports and project-local definitions retain ordinary project version updates.
+
+```json
+"AlignPackageVersions": true,
+"VersionBindings": [
+  {
+    "Path": "Directory.Build.props",
+    "Project": "ExampleSuite.Core",
+    "Pattern": "(?<=<ProductVersion>)\\d+\\.\\d+\\.\\d+(?=</ProductVersion>)"
+  }
+]
+```
+
 ```
 {
   "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/project.build.schema.json",

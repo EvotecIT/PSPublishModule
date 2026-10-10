@@ -354,8 +354,32 @@ public sealed partial class DotNetRepositoryReleaseService
                         root,
                         result.ResolvedVersionsByProject,
                         spec.VersionBindings,
-                        plannedProjectContents)
+                        plannedProjectContents).ToArray()
                     : Array.Empty<ProjectVersionBindingFileUpdate>();
+
+                for (var index = pendingVersionUpdates.Count - 1; index >= 0; index--)
+                {
+                    var pending = pendingVersionUpdates[index];
+                    var bindingIndex = Array.FindIndex(versionBindingPlan, item =>
+                        pathComparer.Equals(Path.GetFullPath(item.Update.FilePath), Path.GetFullPath(pending.Value.FilePath)));
+                    var composedContent = bindingIndex < 0 ? pending.Value.UpdatedContent : versionBindingPlan[bindingIndex].Update.UpdatedContent;
+                    var preserved = BoundProjectVersionService.PreserveReferences(
+                        root, pending.Key.CsprojPath, pending.Value.OriginalContent,
+                        composedContent, pending.Key.NewVersion!, versionBindingPlan, spec.VersionBindings);
+                    if (bindingIndex >= 0)
+                    {
+                        var binding = versionBindingPlan[bindingIndex];
+                        versionBindingPlan[bindingIndex] = new ProjectVersionBindingFileUpdate(
+                            new RepositoryTextFileUpdate(binding.Update.FilePath, binding.Update.OriginalContent, preserved),
+                            binding.RelativePath, binding.BindingCount);
+                    }
+                    pending.Key.HasPendingVersionUpdate = !string.Equals(pending.Value.OriginalContent, preserved, StringComparison.Ordinal);
+                    if (!pending.Key.HasPendingVersionUpdate)
+                        pendingVersionUpdates.RemoveAt(index);
+                    else
+                        pendingVersionUpdates[index] = new(pending.Key, new RepositoryTextFileUpdate(
+                            pending.Value.FilePath, pending.Value.OriginalContent, preserved));
+                }
                 spec.HasPendingVersionBindingChanges = spec.WhatIf && versionBindingPlan.Any(static item => item.HasChanges);
 
                 if (spec.WhatIf)
