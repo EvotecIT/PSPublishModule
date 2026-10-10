@@ -109,9 +109,11 @@ public sealed partial class DotNetRepositoryReleaseService
                 projectName,
                 logger,
                 out var packAsToolValue,
-                out _,
-                out _,
+                out var packAsToolStdErr,
+                out var packAsToolStdOut,
                 out _);
+            if (packAsToolExitCode != 0 && includePreparedPublishOutput)
+                throw new InvalidOperationException($"Unable to evaluate PackAsTool for prepared assembly signing of {projectName}. {SummarizeProcessFailureOutput(packAsToolStdErr, packAsToolStdOut)}".Trim());
             if (packAsToolExitCode != 0 || !bool.TryParse(packAsToolValue?.Trim(), out var packAsTool) || !packAsTool)
                 continue;
 
@@ -131,6 +133,8 @@ public sealed partial class DotNetRepositoryReleaseService
                 out var duration);
             if (intermediateExitCode != 0 || string.IsNullOrWhiteSpace(intermediateOutputPath))
             {
+                if (includePreparedPublishOutput)
+                    throw new InvalidOperationException($"Unable to evaluate IntermediateOutputPath for prepared assembly signing of {projectName}. {SummarizeProcessFailureOutput(stdErr, stdOut)}".Trim());
                 logger.Verbose($"{projectName}: unable to resolve the pack-tool intermediate output in {FormatDuration(duration)}. {SummarizeProcessFailureOutput(stdErr, stdOut)}");
                 continue;
             }
@@ -160,14 +164,15 @@ public sealed partial class DotNetRepositoryReleaseService
                 out duration);
             if (publishExitCode != 0 || string.IsNullOrWhiteSpace(publishDirectory))
             {
-                logger.Verbose($"{projectName}: unable to resolve the pack-tool publish output in {FormatDuration(duration)}. {SummarizeProcessFailureOutput(stdErr, stdOut)}");
-                continue;
+                throw new InvalidOperationException($"Unable to evaluate PublishDir for prepared assembly signing of {projectName}. {SummarizeProcessFailureOutput(stdErr, stdOut)}".Trim());
             }
 
             var normalizedPublishDirectory = publishDirectory!.Trim().Trim('"');
             var resolvedPublishDirectory = Path.IsPathRooted(normalizedPublishDirectory)
                 ? Path.GetFullPath(normalizedPublishDirectory)
                 : Path.GetFullPath(Path.Combine(workingDirectory, normalizedPublishDirectory));
+            if (!Directory.Exists(resolvedPublishDirectory))
+                throw new DirectoryNotFoundException($"The prepared pack-tool publish output for {projectName} is missing: {resolvedPublishDirectory}");
             AddMatchingAssemblyPaths(files, resolvedPublishDirectory, includePatterns, SearchOption.AllDirectories);
         }
 
