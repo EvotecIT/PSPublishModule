@@ -302,6 +302,12 @@ property keep their references. The shared property is updated once, alongside t
 bindings in the same file transaction. A conflicting resolved version fails before source edits.
 This preservation applies to one unconditional property in the nearest automatically imported
 `Directory.Build.props`; custom imports and project-local definitions retain ordinary project version updates.
+Consuming projects may reference that property from multiple conditional groups. Each reference keeps
+its original spelling and whitespace, while literal versions update normally. A binding may initialize
+an empty shared property and compose other project metadata updates. A composed version value that
+conflicts with the resolved version, or a binding that changes version-property ownership or the
+consuming version-element layout, fails the release before any files change. Nested conditional
+definitions of a shared property do not satisfy the unconditional-owner requirement.
 
 ```json
 "AlignPackageVersions": true,

@@ -1,6 +1,6 @@
 namespace PowerForge.Tests;
 
-public sealed class BoundProjectVersionReleaseTests : IDisposable
+public sealed partial class BoundProjectVersionReleaseTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "pf-bound-version-" + Guid.NewGuid().ToString("N"));
     private const string Props = "<Project><PropertyGroup><ProductVersion>2.0.0</ProductVersion><AssemblyVersion>$(ProductVersion).0</AssemblyVersion></PropertyGroup></Project>";
