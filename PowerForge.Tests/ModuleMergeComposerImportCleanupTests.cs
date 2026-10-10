@@ -38,6 +38,13 @@ Export-ModuleMember -Function $FunctionsToExport -Alias $AliasesToExport -Cmdlet
                 var script = Path.Combine(root.FullName, "Generated.ps1");
                 File.WriteAllText(script, "function Get-New { 'generated' }");
                 ModuleMergeComposer.SyncMergedPsm1WithGeneratedScripts(manifest, root.FullName, "Demo", new[] { script });
+                // The pipeline synchronizes exports again after adding delivery commands.
+                File.WriteAllText(modulePath, ModuleMergeComposer.ReplaceExportBlock(File.ReadAllText(modulePath), """
+$FunctionsToExport = @('Get-New')
+$AliasesToExport = @()
+$CmdletsToExport = @()
+Export-ModuleMember -Function $FunctionsToExport -Alias $AliasesToExport -Cmdlet $CmdletsToExport
+"""));
             }
             else
             {

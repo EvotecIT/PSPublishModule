@@ -118,6 +118,19 @@ Remove-Variable FailedResolverForProof -Scope Global
             var result = RunProcess(host, $"-NoLogo -NoProfile -NonInteractive -File \"{script}\"", root, 30000);
             Assert.True(result.ExitCode == 0, result.StandardOutput + Environment.NewLine + result.StandardError);
             Assert.Contains("DEFERRED_JSON_OK", result.StandardOutput);
+            File.WriteAllText(script, """
+try {
+    Import-Module (Join-Path $PSScriptRoot 'DemoModule.psm1') -Force -ErrorAction Continue
+} finally {
+    if ($null -eq $global:FailedResolverForProof -or $global:FailedResolverForProof.Registered) {
+        throw 'Failed Continue import retained its resolver.'
+    }
+    'CONTINUE_CLEANUP_OK'
+}
+""");
+            var continued = RunProcess(host, $"-NoLogo -NoProfile -NonInteractive -File \"{script}\"", root, 30000);
+            Assert.Contains("CONTINUE_CLEANUP_OK", continued.StandardOutput);
+            Assert.DoesNotContain("retained its resolver", continued.StandardError);
         }
         finally
         {

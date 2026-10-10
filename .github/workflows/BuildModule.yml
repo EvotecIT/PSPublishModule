@@ -308,6 +308,14 @@ jobs:
           -c Release --nologo
           --filter 'FullyQualifiedName~BenchmarkServicesTests.History'
 
+      - name: Test generated module loading
+        shell: pwsh
+        timeout-minutes: 10
+        run: >-
+          dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
+          -c Release --nologo
+          --filter 'FullyQualifiedName~ModuleBootstrapperGenerator|FullyQualifiedName~ModuleMergeComposerImportCleanup|FullyQualifiedName~ModuleMergeComposerTests.SyncMergedPsm1'
+
       - name: Test with Windows PowerShell 5.1
         shell: pwsh
         timeout-minutes: 10

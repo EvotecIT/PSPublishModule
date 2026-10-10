@@ -101,14 +101,7 @@ internal static partial class ModuleMergeComposer
             ModuleManifestExportReader.ReadExports(manifestPath),
             conditionalFunctionDependencies,
             moduleName).TrimEnd();
-        if (!string.IsNullOrWhiteSpace(exportBlock))
-        {
-            if (builder.Length > 0)
-                builder.AppendLine().AppendLine();
-            builder.Append(exportBlock);
-        }
-
-        WriteMergedPsm1(psm1Path, ReplaceExportBlock(existing, builder.ToString()));
+        WriteMergedPsm1(psm1Path, ReplaceExportBlock(existing, exportBlock, builder.ToString()));
     }
 
     internal static string PrependFunctions(string[] functions, string content)
@@ -639,24 +632,28 @@ internal static partial class ModuleMergeComposer
         return updated;
     }
 
-    /// <summary>Replaces generated exports without discarding import cleanup that follows them.</summary>
-    internal static string ReplaceExportBlock(string content, string exportBlock)
+    /// <summary>Replaces generated exports and inserts scripts before them, preserving subsequent import cleanup.</summary>
+    internal static string ReplaceExportBlock(string content, string exportBlock, string? scriptBlock = null)
     {
         const string startMarker = "# PowerForge exports begin";
         const string endMarker = "# PowerForge exports end";
+        var scripts = string.IsNullOrWhiteSpace(scriptBlock)
+            ? string.Empty
+            : scriptBlock!.TrimEnd() + System.Environment.NewLine + System.Environment.NewLine;
         var start = content.IndexOf(startMarker, System.StringComparison.Ordinal);
         if (start >= 0)
         {
             var insertion = start + startMarker.Length;
             var end = content.IndexOf(endMarker, insertion, System.StringComparison.Ordinal);
             if (end < 0) throw new InvalidDataException("Generated export section has no end marker.");
-            return content.Substring(0, insertion) + System.Environment.NewLine + exportBlock.TrimEnd() +
+            return content.Substring(0, start) + scripts + content.Substring(start, insertion - start) +
+                   System.Environment.NewLine + exportBlock.TrimEnd() +
                    System.Environment.NewLine + content.Substring(end);
         }
 
         ExtractTrailingExportBlock(content, out var body);
         return body.TrimEnd() + System.Environment.NewLine + System.Environment.NewLine +
-               exportBlock.TrimEnd() + System.Environment.NewLine;
+               scripts + exportBlock.TrimEnd() + System.Environment.NewLine;
     }
 
     internal static string ExtractTrailingExportBlock(string content, out string body)
