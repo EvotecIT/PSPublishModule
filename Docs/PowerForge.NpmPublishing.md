@@ -29,12 +29,23 @@ Configure the trusted publisher for the package on npm with the calling GitHub
 organization, repository and **calling workflow filename**. Do not register
 `powerforge-npm-publish.yml` as the calling workflow. Permit direct `npm publish`
 when that is the intended release mode. GitHub OIDC supplies the short-lived
-publishing identity; this workflow declares no npm token secret.
+publishing identity for ordinary releases without a stored npm token.
 
 The package must already exist before npm allows trusted-publisher configuration.
-For a new package, the first qualified publication therefore needs an authenticated
-package owner. Configure OIDC after that first publication, close to the next
-release: a new trust configuration expires if it is not used within two days.
+For a new package, the first qualified publication uses `publish: true`,
+`bootstrap: true` and the optional `bootstrap-token` secret. A package owner
+creates a short-lived granular token with package-write scope and bypass 2FA for
+unattended publication, then supplies it through the caller's GitHub secret
+settings. The workflow loads it only for that explicit first-publication
+mode and requires an authenticated package lookup to return 404. Existing public
+or private packages, registry failures and missing credentials fail the bootstrap
+check.
+
+After the first publication, remove the bootstrap secret and leave `bootstrap`
+false. Configure OIDC close to the next release: a new trust configuration expires
+if it is not used within two days. This keeps credential creation and registry
+authorization with the package owner while both release modes upload through
+GitHub Actions.
 See [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/) and
 [npm trust prerequisites](https://docs.npmjs.com/cli/v11/commands/npm-trust/).
 

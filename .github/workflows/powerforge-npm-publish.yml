@@ -28,6 +28,14 @@ on:
         description: Publish when true; otherwise validate and perform npm's dry run.
         type: boolean
         default: false
+      bootstrap:
+        description: First publication of a package that does not yet exist; requires bootstrap-token.
+        type: boolean
+        default: false
+    secrets:
+      bootstrap-token:
+        description: Short-lived npm credential used only for an explicitly selected first publication.
+        required: false
 
 permissions:
   contents: read
@@ -48,6 +56,7 @@ jobs:
       NPM_VERSION: ${{ inputs.version }}
       NPM_SHA256: ${{ inputs.sha256 }}
       NPM_EXECUTE: ${{ inputs.publish }}
+      NPM_BOOTSTRAP: ${{ inputs.bootstrap }}
       QUALITY_RUN: ${{ inputs.quality-run-id }}
       QUALITY_WORKFLOW: ${{ inputs.quality-workflow }}
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
@@ -82,12 +91,17 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
+          registry-url: ${{ inputs.bootstrap && inputs.publish && 'https://registry.npmjs.org' || '' }}
 
       - name: Install the qualified npm CLI
+        env:
+          NODE_AUTH_TOKEN: ''
         run: npm install --global npm@11.21.0 --no-audit --no-fund
 
       - name: Verify archive identity and publish the same bytes
         shell: pwsh
+        env:
+          NODE_AUTH_TOKEN: ${{ inputs.bootstrap && inputs.publish && secrets.bootstrap-token || '' }}
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:NPM_SHA256 -notmatch '^[a-fA-F0-9]{64}$' -or
@@ -110,6 +124,18 @@ jobs:
           }
           $integrity = 'sha512-' + [Convert]::ToBase64String(
               [Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($archive)))
+          if ($env:NPM_BOOTSTRAP -eq 'true') {
+              if ($env:NPM_EXECUTE -ne 'true' -or [string]::IsNullOrWhiteSpace($env:NODE_AUTH_TOKEN)) {
+                  throw 'Bootstrap requires an explicit publication and the short-lived bootstrap-token secret.'
+              }
+              $packageUrl = 'https://registry.npmjs.org/' + [Uri]::EscapeDataString($env:NPM_PACKAGE)
+              $existing = Invoke-WebRequest -Uri $packageUrl -SkipHttpErrorCheck -Headers @{
+                  Authorization = "Bearer $env:NODE_AUTH_TOKEN"
+              }
+              if ($existing.StatusCode -ne 404) {
+                  throw 'Bootstrap requires an authenticated registry check confirming that the package does not exist.'
+              }
+          }
           $publishArgs = @('publish', $archive, '--ignore-scripts', '--provenance', '--access', 'public',
               '--registry', 'https://registry.npmjs.org')
           if ($env:NPM_EXECUTE -ne 'true') { $publishArgs += '--dry-run' }
