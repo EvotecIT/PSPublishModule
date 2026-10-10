@@ -141,7 +141,7 @@ policy only to exact asset paths whose content hash PowerForge created.
 ### Immutable browser caching for fingerprinted files
 
 When an origin ignores generated `_headers`, a site can use Cloudflare to set
-browser caching for explicitly named content-addressed files whose URL changes
+browser caching for explicitly named public content-addressed files whose URL changes
 whenever their bytes change:
 
 ```json
@@ -162,7 +162,7 @@ whenever their bytes change:
 ```json
 {
   "description": "PowerForge [example.com/]: Example: immutable browser cache",
-  "expression": "(http.host eq \"example.com\" and http.response.code eq 200 and (http.request.uri.path wildcard \"/app/_framework/*.*.wasm\" or http.request.uri.path wildcard \"/app/_framework/*.*.js\" or http.request.uri.path wildcard \"/app/_framework/*.*.dat\"))",
+  "expression": "(http.host eq \"example.com\" and http.response.code eq 200 and not http.response.content_type.media_type in {\"text/html\" \"application/xhtml+xml\"} and (http.request.uri.path wildcard \"/app/_framework/*.*.wasm\" or http.request.uri.path wildcard \"/app/_framework/*.*.js\" or http.request.uri.path wildcard \"/app/_framework/*.*.dat\"))",
   "action": "rewrite",
   "action_parameters": {
     "headers": {
@@ -174,7 +174,9 @@ whenever their bytes change:
 ```
 
 The rule uses the Transform Rules phase to set the complete browser cache
-header, including the `immutable` directive. Only `200` responses are rewritten, so a `404` for a
+header, including the `immutable` directive. Only non-HTML, non-XHTML `200`
+responses are rewritten. An HTML fallback at an asset URL keeps its existing
+policy, and a `404` for a
 fingerprinted URL requested before the origin serves it is never pinned in a
 browser. Edge caching and the incremental-purge policy fingerprint are
 unchanged. The rule uses the existing Transform Rules permission; no additional
@@ -184,7 +186,7 @@ next apply.
 Patterns use Cloudflare's case-insensitive `wildcard` operator, where `*`
 matches any characters including `/`. Paths are relative to the site's base
 path, must end in a literal non-HTML file extension, and are limited to 32
-patterns within the 4096-character expression limit. List only fingerprinted
+patterns within the 4096-character expression limit. List only public fingerprinted
 names: a browser copy cannot be purged. For .NET WebAssembly output, the
 `*.*.ext` shape matches `dotnet.native.<hash>.js` and `<Assembly>.<hash>.wasm`
 but deliberately not the unfingerprinted `dotnet.js` loader.

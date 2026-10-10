@@ -156,10 +156,10 @@
     },
     "CloudflareImmutablePaths": {
       "type": "array",
-      "description": "Site-relative Cloudflare wildcard patterns for content-addressed files. Successful matching responses receive 'Cache-Control: public, max-age=31536000, immutable'. '*' matches any characters, including '/'. Each pattern must end in a literal non-HTML file extension.",
+      "description": "Site-relative Cloudflare wildcard patterns for public content-addressed files. Successful non-HTML, non-XHTML matching responses receive 'Cache-Control: public, max-age=31536000, immutable'. '*' matches any characters, including '/'. Each pattern must end in a literal non-HTML file extension.",
       "maxItems": 32,
       "uniqueItems": true,
-      "items": { "type": "string", "minLength": 2, "pattern": "^/(?!.*(?:\\*|%2[Aa]){2})[^?#\\\\\"\\s]*\\.[A-Za-z0-9]+$" }
+      "items": { "type": "string", "minLength": 2, "pattern": "^(?!.*//)(?!.*\\.\\.)(?!.*\\.[Hh][Tt][Mm][Ll]?$)/(?!.*(?:\\*|%2[Aa]){2})[^?#\\\\\"\\s\\u0000-\\u001F\\u007F-\\u009F]*\\.[A-Za-z0-9]+$" }
     },
     "CloudflareCacheSpec": {
       "type": "object",

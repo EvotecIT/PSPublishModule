@@ -103,9 +103,10 @@ internal static class CloudflareResponseHeaderPolicyBuilder
         {
             var clauses = immutablePatterns.Select(pattern =>
                 $"http.request.uri.path wildcard \"{CloudflareCachePolicyBuilder.EscapeExpressionString(CloudflareCachePolicyBuilder.EncodeUriPathForExpression(pattern))}\"");
-            // Only successful responses become immutable: a 404 or error for a fingerprinted URL
-            // that is requested before the origin serves it must stay revalidatable.
-            var immutableExpression = $"(http.host eq \"{hostname}\" and http.response.code eq 200 and ({string.Join(" or ", clauses)}))";
+            // Only successful asset responses become immutable. Missing assets can return either
+            // an error status or a status-200 HTML fallback; neither should be pinned in a browser.
+            var immutableExpression = $"(http.host eq \"{hostname}\" and http.response.code eq 200 and " +
+                $"not http.response.content_type.media_type in {{\"text/html\" \"application/xhtml+xml\"}} and ({string.Join(" or ", clauses)}))";
             CloudflareCachePolicyBuilder.ValidateExpressionLength("immutable browser cache", immutableExpression);
             rules.Add(new JsonObject
             {

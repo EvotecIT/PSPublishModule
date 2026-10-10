@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Json.Schema;
 using PowerForge.Web;
 using PowerForge.Web.Cli;
 
@@ -17,7 +18,7 @@ public sealed class CloudflareImmutableBrowserCacheTests
     ];
 
     [Fact]
-    public void BuildManagedRules_ShouldEmitStatusGatedImmutableCacheControlRule()
+    public void BuildManagedRules_ShouldEmitSuccessfulNonHtmlImmutableCacheControlRule()
     {
         var rules = CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
             "officeimo.com",
@@ -30,7 +31,8 @@ public sealed class CloudflareImmutableBrowserCacheTests
         Assert.Equal("rewrite", rule["action"]!.GetValue<string>());
         Assert.True(rule["enabled"]!.GetValue<bool>());
         Assert.Equal(
-            "(http.host eq \"officeimo.com\" and http.response.code eq 200 and (" +
+            "(http.host eq \"officeimo.com\" and http.response.code eq 200 and " +
+            "not http.response.content_type.media_type in {\"text/html\" \"application/xhtml+xml\"} and (" +
             "http.request.uri.path wildcard \"/apps/converter/_framework/*.*.wasm\" or " +
             "http.request.uri.path wildcard \"/apps/converter/_framework/*.*.js\" or " +
             "http.request.uri.path wildcard \"/apps/converter/_framework/*.*.dat\"))",
@@ -65,7 +67,8 @@ public sealed class CloudflareImmutableBrowserCacheTests
 
         var expression = Assert.Single(rules)!["expression"]!.GetValue<string>();
         Assert.Equal(
-            "(http.host eq \"example.com\" and http.response.code eq 200 and (" +
+            "(http.host eq \"example.com\" and http.response.code eq 200 and " +
+            "not http.response.content_type.media_type in {\"text/html\" \"application/xhtml+xml\"} and (" +
             "http.request.uri.path wildcard \"/project/_framework/*.*.wasm\" or " +
             "http.request.uri.path wildcard \"/project/assets/*.*.css\"))",
             expression);
@@ -78,6 +81,7 @@ public sealed class CloudflareImmutableBrowserCacheTests
     [InlineData("/app/_framework/*.*")]
     [InlineData("/app/index.html")]
     [InlineData("/app/*.HTM")]
+    [InlineData("/app/index.HtMl")]
     [InlineData("/app/../secret.js")]
     [InlineData("//cdn.example/app.js")]
     [InlineData("/app/app.js?v=1")]
@@ -85,12 +89,14 @@ public sealed class CloudflareImmutableBrowserCacheTests
     [InlineData("/app/app name.js")]
     [InlineData("/app/app.\"js")]
     [InlineData("/app\\app.js")]
+    [InlineData("/app/control\u007f.js")]
     public void BuildManagedRules_ShouldRejectBroadOrMalformedImmutablePatterns(string pattern)
     {
         var exception = Assert.Throws<ArgumentException>(() => CloudflareResponseHeaderPolicyBuilder.BuildManagedRules(
             "example.com", "Example", new AgentSecurityHeadersSpec { Enabled = false }, immutablePaths: [pattern]));
 
         Assert.Contains("Invalid Cloudflare immutable path", exception.Message, StringComparison.Ordinal);
+        Assert.False(ImmutablePathSchema().Evaluate(new JsonArray(pattern)).IsValid);
     }
 
     [Theory]
@@ -110,6 +116,21 @@ public sealed class CloudflareImmutableBrowserCacheTests
         Assert.False(result.Success);
         Assert.Contains("consecutive wildcard", result.Message, StringComparison.Ordinal);
         Assert.Empty(handler.Requests);
+        Assert.False(ImmutablePathSchema().Evaluate(new JsonArray(pattern)).IsValid);
+    }
+
+    [Fact]
+    public void ImmutablePathSchema_ShouldAcceptPublicAssetPatterns()
+    {
+        foreach (var pattern in FrameworkPatterns.Concat(["/assets/*.HtMl5", "/assets/*.*.css"]))
+            Assert.True(ImmutablePathSchema().Evaluate(new JsonArray(pattern)).IsValid, pattern);
+    }
+
+    private static JsonSchema ImmutablePathSchema()
+    {
+        var schema = JsonNode.Parse(File.ReadAllText(Path.Combine(
+            RepoRootLocator.Find(), "Schemas", "powerforge.web.sitespec.schema.json")))!;
+        return JsonSchema.FromText(schema["$defs"]!["CloudflareImmutablePaths"]!.ToJsonString());
     }
 
     [Fact]
