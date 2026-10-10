@@ -115,23 +115,10 @@ public partial class ModuleBootstrapperGeneratorTests
                 "The module root must be captured before script folders are discovered.");
             Assert.Contains("$FunctionsToExport = @('Get-Demo')", bootstrapper);
             Assert.Contains("$AliasesToExport = @('gdemo')", bootstrapper);
-            Assert.Contains("[AppDomain]::CurrentDomain.add_AssemblyResolve($PowerForgeDesktopAssemblyResolver)", bootstrapper);
-            Assert.Contains("$EventArgs.RequestingAssembly.Location", bootstrapper);
-            Assert.Contains("$PowerForgeDesktopAssemblyResolverState = [pscustomobject]@{", bootstrapper);
-            Assert.Contains("if (-not $PowerForgeDesktopAssemblyResolverState.BootstrapActive)", bootstrapper);
             Assert.Contains("$PowerForgeDesktopAssemblyResolverState.BootstrapActive = $false", bootstrapper);
-            Assert.Contains("$PowerForgeDesktopAssemblyResolverState.Registered = $true", bootstrapper);
-            Assert.Contains("if ($PowerForgeDesktopAssemblyResolverState.Registered)", bootstrapper);
-            Assert.Contains("$PowerForgeDesktopAssemblyResolverState.Registered = $false", bootstrapper);
-            Assert.Contains("StartsWith($PowerForgeDesktopAssemblyRootPrefix, [StringComparison]::OrdinalIgnoreCase)", bootstrapper);
-            Assert.Contains("$PowerForgeRequestedAssemblyName -ne [IO.Path]::GetFileName($PowerForgeRequestedAssemblyName)", bootstrapper);
-            Assert.Contains("$PowerForgeRequestedAssemblyName.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0", bootstrapper);
-            Assert.Contains("$PowerForgeAssemblyCandidate = [IO.Path]::GetFullPath(", bootstrapper);
-            Assert.Contains("$PowerForgeAssemblyCandidate.StartsWith($PowerForgeDesktopAssemblyRootPrefix, [StringComparison]::OrdinalIgnoreCase)", bootstrapper);
-            Assert.Contains("[AppDomain]::CurrentDomain.remove_AssemblyResolve($PowerForgeResolverForRemoval)", bootstrapper);
             Assert.Contains("$ExecutionContext.SessionState.Module.OnRemove", bootstrapper);
-            Assert.Contains("$PowerForgeDesktopAssemblyResolverState.Resolving = $true", bootstrapper);
-            Assert.Contains("$PowerForgeDesktopAssemblyResolverState.Resolving = $false", bootstrapper);
+            Assert.Contains("$PowerForgeDesktopAssemblyResolverState.Register()", bootstrapper);
+            Assert.Contains("$PowerForgeDesktopAssemblyResolverState.Unregister()", bootstrapper);
             Assert.DoesNotContain("ProcessArchitecture", bootstrapper);
         }
         finally
@@ -626,8 +613,8 @@ public partial class ModuleBootstrapperGeneratorTests
             Assert.Contains("Falling back to direct Import-Module", bootstrapper);
             Assert.Contains("will load from the default context", bootstrapper);
             Assert.Contains("$PSEdition -ne 'Core'", bootstrapper);
-            Assert.Contains("[AppDomain]::CurrentDomain.add_AssemblyResolve($PowerForgeDesktopAssemblyResolver)", bootstrapper);
-            Assert.Contains("[AppDomain]::CurrentDomain.remove_AssemblyResolve($PowerForgeResolverForRemoval)", bootstrapper);
+            Assert.Contains("$PowerForgeDesktopAssemblyResolverState.Register()", bootstrapper);
+            Assert.Contains("$PowerForgeDesktopAssemblyResolverState.Unregister()", bootstrapper);
             Assert.Contains("$LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, 'DemoModule.Libraries.ps1')", bootstrapper);
             Assert.True(
                 bootstrapper.IndexOf(". $LibrariesScript", StringComparison.Ordinal) <

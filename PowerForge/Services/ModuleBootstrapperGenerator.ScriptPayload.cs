@@ -10,6 +10,8 @@ internal static partial class ModuleBootstrapperGenerator
     private const string ScriptPreambleEndMarker = "# PowerForge script preamble end";
     private const string ScriptPayloadStartMarker = "# PowerForge script payload begin";
     private const string ScriptPayloadEndMarker = "# PowerForge script payload end";
+    private const string ExportStartMarker = "# PowerForge exports begin";
+    private const string ExportEndMarker = "# PowerForge exports end";
     private const string DeferredPayloadStartMarker = "$PowerForgeMergedScriptPayloadBase64 = @'";
     private const string DeferredPayloadEndMarker = "'@";
 
@@ -51,19 +53,11 @@ internal static partial class ModuleBootstrapperGenerator
             deferredScriptPayload,
             psm1Path);
 
-        var generatedExportBlock = ModuleMergeComposer.ExtractTrailingExportBlock(inlinedBootstrapper, out var bootstrapperWithoutExportBlock);
-        if (string.IsNullOrWhiteSpace(generatedExportBlock))
-        {
-            throw new InvalidOperationException(
-                $"Cannot inline merged scripts because '{Path.GetFileName(psm1Path)}' does not contain a generated export block.");
-        }
-
         if (!string.IsNullOrWhiteSpace(authoritativeExportBlock))
         {
-            inlinedBootstrapper = bootstrapperWithoutExportBlock.TrimEnd() +
-                                  Environment.NewLine + Environment.NewLine +
-                                  authoritativeExportBlock.TrimEnd() +
-                                  Environment.NewLine;
+            // Preserve the module-import cleanup after the export section.
+            inlinedBootstrapper = ReplaceMarkedSection(inlinedBootstrapper,
+                ExportStartMarker, ExportEndMarker, authoritativeExportBlock, psm1Path);
         }
 
         WritePowerShellFile(psm1Path, inlinedBootstrapper);

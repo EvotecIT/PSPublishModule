@@ -31,6 +31,8 @@ public sealed partial class ModuleBootstrapperGeneratorWindowsPowerShellTests
 """);
             File.WriteAllText(Path.Combine(fixture, "Initialize.cs"), """
 using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Encodings.Web;
@@ -44,6 +46,14 @@ namespace DemoModule {
         public static string ReadEncoded() { return JavaScriptEncoder.Default.Encode("<deferred>"); }
         public static string ReadJsonOnWorker() {
             return Task.Run(() => ReadJson()).GetAwaiter().GetResult();
+        }
+        public static void ResolveUnrelatedOnWorkers() {
+            Parallel.For(0, 8, i => {
+                try {
+                    Assembly.Load("PowerForgeUnrelatedMissingAssembly, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null");
+                    throw new System.Exception("Unexpected assembly resolution.");
+                } catch (FileNotFoundException) {}
+            });
         }
     }
     [JsonSerializable(typeof(Dictionary<string, string>))]
@@ -64,6 +74,8 @@ namespace DemoModule {
             foreach (var file in Directory.GetFiles(Path.Combine(fixture, "bin", "Release", "netstandard2.0"), "*.dll"))
                 if (!string.Equals(Path.GetFileName(file), "DemoModule.dll", StringComparison.OrdinalIgnoreCase))
                     File.Copy(file, Path.Combine(lib, Path.GetFileName(file)));
+            var publicScripts = Directory.CreateDirectory(Path.Combine(root, "Public")).FullName;
+            File.WriteAllText(Path.Combine(publicScripts, "Payload.ps1"), "# Valid script payload.");
             ModuleBootstrapperGenerator.Generate(root, "DemoModule",
                 new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
                 new[] { "DemoModule.dll" }, handleRuntimes: false, useAssemblyLoadContext: useAssemblyLoadContext);
@@ -71,6 +83,7 @@ namespace DemoModule {
             File.WriteAllText(script, """
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'DemoModule.psm1')
+[DemoModule.Initialize]::ResolveUnrelatedOnWorkers()
 if (([DemoModule.Initialize]::ReadJsonOnWorker() | ConvertFrom-Json).value -ne 'deferred-json') { throw 'Deferred worker JSON failed.' }
 if (([DemoModule.Initialize]::ReadJson() | ConvertFrom-Json).value -ne 'deferred-json') { throw 'Deferred JSON failed.' }
 if ([DemoModule.Initialize]::ReadEncoded() -ne '\u003Cdeferred\u003E') { throw 'Direct encoder reference failed.' }
@@ -86,6 +99,15 @@ if ($null -ne $resolver.Invoke($null, [ResolveEventArgs]::new($name, [System.Man
 try { Get-Item (Join-Path $PSScriptRoot 'missing-file') -ErrorAction Stop } catch [System.Management.Automation.ItemNotFoundException] {}
 Remove-Module DemoModule
 if ($state.Registered) { throw 'The resolver remained registered after removal.' }
+Set-Content (Join-Path $PSScriptRoot 'Public/Payload.ps1') '$global:FailedResolverForProof = $PowerForgeDesktopAssemblyResolverState; throw "late-script-failure"'
+try {
+    Import-Module (Join-Path $PSScriptRoot 'DemoModule.psm1') -Force -ErrorAction Stop
+    throw 'Late script failure was ignored.'
+} catch {
+    if ($_.Exception.Message -notlike '*late-script-failure*') { throw }
+}
+if ($null -eq $global:FailedResolverForProof -or $global:FailedResolverForProof.Registered) { throw 'Failed import retained its resolver.' }
+Remove-Variable FailedResolverForProof -Scope Global
 'DEFERRED_JSON_OK'
 """);
             var result = RunProcess(host, $"-NoLogo -NoProfile -NonInteractive -File \"{script}\"", root, 30000);

@@ -6,8 +6,18 @@
 # PowerForge script preamble end
 
 {{ModuleRootCaptureBlock}}
+$UnregisterPowerForgeDesktopAssemblyResolver = $null
+try {
 {{BinaryLoaderBlock}}
 # PowerForge script payload begin
 {{ScriptLoaderBlock}}
 # PowerForge script payload end
+# PowerForge exports begin
 {{ExportBlock}}
+# PowerForge exports end
+} catch {
+    if ($null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
+        & $UnregisterPowerForgeDesktopAssemblyResolver
+    }
+    throw
+}
