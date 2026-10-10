@@ -140,9 +140,9 @@ policy only to exact asset paths whose content hash PowerForge created.
 
 ### Immutable browser caching for fingerprinted files
 
-GitHub Pages ignores `_headers` and serves every file with a short
-`Cache-Control: max-age=600`. A site can explicitly name content-addressed files
-whose URL changes whenever their bytes change:
+When an origin ignores generated `_headers`, a site can use Cloudflare to set
+browser caching for explicitly named content-addressed files whose URL changes
+whenever their bytes change:
 
 ```json
 {
@@ -173,9 +173,8 @@ whose URL changes whenever their bytes change:
 }
 ```
 
-The rule uses the Transform Rules phase rather than a Cache Rule Browser TTL
-override because Browser TTL cannot emit the `immutable` directive and has no
-status-code condition. Only `200` responses are rewritten, so a `404` for a
+The rule uses the Transform Rules phase to set the complete browser cache
+header, including the `immutable` directive. Only `200` responses are rewritten, so a `404` for a
 fingerprinted URL requested before the origin serves it is never pinned in a
 browser. Edge caching and the incremental-purge policy fingerprint are
 unchanged. The rule uses the existing Transform Rules permission; no additional
