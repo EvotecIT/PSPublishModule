@@ -14,6 +14,7 @@ public sealed partial class DotNetRepositoryReleaseService
         IReadOnlyList<ProjectVersionBinding>? configuredBindings,
         StringComparer pathComparer)
     {
+        BoundProjectVersionService.ValidatePropertyBindings(root, projects, bindings);
         foreach (var project in projects)
         {
             var projectPath = Path.GetFullPath(project.CsprojPath);

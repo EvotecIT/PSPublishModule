@@ -2,7 +2,8 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Security;
-using System.Text.RegularExpressions;
+using System.Text;
+using System.Xml;
 
 namespace PowerForge;
 
@@ -11,8 +12,6 @@ namespace PowerForge;
 /// </summary>
 internal static class CsprojVersionEditor
 {
-    private const string VersionValuePattern = @"\s*(?<value>[^<]+?)\s*";
-
     private static readonly string[] PackageVersionTags =
     {
         "Version",
@@ -73,6 +72,7 @@ internal static class CsprojVersionEditor
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
+        catch (XmlException) { }
 
         return false;
     }
@@ -85,57 +85,35 @@ internal static class CsprojVersionEditor
         var escapedNumericVersion = SecurityElement.Escape(PackageVersionUtility.GetNumericVersion(version)) ?? string.Empty;
         var prereleaseVersion = PackageVersionUtility.GetPrereleaseVersion(version);
         var escapedPrereleaseVersion = SecurityElement.Escape(prereleaseVersion) ?? string.Empty;
-        var hasPackageVersionTag = PackageVersionTags.Any(tag => Regex.IsMatch(content, BuildVersionTagPattern(tag), RegexOptions.IgnoreCase));
-        var hasVersionPrefix = Regex.IsMatch(content, BuildVersionTagPattern("VersionPrefix"), RegexOptions.IgnoreCase);
-
-        foreach (var tag in ReadVersionTags)
-        {
-            if (Regex.IsMatch(content, BuildVersionTagPattern(tag), RegexOptions.IgnoreCase))
-                hadVersionTag = true;
-        }
-        if (Regex.IsMatch(content, BuildVersionElementPattern("VersionSuffix"), RegexOptions.IgnoreCase))
-            hadVersionTag = true;
+        var hasPackageVersionTag = PackageVersionTags.Any(tag => FindValues(content, tag).Any(IsUnconditional));
+        var hasVersionPrefix = FindValues(content, "VersionPrefix").Any(IsUnconditional);
+        hadVersionTag = ReadVersionTags.Any(tag => FindValues(content, tag).Length != 0) ||
+            FindValues(content, "VersionSuffix", includeEmpty: true).Length != 0;
 
         var updated = content;
         foreach (var tag in FullVersionTags)
         {
-            updated = Regex.Replace(
-                updated,
-                BuildVersionTagPattern(tag),
-                $"<{tag}>{escapedVersion}</{tag}>",
-                RegexOptions.IgnoreCase);
+            updated = ReplaceValues(updated, tag, escapedVersion);
         }
         foreach (var tag in NumericVersionTags)
         {
-            updated = Regex.Replace(
-                updated,
-                BuildVersionTagPattern(tag),
-                $"<{tag}>{escapedNumericVersion}</{tag}>",
-                RegexOptions.IgnoreCase);
+            updated = ReplaceValues(updated, tag, escapedNumericVersion);
         }
 
-        if (hasVersionPrefix && !string.IsNullOrEmpty(prereleaseVersion))
+        if (hasVersionPrefix)
         {
-            if (Regex.IsMatch(updated, BuildVersionElementPattern("VersionSuffix"), RegexOptions.IgnoreCase))
-            {
-                updated = Regex.Replace(
-                    updated,
-                    BuildVersionElementPattern("VersionSuffix"),
-                    $"<VersionSuffix>{escapedPrereleaseVersion}</VersionSuffix>",
-                    RegexOptions.IgnoreCase);
-            }
-            else
-            {
+            var suffixes = FindValues(updated, "VersionSuffix", includeEmpty: true);
+            var hasUnconditionalSuffix = suffixes.Any(IsUnconditional);
+            updated = ReplaceValues(updated, "VersionSuffix", escapedPrereleaseVersion, includeEmpty: true);
+            // Conditional definitions remain conditional. Add the default value
+            // needed by configurations outside those branches, including stable
+            // releases that must clear an inherited prerelease suffix.
+            if (!hasUnconditionalSuffix && (suffixes.Length != 0 || !string.IsNullOrEmpty(prereleaseVersion)))
                 updated = InsertAfterVersionPrefix(updated, "VersionSuffix", escapedPrereleaseVersion);
-            }
         }
-        else if (Regex.IsMatch(updated, BuildVersionElementPattern("VersionSuffix"), RegexOptions.IgnoreCase))
+        else if (FindValues(updated, "VersionSuffix", includeEmpty: true).Length != 0)
         {
-            updated = Regex.Replace(
-                updated,
-                BuildVersionElementPattern("VersionSuffix"),
-                "<VersionSuffix></VersionSuffix>",
-                RegexOptions.IgnoreCase);
+            updated = ReplaceValues(updated, "VersionSuffix", string.Empty, includeEmpty: true);
         }
 
         if (!hasPackageVersionTag && !hasVersionPrefix)
@@ -148,44 +126,68 @@ internal static class CsprojVersionEditor
     {
         version = string.Empty;
         if (string.IsNullOrEmpty(content)) return false;
-        var re = new Regex(BuildVersionTagPattern(tag), RegexOptions.IgnoreCase);
-        var m = re.Match(content);
-        if (!m.Success) return false;
-        version = m.Groups["value"].Value.Trim();
+        var element = FindValues(content, tag).FirstOrDefault(IsUnconditional);
+        if (element.Element is null) return false;
+        version = element.Element.Value.Trim();
         return !string.IsNullOrWhiteSpace(version);
     }
 
-    private static string BuildVersionTagPattern(string tag)
-        => $"<{Regex.Escape(tag)}>{VersionValuePattern}</{Regex.Escape(tag)}>";
+    private static MsBuildProjectXml.ElementSpan[] FindValues(string content, string tag, bool includeEmpty = false)
+        => MsBuildProjectXml.FindProperties(content, tag).Where(span => !span.Element.HasElements &&
+            (includeEmpty || !string.IsNullOrWhiteSpace(span.Element.Value))).ToArray();
 
-    private static string BuildVersionElementPattern(string tag)
-        => $"<{Regex.Escape(tag)}\\b[^>]*(?:/\\s*>|>[^<]*</{Regex.Escape(tag)}\\s*>)";
+    private static bool IsUnconditional(MsBuildProjectXml.ElementSpan span) =>
+        span.Element.Parent?.Parent == span.Element.Document?.Root && !span.Element.AncestorsAndSelf().Any(element =>
+            element.Attributes().Any(attribute => attribute.Name.LocalName.Equals("Condition", StringComparison.OrdinalIgnoreCase)));
+
+    private static string ReplaceValues(string content, string tag, string value, bool includeEmpty = false)
+    {
+        var result = new StringBuilder(content.Length);
+        var offset = 0;
+        foreach (var span in FindValues(content, tag, includeEmpty))
+        {
+            result.Append(content, offset, span.Index - offset);
+            if (span.IsEmpty)
+                result.Append(content, span.Index, span.Length - 2).Append('>').Append(value).Append("</").Append(span.QualifiedName).Append('>');
+            else
+                result.Append(content, span.Index, span.OpeningEnd - span.Index).Append(value)
+                    .Append(content, span.ClosingStart, span.Index + span.Length - span.ClosingStart);
+            offset = span.Index + span.Length;
+        }
+        return result.Append(content, offset, content.Length - offset).ToString();
+    }
 
     private static string InsertVersion(string content, string tag, string escapedVersion)
     {
-        var match = Regex.Match(content, "<PropertyGroup[^>]*>", RegexOptions.IgnoreCase);
-        if (!match.Success)
+        var group = MsBuildProjectXml.FindPropertyGroups(content).FirstOrDefault(span =>
+            span.Element.Parent == span.Element.Document?.Root && !span.Element.Attributes().Any(attribute =>
+                attribute.Name.LocalName.Equals("Condition", StringComparison.OrdinalIgnoreCase)));
+        var lineBreak = DetectLineBreak(content);
+        if (group.Element is null)
         {
-            return content + Environment.NewLine + $"  <PropertyGroup>{Environment.NewLine}    <{tag}>{escapedVersion}</{tag}>{Environment.NewLine}  </PropertyGroup>{Environment.NewLine}";
+            var root = MsBuildProjectXml.FindRoot(content);
+            var insert = $"{lineBreak}  <PropertyGroup>{lineBreak}    <{tag}>{escapedVersion}</{tag}>{lineBreak}  </PropertyGroup>{lineBreak}";
+            return root.IsEmpty ? ExpandEmptyElement(content, root, insert) : content.Insert(root.ClosingStart, insert);
         }
 
-        var insertAt = match.Index + match.Length;
-        var lineBreak = DetectLineBreak(content);
-        var indent = DetectIndentation(content, match.Index);
-        var insert = $"{lineBreak}{indent}  <{tag}>{escapedVersion}</{tag}>";
-        return content.Insert(insertAt, insert);
+        var indent = DetectIndentation(content, group.Index);
+        var property = $"{lineBreak}{indent}  <{tag}>{escapedVersion}</{tag}>";
+        return group.IsEmpty ? ExpandEmptyElement(content, group, property + lineBreak + indent) : content.Insert(group.OpeningEnd, property);
     }
+
+    private static string ExpandEmptyElement(string content, MsBuildProjectXml.ElementSpan span, string value)
+        => content.Substring(0, span.Index + span.Length - 2) + ">" + value + "</" + span.QualifiedName + ">" +
+            content.Substring(span.Index + span.Length);
 
     private static string InsertAfterVersionPrefix(string content, string tag, string escapedVersion)
     {
-        var match = Regex.Match(content, BuildVersionTagPattern("VersionPrefix"), RegexOptions.IgnoreCase);
-        if (!match.Success)
+        var prefix = FindValues(content, "VersionPrefix").FirstOrDefault(IsUnconditional);
+        if (prefix.Element is null)
             return content;
 
         var lineBreak = DetectLineBreak(content);
-        var lineStart = content.LastIndexOf('\n', Math.Max(0, match.Index - 1));
-        var indent = lineStart < 0 ? string.Empty : DetectIndentation(content, match.Index);
-        return content.Insert(match.Index + match.Length, $"{lineBreak}{indent}<{tag}>{escapedVersion}</{tag}>");
+        var indent = DetectIndentation(content, prefix.Index);
+        return content.Insert(prefix.Index + prefix.Length, $"{lineBreak}{indent}<{tag}>{escapedVersion}</{tag}>");
     }
 
     private static string DetectLineBreak(string content)

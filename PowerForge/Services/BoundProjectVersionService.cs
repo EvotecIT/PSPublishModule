@@ -4,20 +4,17 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Xml;
 using System.Xml.Linq;
 
 namespace PowerForge;
 
 /// <summary>Preserves project version references when a binding updates their imported MSBuild property.</summary>
-internal static class BoundProjectVersionService
+internal static partial class BoundProjectVersionService
 {
     private const RegexOptions MatchOptions = RegexOptions.CultureInvariant | RegexOptions.IgnoreCase;
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(2);
-    private static readonly Regex VersionElement = new(
-        @"<(?<tag>Version|PackageVersion)>(?<value>[^<]*)</\k<tag>>", MatchOptions, RegexTimeout);
     private static readonly Regex VersionReference = new(
-        @"<(?<tag>Version|PackageVersion)>\s*\$\((?<property>[A-Za-z_][A-Za-z0-9_.-]*)\)\s*</\k<tag>>",
+        @"^\s*\$\((?<property>[A-Za-z_][A-Za-z0-9_.-]*)\)\s*$",
         MatchOptions, RegexTimeout);
 
     internal static string PreserveReferences(
@@ -37,7 +34,7 @@ internal static class BoundProjectVersionService
         var composedProject = XDocument.Parse(updatedContent);
         ValidateComposition(projectPath, plannedContent, composedProject, resolvedVersion);
         var originalElements = FindVersionElements(originalContent);
-        if (!originalElements.Any(element => VersionReference.IsMatch(element.Value)))
+        if (!originalElements.Any(element => VersionReference.IsMatch(element.Element.Value)))
             return updatedContent;
 
         var propsPath = FindImportedProps(repositoryRoot, projectPath);
@@ -50,12 +47,12 @@ internal static class BoundProjectVersionService
             return updatedContent;
 
         var props = XDocument.Parse(binding.Update.UpdatedContent);
-        if (HasCustomImports(project) || HasImports(props))
+        if (HasCustomImports(project) || HasImports(props) || HasSdkImports(props))
             return updatedContent;
         var preserved = new Dictionary<int, string>();
         for (var index = 0; index < originalElements.Length; index++)
         {
-            var reference = VersionReference.Match(originalElements[index].Value);
+            var reference = VersionReference.Match(originalElements[index].Element.Value);
             if (!reference.Success)
                 continue;
             var propertyName = reference.Groups["property"].Value;
@@ -74,10 +71,11 @@ internal static class BoundProjectVersionService
             if (definitions.Length != 1 || definitions[0].Parent?.Parent != props.Root || definitions[0].AncestorsAndSelf().Any(element =>
                 !string.IsNullOrWhiteSpace((string?)element.Attribute("Condition"))))
                 throw new InvalidOperationException($"Bound MSBuild version property '{propertyName}' must have one unconditional definition in '{propsPath}'.");
+            ValidateVersionProperties(propsPath, props, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { propertyName });
             if (!string.Equals(definitions[0].Value.Trim(), resolvedVersion, StringComparison.Ordinal))
                 throw new InvalidOperationException($"Bound MSBuild version property '{propertyName}' does not match resolved version '{resolvedVersion}' for '{projectPath}'.");
 
-            preserved.Add(index, reference.Value);
+            preserved.Add(index, originalContent.Substring(originalElements[index].Index, originalElements[index].Length));
         }
         if (preserved.Count == 0)
             return updatedContent;
@@ -94,7 +92,7 @@ internal static class BoundProjectVersionService
             if (preserved.TryGetValue(index, out var reference))
                 restored.Append(reference);
             else
-                restored.Append(element.Value);
+                restored.Append(updatedContent, element.Index, element.Length);
             offset = element.Index + element.Length;
         }
         restored.Append(updatedContent, offset, updatedContent.Length - offset);
@@ -105,19 +103,18 @@ internal static class BoundProjectVersionService
         IsEvaluationProperty(element) &&
         string.Equals(element.Name.LocalName, propertyName, StringComparison.OrdinalIgnoreCase));
 
-    private static Match[] FindVersionElements(string content)
-    {
-        var versionStarts = FindPropertyOffsets(content, "Version");
-        versionStarts.UnionWith(FindPropertyOffsets(content, "PackageVersion"));
-        return VersionElement.Matches(content).Cast<Match>().Where(match => versionStarts.Contains(match.Index)).ToArray();
-    }
+    private static MsBuildProjectXml.ElementSpan[] FindVersionElements(string content) =>
+        MsBuildProjectXml.FindProperties(content, "Version").Concat(MsBuildProjectXml.FindProperties(content, "PackageVersion")).OrderBy(element => element.Index).ToArray();
 
-    private static bool IsEvaluationProperty(XElement element) => element.Parent?.Name.LocalName == "PropertyGroup" &&
-        !element.Ancestors().Any(ancestor => ancestor.Name.LocalName == "Target");
+    private static bool IsEvaluationProperty(XElement element) => MsBuildProjectXml.IsEvaluationProperty(element);
 
     private static bool HasImports(XDocument project) => project.Descendants().Any(element =>
         string.Equals(element.Name.LocalName, "Import", StringComparison.OrdinalIgnoreCase) &&
-        (element.Parent == project.Root || element.Parent?.Name.LocalName == "ImportGroup"));
+        (element.Parent == project.Root || (element.Parent?.Name.LocalName == "ImportGroup" && element.Parent.Parent == project.Root)));
+
+    private static bool HasSdkImports(XDocument project) =>
+        !string.IsNullOrWhiteSpace((string?)project.Root?.Attribute("Sdk")) ||
+        project.Root?.Elements().Any(element => element.Name.LocalName == "Sdk") == true;
 
     private static bool HasCustomImports(XDocument project) => HasImports(project) ||
         HasPropertyDefinition(project, "DirectoryBuildPropsPath") || HasPropertyDefinition(project, "ImportDirectoryBuildProps") ||
@@ -130,6 +127,7 @@ internal static class BoundProjectVersionService
     private static void ValidateComposition(
         string projectPath, string plannedContent, XDocument updated, string resolvedVersion)
     {
+        ValidateVersionProperties(projectPath, updated, VersionPropertyNames);
         static bool IsVersion(XElement element) => IsEvaluationProperty(element) &&
             new[] { "Version", "PackageVersion", "VersionPrefix", "VersionSuffix" }.Contains(element.Name.LocalName, StringComparer.OrdinalIgnoreCase);
         static IEnumerable<string> Location(XElement element) => element.AncestorsAndSelf().Reverse()
@@ -163,50 +161,20 @@ internal static class BoundProjectVersionService
     {
         if (bindings is null)
             return false;
-        var propertyStarts = FindPropertyOffsets(originalProps, propertyName);
-        var propertyElements = Regex.Matches(originalProps,
-            @"<" + Regex.Escape(propertyName) + @"(?=[\s/>])[^>]*(?:/\s*>|>[^<]*</" + Regex.Escape(propertyName) + @"\s*>)",
-            MatchOptions, RegexTimeout).Cast<Match>().Where(match => propertyStarts.Contains(match.Index)).ToArray();
+        var propertyElements = MsBuildProjectXml.FindProperties(originalProps, propertyName);
         foreach (var binding in bindings)
         {
             if (!string.Equals(Path.GetFullPath(Path.Combine(root, binding.Path.Trim())), propsPath, comparison))
                 continue;
             var matches = Regex.Matches(originalProps, binding.Pattern, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(2));
             foreach (Match match in matches)
-            foreach (Match property in propertyElements)
+            foreach (var property in propertyElements)
             {
                 if (match.Index < property.Index + property.Length && match.Index + match.Length > property.Index)
                     return true;
             }
         }
         return false;
-    }
-
-    private static HashSet<int> FindPropertyOffsets(string content, string propertyName)
-    {
-        // XML roles identify actual properties; source offsets retain the binding's
-        // text interval without mistaking items, tasks or comments for definitions.
-        var lineStarts = new List<int> { 0 };
-        for (var index = 0; index < content.Length; index++)
-        {
-            if (content[index] == '\r')
-            {
-                if (index + 1 < content.Length && content[index + 1] == '\n')
-                    index++;
-                lineStarts.Add(index + 1);
-            }
-            else if (content[index] == '\n')
-                lineStarts.Add(index + 1);
-        }
-        var document = XDocument.Parse(content, LoadOptions.SetLineInfo);
-        return new HashSet<int>(document.Descendants()
-            .Where(element => IsEvaluationProperty(element) &&
-                string.Equals(element.Name.LocalName, propertyName, StringComparison.OrdinalIgnoreCase))
-            .Select(element =>
-            {
-                var position = (IXmlLineInfo)element;
-                return lineStarts[position.LineNumber - 1] + position.LinePosition - 2;
-            }));
     }
 
     private static string? FindImportedProps(string repositoryRoot, string projectPath)
