@@ -2,13 +2,27 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $EvidencePath,
-    [ValidateSet('win-x64', 'linux-x64')] [string] $RuntimeIdentifier = 'win-x64',
+    [ValidateSet('win-x64', 'linux-x64')] [string] $RuntimeIdentifier,
     [ValidateRange(1, 32)] [int] $MaxParallelThreads = 4,
     [ValidateSet('Fast', 'Full')] [string] $Lane = 'Fast',
     [switch] $NoBuild
 )
 
 $ErrorActionPreference = 'Stop'
+$osArchitecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+$processArchitecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture
+$hostRuntimeIdentifier = if ($IsWindows) { 'win-x64' } elseif ($IsLinux) { 'linux-x64' } else { $null }
+if (-not $hostRuntimeIdentifier -or
+    $osArchitecture -ne [Runtime.InteropServices.Architecture]::X64 -or
+    $processArchitecture -ne [Runtime.InteropServices.Architecture]::X64) {
+    throw "Compiler qualification supports only Windows x64 and Linux x64 hosts running an x64 PowerShell process. Current OS: $([Runtime.InteropServices.RuntimeInformation]::OSDescription); OS architecture: $osArchitecture; process architecture: $processArchitecture."
+}
+if (-not $PSBoundParameters.ContainsKey('RuntimeIdentifier')) {
+    $RuntimeIdentifier = $hostRuntimeIdentifier
+}
+if ($RuntimeIdentifier -ne $hostRuntimeIdentifier) {
+    throw "Compiler qualification runtime '$RuntimeIdentifier' does not match the current host '$hostRuntimeIdentifier' (PowerShell process architecture: $processArchitecture). Use the matching runtime or omit -RuntimeIdentifier."
+}
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $EvidencePath = [IO.Path]::GetFullPath($EvidencePath)
 New-Item -ItemType Directory -Path $EvidencePath -Force | Out-Null
