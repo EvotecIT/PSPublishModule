@@ -68,7 +68,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 $records=@(Read-HostEnum -Value $token -Trace $trace -System:$system)
                 [pscustomobject]@{system=$system;fail=$fail;records=$records;callbacks=@([HostEnumTokenConverter]::Trace.ToArray())}|ConvertTo-Json -Depth 10 -Compress
             }}
-            'simple='+(Read-SimpleHostEnum -Value 1).GetType().FullName
+            [pscustomobject]@{simple=@(Read-SimpleHostEnum -Value 1 2>&1 | ForEach-Object {
+                if($_ -is [Management.Automation.ErrorRecord]){
+                    [pscustomobject]@{error=$_.FullyQualifiedErrorId;type=$_.Exception.GetType().FullName;message=$_.Exception.Message}
+                }else{[pscustomobject]@{type=$_.GetType().FullName;value=[int]$_}}
+            })}|ConvertTo-Json -Depth 10 -Compress
             """;
         var original = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
             fixture.RootPath, "host-enum-original");
@@ -79,21 +83,40 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var actual = generated.StandardOutput.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(29, expected.Length);
         Assert.Equal(expected.Length, actual.Length);
-        for(var i=0;i<28;i++) Assert.True(JsonNode.DeepEquals(JsonNode.Parse(expected[i]), JsonNode.Parse(actual[i])),
+        for(var i=0;i<29;i++) Assert.True(JsonNode.DeepEquals(JsonNode.Parse(expected[i]), JsonNode.Parse(actual[i])),
             "Original: " + expected[i] + Environment.NewLine + "Generated: " + actual[i]);
-        Assert.Equal(expected[28], actual[28]);
-        Assert.Contains("simple=Microsoft.PowerShell.Commands.PCSystemType", actual[28]);
         Assert.Equal(original.StandardError, generated.StandardError);
-        if(host == "powershell.exe")
+        var simple = Assert.Single(JsonNode.Parse(actual[28])!["simple"]!.AsArray())!;
+        if (OperatingSystem.IsWindows())
         {
-            Assert.Contains("TypeNotFound", actual[0]);
-            Assert.DoesNotContain("operand", actual[0]);
+            Assert.Equal("Microsoft.PowerShell.Commands.PCSystemType", simple["type"]!.GetValue<string>());
+            Assert.Equal(1, simple["value"]!.GetValue<int>());
+            if(host == "powershell.exe")
+            {
+                Assert.Contains("TypeNotFound", actual[0]);
+                Assert.DoesNotContain("operand", actual[0]);
+            }
+            Assert.Contains("Microsoft.PowerShell.Commands.OSProductSuite", actual[24]);
+            Assert.Single(JsonNode.Parse(actual[24])!["callbacks"]!.AsArray());
+            Assert.Single(JsonNode.Parse(actual[25])!["callbacks"]!.AsArray());
+            Assert.Contains("offline-enum-callback-failure", actual[25]);
+            Assert.Contains("operand", actual[13]);
         }
-        Assert.Contains("Microsoft.PowerShell.Commands.OSProductSuite", actual[24]);
-        Assert.Single(JsonNode.Parse(actual[24])!["callbacks"]!.AsArray());
-        Assert.Single(JsonNode.Parse(actual[25])!["callbacks"]!.AsArray());
-        Assert.Contains("offline-enum-callback-failure", actual[25]);
-        Assert.Contains("operand", actual[13]);
+        else
+        {
+            // These Management enums are absent on Unix even after module import.
+            // Resolution must fail before operand evaluation or converter callbacks.
+            Assert.Contains("TypeNotFound", simple["error"]!.GetValue<string>(), StringComparison.Ordinal);
+            for (var i = 0; i < 28; i++)
+            {
+                var record = JsonNode.Parse(actual[i])!;
+                Assert.Contains("TypeNotFound", record["records"]![0]!["error"]!.GetValue<string>(), StringComparison.Ordinal);
+                Assert.Equal("prior", record["records"]![1]!["copy"]!.GetValue<string>());
+                Assert.Equal(new[] { "finally" }, record["records"]![1]!["trace"]!.AsArray()
+                    .Select(static value => value!.GetValue<string>()));
+                if (i >= 24) Assert.Empty(record["callbacks"]!.AsArray());
+            }
+        }
         Assert.Contains("finally", actual[13]);
     }
 
