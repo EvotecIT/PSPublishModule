@@ -10,12 +10,17 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
     private const int UnixRegularFile = 0x8000;
     private const int UnixSymbolicLink = 0xA000;
 
-    /// <summary>Authenticates portable read/write/execute bits without carrying privileged Unix modes.</summary>
+    /// <summary>Rejects privileged Unix modes before authenticating portable read/write/execute bits.</summary>
     private static int? GetPortableUnixPermissions(string path)
     {
 #if NET8_0_OR_GREATER
         if (!OperatingSystem.IsWindows())
-            return (int)File.GetUnixFileMode(path) & PortableUnixPermissionMask;
+        {
+            var actual = (int)File.GetUnixFileMode(path);
+            if ((actual & PrivilegedUnixPermissionMask) != 0)
+                throw new InvalidDataException($"Artifact file '{path}' has privileged Unix permission bits.");
+            return actual & PortableUnixPermissionMask;
+        }
 #endif
         return null;
     }
