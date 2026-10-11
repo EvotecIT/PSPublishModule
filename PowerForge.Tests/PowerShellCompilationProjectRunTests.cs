@@ -5,11 +5,10 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
-    [Fact]
+    [WindowsFact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Project_ArtifactBuildCancellationBeforePublicationPreservesPriorOutput()
     {
-        if (!OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("return 7", compactPath: true);
         var spec = new PowerShellCompilationBuildSpec(fixture.ScriptPath, fixture.OutputPath, "CanceledBuild",
             PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Strict,
@@ -31,11 +30,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         foreach (var pair in prior) Assert.Equal(pair.Value, File.ReadAllBytes(pair.Key));
     }
 
-    [Fact]
+    [WindowsFact]
     [Trait("Category", "PowerShellCompilerGate")]
     public async Task Project_RunRebuildsEditedSourceReusesCacheAndRejectsStaleExecution()
     {
-        if (!OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("return 7", compactPath: true);
         var (project, artifact) = CreateRunProject(fixture, PowerShellCompilationMode.Strict);
         var workflow = new PowerShellCompilationProjectWorkflowService();
@@ -80,11 +78,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         AssertRun(await workflow.RunAsync(project, options, cancellationToken: cancellation.Token), "11");
     }
 
-    [Fact]
+    [WindowsFact]
     [Trait("Category", "PowerShellCompilerGate")]
     public async Task Project_WatchRecoversAfterInvalidSourceAndStopsOnCancellation()
     {
-        if (!OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("return 1", compactPath: true);
         var (project, _) = CreateRunProject(fixture, PowerShellCompilationMode.Strict);
         var workflow = new PowerShellCompilationProjectWorkflowService();

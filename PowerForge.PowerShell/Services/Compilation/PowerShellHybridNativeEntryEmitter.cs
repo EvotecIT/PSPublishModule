@@ -30,13 +30,12 @@ internal static class PowerShellHybridNativeEntryEmitter
     }
 
     internal static string LauncherInvocation()
-        => "            var named = new Hashtable(StringComparer.OrdinalIgnoreCase);\n" +
-           "            var positional = new List<object?>();\n" +
+        => "            var arguments = new List<System.Management.Automation.Runspaces.CommandParameter>();\n" +
            "            foreach (var argument in ParseArguments(args))\n" +
            "            {\n" +
-           "                if (argument.Name is null) positional.Add(argument.Value);\n" +
-           "                else named.Add(argument.Name, argument.Value ?? new SwitchParameter(true));\n" +
+           "                arguments.Add(new System.Management.Automation.Runspaces.CommandParameter(argument.Name, argument.Value));\n" +
            "            }\n" +
-           "            powerShell.AddScript(\"param($Named,$Positional) try { $entry = [PowerForge.Compiled.CompiledNativeScriptEntry]::Create($ExecutionContext.SessionState,[PowerForge.Compiled.PowerForgePackagedEntryPoint]::Path); & $entry @Named @Positional } catch { throw }\", useLocalScope: false)\n" +
-           "                .AddParameter(\"Named\", named).AddParameter(\"Positional\", positional.ToArray());";
+           "            var invocation = global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.CreateScriptEntryInvocation(arguments, SwitchParameters, out var values);\n" +
+           "            powerShell.AddScript(\"param($Invocation,$Values) try { $entry = [PowerForge.Compiled.CompiledNativeScriptEntry]::Create($ExecutionContext.SessionState,[PowerForge.Compiled.PowerForgePackagedEntryPoint]::Path); & $Invocation $entry $Values } catch { throw }\", useLocalScope: false)\n" +
+           "                .AddParameter(\"Invocation\", invocation).AddParameter(\"Values\", values);";
 }

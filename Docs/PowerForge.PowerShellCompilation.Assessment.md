@@ -1,8 +1,32 @@
 # PowerShell compilation readiness assessment
 
-Updated: 2026-10-03. M28 grouped diagnostics implementation: `a30e72b79a579ed3d5796f6833c2161b8d4569b4`. M28 NuGet packaging implementation: `7ba90d82352152195472e5526e57fc4f18adbdbc`. M28 run/watch implementation: `3823979bd305cb530fd5586e75eff46dc49f5db8` on `feature/powershell-compiler`. Earlier audit baseline: `419620a88000a714cfb4450821a02fb8e5364583`; corrections: `18e443a1401611e7e144c39cc52b27f3e9c25ab0`; stopping-fixture consolidation: `3cfa5edadbf0a9352924c2d45d9e017776d65ed1`.
+Updated: 2026-10-11. Current audit baseline: `f5398d8da`. The compiler continuation is integrated into `main` through [PR #1009](https://github.com/EvotecIT/PSPublishModule/pull/1009), merged October 4 as `3640ba9c20d17671a63716795a89527e68c5f006`. Earlier qualification records below retain their original candidate identities.
 
-The compiler has a substantial semantic architecture and useful bounded Hybrid/Strict workflows. The September 22 audit findings are closed with implementation and artifact evidence. M28's local development-loop gate includes executable run/watch, Strict library NuGet packaging, grouped project diagnostics, and a Hybrid module consumer quickstart on both supported Windows PowerShell hosts. M29 completed its pinned local coverage gate; M29a owns the current common-form qualification work. Direct source debugging remains unqualified and deferred; integration, public distribution, and additional platform qualification remain separate work.
+The compiler has a substantial semantic architecture and useful bounded Hybrid/Strict workflows. M24–M28 provide bounded semantic, artifact, and development-loop foundations; M29 completed its pinned local portfolio gate. The active work stabilizes admitted behavior and refreshes qualification before further common-form expansion. Direct source debugging remains unqualified and deferred. Public-feed lifecycle, signed generated executables, and additional platform qualification retain separate gates.
+
+## October 11 admitted-contract audit
+
+The review covered roadmap consistency, native script-entry arguments, final unit identities, and compiler-gate evidence. It is a bounded audit of those owners, not an exhaustive proof of PowerShell compatibility. Three read-only discovery reviews informed the selected work; final candidate validation remains distinct from that discovery.
+
+The canonical parser → binder → immutable bound IR → analysis → lowering → C# backend remains the implementation route. The significant post-integration lifecycle validation correction in [PR #1026](https://github.com/EvotecIT/PSPublishModule/pull/1026) reinforces the priority: accepted code and wrapper contracts need correctness proof before another syntax family receives admission. An emitted Hybrid method can still execute hosted PowerShell operations.
+
+Three concrete findings have corrections in this audit:
+
+- **Native entry arguments:** the launcher grouped named arguments into a hashtable and moved positional arguments into a separate array. An emitted Windows x64/net10.0 artifact reproduced `-Unknown` becoming `-Unknown:` in `$args`; the same grouping rejected repeated unknown names and reordered remaining arguments. The native invocation owner now constructs ordered command AST nodes and passes argument values separately as data. Native call-operator dispatch still owns script binding and authorization. The shared process parser's existing named-argument/value and positional-only delimiter rules remain unchanged.
+- **Same-line unit identity:** `function Get-Duplicate { return 1 }; function Get-Duplicate { return 2 }` crashed final Hybrid explanation because both ledger entries had the same path/kind/name/line ID. File-local occurrence identity now distinguishes repeated entries in source order. Unique units retain their previous IDs; both duplicate definitions retain their existing hosted collision disposition.
+- **Platform evidence:** nine Windows-only workflow test methods returned immediately on Linux and were counted as passed. They now report explicit Windows fact/theory skips. The gate requires portable families on Linux and records excluded Windows workflow qualifications in `host-capabilities.json`. The historical Ubuntu total of 291 tests and one skip does not establish execution of those Windows workflows. Normal CI runs the focused compiler gate on Windows; a local Linux run is separate evidence.
+
+The October 3 census remains **545/565 net10.0 functions**, **542/565 net472 functions**, and **130/183 external-workload functions** at its recorded source identity. It is analysis evidence and has not been refreshed for this audit. Neither the launcher correction nor duplicate-definition identity admits another source form.
+
+Live feed discovery on October 11 confirms PSPublishModule, PowerForge.Build, and PowerForge.PowerShell **3.0.166**, with GitHub release `v3.0.166` published October 10. Those observations supersede 3.0.155 as a proposed active release number. They do not repeat the signed eleven-package local-feed lifecycle or qualify installed public providers and generated executables. The 3.0.154/155 records below remain historical candidate evidence.
+
+The [current continuation](PowerForge.PowerShellCompilation.NextMilestones.md#current-continuation-october-11-audit) owns the remaining checklist. Focused generated-artifact and platform checks qualify these corrections; stable-candidate Full qualification, public installed lifecycle, signing, and additional physical targets remain explicit work.
+
+## Historical qualification records
+
+The following records describe the candidates and outstanding work at each checkpoint. Pre-merge integration tasks and proposed version numbers are historical; use the current continuation above for actionable work.
+
+M28 grouped diagnostics implementation: `a30e72b79a579ed3d5796f6833c2161b8d4569b4`; NuGet packaging: `7ba90d82352152195472e5526e57fc4f18adbdbc`; run/watch: `3823979bd305cb530fd5586e75eff46dc49f5db8`. Earlier audit baseline: `419620a88000a714cfb4450821a02fb8e5364583`; corrections: `18e443a1401611e7e144c39cc52b27f3e9c25ab0`; stopping-fixture consolidation: `3cfa5edadbf0a9352924c2d45d9e017776d65ed1`.
 
 The September 22 independent read-only audit covered its three baseline implementation commits (`bc925783a`, `c589eea3c`, `419620a88`) and surrounding contracts. Primary inspection also covered target policy, native host bridges, the compiler gate, CI wiring, and roadmap consistency. This is not an exhaustive audit of all 975 changed files in that continuation. One targeted read-only confirmation of the corrective implementation reported no actionable P0–P3 findings.
 
@@ -62,7 +86,7 @@ The separate Windows x64 Strict corpus passes **6/6** analyze, reviewed-lock, bu
 
 An initial baseline/oracle expansion encountered insufficient C: space. Its partial results are excluded; the detached baseline was rebuilt with task-owned artifacts and runtime temporary data on D:. This is a local storage incident, not compiler-failure evidence. The completed fast-gate result precedes that incident.
 
-The initial reconciliation preceded milestone implementation. Its failed recurring-gate result and incompatible historical host pin are superseded by the goal checkpoint above; they remain recorded as the discovery baseline. The [next two deliveries](PowerForge.PowerShellCompilation.NextMilestones.md#recommended-next-two-deliveries-october-3-assessment) track M29a contract/gate closure and the bounded M30 Windows distribution baseline.
+The initial reconciliation preceded milestone implementation. Its failed recurring-gate result and incompatible historical host pin are superseded by the goal checkpoint above; they remain recorded as the discovery baseline. The [next two deliveries](PowerForge.PowerShellCompilation.NextMilestones.md#current-continuation-october-11-audit) track M29a contract/gate closure and the bounded M30 Windows distribution baseline.
 
 ## Findings and corrective evidence
 

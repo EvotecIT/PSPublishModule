@@ -5,11 +5,10 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeCliPowerShellCompilationTests
 {
-    [Fact]
+    [WindowsFact]
     [Trait("Category", "PowerShellCompilerGate")]
     public async Task ProjectRunCli_PreservesBinaryStdinStdoutArgumentsStderrAndExitCode()
     {
-        if (!OperatingSystem.IsWindows()) return;
         var root = Path.Combine(Path.GetTempPath(), "PFC", Guid.NewGuid().ToString("N")[..12], "source space ż");
         Directory.CreateDirectory(root);
         try

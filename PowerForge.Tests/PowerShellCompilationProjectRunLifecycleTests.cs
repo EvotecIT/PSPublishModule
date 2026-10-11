@@ -5,13 +5,12 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
-    [Theory]
+    [WindowsTheory]
     [InlineData(false)]
     [InlineData(true)]
     [Trait("Category", "PowerShellCompilerGate")]
     public async Task Project_RunRejectsArtifactReplacementAtLaunchBoundary(bool replaceExecutable)
     {
-        if (!OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("[IO.File]::ReadAllText(\"$PSScriptRoot/data.txt\")", compactPath: true);
         File.WriteAllText(Path.Combine(fixture.RootPath, "data.txt"), "original");
         var (project, artifact) = CreateRunProject(fixture, PowerShellCompilationMode.Package);
@@ -45,11 +44,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains("Artifact output changed before launch", result.Error);
     }
 
-    [Fact]
+    [WindowsFact]
     [Trait("Category", "PowerShellCompilerGate")]
     public async Task Project_RunInvalidatesCalleesResourcesAndRejectsChangedProjectContract()
     {
-        if (!OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("""
             . "$PSScriptRoot/helper.ps1"
             Get-LocalValue
@@ -89,11 +87,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains("restore", contract.Error, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
+    [WindowsFact]
     [Trait("Category", "PowerShellCompilerGate")]
     public async Task Project_WatchStopsRunningApplicationAndDescendantBeforeRebuildAndCancellation()
     {
-        if (!OperatingSystem.IsWindows()) return;
         const string source = """
             $start = [Diagnostics.ProcessStartInfo]::new('pwsh')
             $start.Arguments = '-NoProfile -NonInteractive -Command Start-Sleep -Seconds 300'

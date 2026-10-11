@@ -4,13 +4,12 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeCliPowerShellCompilationTests
 {
-    [Theory]
+    [WindowsTheory]
     [InlineData(PowerShellCompilationMode.Package)]
     [InlineData(PowerShellCompilationMode.Strict)]
     [Trait("Category", "PowerShellCompilerGate")]
     public async Task ProjectDiagnosticsCli_UsesAcquiredRuntimePackWithEmptyGlobalCache(PowerShellCompilationMode mode)
     {
-        if (!OperatingSystem.IsWindows()) return;
         using var fixture = PowerShellCompilationProjectDiagnosticsTests.Fixture.Create(
             "function Get-Number { return 7 }", PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict);
         var source = Path.Combine(fixture.Root, "main.ps1");
