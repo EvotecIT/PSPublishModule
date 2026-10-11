@@ -23,6 +23,15 @@ shared coordination lock, before boot, readiness, or foreground execution. A
 pre-existing booted device is rejected without changing it or replacing the
 previous ownership receipt. The default still permits deliberate reuse.
 
+Automation can set `POWERFORGE_APPLE_SIMULATOR_REQUIRE_SHUTDOWN=1` to enforce
+the same requirement for every CLI `run`, including callers that omit the flag.
+An unset or empty value preserves the default; other values fail before the
+session starts. JSON run results record `requireInitialShutdown` alongside the
+ownership receipt so capture provenance can verify the effective requirement.
+The persisted receipt format stays compatible with older operators. The Apple
+screenshot workflow sets this policy for configured simulator captures and
+requires matching guarded results.
+
 Boot/discovery/readiness commands default to 120 seconds each, command execution
 to 1800 seconds, and the entire release attempt to 30 seconds. Override them with
 `--simulator-timeout-seconds`, `--timeout-seconds`, and `--cleanup-timeout-seconds`.

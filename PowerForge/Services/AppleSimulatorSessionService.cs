@@ -53,7 +53,10 @@ public sealed partial class AppleSimulatorSessionService
             StartedAtUtc = DateTimeOffset.UtcNow, DeviceId = deviceId, DeviceSetPath = deviceSet,
             InitialState = initial
         };
-        var result = new AppleSimulatorSessionResult { Receipt = receipt, ReceiptPath = ReceiptPath(root) };
+        var result = new AppleSimulatorSessionResult
+        {
+            Receipt = receipt, ReceiptPath = ReceiptPath(root), RequireInitialShutdown = request.RequireInitialShutdown
+        };
         WriteReceipt(root, receipt);
         try
         {
@@ -85,6 +88,7 @@ public sealed partial class AppleSimulatorSessionService
                 }
                 catch (ArgumentException) { /* A short-lived child may already have exited. */ }
                 catch (InvalidOperationException) { /* Preserve the PID with unknown identity for crash reconciliation. */ }
+                catch (System.ComponentModel.Win32Exception) { /* macOS can lose process metadata after a fast child exit. */ }
                 WriteReceipt(root, receipt);
             });
             result.CommandResult = await _commandRunner.RunAsync(foreground, cancellationToken).ConfigureAwait(false);

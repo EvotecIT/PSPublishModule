@@ -53,6 +53,7 @@ public sealed class AppleSimulatorSessionServiceTests
         var result = await fixture.Service.RunAsync(fixture.Request());
         Assert.True(result.Success);
         Assert.False(result.Receipt.BootRequested);
+        Assert.False(result.RequireInitialShutdown);
         Assert.Equal("Booted", fixture.Devices[Device]);
         Assert.DoesNotContain(fixture.SimulatorRequests, request => request.Arguments[3] is "boot" or "shutdown");
         Assert.DoesNotContain(fixture.SimulatorRequests, request => request.Arguments.Contains("-b"));
@@ -89,6 +90,7 @@ public sealed class AppleSimulatorSessionServiceTests
         request.RequireInitialShutdown = true;
         var result = await fixture.Service.RunAsync(request);
         Assert.True(result.Success);
+        Assert.True(result.RequireInitialShutdown);
         Assert.True(result.Receipt.BootSucceeded);
         Assert.True(result.Receipt.CleanupSucceeded);
         Assert.Equal("Shutdown", fixture.Devices[Device]);

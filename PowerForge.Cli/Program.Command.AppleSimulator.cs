@@ -51,11 +51,14 @@ internal static partial class Program
                 return 0;
             }
             if (separator < 0 || separator + 1 >= args.Length) throw new ArgumentException("run requires -- followed by a foreground executable and arguments.");
+            var shutdownPolicy = Environment.GetEnvironmentVariable("POWERFORGE_APPLE_SIMULATOR_REQUIRE_SHUTDOWN");
+            if (shutdownPolicy is not (null or "" or "1"))
+                throw new ArgumentException("POWERFORGE_APPLE_SIMULATOR_REQUIRE_SHUTDOWN must be 1 or unset.");
             var request = new AppleSimulatorSessionRequest
             {
                 DeviceId = RequiredAppleSimulatorValue(values, "--device"), Owner = RequiredAppleSimulatorValue(values, "--owner"),
                 StateRoot = stateRoot, DeviceSetPath = values.TryGetValue("--device-set", out var deviceSet) ? deviceSet : null,
-                RequireInitialShutdown = values.ContainsKey("--require-shutdown"),
+                RequireInitialShutdown = values.ContainsKey("--require-shutdown") || shutdownPolicy == "1",
                 SimulatorTimeout = AppleSimulatorTimeout(values, "--simulator-timeout-seconds", 120),
                 CleanupTimeout = AppleSimulatorTimeout(values, "--cleanup-timeout-seconds", 30),
                 Command = new ProcessRunRequest(args[separator + 1], Directory.GetCurrentDirectory(), args.Skip(separator + 2).ToArray(),

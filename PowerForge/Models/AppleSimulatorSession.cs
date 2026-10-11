@@ -65,6 +65,8 @@ public sealed class AppleSimulatorSessionReceipt
 /// <summary>Validation outcome and separately visible cleanup evidence.</summary>
 public sealed class AppleSimulatorSessionResult
 {
+    /// <summary>Effective Shutdown precondition checked before boot, readiness, or foreground execution; not persisted in shared receipts.</summary>
+    public bool RequireInitialShutdown { get; set; }
     /// <summary>Final persisted receipt.</summary>
     public AppleSimulatorSessionReceipt Receipt { get; set; } = new();
     /// <summary>Exact persisted receipt location.</summary>

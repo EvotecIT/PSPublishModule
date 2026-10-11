@@ -26,7 +26,7 @@ on:
         default: build/appstore-screenshots
         type: string
       simulator_tool_ref:
-        description: Exact PowerForge commit providing apple-simulator --require-shutdown; blank does not provision a lifecycle tool.
+        description: Exact PowerForge commit providing enforced Shutdown policy and guarded session results; blank does not provision a lifecycle tool.
         required: false
         default: ""
         type: string
@@ -86,7 +86,7 @@ jobs:
           if ($devices -isnot [Collections.IDictionary]) { throw 'simulator_devices_json must be an object.' }
           foreach ($entry in $devices.GetEnumerator()) {
             $device = [guid]::Empty
-            if ($entry.Key -notmatch '^[a-z][a-z0-9_-]{0,39}$' -or
+            if ($entry.Key -cnotmatch '^[a-z][a-z0-9_-]{0,39}$' -or
                 -not [guid]::TryParseExact([string]$entry.Value, 'D', [ref]$device) -or $device -eq [guid]::Empty) {
               throw 'Each capture role must select one exact nonempty simulator UUID.'
             }
@@ -198,6 +198,8 @@ jobs:
 
           $devices = $env:POWERFORGE_CAPTURE_SIMULATORS | ConvertFrom-Json -AsHashtable
           if ($devices.Count -gt 0) {
+            # The provisioned CLI enforces this even if a consumer omits the flag.
+            $env:POWERFORGE_APPLE_SIMULATOR_REQUIRE_SHUTDOWN = '1'
             $inventoryPath = Join-Path $env:RUNNER_TEMP 'powerforge-capture-simulator-inventory.json'
             $errorPath = Join-Path $env:RUNNER_TEMP 'powerforge-capture-simulator-inventory-error.txt'
             $discovery = Start-Process -FilePath xcrun -ArgumentList @('simctl', 'list', 'devices', '--json') -RedirectStandardOutput $inventoryPath -RedirectStandardError $errorPath -PassThru
@@ -259,7 +261,7 @@ jobs:
             if ($capture.command -ne 'apple-simulator.run' -or $capture.success -ne $true -or $capture.exitCode -ne 0 -or
                 $receipt.schemaVersion -ne 1 -or $receipt.deviceId -ne $entry.Value -or $receipt.owner -cne $expectedOwner -or
                 $started -lt $captureStartedAt -or $completed -lt $started -or $completed -gt [DateTimeOffset]::UtcNow -or
-                $receipt.initialState -ne 'Shutdown' -or $receipt.bootSucceeded -ne $true -or
+                $capture.result.requireInitialShutdown -ne $true -or $receipt.initialState -ne 'Shutdown' -or $receipt.bootSucceeded -ne $true -or
                 $receipt.commandExitCode -ne 0 -or $receipt.cleanupSucceeded -ne $true -or $receipt.finalState -ne 'Shutdown') {
               throw "Simulator capture role '$($entry.Key)' lacks a matching successful, released session from this capture."
             }
@@ -269,6 +271,7 @@ jobs:
               sessionId = $receipt.sessionId
               owner = $receipt.owner
               initialState = $receipt.initialState
+              requireInitialShutdown = $capture.result.requireInitialShutdown
               finalState = $receipt.finalState
               receiptSha256 = (Get-FileHash -LiteralPath $receiptPath -Algorithm SHA256).Hash.ToLowerInvariant()
             }
