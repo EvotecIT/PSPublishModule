@@ -43,6 +43,8 @@ public sealed partial class AppleSimulatorSessionService
         var initial = await GetDeviceStateAsync(deviceId, deviceSet, request.SimulatorTimeout, cancellationToken).ConfigureAwait(false);
         if (initial is not ("Shutdown" or "Booted"))
             throw new InvalidOperationException($"Simulator {deviceId} is {initial}; wait for a stable Shutdown or Booted state.");
+        if (request.RequireInitialShutdown && initial != "Shutdown")
+            throw new InvalidOperationException("This simulator session requires initial Shutdown; preserve the pre-existing booted device.");
         using var owner = Process.GetCurrentProcess();
         var receipt = new AppleSimulatorSessionReceipt
         {
@@ -51,7 +53,10 @@ public sealed partial class AppleSimulatorSessionService
             StartedAtUtc = DateTimeOffset.UtcNow, DeviceId = deviceId, DeviceSetPath = deviceSet,
             InitialState = initial
         };
-        var result = new AppleSimulatorSessionResult { Receipt = receipt, ReceiptPath = ReceiptPath(root) };
+        var result = new AppleSimulatorSessionResult
+        {
+            Receipt = receipt, ReceiptPath = ReceiptPath(root), RequireInitialShutdown = request.RequireInitialShutdown
+        };
         WriteReceipt(root, receipt);
         try
         {
@@ -83,6 +88,7 @@ public sealed partial class AppleSimulatorSessionService
                 }
                 catch (ArgumentException) { /* A short-lived child may already have exited. */ }
                 catch (InvalidOperationException) { /* Preserve the PID with unknown identity for crash reconciliation. */ }
+                catch (System.ComponentModel.Win32Exception) { /* macOS can lose process metadata after a fast child exit. */ }
                 WriteReceipt(root, receipt);
             });
             result.CommandResult = await _commandRunner.RunAsync(foreground, cancellationToken).ConfigureAwait(false);
@@ -102,6 +108,11 @@ public sealed partial class AppleSimulatorSessionService
         finally
         {
             await ReleaseAsync(receipt, request.CleanupTimeout, result).ConfigureAwait(false);
+            if (cancellationToken.IsCancellationRequested)
+            {
+                receipt.Outcome = "canceled";
+                result.Error ??= "Simulator validation canceled.";
+            }
             receipt.CompletedAtUtc = DateTimeOffset.UtcNow;
             if (!receipt.CleanupSucceeded && receipt.Outcome == "succeeded") receipt.Outcome = "cleanup-incomplete";
             WriteReceipt(root, receipt);

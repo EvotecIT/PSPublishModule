@@ -55,6 +55,7 @@ public sealed partial class AppleSimulatorSessionService
         var state = await GetDeviceStateAsync(receipt.DeviceId, receipt.DeviceSetPath, TimeSpan.FromSeconds(30), cancellationToken).ConfigureAwait(false);
         if (state != "Shutdown" && !(state == "Booted" && receipt.InitialState == "Booted" && !receipt.BootRequested))
             throw new InvalidOperationException("Owned or ambiguous simulator boot must be independently resolved to Shutdown before acknowledgment.");
+        cancellationToken.ThrowIfCancellationRequested();
         receipt.FinalState = state;
         receipt.CleanupSucceeded = true;
         receipt.CompletedAtUtc = DateTimeOffset.UtcNow;
