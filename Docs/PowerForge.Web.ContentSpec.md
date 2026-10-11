@@ -970,6 +970,9 @@ themes/nova/assets/app.css
     "Breadcrumbs": true,
     "Website": true,
     "Organization": true,
+    "WebPage": true,
+    "OrganizationName": "Example Software",
+    "OrganizationUrl": "https://publisher.example/",
     "OrganizationLegalName": "Example Software Ltd.",
     "OrganizationDescription": "AI-powered developer tooling.",
     "OrganizationLogo": "/assets/brand/logo.png",
@@ -984,12 +987,15 @@ themes/nova/assets/app.css
     "FaqPage": true,
     "HowTo": true,
     "SoftwareApplication": true,
+    "SoftwareSourceCode": true,
     "Product": true,
     "NewsArticle": true
   }
 }
 ```
 When enabled in `site.json`, social tags and structured data are emitted by default for pages.
+See [Structured data](PowerForge.Web.StructuredData.md) for linked publisher/page
+identities, data-driven Scriban metadata, subscription offers and library profiles.
 When `Social.AutoGenerateCards` is `true`, PowerForge.Web generates PNG social cards from
 page title/description and uses them for `og:image`/`twitter:image` (unless a page sets `meta.social_image`).
 By default this applies to share-priority pages (`home`, section pages, `pages` collection, editorial collections like `blog`/`news`).
@@ -1089,7 +1095,7 @@ Recommended generated-card presets for owned sites:
 - Docs pages: `style: docs`, `variant: shelf`.
 - Blog/news/RSS/feed pages: `style: blog` for editorial pages, `style: feed` / `variant: feed` for feed landing pages.
 - Changelog/release pages: `style: release`, `variant: timeline`.
-- Benchmark/status/Syncse-style system pages: `style: benchmark`, `variant: metrics`.
+- Benchmark/status system pages: `style: benchmark`, `variant: metrics`.
 - QR/barcode/code-generation pages: `style: code`, `variant: code`, with `code`, `download`, `globe`, or `check` metrics as appropriate.
 
 Generated card design guidelines:

@@ -700,6 +700,9 @@
         "Breadcrumbs": { "type": "boolean" },
         "Website": { "type": "boolean" },
         "Organization": { "type": "boolean" },
+        "WebPage": { "type": "boolean" },
+        "OrganizationName": { "type": "string" },
+        "OrganizationUrl": { "type": "string" },
         "OrganizationLegalName": { "type": "string" },
         "OrganizationDescription": { "type": "string" },
         "OrganizationLogo": { "type": "string" },
@@ -711,6 +714,7 @@
         "FaqPage": { "type": "boolean" },
         "HowTo": { "type": "boolean" },
         "SoftwareApplication": { "type": "boolean" },
+        "SoftwareSourceCode": { "type": "boolean" },
         "Product": { "type": "boolean" },
         "NewsArticle": { "type": "boolean" }
       }

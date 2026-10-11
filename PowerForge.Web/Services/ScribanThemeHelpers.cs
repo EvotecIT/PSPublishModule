@@ -8,7 +8,7 @@ namespace PowerForge.Web;
 /// Helper methods exposed to Scriban templates as <c>pf</c>.
 /// These helpers exist to keep theme navigation rendering consistent across sites.
 /// </summary>
-internal sealed class ScribanThemeHelpers
+internal sealed partial class ScribanThemeHelpers
 {
     private readonly ThemeRenderContext _context;
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

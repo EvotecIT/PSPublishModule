@@ -89,8 +89,9 @@ Legend:
   - Code: `PowerForge.Web/Services/WebSeoDoctor.cs`, `PowerForge.Web.Cli/WebPipelineRunner.Tasks.SeoDoctor.cs`
 - **Have**: IndexNow submission pipeline step (`indexnow`) for canonical URL push (batch/retry/dry-run/report + changed-file scoping).
   - Code: `PowerForge.Web.Cli/WebPipelineRunner.Tasks.IndexNow.cs`, `PowerForge.Web.Cli/IndexNowSubmitter.cs`
-- **Have**: SEO search templates + preview artifact and expanded JSON-LD profile emitters (`FAQPage`, `HowTo`, `Product`, `SoftwareApplication`, `NewsArticle`).
-  - Code: `PowerForge.Web/Services/WebSiteBuilder.Seo.cs`, `PowerForge.Web/Services/WebSiteBuilder.RenderAssetsAndRouting.cs`, `PowerForge.Web/Services/WebSiteBuilder.StructuredDataProfiles.cs`
+- **Have**: SEO search templates + preview artifact and JSON-LD profile emitters (`FAQPage`, `HowTo`, `Product`, `SoftwareApplication`, `SoftwareSourceCode`, `NewsArticle`), opt-in linked page/publisher identities, and the data-driven Scriban helper `pf.structured_data`.
+  - Code: `PowerForge.Web/Services/WebSiteBuilder.Seo.cs`, `PowerForge.Web/Services/WebSiteBuilder.StructuredData.cs`, `PowerForge.Web/Services/WebSiteBuilder.StructuredDataProfiles.cs`
+  - Docs: `Docs/PowerForge.Web.StructuredData.md`
 - **Have**: specialized sitemap family includes news/image/video sitemap outputs + sitemap index.
   - Code: `PowerForge.Web/Services/WebSitemapGenerator.cs`, `PowerForge.Web/Services/WebSitemapGenerator.Specialized.cs`
 - **Partial**: Search Intelligence now has versioned provider-neutral search, traffic and performance contracts; deterministic observation identity; idempotent DbaClientX SQLite history; evidence-linked weak-page/CTR opportunity reports; fleet provider configuration with a credential-safe capability doctor; authenticated Google Search Console and Bing Webmaster collection with Bing CSV fallback; Cloudflare traffic collection; Lighthouse import; CrUX field-data collection; and portable scheduling, bounded backfill, dry-run retention and static fleet reports through `powerforge-web`.
