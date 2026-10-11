@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using PowerForge;
 using PowerForge.Cli;
@@ -122,5 +123,11 @@ internal static partial class Program
 
     private static void WriteAppleSimulatorJson(string operation, bool success, int exitCode, System.Text.Json.JsonElement result)
         => WriteJson(new CliJsonEnvelope { SchemaVersion = OutputSchemaVersion, Command = "apple-simulator." + operation,
-            Success = success, ExitCode = exitCode, Result = result });
+            Success = success, ExitCode = exitCode, Result = result }, writer =>
+        {
+            writer.WriteStartObject("tool");
+            writer.WriteString("cliVersion", typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+            writer.WriteString("engineVersion", typeof(AppleSimulatorSessionService).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+            writer.WriteEndObject();
+        });
 }

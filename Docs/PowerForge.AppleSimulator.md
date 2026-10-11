@@ -32,6 +32,13 @@ The persisted receipt format stays compatible with older operators. The Apple
 screenshot workflow sets this policy for configured simulator captures and
 requires matching guarded results.
 
+Successful JSON command responses include `tool.cliVersion` and
+`tool.engineVersion` from the executing assemblies' informational versions.
+The screenshot workflow requires both source revisions to match its pinned
+tool checkout and records the verified versions with each session. Missing or
+different build identities fail capture validation; the requested pin alone
+does not establish which tool ran. Shared ownership receipts remain unchanged.
+
 Boot/discovery/readiness commands default to 120 seconds each, command execution
 to 1800 seconds, and the entire release attempt to 30 seconds. Override them with
 `--simulator-timeout-seconds`, `--timeout-seconds`, and `--cleanup-timeout-seconds`.

@@ -126,13 +126,14 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $toolRoot = Join-Path '${{ github.workspace }}' 'simulator-tool'
-          if ((& git -C $toolRoot rev-parse HEAD).Trim() -ne $env:SIMULATOR_TOOL_REF.ToLowerInvariant()) { throw 'Simulator tool checkout does not match its pin.' }
+          $toolCommit = (& git -C $toolRoot rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $toolCommit -cne $env:SIMULATOR_TOOL_REF.ToLowerInvariant()) { throw 'Simulator tool checkout does not match its pin.' }
           $dotnet = '/usr/local/share/dotnet/dotnet'
           if (-not (Test-Path -LiteralPath $dotnet -PathType Leaf)) { throw 'The trusted Mac needs the fixed .NET installation.' }
           $output = Join-Path $env:RUNNER_TEMP 'powerforge-simulator-cli'
           Push-Location $toolRoot
           try {
-            & $dotnet build PowerForge.Cli/PowerForge.Cli.csproj --configuration Release --framework net10.0 --output $output --verbosity quiet
+            & $dotnet build PowerForge.Cli/PowerForge.Cli.csproj --configuration Release --framework net10.0 --output $output --verbosity quiet -p:SourceRevisionId=$toolCommit -p:IncludeSourceRevisionInInformationalVersion=true
             if ($LASTEXITCODE -ne 0) { throw 'Simulator lifecycle tool build failed.' }
           } finally { Pop-Location }
           "POWERFORGE_DOTNET=$dotnet" | Add-Content $env:GITHUB_ENV
@@ -248,6 +249,15 @@ jobs:
             $receiptJson = Get-Content -LiteralPath $receiptPath -Raw
             $capture = $receiptJson | ConvertFrom-Json -Depth 10
             $receipt = $capture.result.receipt
+            # Informational versions come from both executing loaded assemblies,
+            # never from a consumer-provided environment or the requested pin.
+            $cliIdentity = [regex]::Match([string]$capture.tool.cliVersion, '\+([0-9a-f]{40})$')
+            $engineIdentity = [regex]::Match([string]$capture.tool.engineVersion, '\+([0-9a-f]{40})$')
+            if (-not $cliIdentity.Success -or -not $engineIdentity.Success -or
+                $cliIdentity.Groups[1].Value -cne $env:SIMULATOR_TOOL_REF.ToLowerInvariant() -or
+                $engineIdentity.Groups[1].Value -cne $cliIdentity.Groups[1].Value) {
+              throw "Simulator capture role '$($entry.Key)' did not use the pinned CLI and engine builds."
+            }
             $expectedOwner = "$env:GITHUB_REPOSITORY/$env:GITHUB_RUN_ID/$($entry.Key)"
             # Read raw ISO strings: PowerShell can coerce JSON dates to DateTime,
             # whose implicit string conversion loses fractional seconds.
@@ -272,12 +282,15 @@ jobs:
               owner = $receipt.owner
               initialState = $receipt.initialState
               requireInitialShutdown = $capture.result.requireInitialShutdown
+              toolCommit = $cliIdentity.Groups[1].Value
+              cliVersion = $capture.tool.cliVersion
+              engineVersion = $capture.tool.engineVersion
               finalState = $receipt.finalState
               receiptSha256 = (Get-FileHash -LiteralPath $receiptPath -Algorithm SHA256).Hash.ToLowerInvariant()
             }
           }
           if ($devices.Count -gt 0) {
-            [ordered]@{ toolCommit = $env:SIMULATOR_TOOL_REF.ToLowerInvariant(); devices = $devices; sessions = $sessions } |
+            [ordered]@{ toolCommit = $sessions[0].toolCommit; devices = $devices; sessions = $sessions } |
               ConvertTo-Json -Depth 6 -Compress |
               Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-apple-simulator-evidence.json') -Encoding utf8
           }
