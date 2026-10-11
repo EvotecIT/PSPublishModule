@@ -1,4 +1,6 @@
 using PowerForge;
+using System.Reflection;
+using Xunit.Sdk;
 
 namespace PowerForge.Tests;
 
@@ -6,7 +8,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [MemberData(nameof(StatementErrorHosts))]
+    [WindowsRegistryReadHosts]
     public void PinnedRegistryReads_PreserveEnumArgumentsAndIndexedConditionalValues(string framework, string host)
     {
         var source = new[] { "Get-PSSubRegistry.ps1", "Get-PSSubRegistryComplete.ps1" }
@@ -63,5 +65,25 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Contains("compiler-temp", generated);
         Assert.Contains("authored-source-failure", generated);
         Assert.Contains("cleaned=True", generated);
+    }
+}
+
+// Both target frameworks need a Windows source host for the live registry comparison.
+internal sealed class WindowsRegistryReadHostsAttribute : DataAttribute
+{
+    public WindowsRegistryReadHostsAttribute()
+    {
+        if (!OperatingSystem.IsWindows())
+            Skip = "Live Windows Registry proof requires Windows.";
+    }
+
+    public override IEnumerable<object[]> GetData(MethodInfo testMethod)
+    {
+        foreach (var host in PowerShellCompilationArtifactBuilderTests.StatementErrorHosts())
+            yield return host;
+
+        // Keep the unavailable legacy row visible when the shared portable matrix omits it.
+        if (!OperatingSystem.IsWindows())
+            yield return new object[] { "net472", "powershell.exe" };
     }
 }
