@@ -4,6 +4,9 @@ namespace PowerForge;
 internal sealed class AppleArchiveUploadSnapshot : IDisposable
 {
     private readonly SnapshotIdentity _identity;
+    private readonly string _rootIdentity;
+    private readonly AppleArchiveUploadEvidence.Manifest _approvedEntries;
+    private bool _retainForInvestigation;
     private long _expectedScratchActivityUntilUtcTicks;
     private bool _disposed;
 
@@ -15,11 +18,29 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         RootPath = rootPath;
         ArchivePath = archivePath;
         _identity = identity;
+        _rootIdentity = ExistingFilePathIdentityResolver.ResolveDirectoryStatus(rootPath).Identity;
+        _approvedEntries = AppleArchiveUploadEvidence.CaptureEntries(archivePath);
     }
 
     internal string RootPath { get; }
 
     internal string ArchivePath { get; }
+
+    /// <summary>Retains the exact failed private input; diagnostic capture never follows injected aliases.</summary>
+    internal AppleArchiveUploadEvidence RetainIntegrityFailure(string detail)
+    {
+        // Set this before diagnostics: losing the diagnostic must never delete the failed input.
+        _retainForInvestigation = true;
+        EnsureOwnedRoot();
+        return AppleArchiveUploadEvidence.Write(RootPath, ArchivePath, _identity.Sha256, _approvedEntries, detail);
+    }
+
+    private void EnsureOwnedRoot()
+    {
+        if ((File.GetAttributes(RootPath) & FileAttributes.ReparsePoint) != 0 ||
+            !ExistingFilePathIdentityResolver.ResolveDirectoryStatus(RootPath).Identity.Equals(_rootIdentity, StringComparison.Ordinal))
+            throw new InvalidOperationException("The private Apple upload snapshot container was replaced; it cannot be used for diagnostic writes or cleanup.");
+    }
 
     internal static AppleArchiveUploadSnapshot Create(string archivePath, string expectedSha256)
     {
@@ -386,7 +407,14 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         if (_disposed)
             return;
         _disposed = true;
-        try { AppleArtifactCopy.DeleteOwnedDirectory(RootPath); } catch { /* best effort after remote operation */ }
+        if (_retainForInvestigation)
+            return;
+        try
+        {
+            EnsureOwnedRoot();
+            AppleArtifactCopy.DeleteOwnedDirectory(RootPath);
+        }
+        catch { /* best effort after remote operation; never follow a replaced container */ }
     }
 
 }

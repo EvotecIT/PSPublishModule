@@ -11,7 +11,8 @@ internal static partial class Program
         "[--apple-testflight-target <Name[,Name...]>] [--apple-app-store-target <Name[,Name...]>] [--apple-sync-screenshots] " +
         "[--apple-resume|--no-apple-resume] [--apple-wait|--no-apple-wait] " +
         "[--apple-timeout-seconds <seconds>] [--apple-poll-seconds <seconds>] " +
-        "[--target <Name[,Name...]>] [--summary] [--output json]";
+        "[--target <Name[,Name...]>] [--summary] [--output json]. " +
+        "Local evidence: powerforge apple-release evidence --config <release.json> --source-commit <sha> --output json";
 
     private static int CommandAppleRelease(string[] filteredArgs, CliOptions cli, ILogger logger)
     {
@@ -44,6 +45,8 @@ internal static partial class Program
         var action = argv[0];
         if (action.StartsWith("-", StringComparison.Ordinal))
             return WriteReleaseError(outputJson, "apple-release", 2, $"Missing Apple release action. {AppleReleaseUsage}", logger);
+        if (action.Equals("evidence", StringComparison.OrdinalIgnoreCase))
+            return CommandAppleReleaseEvidence(argv.Skip(1).ToArray(), outputJson, logger);
 
         try
         {

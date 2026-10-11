@@ -376,11 +376,17 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
     /// <summary>SHA-256 of the exact local archive used for an upload attempt.</summary>
     public string? ArchiveSha256 { get; set; }
 
-    /// <summary>Attempt id that originally attested the uploaded archive.</summary>
+    /// <summary>Attempt id that originally recorded delivery; integrity qualification and rejection refer to this id.</summary>
     public string? UploadAttestationAttemptId { get; set; }
 
     /// <summary>SHA-256 binding the effective archive, signing, export, and App Store upload controls.</summary>
     public string? UploadExecutionSha256 { get; set; }
+
+    /// <summary>Private diagnostic manifest retained for an upload input that failed integrity validation; never release authority.</summary>
+    public string? UploadIntegrityEvidencePath { get; set; }
+
+    /// <summary>SHA-256 of the retained upload integrity diagnostic manifest.</summary>
+    public string? UploadIntegrityEvidenceSha256 { get; set; }
 
     public string? DirectArtifactPath { get; set; }
 

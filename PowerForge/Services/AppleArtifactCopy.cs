@@ -1,7 +1,7 @@
 namespace PowerForge;
 
 /// <summary>Copies Apple artifacts without following symbolic links outside their owning tree.</summary>
-internal static class AppleArtifactCopy
+internal static partial class AppleArtifactCopy
 {
     internal sealed class PathIdentity
     {
@@ -49,21 +49,7 @@ internal static class AppleArtifactCopy
                 if (isLink)
                 {
 #if NET8_0_OR_GREATER
-                    var linkTarget = isDirectory
-                        ? new DirectoryInfo(sourcePath).LinkTarget
-                        : new FileInfo(sourcePath).LinkTarget;
-                    if (string.IsNullOrWhiteSpace(linkTarget))
-                        throw new InvalidOperationException($"Unable to preserve Apple artifact symbolic link: {sourcePath}");
-                    if (Path.IsPathRooted(linkTarget))
-                        throw new InvalidOperationException($"Apple artifact symbolic links must remain inside the archive or artifact: {sourcePath}");
-                    var resolvedTarget = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourcePath)!, linkTarget));
-                    var relativeTarget = FrameworkCompatibility.GetRelativePath(sourceRoot, resolvedTarget);
-                    if (Path.IsPathRooted(relativeTarget) ||
-                        relativeTarget.Equals("..", StringComparison.Ordinal) ||
-                        relativeTarget.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
-                    {
-                        throw new InvalidOperationException($"Apple artifact symbolic links must remain inside the archive or artifact: {sourcePath}");
-                    }
+                    var linkTarget = InspectContainedSymbolicLink(sourceRoot, sourcePath).LinkTarget;
                     if (isDirectory)
                         Directory.CreateSymbolicLink(destinationPath, linkTarget!);
                     else

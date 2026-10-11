@@ -12,6 +12,10 @@ The helpers live in shared `PowerForge` services first and are exposed through t
 PowerShell cmdlets, so the same release logic can be reused by scripts, tests, CLI,
 and future project release pipelines.
 
+Mac Catalyst archives separate uninstalled package outputs by effective platform.
+An embedded native macOS helper can therefore share static Swift package products with
+the Catalyst app without colliding intermediate object files.
+
 ## Native .NET Mac App Store archives
 
 An Apple target can set `DotNetPublishInstallerId` and point `ProjectPath` at a
@@ -478,17 +482,31 @@ The first schema-v4 write also preserves a schema-v3 latest receipt in history b
 replacing it.
 
 Mutating actions validate the complete journal and append a `Started` checkpoint before
-their first side effect. Upload and direct notarization append `UploadAttested` or
-`NotarizationAttested` immediately after the external tool succeeds, before processing
-polls, stapling, readiness checks, or cleanup can fail. A final `Completed` receipt then
-records the reconciled outcome. This means a terminated process can be resumed from the
-last durable fact without guessing whether the external mutation happened.
+their first side effect. An upload appends `UploadCompleted` when the external tool
+succeeds, preserving the delivery fact before private-input validation. It appends
+`UploadAttested` only after those integrity guards pass. Direct notarization appends
+`NotarizationAttested` after the external tool succeeds. These checkpoints precede
+processing polls, stapling, readiness checks, or cleanup. A final `Completed` receipt
+records the reconciled outcome.
+
+`UploadCompleted` alone cannot qualify a remote build for recovery or distribution.
+An integrity failure appends `UploadIntegrityFailed` and retains the private snapshot
+with bounded entry diagnostics; the receipt records `UploadIntegrityEvidencePath` and
+its hash when diagnostic capture succeeds. Inspect the retained input and remote state
+before deciding how to recover. Changing export settings, disabling resume, or requesting
+deliberate adoption cannot bypass a known rejection for the same source and build.
 
 For App Store uploads, the original attempt records the exact source commit, archive
 path, archive SHA-256, build id or build-upload id, and attestation attempt id. A matching
 version/build in App Store Connect is not enough by itself. If no retained attempt proves
 that PowerForge uploaded that binary from the current source, the action stops instead
 of silently treating an unrelated binary as the current release.
+
+The pinned local entrypoint admits its unchanged receipt-bound archives and inactive,
+empty journal locks through `apple-release evidence`. This read-only inspection keeps
+the source-cleanliness gate usable after a completed action; it grants no CI qualification,
+upload attestation, or release authority. Archive links must resolve inside their owning
+archive, and other ignored output remains subject to the normal cleanliness checks.
 
 Receipt hashes detect corruption and preserve continuity, but receipt files owned by the
 same local account are not treated as operator authority. Resuming an upload or accepted

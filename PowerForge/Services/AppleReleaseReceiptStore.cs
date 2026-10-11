@@ -28,14 +28,26 @@ internal sealed class AppleReleaseReceiptStore
     /// Reads the atomic latest receipt and every immutable history entry, rejecting malformed evidence.
     /// </summary>
     internal PowerForgeAppleReleaseReceipt[] ReadAll(PowerForgeAppleReleasePlan plan)
+        => ReadAll(plan, out _);
+
+    /// <summary>Reads the complete chain and reports only the exact files that were validated.</summary>
+    internal PowerForgeAppleReleaseReceipt[] ReadAll(
+        PowerForgeAppleReleasePlan plan,
+        out string[] evidencePaths)
     {
         if (plan is null)
             throw new ArgumentNullException(nameof(plan));
 
+        EnsureSafeOutputPath(plan.ProjectRoot, plan.ReceiptPath, "AppleApps.Automation.ReceiptPath");
+        EnsureSafeOutputPath(plan.ProjectRoot, plan.ReceiptHistoryPath, "AppleApps.Automation.ReceiptHistoryPath");
+        var paths = new List<string>();
         var receipts = new List<PowerForgeAppleReleaseReceipt>();
         var identities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (File.Exists(plan.ReceiptPath))
+        {
             AddReceipt(plan, plan.ReceiptPath, receipts, identities);
+            paths.Add(Path.GetFullPath(plan.ReceiptPath));
+        }
 
         if (Directory.Exists(plan.ReceiptHistoryPath))
         {
@@ -51,10 +63,12 @@ internal sealed class AppleReleaseReceiptStore
                 }
 
                 AddReceipt(plan, entry, receipts, identities);
+                paths.Add(Path.GetFullPath(entry));
             }
         }
 
         ValidateReceiptChain(plan, receipts);
+        evidencePaths = paths.ToArray();
         return OrderReceipts(receipts);
     }
 
@@ -544,7 +558,7 @@ internal sealed class AppleReleaseReceiptStore
         return difference == 0;
     }
 
-    private static void EnsureSafeOutputPath(string projectRoot, string path, string settingName)
+    internal static void EnsureSafeOutputPath(string projectRoot, string path, string settingName)
     {
         var root = Path.GetFullPath(projectRoot)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);

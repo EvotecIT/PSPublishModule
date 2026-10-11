@@ -81,6 +81,12 @@ public sealed partial class AppleAppArchiveService
             request.AllowProvisioningUpdates,
             args);
         args.Add("archive");
+        if (request.ArchiveVariant == AppleArchiveVariant.MacCatalyst)
+        {
+            // Catalyst and a native macOS helper can share static package products.
+            // Xcode otherwise gives both variants the same uninstalled object path.
+            args.Add("UNINSTALLED_PRODUCTS_DIR=$(TEMP_ROOT)/UninstalledProducts/$(EFFECTIVE_PLATFORM_NAME)");
+        }
         var additionalArguments = request.AdditionalArguments ?? Array.Empty<string>();
         args.AddRange(additionalArguments);
 

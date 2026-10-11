@@ -27,22 +27,23 @@ internal sealed partial class PowerForgeReleaseService
         });
     }
 
-    private void WriteAppleUploadAttestation(
+    private void WriteAppleUploadCheckpoint(
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app,
-        PowerForgeAppleAppReleaseResult result)
+        PowerForgeAppleAppReleaseResult result,
+        bool integrityVerified = false)
     {
         if (!plan.Automation.WriteReceipt || result.Upload?.Succeeded != true)
             return;
 
         var attemptId = Guid.NewGuid().ToString("N");
-        result.UploadAttestationAttemptId = attemptId;
+        result.UploadAttestationAttemptId ??= attemptId;
         var target = CreateAppleCheckpointTarget(plan, app);
         target.UploadPerformed = true;
         target.ArchivePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/');
         target.ArchiveSha256 = result.ArchiveSha256;
         target.BuildUploadId = result.Upload.BuildUploadId;
-        target.UploadAttestationAttemptId = attemptId;
+        target.UploadAttestationAttemptId = result.UploadAttestationAttemptId;
         target.UploadExecutionSha256 = ComputeAppleUploadExecutionSha256(plan, app);
         _appleReceiptStore.WriteAttempt(plan, new PowerForgeAppleReleaseReceipt
         {
@@ -52,8 +53,43 @@ internal sealed partial class PowerForgeReleaseService
             SourceCommit = plan.SourceCommit,
             PlanSha256 = plan.ApprovedPlanSha256,
             Versioning = plan.ApprovedVersioning,
-            OperationPhase = "UploadAttested",
-            Success = true,
+            OperationPhase = integrityVerified ? "UploadAttested" : "UploadCompleted",
+            Success = integrityVerified,
+            Targets = new[] { target }
+        });
+    }
+
+    private void WriteAppleUploadIntegrityFailure(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app,
+        PowerForgeAppleAppReleaseResult result,
+        string detail,
+        AppleArchiveUploadEvidence? evidence)
+    {
+        if (!plan.Automation.WriteReceipt)
+            return;
+        var target = CreateAppleCheckpointTarget(plan, app);
+        // A failed response can follow a real remote handoff. Only a durably recorded
+        // delivery or ambiguity checkpoint supplies the attempt rejected by this guard.
+        target.UploadPerformed = !plan.Rehearse && !string.IsNullOrWhiteSpace(result.UploadAttestationAttemptId);
+        target.ArchivePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/');
+        target.ArchiveSha256 = result.ArchiveSha256;
+        target.BuildUploadId = result.Upload?.BuildUploadId;
+        target.UploadAttestationAttemptId = result.UploadAttestationAttemptId;
+        target.UploadExecutionSha256 = ComputeAppleUploadExecutionSha256(plan, app);
+        target.UploadIntegrityEvidencePath = evidence?.Path;
+        target.UploadIntegrityEvidenceSha256 = evidence?.Sha256;
+        target.ErrorMessage = detail;
+        _appleReceiptStore.WriteAttempt(plan, new PowerForgeAppleReleaseReceipt
+        {
+            Action = plan.Action,
+            ShipPhase = plan.ShipPhase,
+            SourceCommit = plan.SourceCommit,
+            PlanSha256 = plan.ApprovedPlanSha256,
+            Versioning = plan.ApprovedVersioning,
+            OperationPhase = "UploadIntegrityFailed",
+            Success = false,
+            ErrorMessage = detail,
             Targets = new[] { target }
         });
     }
@@ -68,6 +104,7 @@ internal sealed partial class PowerForgeReleaseService
             return;
 
         var attemptId = Guid.NewGuid().ToString("N");
+        result.UploadAttestationAttemptId = attemptId;
         var target = CreateAppleCheckpointTarget(plan, app);
         target.UploadPerformed = true;
         target.ArchivePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/');

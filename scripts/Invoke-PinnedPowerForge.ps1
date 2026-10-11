@@ -587,11 +587,13 @@ try {
     $scriptRelative = [IO.Path]::GetRelativePath($toolRoot, $PSCommandPath).Replace('\', '/')
     Invoke-GitText -Root $toolRoot -Arguments @('ls-files', '--error-unmatch', '--', $scriptRelative) | Out-Null
     Invoke-GitText -Root $toolRoot -Arguments @('diff', '--quiet', 'HEAD', '--', $scriptRelative) | Out-Null
-    $evidenceSupport = Join-Path $PSScriptRoot 'Invoke-PinnedPowerForge.Evidence.ps1'
-    $evidenceRelative = [IO.Path]::GetRelativePath($toolRoot, $evidenceSupport).Replace('\', '/')
-    Invoke-GitText -Root $toolRoot -Arguments @('ls-files', '--error-unmatch', '--', $evidenceRelative) | Out-Null
-    Invoke-GitText -Root $toolRoot -Arguments @('diff', '--quiet', 'HEAD', '--', $evidenceRelative) | Out-Null
-    . $evidenceSupport
+    foreach ($supportName in @('Invoke-PinnedPowerForge.Evidence.ps1', 'Invoke-PinnedPowerForge.Recovery.ps1')) {
+        $supportPath = Join-Path $PSScriptRoot $supportName
+        $supportRelative = [IO.Path]::GetRelativePath($toolRoot, $supportPath).Replace('\', '/')
+        Invoke-GitText -Root $toolRoot -Arguments @('ls-files', '--error-unmatch', '--', $supportRelative) | Out-Null
+        Invoke-GitText -Root $toolRoot -Arguments @('diff', '--quiet', 'HEAD', '--', $supportRelative) | Out-Null
+        . $supportPath
+    }
     Assert-SafeArguments
     Assert-FixedAppleToolConfiguration
     Invoke-TrackedInputValidator -SourceCommit $consumerHead
@@ -655,6 +657,12 @@ try {
     Register-StandaloneScreenshotEvidence
     Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead -ResolvedTargets $resolvedAppleTargets
     Register-AppleAutomationEvidence -SourceCommit $consumerHead
+    Register-AppleRecoveryEvidence `
+        -SourceCommit $consumerHead `
+        -DotNetPath $dotnet `
+        -CliAssembly $cliAssembly `
+        -NuGetPackagesPath $nugetPackages `
+        -OutputPath (Join-Path $temporaryRoot 'apple-recovery-evidence.json')
     Assert-ConsumerRepositoryContent
     Assert-TrackedSourceLinks
 
