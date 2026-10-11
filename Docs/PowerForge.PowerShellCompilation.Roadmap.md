@@ -1724,7 +1724,7 @@ The semantic compiler does not have a competing AST/emitter eligibility brain. P
 - [x] Complete corrective full-gate, Strict corpus, and final fixture requalification.
 - [x] Deliver M28 executable run/watch with source invalidation, verified cache reuse, stream/argument fidelity, owned process-tree cancellation, and launch-integrity checks.
 - [x] Complete the bounded M28 development loop and two-host module consumer quickstart. Authenticated PDB source mapping is implemented; interactive debugger behavior is still unqualified and deferred.
-- [ ] Complete hosted CI, review settlement, and integration of current M29a corrections, then refresh M30 host-servicing/coherent-release proof through the existing owners. Local Windows Full qualification and the later focused platform-reporting checks are complete; M29a and M30 remain partial. M29's bounded coverage gate remains complete; bounded M31 diagnosis can proceed independently of held release gates.
+- [ ] Refresh M30 host-servicing/coherent-release proof through the existing owners. Local Windows Full and native Linux Full-matrix qualification are complete within the assessment's scopes; M29a and M30 remain partial. Source integration follows the repository's PR CI and review gates. M29's bounded coverage gate remains complete; bounded M31 diagnosis can proceed independently of held release gates.
 
 Broad percentage growth is useful only as a diagnostic trend. It never substitutes for these complete-program, clean-target, semantic, ecosystem, and product gates.
 
