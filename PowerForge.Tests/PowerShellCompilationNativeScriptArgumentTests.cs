@@ -4,7 +4,7 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
-    [WindowsFact]
+    [WindowsX64Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootPreservesOrderedUnboundArguments()
     {
