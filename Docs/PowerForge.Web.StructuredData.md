@@ -81,7 +81,8 @@ meta.source_code.license: https://opensource.org/license/mit/
 
 The source-code profile has no default offer, rating or application claim.
 Application and source-code profiles are independently enabled and require their
-own metadata.
+own metadata. An optional `meta.source_code.id` sets a stable identity even when
+page linking is disabled.
 
 ## Validation
 

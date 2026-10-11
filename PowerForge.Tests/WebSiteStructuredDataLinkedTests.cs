@@ -138,6 +138,22 @@ public class WebSiteStructuredDataLinkedTests
         Assert.DoesNotContain(models, model => model.GetProperty("@type").GetString() == "SoftwareApplication");
     }
 
+    [Theory]
+    [InlineData(false, "https://source.example/#library", "https://source.example/#library")]
+    [InlineData(true, "https://source.example/#library", "https://source.example/#library")]
+    [InlineData(true, null, "https://product.example/pricing/#source-code")]
+    [InlineData(false, null, null)]
+    public void Render_SourceCodeIdentityRespectsExplicitIdIndependentlyOfPageLinking(bool linkPages, string? id, string? expected)
+    {
+        var site = Site();
+        site.StructuredData!.SoftwareSourceCode = true;
+        site.StructuredData.WebPage = linkPages;
+        var page = Page();
+        page.Meta["source_code"] = new Dictionary<string, object?> { ["name"] = "Example.Documents", ["id"] = id };
+        var source = OfType(Models(WebSiteBuilder.RenderStructuredData(site, page, [], null)), "SoftwareSourceCode");
+        Assert.Equal(expected, source.TryGetProperty("@id", out var identity) ? identity.GetString() : null);
+    }
+
     [Fact]
     public void Render_HelperPreservesArticleModificationDateAndPublisher()
     {

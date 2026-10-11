@@ -67,8 +67,9 @@ public static partial class WebSiteBuilder
             ["url"] = pageUrl,
             ["publisher"] = BuildStructuredPublisher(spec, baseUrl)
         };
-        if (spec.StructuredData?.WebPage == true)
-            model["@id"] = FirstStructuredValue(ReadMetaString(item.Meta, "source_code.id"), pageUrl + "#source-code");
+        var sourceCodeId = ReadMetaString(item.Meta, "source_code.id");
+        if (!string.IsNullOrWhiteSpace(sourceCodeId) || spec.StructuredData?.WebPage == true)
+            model["@id"] = FirstStructuredValue(sourceCodeId, pageUrl + "#source-code");
         foreach (var (key, property) in new[] { ("description", "description"), ("code_repository", "codeRepository"),
                      ("programming_language", "programmingLanguage"), ("runtime_platform", "runtimePlatform"), ("license", "license") })
         {
