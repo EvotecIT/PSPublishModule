@@ -103,8 +103,29 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var original=RunModuleProof(fixture.ScriptPath,probe,host);
         var generated=RunModuleProof(built.ArtifactPath!,probe,host);
         Assert.True(original==generated,"Original: "+original+Environment.NewLine+"Generated: "+generated);
-        Assert.Contains("03:04:05 - one",generated);
-        Assert.Contains("offline dispatcher failed",generated);
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Contains("03:04:05 - one",generated);
+            Assert.Contains("offline dispatcher failed",generated);
+        }
+        else
+        {
+            // The pinned function returns a warning before consulting TraceEnabled or its dispatcher on Unix.
+            const string warning = "This command only works on Windows platforms.";
+            Assert.Equal(11, System.Text.RegularExpressions.Regex.Matches(generated,
+                System.Text.RegularExpressions.Regex.Escape(warning)).Count);
+            var records = generated.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+                .Where(static line => line.StartsWith("{", StringComparison.Ordinal))
+                .Select(static line => System.Text.Json.Nodes.JsonNode.Parse(line)!).ToArray();
+            Assert.Equal(4, records.Length);
+            Assert.Equal(new[] { false, true, true }, records.Take(3)
+                .Select(static record => record["enabled"]!.GetValue<bool>()));
+            Assert.All(records, static record =>
+            {
+                Assert.Equal(string.Empty, record["text"]!.GetValue<string>());
+                Assert.Empty(record["calls"]!.AsArray());
+            });
+        }
         Assert.Contains("\"helperVisible\":false",generated);
     }
 }
