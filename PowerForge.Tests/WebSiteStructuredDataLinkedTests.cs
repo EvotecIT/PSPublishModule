@@ -93,6 +93,17 @@ public class WebSiteStructuredDataLinkedTests
     }
 
     [Theory]
+    [InlineData("[\"A\",\"B\"]")]
+    [InlineData("[]")]
+    public void Render_HelperPreservesLiteralJsonFaqAnswer(string answer)
+    {
+        var template = "{{ metadata = { faq: { items: [{ question: \"Payload?\", answer: " +
+            JsonSerializer.Serialize(answer) + " }] } } }}{{ pf.structured_data metadata }}";
+        var model = OfType(Models(RenderTemplate(template, Site(), Page())), "FAQPage");
+        Assert.Equal(answer, model.GetProperty("mainEntity")[0].GetProperty("acceptedAnswer").GetProperty("text").GetString());
+    }
+
+    [Theory]
     [InlineData(true, false)]
     [InlineData(false, true)]
     public void Render_HelperRespectsPageAndSiteOptOut(bool siteEnabled, bool pageEnabled)

@@ -49,6 +49,12 @@ public static partial class WebSiteBuilder
         {
             if (!map.TryGetValue(key, out var value) || value is null)
                 continue;
+            if (value is string literal)
+            {
+                if (!string.IsNullOrWhiteSpace(literal))
+                    return literal.Trim();
+                continue;
+            }
             var paragraphs = ExpandListValue(value).Select(ConvertToString).Where(text => !string.IsNullOrWhiteSpace(text));
             var answer = string.Join("\n\n", paragraphs);
             if (!string.IsNullOrWhiteSpace(answer))
