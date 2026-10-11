@@ -74,10 +74,17 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 }else{[pscustomobject]@{type=$_.GetType().FullName;value=[int]$_}}
             })}|ConvertTo-Json -Depth 10 -Compress
             """;
+        // ConsoleHost replays a startup JIT profile that can load Management in the background.
+        // Keep the cold phase cold in each child: .NET 10 rejects profile replay below this CPU gate.
+        // https://github.com/dotnet/runtime/blob/v10.0.0/src/coreclr/vm/multicorejit.cpp#L1075-L1103
+        var environment = new Dictionary<string, string>
+        {
+            ["DOTNET_MultiCoreJitMinNumCpus"] = uint.MaxValue.ToString("x", System.Globalization.CultureInfo.InvariantCulture)
+        };
         var original = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(fixture.ScriptPath) + "'; " + probe,
-            fixture.RootPath, "host-enum-original");
+            fixture.RootPath, "host-enum-original", environment);
         var generated = RunStatementErrorProbe(host, "Import-Module '" + EscapeStatementErrorPath(result.ArtifactPath!) + "'; " + probe,
-            fixture.RootPath, "host-enum-generated");
+            fixture.RootPath, "host-enum-generated", environment);
         Assert.True(original.ExitCode == 0 && generated.ExitCode == 0, original.StandardError + generated.StandardError);
         var expected = original.StandardOutput.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         var actual = generated.StandardOutput.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
@@ -91,10 +98,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         {
             Assert.Equal("Microsoft.PowerShell.Commands.PCSystemType", simple["type"]!.GetValue<string>());
             Assert.Equal(1, simple["value"]!.GetValue<int>());
-            if(host == "powershell.exe")
+            for (var i = 0; i < 12; i++)
             {
-                Assert.Contains("TypeNotFound", actual[0]);
-                Assert.DoesNotContain("operand", actual[0]);
+                var record = JsonNode.Parse(actual[i])!;
+                Assert.Contains("TypeNotFound", record["records"]![0]!["error"]!.GetValue<string>(), StringComparison.Ordinal);
+                Assert.Equal("prior", record["records"]![1]!["copy"]!.GetValue<string>());
+                Assert.Equal(new[] { "finally" }, record["records"]![1]!["trace"]!.AsArray()
+                    .Select(static value => value!.GetValue<string>()));
             }
             Assert.Contains("Microsoft.PowerShell.Commands.OSProductSuite", actual[24]);
             Assert.Single(JsonNode.Parse(actual[24])!["callbacks"]!.AsArray());
