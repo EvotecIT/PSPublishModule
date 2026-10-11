@@ -45,7 +45,12 @@ public static partial class WebSiteBuilder
 
         var publisherName = ((Dictionary<string, object?>)articleModel["publisher"]!)["name"]?.ToString();
         if (string.IsNullOrWhiteSpace(publisherName))
-            ((Dictionary<string, object?>)articleModel["publisher"]!)["name"] = spec.Name;
+        {
+            var publisherLocalization = ResolveLocalizationConfig(spec);
+            articleModel["publisher"] = BuildStructuredPublisher(spec, ResolveLanguageBaseUrl(spec, publisherLocalization, item.Language));
+        }
+        if (spec.StructuredData?.WebPage == true)
+            articleModel["mainEntityOfPage"] = StructuredReference(pageUrl + "#webpage");
 
         var articleDescription = string.IsNullOrWhiteSpace(item.Description)
             ? BuildSnippet(item.HtmlContent, 200)
@@ -121,16 +126,16 @@ public static partial class WebSiteBuilder
         return false;
     }
 
-    private static string BuildFaqStructuredDataScript(ContentItem item, string pageUrl)
+    private static Dictionary<string, object?>? BuildFaqStructuredDataModel(ContentItem item, string pageUrl)
     {
-        var entries = ReadMetaList(item.Meta, "faq.questions", "faq.items", "faq.qa", "faq.questions_json", "faq.items_json")
+        var entries = ReadFaqEntries(item.Meta)
             .Select(ParseFaqEntry)
             .Where(static entry => entry is not null)
             .Cast<StructuredQuestionAnswer>()
             .ToArray();
 
         if (entries.Length == 0)
-            return string.Empty;
+            return null;
 
         var faqModel = new Dictionary<string, object?>
         {
@@ -161,7 +166,7 @@ public static partial class WebSiteBuilder
         if (!string.IsNullOrWhiteSpace(pageUrl))
             faqModel["@id"] = pageUrl + "#faq";
 
-        return BuildJsonLdScript(faqModel);
+        return faqModel;
     }
 
     private static string BuildHowToStructuredDataScript(ContentItem item, string pageUrl)
@@ -283,14 +288,7 @@ public static partial class WebSiteBuilder
         if (!string.IsNullOrWhiteSpace(downloadUrl))
             appModel["downloadUrl"] = ResolveAbsoluteUrl(languageBaseUrl, downloadUrl);
 
-        var publisher = new Dictionary<string, object?>
-        {
-            ["@type"] = "Organization",
-            ["name"] = spec.Name
-        };
-        if (!string.IsNullOrWhiteSpace(languageBaseUrl))
-            publisher["url"] = languageBaseUrl;
-        appModel["publisher"] = publisher;
+        appModel["publisher"] = BuildStructuredPublisher(spec, languageBaseUrl);
 
         var sameAs = ReadMetaStringList(item.Meta, "software.website_url", "software.websiteUrl", "softwareapplication.sameAs")
             .Select(url => ResolveAbsoluteUrl(languageBaseUrl, url))
@@ -308,14 +306,22 @@ public static partial class WebSiteBuilder
 
         var offer = BuildOfferModel(item.Meta, "software");
         if (offer is not null)
+        {
+            offer["seller"] = BuildStructuredPublisher(spec, languageBaseUrl);
             appModel["offers"] = offer;
+        }
 
         var rating = BuildAggregateRatingModel(item.Meta, "software");
         if (rating is not null)
             appModel["aggregateRating"] = rating;
 
-        if (!string.IsNullOrWhiteSpace(pageUrl))
-            appModel["url"] = pageUrl;
+        var softwareUrl = ReadMetaString(item.Meta, "software.url");
+        appModel["url"] = string.IsNullOrWhiteSpace(softwareUrl) ? pageUrl : ResolveAbsoluteUrl(languageBaseUrl, softwareUrl);
+        var softwareId = ReadMetaString(item.Meta, "software.id");
+        if (!string.IsNullOrWhiteSpace(softwareId) || spec.StructuredData?.WebPage == true)
+            appModel["@id"] = FirstStructuredValue(softwareId, pageUrl + "#software");
+        if (spec.StructuredData?.WebPage == true)
+            appModel["mainEntityOfPage"] = StructuredReference(pageUrl + "#webpage");
 
         return BuildJsonLdScript(appModel);
     }
@@ -382,35 +388,6 @@ public static partial class WebSiteBuilder
         return BuildJsonLdScript(productModel);
     }
 
-    private static Dictionary<string, object?>? BuildOfferModel(Dictionary<string, object?> meta, string prefix)
-    {
-        var price = ReadMetaDecimal(meta, prefix + ".price");
-        var currency = ReadMetaString(meta, prefix + ".price_currency", prefix + ".priceCurrency");
-        if (!price.HasValue && string.IsNullOrWhiteSpace(currency))
-            return null;
-
-        var offer = new Dictionary<string, object?>
-        {
-            ["@type"] = "Offer"
-        };
-
-        if (price.HasValue)
-            offer["price"] = price.Value.ToString(CultureInfo.InvariantCulture);
-
-        if (!string.IsNullOrWhiteSpace(currency))
-            offer["priceCurrency"] = currency;
-
-        var availability = ReadMetaString(meta, prefix + ".availability");
-        if (!string.IsNullOrWhiteSpace(availability))
-            offer["availability"] = availability;
-
-        var condition = ReadMetaString(meta, prefix + ".condition", prefix + ".itemCondition");
-        if (!string.IsNullOrWhiteSpace(condition))
-            offer["itemCondition"] = condition;
-
-        return offer;
-    }
-
     private static Dictionary<string, object?>? BuildAggregateRatingModel(Dictionary<string, object?> meta, string prefix)
     {
         var value = ReadMetaDecimal(meta, prefix + ".rating_value", prefix + ".ratingValue");
@@ -450,7 +427,7 @@ public static partial class WebSiteBuilder
         if (TryAsDictionary(raw, out var map))
         {
             var question = ReadMapString(map, "question", "q", "name", "title");
-            var answer = ReadMapString(map, "answer", "a", "text", "content", "description");
+            var answer = ReadFaqAnswer(map);
             if (!string.IsNullOrWhiteSpace(question) && !string.IsNullOrWhiteSpace(answer))
                 return new StructuredQuestionAnswer(question, answer);
         }
@@ -505,6 +482,12 @@ public static partial class WebSiteBuilder
         if (value is Dictionary<string, object?> dict)
         {
             map = dict;
+            return true;
+        }
+
+        if (value is IDictionary<string, object> scriptMap)
+        {
+            map = scriptMap.ToDictionary(pair => pair.Key, pair => (object?)pair.Value, StringComparer.OrdinalIgnoreCase);
             return true;
         }
 

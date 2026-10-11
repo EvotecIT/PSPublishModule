@@ -7,10 +7,16 @@ public sealed class StructuredDataSpec
     public bool Enabled { get; set; } = true;
     /// <summary>When true, emit breadcrumb structured data.</summary>
     public bool Breadcrumbs { get; set; } = true;
-    /// <summary>When true, emit WebSite JSON-LD on home pages.</summary>
+    /// <summary>When true, emit WebSite JSON-LD on home pages, or on all pages when WebPage is enabled.</summary>
     public bool Website { get; set; } = true;
-    /// <summary>When true, emit Organization JSON-LD on home pages.</summary>
+    /// <summary>When true, emit Organization JSON-LD on home pages, or on all pages when WebPage is enabled.</summary>
     public bool Organization { get; set; } = true;
+    /// <summary>When true, link pages, the website and its publisher with stable identifiers.</summary>
+    public bool WebPage { get; set; }
+    /// <summary>Optional publisher name; defaults to the legal name, then the site name.</summary>
+    public string? OrganizationName { get; set; }
+    /// <summary>Optional publisher website, independent of the product website.</summary>
+    public string? OrganizationUrl { get; set; }
     /// <summary>Optional legal business name for Organization JSON-LD.</summary>
     public string? OrganizationLegalName { get; set; }
     /// <summary>Optional organization description for Organization JSON-LD.</summary>
@@ -33,6 +39,8 @@ public sealed class StructuredDataSpec
     public bool HowTo { get; set; }
     /// <summary>When true, emit SoftwareApplication JSON-LD when application metadata is present.</summary>
     public bool SoftwareApplication { get; set; }
+    /// <summary>When true, emit SoftwareSourceCode JSON-LD when source-code metadata is present.</summary>
+    public bool SoftwareSourceCode { get; set; }
     /// <summary>When true, emit Product JSON-LD when product metadata is present.</summary>
     public bool Product { get; set; }
     /// <summary>When true, emit NewsArticle JSON-LD for news/article pages.</summary>

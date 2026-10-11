@@ -75,6 +75,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         var helpers = new ScribanThemeHelpers(context);
         var pf = new ScriptObject();
         pf.Import("menu", new Func<string?, NavigationMenu?>(helpers.Menu));
+        pf.Import("structured_data", new Func<object?, string>(helpers.StructuredData));
         pf.Import("surface", new Func<string?, NavigationSurfaceRuntime?>(helpers.Surface));
         pf.Import("nav_actions", new Func<string>(helpers.NavActions));
         pf.Add("nav_links", new PfNavLinksFunction(helpers));
