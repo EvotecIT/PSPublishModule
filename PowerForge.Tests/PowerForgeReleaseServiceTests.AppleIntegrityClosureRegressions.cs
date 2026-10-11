@@ -298,6 +298,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
     public void Execute_AppleUpload_rejects_transient_private_archive_snapshot_mutation() {
         string? sourceCommit = null;
         var root = CreateSandbox();
+        string? privateArchive = null;
         try {
             CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
             var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
@@ -306,7 +307,6 @@ public sealed partial class PowerForgeReleaseServiceTests {
             spec.AppleApps!.Automation.MinimumFreeSpaceGB = 0;
             spec.AppleApps.Automation.CleanupBeforeArchive = false;
             spec.AppleApps.Automation.WaitForProcessing = false;
-            string? privateArchive = null;
 
             var result = CreateAppleAutomationService(
                     request => CreateReleaseState(request, processingState: null),
@@ -333,9 +333,10 @@ public sealed partial class PowerForgeReleaseServiceTests {
             Assert.Contains("private Apple upload archive snapshot changed", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(
                 new AppleReleaseReceiptStore().ReadAll(result.AppleAppPlan!),
-                receipt => receipt.OperationPhase == "UploadAttested" &&
+                receipt => receipt.OperationPhase == "UploadCompleted" &&
                            Assert.Single(receipt.Targets).UploadPerformed);
         } finally {
+            if (privateArchive is not null) TryDelete(Path.GetDirectoryName(privateArchive)!);
             TryDelete(root);
         }
     }
@@ -565,6 +566,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
     public void Execute_AppleUpload_rejects_xcode_sandbox_scratch_outside_exact_archive_info_plist(string scratchRelativePath) {
         string? sourceCommit = null;
         var root = CreateSandbox();
+        string? privateArchive = null;
         try {
             CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
             var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
@@ -584,6 +586,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
                         return CreateSuccessfulArchive(request);
                     },
                     uploadAppleApp: request => {
+                        privateArchive = request.ArchivePath;
                         var scratch = Path.Combine(request.ArchivePath!, scratchRelativePath);
                         File.WriteAllText(scratch, "unapproved scratch bytes");
                         Thread.Sleep(1000);
@@ -599,6 +602,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
             Assert.False(result.Success);
             Assert.Contains("private Apple upload archive snapshot changed", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
         } finally {
+            if (privateArchive is not null) TryDelete(Path.GetDirectoryName(privateArchive)!);
             TryDelete(root);
         }
     }
@@ -607,6 +611,7 @@ public sealed partial class PowerForgeReleaseServiceTests {
     public void Execute_AppleUpload_rejects_transient_private_archive_hard_link_alias_mutation() {
         string? sourceCommit = null;
         var root = CreateSandbox();
+        string? privateArchive = null;
         string? aliasRoot = null;
         try {
             CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
@@ -616,7 +621,6 @@ public sealed partial class PowerForgeReleaseServiceTests {
             spec.AppleApps!.Automation.MinimumFreeSpaceGB = 0;
             spec.AppleApps.Automation.CleanupBeforeArchive = false;
             spec.AppleApps.Automation.WaitForProcessing = false;
-            string? privateArchive = null;
 
             var result = CreateAppleAutomationService(
                     request => CreateReleaseState(request, processingState: null),
@@ -649,11 +653,12 @@ public sealed partial class PowerForgeReleaseServiceTests {
             Assert.Contains("private Apple upload archive snapshot", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(
                 new AppleReleaseReceiptStore().ReadAll(result.AppleAppPlan!),
-                receipt => receipt.OperationPhase == "UploadAttested" &&
+                receipt => receipt.OperationPhase == "UploadCompleted" &&
                            Assert.Single(receipt.Targets).UploadPerformed);
         } finally {
             if (!string.IsNullOrWhiteSpace(aliasRoot) && Directory.Exists(aliasRoot))
                 Directory.Delete(aliasRoot, recursive: true);
+            if (privateArchive is not null) TryDelete(Path.GetDirectoryName(privateArchive)!);
             TryDelete(root);
         }
     }

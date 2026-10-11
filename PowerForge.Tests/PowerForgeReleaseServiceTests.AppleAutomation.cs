@@ -45,6 +45,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     public void Execute_AppleUpload_RejectsPrivateArchiveSnapshotMutation()
     {
         var root = CreateSandbox();
+        string? uploaderArchivePath = null;
         try
         {
             CreateXcodeProject(root, "CasaRay.xcodeproj", "1.2.0", "9");
@@ -54,7 +55,6 @@ public sealed partial class PowerForgeReleaseServiceTests
             spec.AppleApps!.Automation.MinimumFreeSpaceGB = 0;
             spec.AppleApps.Automation.CleanupBeforeArchive = false;
             spec.AppleApps.Automation.WaitForProcessing = false;
-            string? uploaderArchivePath = null;
             var trustedUploadExecution = false;
             var service = CreateAppleAutomationService(
                 request => CreateReleaseState(request, processingState: null),
@@ -87,13 +87,19 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.NotEqual(Assert.Single(result.AppleAppPlan!.Apps).ArchivePath, uploaderArchivePath);
             Assert.Equal("before", File.ReadAllText(Path.Combine(Assert.Single(result.AppleAppPlan.Apps).ArchivePath, "payload")));
             Assert.Contains("private Apple upload archive snapshot changed", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
-            var uploadAttestation = Assert.Single(
-                new AppleReleaseReceiptStore().ReadAll(result.AppleAppPlan!),
-                receipt => receipt.OperationPhase == "UploadAttested");
-            Assert.True(Assert.Single(uploadAttestation.Targets).UploadPerformed);
+            var receipts = new AppleReleaseReceiptStore().ReadAll(result.AppleAppPlan!);
+            var delivery = Assert.Single(receipts, receipt => receipt.OperationPhase == "UploadCompleted");
+            Assert.True(Assert.Single(delivery.Targets).UploadPerformed);
+            var rejection = Assert.Single(receipts, receipt => receipt.OperationPhase == "UploadIntegrityFailed");
+            Assert.Equal(Assert.Single(delivery.Targets).UploadAttestationAttemptId,
+                Assert.Single(rejection.Targets).UploadAttestationAttemptId);
+            Assert.DoesNotContain(receipts, receipt => receipt.OperationPhase == "UploadAttested");
+            Assert.True(Directory.Exists(uploaderArchivePath));
         }
         finally
         {
+            if (uploaderArchivePath is not null)
+                TryDelete(Path.GetDirectoryName(uploaderArchivePath)!);
             TryDelete(root);
         }
     }

@@ -72,6 +72,7 @@ public sealed partial class AppleAppArchiveServiceTests
             Assert.Contains("-archivePath", request.Arguments);
             Assert.Contains(result.ArchivePath, request.Arguments);
             Assert.Contains("archive", request.Arguments);
+            Assert.DoesNotContain(request.Arguments, argument => argument.StartsWith("UNINSTALLED_PRODUCTS_DIR=", StringComparison.Ordinal));
         }
         finally
         {
@@ -102,6 +103,7 @@ public sealed partial class AppleAppArchiveServiceTests
             Assert.True(result.Succeeded);
             Assert.Equal("generic/platform=macOS,variant=Mac Catalyst", result.Destination);
             Assert.Contains(result.Destination, Assert.Single(runner.Requests).Arguments);
+            Assert.Contains("UNINSTALLED_PRODUCTS_DIR=$(TEMP_ROOT)/UninstalledProducts/$(EFFECTIVE_PLATFORM_NAME)", Assert.Single(runner.Requests).Arguments);
         }
         finally
         {

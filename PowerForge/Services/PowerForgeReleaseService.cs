@@ -2573,6 +2573,9 @@ internal sealed partial class PowerForgeReleaseService
                     }
                 }
 
+                if (UsesAppStoreConnect(app) && (plan.Upload || HasAppleReleaseStateMutation(plan)))
+                    EnsureAppleUploadIntegrityQualified(plan, app, app.MarketingVersion, app.BuildNumber);
+
                 var resumedUpload = UsesAppStoreConnect(app)
                     ? TryResumeAppleUpload(plan, app, result)
                     : app.DistributionRoute == AppleDistributionRoute.DirectNotarized &&
@@ -2749,6 +2752,9 @@ internal sealed partial class PowerForgeReleaseService
                             ex,
                             checkpointException);
                     }
+                    // A lost response does not waive the private-input guard. Record the
+                    // remote ambiguity first, then retain and reject any changed input.
+                    ValidateAppleUploadIntegrity(plan, app, result, uploadSnapshot, uploadMutationMonitor, approvedArchiveSha256);
                     throw new InvalidOperationException(
                         $"The App Store upload attempt for '{app.Name}' ended without a definitive result. Do not upload again until App Store Connect state is reconciled.",
                         ex);
@@ -2759,12 +2765,12 @@ internal sealed partial class PowerForgeReleaseService
                 {
                     try
                     {
-                        WriteAppleUploadAttestation(plan, app, result);
+                        WriteAppleUploadCheckpoint(plan, app, result);
                     }
                     catch (Exception ex)
                     {
                         throw new InvalidOperationException(
-                            $"The App Store upload completed for '{app.Name}', but its durable upload attestation could not be persisted. " +
+                            $"The App Store upload completed for '{app.Name}', but its durable delivery checkpoint could not be persisted. " +
                             "Do not upload the archive again until App Store Connect state has been reconciled.",
                             ex);
                     }
@@ -2792,18 +2798,20 @@ internal sealed partial class PowerForgeReleaseService
                 // xcodebuild can return before its approved Info.plist sandbox scratch file is
                 // removed. Let that narrowly recognized cleanup settle while the mutation monitor
                 // remains active, so every unrelated transient archive mutation still fails closed.
-                uploadSnapshot?.WaitForExpectedXcodeExportScratchPathsToSettle();
-                if (uploadMutationMonitor is not null && uploadSnapshot is not null)
+                ValidateAppleUploadIntegrity(plan, app, result, uploadSnapshot, uploadMutationMonitor, approvedArchiveSha256);
+                if (!direct && !plan.Rehearse && upload.Succeeded)
                 {
-                    uploadMutationMonitor.ValidateNoChanges(
-                        () => uploadSnapshot.ValidateUnchanged(
-                            approvedArchiveSha256!,
-                            allowExpectedScratchDirectoryMutation: true));
-                }
-                else
-                {
-                    uploadMutationMonitor?.ValidateNoChanges();
-                    uploadSnapshot?.ValidateUnchanged(approvedArchiveSha256!);
+                    try
+                    {
+                        WriteAppleUploadCheckpoint(plan, app, result, integrityVerified: true);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException(
+                            $"The App Store upload completed for '{app.Name}' and its private input integrity was validated, but its durable qualification checkpoint could not be persisted. " +
+                            "Do not upload the archive again until App Store Connect state and the receipt journal have been reconciled.",
+                            ex);
+                    }
                 }
                 if (!upload.Succeeded)
                 {

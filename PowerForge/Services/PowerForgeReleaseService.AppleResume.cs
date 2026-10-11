@@ -198,6 +198,7 @@ internal sealed partial class PowerForgeReleaseService
         AppStoreConnectBuildInfo? remoteBuild)
     {
         var receipts = _appleReceiptStore.ReadAll(plan);
+        EnsureAppleUploadIntegrityQualified(plan, app, state.VersionString, state.BuildNumber, receipts);
         foreach (var receipt in receipts)
         {
             var target = FindMatchingAppleUploadAttestationTarget(
@@ -208,6 +209,9 @@ internal sealed partial class PowerForgeReleaseService
                 state.VersionString,
                 state.BuildNumber);
             if (target is null)
+                continue;
+
+            if (string.Equals(receipt.OperationPhase, "UploadCompleted", StringComparison.Ordinal))
                 continue;
 
             if (string.Equals(receipt.OperationPhase, "UploadAmbiguous", StringComparison.Ordinal))
@@ -257,6 +261,47 @@ internal sealed partial class PowerForgeReleaseService
         return null;
     }
 
+    private void EnsureAppleUploadIntegrityQualified(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app,
+        string? version,
+        string? build,
+        IReadOnlyCollection<PowerForgeAppleReleaseReceipt>? receipts = null)
+    {
+        receipts ??= _appleReceiptStore.ReadAll(plan);
+        foreach (var receipt in receipts)
+        {
+            // Export-policy changes and adoption cannot repair a known failed input for the
+            // same remote build. Match the original checkpoint independently of today's controls.
+            var target = FindMatchingAppleUploadAttestationTarget(
+                receipts, receipt, plan, app, version, build,
+                includeLegacyIntegrityFailure: true, requireCurrentExecutionPolicy: false);
+            if (target is null)
+                continue;
+            if (string.Equals(receipt.OperationPhase, "UploadIntegrityFailed", StringComparison.Ordinal) ||
+                IsLegacyAppleUploadIntegrityFailure(receipt, target))
+            {
+                throw new InvalidOperationException(
+                    $"The prior App Store upload attempt for '{app.Name}' failed private-input integrity validation. " +
+                    "Its delivery remains recorded, but it cannot qualify for resume or distribution, including the same approved Ship plan. " +
+                    "PowerForge will not upload the archive again. Investigate the retained evidence and reconcile remote state before choosing a new build.");
+            }
+            if (!string.Equals(receipt.OperationPhase, "UploadCompleted", StringComparison.Ordinal))
+                continue;
+            var qualified = receipts.Any(candidate =>
+                string.Equals(candidate.OperationPhase, "UploadAttested", StringComparison.Ordinal) &&
+                FindMatchingAppleUploadAttestationTarget(receipts, candidate, plan, app, version, build,
+                    requireCurrentExecutionPolicy: false) is { } verified &&
+                string.Equals(verified.UploadAttestationAttemptId, target.UploadAttestationAttemptId, StringComparison.OrdinalIgnoreCase));
+            if (!qualified)
+            {
+                throw new InvalidOperationException(
+                    $"The prior App Store upload attempt for '{app.Name}' completed delivery without a durable private-input integrity qualification. " +
+                    "PowerForge will not upload the archive again or resume distribution from this attempt. Reconcile its retained evidence and remote state.");
+            }
+        }
+    }
+
     private bool HasPotentialVerifiedAppleUploadAttestation(
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app)
@@ -277,11 +322,16 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app,
         string? version,
-        string? build)
+        string? build,
+        bool includeLegacyIntegrityFailure = false,
+        bool requireCurrentExecutionPolicy = true)
     {
         if (receipt.PlanOnly ||
             (!string.Equals(receipt.OperationPhase, "UploadAttested", StringComparison.Ordinal) &&
-             !string.Equals(receipt.OperationPhase, "UploadAmbiguous", StringComparison.Ordinal)) ||
+             !string.Equals(receipt.OperationPhase, "UploadAmbiguous", StringComparison.Ordinal) &&
+             !string.Equals(receipt.OperationPhase, "UploadCompleted", StringComparison.Ordinal) &&
+             !string.Equals(receipt.OperationPhase, "UploadIntegrityFailed", StringComparison.Ordinal) &&
+             !(includeLegacyIntegrityFailure && string.Equals(receipt.OperationPhase, "Completed", StringComparison.Ordinal))) ||
             receipt.SchemaVersion < 4 ||
             string.IsNullOrWhiteSpace(receipt.ReceiptSha256) ||
             !AppleSourceCommitEvidenceMatches(receipt.SourceCommit, plan.SourceCommit))
@@ -290,7 +340,28 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         return receipt.Targets.SingleOrDefault(candidate =>
-            candidate.Name.Equals(app.Name, StringComparison.OrdinalIgnoreCase) &&
+            IsMatchingAppleReceiptTargetIdentity(plan, app, candidate) &&
+            (string.IsNullOrWhiteSpace(version) ||
+             string.Equals(candidate.Version, version, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrWhiteSpace(build) ||
+             string.Equals(candidate.Build, build, StringComparison.OrdinalIgnoreCase)) &&
+            !candidate.AdoptedExistingBuild &&
+            candidate.UploadPerformed &&
+            IsSha256(candidate.ArchiveSha256) &&
+            IsSha256(candidate.UploadExecutionSha256) &&
+            (!requireCurrentExecutionPolicy ||
+             (string.Equals(candidate.UploadExecutionSha256, ComputeAppleUploadExecutionSha256(plan, app), StringComparison.OrdinalIgnoreCase) &&
+              (string.IsNullOrWhiteSpace(app.ExpectedArchiveSha256) ||
+               string.Equals(candidate.ArchiveSha256, app.ExpectedArchiveSha256, StringComparison.OrdinalIgnoreCase)))) &&
+            !string.IsNullOrWhiteSpace(candidate.ArchivePath) &&
+            IsVerifiedUploadCheckpoint(receipts, receipt, candidate, plan.ProjectRoot));
+    }
+
+    private static bool IsMatchingAppleReceiptTargetIdentity(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app,
+        PowerForgeAppleReleaseTargetReceipt candidate)
+        => candidate.Name.Equals(app.Name, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(candidate.BundleId, app.BundleId, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(candidate.AppId, app.AppStoreConnectAppId, StringComparison.OrdinalIgnoreCase) &&
             candidate.Platform == app.Platform &&
@@ -304,24 +375,18 @@ internal sealed partial class PowerForgeReleaseService
             string.Equals(candidate.Scheme, app.Scheme, StringComparison.Ordinal) &&
             candidate.ArchiveVariant == app.ArchiveVariant &&
             string.Equals(candidate.Destination, app.Destination, StringComparison.Ordinal) &&
-            candidate.DistributionRoute == app.DistributionRoute &&
-            (string.IsNullOrWhiteSpace(version) ||
-             string.Equals(candidate.Version, version, StringComparison.OrdinalIgnoreCase)) &&
-            (string.IsNullOrWhiteSpace(build) ||
-             string.Equals(candidate.Build, build, StringComparison.OrdinalIgnoreCase)) &&
-            !candidate.AdoptedExistingBuild &&
-            candidate.UploadPerformed &&
-            IsSha256(candidate.ArchiveSha256) &&
-            IsSha256(candidate.UploadExecutionSha256) &&
-            string.Equals(
-                candidate.UploadExecutionSha256,
-                ComputeAppleUploadExecutionSha256(plan, app),
-                StringComparison.OrdinalIgnoreCase) &&
-            (string.IsNullOrWhiteSpace(app.ExpectedArchiveSha256) ||
-             string.Equals(candidate.ArchiveSha256, app.ExpectedArchiveSha256, StringComparison.OrdinalIgnoreCase)) &&
-            !string.IsNullOrWhiteSpace(candidate.ArchivePath) &&
-            IsVerifiedUploadCheckpoint(receipts, receipt, candidate, plan.ProjectRoot));
-    }
+            candidate.DistributionRoute == app.DistributionRoute;
+
+    private static bool IsLegacyAppleUploadIntegrityFailure(
+        PowerForgeAppleReleaseReceipt receipt,
+        PowerForgeAppleReleaseTargetReceipt target)
+        => !receipt.Success &&
+           string.Equals(receipt.OperationPhase, "Completed", StringComparison.Ordinal) &&
+           target.ErrorMessage is { } error &&
+           (error.StartsWith("The private Apple upload snapshot changed while xcodebuild was reading it.", StringComparison.Ordinal) ||
+            error.StartsWith("The private Apple upload archive snapshot changed while xcodebuild was reading it:", StringComparison.Ordinal) ||
+            error.StartsWith("The private Apple upload archive snapshot file identity changed while xcodebuild was reading it.", StringComparison.Ordinal) ||
+            error.StartsWith("The private Apple upload archive snapshot mutation monitor failed;", StringComparison.Ordinal));
 
     private static bool IsVerifiedUploadCheckpoint(
         IReadOnlyCollection<PowerForgeAppleReleaseReceipt> receipts,
@@ -337,7 +402,10 @@ internal sealed partial class PowerForgeReleaseService
         var checkpoint = receipts.SingleOrDefault(candidate =>
             string.Equals(candidate.AttemptId, target.UploadAttestationAttemptId, StringComparison.OrdinalIgnoreCase));
         if (checkpoint is null ||
-            !string.Equals(checkpoint.OperationPhase, "UploadAttested", StringComparison.Ordinal) ||
+            (!string.Equals(checkpoint.OperationPhase, "UploadAttested", StringComparison.Ordinal) &&
+             !string.Equals(checkpoint.OperationPhase, "UploadCompleted", StringComparison.Ordinal) &&
+             !(string.Equals(receipt.OperationPhase, "UploadIntegrityFailed", StringComparison.Ordinal) &&
+               string.Equals(checkpoint.OperationPhase, "UploadAmbiguous", StringComparison.Ordinal))) ||
             !string.Equals(checkpoint.SourceCommit, receipt.SourceCommit, StringComparison.OrdinalIgnoreCase))
         {
             return false;
