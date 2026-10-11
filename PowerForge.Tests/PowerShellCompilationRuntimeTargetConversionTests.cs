@@ -19,7 +19,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.False(strict.Succeeded);
-        Assert.Contains("not available in the generated target contract", strict.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(OperatingSystem.IsWindows()
+                ? "not available in the generated target contract"
+                : "requires runtime type resolution",
+            strict.Error, StringComparison.OrdinalIgnoreCase);
 
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "Generated.RuntimeTarget.Module",
@@ -28,9 +31,16 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries,
             static entry => entry.Name == "Convert-ToDirectoryEntry");
-        Assert.True(unit.EmittedClrMethod);
-        Assert.True(unit.UsesNativeFunctionBinding);
-        Assert.False(unit.RetainedHostedSource);
+        // Windows hosts provide the ADSI type accelerator. Unix hosts must retain
+        // the unresolved conversion so the active host reports TypeNotFound.
+        var expectsNativeConversion = OperatingSystem.IsWindows();
+        Assert.Equal(expectsNativeConversion, unit.EmittedClrMethod);
+        Assert.Equal(expectsNativeConversion, unit.UsesNativeFunctionBinding);
+        Assert.Equal(!expectsNativeConversion, unit.RetainedHostedSource);
+        if (!expectsNativeConversion)
+            Assert.Contains(unit.DiagnosticChain, static diagnostic =>
+                diagnostic.FeatureId == PowerShellCompilationFeatureIds.Conversion &&
+                diagnostic.Message.Contains("Conversion target 'ADSI' requires runtime type resolution", StringComparison.Ordinal));
 
         const string probe = """
             function Describe-Record($item) {
@@ -69,19 +79,22 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             fixture.RootPath, "runtime-target-compiled");
         Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
         Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + compiled.StandardError);
+        if (!expectsNativeConversion)
+            Assert.Contains("TypeNotFound", original.StandardOutput, StringComparison.Ordinal);
         Assert.Equal(original.StandardOutput, compiled.StandardOutput);
         Assert.Equal(original.StandardError, compiled.StandardError);
     }
 
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData("Convert-DomainToSid.ps1", "5d51cb22e051605880ed678eeee9b07d81ed40da53def00bb2471259711f5128", "Convert-DomainToSid")]
-    [InlineData("Convert-DomainFqdnToNetBIOS.ps1", "3cc96dc766b8a0d82335445ca20190d03b5fd5bbe50a0a96e63c8530915279af", "Convert-DomainFqdnToNetBIOS")]
-    [InlineData("ConvertFrom-NetbiosName.ps1", "f65488348776a529068b221200a3419b9aa3a80a28b4b0cbdc312a15852315dd", "ConvertFrom-NetbiosName")]
-    public void CompleteWorkflow_RuntimeTargetConversionsEmitUnchangedFunctions(
+    [InlineData("Convert-DomainToSid.ps1", "5d51cb22e051605880ed678eeee9b07d81ed40da53def00bb2471259711f5128", "Convert-DomainToSid", true)]
+    [InlineData("Convert-DomainFqdnToNetBIOS.ps1", "3cc96dc766b8a0d82335445ca20190d03b5fd5bbe50a0a96e63c8530915279af", "Convert-DomainFqdnToNetBIOS", false)]
+    [InlineData("ConvertFrom-NetbiosName.ps1", "f65488348776a529068b221200a3419b9aa3a80a28b4b0cbdc312a15852315dd", "ConvertFrom-NetbiosName", true)]
+    public void CompleteWorkflow_RuntimeTargetConversionsPreserveHostEligibility(
         string fileName,
         string expectedSha256,
-        string functionName)
+        string functionName,
+        bool usesWindowsAdsiAlias)
     {
         var source = FindCompleteConversionWorkflow("PSSharedGoods", "FullModule", "Public", "Converts", fileName);
         Assert.Equal(expectedSha256,
@@ -101,9 +114,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries,
             entry => entry.Name == functionName);
-        Assert.True(unit.EmittedClrMethod, System.Text.Json.JsonSerializer.Serialize(unit));
-        Assert.True(unit.UsesNativeFunctionBinding);
-        Assert.False(unit.RetainedHostedSource);
+        var expectsNativeConversion = OperatingSystem.IsWindows() || !usesWindowsAdsiAlias;
+        Assert.Equal(expectsNativeConversion, unit.EmittedClrMethod);
+        Assert.Equal(expectsNativeConversion, unit.UsesNativeFunctionBinding);
+        Assert.Equal(!expectsNativeConversion, unit.RetainedHostedSource);
+        if (!expectsNativeConversion)
+            Assert.Contains(unit.DiagnosticChain, static diagnostic =>
+                diagnostic.FeatureId == PowerShellCompilationFeatureIds.Conversion &&
+                diagnostic.Message.Contains("Conversion target 'ADSI' requires runtime type resolution", StringComparison.Ordinal));
     }
 
     [Theory]
