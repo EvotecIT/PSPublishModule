@@ -154,6 +154,37 @@ public class WebSiteStructuredDataLinkedTests
         Assert.Equal(expected, source.TryGetProperty("@id", out var identity) ? identity.GetString() : null);
     }
 
+    [Theory]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, true, true)]
+    [InlineData(true, true, false)]
+    public void Render_LinksEachSoftwareEntityToCanonicalPageWithOrWithoutFaq(bool application, bool sourceCode, bool withFaq)
+    {
+        var site = Site();
+        site.StructuredData!.SoftwareApplication = application;
+        site.StructuredData.SoftwareSourceCode = sourceCode;
+        var page = Page();
+        page.Canonical = "https://product.example/guide/";
+        page.Meta["software"] = new Dictionary<string, object?> { ["name"] = "Example App", ["id"] = "https://product.example/#software" };
+        page.Meta["source_code"] = new Dictionary<string, object?> { ["name"] = "Example Library", ["id"] = "https://source.example/#library" };
+        if (withFaq)
+            page.Meta["faq"] = new Dictionary<string, object?> { ["items"] = new[] {
+                new Dictionary<string, object?> { ["question"] = "How?", ["answer"] = "Use the library." }
+            } };
+
+        var models = Models(RenderTemplate("{{ pf.structured_data {} }}", site, page));
+        var pageModel = OfType(models, withFaq ? "FAQPage" : "WebPage");
+        foreach (var type in new[] { "SoftwareApplication", "SoftwareSourceCode" })
+        {
+            var entity = models.SingleOrDefault(model => model.GetProperty("@type").GetString() == type);
+            if (entity.ValueKind != JsonValueKind.Undefined)
+                Assert.Equal(pageModel.GetProperty("@id").GetString(), entity.GetProperty("mainEntityOfPage").GetProperty("@id").GetString());
+        }
+        if (withFaq)
+            Assert.Equal("Use the library.", pageModel.GetProperty("mainEntity")[0].GetProperty("acceptedAnswer").GetProperty("text").GetString());
+    }
+
     [Fact]
     public void Render_HelperPreservesArticleModificationDateAndPublisher()
     {

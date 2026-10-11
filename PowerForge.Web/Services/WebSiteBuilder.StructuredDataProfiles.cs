@@ -320,6 +320,8 @@ public static partial class WebSiteBuilder
         var softwareId = ReadMetaString(item.Meta, "software.id");
         if (!string.IsNullOrWhiteSpace(softwareId) || spec.StructuredData?.WebPage == true)
             appModel["@id"] = FirstStructuredValue(softwareId, pageUrl + "#software");
+        if (spec.StructuredData?.WebPage == true)
+            appModel["mainEntityOfPage"] = StructuredReference(pageUrl + "#webpage");
 
         return BuildJsonLdScript(appModel);
     }

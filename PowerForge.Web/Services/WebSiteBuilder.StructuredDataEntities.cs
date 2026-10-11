@@ -70,6 +70,8 @@ public static partial class WebSiteBuilder
         var sourceCodeId = ReadMetaString(item.Meta, "source_code.id");
         if (!string.IsNullOrWhiteSpace(sourceCodeId) || spec.StructuredData?.WebPage == true)
             model["@id"] = FirstStructuredValue(sourceCodeId, pageUrl + "#source-code");
+        if (spec.StructuredData?.WebPage == true)
+            model["mainEntityOfPage"] = StructuredReference(pageUrl + "#webpage");
         foreach (var (key, property) in new[] { ("description", "description"), ("code_repository", "codeRepository"),
                      ("programming_language", "programmingLanguage"), ("runtime_platform", "runtimePlatform"), ("license", "license") })
         {
