@@ -2800,7 +2800,19 @@ internal sealed partial class PowerForgeReleaseService
                 // remains active, so every unrelated transient archive mutation still fails closed.
                 ValidateAppleUploadIntegrity(plan, app, result, uploadSnapshot, uploadMutationMonitor, approvedArchiveSha256);
                 if (!direct && !plan.Rehearse && upload.Succeeded)
-                    WriteAppleUploadCheckpoint(plan, app, result, integrityVerified: true);
+                {
+                    try
+                    {
+                        WriteAppleUploadCheckpoint(plan, app, result, integrityVerified: true);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new InvalidOperationException(
+                            $"The App Store upload completed for '{app.Name}' and its private input integrity was validated, but its durable qualification checkpoint could not be persisted. " +
+                            "Do not upload the archive again until App Store Connect state and the receipt journal have been reconciled.",
+                            ex);
+                    }
+                }
                 if (!upload.Succeeded)
                 {
                     result.Success = false;
