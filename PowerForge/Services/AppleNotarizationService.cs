@@ -652,6 +652,14 @@ public sealed partial class AppleNotarizationService
     }
 
     internal static string ComputeArtifactSha256(string artifactPath)
+        => ComputeArtifactSha256(artifactPath, null);
+
+    // Used only after the upload snapshot validates the exporter-owned history append.
+    // Every entry, path, mode, attribute and link remains in the original hash contract.
+    internal static string ComputeArtifactSha256WithApprovedArchiveInfoPlist(string artifactPath, byte[] approvedInfoPlist)
+        => ComputeArtifactSha256(artifactPath, approvedInfoPlist);
+
+    private static string ComputeArtifactSha256(string artifactPath, byte[]? approvedInfoPlist)
     {
         using var sha256 = SHA256.Create();
         AppendValue(sha256, "PowerForge.ArtifactSha256.v2");
@@ -694,7 +702,8 @@ public sealed partial class AppleNotarizationService
                     sha256,
                     entry.Info,
                     entry.RelativePath,
-                    includeContents);
+                    includeContents,
+                    entry.RelativePath == "Info.plist" ? approvedInfoPlist : null);
             }
         }
 
@@ -713,7 +722,8 @@ public sealed partial class AppleNotarizationService
         HashAlgorithm hash,
         FileSystemInfo entry,
         string relativePath,
-        bool includeContents)
+        bool includeContents,
+        byte[]? approvedContents = null)
     {
         AppendValue(hash, "entry");
         AppendValue(hash, relativePath);
@@ -738,7 +748,15 @@ public sealed partial class AppleNotarizationService
 #endif
         AppendValue(hash, includeContents ? "file" : "metadata");
         if (includeContents)
-            AppendFile(hash, entry.FullName);
+        {
+            if (approvedContents is null)
+                AppendFile(hash, entry.FullName);
+            else
+            {
+                AppendLength(hash, approvedContents.LongLength);
+                AppendBytes(hash, approvedContents);
+            }
+        }
     }
 
     private static void AppendValue(HashAlgorithm hash, string value)

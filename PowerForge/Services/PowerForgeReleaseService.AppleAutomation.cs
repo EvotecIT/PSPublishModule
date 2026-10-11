@@ -563,6 +563,7 @@ internal sealed partial class PowerForgeReleaseService
             var betaGroupsConfigured = UsesTestFlight(app) &&
                                        (plan.TestFlightBetaGroupIds.Length > 0 ||
                                         plan.TestFlightBetaGroupNames.Length > 0);
+            var delivery = ReadAppleStatusDelivery(plan, app, result, values.MarketingVersion, values.BuildNumber);
             var diagnostics = AppleReleaseFailureClassifier.Classify(
                     result?.ErrorMessage,
                     build?.ProcessingState,
@@ -573,6 +574,7 @@ internal sealed partial class PowerForgeReleaseService
                     : Array.Empty<PowerForgeAppleReleaseDiagnostic>())
                 .Concat(CreateGovernanceDiagnostics(result?.Governance))
                 .Concat(CreateAdoptedBuildDiagnostics(result))
+                .Concat(delivery.Diagnostics)
                 .GroupBy(static diagnostic => diagnostic.Code, StringComparer.OrdinalIgnoreCase)
                 .Select(static group => group.First())
                 .ToArray();
@@ -619,7 +621,8 @@ internal sealed partial class PowerForgeReleaseService
                 Build = state?.BuildNumber ?? values.BuildNumber,
                 BuildId = build?.Id,
                 BuildProcessingState = build?.ProcessingState,
-                BuildUploadId = result?.Upload?.BuildUploadId ?? result?.ResumedUploadAttestation?.BuildUploadId,
+                BuildUploadId = result?.Upload?.BuildUploadId ?? result?.ResumedUploadAttestation?.BuildUploadId ?? delivery.Id,
+                BuildUploadState = delivery.State,
                 DistributionVersionId = receiptVersion?.Id,
                 DistributionState = receiptVersion?.AppStoreState ?? receiptVersion?.AppVersionState,
                 BuildSelected = platform?.MatchedBuildSelected ??

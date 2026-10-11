@@ -316,6 +316,9 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
 
     public string? BuildUploadId { get; set; }
 
+    /// <summary>Observed delivery processing state; it does not establish build or upload integrity qualification.</summary>
+    public string? BuildUploadState { get; set; }
+
     public string? DistributionVersionId { get; set; }
 
     public string? DistributionState { get; set; }
