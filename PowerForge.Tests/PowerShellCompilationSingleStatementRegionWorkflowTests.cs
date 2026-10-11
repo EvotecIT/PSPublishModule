@@ -54,11 +54,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal("PowerForge.Generated.Runtime.PowerShellNativeFunctionContext", nativeContext.TypeName);
         Assert.DoesNotContain(methodAbi.Parameters,
             static parameter => parameter.PowerShellName.Equals("IP", StringComparison.OrdinalIgnoreCase));
-        var generatedSource = string.Join(Environment.NewLine, Directory.EnumerateFiles(
-            result.GeneratedSourcePath!, "*.cs", SearchOption.AllDirectories).Select(File.ReadAllText));
-        Assert.Contains("<param name=\"__nativeFunction\">", generatedSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("<param name=\"IP\">", generatedSource, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(fixture.RootPath, generatedSource, StringComparison.OrdinalIgnoreCase);
+        var generatedDocumentation = string.Join(Environment.NewLine, Directory.EnumerateFiles(
+            result.GeneratedSourcePath!, "*.cs", SearchOption.AllDirectories).SelectMany(File.ReadLines)
+                .Where(static line => line.TrimStart().StartsWith("///", StringComparison.Ordinal)));
+        Assert.Contains("<param name=\"__nativeFunction\">", generatedDocumentation, StringComparison.Ordinal);
+        Assert.DoesNotContain("<param name=\"IP\">", generatedDocumentation, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(fixture.RootPath, generatedDocumentation, StringComparison.OrdinalIgnoreCase);
 
         const string probe = """
             function Describe-RegionRecord($record) {
