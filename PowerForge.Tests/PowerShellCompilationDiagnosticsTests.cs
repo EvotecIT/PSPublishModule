@@ -198,6 +198,34 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 entry => Assert.Equal("Public/Functions.ps1", entry.RelativePath));
     }
 
+    [Theory]
+    [InlineData("Get-Duplicate")]
+    [InlineData("get-duplicate")]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void HybridFailureMapPreservesSameLineDuplicateDefinitionExtents(string secondName)
+    {
+        using var fixture = ArtifactFixture.Create(
+            "function Get-Duplicate { function Get-Duplicate { return 0 }; return 1 }; " +
+            "function " + secondName + " {\n    throw 'second'\n}", ".psm1");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "Generic.DuplicateFailureMapProof",
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true));
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var entries = result.Manifest!.FailureMap!.Entries
+            .Where(static entry => entry.UnitName.Equals("Get-Duplicate", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(static entry => entry.SourceStartColumn).ToArray();
+        Assert.Equal(2, entries.Length);
+        Assert.NotEqual(entries[0].UnitId, entries[1].UnitId);
+        Assert.Equal(1, entries[0].SourceEndLine);
+        Assert.Equal(3, entries[1].SourceEndLine);
+        Assert.True(entries[1].SourceStartColumn > entries[0].SourceEndColumn);
+        var failure = PowerShellCompilationFailureMapper.MapRuntimeFailure(
+            result.Manifest, $"failure in {entries[1].DocumentId}:line 2");
+        Assert.Equal(entries[1].UnitId, Assert.Single(failure.Locations).UnitId);
+    }
+
     [Fact]
     [Trait("Category", "PowerShellCompilation")]
     public void DiagnosticsRedactPathsAndSecretAssignments()
