@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using PowerForge;
 using PowerForge.Cli;
@@ -7,7 +8,7 @@ internal static partial class Program
 {
     private const string AppleSimulatorUsage =
         "Usage: powerforge apple-simulator run --owner <chat-or-run> --device <UUID> " +
-        "[--state-root <shared-path>] [--device-set <existing-path>] [--timeout-seconds <seconds>] " +
+        "[--state-root <shared-path>] [--device-set <existing-path>] [--require-shutdown] [--timeout-seconds <seconds>] " +
         "[--simulator-timeout-seconds <seconds>] [--cleanup-timeout-seconds <seconds>] [--output json] -- <executable> [args...]\n" +
         "       powerforge apple-simulator status [--state-root <shared-path>] [--output json]\n" +
         "       powerforge apple-simulator acknowledge --session <session-id> [--state-root <shared-path>] [--output json]";
@@ -51,10 +52,14 @@ internal static partial class Program
                 return 0;
             }
             if (separator < 0 || separator + 1 >= args.Length) throw new ArgumentException("run requires -- followed by a foreground executable and arguments.");
+            var shutdownPolicy = Environment.GetEnvironmentVariable("POWERFORGE_APPLE_SIMULATOR_REQUIRE_SHUTDOWN");
+            if (shutdownPolicy is not (null or "" or "1"))
+                throw new ArgumentException("POWERFORGE_APPLE_SIMULATOR_REQUIRE_SHUTDOWN must be 1 or unset.");
             var request = new AppleSimulatorSessionRequest
             {
                 DeviceId = RequiredAppleSimulatorValue(values, "--device"), Owner = RequiredAppleSimulatorValue(values, "--owner"),
                 StateRoot = stateRoot, DeviceSetPath = values.TryGetValue("--device-set", out var deviceSet) ? deviceSet : null,
+                RequireInitialShutdown = values.ContainsKey("--require-shutdown") || shutdownPolicy == "1",
                 SimulatorTimeout = AppleSimulatorTimeout(values, "--simulator-timeout-seconds", 120),
                 CleanupTimeout = AppleSimulatorTimeout(values, "--cleanup-timeout-seconds", 30),
                 Command = new ProcessRunRequest(args[separator + 1], Directory.GetCurrentDirectory(), args.Skip(separator + 2).ToArray(),
@@ -89,6 +94,11 @@ internal static partial class Program
         {
             var option = options[index].ToLowerInvariant();
             if (option is "--json" or "--output-json") continue;
+            if (option == "--require-shutdown" && operation == "run")
+            {
+                if (!values.TryAdd(option, "true")) throw new ArgumentException($"Duplicate option '{option}'.");
+                continue;
+            }
             var common = option is "--state-root" or "--output";
             var run = operation == "run" && option is "--device" or "--owner" or "--device-set" or "--timeout-seconds" or "--simulator-timeout-seconds" or "--cleanup-timeout-seconds";
             if (!common && !run && !(operation == "acknowledge" && option == "--session")) throw new ArgumentException($"Unknown {operation} option '{option}'.");
@@ -113,5 +123,19 @@ internal static partial class Program
 
     private static void WriteAppleSimulatorJson(string operation, bool success, int exitCode, System.Text.Json.JsonElement result)
         => WriteJson(new CliJsonEnvelope { SchemaVersion = OutputSchemaVersion, Command = "apple-simulator." + operation,
-            Success = success, ExitCode = exitCode, Result = result });
+            Success = success, ExitCode = exitCode, Result = result }, writer =>
+        {
+            writer.WriteStartObject("tool");
+            writer.WriteString("cliVersion", typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+            writer.WriteString("engineVersion", typeof(AppleSimulatorSessionService).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+            writer.WriteString("cliModuleId", AppleSimulatorModuleId(typeof(Program).Assembly));
+            writer.WriteString("engineModuleId", AppleSimulatorModuleId(typeof(AppleSimulatorSessionService).Assembly));
+            writer.WriteEndObject();
+        });
+
+    private static string? AppleSimulatorModuleId(Assembly assembly)
+    {
+        try { return assembly.ManifestModule.ModuleVersionId.ToString("D"); }
+        catch (NotSupportedException) { return null; } // NativeAOT may not expose module metadata; guarded captures require it.
+    }
 }

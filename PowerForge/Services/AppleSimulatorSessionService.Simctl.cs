@@ -17,6 +17,7 @@ public sealed partial class AppleSimulatorSessionService
     private async Task<string> GetDeviceStateAsync(string deviceId, string? deviceSet, TimeSpan timeout, CancellationToken cancellationToken)
     {
         var inventory = await SimctlAsync(deviceSet, new[] { "list", "devices", "--json" }, timeout, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         RequireSuccess(inventory, "Simulator discovery");
         using var document = JsonDocument.Parse(inventory.StdOut);
         var matches = new List<JsonElement>();

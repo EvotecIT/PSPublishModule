@@ -17,6 +17,30 @@ It boots a shutdown device, waits for readiness, runs the command, and verifies
 owned shutdown. Failed or ambiguous boot attempts are reported without claiming
 authority to shut down a device another actor may have booted.
 
+Use `--require-shutdown` for disposable capture or installation fixtures that
+must not reuse an active device. PowerForge checks this requirement under the
+shared coordination lock, before boot, readiness, or foreground execution. A
+pre-existing booted device is rejected without changing it or replacing the
+previous ownership receipt. The default still permits deliberate reuse.
+
+Automation can set `POWERFORGE_APPLE_SIMULATOR_REQUIRE_SHUTDOWN=1` to enforce
+the same requirement for every CLI `run`, including callers that omit the flag.
+An unset or empty value preserves the default; other values fail before the
+session starts. JSON run results record `requireInitialShutdown` alongside the
+ownership receipt so capture provenance can verify the effective requirement.
+The persisted receipt format stays compatible with older operators. The Apple
+screenshot workflow sets this policy for configured simulator captures and
+requires matching guarded results.
+
+Successful JSON command responses include `tool.cliVersion` and
+`tool.engineVersion` from the executing assemblies' informational versions.
+Managed builds also report `tool.cliModuleId` and `tool.engineModuleId` from the
+loaded modules. The screenshot workflow compares these with the tool it built,
+requires both source revisions to match its pinned checkout, and records the
+verified identities with each session. Missing or different identities fail
+capture validation, including different builds from the same source revision.
+Shared ownership receipts remain unchanged.
+
 Boot/discovery/readiness commands default to 120 seconds each, command execution
 to 1800 seconds, and the entire release attempt to 30 seconds. Override them with
 `--simulator-timeout-seconds`, `--timeout-seconds`, and `--cleanup-timeout-seconds`.
