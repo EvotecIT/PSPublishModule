@@ -25,6 +25,16 @@ on:
         required: false
         default: build/appstore-screenshots
         type: string
+      simulator_tool_ref:
+        description: Exact PowerForge commit providing apple-simulator; blank does not provision a lifecycle tool.
+        required: false
+        default: ""
+        type: string
+      simulator_devices_json:
+        description: Explicit task-owned simulator UUIDs keyed by consumer capture role.
+        required: false
+        default: '{}'
+        type: string
       runner_labels_json:
         description: JSON array of trusted Apple runner labels.
         required: false
@@ -68,7 +78,20 @@ jobs:
           MARKETING_VERSION: ${{ inputs.marketing_version }}
           CAPTURE_SHELL: ${{ inputs.capture_shell }}
           CAPTURE_RUNTIME: ${{ inputs.runtime }}
+          SIMULATOR_TOOL_REF: ${{ inputs.simulator_tool_ref }}
+          SIMULATOR_DEVICES: ${{ inputs.simulator_devices_json }}
         run: |
+          if ($env:SIMULATOR_TOOL_REF -and $env:SIMULATOR_TOOL_REF -notmatch '^[0-9A-Fa-f]{40}$') { throw 'simulator_tool_ref must be an exact commit SHA.' }
+          $devices = $env:SIMULATOR_DEVICES | ConvertFrom-Json -AsHashtable
+          if ($devices -isnot [Collections.IDictionary]) { throw 'simulator_devices_json must be an object.' }
+          foreach ($entry in $devices.GetEnumerator()) {
+            $device = [guid]::Empty
+            if ($entry.Key -notmatch '^[a-z][a-z0-9_-]{0,39}$' -or
+                -not [guid]::TryParseExact([string]$entry.Value, 'D', [ref]$device) -or $device -eq [guid]::Empty) {
+              throw 'Each capture role must select one exact nonempty simulator UUID.'
+            }
+          }
+          if ($devices.Count -gt 0 -and -not $env:SIMULATOR_TOOL_REF) { throw 'Simulator captures require a pinned lifecycle tool.' }
           if ($env:SOURCE_REF -notmatch '^[0-9A-Fa-f]{40}$') { throw 'source_ref must be an exact 40-character commit SHA.' }
           if ($env:MARKETING_VERSION -notmatch '^\d+\.\d+(?:\.\d+)?$') { throw 'marketing_version must use x.y or x.y.z.' }
           if ($env:CAPTURE_SHELL -notin @('bash', 'pwsh')) { throw 'capture_shell must be bash or pwsh.' }
@@ -84,6 +107,36 @@ jobs:
           path: source
           persist-credentials: false
 
+      - name: Checkout pinned simulator lifecycle tool
+        if: inputs.simulator_tool_ref != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          repository: EvotecIT/PSPublishModule
+          ref: ${{ inputs.simulator_tool_ref }}
+          fetch-depth: 1
+          path: simulator-tool
+          persist-credentials: false
+
+      - name: Build simulator lifecycle tool
+        if: inputs.simulator_tool_ref != ''
+        shell: pwsh
+        env:
+          SIMULATOR_TOOL_REF: ${{ inputs.simulator_tool_ref }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $toolRoot = Join-Path '${{ github.workspace }}' 'simulator-tool'
+          if ((& git -C $toolRoot rev-parse HEAD).Trim() -ne $env:SIMULATOR_TOOL_REF.ToLowerInvariant()) { throw 'Simulator tool checkout does not match its pin.' }
+          $dotnet = '/usr/local/share/dotnet/dotnet'
+          if (-not (Test-Path -LiteralPath $dotnet -PathType Leaf)) { throw 'The trusted Mac needs the fixed .NET installation.' }
+          $output = Join-Path $env:RUNNER_TEMP 'powerforge-simulator-cli'
+          Push-Location $toolRoot
+          try {
+            & $dotnet build PowerForge.Cli/PowerForge.Cli.csproj --configuration Release --framework net10.0 --output $output --verbosity quiet
+            if ($LASTEXITCODE -ne 0) { throw 'Simulator lifecycle tool build failed.' }
+          } finally { Pop-Location }
+          "POWERFORGE_DOTNET=$dotnet" | Add-Content $env:GITHUB_ENV
+          "POWERFORGE_SIMULATOR_CLI=$(Join-Path $output 'PowerForge.Cli.dll')" | Add-Content $env:GITHUB_ENV
+
       - name: Capture deterministic App Store screenshots
         shell: pwsh
         env:
@@ -91,6 +144,7 @@ jobs:
           CAPTURE_SCRIPT: ${{ inputs.capture_script }}
           CAPTURE_SHELL: ${{ inputs.capture_shell }}
           CAPTURE_ARTIFACT_PATH: ${{ inputs.capture_artifact_path }}
+          POWERFORGE_CAPTURE_SIMULATORS: ${{ inputs.simulator_devices_json }}
         run: |
           $ErrorActionPreference = 'Stop'
           $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source').TrimEnd([IO.Path]::DirectorySeparatorChar)
@@ -220,4 +274,13 @@ jobs:
           name: powerforge-apple-screenshots-${{ inputs.source_ref }}
           path: source/${{ inputs.capture_artifact_path }}/**/*.png
           if-no-files-found: error
+          retention-days: 30
+
+      - name: Retain simulator ownership and release receipts
+        if: always() && inputs.simulator_tool_ref != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: powerforge-apple-simulator-receipts-${{ inputs.source_ref }}
+          path: source/build/powerforge/screenshots/*.json
+          if-no-files-found: warn
           retention-days: 30
