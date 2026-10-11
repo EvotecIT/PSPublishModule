@@ -302,6 +302,7 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
             .Where(item => line >= item.SourceStartLine && line <= Math.Max(item.SourceStartLine, item.SourceEndLine))
             .OrderBy(item => Math.Max(item.SourceStartLine, item.SourceEndLine) - item.SourceStartLine)
             .ThenByDescending(static item => item.GeneratedStartLine > 0)
+            .ThenBy(static item => item.UnitName.Equals("<script>", StringComparison.Ordinal))
             .ThenBy(static item => item.SourceStartColumn)
             .FirstOrDefault();
 
@@ -341,8 +342,7 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
             IScriptExtent extent = ast.Extent;
             if (unit.Kind == PowerShellCompilationUnitKind.Function)
             {
-                var function = ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
-                    .OfType<FunctionDefinitionAst>()
+                var function = PowerShellSourceParser.GetTopLevelFunctions(ast)
                     // Unit identities retain authored spelling. Match that spelling before
                     // selecting its occurrence so case-variant declarations keep their own extent.
                     .Where(candidate =>

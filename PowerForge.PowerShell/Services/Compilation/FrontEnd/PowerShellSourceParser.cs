@@ -41,6 +41,13 @@ internal static class PowerShellSourceParser
             extent.EndLineNumber,
             extent.EndColumnNumber);
 
+    /// <summary>Finds source-ordered function declarations directly owned by this compilation document.</summary>
+    internal static IEnumerable<FunctionDefinitionAst> GetTopLevelFunctions(ScriptBlockAst syntax)
+        => syntax.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+            .OfType<FunctionDefinitionAst>()
+            .Where(function => function.Parent is NamedBlockAst && ReferenceEquals(function.Parent.Parent, syntax))
+            .OrderBy(static function => function.Extent.StartOffset);
+
     internal static string GetParameterBlockSource(ParamBlockAst? parameterBlock)
     {
         if (parameterBlock is null) return string.Empty;

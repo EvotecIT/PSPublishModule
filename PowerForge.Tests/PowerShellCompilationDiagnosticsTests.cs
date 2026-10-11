@@ -199,13 +199,15 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Theory]
-    [InlineData("Get-Duplicate")]
-    [InlineData("get-duplicate")]
+    [InlineData("Get-Duplicate", false)]
+    [InlineData("get-duplicate", false)]
+    [InlineData("Get-Duplicate", true)]
     [Trait("Category", "PowerShellCompilerGate")]
-    public void HybridFailureMapPreservesSameLineDuplicateDefinitionExtents(string secondName)
+    public void HybridFailureMapPreservesSameLineDuplicateDefinitionExtents(string secondName, bool conditionalDeclaration)
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-Duplicate { function Get-Duplicate { return 0 }; return 1 }; " +
+            (conditionalDeclaration ? "if ($false) { function Get-Duplicate { return -1 } }; " : string.Empty) +
             "function " + secondName + " {\n    throw 'second'\n}", ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, "Generic.DuplicateFailureMapProof",
@@ -224,6 +226,15 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var failure = PowerShellCompilationFailureMapper.MapRuntimeFailure(
             result.Manifest, $"failure in {entries[1].DocumentId}:line 2");
         Assert.Equal(entries[1].UnitId, Assert.Single(failure.Locations).UnitId);
+        var units = result.Manifest.UnitDispositionLedger!.Entries
+            .Where(static entry => entry.Name.Equals("Get-Duplicate", StringComparison.OrdinalIgnoreCase)).ToArray();
+        Assert.Equal(2, units.Length);
+        var source = File.ReadAllText(fixture.ScriptPath);
+        var declarationColumns = new[] { 1, source.LastIndexOf("function " + secondName, StringComparison.Ordinal) + 1 };
+        for (var index = 0; index < units.Length; index++)
+            Assert.Contains(units[index].DiagnosticChain, cause =>
+                cause.Code == PowerShellCompilationDiagnosticCode.UnsupportedSyntax &&
+                cause.Line == 1 && cause.Column == declarationColumns[index]);
     }
 
     [Fact]

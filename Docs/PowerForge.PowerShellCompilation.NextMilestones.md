@@ -19,7 +19,7 @@ The complete October 3 five-module census records **545/565** complete emitted f
 | Priority | Milestone | Current state | Required outcome |
 | --- | --- | --- | --- |
 | Complete | M29 script and module coverage | Pinned local portfolio passed | Pinned Evotec and independent third-party module portfolio; measured per-module gains, safe original/generated workflows, and no accepted regressions |
-| 1 | M29a admitted-contract stabilization | Integrated source; current audit and affected validation in progress | Preserve script argument binding and explain/build diagnostics; close reproduced defects before adding breadth |
+| 1 | M29a admitted-contract stabilization | Local audit fixes and affected validation complete; Full and CI qualification open | Preserve script argument binding and explain/build diagnostics; close reproduced defects before adding breadth |
 | 2 | M30 distribution and platforms | Historical signed local-feed lifecycle; public 3.0.166 release availability verified separately | Verify the coherent compiler/provider set and clean-target lifecycle; retain signing and platform limits |
 | Independent diagnosis | M31 performance | Known explain and recursive-call costs need controlled measurement | Measure a qualified workflow while release gates are held; promote optimizations only with semantic parity |
 
@@ -28,8 +28,8 @@ The complete October 3 five-module census records **545/565** complete emitted f
 **First: stabilize admitted contracts at the current candidate.** The post-merge lifecycle validation-metadata repair in [PR #1026](https://github.com/EvotecIT/PSPublishModule/pull/1026) demonstrates why broad emission counts cannot replace invocation proof. Inspect reachable sibling paths of reproduced defects before adding isolated type or command rules.
 
 - [x] Correct native script-launcher argument regressions: generated Windows x64/net10.0 artifacts preserve unknown dash-prefixed tokens, order, repeated arguments, aliases, and switch values through native script binding. Argument values containing PowerShell syntax remain data.
-- [x] Correct the same-line duplicate-unit explanation crash and related failure-map extent lookup. Distinct unit identities retain their hosted collision decisions; errors in the second body map to that definition, including case-variant names and a nested declaration.
-- [x] Run focused affected artifact/host tests and the Windows Fast gate. Final affected checks pass 7/7 after the source-map correction; the preceding stable candidate passes 303 Fast cases and six Strict programs. Linux reports explicit Windows skips and portable/excluded requirement metadata. The historical Linux 291-test/one-skip count does not qualify workflows whose test bodies returned early.
+- [x] Correct the same-line duplicate-unit explanation crash and related diagnostic extents. Analyzer and evidence use the same top-level declarations; nested and conditional definitions do not displace a unit's range or collision cause. Failure mapping distinguishes the active second body from its script root.
+- [x] Run focused affected artifact/host tests and the Windows Fast gate. Native process-argument proof passes; the final diagnostic/analyzer closure passes 52/52. The preceding stable candidate passes 303 Fast cases and six Strict programs. Linux reports explicit Windows skips and portable/excluded requirement metadata. The historical Linux 291-test/one-skip count does not qualify workflows whose test bodies returned early.
 - [ ] Freeze a stable candidate for required Full qualification, CI, and review. Record exact source, host, and test identities; no old aggregate pass or census substitutes for this evidence.
 - [x] Assess whether admission changed: this correction admits no new source form, so it claims no census gain and preserves the October 3 ledgers. Rerun affected same-input dispositions when a later admission change requires no-loss proof.
 

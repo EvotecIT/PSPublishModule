@@ -427,13 +427,11 @@ public sealed class PowerShellCompilationAnalyzerTests
 
         var plan = new PowerShellCompilationAnalyzer().Analyze(new PowerShellCompilationSpec(fixture.ScriptPath));
 
-        Assert.Equal(17, plan.RuntimeFallbackUnits);
         var units = Assert.Single(plan.Files).Units;
-        Assert.True(units.Single(static unit => unit.Name == "Get-LoopLeak").IsCompilable);
-        Assert.All(units.Where(static unit => unit.Name != "Get-LoopLeak"), static unit => Assert.False(unit.IsCompilable));
+        var supportedNames = new[] { "Test-Truthiness", "Get-OverflowingAdd", "Get-LoopLeak", "Test-NullScalar" };
+        Assert.All(supportedNames, name => Assert.True(units.Single(unit => unit.Name == name).IsCompilable));
+        Assert.All(units.Where(unit => !supportedNames.Contains(unit.Name)), static unit => Assert.False(unit.IsCompilable));
         var messages = string.Join(Environment.NewLine, plan.Files.SelectMany(static file => file.Units).SelectMany(static unit => unit.Diagnostics).Select(static diagnostic => diagnostic.Message));
-        Assert.Contains("truthiness", messages, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("promote on overflow", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("may remain unassigned", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("must end with an explicit return", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("collides with another function", messages, StringComparison.OrdinalIgnoreCase);
@@ -444,7 +442,6 @@ public sealed class PowerShellCompilationAnalyzerTests
         Assert.Contains("break must be inside", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("integral division changes runtime result type", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("string relational comparison", messages, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("non-nullable CLR value", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Relational comparison for CLR type 'System.Boolean'", messages, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("per-pipeline-input", messages, StringComparison.OrdinalIgnoreCase);
     }

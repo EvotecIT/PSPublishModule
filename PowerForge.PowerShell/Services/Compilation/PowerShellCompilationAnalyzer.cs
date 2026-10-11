@@ -110,11 +110,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             units.Add(scriptUnit);
         }
 
-        var functions = ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
-            .Cast<FunctionDefinitionAst>()
-            .Where(function => function.Parent is NamedBlockAst && ReferenceEquals(function.Parent.Parent, ast))
-            .OrderBy(static function => function.Extent.StartOffset)
-            .ToArray();
+        var functions = PowerShellSourceParser.GetTopLevelFunctions(ast).ToArray();
         foreach (var function in functions)
         {
             var functionUnit = AnalyzeUnit(
