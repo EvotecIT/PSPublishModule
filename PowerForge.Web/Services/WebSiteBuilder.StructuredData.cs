@@ -152,7 +152,13 @@ public static partial class WebSiteBuilder
             var pageModel = BuildWebPageStructuredData(spec, item, pageUrl, baseUrl);
             if (faqModel is not null)
             {
-                pageModel["@type"] = "FAQPage";
+                if (string.Equals(pageModel["@type"] as string, "ContactPage", StringComparison.Ordinal))
+                {
+                    pageModel["@type"] = new[] { "ContactPage", "FAQPage" };
+                    pageModel["about"] = pageModel["mainEntity"];
+                }
+                else
+                    pageModel["@type"] = "FAQPage";
                 pageModel["mainEntity"] = faqModel["mainEntity"];
                 if (faqModel.TryGetValue("name", out var faqName))
                     pageModel["name"] = faqName;

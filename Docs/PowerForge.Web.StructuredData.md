@@ -29,6 +29,9 @@ The publisher's name falls back to `OrganizationLegalName`, then the site name.
 Its URL falls back to the site base URL. Existing logo, contact and `sameAs`
 settings still apply. Set `meta.schema.page_type: ContactPage` on a contact page.
 FAQ metadata produces a single `FAQPage` with the canonical page identity.
+Contact pages containing FAQs retain both types on that identity, with the
+publisher as their subject and the questions in `mainEntity`. Software entities
+retain their canonical page link through `mainEntityOfPage` when FAQs are present.
 
 ## Data supplied by a theme
 

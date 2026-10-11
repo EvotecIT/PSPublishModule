@@ -35,6 +35,22 @@ public class WebSiteStructuredDataLinkedTests
     }
 
     [Fact]
+    public void Render_ContactPageWithFaqRetainsBothTypesAndPublisherSubject()
+    {
+        var page = Page();
+        page.Canonical = "https://product.example/contact/";
+        page.Meta["schema"] = new Dictionary<string, object?> { ["page_type"] = "ContactPage" };
+        page.Meta["faq"] = new Dictionary<string, object?> { ["items"] = new[] {
+            new Dictionary<string, object?> { ["question"] = "How can I contact you?", ["answer"] = "Use our contact form." }
+        } };
+        var model = Models(RenderTemplate("{{ pf.structured_data {} }}", Site(), page))
+            .Single(item => item.TryGetProperty("@id", out var id) && id.GetString() == "https://product.example/contact/#webpage");
+        Assert.Equal(new[] { "ContactPage", "FAQPage" }, model.GetProperty("@type").EnumerateArray().Select(type => type.GetString()));
+        Assert.Equal("https://publisher.example/#organization", model.GetProperty("about").GetProperty("@id").GetString());
+        Assert.Equal("Use our contact form.", model.GetProperty("mainEntity")[0].GetProperty("acceptedAnswer").GetProperty("text").GetString());
+    }
+
+    [Fact]
     public void Render_HelperUsesDataDrivenSubscriptionFactsWithoutChangingPageMetadata()
     {
         var page = Page();
