@@ -132,6 +132,64 @@ public sealed class AppleSimulatorSessionServiceTests
     }
 
     [Theory]
+    [InlineData(0, 130)]
+    [InlineData(7, 7)]
+    public async Task Cancellation_during_release_preserves_cleanup_and_cannot_report_success(int childExitCode, int expectedExitCode)
+    {
+        using var fixture = new Fixture();
+        using var cancellation = new CancellationTokenSource();
+        fixture.CancelShutdown = cancellation;
+        fixture.Validation = (_, _) => Task.FromResult(Result(childExitCode));
+
+        var result = await fixture.Service.RunAsync(fixture.Request(), cancellation.Token);
+
+        Assert.Equal("canceled", result.Receipt.Outcome);
+        Assert.False(result.Success);
+        Assert.Equal(expectedExitCode, result.ExitCode);
+        Assert.True(result.Receipt.CleanupSucceeded);
+        Assert.Equal("Shutdown", fixture.Devices[Device]);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Initial_discovery_cancellation_preserves_the_previous_receipt_without_running_a_child(bool successfulDiscovery)
+    {
+        using var fixture = new Fixture();
+        var previous = await fixture.Service.RunAsync(fixture.Request());
+        var persisted = File.ReadAllText(previous.ReceiptPath);
+        using var cancellation = new CancellationTokenSource();
+        fixture.CancelDiscovery = cancellation;
+        fixture.DiscoverySucceedsAfterCancellation = successfulDiscovery;
+        var invoked = false;
+        fixture.Validation = (_, _) => { invoked = true; return Task.FromResult(Result()); };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fixture.Service.RunAsync(fixture.Request(), cancellation.Token));
+
+        Assert.False(invoked);
+        Assert.Equal("Shutdown", fixture.Devices[Device]);
+        Assert.Equal(persisted, File.ReadAllText(previous.ReceiptPath));
+    }
+
+    [Fact]
+    public async Task Acknowledgment_cancellation_after_successful_discovery_preserves_the_interrupted_receipt()
+    {
+        using var fixture = new Fixture();
+        var previous = await fixture.Service.RunAsync(fixture.Request());
+        previous.Receipt.OwnerProcessStartedUtc = previous.Receipt.OwnerProcessStartedUtc.AddTicks(-1);
+        previous.Receipt.CompletedAtUtc = null;
+        File.WriteAllText(previous.ReceiptPath, JsonSerializer.Serialize(previous.Receipt));
+        var persisted = File.ReadAllText(previous.ReceiptPath);
+        using var cancellation = new CancellationTokenSource();
+        fixture.CancelDiscovery = cancellation;
+        fixture.DiscoverySucceedsAfterCancellation = true;
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fixture.Service.AcknowledgeAsync(previous.Receipt.SessionId, fixture.StateRoot, cancellation.Token));
+
+        Assert.Equal(persisted, File.ReadAllText(previous.ReceiptPath));
+    }
+
+    [Theory]
     [InlineData("failed")]
     [InlineData("malformed")]
     [InlineData("missing")]
@@ -271,6 +329,8 @@ public sealed class AppleSimulatorSessionServiceTests
         internal bool FailShutdown { get; init; }
         internal string? DiscoveryFailure { get; set; }
         internal CancellationTokenSource? CancelDiscovery { get; set; }
+        internal bool DiscoverySucceedsAfterCancellation { get; set; }
+        internal CancellationTokenSource? CancelShutdown { get; set; }
         internal AppleSimulatorSessionService Service { get; }
 
         internal Fixture()
@@ -293,7 +353,11 @@ public sealed class AppleSimulatorSessionServiceTests
             var command = request.Arguments[3];
             if (command == "list")
             {
-                if (CancelDiscovery is not null) { CancelDiscovery.Cancel(); return Task.FromResult(Result(130)); }
+                if (CancelDiscovery is not null)
+                {
+                    CancelDiscovery.Cancel();
+                    if (!DiscoverySucceedsAfterCancellation) return Task.FromResult(Result(130));
+                }
                 if (DiscoveryFailure == "failed") return Task.FromResult(Result(1));
                 if (DiscoveryFailure == "malformed") return Task.FromResult(Result(output: "invalid JSON"));
                 if (DiscoveryFailure == "missing") return Task.FromResult(Result(output: "{\"devices\":{}}"));
@@ -302,7 +366,12 @@ public sealed class AppleSimulatorSessionServiceTests
             }
             if (command == "boot") { Devices[Device] = "Booted"; return Task.FromResult(Result(FailBootAfterStateChange ? 1 : 0)); }
             if (command == "bootstatus") return Task.FromResult(Result(FailReadiness ? 1 : 0));
-            if (command == "shutdown") { if (!FailShutdown) Devices[Device] = "Shutdown"; return Task.FromResult(Result(FailShutdown ? 1 : 0)); }
+            if (command == "shutdown")
+            {
+                CancelShutdown?.Cancel();
+                if (!FailShutdown) Devices[Device] = "Shutdown";
+                return Task.FromResult(Result(FailShutdown ? 1 : 0));
+            }
             throw new InvalidOperationException("Unexpected simulator command.");
         }
 

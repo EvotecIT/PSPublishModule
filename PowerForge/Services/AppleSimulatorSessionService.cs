@@ -108,6 +108,11 @@ public sealed partial class AppleSimulatorSessionService
         finally
         {
             await ReleaseAsync(receipt, request.CleanupTimeout, result).ConfigureAwait(false);
+            if (cancellationToken.IsCancellationRequested)
+            {
+                receipt.Outcome = "canceled";
+                result.Error ??= "Simulator validation canceled.";
+            }
             receipt.CompletedAtUtc = DateTimeOffset.UtcNow;
             if (!receipt.CleanupSucceeded && receipt.Outcome == "succeeded") receipt.Outcome = "cleanup-incomplete";
             WriteReceipt(root, receipt);
