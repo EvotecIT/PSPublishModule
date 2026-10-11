@@ -1,0 +1,947 @@
+{
+  "schemaVersion": 1,
+  "recordedAtUtc": "2026-10-11T19:38:46.4809073Z",
+  "state": "bounded-public-Windows-lifecycle-qualified-with-explicit-gaps",
+  "selectedRelease": {
+    "version": "3.0.168",
+    "releaseUrl": "https://github.com/EvotecIT/PSPublishModule/releases/tag/v3.0.168",
+    "publishedAtUtc": "2026-10-11T07:30:39Z",
+    "sourceCommit": "f5398d8daff6f089cb0c6e256f1b571314226de2",
+    "baselineVersion": "3.0.166",
+    "baselineSourceCommit": "1c1cd34dc899bdcb20fca3e20c1dc0722c5bff71",
+    "compilerIntegrationCommit": "d856c5468a7e22e3284b5c0c9e44feb0b9b14aab",
+    "containsCompilerPr1084": false
+  },
+  "target": {
+    "os": "Windows 11 Pro 10.0.26300",
+    "architecture": "x64",
+    "powerShell": "7.6.6",
+    "windowsPowerShell": "5.1.26100.9444",
+    "sdk": "10.0.303",
+    "longPathsEnabled": true,
+    "freshHostProcesses": true,
+    "cleanMachine": false,
+    "scope": "Task-isolated tool/module/package installations and public-only package restore on an existing development workstation"
+  },
+  "publicPackages": [
+    {
+      "id": "PowerForge",
+      "version": "3.0.168",
+      "packageUrl": "https://api.nuget.org/v3-flatcontainer/powerforge/3.0.168/powerforge.3.0.168.nupkg",
+      "sha256": "fa26c3bef9110ccd1b3032d61e6bb5df85680648168ed2fdb7e49a5bed655741",
+      "size": 8977599,
+      "repositoryCommit": "f5398d8daff6f089cb0c6e256f1b571314226de2",
+      "dependencies": [
+        {
+          "framework": "net10.0",
+          "dependencies": [
+            {
+              "id": "NuGet.Configuration",
+              "version": "7.9.0",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "NuGet.Packaging",
+              "version": "7.9.0",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "System.IO.Packaging",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "System.Reflection.MetadataLoadContext",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "System.Security.Cryptography.Pkcs",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "System.Security.Cryptography.ProtectedData",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "VirusTotalAnalyzer",
+              "version": "1.0.0",
+              "exclude": "Build,Analyzers"
+            }
+          ]
+        },
+        {
+          "framework": ".NETFramework4.7.2",
+          "dependencies": [
+            {
+              "id": "NuGet.Configuration",
+              "version": "7.9.0",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "NuGet.Packaging",
+              "version": "7.9.0",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "System.Reflection.Metadata",
+              "version": "10.0.10",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "System.Security.Cryptography.Pkcs",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "System.Security.Cryptography.ProtectedData",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "System.Text.Json",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "VirusTotalAnalyzer",
+              "version": "1.0.0",
+              "exclude": "Build,Analyzers"
+            }
+          ]
+        },
+        {
+          "framework": "net8.0",
+          "dependencies": [
+            {
+              "id": "NuGet.Configuration",
+              "version": "7.9.0",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "NuGet.Packaging",
+              "version": "7.9.0",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "System.IO.Packaging",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "System.Reflection.MetadataLoadContext",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "System.Security.Cryptography.Pkcs",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "System.Security.Cryptography.ProtectedData",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "VirusTotalAnalyzer",
+              "version": "1.0.0",
+              "exclude": "Build,Analyzers"
+            }
+          ]
+        }
+      ],
+      "signatureVerifyExitCode": 0,
+      "comparedEntries": 11,
+      "payloadMismatches": 0
+    },
+    {
+      "id": "PowerForge.Blazor",
+      "version": "3.0.168",
+      "packageUrl": "https://api.nuget.org/v3-flatcontainer/powerforge.blazor/3.0.168/powerforge.blazor.3.0.168.nupkg",
+      "sha256": "42a5638a2ef69186f45d114d4c752df871f8cbf8e1905190e25533cb8707d6b5",
+      "size": 85155,
+      "repositoryCommit": "f5398d8daff6f089cb0c6e256f1b571314226de2",
+      "dependencies": [
+        {
+          "framework": "net8.0",
+          "dependencies": [
+            {
+              "id": "PowerForge",
+              "version": "3.0.168",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "Microsoft.AspNetCore.Components.Web",
+              "version": "8.0.11",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "OfficeIMO.Markdown",
+              "version": "0.5.0",
+              "exclude": "Build,Analyzers"
+            }
+          ]
+        }
+      ],
+      "signatureVerifyExitCode": 0,
+      "comparedEntries": 12,
+      "payloadMismatches": 0
+    },
+    {
+      "id": "PowerForge.Build",
+      "version": "3.0.168",
+      "packageUrl": "https://api.nuget.org/v3-flatcontainer/powerforge.build/3.0.168/powerforge.build.3.0.168.nupkg",
+      "sha256": "e187bc60f6d5f3e77afab5cd7b82b5c90f704441c62f090ab015c82c1c17fc21",
+      "size": 72103647,
+      "repositoryCommit": "f5398d8daff6f089cb0c6e256f1b571314226de2",
+      "dependencies": [],
+      "signatureVerifyExitCode": 0,
+      "comparedEntries": 858,
+      "payloadMismatches": 0
+    },
+    {
+      "id": "PowerForge.IndexNow",
+      "version": "3.0.168",
+      "packageUrl": "https://api.nuget.org/v3-flatcontainer/powerforge.indexnow/3.0.168/powerforge.indexnow.3.0.168.nupkg",
+      "sha256": "5f75df77c3d4c90faa5a30d4519a0eae3c81c516df7d3f87b127db5504ec9c45",
+      "size": 53319,
+      "repositoryCommit": "f5398d8daff6f089cb0c6e256f1b571314226de2",
+      "dependencies": [
+        {
+          "framework": "net8.0",
+          "dependencies": []
+        }
+      ],
+      "signatureVerifyExitCode": 0,
+      "comparedEntries": 6,
+      "payloadMismatches": 0
+    },
+    {
+      "id": "PowerForge.PowerShell",
+      "version": "3.0.168",
+      "packageUrl": "https://api.nuget.org/v3-flatcontainer/powerforge.powershell/3.0.168/powerforge.powershell.3.0.168.nupkg",
+      "sha256": "01a19df799270b9ba3d451b9ac2f6cd441df66b156121780b2483ba3cbae8d37",
+      "size": 4466986,
+      "repositoryCommit": "f5398d8daff6f089cb0c6e256f1b571314226de2",
+      "dependencies": [
+        {
+          "framework": "net10.0",
+          "dependencies": [
+            {
+              "id": "PowerForge",
+              "version": "3.0.168",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "Microsoft.PowerShell.SDK",
+              "version": "7.6.6",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "System.Security.Cryptography.Xml",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            }
+          ]
+        },
+        {
+          "framework": ".NETFramework4.7.2",
+          "dependencies": [
+            {
+              "id": "PowerForge",
+              "version": "3.0.168",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "Microsoft.PowerShell.5.ReferenceAssemblies",
+              "version": "1.1.0",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "System.Security.Cryptography.Xml",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "System.Text.Json",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            }
+          ]
+        },
+        {
+          "framework": "net8.0",
+          "dependencies": [
+            {
+              "id": "PowerForge",
+              "version": "3.0.168",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "Microsoft.PowerShell.SDK",
+              "version": "7.4.20",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "System.Security.Cryptography.Xml",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            }
+          ]
+        }
+      ],
+      "signatureVerifyExitCode": 0,
+      "comparedEntries": 10,
+      "payloadMismatches": 0
+    },
+    {
+      "id": "PowerForge.PowerShell.Provider.Directory",
+      "version": "3.0.168",
+      "packageUrl": "https://api.nuget.org/v3-flatcontainer/powerforge.powershell.provider.directory/3.0.168/powerforge.powershell.provider.directory.3.0.168.nupkg",
+      "sha256": "dc48c43f58535fafae9fa6f3e71b309e54d4a059fce0465c6ed8db659008d7bf",
+      "size": 105077,
+      "repositoryCommit": "f5398d8daff6f089cb0c6e256f1b571314226de2",
+      "dependencies": [
+        {
+          "framework": "net10.0",
+          "dependencies": [
+            {
+              "id": "System.DirectoryServices.Protocols",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            }
+          ]
+        },
+        {
+          "framework": ".NETFramework4.7.2",
+          "dependencies": [
+            {
+              "id": "System.DirectoryServices.Protocols",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "System.Text.Json",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            }
+          ]
+        },
+        {
+          "framework": "net8.0",
+          "dependencies": [
+            {
+              "id": "System.DirectoryServices.Protocols",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            }
+          ]
+        }
+      ],
+      "signatureVerifyExitCode": 0,
+      "comparedEntries": 10,
+      "payloadMismatches": 0
+    },
+    {
+      "id": "PowerForge.PowerShell.Provider.Directory.Runtime",
+      "version": "3.0.168",
+      "packageUrl": "https://api.nuget.org/v3-flatcontainer/powerforge.powershell.provider.directory.runtime/3.0.168/powerforge.powershell.provider.directory.runtime.3.0.168.nupkg",
+      "sha256": "1330a7edc3770bf7360e5649fe7724a35518f3ca45d7fdacdf8c054cccf443fe",
+      "size": 125338,
+      "repositoryCommit": "f5398d8daff6f089cb0c6e256f1b571314226de2",
+      "dependencies": [
+        {
+          "framework": "net10.0",
+          "dependencies": []
+        }
+      ],
+      "signatureVerifyExitCode": 0,
+      "comparedEntries": 5,
+      "payloadMismatches": 0
+    },
+    {
+      "id": "PowerForge.PowerShell.Provider.Management",
+      "version": "3.0.168",
+      "packageUrl": "https://api.nuget.org/v3-flatcontainer/powerforge.powershell.provider.management/3.0.168/powerforge.powershell.provider.management.3.0.168.nupkg",
+      "sha256": "b6c7f6f76a94ed6f36b86f219f69ee88a5e3c1ad38a808a6dea39b6e5522f0c4",
+      "size": 105869,
+      "repositoryCommit": "f5398d8daff6f089cb0c6e256f1b571314226de2",
+      "dependencies": [
+        {
+          "framework": "net10.0",
+          "dependencies": [
+            {
+              "id": "Microsoft.Management.Infrastructure",
+              "version": "3.0.0",
+              "exclude": "Build,Analyzers"
+            }
+          ]
+        },
+        {
+          "framework": ".NETFramework4.7.2",
+          "dependencies": [
+            {
+              "id": "Microsoft.Management.Infrastructure",
+              "version": "3.0.0",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "System.Text.Json",
+              "version": "10.0.12",
+              "exclude": "Build,Analyzers"
+            }
+          ]
+        },
+        {
+          "framework": "net8.0",
+          "dependencies": [
+            {
+              "id": "Microsoft.Management.Infrastructure",
+              "version": "3.0.0",
+              "exclude": "Build,Analyzers"
+            }
+          ]
+        }
+      ],
+      "signatureVerifyExitCode": 0,
+      "comparedEntries": 10,
+      "payloadMismatches": 0
+    },
+    {
+      "id": "PowerForge.PowerShell.Provider.Management.Runtime",
+      "version": "3.0.168",
+      "packageUrl": "https://api.nuget.org/v3-flatcontainer/powerforge.powershell.provider.management.runtime/3.0.168/powerforge.powershell.provider.management.runtime.3.0.168.nupkg",
+      "sha256": "98a24e62343e9afea1d82b2531eb52ef2144fa97c333350a3101a0d8fa1c615d",
+      "size": 176003,
+      "repositoryCommit": "f5398d8daff6f089cb0c6e256f1b571314226de2",
+      "dependencies": [
+        {
+          "framework": "net10.0",
+          "dependencies": []
+        }
+      ],
+      "signatureVerifyExitCode": 0,
+      "comparedEntries": 7,
+      "payloadMismatches": 0
+    },
+    {
+      "id": "PowerForge.PowerShell.ProviderSdk",
+      "version": "3.0.168",
+      "packageUrl": "https://api.nuget.org/v3-flatcontainer/powerforge.powershell.providersdk/3.0.168/powerforge.powershell.providersdk.3.0.168.nupkg",
+      "sha256": "f21251ddeff387d9ba87cb5dce697519a232bbac829dd1fc0ee85d4cecc6ac54",
+      "size": 105657,
+      "repositoryCommit": "f5398d8daff6f089cb0c6e256f1b571314226de2",
+      "dependencies": [
+        {
+          "framework": "net10.0",
+          "dependencies": [
+            {
+              "id": "PowerForge",
+              "version": "3.0.168",
+              "exclude": "Build,Analyzers"
+            }
+          ]
+        },
+        {
+          "framework": ".NETFramework4.7.2",
+          "dependencies": [
+            {
+              "id": "PowerForge",
+              "version": "3.0.168",
+              "exclude": "Build,Analyzers"
+            }
+          ]
+        },
+        {
+          "framework": "net8.0",
+          "dependencies": [
+            {
+              "id": "PowerForge",
+              "version": "3.0.168",
+              "exclude": "Build,Analyzers"
+            }
+          ]
+        }
+      ],
+      "signatureVerifyExitCode": 0,
+      "comparedEntries": 10,
+      "payloadMismatches": 0
+    },
+    {
+      "id": "PowerForge.Web",
+      "version": "3.0.168",
+      "packageUrl": "https://api.nuget.org/v3-flatcontainer/powerforge.web/3.0.168/powerforge.web.3.0.168.nupkg",
+      "sha256": "a422764874a36286409856444624e3382f6de4a91c918aa28a05a7cb573d1a2c",
+      "size": 2713654,
+      "repositoryCommit": "f5398d8daff6f089cb0c6e256f1b571314226de2",
+      "dependencies": [
+        {
+          "framework": "net10.0",
+          "dependencies": [
+            {
+              "id": "PowerForge",
+              "version": "3.0.168",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "Google.Apis.Auth",
+              "version": "1.77.0",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "HtmlTinkerX",
+              "version": "3.0.3",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "Magick.NET-Q8-AnyCPU",
+              "version": "14.17.2",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "OfficeIMO.Markdown",
+              "version": "3.4.4",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "Scriban",
+              "version": "7.5.0",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "YamlDotNet",
+              "version": "18.1.0",
+              "exclude": "Build,Analyzers"
+            }
+          ]
+        },
+        {
+          "framework": "net8.0",
+          "dependencies": [
+            {
+              "id": "PowerForge",
+              "version": "3.0.168",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "Google.Apis.Auth",
+              "version": "1.77.0",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "HtmlTinkerX",
+              "version": "3.0.3",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "Magick.NET-Q8-AnyCPU",
+              "version": "14.17.2",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "OfficeIMO.Markdown",
+              "version": "3.4.4",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "Scriban",
+              "version": "7.5.0",
+              "exclude": "Build,Analyzers"
+            },
+            {
+              "id": "YamlDotNet",
+              "version": "18.1.0",
+              "exclude": "Build,Analyzers"
+            }
+          ]
+        }
+      ],
+      "signatureVerifyExitCode": 0,
+      "comparedEntries": 9,
+      "payloadMismatches": 0
+    },
+    {
+      "id": "PowerForge.Web.Build",
+      "version": "3.0.168",
+      "packageUrl": "https://api.nuget.org/v3-flatcontainer/powerforge.web.build/3.0.168/powerforge.web.build.3.0.168.nupkg",
+      "sha256": "fddbe014985c20ae40f16d54508094946a2abb94363e213088c77169bc51cf3c",
+      "size": 189767571,
+      "repositoryCommit": "f5398d8daff6f089cb0c6e256f1b571314226de2",
+      "dependencies": [],
+      "signatureVerifyExitCode": 0,
+      "comparedEntries": 220,
+      "payloadMismatches": 0
+    }
+  ],
+  "packageVerification": {
+    "count": 12,
+    "authorSignaturesValid": 12,
+    "repositoryCountersignaturesValid": 12,
+    "authorSignerSha256": "d13c03bfeec0cbf7fd0e0e7ffaf3f3d2076e62b1af64665e806917b9191cffde",
+    "githubNonSignatureEntriesCompared": 1168,
+    "payloadMismatches": 0,
+    "containerHashDifference": "NuGet repository countersigning",
+    "compilerDllAuthenticodeValid": 22
+  },
+  "gallery": {
+    "version": "3.0.168",
+    "url": "https://www.powershellgallery.com/api/v2/package/PSPublishModule/3.0.168",
+    "sha256": "b2ce7fcd62a73bea1142546ee728823013ac738acf12033d5acbcbc6b6c0977a",
+    "size": 42594241,
+    "advertisedSha512Matches": true,
+    "finalizedPayloadFiles": 79,
+    "validAuthenticodeFiles": 70,
+    "redundantSourcePaths": 0,
+    "githubExactFileMatches": 78,
+    "githubSignatureOnlyDifferences": 1,
+    "githubSignedScriptBodyMatches": true,
+    "baselineSha256": "0b44729d48ceee30ba071c19e0aed62f241898472b073de3f55145c3b860af61",
+    "engineIdentity": "Bundled PowerForge/PowerForge.PowerShell Core and Default assembly/file versions remain 3.0.166.0; product versions declare 3.0.166+f5398d8daff6f089cb0c6e256f1b571314226de2. The module declares 3.0.168+the same commit. These are separately rebuilt module payloads, not byte-equal NuGet library assets; no stale earlier source commit is established."
+  },
+  "toolLifecycle": {
+    "transition": [
+      "3.0.166",
+      "3.0.168",
+      "3.0.166"
+    ],
+    "operations": [
+      "install",
+      "update",
+      "allow-downgrade",
+      "side-by-side",
+      "uninstall",
+      "reinstall"
+    ],
+    "recordedCommands": 52,
+    "unexpectedFailures": 0,
+    "actualCompilerOperations": [
+      "analyze",
+      "lock",
+      "restore",
+      "build",
+      "test",
+      "pack",
+      "install",
+      "diagnose",
+      "run"
+    ],
+    "output": "7",
+    "rollbackInventoryMatches": 746,
+    "candidateInstalledNuGetEntriesMatch": 854,
+    "baselineInstalledNuGetEntriesMatch": 854
+  },
+  "moduleLifecycle": {
+    "transition": [
+      "3.0.166",
+      "3.0.168",
+      "3.0.166"
+    ],
+    "hostCases": 6,
+    "actualEntryPoint": "Build-PowerShellArtifact",
+    "strictLibraryArithmetic": 42,
+    "exports": 217,
+    "cmdlets": 209,
+    "aliases": 8,
+    "rollbackLoadedAssemblyHashesMatch": true,
+    "signedFilesAcrossBothVersionsUnchanged": 140,
+    "net472WarningsPerBuild": 2,
+    "warning": "NETSDK1210: public net472 library template enables unsupported AOT analysis",
+    "errors": 0,
+    "generatedSigning": "Unsigned"
+  },
+  "ordinaryConsumerLifecycle": {
+    "frameworks": [
+      "net10.0",
+      "net472"
+    ],
+    "transition": [
+      "3.0.166",
+      "3.0.168",
+      "3.0.166"
+    ],
+    "cases": 6,
+    "packageIds": [
+      "PowerForge",
+      "PowerForge.PowerShell",
+      "PowerForge.PowerShell.ProviderSdk",
+      "PowerForge.PowerShell.Provider.Directory",
+      "PowerForge.PowerShell.Provider.Management"
+    ],
+    "cachedPublicPackageBytesMatch": true,
+    "restoreRebuild": true,
+    "freshProcessRunnerExecution": true,
+    "warnings": 0,
+    "errors": 0,
+    "rollbackAssemblyHashesMatch": 10,
+    "savedBaselineExecutablesRunAgain": 2,
+    "binaryDropInClaimed": false
+  },
+  "compiledArtifactLifecycle": {
+    "version1Output": "7",
+    "version2Output": "9",
+    "savedVersion1RollbackOutput": "7",
+    "differentInstallIdentities": true,
+    "differentManagedPayloadHashes": true,
+    "apphostMayRemainIdentical": true,
+    "staleSourceTestRejected": true,
+    "staleSourcePackRejected": true,
+    "priorZipPreserved": true,
+    "installedTamperRejected": true,
+    "exactByteRecoveryAccepted": true,
+    "contract": "Immutable content-addressed side-by-side installations, selected by path; no active-version switch or replacement of loaded assemblies"
+  },
+  "deepPaths": {
+    "sourceDirectoryLength": 225,
+    "projectLength": 251,
+    "finalExecutableLength": 247,
+    "maximumRetainedPackagePathLength": 399,
+    "nonAsciiSpacesAndApostrophe": true,
+    "operations": [
+      "init",
+      "analyze",
+      "lock",
+      "restore",
+      "offline-restore",
+      "build",
+      "test",
+      "diagnose",
+      "pack",
+      "execute"
+    ],
+    "output": "7",
+    "exitCode": 0,
+    "longPathsEnabled": true,
+    "arbitraryFinalLaunchPathsClaimed": false,
+    "deepRootInstallationClaimed": false,
+    "generatedSigning": "Unsigned"
+  },
+  "runtimeProviders": [
+    {
+      "packageId": "PowerForge.PowerShell.Provider.Directory.Runtime",
+      "version": "3.0.168",
+      "abi": "5",
+      "sha256": "1330a7edc3770bf7360e5649fe7724a35518f3ca45d7fdacdf8c054cccf443fe",
+      "manifestSha256": "aeb4a56680a78277073aa0070cfa2427cf5e116a4d7c3489e1cbedb79478c509",
+      "signature": "ValidIntegrity",
+      "signerFingerprint": "d13c03bfeec0cbf7fd0e0e7ffaf3f3d2076e62b1af64665e806917b9191cffde",
+      "publisher": "EvotecIT",
+      "license": "MIT",
+      "redistributable": true,
+      "supportedRids": [
+        "win-x64"
+      ],
+      "managedAssets": [
+        {
+          "path": "lib/net10.0/PowerForge.PowerShell.Provider.Directory.dll",
+          "sha256": "fab0b1aef9375b02f936bc63415720cab46dfc4ece8beffddd8748e4aada0e5d",
+          "assemblyName": "PowerForge.PowerShell.Provider.Directory",
+          "assemblyVersion": "3.0.168.0"
+        },
+        {
+          "path": "lib/net10.0/System.DirectoryServices.Protocols.dll",
+          "sha256": "0c7e3ce4718549b5b3ef6c70571a697760bf2b197a30384e8a2b6ff4e529e58c",
+          "assemblyName": "System.DirectoryServices.Protocols",
+          "assemblyVersion": "10.0.0.12"
+        }
+      ],
+      "nativeAssets": [],
+      "validSignatureAccepted": true,
+      "modifiedPackageRejected": true,
+      "linuxRidRejected": true,
+      "priorLockPreserved": true
+    },
+    {
+      "packageId": "PowerForge.PowerShell.Provider.Management.Runtime",
+      "version": "3.0.168",
+      "abi": "5",
+      "sha256": "98a24e62343e9afea1d82b2531eb52ef2144fa97c333350a3101a0d8fa1c615d",
+      "manifestSha256": "a6424ce6d4a58fdc8397f707c7fd8306ab700408ad86cf26cdfaf38b9eb8f190",
+      "signature": "ValidIntegrity",
+      "signerFingerprint": "d13c03bfeec0cbf7fd0e0e7ffaf3f3d2076e62b1af64665e806917b9191cffde",
+      "publisher": "EvotecIT",
+      "license": "MIT",
+      "redistributable": true,
+      "supportedRids": [
+        "win-x64"
+      ],
+      "managedAssets": [
+        {
+          "path": "lib/net10.0/PowerForge.PowerShell.Provider.Management.dll",
+          "sha256": "5d9bdf82738199a7b37e02e6854b915b1ab177fd2ff1a5bf26adf2b1066be893",
+          "assemblyName": "PowerForge.PowerShell.Provider.Management",
+          "assemblyVersion": "3.0.168.0"
+        },
+        {
+          "path": "lib/net10.0/microsoft.management.infrastructure.dll",
+          "sha256": "50557f6674bc1570308b3f326ae7b6b72839cc9bbac8934ab16ff563178d28f9",
+          "assemblyName": "Microsoft.Management.Infrastructure",
+          "assemblyVersion": "1.0.0.0"
+        },
+        {
+          "path": "lib/net10.0/microsoft.management.infrastructure.native.dll",
+          "sha256": "ef675cf5c7e0e4ba6291e4644d3ceba378ce9685eb179c6afa8f0bf8f9cadc32",
+          "assemblyName": "Microsoft.Management.Infrastructure.Native",
+          "assemblyVersion": "1.0.0.0"
+        }
+      ],
+      "nativeAssets": [
+        {
+          "path": "runtimes/win-x64/native/microsoft.management.infrastructure.native.unmanaged.dll",
+          "sha256": "9bee4e35576355156f00e2e47ef57aa2c8ca64390c112f083a772f2219026293",
+          "runtimeIdentifier": "win-x64"
+        }
+      ],
+      "validSignatureAccepted": true,
+      "modifiedPackageRejected": true,
+      "linuxRidRejected": true,
+      "priorLockPreserved": true
+    }
+  ],
+  "managementExecution": {
+    "publicRuntimePackage": "PowerForge.PowerShell.Provider.Management.Runtime/3.0.168",
+    "kind": "Strict net10.0 win-x64 framework-dependent installed executable",
+    "query": "SELECT Caption, Version FROM Win32_OperatingSystem",
+    "instances": 1,
+    "ownedSessionDisposed": true,
+    "writeEffects": false,
+    "directoryEffects": false
+  },
+  "executableProfiles": {
+    "frameworkDependent": "Installed execution passed",
+    "selfContained": {
+      "status": "passed",
+      "files": 197,
+      "bytes": 81142022,
+      "output": "7",
+      "exeSha256": "f70c21a8ae28c627760169cd3ac40783f86844ae4af59713df1f891ecf7a050c"
+    },
+    "trimmedSingleFile": {
+      "status": "passed",
+      "files": 7,
+      "bytes": 14024617,
+      "output": "7",
+      "exeSha256": "85500cdbc294ac4586d624fbcb37c20ea52df5a82529e0ad7cbd564a0d52d813"
+    },
+    "nativeAot": {
+      "status": "passed",
+      "files": 7,
+      "bytes": 17421715,
+      "output": "7",
+      "exitCode": 0,
+      "exeSha256": "d5fb20bad722a21d2bdef7269cc5c8864e9c10101841f2ddd4a5f5574892a0d2",
+      "workflows": [
+        "init",
+        "lock",
+        "restore",
+        "offline restore",
+        "build",
+        "test",
+        "pack",
+        "install",
+        "repeat install",
+        "execute installed artifact"
+      ],
+      "toolchainInstallationAuthorized": true,
+      "visualStudioBuildTools": "17.14.37710.0",
+      "msvc": "14.44.35207",
+      "linker": "14.44.35229.0",
+      "windowsSdk": "10.0.26100.0",
+      "processLocalPathCharacters": 1180,
+      "sdkProperty": "IlcUseEnvironmentalTools=true",
+      "initialDiagnosisCorrection": "The first stable-only inventory omitted existing prerelease C++ tools. Direct SDK control reproduces linker discovery failure under the inherited 20,592-character PATH; a bounded process-local developer environment restores discovery. The approved stable Build Tools installation is retained. No compiler defect is established by those initial failures."
+    },
+    "generatedSigning": "Unsigned",
+    "runtimeAbsentMachineClaimed": false,
+    "runtimePack": "10.0.11/win-x64"
+  },
+  "sourceRepair": {
+    "baseCommit": "d856c5468a7e22e3284b5c0c9e44feb0b9b14aab",
+    "owner": "PowerForge.PowerShell/Templates/Compilation/TypedLibrary.csproj.template",
+    "defect": "Unsupported AOT analysis emitted for net472 libraries",
+    "classification": "Pre-existing nonfatal build warning",
+    "change": "Enable trim/AOT analysis only for the supported modern generated target",
+    "templateSha256": "0ad0f151b9ec9d2506a6e765d69bd241c4c578b0ae3efcab6182f523d80ebe6f",
+    "validation": "Four focused source tests pass with zero failures/skips; no source-build warnings/errors. Existing net472 package/consumer test now rejects NETSDK1210. Independent SDK evaluation keeps all four trim/AOT properties enabled on net10.0 and disabled on net472.",
+    "testCases": [
+      "LibraryPackage_RestoresAndRunsNet472Consumer",
+      "Build_StrictLibraryCanBeCalledFromCleanCSharpConsumer",
+      "Project_NuGetPackRebuildsLockedLibraryAndRunsOrdinaryConsumer(net10.0)",
+      "Project_NuGetPackRebuildsLockedLibraryAndRunsOrdinaryConsumer(net472)"
+    ]
+  },
+  "remaining": [
+    "Publish/select a release containing PR #1084 and the template repair before qualifying current-source public distribution.",
+    "Repeat selected release lifecycle on a clean Windows target and affected deep paths with long-path policy disabled.",
+    "Generated executable signing requires its separately authorized signing operation.",
+    "Linux public installed lifecycle and additional physical RIDs are not qualified by this Windows release pass."
+  ],
+  "evidenceSha256": [
+    {
+      "name": "public-packages/public-package-qualification-summary.json",
+      "sha256": "39da46f18dc72035d9ecbbe124d19fb1aa98a47f170d82ef0a6a86e3a1fc9226"
+    },
+    {
+      "name": "public-packages/release-set-3.0.168-evidence.json",
+      "sha256": "217d53381b092aa3613bd8a4cd1e45f79701c00caa20ff77118f4878420815e5"
+    },
+    {
+      "name": "evidence/tool-lifecycle/tool-lifecycle-result.json",
+      "sha256": "b2a48d3a4bff50118a5880b02ce0609963062e06d2f96bedc759dc3aafefd134"
+    },
+    {
+      "name": "module-lifecycle/evidence/cmdlet-lifecycle-summary.json",
+      "sha256": "1c5c6eb346033258de05f09026234b9125f0f69ac8df7d2d6ce35947c918a097"
+    },
+    {
+      "name": "consumer-lifecycle/evidence/lifecycle-summary.json",
+      "sha256": "01c1e45c57f29dc6ce3e60e6bd9d6f1d3fc2edd5df98d96c4e2fa58ebfc25837"
+    },
+    {
+      "name": "evidence/artifact-lifecycle/artifact-lifecycle-result.json",
+      "sha256": "39194aa6e5f6bd6847e4f49e1387cdc442fd872ebf6018878a0acb677a41557f"
+    },
+    {
+      "name": "evidence/deep-path/result.json",
+      "sha256": "3c2e053ac7dec8c474230b701558e7f0c85e4a4fbb3d4cd79674943953d58585"
+    },
+    {
+      "name": "evidence/provider-audit/results.json",
+      "sha256": "b56dee6386a23ef8a8c251e462c6c1878f24b158a16b00e51f8f752b4239263d"
+    },
+    {
+      "name": "evidence/provider-lifecycle/result.json",
+      "sha256": "b53b7eb92cb61c94c8e00eb7890975dbb9bf73d4332cf72254e8836a858c00ba"
+    },
+    {
+      "name": "evidence/deployment-profiles/sc-summary.json",
+      "sha256": "b2f65b0924cf614f1a20174b7da68f25a46d46b64dbe06dd019ed720da42e072"
+    },
+    {
+      "name": "evidence/deployment-profiles/trim-summary.json",
+      "sha256": "84f70090fedf39bfa4a93d71a3dc6cb53674ab07cd0d2aed4f2733a0fd3bec6f"
+    },
+    {
+      "name": "evidence/template-repair/template-repair.trx",
+      "sha256": "1422096cefd6467d16ad108af51799b7d6e272b5a0e244544c6603e39d211563"
+    },
+    {
+      "name": "evidence/template-repair/evaluated-analysis-properties.json",
+      "sha256": "a146501c4ec836ba3f6b0382df5b0fcb4bc98fe5ae84a13404ba3ae332628ff0"
+    },
+    {
+      "name": "evidence/deployment-profiles/aot-stable-toolchain/aot-summary.json",
+      "sha256": "e55d75124e31c0f579f9d4d9b741fcb8255049d113f96f498b0388fe696134fe"
+    },
+    {
+      "name": "evidence/deployment-profiles/aot-stable-toolchain/aot-steps.json",
+      "sha256": "1137438bd0a8e6e13630200bc5daf717e9cf8dab3c2746e6ff7e28a94cfc1c33"
+    },
+    {
+      "name": "evidence/deployment-profiles/toolchain-install/persistent-toolchain.json",
+      "sha256": "4486d39087e66f5750413557a073a84c84af36e196ce435468f6e6eb1af0ad8c"
+    }
+  ]
+}

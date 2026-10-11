@@ -2,7 +2,7 @@
 
 `powerforge powershell project pack --format nuget` creates a local NuGet package from one tested Strict CLR library. It uses the existing library packer to rebuild the emitted project independently and verify the assembly, portable PDB, public ABI, and provider dependencies before replacing the destination package.
 
-This workflow is implemented on `feature/powershell-compiler`. It is not a public package release. Build the development CLI as described in the [development guide](PowerForge.PowerShellCompilation.Development.md); keep its absolute path in `$powerforge`. The examples use PowerShell 7 and the .NET 10 SDK.
+The examples use PowerShell 7, the .NET 10 SDK, and the CLI assembly built as described in the [development guide](PowerForge.PowerShellCompilation.Development.md). Keep the assembly's absolute path in `$powerforge`.
 
 ## Create and qualify the library
 
