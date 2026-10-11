@@ -8,7 +8,8 @@ $regions=@(
     '$Value | ForEach-Object { Test-PrivateRegion $_; Set-Variable -Scope 1 -Name Seen -Value callback }',
     'Write-Output before; Write-Error "region failure"; Write-Output "status=$?"; Write-Output after',
     '$Value | ForEach-Object { $Count++; Write-Output $_; Write-Error "item error $_" }; Write-Output "status=$?"',
-    'Get-Command DefinitelyMissingNativeRegionCommand; Write-Output after',
+    # Use loaded cmdlets for a bounded missing-command lookup across test hosts.
+    'Get-Command -ListImported -CommandType Cmdlet DefinitelyMissingNativeRegionCommand; Write-Output after',
     '$Value | ForEach-Object { if ($_ -eq 2) { throw "item failure" }; $_ }; Write-Output after',
     'Write-Output (1/0); Write-Output after',
     '$Value | ForEach-Object { Write-Output $_; Write-Warning "warning $_" }',
