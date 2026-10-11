@@ -131,7 +131,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         {
             Path = FrameworkCompatibility.GetRelativePath(root, fullPath).Replace('\\', '/'),
             Sha256 = PowerShellCompilationProjectManifestService.ComputeSha256(fullPath),
-            Size = new FileInfo(fullPath).Length
+            Size = new FileInfo(fullPath).Length,
+            UnixPermissions = GetPortableUnixPermissions(fullPath)
         };
     }
 
@@ -139,7 +140,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         => expected.Length == actual.Length && expected.Where((file, index) =>
             !file.Path.Equals(actual[index].Path, StringComparison.Ordinal) ||
             !file.Sha256.Equals(actual[index].Sha256, StringComparison.OrdinalIgnoreCase) ||
-            file.Size != actual[index].Size).Any() == false;
+            file.Size != actual[index].Size || file.UnixPermissions != actual[index].UnixPermissions).Any() == false;
 
     private static string DescribeFileInventoryDifference(QualifiedProjectFile[] expected, QualifiedProjectFile[] actual)
     {
@@ -149,15 +150,15 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         var unexpected = actualByPath.Keys.Except(expectedByPath.Keys, StringComparer.Ordinal).OrderBy(static path => path, StringComparer.Ordinal);
         var changed = expectedByPath.Keys.Intersect(actualByPath.Keys, StringComparer.Ordinal)
             .Where(path => !expectedByPath[path].Sha256.Equals(actualByPath[path].Sha256, StringComparison.OrdinalIgnoreCase) ||
-                           expectedByPath[path].Size != actualByPath[path].Size)
+                           expectedByPath[path].Size != actualByPath[path].Size ||
+                           expectedByPath[path].UnixPermissions != actualByPath[path].UnixPermissions)
             .OrderBy(static path => path, StringComparer.Ordinal);
         return "missing=[" + string.Join(",", missing) + "]; unexpected=[" + string.Join(",", unexpected) +
                "]; changed=[" + string.Join(",", changed) + "]";
     }
 
     private static string ComputeArtifactSetSha256(IEnumerable<QualifiedProjectFile> files)
-        => CanonicalJsonSha256(files.OrderBy(static file => file.Path, StringComparer.Ordinal)
-            .Select(static file => new { file.Path, file.Sha256, file.Size }).ToArray());
+        => CanonicalJsonSha256(files.OrderBy(static file => file.Path, StringComparer.Ordinal).ToArray());
 
     internal static string ComputeQualifiedInstallationIdentity(
         string targetContractSha256,
@@ -308,8 +309,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         for (var index = 0; index < entries.Length; index++)
         {
             var entry = entries[index];
-            if ((entry.ExternalAttributes >> 16 & 0xF000) == 0xA000)
-                throw new InvalidDataException($"Qualified package entry '{entry.FullName}' is a symbolic link.");
+            ValidateArchiveUnixPermissions(entry, expected.Files[index].UnixPermissions);
             var relative = entry.FullName.Substring("artifact/".Length);
             if (!relative.Equals(expected.Files[index].Path, StringComparison.Ordinal) || entry.Length != expected.Files[index].Size)
                 throw new InvalidDataException("Qualified package payload inventory differs from its descriptor.");
@@ -362,6 +362,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         public string Path { get; set; } = string.Empty;
         public string Sha256 { get; set; } = string.Empty;
         public long Size { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public int? UnixPermissions { get; set; }
     }
 
     private sealed class PowerShellCompilationProjectTestEvidence

@@ -51,10 +51,9 @@ public sealed class PowerShellCompilationPackagePublicationTests
         fixture.AssertUnchanged(existing);
     }
 
-    [Fact]
+    [WindowsFact]
     public void Publication_CleanupFailureDoesNotHideWriterFailure()
     {
-        if (!OperatingSystem.IsWindows()) return;
         using var fixture = new PublicationFixture(existing: true);
         var expected = new IOException("Archive input failed.");
         string? temporary = null;
@@ -77,10 +76,9 @@ public sealed class PowerShellCompilationPackagePublicationTests
         }
     }
 
-    [Fact]
+    [WindowsFact]
     public void Publication_LockedWindowsDestinationIsNotReplaced()
     {
-        if (!OperatingSystem.IsWindows()) return;
         using var fixture = new PublicationFixture(existing: true);
         using (var locked = new FileStream(fixture.Output, FileMode.Open, FileAccess.Read, FileShare.None))
             Assert.ThrowsAny<IOException>(() => PowerShellCompilationLibraryPackageBuilder.PublishPackage(

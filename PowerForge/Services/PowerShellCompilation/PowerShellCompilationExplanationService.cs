@@ -303,6 +303,8 @@ public static class PowerShellCompilationExplanationService
     internal static string ComputeUnitId(string relativePath, PowerShellCompilationUnitPlan unit)
     {
         var identity = string.Join("\0", relativePath, unit.Kind, unit.Name, unit.StartLine);
+        if (unit.IdentityOccurrence > 0)
+            identity += "\0" + unit.IdentityOccurrence.ToString(System.Globalization.CultureInfo.InvariantCulture);
         using var sha = SHA256.Create();
         return string.Concat(sha.ComputeHash(Encoding.UTF8.GetBytes(identity))
             .Take(12)

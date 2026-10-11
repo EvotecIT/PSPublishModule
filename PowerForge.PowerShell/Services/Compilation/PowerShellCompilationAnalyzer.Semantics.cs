@@ -43,10 +43,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         {
             if (!documentsByPath.TryGetValue(Path.GetFullPath(file.FullPath), out var document) || document.Errors.Length > 0)
                 continue;
-            var functions = document.SyntaxRoot.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
-                .OfType<FunctionDefinitionAst>()
-                .Where(function => function.Parent is NamedBlockAst && ReferenceEquals(function.Parent.Parent, document.SyntaxRoot))
-                .ToArray();
+            var functions = PowerShellSourceParser.GetTopLevelFunctions(document.SyntaxRoot).ToArray();
             foreach (var unit in file.Units.Where(static unit => unit.Kind == PowerShellCompilationUnitKind.Function))
             {
                 var occurrence = file.Units.TakeWhile(candidate => !ReferenceEquals(candidate, unit)).Count(candidate =>

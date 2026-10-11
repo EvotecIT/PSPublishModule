@@ -302,6 +302,7 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
             .Where(item => line >= item.SourceStartLine && line <= Math.Max(item.SourceStartLine, item.SourceEndLine))
             .OrderBy(item => Math.Max(item.SourceStartLine, item.SourceEndLine) - item.SourceStartLine)
             .ThenByDescending(static item => item.GeneratedStartLine > 0)
+            .ThenBy(static item => item.UnitName.Equals("<script>", StringComparison.Ordinal))
             .ThenBy(static item => item.SourceStartColumn)
             .FirstOrDefault();
 
@@ -341,11 +342,14 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
             IScriptExtent extent = ast.Extent;
             if (unit.Kind == PowerShellCompilationUnitKind.Function)
             {
-                var function = ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
-                    .OfType<FunctionDefinitionAst>()
-                    .FirstOrDefault(candidate =>
-                        candidate.Name.Equals(unit.Name, StringComparison.OrdinalIgnoreCase) &&
-                        candidate.Body.Extent.StartLineNumber == unit.StartLine);
+                var function = PowerShellSourceParser.GetTopLevelFunctions(ast)
+                    // Unit identities retain authored spelling. Match that spelling before
+                    // selecting its occurrence so case-variant declarations keep their own extent.
+                    .Where(candidate =>
+                        candidate.Name.Equals(unit.Name, StringComparison.Ordinal) &&
+                        candidate.Body.Extent.StartLineNumber == unit.StartLine)
+                    .Skip(unit.IdentityOccurrence)
+                    .FirstOrDefault();
                 if (function is not null) extent = function.Body.Extent;
             }
             return (extent.StartLineNumber, extent.StartColumnNumber, extent.EndLineNumber, extent.EndColumnNumber);

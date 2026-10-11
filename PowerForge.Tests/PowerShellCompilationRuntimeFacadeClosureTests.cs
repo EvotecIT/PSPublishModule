@@ -8,11 +8,9 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationBoundPipelineTests
 {
-    [Fact]
+    [WindowsX64Fact]
     public void StrictClosureCertifiesRuntimeHelperExecutableOnlyWithExactTargetEvidence()
     {
-        if (!OperatingSystem.IsWindows() || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture !=
-            System.Runtime.InteropServices.Architecture.X64) return;
         var helper = Path.Combine(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "createdump.exe");
         Assert.True(File.Exists(helper), "The Windows .NET runtime must supply createdump.exe for this closure fixture.");
         var files = new[] { new PowerShellCompilationArtifactFile { Path = helper, Role = "RuntimeDependency" } };

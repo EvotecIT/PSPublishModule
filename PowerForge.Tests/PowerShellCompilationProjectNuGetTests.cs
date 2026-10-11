@@ -37,13 +37,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.False(Directory.Exists(Path.Combine(fixture.RootPath, ".powerforge/packages")));
     }
 
-    [Theory]
+    [WindowsTheory]
     [InlineData("net10.0")]
     [InlineData("net472")]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Project_NuGetPackRebuildsLockedLibraryAndRunsOrdinaryConsumer(string framework)
     {
-        if (!OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("function Add-CompiledValues { param([int] $Left, [int] $Right) $Left + $Right }", ".psm1", compactPath: true);
         var (project, manifest) = CreateNuGetProject(fixture, framework);
         var workflow = new PowerShellCompilationProjectWorkflowService();

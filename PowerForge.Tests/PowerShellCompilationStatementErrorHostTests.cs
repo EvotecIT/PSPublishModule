@@ -227,10 +227,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     private static string EscapeStatementErrorPath(string path) => path.Replace("'", "''", StringComparison.Ordinal);
 
     private static (int ExitCode, string StandardOutput, string StandardError) RunStatementErrorProbe(
-        string host, string source, string root, string name)
+        string host, string source, string root, string name, IReadOnlyDictionary<string, string>? environment = null)
     {
         var script = Path.Combine(root, name + ".ps1");
         File.WriteAllText(script, source, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-        return RunProcess(host, "-NoProfile", "-NonInteractive", "-File", script);
+        return RunProcess(host, environment, "-NoProfile", "-NonInteractive", "-File", script);
     }
 }

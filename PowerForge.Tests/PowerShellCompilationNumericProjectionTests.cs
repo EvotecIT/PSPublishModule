@@ -28,10 +28,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("net10.0", "pwsh")]
-    [InlineData("net472", "powershell.exe")]
+    [WindowsInlineData("net472", "powershell.exe")]
     public void Build_HybridRetainsHeaderAndCompilesImplicitTerminalComputation(string framework, string host)
     {
-        if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         const string source = """
             function divisorCheck([double]$Number) {
                 $limit = [Math]::Sqrt($Number)
@@ -80,10 +79,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("net10.0", "pwsh")]
-    [InlineData("net472", "powershell.exe")]
+    [WindowsInlineData("net472", "powershell.exe")]
     public void Build_NumericValueProjectionPreservesPromotionAndDoubleConsumers(string framework, string host)
     {
-        if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         const string source = """
             function Get-Positive {
                 [CmdletBinding()] param([double]$Limit)

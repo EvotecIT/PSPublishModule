@@ -7,10 +7,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("net10.0", "pwsh")]
-    [InlineData("net472", "powershell.exe")]
+    [WindowsInlineData("net472", "powershell.exe")]
     public void Build_NullableStringRecordsPreserveElementConversion(string framework, string host)
     {
-        if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("""
             function Get-LiteralNull { [CmdletBinding()] param([Collections.Generic.Dictionary[string,string]]$Map) [string[]]$Values = ,$Map['missing']; return ,$Values }
             function Get-CollectedNull { [CmdletBinding()] param([Collections.Generic.Dictionary[string,string]]$Map) [string[]]$Values = @($Map['missing']); return ,$Values }
@@ -52,10 +51,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("net10.0", "pwsh")]
-    [InlineData("net472", "powershell.exe")]
+    [WindowsInlineData("net472", "powershell.exe")]
     public void Build_AuthoredArrayCollectionPreservesOneLevelGrouping(string framework, string host)
     {
-        if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("""
             function Get-Parenthesized { [CmdletBinding()] param() $Values = @((1,2)); return ,$Values }
             function Get-Nested { [CmdletBinding()] param() $Values = @((1,2),(3,4)); return ,$Values }

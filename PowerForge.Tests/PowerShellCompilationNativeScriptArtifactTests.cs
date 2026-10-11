@@ -4,7 +4,7 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
-    [Fact]
+    [WindowsX64Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootPreservesBindingStorageAndOutput()
     {
@@ -148,7 +148,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(root.RetainedHostedSource);
     }
 
-    [Fact]
+    [WindowsX64Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootRunsUnchangedOfflineBaklava()
     {
@@ -193,7 +193,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(21, lines.Length);
     }
 
-    [Fact]
+    [WindowsX64Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootRunsUnchangedOfflineQuineWithHostedWriteHost()
     {
@@ -237,7 +237,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(2, generated.StandardOutput.Split('\n', System.StringSplitOptions.RemoveEmptyEntries).Length);
     }
 
-    [Fact]
+    [WindowsX64Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootPreservesInterleavedHostAndSuccessOutput()
     {
@@ -272,7 +272,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 .Select(static line => line.TrimEnd('\r')).ToArray());
     }
 
-    [Fact]
+    [WindowsX64Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootPreservesWarningAndSuccessOutput()
     {
@@ -308,7 +308,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 .Select(static line => line.TrimEnd('\r')).ToArray());
     }
 
-    [Fact]
+    [WindowsX64Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootPreservesAuthoredWarningShadow()
     {
@@ -344,7 +344,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 .Select(static line => line.TrimEnd('\r')).ToArray());
     }
 
-    [Fact]
+    [WindowsX64Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootPreservesVerboseDebugAndInformationOutput()
     {
@@ -384,7 +384,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             .Select(static line => line.TrimEnd('\r')).ToArray());
     }
 
-    [Fact]
+    [WindowsX64Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootPreservesErrorActionContinuationAndStop()
     {
@@ -425,7 +425,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         }
     }
 
-    [Fact]
+    [WindowsX64Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootPreservesReturnThroughFinally()
     {
@@ -481,7 +481,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         }
     }
 
-    [Fact]
+    [WindowsX64Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootPreservesTerminalForEachObjectPipelineState()
     {
@@ -529,7 +529,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         }
     }
 
-    [Fact]
+    [WindowsX64Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootPreservesWhereForEachPipelineState()
     {
@@ -578,7 +578,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         }
     }
 
-    [Fact]
+    [WindowsX64Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootPreservesFilteredProjectionAndGrouping()
     {
@@ -633,7 +633,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         }
     }
 
-    [Fact]
+    [WindowsX64Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootStopsEffectfulFilterAtFirstSelectedRecord()
     {
@@ -678,7 +678,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         }
     }
 
-    [Fact]
+    [WindowsX64Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootPreservesOwnedFunctionDeclarations()
     {

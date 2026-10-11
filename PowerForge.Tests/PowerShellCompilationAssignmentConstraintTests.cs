@@ -53,10 +53,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("net10.0", "pwsh")]
-    [InlineData("net472", "powershell.exe")]
+    [WindowsInlineData("net472", "powershell.exe")]
     public void Build_HybridValueCastPreservesPromotionAndReassignment(string framework, string host)
     {
-        if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("""
             function Get-CastNumber { $Value = [int]2147483647; $Value += 1; return $Value }
             function Get-CastIncrement { $Value = [int]2147483647; $Value++; return $Value }

@@ -147,11 +147,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("net10.0", "pwsh", "[int]", "System.Int32")]
     [InlineData("net10.0", "pwsh", "", "System.String")]
-    [InlineData("net472", "powershell.exe", "[int]", "System.Int32")]
+    [WindowsInlineData("net472", "powershell.exe", "[int]", "System.Int32")]
     public void Build_HybridPrefixResumesWithSameOutputAndVariableConstraint(
         string framework, string host, string constraint, string finalType)
     {
-        if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("""
             function Get-PrefixValue {
                 [CmdletBinding()]

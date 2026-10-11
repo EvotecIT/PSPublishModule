@@ -168,10 +168,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
     private static FunctionDefinitionAst[] GetFunctionExtents(string sourcePath)
     {
         if (!File.Exists(sourcePath)) return Array.Empty<FunctionDefinitionAst>();
-        return Parser.ParseFile(sourcePath, out _, out _)
-            .FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: true)
-            .OfType<FunctionDefinitionAst>()
-            .ToArray();
+        return PowerShellSourceParser.GetTopLevelFunctions(Parser.ParseFile(sourcePath, out _, out _)).ToArray();
     }
 
     private static IScriptExtent? FindFunctionExtent(

@@ -200,13 +200,15 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         }
     }
 
-    [Fact]
-    public async Task Explain_HybridModuleReportsDuplicateFunctionsAfterFinalCollisionRouting()
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("; ")]
+    public async Task Explain_HybridModuleReportsDuplicateFunctionsAfterFinalCollisionRouting(string separator)
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Final Explain Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         var source = Path.Combine(root, "Input.psm1");
-        File.WriteAllText(source, "function Get-Duplicate { return 1 }\nfunction Get-Duplicate { return 2 }");
+        File.WriteAllText(source, "function Get-Duplicate { return 1 }" + separator + "function Get-Duplicate { return 2 }");
         try
         {
             var result = await RunCliAsync(
@@ -221,6 +223,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
             Assert.Equal(2, explanation.GetProperty("runtimeFallbackUnits").GetInt32());
             var units = Assert.Single(explanation.GetProperty("files").EnumerateArray())
                 .GetProperty("units").EnumerateArray().ToArray();
+            Assert.Equal(2, units.Select(static unit => unit.GetProperty("unitId").GetString()).Distinct().Count());
             Assert.All(units, static unit => Assert.Equal("RuntimeFallback", unit.GetProperty("decision").GetString()));
             Assert.All(units, static unit => Assert.NotEmpty(unit.GetProperty("causes").EnumerateArray()));
             Assert.Contains(units.SelectMany(static unit => unit.GetProperty("causes").EnumerateArray()), static cause =>

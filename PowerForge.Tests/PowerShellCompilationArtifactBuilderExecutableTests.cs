@@ -419,6 +419,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     private static (int ExitCode, string StandardOutput, string StandardError) RunProcess(string fileName, params string[] arguments)
+        => RunProcess(fileName, environment: null, arguments);
+
+    private static (int ExitCode, string StandardOutput, string StandardError) RunProcess(
+        string fileName, IReadOnlyDictionary<string, string>? environment, params string[] arguments)
     {
         const int processTimeoutMilliseconds = 120_000;
         var startInfo = new ProcessStartInfo
@@ -431,6 +435,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         };
         // Compare stream content independently of the invoking terminal's color policy.
         startInfo.Environment["NO_COLOR"] = "1";
+        if (environment is not null)
+            foreach (var pair in environment)
+                startInfo.Environment[pair.Key] = pair.Value;
         foreach (var argument in arguments)
             startInfo.ArgumentList.Add(argument);
         using var process = Process.Start(startInfo)!;

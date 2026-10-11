@@ -27,10 +27,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("net10.0", "pwsh")]
-    [InlineData("net472", "powershell.exe")]
+    [WindowsInlineData("net472", "powershell.exe")]
     public void Build_HybridRetainsDynamicCollectionsAndCompilesBoundedCounters(string framework, string host)
     {
-        if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         const string source = """
             function Get-Collected { [CmdletBinding()] param([object]$Value) [object[]]$items = @($Value); return ,$items }
             function Get-Paired { [CmdletBinding()] param([object]$Value) [object[]]$items = @($Value, $Value); return ,$items }

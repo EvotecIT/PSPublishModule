@@ -8,10 +8,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("net10.0", "pwsh")]
-    [InlineData("net472", "powershell.exe")]
+    [WindowsInlineData("net472", "powershell.exe")]
     public void Build_MixedDoubleComparisonMatchesPowerShellInBothOperandOrders(string framework, string host)
     {
-        if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         var operators = new[] { "eq", "ne", "lt", "le", "gt", "ge" };
         var source = string.Join(Environment.NewLine, operators.SelectMany(operation => new[]
         {

@@ -111,6 +111,9 @@ public sealed class PowerShellCompilationUnitPlan
     /// <summary>One-based starting source line.</summary>
     public int StartLine { get; }
 
+    /// <summary>Source-order occurrence among otherwise identical file-local unit identities.</summary>
+    internal int IdentityOccurrence { get; set; }
+
     /// <summary>Resolved CLR return type name, or <see cref="object"/> until inference completes.</summary>
     public string ReturnType { get; }
 
@@ -310,6 +313,14 @@ public sealed class PowerShellCompilationFilePlan
         RelativePath = relativePath ?? string.Empty;
         Units = units ?? Array.Empty<PowerShellCompilationUnitPlan>();
         Diagnostics = diagnostics ?? Array.Empty<PowerShellCompilationDiagnostic>();
+        var occurrences = new Dictionary<(PowerShellCompilationUnitKind Kind, string Name, int Line), int>();
+        foreach (var unit in Units)
+        {
+            var identity = (unit.Kind, unit.Name, unit.StartLine);
+            occurrences.TryGetValue(identity, out var occurrence);
+            unit.IdentityOccurrence = occurrence;
+            occurrences[identity] = occurrence + 1;
+        }
     }
 
     /// <summary>Full source path.</summary>

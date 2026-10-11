@@ -5,10 +5,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("net10.0", "pwsh")]
-    [InlineData("net472", "powershell.exe")]
+    [WindowsInlineData("net472", "powershell.exe")]
     public void TypeLiterals_PreserveValuesInRuntimeFreeAndHostedSurfaces(string framework, string host)
     {
-        if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("""
             function Get-AccountType { $type = [System.Security.Principal.NTAccount]; return $type.FullName }
             function Get-IdentifierType { $type = [System.Security.Principal.SecurityIdentifier]; return $type.FullName }
@@ -124,9 +123,16 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var unit = Assert.Single(result.Manifest!.UnitDispositionLedger!.Entries,
             static entry => entry.Name == "Convert-Identity");
-        Assert.True(unit.EmittedClrMethod, System.Text.Json.JsonSerializer.Serialize(unit));
-        Assert.True(unit.UsesNativeFunctionBinding);
-        Assert.False(unit.RetainedHostedSource);
+        // The independent distinguished-name branch uses the Windows ADSI accelerator.
+        // Unix retains the complete function even when this probe exercises caught NTAccount errors.
+        var expectsNativeConversion = OperatingSystem.IsWindows();
+        Assert.Equal(expectsNativeConversion, unit.EmittedClrMethod);
+        Assert.Equal(expectsNativeConversion, unit.UsesNativeFunctionBinding);
+        Assert.Equal(!expectsNativeConversion, unit.RetainedHostedSource);
+        if (!expectsNativeConversion)
+            Assert.Contains(unit.DiagnosticChain, static diagnostic =>
+                diagnostic.FeatureId == PowerShellCompilationFeatureIds.Conversion &&
+                diagnostic.Message.Contains("Conversion target 'adsi' requires runtime type resolution", StringComparison.OrdinalIgnoreCase));
 
         const string probe = """
             $first = @(Convert-Identity -Identity '__PowerForge_Missing_Identity_C__','__PowerForge_Missing_Identity_D__')
@@ -149,6 +155,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(original.ExitCode == 0, original.StandardOutput + original.StandardError);
         Assert.Equal((original.ExitCode, original.StandardOutput, original.StandardError),
             (compiled.ExitCode, compiled.StandardOutput, compiled.StandardError));
+        if (!expectsNativeConversion)
+        {
+            Assert.Contains("Windows Principal functionality is not supported on this platform.", compiled.StandardOutput, StringComparison.Ordinal);
+            Assert.Contains("repeat=__PowerForge_Missing_Identity_C__::", compiled.StandardOutput, StringComparison.Ordinal);
+            Assert.Contains("reimport=__PowerForge_Missing_Identity_C__::", compiled.StandardOutput, StringComparison.Ordinal);
+        }
     }
 
     [Theory]
