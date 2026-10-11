@@ -11,6 +11,8 @@ public sealed class AppleSimulatorSessionRequest
     public string? DeviceSetPath { get; set; }
     /// <summary>Shared machine-local coordination directory; null uses the default for this user.</summary>
     public string? StateRoot { get; set; }
+    /// <summary>Rejects a pre-existing booted device before any foreground command. Default false preserves deliberate reuse.</summary>
+    public bool RequireInitialShutdown { get; set; }
     /// <summary>Foreground command with a finite positive timeout. Descendants in its owned process scope are released.</summary>
     public ProcessRunRequest? Command { get; set; }
     /// <summary>Maximum duration of each simulator discovery, boot, and readiness command.</summary>

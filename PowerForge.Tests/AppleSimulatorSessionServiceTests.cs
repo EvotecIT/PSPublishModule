@@ -59,6 +59,42 @@ public sealed class AppleSimulatorSessionServiceTests
     }
 
     [Fact]
+    public async Task Required_initial_shutdown_rejects_booted_device_before_command_and_preserves_prior_receipt()
+    {
+        using var fixture = new Fixture();
+        var previous = await fixture.Service.RunAsync(fixture.Request());
+        var persisted = File.ReadAllText(previous.ReceiptPath);
+        fixture.Devices[Device] = "Booted";
+        fixture.SimulatorRequests.Clear();
+        var invoked = false;
+        fixture.Validation = (_, _) => { invoked = true; return Task.FromResult(Result()); };
+        var request = fixture.Request();
+        request.RequireInitialShutdown = true;
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => fixture.Service.RunAsync(request));
+
+        Assert.Contains("requires initial Shutdown", exception.Message);
+        Assert.False(invoked);
+        Assert.Equal("Booted", fixture.Devices[Device]);
+        Assert.Equal("Booted", fixture.Devices[OtherDevice]);
+        Assert.All(fixture.SimulatorRequests, command => Assert.Equal("list", command.Arguments[3]));
+        Assert.Equal(persisted, File.ReadAllText(previous.ReceiptPath));
+    }
+
+    [Fact]
+    public async Task Required_initial_shutdown_runs_and_releases_its_shutdown_device()
+    {
+        using var fixture = new Fixture();
+        var request = fixture.Request();
+        request.RequireInitialShutdown = true;
+        var result = await fixture.Service.RunAsync(request);
+        Assert.True(result.Success);
+        Assert.True(result.Receipt.BootSucceeded);
+        Assert.True(result.Receipt.CleanupSucceeded);
+        Assert.Equal("Shutdown", fixture.Devices[Device]);
+    }
+
+    [Fact]
     public async Task Cancellation_uses_an_independent_cleanup_token_and_blocks_overlap()
     {
         using var fixture = new Fixture();

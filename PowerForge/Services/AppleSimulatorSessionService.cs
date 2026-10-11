@@ -43,6 +43,8 @@ public sealed partial class AppleSimulatorSessionService
         var initial = await GetDeviceStateAsync(deviceId, deviceSet, request.SimulatorTimeout, cancellationToken).ConfigureAwait(false);
         if (initial is not ("Shutdown" or "Booted"))
             throw new InvalidOperationException($"Simulator {deviceId} is {initial}; wait for a stable Shutdown or Booted state.");
+        if (request.RequireInitialShutdown && initial != "Shutdown")
+            throw new InvalidOperationException("This simulator session requires initial Shutdown; preserve the pre-existing booted device.");
         using var owner = Process.GetCurrentProcess();
         var receipt = new AppleSimulatorSessionReceipt
         {

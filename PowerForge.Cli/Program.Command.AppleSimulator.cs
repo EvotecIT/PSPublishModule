@@ -7,7 +7,7 @@ internal static partial class Program
 {
     private const string AppleSimulatorUsage =
         "Usage: powerforge apple-simulator run --owner <chat-or-run> --device <UUID> " +
-        "[--state-root <shared-path>] [--device-set <existing-path>] [--timeout-seconds <seconds>] " +
+        "[--state-root <shared-path>] [--device-set <existing-path>] [--require-shutdown] [--timeout-seconds <seconds>] " +
         "[--simulator-timeout-seconds <seconds>] [--cleanup-timeout-seconds <seconds>] [--output json] -- <executable> [args...]\n" +
         "       powerforge apple-simulator status [--state-root <shared-path>] [--output json]\n" +
         "       powerforge apple-simulator acknowledge --session <session-id> [--state-root <shared-path>] [--output json]";
@@ -55,6 +55,7 @@ internal static partial class Program
             {
                 DeviceId = RequiredAppleSimulatorValue(values, "--device"), Owner = RequiredAppleSimulatorValue(values, "--owner"),
                 StateRoot = stateRoot, DeviceSetPath = values.TryGetValue("--device-set", out var deviceSet) ? deviceSet : null,
+                RequireInitialShutdown = values.ContainsKey("--require-shutdown"),
                 SimulatorTimeout = AppleSimulatorTimeout(values, "--simulator-timeout-seconds", 120),
                 CleanupTimeout = AppleSimulatorTimeout(values, "--cleanup-timeout-seconds", 30),
                 Command = new ProcessRunRequest(args[separator + 1], Directory.GetCurrentDirectory(), args.Skip(separator + 2).ToArray(),
@@ -89,6 +90,11 @@ internal static partial class Program
         {
             var option = options[index].ToLowerInvariant();
             if (option is "--json" or "--output-json") continue;
+            if (option == "--require-shutdown" && operation == "run")
+            {
+                if (!values.TryAdd(option, "true")) throw new ArgumentException($"Duplicate option '{option}'.");
+                continue;
+            }
             var common = option is "--state-root" or "--output";
             var run = operation == "run" && option is "--device" or "--owner" or "--device-set" or "--timeout-seconds" or "--simulator-timeout-seconds" or "--cleanup-timeout-seconds";
             if (!common && !run && !(operation == "acknowledge" && option == "--session")) throw new ArgumentException($"Unknown {operation} option '{option}'.");

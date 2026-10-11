@@ -26,7 +26,7 @@ on:
         default: build/appstore-screenshots
         type: string
       simulator_tool_ref:
-        description: Exact PowerForge commit providing apple-simulator; blank does not provision a lifecycle tool.
+        description: Exact PowerForge commit providing apple-simulator --require-shutdown; blank does not provision a lifecycle tool.
         required: false
         default: ""
         type: string
@@ -100,6 +100,7 @@ jobs:
           }
 
       - name: Checkout exact screenshot source
+        id: source_checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
           ref: ${{ inputs.source_ref }}
@@ -195,6 +196,28 @@ jobs:
           & git -C $sourceRoot diff --quiet HEAD -- $relativeScript
           if ($LASTEXITCODE -ne 0) { throw "Capture script differs from the exact source commit: $relativeScript" }
 
+          $devices = $env:POWERFORGE_CAPTURE_SIMULATORS | ConvertFrom-Json -AsHashtable
+          if ($devices.Count -gt 0) {
+            $inventoryPath = Join-Path $env:RUNNER_TEMP 'powerforge-capture-simulator-inventory.json'
+            $errorPath = Join-Path $env:RUNNER_TEMP 'powerforge-capture-simulator-inventory-error.txt'
+            $discovery = Start-Process -FilePath xcrun -ArgumentList @('simctl', 'list', 'devices', '--json') -RedirectStandardOutput $inventoryPath -RedirectStandardError $errorPath -PassThru
+            try {
+              if (-not $discovery.WaitForExit(30000)) {
+                $discovery.Kill($true)
+                $null = $discovery.WaitForExit(5000)
+                throw 'Simulator capture discovery timed out before capture.'
+              }
+              if ($discovery.ExitCode -ne 0) { throw 'Simulator capture discovery failed before capture.' }
+            } finally { $discovery.Dispose() }
+            $inventory = Get-Content -LiteralPath $inventoryPath -Raw | ConvertFrom-Json
+            foreach ($entry in $devices.GetEnumerator()) {
+              $selected = @($inventory.devices.PSObject.Properties | ForEach-Object { $_.Value } | Where-Object { $_.udid -eq $entry.Value })
+              if ($selected.Count -ne 1 -or $selected[0].state -ne 'Shutdown' -or $selected[0].isAvailable -ne $true) {
+                throw "Capture role '$($entry.Key)' must select one available Shutdown simulator before capture."
+              }
+            }
+          }
+
           Push-Location $sourceRoot
           $captureStartedAt = [DateTimeOffset]::UtcNow
           try {
@@ -220,11 +243,19 @@ jobs:
             Assert-UnlinkedSourcePath -Path $receiptPath -Name 'Simulator capture receipt'
             $receiptFile = Get-Item -LiteralPath $receiptPath
             if ($receiptFile.PSIsContainer -or $receiptFile.Length -gt 65536) { throw 'Invalid simulator capture receipt file.' }
-            $capture = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json -Depth 10
+            $receiptJson = Get-Content -LiteralPath $receiptPath -Raw
+            $capture = $receiptJson | ConvertFrom-Json -Depth 10
             $receipt = $capture.result.receipt
             $expectedOwner = "$env:GITHUB_REPOSITORY/$env:GITHUB_RUN_ID/$($entry.Key)"
-            $started = [DateTimeOffset]::Parse($receipt.startedAtUtc)
-            $completed = [DateTimeOffset]::Parse($receipt.completedAtUtc)
+            # Read raw ISO strings: PowerShell can coerce JSON dates to DateTime,
+            # whose implicit string conversion loses fractional seconds.
+            $document = [Text.Json.JsonDocument]::Parse($receiptJson)
+            try {
+              $timestamps = $document.RootElement.GetProperty('result').GetProperty('receipt')
+              $invariant = [Globalization.CultureInfo]::InvariantCulture
+              $started = [DateTimeOffset]::Parse($timestamps.GetProperty('startedAtUtc').GetString(), $invariant)
+              $completed = [DateTimeOffset]::Parse($timestamps.GetProperty('completedAtUtc').GetString(), $invariant)
+            } finally { $document.Dispose() }
             if ($capture.command -ne 'apple-simulator.run' -or $capture.success -ne $true -or $capture.exitCode -ne 0 -or
                 $receipt.schemaVersion -ne 1 -or $receipt.deviceId -ne $entry.Value -or $receipt.owner -cne $expectedOwner -or
                 $started -lt $captureStartedAt -or $completed -lt $started -or $completed -gt [DateTimeOffset]::UtcNow -or
@@ -318,7 +349,7 @@ jobs:
           retention-days: 30
 
       - name: Retain simulator ownership and release receipts
-        if: always() && inputs.simulator_tool_ref != ''
+        if: always() && steps.source_checkout.outcome == 'success' && inputs.simulator_tool_ref != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: powerforge-apple-simulator-receipts-${{ inputs.source_ref }}

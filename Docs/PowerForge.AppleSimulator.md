@@ -17,6 +17,12 @@ It boots a shutdown device, waits for readiness, runs the command, and verifies
 owned shutdown. Failed or ambiguous boot attempts are reported without claiming
 authority to shut down a device another actor may have booted.
 
+Use `--require-shutdown` for disposable capture or installation fixtures that
+must not reuse an active device. PowerForge checks this requirement under the
+shared coordination lock, before boot, readiness, or foreground execution. A
+pre-existing booted device is rejected without changing it or replacing the
+previous ownership receipt. The default still permits deliberate reuse.
+
 Boot/discovery/readiness commands default to 120 seconds each, command execution
 to 1800 seconds, and the entire release attempt to 30 seconds. Override them with
 `--simulator-timeout-seconds`, `--timeout-seconds`, and `--cleanup-timeout-seconds`.
