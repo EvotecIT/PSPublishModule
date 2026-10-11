@@ -10,6 +10,10 @@ try {
     $sha = [Security.Cryptography.SHA256]::Create()
     try { $hash = ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($source)))).Replace('-', '').ToLowerInvariant() }
     finally { $sha.Dispose() }
+    # PowerShell's ShouldRunInternal returns without calling authorization managers on Unix.
+    # Preserve that native behavior while proving the compiled path matches authored dispatch.
+    $nativeAuthorizationApplies = [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
+    $observations = @{}
     foreach ($case in @('original-allow', 'compiled-allow', 'original-deny', 'compiled-deny', 'source-mismatch', 'restricted')) {
         [Generic.Compiler.StatementErrors.NativeScriptEntryAuthorization]::Checks = 0
         [Generic.Compiler.StatementErrors.NativeScriptEntryAuthorization]::Reject = $case.EndsWith('-deny')
@@ -36,19 +40,31 @@ try {
             }
             $records = @()
             try { $records = @($ps.Invoke()) } catch { }
-            $allowed = $case.EndsWith('-allow')
+            $allowed = $case.EndsWith('-allow') -or ($case.EndsWith('-deny') -and -not $nativeAuthorizationApplies)
             $checks = [Generic.Compiler.StatementErrors.NativeScriptEntryAuthorization]::Checks
             $callbacks = [Generic.Compiler.StatementErrors.NativeScriptEntryPolicyFixture]::CallbackInvocations
             $bindings = $runspace.SessionStateProxy.GetVariable('BindingRuns')
             $attributes = [Generic.Compiler.StatementErrors.NativeScriptEntryBindingAttribute]::Constructions
             if ($allowed) {
                 if ($ps.HadErrors -or $records.Count -ne 1 -or $records[0] -cne 'ran' -or $bindings -ne 1 -or $attributes -ne 1) { throw "Allowed invocation failed: $case" }
-                $expectedCallbacks = if ($case -eq 'compiled-allow') { 1 } else { 0 }
+                $expectedCallbacks = if ($case.StartsWith('compiled-')) { 1 } else { 0 }
                 if ($callbacks -ne $expectedCallbacks) { throw "Unexpected callback count: $case" }
             } elseif (-not $ps.HadErrors -or $records.Count -ne 0 -or $callbacks -ne 0 -or $bindings -ne 0 -or $attributes -ne 0) { throw "Rejected invocation reached binding/body: $case" }
-            $expectedChecks = if ($case -in @('restricted', 'source-mismatch')) { 0 } else { 1 }
+            $expectedChecks = if ($nativeAuthorizationApplies -and $case -notin @('restricted', 'source-mismatch')) { 1 } else { 0 }
             if ($checks -ne $expectedChecks) { throw "Native authorization count mismatch: $case ($checks)" }
+            $observations[$case] = [pscustomobject]@{
+                HadErrors = $ps.HadErrors; RecordCount = $records.Count
+                Checks = $checks; BindingRuns = $bindings; Attributes = $attributes
+            }
+            if ($case.StartsWith('compiled-')) {
+                $original = $observations[$case.Replace('compiled-', 'original-')]
+                foreach ($property in @('HadErrors', 'RecordCount', 'Checks', 'BindingRuns', 'Attributes')) {
+                    if ($observations[$case].$property -ne $original.$property) { throw "Native entry policy differential mismatch: $case ($property)" }
+                }
+            }
+            Write-Output ('Native entry policy observation: {0}; errors={1}; records={2}; checks={3}; binding={4}; attributes={5}; callbacks={6}' -f
+                $case, $ps.HadErrors, $records.Count, $checks, $bindings, $attributes, $callbacks)
         } finally { $ps.Dispose(); $runspace.Dispose() }
     }
-    'Native script entry policy comparison passed: authorization allow/deny, source mismatch and restricted language.'
+    'Native script entry policy comparison passed: platform={0}; authored/compiled native authorization behavior, source mismatch and restricted language.' -f [Environment]::OSVersion.Platform
 } finally { Remove-Item -LiteralPath $taskRoot -Recurse -ErrorAction Stop }

@@ -177,9 +177,9 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                     validated.OutputRoot,
                     validated.ArtifactPath).Replace('\\', '/');
                 if (Directory.Exists(installRoot))
-                    EnsureInstalledPackageMatches(packagePath, installRoot);
+                    EnsureInstalledPackageMatches(packagePath, installRoot, validated.Files);
                 else
-                    InstallPackageAtomically(packagePath, installRoot);
+                    InstallPackageAtomically(packagePath, installRoot, validated.Files);
                 var installedPrimary = Path.GetFullPath(Path.Combine(installRoot, "artifact", primaryRelative.Replace('/', Path.DirectorySeparatorChar)));
                 PowerShellCompilationPathSafety.EnsureContained(installRoot, installedPrimary, "Installed primary artifact escapes its qualified installation root.");
                 if (!File.Exists(installedPrimary)) throw new FileNotFoundException("Installed primary artifact is missing.", installedPrimary);
@@ -334,15 +334,15 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             throw new InvalidOperationException($"Clean module import failed with exit {run.ExitCode}: {run.StdOut}{Environment.NewLine}{run.StdErr}".Trim());
     }
 
-    private static void InstallPackageAtomically(string packagePath, string installRoot)
+    private static void InstallPackageAtomically(string packagePath, string installRoot, QualifiedProjectFile[] files)
     {
         var parent = Path.GetDirectoryName(installRoot) ?? throw new InvalidOperationException("Qualified installation root has no parent.");
         Directory.CreateDirectory(parent);
         var staging = installRoot + "." + Guid.NewGuid().ToString("N") + ".staging";
         try
         {
-            ExtractQualifiedPackage(packagePath, staging);
-            EnsureInstalledPackageMatches(packagePath, staging);
+            ExtractQualifiedPackage(packagePath, staging, files);
+            EnsureInstalledPackageMatches(packagePath, staging, files);
             Directory.Move(staging, installRoot);
         }
         finally
@@ -351,28 +351,31 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         }
     }
 
-    private static void ExtractQualifiedPackage(string packagePath, string installRoot)
+    private static void ExtractQualifiedPackage(string packagePath, string installRoot, QualifiedProjectFile[] files)
     {
         Directory.CreateDirectory(installRoot);
+        var payload = files.ToDictionary(static file => "artifact/" + file.Path, StringComparer.Ordinal);
         using var archive = ZipFile.OpenRead(packagePath);
         foreach (var entry in archive.Entries.OrderBy(static entry => entry.FullName, StringComparer.Ordinal))
         {
             if (entry.FullName.Length == 0 || entry.FullName.EndsWith("/", StringComparison.Ordinal)) continue;
-            if ((entry.ExternalAttributes >> 16 & 0xF000) == 0xA000)
-                throw new InvalidDataException($"Qualified package entry '{entry.FullName}' is a symbolic link.");
+            var permissions = payload.TryGetValue(entry.FullName, out var file) ? file.UnixPermissions : null;
+            ValidateArchiveUnixPermissions(entry, permissions);
             var destination = Path.GetFullPath(Path.Combine(installRoot, entry.FullName.Replace('/', Path.DirectorySeparatorChar)));
             PowerShellCompilationPathSafety.EnsureContained(installRoot, destination, $"Qualified package entry '{entry.FullName}' escapes the installation root.");
             var parent = Path.GetDirectoryName(destination);
             if (!string.IsNullOrWhiteSpace(parent)) Directory.CreateDirectory(parent);
-            using var input = entry.Open();
-            using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-            input.CopyTo(output);
+            using (var input = entry.Open())
+            using (var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                input.CopyTo(output);
+            RestoreExtractedUnixPermissions(destination, permissions);
         }
     }
 
-    private static void EnsureInstalledPackageMatches(string packagePath, string installRoot)
+    private static void EnsureInstalledPackageMatches(string packagePath, string installRoot, QualifiedProjectFile[] files)
     {
         PowerShellCompilationPathSafety.EnsureNoLinks(installRoot, installRoot, "Qualified installation root traverses a symbolic link or junction.");
+        var payload = files.ToDictionary(static file => "artifact/" + file.Path, StringComparer.Ordinal);
         using var archive = ZipFile.OpenRead(packagePath);
         var entries = archive.Entries
             .Where(static entry => entry.FullName.Length > 0 && !entry.FullName.EndsWith("/", StringComparison.Ordinal))
@@ -386,8 +389,11 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             throw new InvalidDataException("Qualified installation file inventory differs from its package.");
         foreach (var entry in entries)
         {
+            var permissions = payload.TryGetValue(entry.FullName, out var file) ? file.UnixPermissions : null;
+            ValidateArchiveUnixPermissions(entry, permissions);
             var path = Path.GetFullPath(Path.Combine(installRoot, entry.FullName.Replace('/', Path.DirectorySeparatorChar)));
             PowerShellCompilationPathSafety.EnsureNoLinks(installRoot, path, $"Installed package entry '{entry.FullName}' traverses a symbolic link or junction.");
+            ValidateInstalledUnixPermissions(path, entry.FullName, permissions);
             using var expectedStream = entry.Open();
             using var actualStream = File.OpenRead(path);
             using var expectedHash = System.Security.Cryptography.SHA256.Create();
@@ -412,6 +418,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
             using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: false))
             {
+                var payload = validated.Files.ToDictionary(static file => file.Path, StringComparer.Ordinal);
                 foreach (var file in Directory.EnumerateFiles(outputRoot, "*", SearchOption.AllDirectories)
                              .Where(path => IsArtifactPayloadFile(path, context, artifact))
                              .OrderBy(path => FrameworkCompatibility.GetRelativePath(outputRoot, path), StringComparer.Ordinal))
@@ -420,6 +427,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                     var relative = FrameworkCompatibility.GetRelativePath(outputRoot, file).Replace('\\', '/');
                     var entry = archive.CreateEntry("artifact/" + relative, CompressionLevel.Optimal);
                     entry.LastWriteTime = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
+                    WriteArchiveUnixPermissions(entry, payload[relative].UnixPermissions);
                     using var input = File.OpenRead(file);
                     using var output = entry.Open();
                     input.CopyTo(output);

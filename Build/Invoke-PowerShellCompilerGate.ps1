@@ -27,6 +27,7 @@ $requiredFamilies = @{
     'project grouped diagnostics' = 'PowerForge.Tests.PowerShellCompilationProjectDiagnosticsTests.*'
     'project diagnostics CLI' = 'PowerForge.Tests.PowerForgeCliPowerShellCompilationTests.ProjectDiagnosticsCli_ShowsGroupedShapingCallsAndCorrectFailureStatus*'
     'project module lifecycle' = 'PowerForge.Tests.PowerShellCompilationProjectWorkflowTests.ProjectWorkflow_UsesReviewedLocksOfflineEnvironmentAndQualifiedPackage*'
+    'project executable installation' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_ExecutablePackagePreservesQualifiedPermissionsAndRunsAfterInstall*'
     'hosted lifecycle metadata admission' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Plan_HostedLifecyclePromotesOnlyRepresentableValidationMetadata*'
     'hosted lifecycle validation compatibility' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridLifecyclePreservesUnrepresentedValidationMetadata*'
 }
