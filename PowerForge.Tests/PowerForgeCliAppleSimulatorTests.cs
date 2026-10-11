@@ -29,6 +29,8 @@ public sealed class PowerForgeCliAppleSimulatorTests
                 tool.GetProperty("cliVersion").GetString());
             Assert.Equal(typeof(AppleSimulatorSessionService).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion,
                 tool.GetProperty("engineVersion").GetString());
+            Assert.Equal(Assembly.LoadFrom(cli).ManifestModule.ModuleVersionId.ToString("D"), tool.GetProperty("cliModuleId").GetString());
+            Assert.Equal(typeof(AppleSimulatorSessionService).Assembly.ManifestModule.ModuleVersionId.ToString("D"), tool.GetProperty("engineModuleId").GetString());
             Assert.Empty(Directory.EnumerateFiles(root));
         }
         finally { Directory.Delete(root, recursive: true); }

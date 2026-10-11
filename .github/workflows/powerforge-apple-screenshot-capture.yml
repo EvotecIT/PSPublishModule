@@ -136,8 +136,21 @@ jobs:
             & $dotnet build PowerForge.Cli/PowerForge.Cli.csproj --configuration Release --framework net10.0 --output $output --verbosity quiet -p:SourceRevisionId=$toolCommit -p:IncludeSourceRevisionInInformationalVersion=true
             if ($LASTEXITCODE -ne 0) { throw 'Simulator lifecycle tool build failed.' }
           } finally { Pop-Location }
+          $cli = Join-Path $output 'PowerForge.Cli.dll'
+          # An empty isolated status root reads build identity without native discovery.
+          $identityRoot = Join-Path $output ('capture-identity-' + [Guid]::NewGuid().ToString('N'))
+          try {
+            $identity = (& $dotnet $cli apple-simulator status --state-root $identityRoot --output json) | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0 -or $identity.command -ne 'apple-simulator.status' -or $identity.success -ne $true -or
+                [string]::IsNullOrWhiteSpace($identity.tool.cliModuleId) -or [string]::IsNullOrWhiteSpace($identity.tool.engineModuleId)) {
+              throw 'Built simulator tool did not provide loaded assembly identities.'
+            }
+            $identity.tool | ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-simulator-build-identity.json') -Encoding utf8
+          } finally {
+            if (Test-Path -LiteralPath $identityRoot) { Remove-Item -LiteralPath $identityRoot -ErrorAction Stop }
+          }
           "POWERFORGE_DOTNET=$dotnet" | Add-Content $env:GITHUB_ENV
-          "POWERFORGE_SIMULATOR_CLI=$(Join-Path $output 'PowerForge.Cli.dll')" | Add-Content $env:GITHUB_ENV
+          "POWERFORGE_SIMULATOR_CLI=$cli" | Add-Content $env:GITHUB_ENV
 
       - name: Capture deterministic App Store screenshots
         shell: pwsh
@@ -241,6 +254,9 @@ jobs:
 
           $devices = $env:POWERFORGE_CAPTURE_SIMULATORS | ConvertFrom-Json -AsHashtable
           $sessions = @()
+          $expectedTool = if ($devices.Count -gt 0) {
+            Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-simulator-build-identity.json') -Raw | ConvertFrom-Json
+          } else { $null }
           foreach ($entry in $devices.GetEnumerator()) {
             $receiptPath = Join-Path $sourceRoot "build/powerforge/screenshots/$($entry.Key).json"
             Assert-UnlinkedSourcePath -Path $receiptPath -Name 'Simulator capture receipt'
@@ -255,7 +271,9 @@ jobs:
             $engineIdentity = [regex]::Match([string]$capture.tool.engineVersion, '\+([0-9a-f]{40})$')
             if (-not $cliIdentity.Success -or -not $engineIdentity.Success -or
                 $cliIdentity.Groups[1].Value -cne $env:SIMULATOR_TOOL_REF.ToLowerInvariant() -or
-                $engineIdentity.Groups[1].Value -cne $cliIdentity.Groups[1].Value) {
+                $engineIdentity.Groups[1].Value -cne $cliIdentity.Groups[1].Value -or
+                [string]::IsNullOrWhiteSpace($expectedTool.cliModuleId) -or [string]::IsNullOrWhiteSpace($expectedTool.engineModuleId) -or
+                $capture.tool.cliModuleId -cne $expectedTool.cliModuleId -or $capture.tool.engineModuleId -cne $expectedTool.engineModuleId) {
               throw "Simulator capture role '$($entry.Key)' did not use the pinned CLI and engine builds."
             }
             $expectedOwner = "$env:GITHUB_REPOSITORY/$env:GITHUB_RUN_ID/$($entry.Key)"
@@ -285,6 +303,8 @@ jobs:
               toolCommit = $cliIdentity.Groups[1].Value
               cliVersion = $capture.tool.cliVersion
               engineVersion = $capture.tool.engineVersion
+              cliModuleId = $capture.tool.cliModuleId
+              engineModuleId = $capture.tool.engineModuleId
               finalState = $receipt.finalState
               receiptSha256 = (Get-FileHash -LiteralPath $receiptPath -Algorithm SHA256).Hash.ToLowerInvariant()
             }

@@ -128,6 +128,14 @@ internal static partial class Program
             writer.WriteStartObject("tool");
             writer.WriteString("cliVersion", typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
             writer.WriteString("engineVersion", typeof(AppleSimulatorSessionService).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+            writer.WriteString("cliModuleId", AppleSimulatorModuleId(typeof(Program).Assembly));
+            writer.WriteString("engineModuleId", AppleSimulatorModuleId(typeof(AppleSimulatorSessionService).Assembly));
             writer.WriteEndObject();
         });
+
+    private static string? AppleSimulatorModuleId(Assembly assembly)
+    {
+        try { return assembly.ManifestModule.ModuleVersionId.ToString("D"); }
+        catch (NotSupportedException) { return null; } // NativeAOT may not expose module metadata; guarded captures require it.
+    }
 }
