@@ -484,10 +484,9 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         }
     }
 
-    [Fact]
+    [WindowsFact]
     public void StrictClosureVerifierRejectsOpaqueNativeLibraryUntilTargetHostProofExists()
     {
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "OpaqueNativeClosure", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try

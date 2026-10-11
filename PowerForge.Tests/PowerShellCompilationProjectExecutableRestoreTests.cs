@@ -5,11 +5,10 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
-    [Fact]
+    [WindowsFact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Project_RestoreAndExecutionSupportLongInternalPathsWithCompactOutput()
     {
-        if (!OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("return 7", compactPath: true);
         var projectRoot = Path.Combine(fixture.RootPath, new string('d', 225 - fixture.RootPath.Length - 1));
         Directory.CreateDirectory(projectRoot);
@@ -46,12 +45,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
-    [InlineData(PowerShellCompilationMode.Strict, "return 7", "7")]
-    [InlineData(PowerShellCompilationMode.Package, "Write-Host 'ready'", "ready")]
+    [WindowsInlineData(PowerShellCompilationMode.Strict, "return 7", "7")]
+    [WindowsInlineData(PowerShellCompilationMode.Package, "Write-Host 'ready'", "ready")]
     public void Project_RestoreBuildAndRunPreservesSingleFilePackageClosure(
         PowerShellCompilationMode mode, string source, string expectedOutput)
     {
-        if (!OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create(source, compactPath: true);
         var projectPath = Path.Combine(fixture.RootPath, "powerforge.psproject.json");
         var target = PowerShellCompilationTargetContractService.Create(

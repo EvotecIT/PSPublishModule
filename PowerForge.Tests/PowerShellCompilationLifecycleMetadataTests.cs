@@ -31,11 +31,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("net10.0")]
-    [InlineData("net472")]
+    [WindowsInlineData("net472")]
     public void Build_HybridLifecyclePreservesUnrepresentedValidationMetadata(string targetFramework)
     {
-        if (targetFramework == "net472" && !OperatingSystem.IsWindows())
-            return;
         using var fixture = ArtifactFixture.Create(
             """
             function Test-NumericSet {

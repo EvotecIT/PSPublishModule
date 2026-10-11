@@ -2,11 +2,10 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationProviderPackageTests
 {
-    [Fact]
+    [WindowsFact]
     [Trait("Category", "PowerShellCompilerGate")]
     public async Task Project_RunRejectsChangedProviderAndSemanticProfileBeforeExecution()
     {
-        if (!OperatingSystem.IsWindows()) return;
         using var fixture = ProviderFixture.Create();
         fixture.BuildPackage("provider.nupkg");
         var source = Path.Combine(fixture.RootPath, "input.ps1");

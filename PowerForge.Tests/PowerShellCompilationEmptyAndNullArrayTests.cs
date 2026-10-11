@@ -7,10 +7,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("net10.0", "pwsh")]
-    [InlineData("net472", "powershell.exe")]
+    [WindowsInlineData("net472", "powershell.exe")]
     public void Build_ClosedArrayValuesPreserveIdentityAndNullCardinality(string framework, string host)
     {
-        if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("""
             function Test-EmptyIdentity { [CmdletBinding()] param() $First = @(); $Second = @(); return [object]::ReferenceEquals($First, $Second) }
             function Test-TypedEmptyIdentity { [CmdletBinding()] param() [int[]]$First = @(); [int[]]$Second = @(); return [object]::ReferenceEquals($First, $Second) }

@@ -5,10 +5,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [InlineData("net10.0", "pwsh")]
-    [InlineData("net472", "powershell.exe")]
+    [WindowsInlineData("net472", "powershell.exe")]
     public void TypeLiterals_PreserveValuesInRuntimeFreeAndHostedSurfaces(string framework, string host)
     {
-        if (framework == "net472" && !OperatingSystem.IsWindows()) return;
         using var fixture = ArtifactFixture.Create("""
             function Get-AccountType { $type = [System.Security.Principal.NTAccount]; return $type.FullName }
             function Get-IdentifierType { $type = [System.Security.Principal.SecurityIdentifier]; return $type.FullName }
