@@ -12,7 +12,9 @@ public sealed class PowerForgeCliAppleSimulatorTests
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "PSPublishModule.sln")))
             directory = directory.Parent;
         var repository = directory?.FullName ?? throw new DirectoryNotFoundException("Repository root was not found.");
-        var cli = Path.Combine(repository, "PowerForge.Cli", "bin", "Release", "net10.0", "PowerForge.Cli.dll");
+        var configuration = typeof(PowerForgeCliAppleSimulatorTests).Assembly
+            .GetCustomAttribute<AssemblyConfigurationAttribute>()!.Configuration;
+        var cli = Path.Combine(repository, "PowerForge.Cli", "bin", configuration, "net10.0", "PowerForge.Cli.dll");
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "SimulatorCli-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
