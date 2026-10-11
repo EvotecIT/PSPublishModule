@@ -31,7 +31,7 @@ on:
         default: ""
         type: string
       simulator_devices_json:
-        description: Explicit task-owned simulator UUIDs keyed by consumer capture role.
+        description: Task-owned UUIDs by capture role; consumers persist each apple-simulator JSON result under build/powerforge/screenshots/<role>.json.
         required: false
         default: '{}'
         type: string
@@ -145,6 +145,7 @@ jobs:
           CAPTURE_SHELL: ${{ inputs.capture_shell }}
           CAPTURE_ARTIFACT_PATH: ${{ inputs.capture_artifact_path }}
           POWERFORGE_CAPTURE_SIMULATORS: ${{ inputs.simulator_devices_json }}
+          SIMULATOR_TOOL_REF: ${{ inputs.simulator_tool_ref }}
         run: |
           $ErrorActionPreference = 'Stop'
           $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source').TrimEnd([IO.Path]::DirectorySeparatorChar)
@@ -195,6 +196,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Capture script differs from the exact source commit: $relativeScript" }
 
           Push-Location $sourceRoot
+          $captureStartedAt = [DateTimeOffset]::UtcNow
           try {
             if ($env:CAPTURE_SHELL -eq 'bash') { & bash $scriptPath } else { & pwsh -NoLogo -NoProfile -File $scriptPath }
             if ($LASTEXITCODE -ne 0) { throw "Screenshot capture failed with exit code $LASTEXITCODE." }
@@ -211,6 +213,41 @@ jobs:
             throw 'Capture produced no PNG screenshots.'
           }
 
+          $devices = $env:POWERFORGE_CAPTURE_SIMULATORS | ConvertFrom-Json -AsHashtable
+          $sessions = @()
+          foreach ($entry in $devices.GetEnumerator()) {
+            $receiptPath = Join-Path $sourceRoot "build/powerforge/screenshots/$($entry.Key).json"
+            Assert-UnlinkedSourcePath -Path $receiptPath -Name 'Simulator capture receipt'
+            $receiptFile = Get-Item -LiteralPath $receiptPath
+            if ($receiptFile.PSIsContainer -or $receiptFile.Length -gt 65536) { throw 'Invalid simulator capture receipt file.' }
+            $capture = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json -Depth 10
+            $receipt = $capture.result.receipt
+            $expectedOwner = "$env:GITHUB_REPOSITORY/$env:GITHUB_RUN_ID/$($entry.Key)"
+            $started = [DateTimeOffset]::Parse($receipt.startedAtUtc)
+            $completed = [DateTimeOffset]::Parse($receipt.completedAtUtc)
+            if ($capture.command -ne 'apple-simulator.run' -or $capture.success -ne $true -or $capture.exitCode -ne 0 -or
+                $receipt.schemaVersion -ne 1 -or $receipt.deviceId -ne $entry.Value -or $receipt.owner -cne $expectedOwner -or
+                $started -lt $captureStartedAt -or $completed -lt $started -or $completed -gt [DateTimeOffset]::UtcNow -or
+                $receipt.initialState -ne 'Shutdown' -or $receipt.bootSucceeded -ne $true -or
+                $receipt.commandExitCode -ne 0 -or $receipt.cleanupSucceeded -ne $true -or $receipt.finalState -ne 'Shutdown') {
+              throw "Simulator capture role '$($entry.Key)' lacks a matching successful, released session from this capture."
+            }
+            $sessions += [ordered]@{
+              role = $entry.Key
+              deviceId = $receipt.deviceId
+              sessionId = $receipt.sessionId
+              owner = $receipt.owner
+              initialState = $receipt.initialState
+              finalState = $receipt.finalState
+              receiptSha256 = (Get-FileHash -LiteralPath $receiptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
+          }
+          if ($devices.Count -gt 0) {
+            [ordered]@{ toolCommit = $env:SIMULATOR_TOOL_REF.ToLowerInvariant(); devices = $devices; sessions = $sessions } |
+              ConvertTo-Json -Depth 6 -Compress |
+              Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-apple-simulator-evidence.json') -Encoding utf8
+          }
+
       - name: Record capture provenance
         shell: pwsh
         env:
@@ -221,6 +258,7 @@ jobs:
           CAPTURE_THEME: ${{ inputs.theme }}
           CAPTURE_SCENARIO: ${{ inputs.scenario }}
           CAPTURE_ARTIFACT_PATH: ${{ inputs.capture_artifact_path }}
+          SIMULATOR_DEVICES: ${{ inputs.simulator_devices_json }}
         run: |
           $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source')
           $artifactRoot = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:CAPTURE_ARTIFACT_PATH))
@@ -257,7 +295,10 @@ jobs:
             scenario = $env:CAPTURE_SCENARIO
             screenshots = $screenshots
           }
-          $provenance | ConvertTo-Json -Depth 5 -Compress |
+          if (($env:SIMULATOR_DEVICES | ConvertFrom-Json -AsHashtable).Count -gt 0) {
+            $provenance.simulatorCapture = Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-apple-simulator-evidence.json') -Raw | ConvertFrom-Json -AsHashtable
+          }
+          $provenance | ConvertTo-Json -Depth 8 -Compress |
             Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-apple-screenshot-provenance.json') -Encoding utf8
 
       - name: Retain compact capture provenance
