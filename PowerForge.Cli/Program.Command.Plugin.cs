@@ -115,7 +115,7 @@ internal static partial class Program
             var plan = service.PlanFolderExport(spec, fullConfigPath, request);
             var result = planOnly
                 ? null
-                : RunWithStatus(outputJson, cli, "Exporting plugin folders", () => service.ExportFolders(plan));
+                : RunWithStatus(outputJson, cli, "Exporting plugin folders", () => service.ExportFolders(plan), value => value.Success);
             var exitCode = result is not null && !result.Success ? 1 : 0;
 
             if (outputJson)
@@ -251,7 +251,7 @@ internal static partial class Program
             var plan = service.PlanPackages(spec, fullConfigPath, request);
             var result = planOnly
                 ? null
-                : RunWithStatus(outputJson, cli, "Packing plugin packages", () => service.PackPackages(plan, request.ApiKey));
+                : RunWithStatus(outputJson, cli, "Packing plugin packages", () => service.PackPackages(plan, request.ApiKey), value => value.Success);
             var exitCode = result is not null && !result.Success ? 1 : 0;
 
             if (outputJson)

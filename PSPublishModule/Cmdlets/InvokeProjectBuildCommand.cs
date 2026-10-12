@@ -101,9 +101,13 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         var interactive = !Quiet.IsPresent && !NoInteractive.IsPresent &&
                           SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
         BufferedLogger? interactiveBuffer = null;
-        ILogger outputLogger = interactive || Quiet.IsPresent || ExitCode.IsPresent
+        ILogger outputLogger = Quiet.IsPresent
             ? interactiveBuffer = new BufferedLogger { IsVerbose = isVerbose }
-            : new CmdletLogger(this, isVerbose);
+            : interactive
+                ? new SpectreConsoleLogger { IsVerbose = isVerbose }
+                : ExitCode.IsPresent
+                    ? interactiveBuffer = new BufferedLogger { IsVerbose = isVerbose }
+                    : new CmdletLogger(this, isVerbose);
         var logger = new CmdletWarningLogger(this, outputLogger);
         var support = new ProjectBuildSupportService(logger);
 
@@ -167,13 +171,6 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
             summary.Success = workflow.Result.Success;
             var display = new DotNetRepositoryReleaseDisplayService().CreateDisplay(summary, isPlan: preparation.PlanOnly || !executeBuild);
             SpectreProjectBuildSummaryWriter.Write(display);
-
-            if (!workflow.Result.Success && interactiveBuffer?.Entries.Count > 0)
-            {
-                new BufferedLogSupportService().WriteTail(
-                    interactiveBuffer.Entries,
-                    new SpectreConsoleLogger { IsVerbose = isVerbose });
-            }
 
             if (workflow.GitHubPublishSummary is { PerProject: false } publishSummary)
                 WriteGitHubSummary(false, publishSummary.SummaryTag, publishSummary.SummaryReleaseUrl, publishSummary.SummaryAssetsCount, workflow.Result.GitHub);

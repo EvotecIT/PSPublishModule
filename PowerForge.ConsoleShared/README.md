@@ -13,3 +13,22 @@ If the CLI and PowerShell module later converge on the same console dependency
 and packaging model, this folder can become a small project reference. Until
 then, source linking is intentional and keeps console dependencies out of the
 core engine.
+
+Module builds, project/package builds, executable publishing, and unified releases
+use the same progress display. The current operation appears in a wrapping line
+below the rows. Diagnostics appear below that line while work runs, and the
+complete messages follow the finished progress table with blank-line separators.
+Operations without detailed progress events use one running row with elapsed
+time through `SpectreStatusConsoleUi`.
+
+Interactive callers pass their Spectre logger directly to the engine. Buffering
+that logger prevents the live message area from receiving output and hides
+messages on successful runs. JSON and quiet modes keep their separate output
+contracts. PowerShell warnings are synchronous host writes so warning preferences
+and prompts still work; the display clears its live area and resumes below the
+complete warning.
+
+Signing rows show certificate-provider guidance before a potentially blocking
+operation. A running timer indicates elapsed time; it does not confirm that a
+PIN dialog is open. NuGet signing reports each package and retry attempt before
+calling the signer, leaving packages that have not started queued.

@@ -181,7 +181,7 @@ internal static partial class Program
             }
 
             var result = RunWithStatus(outputJson, cli, "Running workspace validation", () =>
-                service.RunAsync(loaded.Value, loaded.FullPath, request).GetAwaiter().GetResult());
+                service.RunAsync(loaded.Value, loaded.FullPath, request).GetAwaiter().GetResult(), value => value.Succeeded);
             var exitCode = result.Succeeded ? 0 : 1;
 
             if (outputJson)

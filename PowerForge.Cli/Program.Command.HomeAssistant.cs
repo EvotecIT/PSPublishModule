@@ -33,17 +33,17 @@ internal static partial class Program {
                     releaseArgs.Any(value => value.Equals("--apply", StringComparison.OrdinalIgnoreCase))
                         ? "Preparing Home Assistant release metadata"
                         : "Planning Home Assistant release",
-                    () => service.Prepare(ParsePrepareSpec(releaseArgs))),
+                    () => service.Prepare(ParsePrepareSpec(releaseArgs)), value => value.Success),
                 "build" => RunWithStatus(
                     outputJson,
                     cli,
                     "Building Home Assistant release assets",
-                    () => service.Build(ParseBuildSpec(releaseArgs))),
+                    () => service.Build(ParseBuildSpec(releaseArgs)), value => value.Success),
                 "publish" => RunWithStatus(
                     outputJson,
                     cli,
                     "Publishing Home Assistant release",
-                    () => service.Publish(ParsePublishSpec(releaseArgs))),
+                    () => service.Publish(ParsePublishSpec(releaseArgs)), value => value.Success),
                 _ => throw new ArgumentException("Release stage must be prepare, build, or publish.")
             };
 

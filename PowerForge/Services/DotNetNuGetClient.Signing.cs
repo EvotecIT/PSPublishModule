@@ -10,7 +10,8 @@ public sealed partial class DotNetNuGetClient
     /// </summary>
     internal async Task<(DotNetNuGetSignResult Result, string[] FailedPackages)> SignPackagesIndividuallyAsync(
         DotNetNuGetSignRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Action<string, int, DotNetNuGetSignResult?>? progress = null)
     {
         if (request is null)
             throw new ArgumentNullException(nameof(request));
@@ -26,8 +27,10 @@ public sealed partial class DotNetNuGetClient
             cancellationToken.ThrowIfCancellationRequested();
             attemptedPackageCount++;
             DotNetNuGetSignResult? last = null;
+            TimeSpan packageDuration = TimeSpan.Zero;
             for (int attempt = 1; attempt <= 2; attempt++)
             {
+                progress?.Invoke(packagePath, attempt, null);
                 last = await SignPackageAsync(
                     new DotNetNuGetSignRequest(
                         packagePath,
@@ -39,6 +42,7 @@ public sealed partial class DotNetNuGetClient
                         request.WorkingDirectory,
                         request.Timeout),
                     cancellationToken).ConfigureAwait(false);
+                packageDuration += last.Duration;
                 if (last.Succeeded)
                 {
                     messages.Add($"{Path.GetFileName(packagePath)}: " +
@@ -49,6 +53,10 @@ public sealed partial class DotNetNuGetClient
                     break;
             }
 
+            if (last is not null)
+                last = new DotNetNuGetSignResult(last.ExitCode, last.StdOut, last.StdErr,
+                    last.Executable, packageDuration, last.TimedOut, last.ErrorMessage);
+            progress?.Invoke(packagePath, 0, last);
             if (last is not null && !last.Succeeded)
                 failures.Add((packagePath, last));
             if (last?.TimedOut == true)

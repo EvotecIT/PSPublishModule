@@ -615,9 +615,16 @@ public sealed class ProjectBuildProgressLedgerTests
                 IReadOnlyList<string> packages,
                 DotNetRepositoryReleaseSpec spec,
                 string sha256,
+                Action<string, int, DotNetNuGetSignResult?>? signingProgress,
                 out string[] failedPackages,
                 out string error) =>
             {
+                foreach (var package in packages)
+                {
+                    signingProgress?.Invoke(package, 1, null);
+                    signingProgress?.Invoke(package, 0,
+                        new DotNetNuGetSignResult(0, "", "", "dotnet", TimeSpan.FromMilliseconds(42), false, null));
+                }
                 failedPackages = Array.Empty<string>();
                 error = string.Empty;
                 return packages.Count > 0;
@@ -654,12 +661,12 @@ public sealed class ProjectBuildProgressLedgerTests
             Assert.Contains(progress.Updates, update =>
                 update.Item.Key == signingItem.Key &&
                 update.State == ProjectBuildProgressItemState.Started &&
-                update.Detail == "signing");
+                update.Detail == "Signing and timestamping (attempt 1/2)");
             var completed = Assert.Single(progress.Updates, update =>
                 update.Item.Key == signingItem.Key &&
                 update.State == ProjectBuildProgressItemState.Completed);
             Assert.Equal("signed", completed.Detail);
-            Assert.NotNull(completed.Item.Duration);
+            Assert.Equal(TimeSpan.FromMilliseconds(42), completed.Item.Duration);
         }
         finally
         {

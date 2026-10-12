@@ -96,7 +96,13 @@ internal static partial class Program
                 defaults: requestDefaults);
 
             var service = new PowerForgeReleaseService(cmdLogger);
-            var result = RunWithStatus(outputJson, cli, "Running project release workflow", () => service.Execute(spec, request));
+            var result = PipelineConsoleUi.ShouldUseInteractiveView(outputJson, cli)
+                ? PowerForge.ConsoleShared.SpectrePowerForgeReleaseConsoleUi.RunInteractive(spec, request, progress =>
+                {
+                    request.Progress = progress;
+                    return service.Execute(spec, request);
+                })
+                : RunWithStatus(outputJson, cli, "Running project release workflow", () => service.Execute(spec, request), value => value.Success);
             var exitCode = result.Success ? 0 : 1;
 
             if (outputJson)

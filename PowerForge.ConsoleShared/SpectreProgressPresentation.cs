@@ -67,7 +67,7 @@ internal sealed class SpectreProgressPresentation
     {
         _states[task] = state;
         _details[task] = string.IsNullOrWhiteSpace(detail) ? item.Title : $"{item.Title}: {detail}";
-        _signing[task] = string.Equals(item.Kind, nameof(ModulePipelineStepKind.Signing), StringComparison.OrdinalIgnoreCase);
+        _signing[task] = item.Kind?.ToLowerInvariant() is "signing" or "packagesigning" or "msisign";
     }
 
     internal IRenderable? RenderActiveStatus(IReadOnlyList<ProgressTask> tasks)

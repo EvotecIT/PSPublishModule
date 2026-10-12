@@ -68,7 +68,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                     failure = exception;
                     reporter.FinishRemaining(success: false);
                 }
-            });
+            }, activeStatus: presentation.RenderActiveStatus);
 
         reporter?.WriteLedger();
         if (failure is not null)
@@ -288,8 +288,12 @@ internal static class SpectrePowerForgeReleaseConsoleUi
             if (!_tasks.TryGetValue(phase, out var task)) return;
             if (!task.IsStarted) task.StartTask();
             _presentation.MarkStarted(task, phase.ToString());
-            task.Value = 5;
-            task.Description = Label(phase, detail);
+            task.IsIndeterminate = true;
+            task.Value = 0;
+            var item = new SpectreProgressLedgerItem { Title = Label(phase, null), Kind = phase.ToString() };
+            _presentation.SetDetail(task, item, SpectreProgressLedgerState.Started, detail);
+            task.Description = _presentation.BuildLabel(item, detail);
+            SpectreProgressDisplay.Refresh(_context);
         }
 
         public void PhaseCompleted(PowerForgeReleaseProgressPhase phase, string? detail = null)
@@ -330,7 +334,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                 {
                     phaseTask.StartTask();
                     _presentation.MarkStarted(phaseTask, phase.ToString());
-                    phaseTask.Value = 5;
+                    phaseTask.Value = 0;
                 }
 
                 phaseTask.Description = Label(phase, $"{CountItems(phase)} detailed step(s)");
@@ -416,7 +420,8 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                 return;
 
             var completed = _ledger.GetCompletionRatio(phase.ToString());
-            phaseTask.Value = Math.Max(5d, Math.Min(99d, completed * 100d));
+            phaseTask.IsIndeterminate = false;
+            phaseTask.Value = Math.Min(99d, completed * 100d);
         }
 
         private int CountItems(PowerForgeReleaseProgressPhase phase)

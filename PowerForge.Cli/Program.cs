@@ -358,7 +358,7 @@ internal static partial class Program
             {
                 var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
                 var service = new ModuleTestSuiteService(new PowerShellRunner(), cmdLogger);
-                var res = RunWithStatus(outputJson, cli, "Running test suite", () => service.Run(spec));
+                var res = RunWithStatus(outputJson, cli, "Running test suite", () => service.Run(spec), value => value.FailedCount == 0);
 
                 var success = res.FailedCount == 0;
                 var exitCode = success ? 0 : 1;
@@ -499,16 +499,13 @@ internal static partial class Program
                 return 2;
             }
 
-            BufferedLogger? interactiveBuffer = null;
             ModulePipelinePlan? lastPlan = null;
             bool usedInteractiveView = false;
             try
             {
                 var interactive = PipelineConsoleUi.ShouldUseInteractiveView(outputJson, cli);
                 usedInteractiveView = interactive;
-                var (cmdLogger, logBuffer) = interactive
-                    ? (interactiveBuffer = new BufferedLogger { IsVerbose = cli.Verbose }, interactiveBuffer)
-                    : CreateCommandLogger(outputJson, cli, logger);
+                var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
                 var runner = new ModulePipelineRunner(cmdLogger);
                 var plan = runner.Plan(spec);
                 lastPlan = plan;
@@ -551,9 +548,6 @@ internal static partial class Program
                     });
                     return 1;
                 }
-
-                if (interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0 && !cli.Quiet)
-                    WriteLogTail(interactiveBuffer, logger);
 
                 if (policyFailure is not null)
                 {

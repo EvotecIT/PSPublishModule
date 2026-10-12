@@ -58,7 +58,7 @@ internal static partial class SpectreDotNetPublishConsoleUi
                 failure = ex;
                 ledger.FinishRemaining(success: false);
             }
-        });
+        }, activeStatus: presentation.RenderActiveStatus);
 
         SpectreProgressLedger.WriteLedger(console, ledger!.GetSnapshots(), "Executable publish details");
         if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();

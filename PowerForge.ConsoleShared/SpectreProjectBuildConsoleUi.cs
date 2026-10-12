@@ -65,7 +65,7 @@ internal static class SpectreProjectBuildConsoleUi
                     failure = exception;
                     reporter.FinishRemaining(success: false);
                 }
-            });
+            }, activeStatus: presentation.RenderActiveStatus);
 
         reporter?.WriteLedger(console);
         if (failure is not null)
@@ -161,8 +161,10 @@ internal static class SpectreProjectBuildConsoleUi
             RememberCount(phase, 0, totalItems);
             if (!task.IsStarted) task.StartTask();
             task.Value = 0;
-            task.Description = BuildLabel(phase, detail, 0, totalItems);
+            task.IsIndeterminate = totalItems <= 0;
+            task.Description = DescribePhase(task, phase, detail, 0, totalItems);
             _presentation.MarkStarted(task, phase.ToString());
+            SpectreProgressDisplay.Refresh(_context);
         }
 
         public void PhaseUpdated(ProjectBuildProgressPhase phase, int completedItems, int totalItems, string? detail = null)
@@ -171,9 +173,11 @@ internal static class SpectreProjectBuildConsoleUi
             RememberCount(phase, completedItems, totalItems);
             if (!task.IsStarted) task.StartTask();
             var total = Math.Max(1, totalItems);
+            task.IsIndeterminate = totalItems <= 0;
             task.Value = Math.Min(100, Math.Max(0, completedItems) * 100d / total);
-            task.Description = BuildLabel(phase, detail, completedItems, totalItems);
+            task.Description = DescribePhase(task, phase, detail, completedItems, totalItems);
             _presentation.MarkStarted(task, phase.ToString());
+            SpectreProgressDisplay.Refresh(_context);
         }
 
         public void PhaseCompleted(ProjectBuildProgressPhase phase, string? detail = null)
@@ -261,6 +265,18 @@ internal static class SpectreProjectBuildConsoleUi
             }
 
             _phaseCounts[phase] = (Math.Min(Math.Max(0, completed), total), total);
+        }
+
+        private string DescribePhase(ProgressTask task, ProjectBuildProgressPhase phase, string? detail, int completed, int total)
+        {
+            var item = new SpectreProgressLedgerItem
+            {
+                Title = GetPhaseName(phase),
+                Kind = phase.ToString()
+            };
+            _presentation.SetDetail(task, item, SpectreProgressLedgerState.Started, detail);
+            item.Title = BuildLabel(phase, null, completed, total);
+            return _presentation.BuildLabel(item, detail);
         }
 
         private (int? Completed, int? Total) GetTerminalCount(

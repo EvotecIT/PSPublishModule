@@ -63,6 +63,7 @@
     <Compile Include="..\PowerForge.ConsoleShared\SpectreBuildProgressColumns.cs" Link="PowerForge.ConsoleShared\SpectreBuildProgressColumns.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressPresentation.cs" Link="PowerForge.ConsoleShared\SpectreProgressPresentation.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressDisplay.cs" Link="PowerForge.ConsoleShared\SpectreProgressDisplay.cs" />
+    <Compile Include="..\PowerForge.ConsoleShared\SpectreStatusConsoleUi.cs" Link="PowerForge.ConsoleShared\SpectreStatusConsoleUi.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressDiagnostics.cs" Link="PowerForge.ConsoleShared\SpectreProgressDiagnostics.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressViewport.cs" Link="PowerForge.ConsoleShared\SpectreProgressViewport.cs" />
     <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressLedger.cs" Link="PowerForge.ConsoleShared\SpectreProgressLedger.cs" />
