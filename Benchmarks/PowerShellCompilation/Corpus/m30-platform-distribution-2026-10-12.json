@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedAtUtc": "2026-10-12T11:45:27.2361905Z",
+  "recordedAtUtc": "2026-10-12T12:10:51.2998151Z",
   "state": "bounded-source-platform-and-signed-target-qualification-with-hosted-trust-remediation-and-public-release-pending",
   "baselineSourceCommit": "3bf263de3f39759fb21202e812728b47b85b05dc",
   "previousWindowsLedger": "m30-public-distribution-3.0.168.json",
@@ -491,5 +491,27 @@
       "bothRuntimeAbsent": "Actual final installed bundled/trimmed payloads print 7, exit 0, empty stderr; FD control exit 131; no dotnet before/after, guest ICU74 only; hashes/modes unchanged",
       "sourceBinding": "Actual precommit compiler informational base 548 plus immutable file manifests; committed source matches normalized file contents, no binary relabeling"
     }
+  },
+  "coldRuntimePackTestPrerequisite": {
+    "sourceBase": "9e082874664bd66e4fe7d8adab7b880f3927ac5e",
+    "testDeltaManifestSha256": "3952813f3814a60f8a7be1c463cb50f2537a338eea674e23c826b0e10a5f6a1d",
+    "testHarnessSha256": "7228f535bf4b208042572168a4d24757b7d44c0d5cb00cc3ab336f21d07514a6",
+    "hostedFailure": "LinuxBuild failed at Lock because the runtime pack was absent from the hosted package cache; six other applicable jobs passed on that earlier published head",
+    "classification": "Integration test setup depended on a pre-restored runtime pack; existing compiler metadata-only prerequisite contract is unchanged",
+    "repair": "Shared test-only SDK restore acquires the selected runtime pack before Lock; both Linux lifecycle facts and the existing two Windows diagnostics rows use it",
+    "sdk": "10.0.303",
+    "runtime": "10.0.11",
+    "linuxPassed": 2,
+    "linuxFailed": 0,
+    "linuxSkipped": 0,
+    "windowsDiagnosticsPassed": 2,
+    "windowsExplicitLinuxSkips": 2,
+    "windowsFailed": 0,
+    "build": "Zero warnings and errors",
+    "productionOwnersUnchanged": 14,
+    "packageCachePrecondition": "Each Linux fact starts with a separate empty package root, zero files and bytes; ordinary shared HTTP cache may be warm and the SDK is already installed",
+    "runtimePackArchiveSha256": "dec12c4b4ed5d2739669243756493090bb0f7b013a33a0eb84ec77428a8ab1ca",
+    "existingAssertions": "Signed runtime authority/tamper controls (bundled); fresh authenticated SDK derivation/cache-hit refusal (trimmed); build,test,pack,install,repeat-install,direct installed entry7/exit0,hash and Unix mode parity.",
+    "qualificationLimit": "Focused fixture proof; no new Full, public-release, runtime-absent or all-network-cold claim"
   }
 }

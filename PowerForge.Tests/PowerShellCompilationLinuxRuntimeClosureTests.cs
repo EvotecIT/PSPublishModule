@@ -7,15 +7,15 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [LinuxX64RuntimeClosureFact]
     [Trait("Category", "PowerShellCompilerGate")]
-    public void Project_LinuxBundledSelfContainedRuntimeClosureRunsAfterInstall()
-        => AssertLinuxRuntimeClosureAfterInstall(PowerShellCompilationExecutableOptimization.None);
+    public Task Project_LinuxBundledSelfContainedRuntimeClosureRunsAfterInstall()
+        => AssertLinuxRuntimeClosureAfterInstallAsync(PowerShellCompilationExecutableOptimization.None);
 
     [LinuxX64RuntimeClosureFact]
     [Trait("Category", "PowerShellCompilerGate")]
-    public void Project_LinuxTrimmedRuntimeClosurePreservesAuthenticatedCallersAfterInstall()
-        => AssertLinuxRuntimeClosureAfterInstall(PowerShellCompilationExecutableOptimization.Trimmed);
+    public Task Project_LinuxTrimmedRuntimeClosurePreservesAuthenticatedCallersAfterInstall()
+        => AssertLinuxRuntimeClosureAfterInstallAsync(PowerShellCompilationExecutableOptimization.Trimmed);
 
-    private static void AssertLinuxRuntimeClosureAfterInstall(PowerShellCompilationExecutableOptimization optimization)
+    private static async Task AssertLinuxRuntimeClosureAfterInstallAsync(PowerShellCompilationExecutableOptimization optimization)
     {
         if (!OperatingSystem.IsLinux()) throw new PlatformNotSupportedException("Linux runtime-pack closure qualification requires Linux.");
         // This exact bundled profile includes Linux System.Net.Ping's Process.Start
@@ -29,6 +29,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             optimization, explicitContract: true);
         var projectManifest = manifests.Create(project, fixture.ScriptPath, "LinuxRuntimeClosure", target);
         manifests.Save(project, projectManifest);
+        await PowerShellCompilationTestPrerequisites.AcquireRuntimePackAsync("net10.0", "linux-x64");
         var workflow = new PowerShellCompilationProjectWorkflowService();
         AssertProjectSuccess(workflow.Lock(project));
         AssertProjectSuccess(workflow.Restore(project));
