@@ -444,6 +444,7 @@ try {
         ConfigPath    = $ConfigPath
         EffectiveConfigurationPath = $effectiveConfigPath
         ModuleHostPath = Join-Path $toolSnapshotRoot 'PSPublishModule\bin\Release\net8.0\PSPublishModule.dll'
+        ModuleSkipInstall = $true
         Json          = $true
     }
     switch ($Operation) {
