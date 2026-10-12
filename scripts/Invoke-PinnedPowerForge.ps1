@@ -98,9 +98,9 @@ function Assert-CleanRepository {
             if (-not $AllowBehindMain -or $RequiredBranch -ne 'main') {
                 throw "$Name HEAD '$head' does not match origin/$RequiredBranch '$remote'."
             }
-            # Only the worker control plane may enter strictly behind main. Its
-            # source/evidence checks still run before the worker fast-forwards;
-            # every child Ship call retains the exact latest-main requirement.
+            # Behind-main admission is restricted by the command entry policy.
+            # The worker binds release source after its canonical fast-forward;
+            # screenshot commands bind their exact retained capture source.
             Invoke-GitText -Root $Root -Arguments @('merge-base', '--is-ancestor', $head, $remote) | Out-Null
         }
     }
@@ -194,6 +194,21 @@ function Get-OptionValue {
     return $result
 }
 
+function Test-CapturedScreenshotCommand {
+    if ($ArgumentList.Count -lt 2) { return $false }
+    return ($ArgumentList[0] -eq 'apple-screenshots' -and $ArgumentList[1] -in @('manifest', 'manifests')) -or
+        ($ArgumentList[0] -eq 'apple-release' -and $ArgumentList[1] -eq 'Screenshots')
+}
+
+function Assert-ConsumerSourceRepository {
+    $consumerRequiredBranch = if ($ArgumentList.Count -gt 0 -and $ArgumentList[0] -eq 'apple-deploy') { $null } else { $requiredBranch }
+    $workerEntry = $ArgumentList.Count -gt 0 -and $ArgumentList[0] -eq 'apple-testflight'
+    $capturedScreenshotEntry = (Test-CapturedScreenshotCommand) -and
+        -not [string]::IsNullOrWhiteSpace((Get-OptionValue -Option '--capture-provenance'))
+    return Assert-CleanRepository -Root $consumer -Name 'Consumer source' -RequiredBranch $consumerRequiredBranch `
+        -ExpectedRepository $ExpectedConsumerRepository -DeferContentCheck -AllowBehindMain:($workerEntry -or $capturedScreenshotEntry)
+}
+
 function Assert-SafeArguments {
     if ($ArgumentList.Count -lt 1 -or $ArgumentList[0] -notin @('apple-release', 'apple-deploy', 'apple-screenshots', 'apple-governance', 'apple-review-details', 'apple-testflight')) {
         throw 'Pinned local operator accepts only Apple PowerForge commands.'
@@ -230,6 +245,14 @@ function Assert-SafeArguments {
     $releaseConfig = Get-OptionValue -Option '--release-config'
     if ($releaseConfig) {
         $script:validatedReleaseConfigPaths += Resolve-OptionPath -Value $releaseConfig
+    }
+    if ($command -eq 'apple-screenshots') {
+        $configuredSource = Get-OptionValue -Option '--source-commit'
+        if ($null -ne $configuredSource -and
+            ($configuredSource -notmatch '^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$' -or
+             -not $configuredSource.Equals((Invoke-GitText -Root $consumer -Arguments @('rev-parse', 'HEAD')), [StringComparison]::OrdinalIgnoreCase))) {
+            throw '--source-commit must match the exact consumer HEAD at the pinned screenshot boundary.'
+        }
     }
     if ($command -eq 'apple-testflight') {
         $policy = Get-OptionValue -Option '--policy'
@@ -487,25 +510,25 @@ function Assert-AuthoritativeCaptureProvenance {
     $provenance = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
     $repository = [string]$provenance.repository
     $runId = [string]$provenance.captureRunId
-    $sourceCommit = ([string]$provenance.sourceCommit).ToLowerInvariant()
+    $provenanceSourceCommit = ([string]$provenance.sourceCommit).ToLowerInvariant()
     $workflowRef = [string]$provenance.workflowRef
     $workflowPattern = '^' + [regex]::Escape($ExpectedConsumerRepository) + '/(?<path>\.github/workflows/[A-Za-z0-9._/-]+\.ya?ml)@refs/heads/' + [regex]::Escape($requiredBranch) + '$'
     $workflowMatch = [regex]::Match($workflowRef, $workflowPattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
     if (-not $repository.Equals($ExpectedConsumerRepository, [StringComparison]::OrdinalIgnoreCase) -or
-        $runId -notmatch '^\d+$' -or $sourceCommit -notmatch '^(?:[0-9a-f]{40}|[0-9a-f]{64})$' -or -not $workflowMatch.Success) {
+        $runId -notmatch '^\d+$' -or $provenanceSourceCommit -notmatch '^(?:[0-9a-f]{40}|[0-9a-f]{64})$' -or -not $workflowMatch.Success) {
         throw 'Capture provenance repository, run id, source commit, or workflow identity is invalid.'
     }
-    if ($sourceCommit -ne $SourceCommit.ToLowerInvariant()) {
-        throw "Capture provenance source commit '$sourceCommit' does not match the exact consumer HEAD '$SourceCommit'."
+    if (-not $provenanceSourceCommit.Equals($SourceCommit, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Capture provenance source commit '$provenanceSourceCommit' does not match the exact consumer HEAD '$SourceCommit'."
     }
     $run = & $GhPath api "repos/$repository/actions/runs/$runId" 2>$null | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0 -or $run.status -ne 'completed' -or $run.conclusion -ne 'success' -or
         $run.event -ne 'workflow_dispatch' -or $run.path -ne $workflowMatch.Groups['path'].Value -or
         $run.head_repository.full_name -ne $repository -or $run.head_branch -ne $requiredBranch -or
-        ([string]$run.head_sha).ToLowerInvariant() -ne $sourceCommit) {
+        ([string]$run.head_sha).ToLowerInvariant() -ne $provenanceSourceCommit) {
         throw 'Capture provenance does not identify the dedicated successful default-branch capture workflow at the exact source commit.'
     }
-    $artifactName = "powerforge-apple-screenshot-provenance-$sourceCommit"
+    $artifactName = "powerforge-apple-screenshot-provenance-$provenanceSourceCommit"
     $downloadRoot = Join-Path $temporaryRoot 'authoritative-provenance'
     New-Item -ItemType Directory -Path $downloadRoot -Force | Out-Null
     & $GhPath run download $runId --repo $repository --name $artifactName --dir $downloadRoot 2>$null
@@ -634,9 +657,7 @@ try {
     Set-SafeGitEnvironment
     $script:gitPath = Resolve-FixedTool -Name git
     $toolHead = Assert-CleanRepository -Root $toolRoot -Name 'PSPublishModule source' -RequiredCommit $ExpectedCommit -ExpectedRepository 'EvotecIT/PSPublishModule'
-    $consumerRequiredBranch = if ($ArgumentList.Count -gt 0 -and $ArgumentList[0] -eq 'apple-deploy') { $null } else { $requiredBranch }
-    $workerEntry = $ArgumentList.Count -gt 0 -and $ArgumentList[0] -eq 'apple-testflight'
-    $consumerHead = Assert-CleanRepository -Root $consumer -Name 'Consumer source' -RequiredBranch $consumerRequiredBranch -ExpectedRepository $ExpectedConsumerRepository -DeferContentCheck -AllowBehindMain:$workerEntry
+    $consumerHead = Assert-ConsumerSourceRepository
     Assert-NoReplaceRefs -Root $toolRoot -Name 'PSPublishModule source'
     Assert-NoReplaceRefs -Root $consumer -Name 'Consumer source'
     $scriptRelative = [IO.Path]::GetRelativePath($toolRoot, $PSCommandPath).Replace('\', '/')

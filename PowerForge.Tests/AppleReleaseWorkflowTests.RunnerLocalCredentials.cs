@@ -43,7 +43,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("run download $runId", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("requires an explicit --config", script, StringComparison.Ordinal);
         Assert.Contains("'apple-deploy'", script, StringComparison.Ordinal);
-        Assert.Contains("$command -in @('apple-release', 'apple-deploy')", script, StringComparison.Ordinal);
+        Assert.Contains("$command -in @('apple-release', 'apple-deploy', 'apple-testflight')", script, StringComparison.Ordinal);
         Assert.Contains("$consumerRequiredBranch = if ($ArgumentList.Count -gt 0 -and $ArgumentList[0] -eq 'apple-deploy')", script, StringComparison.Ordinal);
         Assert.Contains("'apple-review-details'", script, StringComparison.Ordinal);
         Assert.Contains("Invoke-TrackedInputValidator -SourceCommit $consumerHead", script, StringComparison.Ordinal);
@@ -83,7 +83,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("-IncludeAppleCredentials", script, StringComparison.Ordinal);
         Assert.Contains("Assert-FixedAppleToolConfiguration", script, StringComparison.Ordinal);
         Assert.Contains("$script:validatedReleaseConfigPaths", script, StringComparison.Ordinal);
-        Assert.Contains("if ($command -in @('apple-release', 'apple-deploy') -and $config)", script, StringComparison.Ordinal);
+        Assert.Contains("if ($command -in @('apple-release', 'apple-deploy', 'apple-testflight') -and $config)", script, StringComparison.Ordinal);
         Assert.Contains("Get-OptionValue -Option '--release-config'", script, StringComparison.Ordinal);
         Assert.DoesNotContain("$script:validatedConfigPaths", script, StringComparison.Ordinal);
         Assert.Contains("/usr/bin/xcodebuild", script, StringComparison.Ordinal);
