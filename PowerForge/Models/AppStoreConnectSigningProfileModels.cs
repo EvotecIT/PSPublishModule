@@ -20,6 +20,8 @@ public sealed class AppStoreConnectSigningCertificateInfo
     public string? Name { get; set; }
     /// <summary>Certificate type returned by Apple.</summary>
     public string? CertificateType { get; set; }
+    /// <summary>Whether Apple reports the certificate as activated; null when not returned.</summary>
+    public bool? Activated { get; set; }
     /// <summary>Certificate serial number.</summary>
     public string? SerialNumber { get; set; }
     /// <summary>Certificate expiration date.</summary>

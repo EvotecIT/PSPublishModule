@@ -78,6 +78,7 @@ public sealed partial class AppStoreConnectClient
             Id = GetString(item, "id") ?? string.Empty,
             Name = GetString(attrs, "name"),
             CertificateType = GetString(attrs, "certificateType"),
+            Activated = GetBool(attrs, "activated"),
             SerialNumber = GetString(attrs, "serialNumber"),
             ExpirationDate = GetDateTimeOffset(attrs, "expirationDate"),
             CertificateContent = GetString(attrs, "certificateContent")

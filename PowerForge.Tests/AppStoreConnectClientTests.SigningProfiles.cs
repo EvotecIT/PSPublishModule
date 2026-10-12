@@ -11,7 +11,7 @@ public sealed partial class AppStoreConnectClientTests
         var handler = new SequenceHandler(
             new SequenceResponse(HttpStatusCode.OK, """
                 { "data": [{ "type": "certificates", "id": "cert-1", "attributes": {
-                  "name": "Distribution", "certificateType": "DISTRIBUTION", "serialNumber": "1234",
+                  "name": "Distribution", "certificateType": "DISTRIBUTION", "activated": false, "serialNumber": "1234",
                   "expirationDate": "2027-10-12T01:00:00Z", "certificateContent": "REVSTw==" } }],
                   "links": { "next": "https://api.appstoreconnect.apple.com/v1/certificates?cursor=2" } }
                 """),
@@ -30,9 +30,11 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal(2, certificates.Length);
         Assert.Equal("cert-1", certificates[0].Id);
         Assert.Equal("1234", certificates[0].SerialNumber);
+        Assert.False(certificates[0].Activated);
         Assert.Equal("REVSTw==", certificates[0].CertificateContent);
         Assert.Equal("FUTURE_TYPE", certificates[1].CertificateType);
         Assert.Null(certificates[1].CertificateContent);
+        Assert.Null(certificates[1].Activated);
         Assert.Equal(DateTimeOffset.Parse("2027-10-12T01:00:00Z"), profile.ExpirationDate);
         Assert.Equal("profile-uuid", profile.Uuid);
         Assert.Equal("Helper Store", profile.Name);
@@ -42,6 +44,17 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal("UE9GSUxF", profile.ProfileContent);
         Assert.Equal("?limit=200", handler.RequestUris[0].Query);
         Assert.EndsWith("bundleIds/bundle%2Fid/profiles?limit=1", handler.RequestUris[2].AbsoluteUri, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SigningProfiles_PreservesActivatedCertificateStatus()
+    {
+        var handler = new SequenceHandler(new SequenceResponse(HttpStatusCode.OK, """
+            { "data": [{ "id": "active-cert", "attributes": { "certificateType": "DISTRIBUTION", "activated": true } }] }
+            """));
+        using var http = new HttpClient(handler);
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        Assert.True(Assert.Single(await client.GetSigningCertificatesAsync()).Activated);
     }
 
     [Theory]
