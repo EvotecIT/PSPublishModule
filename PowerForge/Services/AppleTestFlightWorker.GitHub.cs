@@ -7,8 +7,12 @@ internal sealed partial class AppleTestFlightWorker
 {
     private void SyncRequests()
     {
-        var runs = Pages($"actions/workflows/{Uri.EscapeDataString(Path.GetFileName(_policy.WorkflowPath))}/runs?event=workflow_dispatch&branch=main", "workflow_runs")
-            .TakeWhile(value => value.GetProperty("created_at").GetDateTimeOffset() >= _policy.AcceptRequestsAfter).ToArray();
+        var path = $"actions/workflows/{Uri.EscapeDataString(Path.GetFileName(_policy.WorkflowPath))}/runs?event=workflow_dispatch&branch=main";
+        var runs = ObserveRequestRuns(_state, _policy.AcceptRequestsAfter,
+            page => Api(path + $"&per_page=100&page={page}").GetProperty("workflow_runs").EnumerateArray().Select(value => value.Clone()).ToArray(),
+            id => Api($"actions/runs/{id}"), Save,
+            () => new[] { "queued", "in_progress", "waiting", "pending", "requested" }
+                .SelectMany(status => Pages(path + "&status=" + status, "workflow_runs")).ToArray());
         ConsumeRequestRuns(_state, runs, DateTimeOffset.UtcNow, ReadRequest, Save);
         PublishPendingRequestStatuses();
     }
@@ -70,12 +74,28 @@ internal sealed partial class AppleTestFlightWorker
             case "Build now":
                 state.Jobs.Add(new AppleTestFlightJob { Id = request.Key.Replace(':', '-'), RequestKeys = new() { request.Key }, IncludedPullRequests = request.PullRequest > 0 ? new() { request.PullRequest } : new() });
                 break;
-            case "Automatic: Off": state.Mode = AppleTestFlightAutomaticMode.Off; state.ModeChangedAt = request.RecordedAt; break;
-            case "Automatic: Selected PRs": state.Mode = AppleTestFlightAutomaticMode.SelectedPRs; state.ModeChangedAt = request.RecordedAt; break;
-            case "Automatic: Every merged PR": state.Mode = AppleTestFlightAutomaticMode.EveryMergedPR; state.ModeChangedAt = request.RecordedAt; break;
+            case "Automatic: Off": ApplyMode(state, request, AppleTestFlightAutomaticMode.Off); break;
+            case "Automatic: Selected PRs": ApplyMode(state, request, AppleTestFlightAutomaticMode.SelectedPRs); break;
+            case "Automatic: Every merged PR": ApplyMode(state, request, AppleTestFlightAutomaticMode.EveryMergedPR); break;
             default: throw new InvalidOperationException("Unsupported TestFlight request operation.");
         }
         state.Requests.Add(request);
+    }
+
+    private static void ApplyMode(AppleTestFlightWorkerState state, AppleTestFlightRequestRecord request, AppleTestFlightAutomaticMode mode)
+    {
+        static long RunId(AppleTestFlightRequestRecord record) => record.Key.StartsWith("run:", StringComparison.Ordinal) &&
+            long.TryParse(record.Key.Substring(4), out var id) ? id : 0;
+        // Older journals have the intent time but no explicit tie breaker.
+        if (state.ModeChangedByRunId == 0)
+            state.ModeChangedByRunId = state.Requests.Where(value => value.Operation.StartsWith("Automatic:", StringComparison.Ordinal) &&
+                value.RecordedAt == state.ModeChangedAt).Select(RunId).DefaultIfEmpty().Max();
+        var runId = RunId(request);
+        if (request.RecordedAt < state.ModeChangedAt ||
+            (request.RecordedAt == state.ModeChangedAt && runId < state.ModeChangedByRunId)) return;
+        state.Mode = mode;
+        state.ModeChangedAt = request.RecordedAt;
+        state.ModeChangedByRunId = runId;
     }
 
     private void RequireMaintainer(string actor)

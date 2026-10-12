@@ -689,6 +689,7 @@ internal sealed partial class PowerForgeReleaseService
                     XcodeGenExecutable = app.XcodeGenExecutable,
                     ProjectGenerationTimeoutSeconds = app.ProjectGenerationTimeoutSeconds
                 };
+                AppleReleaseAppState.AssertMutationAllowed(plan, _appleAppStateRoot);
                 result.ProjectGenerated = _generateAppleProject(generationPlan);
             }
             results.Add(result);

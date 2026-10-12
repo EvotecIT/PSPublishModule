@@ -608,6 +608,7 @@ public sealed partial class PowerForgeReleaseServiceTests : IDisposable
                             new AppleAppConfiguration
                             {
                                 Name = "Tactra",
+                                BundleId = "com.example.tactra",
                                 ProjectPath = "Tactra.xcodeproj",
                                 Scheme = "Tactra",
                                 Platform = ApplePlatform.iPadOS
@@ -705,6 +706,7 @@ public sealed partial class PowerForgeReleaseServiceTests : IDisposable
                             new AppleAppConfiguration
                             {
                                 Name = "Tactra",
+                                BundleId = "com.example.tactra",
                                 ProjectPath = "Tactra.xcodeproj",
                                 Scheme = "Tactra",
                                 Platform = ApplePlatform.iOS,
@@ -1101,6 +1103,7 @@ public sealed partial class PowerForgeReleaseServiceTests : IDisposable
                             new AppleAppConfiguration
                             {
                                 Name = "Tactra",
+                                BundleId = "com.example.tactra",
                                 ProjectPath = "Tactra.xcodeproj",
                                 Scheme = "Tactra",
                                 Platform = ApplePlatform.iOS,
@@ -1267,6 +1270,7 @@ public sealed partial class PowerForgeReleaseServiceTests : IDisposable
                             new AppleAppConfiguration
                             {
                                 Name = "Tactra",
+                                BundleId = "com.example.tactra",
                                 ProjectPath = "Tactra.xcodeproj",
                                 Scheme = "Tactra",
                                 Platform = ApplePlatform.iOS,
@@ -1427,6 +1431,7 @@ public sealed partial class PowerForgeReleaseServiceTests : IDisposable
                             new AppleAppConfiguration
                             {
                                 Name = "Tactra",
+                                BundleId = "com.example.tactra",
                                 ProjectPath = "Tactra.xcodeproj",
                                 Scheme = "Tactra",
                                 Platform = ApplePlatform.iOS,
@@ -1495,6 +1500,7 @@ public sealed partial class PowerForgeReleaseServiceTests : IDisposable
                             new AppleAppConfiguration
                             {
                                 Name = "Tactra",
+                                BundleId = "com.example.tactra",
                                 ProjectPath = Path.Combine("Tactra.xcodeproj", "project.pbxproj"),
                                 Scheme = "Tactra",
                                 Platform = ApplePlatform.iOS
@@ -1614,6 +1620,7 @@ public sealed partial class PowerForgeReleaseServiceTests : IDisposable
                             new AppleAppConfiguration
                             {
                                 Name = "First",
+                                BundleId = "com.example.first",
                                 ProjectPath = "First.xcodeproj",
                                 Scheme = "First",
                                 Platform = ApplePlatform.iOS
@@ -1621,6 +1628,7 @@ public sealed partial class PowerForgeReleaseServiceTests : IDisposable
                             new AppleAppConfiguration
                             {
                                 Name = "Second",
+                                BundleId = "com.example.second",
                                 ProjectPath = "Second.xcodeproj",
                                 Scheme = "Second",
                                 Platform = ApplePlatform.iOS

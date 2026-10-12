@@ -72,7 +72,7 @@ public sealed partial class AppleTestFlightWorkerTests
         var selected = new AppleTestFlightRequestRecord { Key = "run:1", Operation = "Automatic: Selected PRs", RecordedAt = DateTimeOffset.UtcNow };
         AppleTestFlightWorker.ApplyRequest(state, selected);
         AppleTestFlightWorker.ApplyRequest(state, selected);
-        AppleTestFlightWorker.ApplyRequest(state, new() { Key = "run:2", Operation = "Automatic: Off" });
+        AppleTestFlightWorker.ApplyRequest(state, new() { Key = "run:2", Operation = "Automatic: Off", RecordedAt = selected.RecordedAt.AddSeconds(1) });
         AppleTestFlightWorker.ApplyRequest(state, new() { Key = "run:3", Operation = "Build now", PullRequest = 351 });
         Assert.Equal(AppleTestFlightAutomaticMode.Off, state.Mode);
         Assert.Equal(3, state.Requests.Count);

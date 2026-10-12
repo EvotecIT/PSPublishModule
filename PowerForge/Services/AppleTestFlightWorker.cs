@@ -104,7 +104,7 @@ internal sealed partial class AppleTestFlightWorker
             (AppleTestFlightJobStage.ReadyInHome or AppleTestFlightJobStage.Excluded));
 
     internal static AppleTestFlightJobStage FailureStage(AppleTestFlightJobStage stage, Exception exception, AppleTestFlightJobStage? releasingFrom = null) =>
-        exception is AppleTestFlightLeaseBusyException
+        exception is AppleTestFlightPreMutationRejectedException
             ? stage switch
             {
                 AppleTestFlightJobStage.CheckpointExecuting => AppleTestFlightJobStage.Planning,

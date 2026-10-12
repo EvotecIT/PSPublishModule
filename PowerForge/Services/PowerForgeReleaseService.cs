@@ -2654,6 +2654,7 @@ internal sealed partial class PowerForgeReleaseService
                             $"Apple app '{app.Name}' cannot mutate project versions while building an exact-source archive. " +
                             "Commit the requested version first, then create the checkpoint from that commit.");
                     }
+                    AppleReleaseAppState.AssertMutationAllowed(plan, _appleAppStateRoot);
                     result.VersionUpdate = new XcodeProjectVersionEditor().Update(app.ProjectPath, app.MarketingVersion!, app.BuildNumber);
                 }
 
@@ -2891,6 +2892,8 @@ internal sealed partial class PowerForgeReleaseService
                     : (MarketingVersion: string.Empty, BuildNumber: string.Empty);
                 var matchingScreenshotSpecs = screenshotsByApp[app];
                 var matchingMetadataSpecs = metadataByApp[app];
+                if (plan.PrepareDistribution || plan.SyncScreenshots || plan.SyncMetadata || appInfoMetadataSpecs.Length > 0)
+                    AppleReleaseAppState.AssertMutationAllowed(plan, _appleAppStateRoot);
                 result.Distribution = _prepareAppleDistribution(new AppStoreConnectReleasePreparationRequest
                 {
                     Credential = CreateAppStoreConnectCredential(plan),
@@ -2960,6 +2963,7 @@ internal sealed partial class PowerForgeReleaseService
             if (plan.SubmitTestFlightBetaReview && result.Success && UsesExternalTestFlight(app))
             {
                 var testFlightValues = valuesByApp[app];
+                AppleReleaseAppState.AssertMutationAllowed(plan, _appleAppStateRoot);
                 result.TestFlightBetaReviewSubmission = _submitTestFlightBetaReview(new AppStoreConnectBetaAppReviewSubmissionRequest
                 {
                     Credential = CreateAppStoreConnectCredential(plan),
@@ -2980,6 +2984,7 @@ internal sealed partial class PowerForgeReleaseService
                 var matchingScreenshotSpecs = !plan.SkipReviewReadinessCheck
                     ? screenshotsByApp[app]
                     : Array.Empty<(AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)>();
+                AppleReleaseAppState.AssertMutationAllowed(plan, _appleAppStateRoot);
                 result.ReviewSubmission = _submitAppleReview(new AppStoreConnectReviewSubmissionRequest
                 {
                     Credential = CreateAppStoreConnectCredential(plan),
@@ -3002,6 +3007,7 @@ internal sealed partial class PowerForgeReleaseService
                 app.DistributionRoute == AppleDistributionRoute.AppStore)
             {
                 var releaseValues = valuesByApp[app];
+                AppleReleaseAppState.AssertMutationAllowed(plan, _appleAppStateRoot);
                 result.VersionRelease = _releaseAppleVersion(new AppStoreConnectVersionReleaseRequest
                 {
                     Credential = CreateAppStoreConnectCredential(plan),

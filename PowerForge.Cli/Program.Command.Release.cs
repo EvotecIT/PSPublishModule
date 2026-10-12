@@ -299,9 +299,10 @@ internal static partial class Program
             return WriteReleaseError(
                 outputJson,
                 commandName,
-                ex is AppleReleaseLeaseContentionException ? AppleReleaseLeaseContentionException.ExitCode : 1,
+                ex is AppleReleaseLeaseContentionException or AppleReleaseGateClosedException { BeforeMutation: true } ? AppleReleaseLeaseContentionException.ExitCode : 1,
                 RedactReleaseCredentialText(ex.Message, CollectReleaseCredentialMetadata(specForRedaction, null)),
-                logger, ex is AppleReleaseLeaseContentionException ? "AppleAppLeaseBusy" : null);
+                logger, ex is AppleReleaseLeaseContentionException ? "AppleAppLeaseBusy" :
+                    ex is AppleReleaseGateClosedException { BeforeMutation: true } ? "AppleMutationGateClosed" : null);
         }
         finally
         {

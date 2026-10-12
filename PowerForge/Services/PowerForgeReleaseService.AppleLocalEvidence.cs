@@ -115,24 +115,33 @@ internal sealed partial class PowerForgeReleaseService
         if (string.IsNullOrWhiteSpace(artifactPath)) return;
         EnsurePathWithinProjectRoot(plan.ProjectRoot, artifactPath, "Configured Apple artifact");
         if (!File.Exists(artifactPath) && !Directory.Exists(artifactPath)) return;
-        var evidence = receipts.Where(receipt => !receipt.PlanOnly && receipt.SchemaVersion >= 4 &&
+        var before = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(artifactPath, "receipt-bound Apple artifact");
+        var candidates = receipts.Where(receipt => !receipt.PlanOnly && receipt.SchemaVersion >= 4 &&
                 !string.IsNullOrWhiteSpace(receipt.ReceiptSha256) && GitObjectId.IsFull(receipt.SourceCommit))
             .SelectMany(receipt => receipt.Targets.Where(target => IsMatchingAppleReceiptTargetIdentity(plan, app, target) &&
                     !string.IsNullOrWhiteSpace(receiptPath(target)) && IsSha256(receiptSha256(target)))
-                .Select(target => new { Receipt = receipt, Target = target })).FirstOrDefault();
-        if (evidence is null) throw new InvalidOperationException($"The configured Apple artifact for '{app.Name}' has no receipt bound to a verified source and target.");
-        // Historical artifacts are inert evidence. Execution/recovery still
-        // requires exact-source equality and never reuses an upload export.
-        if (!AppleSourceCommitEvidenceMatches(evidence.Receipt.SourceCommit, plan.SourceCommit))
-            new HomeAssistantReleaseGitService(GitClient.CreateTrustedSystemClient()).EnsureContainsMerge(plan.ProjectRoot, evidence.Receipt.SourceCommit!);
-        var boundPath = ResolveOutputPath(plan.ProjectRoot, receiptPath(evidence.Target)!);
-        EnsurePathWithinProjectRoot(plan.ProjectRoot, boundPath, "Receipt-bound Apple artifact");
-        if (!AppleReleasePathsEqual(Path.GetFullPath(artifactPath), boundPath, plan.ProjectRoot))
-            throw new InvalidOperationException($"The receipt artifact path for '{app.Name}' differs from its configured artifact.");
+                .Select(target => new { Receipt = receipt, Target = target }))
+            .OrderByDescending(value => AppleSourceCommitEvidenceMatches(value.Receipt.SourceCommit, plan.SourceCommit));
+        var matched = false;
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                var boundPath = ResolveOutputPath(plan.ProjectRoot, receiptPath(candidate.Target)!);
+                EnsurePathWithinProjectRoot(plan.ProjectRoot, boundPath, "Receipt-bound Apple artifact");
+                if (!AppleReleasePathsEqual(Path.GetFullPath(artifactPath), boundPath, plan.ProjectRoot) ||
+                    !string.Equals(before.Sha256, receiptSha256(candidate.Target), StringComparison.OrdinalIgnoreCase)) continue;
+                // Historical artifacts are inert evidence. Execution/recovery
+                // still requires exact-source equality and never reuses an export.
+                if (!AppleSourceCommitEvidenceMatches(candidate.Receipt.SourceCommit, plan.SourceCommit))
+                    new HomeAssistantReleaseGitService(GitClient.CreateTrustedSystemClient()).EnsureContainsMerge(plan.ProjectRoot, candidate.Receipt.SourceCommit!);
+                matched = true;
+                break;
+            }
+            catch (InvalidOperationException) { /* A different valid receipt may bind this artifact. */ }
+        }
+        if (!matched) throw new InvalidOperationException($"The configured Apple artifact for '{app.Name}' has no receipt bound to its verified source ancestry, target, path and bytes.");
         AddLocalAppleArchiveFiles(artifactPath, paths, links);
-        var before = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(artifactPath, "receipt-bound Apple artifact");
-        if (!string.Equals(before.Sha256, receiptSha256(evidence.Target), StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"The receipt-bound Apple artifact for '{app.Name}' changed.");
         var after = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(artifactPath, "receipt-bound Apple artifact");
         if (!before.Equals(after)) throw new InvalidOperationException($"The receipt-bound Apple artifact for '{app.Name}' changed during evidence inspection.");
     }

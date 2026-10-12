@@ -183,7 +183,12 @@ restart during mutation is **NeedsOperator**: inspect canonical immutable receip
 and remote delivery before resuming with the existing pinned Ship commands.
 A positive child-command app-lease rejection means no mutation started and is
 retryable, including when another checkout acquired the lease after preview.
-Interrupted or otherwise ambiguous mutations remain NeedsOperator.
+A closed or expired gate at child entry is a definitive pre-mutation rejection
+and retains the retryable stage, just like a busy app lease. A gate rejection
+after release work has started, an unrelated state I/O failure, or an interrupted
+or otherwise ambiguous mutation remains NeedsOperator. Off or pause also holds
+an unpublished local version checkpoint. If the checkpoint was already committed
+when the stop arrived, its exact commit remains held for operator reconciliation.
 A NeedsOperator job holds the queue, including later manual requests. After
 inspecting and reconciling the canonical receipts and remote delivery, use the
 same local operator with `apple-testflight retire --job <id> --confirm-reconciled
@@ -223,3 +228,13 @@ compiled sandbox after each invocation. Retain archive/export recovery evidence
 until the existing release retention policy permits cleanup. Rotate worker logs
 through the machine's established storage review; do not treat queue history,
 reservations or signing material as disposable cache.
+
+Request scans retain a durable discovery cursor and pending run IDs, so completed
+history does not grow each pass. Failed or stalled attempts are checked for
+reruns in rotating batches of twenty per pass; successful accepted runs are not
+polled again. Fresh requests are discovered independently of that historical
+retry batch. Journal upgrades retain the consumed frontier and recover outstanding
+runs before advancing it. Mode requests retain their intent time and run ID, so a
+late rerun cannot override a newer Off request; Build now remains eligible.
+Initial enrollment uses a bounded scan; choose an enrollment time with fewer than
+10,000 new runs.

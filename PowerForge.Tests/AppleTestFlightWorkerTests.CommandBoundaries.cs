@@ -53,19 +53,22 @@ public sealed partial class AppleTestFlightWorkerTests
     [Fact]
     public void LeaseRejectionRequiresCanonicalErrorEnvelopeAndPreservesAmbiguousStages()
     {
-        Assert.False(AppleTestFlightWorker.IsLeaseRejection(75, "restore failed"));
-        Assert.False(AppleTestFlightWorker.IsLeaseRejection(75, "{\"command\":\"apple-release\",\"success\":false,\"exitCode\":75}"));
+        Assert.False(AppleTestFlightWorker.IsPreMutationRejection(75, "restore failed"));
+        Assert.False(AppleTestFlightWorker.IsPreMutationRejection(75, "{\"command\":\"apple-release\",\"success\":false,\"exitCode\":75}"));
         Assert.Equal(AppleTestFlightJobStage.ReleaseReady,
-            AppleTestFlightWorker.FailureStage(AppleTestFlightJobStage.Releasing, new AppleTestFlightLeaseBusyException()));
+            AppleTestFlightWorker.FailureStage(AppleTestFlightJobStage.Releasing, new AppleTestFlightPreMutationRejectedException()));
         Assert.Equal(AppleTestFlightJobStage.AppleProcessingPending,
-            AppleTestFlightWorker.FailureStage(AppleTestFlightJobStage.Releasing, new AppleTestFlightLeaseBusyException(), AppleTestFlightJobStage.AppleProcessingPending));
+            AppleTestFlightWorker.FailureStage(AppleTestFlightJobStage.Releasing, new AppleTestFlightPreMutationRejectedException(), AppleTestFlightJobStage.AppleProcessingPending));
         Assert.Equal(AppleTestFlightJobStage.Planning,
-            AppleTestFlightWorker.FailureStage(AppleTestFlightJobStage.CheckpointExecuting, new AppleTestFlightLeaseBusyException()));
+            AppleTestFlightWorker.FailureStage(AppleTestFlightJobStage.CheckpointExecuting, new AppleTestFlightPreMutationRejectedException()));
         Assert.Equal(AppleTestFlightJobStage.NeedsOperator,
             AppleTestFlightWorker.FailureStage(AppleTestFlightJobStage.Releasing, new AppleTestFlightToolException("interrupted")));
     }
 
     internal static (int ExitCode, string Output, string Error) RunCli(string root, params string[] arguments)
+        => RunCliWithEnvironment(root, new Dictionary<string, string>(), arguments);
+
+    internal static (int ExitCode, string Output, string Error) RunCliWithEnvironment(string root, IReadOnlyDictionary<string, string> environment, params string[] arguments)
     {
         var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
         var cli = Path.Combine(FindRepository(), "PowerForge.Cli", "bin", configuration, "net10.0", "PowerForge.Cli.dll");
@@ -75,6 +78,7 @@ public sealed partial class AppleTestFlightWorkerTests
         start.Environment["POWERFORGE_APPLE_STATE_ROOT"] = Path.Combine(root, "state");
         foreach (var name in new[] { "APP_STORE_CONNECT_KEY_ID", "APP_STORE_CONNECT_ISSUER_ID", "APP_STORE_CONNECT_PRIVATE_KEY_PATH",
             "APP_STORE_CONNECT_PRIVATE_KEY", "ASC_KEY_ID", "ASC_ISSUER_ID", "ASC_PRIVATE_KEY_PATH", "ASC_PRIVATE_KEY", "POWERFORGE_APPLE_WORKER_GATE" }) start.Environment.Remove(name);
+        foreach (var entry in environment) start.Environment[entry.Key] = entry.Value;
         using var process = Process.Start(start)!;
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();

@@ -1582,6 +1582,8 @@ public sealed partial class PowerForgeReleaseServiceTests
         Func<AppleNotarizationRequest, AppleNotarizationResult>? notarizeAppleArtifact = null,
         Func<AppStoreConnectApiCredential, AppStoreConnectGovernanceSpec, AppStoreConnectGovernancePlan>? planAppleGovernance = null,
         Func<AppStoreConnectReviewSubmissionRequest, AppStoreConnectReviewSubmissionResult>? submitAppleReview = null,
+        Func<AppStoreConnectBetaAppReviewSubmissionRequest, AppStoreConnectBetaAppReviewSubmissionResult>? submitTestFlightBetaReview = null,
+        Func<AppStoreConnectVersionReleaseRequest, AppStoreConnectVersionReleaseResult>? releaseAppleVersion = null,
         Func<AppStoreConnectApiCredential, AppStoreConnectReleaseReadinessRequest, AppStoreConnectReleaseReadinessResult>? checkAppleReleaseReadiness = null,
         Func<PowerForgeReleaseValidationAction, PowerForgeReleaseValidationContext, string, CancellationToken, PowerForgeReleaseValidationResult>? runReleaseValidation = null)
         => new(
@@ -1608,6 +1610,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             notarizeAppleArtifact: notarizeAppleArtifact,
             planAppleGovernance: planAppleGovernance,
             submitAppleReview: submitAppleReview,
+            submitTestFlightBetaReview: submitTestFlightBetaReview,
+            releaseAppleVersion: releaseAppleVersion,
             checkAppleReleaseReadiness: checkAppleReleaseReadiness,
             runReleaseValidation: runReleaseValidation,
             appleAppStateRoot: _appleAppStateRoot);

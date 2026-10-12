@@ -337,6 +337,11 @@ Start with a remote-read-only status receipt:
 powerforge apple-release Status --config powerforge.release.json --summary --output json
 ```
 
+Every mutating Apple target requires an explicit `BundleId`, including a direct
+notarized app or an App Store app with an explicit `AppStoreConnectAppId`. The
+bundle identifier provides the shared app lease across local checkouts; mutation
+fails before execution when that identity is missing.
+
 Use the same entry point for each transition:
 
 | Action | Result |

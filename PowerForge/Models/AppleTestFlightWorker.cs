@@ -40,9 +40,13 @@ internal sealed class AppleTestFlightWorkerState
     public string Repository { get; set; } = "";
     public AppleTestFlightAutomaticMode Mode { get; set; }
     public DateTimeOffset ModeChangedAt { get; set; }
+    public long ModeChangedByRunId { get; set; }
     public DateTimeOffset HeartbeatAt { get; set; }
     public bool Paused { get; set; }
     public long LastRequestRun { get; set; }
+    public long LastScannedRequestRun { get; set; }
+    public long RejectedRequestScanCursor { get; set; }
+    public List<long> PendingRequestRuns { get; set; } = new();
     public List<AppleTestFlightRequestRecord> Requests { get; set; } = new();
     public List<AppleTestFlightJob> Jobs { get; set; } = new();
 }

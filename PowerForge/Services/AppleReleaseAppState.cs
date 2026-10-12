@@ -26,14 +26,11 @@ internal sealed class AppleReleaseAppState : IDisposable
                 EnsureDirectory(directory);
                 var path = Path.Combine(directory, "operation.lock");
                 AssertUnlinked(path);
-                state._leases.Add(new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None));
+                try { state._leases.Add(new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)); }
+                catch (IOException exception) when (IsLockSharingConflict(exception))
+                { throw new AppleReleaseLeaseContentionException(exception); }
             }
             return state;
-        }
-        catch (IOException exception)
-        {
-            state.Dispose();
-            throw new AppleReleaseLeaseContentionException(exception);
         }
         catch { state.Dispose(); throw; }
     }
@@ -67,7 +64,7 @@ internal sealed class AppleReleaseAppState : IDisposable
             var existing = reservations.SingleOrDefault(value => (value.Identity ?? value.Build.ToString(System.Globalization.CultureInfo.InvariantCulture)) == build);
             if (existing is not null)
             {
-                if (string.IsNullOrWhiteSpace(plan.SourceCommit) || existing.Source != plan.SourceCommit)
+                if (string.IsNullOrWhiteSpace(plan.SourceCommit) || !string.Equals(existing.Source, plan.SourceCommit, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException($"Apple build {number} is already reserved for another source.");
                 continue;
             }
@@ -76,15 +73,15 @@ internal sealed class AppleReleaseAppState : IDisposable
         }
     }
 
-    internal static void AssertMutationAllowed(PowerForgeAppleReleasePlan plan, string? stateRoot = null)
+    internal static void AssertMutationAllowed(PowerForgeAppleReleasePlan plan, string? stateRoot = null, bool beforeMutation = false)
     {
         foreach (var directory in Directories(plan, stateRoot))
             if (File.Exists(Path.Combine(directory, "paused")))
-                throw new InvalidOperationException("Apple operations for this app are paused by the local operator.");
+                throw new AppleReleaseGateClosedException("Apple operations for this app are paused by the local operator.", beforeMutation);
         var gate = Environment.GetEnvironmentVariable("POWERFORGE_APPLE_WORKER_GATE");
         if (string.IsNullOrWhiteSpace(gate)) return;
         if (!GateAllowsMutation(gate, DateTimeOffset.UtcNow))
-            throw new InvalidOperationException("TestFlight worker is Off, paused, or has lost its request heartbeat. The next mutating stage is held.");
+            throw new AppleReleaseGateClosedException("TestFlight worker is Off, paused, or has lost its request heartbeat. The next mutating stage is held.", beforeMutation);
     }
 
     internal static bool GateAllowsMutation(string gate, DateTimeOffset now)
@@ -146,11 +143,20 @@ internal sealed class AppleReleaseAppState : IDisposable
         return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PowerForge", "Apple");
     }
 
-    private static string[] Directories(PowerForgeAppleReleasePlan plan, string? stateRoot = null) => plan.Apps
-        .Select(app => app.BundleId?.Trim().ToLowerInvariant())
-        .Where(static value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.Ordinal)
-        .Select(value => Path.Combine(stateRoot ?? Root, "apps", Hash(value!)))
-        .OrderBy(static value => value, StringComparer.Ordinal).ToArray();
+    private static string[] Directories(PowerForgeAppleReleasePlan plan, string? stateRoot = null)
+    {
+        var apps = plan.Apps;
+        if (apps.Any(app => PowerForgeReleaseService.ShouldExecuteAppleTarget(plan.Action, app) && string.IsNullOrWhiteSpace(app.BundleId)))
+            throw new InvalidOperationException("Every mutating Apple target requires BundleId for its shared cross-checkout app lease.");
+        return apps.Where(app => !string.IsNullOrWhiteSpace(app.BundleId)).Select(app => app.BundleId!.Trim().ToLowerInvariant()).Distinct(StringComparer.Ordinal)
+            .Select(value => Path.Combine(stateRoot ?? Root, "apps", Hash(value)))
+            .OrderBy(static value => value, StringComparer.Ordinal).ToArray();
+    }
+
+    private static bool IsLockSharingConflict(IOException exception)
+        => System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows)
+            ? exception.HResult is unchecked((int)0x80070020) or unchecked((int)0x80070021)
+            : exception.HResult == (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX) ? 35 : 11);
 
     internal static string Hash(string value)
     {
@@ -184,4 +190,10 @@ internal sealed class AppleReleaseLeaseContentionException(Exception inner)
     : InvalidOperationException("Another checkout owns this app's Apple release lease. Retry after it finishes.", inner)
 {
     internal const int ExitCode = 75;
+}
+
+/// <summary>A closed mutation gate. Only entry rejection proves that this invocation has not mutated.</summary>
+internal sealed class AppleReleaseGateClosedException(string message, bool beforeMutation) : InvalidOperationException(message)
+{
+    internal bool BeforeMutation { get; } = beforeMutation;
 }

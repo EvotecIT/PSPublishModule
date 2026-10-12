@@ -190,11 +190,16 @@ internal sealed partial class AppleTestFlightWorker
 
     private void PublishCheckpoint(AppleTestFlightJob job)
     {
+        // A successful child checkpoint can finish after Off/pause was observed.
+        // Its local metadata remains recoverable; do not publish it in that pass.
+        if (!UpdateGate()) { SetStage(AppleTestFlightJobStage.CheckpointReady, "Publisher checkpoint is held by current Off/selection/pause intent."); return; }
         RequireUnprotectedMain();
         Git("fetch", "--quiet", "origin", "main");
         if (Git("rev-parse", "refs/remotes/origin/main") != job.OriginalSource || Git("rev-parse", "HEAD") != job.OriginalSource)
             throw new InvalidOperationException("Main moved during the publisher checkpoint. Preserve the narrow diff for operator reconciliation.");
         ValidatePublisherDiff(job);
+        SyncRequests();
+        if (!UpdateGate()) { SetStage(AppleTestFlightJobStage.CheckpointReady, "Publisher checkpoint is held by current Off/selection/pause intent."); return; }
         SetStage(AppleTestFlightJobStage.PublishingCheckpoint);
         Git(new[] { "add", "--" }.Concat(_policy.PublisherPaths).ToArray());
         Git("-c", "commit.gpgSign=false", "commit", "-m", $"Set Apple beta version {job.Version} build {job.Build}");
@@ -206,6 +211,10 @@ internal sealed partial class AppleTestFlightWorker
                 throw new InvalidOperationException("Committed publisher checkpoint changed behavior or project graph.");
         job.Source = job.CheckpointCommit;
         Save();
+        // A stop after commit is no longer an untouched checkpoint: retain the
+        // exact commit and let the ordinary ambiguous-mutation hold reconcile it.
+        SyncRequests();
+        if (!UpdateGate()) throw new InvalidOperationException("Publisher checkpoint committed locally, but Off/pause now holds its push. Reconcile the retained exact commit.");
         Git("push", "origin", "HEAD:refs/heads/main");
         if (Git("ls-remote", "origin", "refs/heads/main").Split('\t')[0] != job.Source)
             throw new InvalidOperationException("Publisher checkpoint was not read back as the current remote main.");
