@@ -363,6 +363,13 @@ Use the same entry point for each transition:
 | `Release` | Publishes a version waiting for developer release. |
 | `Cleanup` | Removes stale files only from configured archive/export roots. |
 
+New App Store versions use `MANUAL` release policy, so App Review approval waits
+for the separate `Release` action. Existing versions retain their configured policy.
+For .NET callers, `AppStoreConnectVersionInfo.ReleaseType` exposes the server value,
+including unknown future values. `AppStoreConnectClient.SetVersionManualReleaseAsync(versionId)`
+sets one existing version to Manual and confirms its identity and policy in the response;
+it does not submit the version for review or publish it.
+
 Plan a mutating action before running it:
 
 ```text

@@ -40,6 +40,9 @@ public sealed class AppStoreConnectVersionInfo
 
     /// <summary>Platform value returned by App Store Connect.</summary>
     public string? Platform { get; set; }
+
+    /// <summary>Release policy returned by App Store Connect, including unknown future values.</summary>
+    public string? ReleaseType { get; set; }
 }
 
 /// <summary>
