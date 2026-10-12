@@ -587,7 +587,7 @@ internal sealed partial class PowerForgeReleaseService
                             : module.Request.IncludeModulePublishing,
                         releaseCheckpoint: true,
                         cancellationToken: request.CancellationToken)
-                    : _executeModuleBuild(module.Request, request.CancellationToken);
+                    : ExecuteModuleBuildWithDiagnostics(module.Request, request.CancellationToken);
                 result.Module = moduleResult;
                 if (!moduleResult.Succeeded)
                 {

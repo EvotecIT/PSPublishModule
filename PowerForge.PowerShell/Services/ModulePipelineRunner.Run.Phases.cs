@@ -335,24 +335,7 @@ public sealed partial class ModulePipelineRunner
             if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
         }
 
-        if (plan.BuildSpec.PowerShellCompilation?.Enabled == true)
-        {
-            session.Start(session.CompilationStep);
-            try
-            {
-                ApplyPowerShellModuleCompilation(
-                    plan,
-                    state,
-                    manifestRequiredModules,
-                    manifestExternalModuleDependencies);
-                session.Done(session.CompilationStep);
-            }
-            catch (Exception ex)
-            {
-                session.Fail(session.CompilationStep, ex);
-                throw;
-            }
-        }
+        ExecuteCompilationPhase(plan, session, state, manifestRequiredModules, manifestExternalModuleDependencies);
         buildResult = state.RequireBuildResult();
 
         ExecuteActions(ModulePipelineActionStage.BeforeSigning, plan, session, state);

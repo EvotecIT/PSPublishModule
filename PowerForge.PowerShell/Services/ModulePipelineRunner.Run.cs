@@ -64,8 +64,9 @@ public sealed partial class ModulePipelineRunner
                 state.MergeExecution.FullyInlinedApprovedModules);
             if (plan.GateMode == ConfigurationGateMode.Documentation)
             {
-                ApplyPowerShellModuleCompilation(
+                ExecuteCompilationPhase(
                     plan,
+                    session,
                     state,
                     manifestRequiredModules,
                     manifestExternalModuleDependencies);

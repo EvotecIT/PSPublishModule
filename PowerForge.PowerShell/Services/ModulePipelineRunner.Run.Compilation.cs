@@ -2,6 +2,27 @@ namespace PowerForge;
 
 public sealed partial class ModulePipelineRunner
 {
+    private void ExecuteCompilationPhase(
+        ModulePipelinePlan plan,
+        ModulePipelineExecutionSession session,
+        ModulePipelineRunState state,
+        RequiredModuleReference[] manifestRequiredModules,
+        string[] manifestExternalModuleDependencies)
+    {
+        if (plan.BuildSpec.PowerShellCompilation?.Enabled != true) return;
+        session.Start(session.CompilationStep);
+        try
+        {
+            ApplyPowerShellModuleCompilation(plan, state, manifestRequiredModules, manifestExternalModuleDependencies);
+            session.Done(session.CompilationStep);
+        }
+        catch (Exception ex)
+        {
+            session.Fail(session.CompilationStep, ex);
+            throw;
+        }
+    }
+
     private void ApplyPowerShellModuleCompilation(
         ModulePipelinePlan plan,
         ModulePipelineRunState state,
