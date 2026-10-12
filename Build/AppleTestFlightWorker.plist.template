@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>@@LABEL@@</string>
+  <key>ProgramArguments</key><array>
+    <string>/usr/local/bin/pwsh</string>
+    <string>-NoLogo</string><string>-NoProfile</string><string>-NonInteractive</string>
+    <string>-File</string><string>@@OWNER_ROOT@@/scripts/Invoke-PinnedPowerForge.ps1</string>
+    <string>-ExpectedCommit</string><string>@@OWNER_COMMIT@@</string>
+    <string>-ConsumerRoot</string><string>@@CONSUMER_ROOT@@</string>
+    <string>-ExpectedConsumerRepository</string><string>@@REPOSITORY@@</string>
+    <string>-LoadFixedLocalAppleProfile</string>
+    <string>apple-testflight</string><string>run</string>
+    <string>--policy</string><string>@@POLICY_PATH@@</string>
+    <string>--config</string><string>powerforge.release.json</string>
+    <string>--output</string><string>json</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>POWERFORGE_APPLE_STATE_ROOT</key><string>@@STATE_ROOT@@</string>
+    <key>TMPDIR</key><string>@@SCRATCH_ROOT@@/tmp</string>
+  </dict>
+  <key>StartInterval</key><integer>900</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>@@SCRATCH_ROOT@@/worker.log</string>
+  <key>StandardErrorPath</key><string>@@SCRATCH_ROOT@@/worker-error.log</string>
+</dict></plist>

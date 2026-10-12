@@ -11,6 +11,7 @@ internal sealed partial class PowerForgeReleaseService
         string? acceptedSubmissionSha256 = null,
         bool staplingCompleted = false)
     {
+        AppleReleaseAppState.AssertMutationAllowed(plan, _appleAppStateRoot);
         var result = _notarizeAppleArtifact(new AppleNotarizationRequest
         {
             ArtifactPath = artifactPath ?? ResolveDirectAppleArtifactPath(app.ExportPath),

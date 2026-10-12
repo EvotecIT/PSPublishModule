@@ -199,6 +199,56 @@ public sealed class AppleReleaseLocalEvidenceTests
         Assert.Equal(before, Directory.GetFileSystemEntries(fixture.Root, "*", SearchOption.AllDirectories));
     }
 
+    [Theory]
+    [InlineData("divergent-source")]
+    [InlineData("old-path")]
+    [InlineData("different-bytes")]
+    public void Evidence_NewerUnrelatedReceiptCannotMaskAnExactValidArtifact(string invalid)
+    {
+        using var fixture = new EvidenceFixture();
+        fixture.WriteReceipt();
+        fixture.WriteReceipt(receipt =>
+        {
+            if (invalid == "divergent-source") receipt.SourceCommit = new string('b', 40);
+            if (invalid == "old-path") receipt.Targets[0].ArchivePath = "build/old.xcarchive";
+            if (invalid == "different-bytes") receipt.Targets[0].ArchiveSha256 = new string('b', 64);
+        });
+        var result = fixture.Validate();
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.Contains(fixture.ArchiveFile, result.EvidencePaths);
+    }
+
+    [Fact]
+    public void Evidence_ValidAncestorSurvivesARecentDivergentReceipt()
+    {
+        using var fixture = new EvidenceFixture();
+        void Git(params string[] arguments)
+        {
+            using var process = System.Diagnostics.Process.Start(AppleTestFlightWorker.CreateProcess("git", fixture.Root,
+                new[] { "-c", "core.hooksPath=/dev/null", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid" }.Concat(arguments)))!;
+            process.WaitForExit();
+            Assert.Equal(0, process.ExitCode);
+        }
+        Git("init", "--quiet");
+        File.WriteAllText(Path.Combine(fixture.Root, ".gitignore"), "build/\n");
+        File.WriteAllText(Path.Combine(fixture.Root, "source"), "original");
+        Git("add", "."); Git("commit", "--quiet", "-m", "original");
+        string Head()
+        {
+            using var process = System.Diagnostics.Process.Start(AppleTestFlightWorker.CreateProcess("git", fixture.Root, ["rev-parse", "HEAD"]))!;
+            var value = process.StandardOutput.ReadToEnd().Trim(); process.WaitForExit(); Assert.Equal(0, process.ExitCode); return value;
+        }
+        var ancestor = Head();
+        fixture.WriteReceipt(receipt => receipt.SourceCommit = ancestor);
+        File.WriteAllText(Path.Combine(fixture.Root, "source"), "new source");
+        Git("add", "."); Git("commit", "--quiet", "-m", "new source");
+        fixture.Plan.SourceCommit = Head();
+        fixture.WriteReceipt(receipt => receipt.SourceCommit = new string('b', 40));
+        var result = fixture.Validate();
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.Contains(fixture.ArchiveFile, result.EvidencePaths);
+    }
+
     private static void AssertRejected(AppleReleaseLocalEvidence result, AppleReleaseLocalEvidenceRejectionPhase phase)
     {
         Assert.False(result.Success);

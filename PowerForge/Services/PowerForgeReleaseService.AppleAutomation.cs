@@ -559,6 +559,17 @@ internal sealed partial class PowerForgeReleaseService
                     }
                 }
             }
+            (string? Path, string? Sha256) uploadExport = (null, null);
+            try { uploadExport = CaptureAppleUploadExportEvidence(plan, app, result); }
+            catch (Exception exception)
+            {
+                if (result is not null)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = (string.IsNullOrWhiteSpace(result.ErrorMessage) ? "" : result.ErrorMessage + " ") +
+                        $"Unable to capture upload export evidence for receipt: {exception.Message}";
+                }
+            }
             var readiness = result?.Distribution?.Readiness;
             var betaGroupsConfigured = UsesTestFlight(app) &&
                                        (plan.TestFlightBetaGroupIds.Length > 0 ||
@@ -640,6 +651,7 @@ internal sealed partial class PowerForgeReleaseService
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray(),
                 TestFlightBetaGroupsConfigured = betaGroupsConfigured,
+                DistributedTestFlightBetaGroups = result?.TestFlight?.VerifiedBetaGroups ?? Array.Empty<AppStoreConnectBetaGroupInfo>(),
                 ControlPlane = result?.RemoteState?.ControlPlane,
                 Governance = result?.Governance,
                 ArchiveCreated = result?.Archive?.Succeeded == true,
@@ -656,6 +668,8 @@ internal sealed partial class PowerForgeReleaseService
                     ? FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/')
                     : null,
                 ArchiveSha256 = result?.ArchiveSha256 ?? result?.ResumedUploadAttestation?.ArchiveSha256,
+                UploadExportPath = uploadExport.Path,
+                UploadExportSha256 = uploadExport.Sha256,
                 UploadAttestationAttemptId = !plan.Rehearse && result?.Upload?.Succeeded == true
                     ? result.UploadAttestationAttemptId
                     : result?.ResumedUploadAttestationAttemptId,

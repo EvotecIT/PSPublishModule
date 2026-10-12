@@ -337,6 +337,11 @@ Start with a remote-read-only status receipt:
 powerforge apple-release Status --config powerforge.release.json --summary --output json
 ```
 
+Every mutating Apple target requires an explicit `BundleId`, including a direct
+notarized app or an App Store app with an explicit `AppStoreConnectAppId`. The
+bundle identifier provides the shared app lease across local checkouts; mutation
+fails before execution when that identity is missing.
+
 Use the same entry point for each transition:
 
 | Action | Result |
@@ -966,17 +971,23 @@ explicit root; the provenance JSON may remain in its separate downloaded artifac
 
 The capture workflow therefore requires the exact two- or three-part marketing version;
 blank or branch-relative capture evidence cannot be approved. The pinned helper
-also requires the retained provenance for every local `Screenshots` action, for
-an `Advance` action configured to synchronize screenshots, and for final review
-submission or release when screenshot configs are present. Before any mutation, it
+also requires the retained provenance for every local `Screenshots` action and for
+an `Advance` action configured to synchronize screenshots. Before screenshot publication, it
 re-downloads that artifact and proves that the approval manifests name the same
 run, repository, workflow, source commit, version, and complete path-bound PNG
 byte and dimension inventory.
 
 For local publication, invoke the command through the reviewed
 `scripts/Invoke-PinnedPowerForge.ps1` helper. It requires the exact merged
-PSPublishModule commit, a clean consumer `main` equal to `origin/main`, and the
-expected GitHub repository. Use a fresh checkout or worktree. Modified, untracked,
+PSPublishModule commit and the expected GitHub repository. Screenshot `manifest`,
+`manifests`, and `apple-release Screenshots` commands with retained capture provenance
+accept a clean consumer `main` at the exact captured commit when it is a verified
+ancestor of freshly fetched `origin/main`. The successful default-branch capture run,
+retained artifact, source commit, version, and reviewed image bytes must still match;
+an explicit source option must match that exact checkout. Other release actions
+require consumer `main` equal to freshly fetched `origin/main`.
+
+Use a fresh checkout or worktree. Modified, untracked,
 and ignored files are rejected because Xcode projects and build phases can otherwise
 consume bytes that are absent from the reviewed commit. The only exceptions are
 individual screenshot PNGs and provenance files whose paths and bytes match the

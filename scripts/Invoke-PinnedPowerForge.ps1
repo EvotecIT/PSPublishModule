@@ -10,6 +10,8 @@ param(
     [ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')]
     [string] $ExpectedConsumerRepository,
 
+    [switch] $LoadFixedLocalAppleProfile,
+
     [Parameter(Mandatory, Position = 0, ValueFromRemainingArguments)]
     [string[]] $ArgumentList
 )
@@ -75,7 +77,8 @@ function Assert-CleanRepository {
         [string] $RequiredCommit,
         [string] $RequiredBranch,
         [string] $ExpectedRepository,
-        [switch] $DeferContentCheck
+        [switch] $DeferContentCheck,
+        [switch] $AllowBehindMain
     )
     Assert-UnlinkedDirectory -Path $Root -Name $Name
     if ((Invoke-GitText -Root $Root -Arguments @('rev-parse', '--is-inside-work-tree')) -ne 'true') {
@@ -91,7 +94,15 @@ function Assert-CleanRepository {
         if ($branch -ne $RequiredBranch) { throw "$Name must be on '$RequiredBranch', not '$branch'." }
         Invoke-GitText -Root $Root -Arguments @('fetch', '--quiet', 'origin', $RequiredBranch) | Out-Null
         $remote = (Invoke-GitText -Root $Root -Arguments @('rev-parse', "refs/remotes/origin/$RequiredBranch")).ToLowerInvariant()
-        if ($head -ne $remote) { throw "$Name HEAD '$head' does not match origin/$RequiredBranch '$remote'." }
+        if ($head -ne $remote) {
+            if (-not $AllowBehindMain -or $RequiredBranch -ne 'main') {
+                throw "$Name HEAD '$head' does not match origin/$RequiredBranch '$remote'."
+            }
+            # Behind-main admission is restricted by the command entry policy.
+            # The worker binds release source after its canonical fast-forward;
+            # screenshot commands bind their exact retained capture source.
+            Invoke-GitText -Root $Root -Arguments @('merge-base', '--is-ancestor', $head, $remote) | Out-Null
+        }
     }
     if (-not $DeferContentCheck) {
         $status = Invoke-GitText -Root $Root -Arguments @('status', '--porcelain=v1', '--untracked-files=all')
@@ -161,20 +172,45 @@ function Assert-TrackedConsumerInput {
 
 function Get-OptionValue {
     param([Parameter(Mandatory)][string] $Option)
+    $found = $false
+    $result = $null
     for ($index = 0; $index -lt $ArgumentList.Count; $index++) {
+        $value = $null
+        $isMatch = $false
         if ($ArgumentList[$index] -eq $Option) {
             if ($index + 1 -ge $ArgumentList.Count) { throw "Missing value for $Option." }
-            return $ArgumentList[$index + 1]
+            $value = $ArgumentList[$index + 1]
+            $isMatch = $true
+        } elseif ($ArgumentList[$index].StartsWith("$Option=", [StringComparison]::OrdinalIgnoreCase)) {
+            $value = $ArgumentList[$index].Substring($Option.Length + 1)
+            $isMatch = $true
         }
-        if ($ArgumentList[$index].StartsWith("$Option=", [StringComparison]::OrdinalIgnoreCase)) {
-            return $ArgumentList[$index].Substring($Option.Length + 1)
+        if ($isMatch) {
+            if ($found) { throw "Duplicate option at the pinned operator boundary: $Option." }
+            $found = $true
+            $result = $value
         }
     }
-    return $null
+    return $result
+}
+
+function Test-CapturedScreenshotCommand {
+    if ($ArgumentList.Count -lt 2) { return $false }
+    return ($ArgumentList[0] -eq 'apple-screenshots' -and $ArgumentList[1] -in @('manifest', 'manifests')) -or
+        ($ArgumentList[0] -eq 'apple-release' -and $ArgumentList[1] -eq 'Screenshots')
+}
+
+function Assert-ConsumerSourceRepository {
+    $consumerRequiredBranch = if ($ArgumentList.Count -gt 0 -and $ArgumentList[0] -eq 'apple-deploy') { $null } else { $requiredBranch }
+    $workerEntry = $ArgumentList.Count -gt 0 -and $ArgumentList[0] -eq 'apple-testflight'
+    $capturedScreenshotEntry = (Test-CapturedScreenshotCommand) -and
+        -not [string]::IsNullOrWhiteSpace((Get-OptionValue -Option '--capture-provenance'))
+    return Assert-CleanRepository -Root $consumer -Name 'Consumer source' -RequiredBranch $consumerRequiredBranch `
+        -ExpectedRepository $ExpectedConsumerRepository -DeferContentCheck -AllowBehindMain:($workerEntry -or $capturedScreenshotEntry)
 }
 
 function Assert-SafeArguments {
-    if ($ArgumentList.Count -lt 1 -or $ArgumentList[0] -notin @('apple-release', 'apple-deploy', 'apple-screenshots', 'apple-governance', 'apple-review-details')) {
+    if ($ArgumentList.Count -lt 1 -or $ArgumentList[0] -notin @('apple-release', 'apple-deploy', 'apple-screenshots', 'apple-governance', 'apple-review-details', 'apple-testflight')) {
         throw 'Pinned local operator accepts only Apple PowerForge commands.'
     }
     foreach ($forbidden in @('--key-path', '--key-id', '--issuer-id')) {
@@ -186,7 +222,7 @@ function Assert-SafeArguments {
         throw 'UploadExisting is forbidden at the pinned local operator boundary because existing archive bytes lack reviewed provenance.'
     }
     $config = Get-OptionValue -Option '--config'
-    $requiresConfig = $command -in @('apple-release', 'apple-deploy') -or
+    $requiresConfig = $command -in @('apple-release', 'apple-deploy', 'apple-testflight') -or
         ($command -eq 'apple-screenshots' -and $operation -ne 'manifests') -or
         $command -eq 'apple-review-details' -or
         ($command -eq 'apple-governance' -and $operation -ne 'snapshot')
@@ -203,12 +239,32 @@ function Assert-SafeArguments {
             Assert-TrackedConsumerInput -Value $value -Option $option
         }
     }
-    if ($command -in @('apple-release', 'apple-deploy') -and $config) {
+    if ($command -in @('apple-release', 'apple-deploy', 'apple-testflight') -and $config) {
         $script:validatedReleaseConfigPaths += Resolve-OptionPath -Value $config
     }
     $releaseConfig = Get-OptionValue -Option '--release-config'
     if ($releaseConfig) {
         $script:validatedReleaseConfigPaths += Resolve-OptionPath -Value $releaseConfig
+    }
+    if ($command -eq 'apple-screenshots') {
+        $configuredSource = Get-OptionValue -Option '--source-commit'
+        if ($null -ne $configuredSource -and
+            ($configuredSource -notmatch '^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$' -or
+             -not $configuredSource.Equals((Invoke-GitText -Root $consumer -Arguments @('rev-parse', 'HEAD')), [StringComparison]::OrdinalIgnoreCase))) {
+            throw '--source-commit must match the exact consumer HEAD at the pinned screenshot boundary.'
+        }
+    }
+    if ($command -eq 'apple-testflight') {
+        $policy = Get-OptionValue -Option '--policy'
+        if (-not $policy -or -not [IO.Path]::IsPathRooted($policy)) { throw 'apple-testflight requires an absolute machine-local --policy path.' }
+        Assert-UnlinkedPath -Path $policy -Name 'Local TestFlight policy'
+        $localPolicy = Get-Content -LiteralPath $policy -Raw | ConvertFrom-Json
+        if ([IO.Path]::GetFullPath($localPolicy.ConsumerRoot) -ne $consumer -or
+            $localPolicy.Repository -ne $ExpectedConsumerRepository -or
+            [IO.Path]::GetFullPath($localPolicy.OwnerRoot) -ne $toolRoot -or
+            $localPolicy.OwnerCommit -ne $ExpectedCommit -or $localPolicy.ConfigPath -ne $config) {
+            throw 'Local TestFlight policy must bind this exact operator, consumer, repository, and release config.'
+        }
     }
     foreach ($option in @('--capture-provenance', '--reviewed-plan')) {
         $value = Get-OptionValue -Option $option
@@ -270,7 +326,8 @@ function Invoke-TrackedInputValidator {
             -GitPath $script:gitPath `
             -SkipToolManifest `
             -RejectCredentialOverrides `
-            -AllowMissingProject:$allowMissingProject
+            -AllowMissingProject:$allowMissingProject `
+            -PublisherCheckpointPaths @($script:publisherCheckpointPaths)
     }
 }
 
@@ -379,6 +436,37 @@ function Assert-FixedLocalCredentialProfile {
     }
 }
 
+function Read-FixedLocalAppleProfile {
+    $profileRoot = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.appstoreconnect'
+    $profilePath = Join-Path $profileRoot 'env'
+    Assert-UnlinkedPath -Path $profilePath -Name 'Fixed local Apple environment'
+    Assert-PrivateUnixPath -Path $profileRoot -Directory $true -Description 'App Store Connect profile directory'
+    Assert-PrivateUnixPath -Path $profilePath -Directory $false -Description 'App Store Connect environment file'
+    $values = @{}
+    foreach ($line in [IO.File]::ReadAllLines($profilePath)) {
+        if ($line -match '^\s*(?:#.*)?$') { continue }
+        $assignment = [regex]::Match($line, '^\s*(?:export\s+)?(?<name>APP_STORE_CONNECT_(?:KEY_ID|ISSUER_ID|PRIVATE_KEY_PATH)|ASC_(?:KEY_ID|ISSUER_ID|PRIVATE_KEY_PATH))\s*=\s*(?:"(?<value>[^"\r\n]*)"|''(?<value>[^''\r\n]*)''|(?<value>[^\s;`|&<>]+))\s*$')
+        if (-not $assignment.Success) { throw 'The fixed local Apple environment accepts only literal credential assignments and comments.' }
+        $value = $assignment.Groups['value'].Value
+        # Resolve whole-value references only from earlier canonical assignments;
+        # never inherit values from the caller environment or evaluate shell text.
+        $reference = [regex]::Match($value, '^\$(?:(?<name>APP_STORE_CONNECT_(?:KEY_ID|ISSUER_ID|PRIVATE_KEY_PATH))|\{(?<name>APP_STORE_CONNECT_(?:KEY_ID|ISSUER_ID|PRIVATE_KEY_PATH))\})$')
+        if ($reference.Success) {
+            $name = $reference.Groups['name'].Value
+            if (-not $values.ContainsKey($name)) { throw 'The fixed local Apple environment references an undefined credential variable.' }
+            $value = $values[$name]
+        } else {
+            $homeReference = [regex]::Match($value, '^\$(?:HOME|\{HOME\})(?=$|/)')
+            if ($homeReference.Success) {
+                $value = [Environment]::GetFolderPath('UserProfile') + $value.Substring($homeReference.Length)
+            }
+        }
+        if ($value.Contains('$') -or $value.Contains('`')) { throw 'The fixed local Apple environment must not execute shell expressions.' }
+        $values[$assignment.Groups['name'].Value] = $value
+    }
+    return $values
+}
+
 function New-TrackedToolSnapshot {
     param([Parameter(Mandatory)][string] $TarPath)
     $snapshotRoot = Join-Path $temporaryRoot 'tool-source'
@@ -434,25 +522,25 @@ function Assert-AuthoritativeCaptureProvenance {
     $provenance = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
     $repository = [string]$provenance.repository
     $runId = [string]$provenance.captureRunId
-    $sourceCommit = ([string]$provenance.sourceCommit).ToLowerInvariant()
+    $provenanceSourceCommit = ([string]$provenance.sourceCommit).ToLowerInvariant()
     $workflowRef = [string]$provenance.workflowRef
     $workflowPattern = '^' + [regex]::Escape($ExpectedConsumerRepository) + '/(?<path>\.github/workflows/[A-Za-z0-9._/-]+\.ya?ml)@refs/heads/' + [regex]::Escape($requiredBranch) + '$'
     $workflowMatch = [regex]::Match($workflowRef, $workflowPattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
     if (-not $repository.Equals($ExpectedConsumerRepository, [StringComparison]::OrdinalIgnoreCase) -or
-        $runId -notmatch '^\d+$' -or $sourceCommit -notmatch '^(?:[0-9a-f]{40}|[0-9a-f]{64})$' -or -not $workflowMatch.Success) {
+        $runId -notmatch '^\d+$' -or $provenanceSourceCommit -notmatch '^(?:[0-9a-f]{40}|[0-9a-f]{64})$' -or -not $workflowMatch.Success) {
         throw 'Capture provenance repository, run id, source commit, or workflow identity is invalid.'
     }
-    if ($sourceCommit -ne $SourceCommit.ToLowerInvariant()) {
-        throw "Capture provenance source commit '$sourceCommit' does not match the exact consumer HEAD '$SourceCommit'."
+    if (-not $provenanceSourceCommit.Equals($SourceCommit, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Capture provenance source commit '$provenanceSourceCommit' does not match the exact consumer HEAD '$SourceCommit'."
     }
     $run = & $GhPath api "repos/$repository/actions/runs/$runId" 2>$null | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0 -or $run.status -ne 'completed' -or $run.conclusion -ne 'success' -or
         $run.event -ne 'workflow_dispatch' -or $run.path -ne $workflowMatch.Groups['path'].Value -or
         $run.head_repository.full_name -ne $repository -or $run.head_branch -ne $requiredBranch -or
-        ([string]$run.head_sha).ToLowerInvariant() -ne $sourceCommit) {
+        ([string]$run.head_sha).ToLowerInvariant() -ne $provenanceSourceCommit) {
         throw 'Capture provenance does not identify the dedicated successful default-branch capture workflow at the exact source commit.'
     }
-    $artifactName = "powerforge-apple-screenshot-provenance-$sourceCommit"
+    $artifactName = "powerforge-apple-screenshot-provenance-$provenanceSourceCommit"
     $downloadRoot = Join-Path $temporaryRoot 'authoritative-provenance'
     New-Item -ItemType Directory -Path $downloadRoot -Force | Out-Null
     & $GhPath run download $runId --repo $repository --name $artifactName --dir $downloadRoot 2>$null
@@ -541,7 +629,7 @@ function Invoke-RedactedProcess {
         PATH = $(if ($IsMacOS) { '/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin' } elseif ($IsWindows) { "$env:SystemRoot\System32;$env:SystemRoot" } else { '/usr/bin:/bin:/usr/sbin:/sbin' })
         TMPDIR = [IO.Path]::GetTempPath()
     }
-    foreach ($name in @('USER', 'LOGNAME', 'SHELL', 'SSH_AUTH_SOCK', 'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'SSL_CERT_FILE', 'SSL_CERT_DIR')) {
+    foreach ($name in @('USER', 'LOGNAME', 'SHELL', 'SSH_AUTH_SOCK', 'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'POWERFORGE_APPLE_STATE_ROOT', 'POWERFORGE_APPLE_WORKER_GATE')) {
         $value = [Environment]::GetEnvironmentVariable($name)
         if (-not [string]::IsNullOrWhiteSpace($value)) { $safeEnvironment[$name] = $value }
     }
@@ -577,11 +665,11 @@ function Invoke-RedactedProcess {
 try {
     New-Item -ItemType Directory -Path $temporaryRoot -Force | Out-Null
     $savedCredentialEnvironment = Suspend-AppleCredentialEnvironment
+    if ($LoadFixedLocalAppleProfile) { $savedCredentialEnvironment = Read-FixedLocalAppleProfile }
     Set-SafeGitEnvironment
     $script:gitPath = Resolve-FixedTool -Name git
     $toolHead = Assert-CleanRepository -Root $toolRoot -Name 'PSPublishModule source' -RequiredCommit $ExpectedCommit -ExpectedRepository 'EvotecIT/PSPublishModule'
-    $consumerRequiredBranch = if ($ArgumentList.Count -gt 0 -and $ArgumentList[0] -eq 'apple-deploy') { $null } else { $requiredBranch }
-    $consumerHead = Assert-CleanRepository -Root $consumer -Name 'Consumer source' -RequiredBranch $consumerRequiredBranch -ExpectedRepository $ExpectedConsumerRepository -DeferContentCheck
+    $consumerHead = Assert-ConsumerSourceRepository
     Assert-NoReplaceRefs -Root $toolRoot -Name 'PSPublishModule source'
     Assert-NoReplaceRefs -Root $consumer -Name 'Consumer source'
     $scriptRelative = [IO.Path]::GetRelativePath($toolRoot, $PSCommandPath).Replace('\', '/')
@@ -596,7 +684,7 @@ try {
     }
     Assert-SafeArguments
     Assert-FixedAppleToolConfiguration
-    Invoke-TrackedInputValidator -SourceCommit $consumerHead
+    if (-not (Test-AppleWorkerControl) -and -not (Test-AppleWorkerRun)) { Invoke-TrackedInputValidator -SourceCommit $consumerHead }
     Assert-FixedLocalCredentialProfile -Saved $savedCredentialEnvironment
     $forwardedArgumentList = Get-ForwardedArgumentList -SourceCommit $consumerHead
 
@@ -654,6 +742,9 @@ try {
         $resolvedAppleTargets = @(Read-ResolvedAppleTargets -Path $resolutionOutput)
     }
 
+    Register-AppleWorkerCheckpointEvidence -DotNetPath $dotnet -CliAssembly $cliAssembly -NuGetPackagesPath $nugetPackages `
+        -OutputPath (Join-Path $temporaryRoot 'worker-checkpoint-evidence.json')
+    if (Test-AppleWorkerRun) { Invoke-TrackedInputValidator -SourceCommit $consumerHead }
     Register-StandaloneScreenshotEvidence
     Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead -ResolvedTargets $resolvedAppleTargets
     Register-AppleAutomationEvidence -SourceCommit $consumerHead

@@ -58,7 +58,7 @@ public partial class PowerForgeReleaseServiceTests
                         Platform = request.Platform,
                         Version = new AppStoreConnectVersionInfo { Id = "version-1", VersionString = request.VersionString }
                     };
-                });
+                }, appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec

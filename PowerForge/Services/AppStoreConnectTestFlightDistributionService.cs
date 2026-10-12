@@ -71,10 +71,23 @@ public sealed class AppStoreConnectTestFlightDistributionService
             messages.Add($"Added beta tester '{resolution.Tester.Email ?? resolution.Tester.Id}' to {resolution.TargetGroups.Length} beta group(s).");
         }
 
+        var verifiedGroups = new List<AppStoreConnectBetaGroupInfo>();
+        if (request.TestFlightPolicy == AppleTestFlightPolicy.Internal)
+        {
+            foreach (var group in groups)
+            {
+                if (group.HasAccessToAllBuilds == true ||
+                    (await _client.GetBuildsForBetaGroupAsync(group.Id, cancellationToken: cancellationToken).ConfigureAwait(false)).Any(value => value.Id == build.Id))
+                    verifiedGroups.Add(group);
+                else messages.Add($"Build '{build.Id}' is not yet visible in beta group '{group.Name ?? group.Id}'; group access remains pending.");
+            }
+        }
+
         return new AppStoreConnectTestFlightDistributionResult
         {
             Build = build,
             BetaGroups = groups,
+            VerifiedBetaGroups = verifiedGroups.ToArray(),
             Testers = testers.ToArray(),
             Messages = messages.ToArray()
         };

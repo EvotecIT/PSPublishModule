@@ -299,9 +299,10 @@ internal static partial class Program
             return WriteReleaseError(
                 outputJson,
                 commandName,
-                1,
+                ex is AppleReleaseLeaseContentionException or AppleReleaseGateClosedException { BeforeMutation: true } ? AppleReleaseLeaseContentionException.ExitCode : 1,
                 RedactReleaseCredentialText(ex.Message, CollectReleaseCredentialMetadata(specForRedaction, null)),
-                logger);
+                logger, ex is AppleReleaseLeaseContentionException ? "AppleAppLeaseBusy" :
+                    ex is AppleReleaseGateClosedException { BeforeMutation: true } ? "AppleMutationGateClosed" : null);
         }
         finally
         {
@@ -309,7 +310,7 @@ internal static partial class Program
         }
     }
 
-    private static int WriteReleaseError(bool outputJson, string command, int exitCode, string message, ILogger logger)
+    private static int WriteReleaseError(bool outputJson, string command, int exitCode, string message, ILogger logger, string? errorCode = null)
     {
         if (outputJson)
         {
@@ -319,7 +320,8 @@ internal static partial class Program
                 Command = command,
                 Success = false,
                 ExitCode = exitCode,
-                Error = message
+                Error = message,
+                ErrorCode = errorCode
             });
             return exitCode;
         }

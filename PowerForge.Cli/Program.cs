@@ -104,6 +104,8 @@ internal static partial class Program
             return CommandValidateRelease(filteredArgs, logger);
         case "apple-release":
             return CommandAppleRelease(filteredArgs, cli, logger);
+        case "apple-testflight":
+            return CommandAppleTestFlight(filteredArgs, logger);
         case "apple-deploy":
             return CommandAppleDeploy(filteredArgs, cli, logger);
         case "apple-screenshots":

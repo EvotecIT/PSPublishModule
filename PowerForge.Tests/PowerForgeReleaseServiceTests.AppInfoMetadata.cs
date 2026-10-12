@@ -26,7 +26,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 }
                 """);
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot);
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -157,6 +157,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 new AppleAppConfiguration
                 {
                     Name = "Tactra iOS",
+                    BundleId = "com.example.tactra",
                     ProjectPath = "Tactra.xcodeproj",
                     Scheme = "Tactra",
                     Platform = ApplePlatform.iOS,
@@ -165,6 +166,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 new AppleAppConfiguration
                 {
                     Name = "Tactra Mac",
+                    BundleId = "com.example.tactra",
                     ProjectPath = "Tactra.xcodeproj",
                     Scheme = "TactraMac",
                     Platform = ApplePlatform.macOS,
@@ -288,6 +290,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 new AppleAppConfiguration
                 {
                     Name = "Tactra Second",
+                    BundleId = "com.example.tactra.second",
                     ProjectPath = "Second.xcodeproj",
                     Scheme = "Second",
                     Platform = ApplePlatform.iOS,
@@ -315,7 +318,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
-    private static PowerForgeReleaseService CreateAppInfoReleaseService(
+    private PowerForgeReleaseService CreateAppInfoReleaseService(
         List<AppStoreConnectReleasePreparationRequest> requests,
         bool corruptResponse = false)
         => new(
@@ -356,7 +359,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 };
             },
             getAppleReleaseState: _ => throw new InvalidOperationException(
-                "App Information-only mutation must not read version/build release state."));
+                "App Information-only mutation must not read version/build release state."),
+            appleAppStateRoot: _appleAppStateRoot);
 
     private static PowerForgeReleaseSpec CreateAppInfoReleaseSpec(string keyPath)
         => new()
@@ -375,6 +379,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     new AppleAppConfiguration
                     {
                         Name = "Tactra",
+                        BundleId = "com.example.tactra",
                         ProjectPath = "Tactra.xcodeproj",
                         Scheme = "Tactra",
                         Platform = ApplePlatform.iOS,

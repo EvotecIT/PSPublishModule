@@ -3,8 +3,11 @@ using System.Diagnostics;
 
 namespace PowerForge.Tests;
 
-public sealed partial class PowerForgeReleaseServiceTests
+public sealed partial class PowerForgeReleaseServiceTests : IDisposable
 {
+    private readonly string _appleAppStateRoot = CreateSandbox();
+    public void Dispose() => TryDelete(_appleAppStateRoot);
+
     [Fact]
     public void ModuleReleasePlan_LegacyScriptWithoutFramework_PreservesHostFallback()
     {
@@ -481,7 +484,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             CreateXcodeProject(root, "Tactra.xcodeproj");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot);
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -583,7 +586,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         ExportOptionsPlistPath = Path.Combine(request.ExportPath!, "ExportOptions.plist"),
                         ProcessResult = new ProcessRunResult(0, "upload-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
                     };
-                });
+                }, appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -605,6 +608,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             new AppleAppConfiguration
                             {
                                 Name = "Tactra",
+                                BundleId = "com.example.tactra",
                                 ProjectPath = "Tactra.xcodeproj",
                                 Scheme = "Tactra",
                                 Platform = ApplePlatform.iPadOS
@@ -683,7 +687,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         SelectedBuild = true
                     };
                 },
-                getAppleReleaseState: request => CreateReleaseState(request, "VALID"));
+                getAppleReleaseState: request => CreateReleaseState(request, "VALID"), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -702,6 +706,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             new AppleAppConfiguration
                             {
                                 Name = "Tactra",
+                                BundleId = "com.example.tactra",
                                 ProjectPath = "Tactra.xcodeproj",
                                 Scheme = "Tactra",
                                 Platform = ApplePlatform.iOS,
@@ -764,7 +769,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     archiveCalled = true;
                     throw new InvalidOperationException("Apple apps should not run.");
-                });
+                }, appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -814,7 +819,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             var screenshotConfigPath = Path.Combine(root, "screenshots.json");
             File.WriteAllText(screenshotConfigPath, """{ "appId": "app-1", "versionString": "1.0.0", "platform": "iOS", "screenshotSets": [] }""");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot);
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -1080,7 +1085,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         }
                     };
                 },
-                getAppleReleaseState: request => CreateReleaseState(request, "VALID"));
+                getAppleReleaseState: request => CreateReleaseState(request, "VALID"), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -1098,6 +1103,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             new AppleAppConfiguration
                             {
                                 Name = "Tactra",
+                                BundleId = "com.example.tactra",
                                 ProjectPath = "Tactra.xcodeproj",
                                 Scheme = "Tactra",
                                 Platform = ApplePlatform.iOS,
@@ -1245,7 +1251,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         }
                     };
                 },
-                getAppleReleaseState: request => CreateReleaseState(request, "VALID"));
+                getAppleReleaseState: request => CreateReleaseState(request, "VALID"), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -1264,6 +1270,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             new AppleAppConfiguration
                             {
                                 Name = "Tactra",
+                                BundleId = "com.example.tactra",
                                 ProjectPath = "Tactra.xcodeproj",
                                 Scheme = "Tactra",
                                 Platform = ApplePlatform.iOS,
@@ -1349,7 +1356,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         var root = CreateSandbox();
         try
         {
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot);
             var ex = Assert.Throws<FileNotFoundException>(() => service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -1410,7 +1417,7 @@ public sealed partial class PowerForgeReleaseServiceTests
 
                     return CreateSuccessfulArchive(request);
                 },
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -1424,6 +1431,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             new AppleAppConfiguration
                             {
                                 Name = "Tactra",
+                                BundleId = "com.example.tactra",
                                 ProjectPath = "Tactra.xcodeproj",
                                 Scheme = "Tactra",
                                 Platform = ApplePlatform.iOS,
@@ -1478,7 +1486,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     archiveRequests.Add(request);
                     return CreateSuccessfulArchive(request);
                 },
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -1492,6 +1500,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             new AppleAppConfiguration
                             {
                                 Name = "Tactra",
+                                BundleId = "com.example.tactra",
                                 ProjectPath = Path.Combine("Tactra.xcodeproj", "project.pbxproj"),
                                 Scheme = "Tactra",
                                 Platform = ApplePlatform.iOS
@@ -1527,7 +1536,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             Directory.CreateDirectory(Path.Combine(root, "Tactra.xcworkspace"));
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot);
             var ex = Assert.Throws<InvalidOperationException>(() => service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -1597,7 +1606,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     uploadRequests.Add(request);
                     throw new InvalidOperationException("Upload should not run after archive failure.");
-                });
+                }, appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -1611,6 +1620,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             new AppleAppConfiguration
                             {
                                 Name = "First",
+                                BundleId = "com.example.first",
                                 ProjectPath = "First.xcodeproj",
                                 Scheme = "First",
                                 Platform = ApplePlatform.iOS
@@ -1618,6 +1628,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             new AppleAppConfiguration
                             {
                                 Name = "Second",
+                                BundleId = "com.example.second",
                                 ProjectPath = "Second.xcodeproj",
                                 Scheme = "Second",
                                 Platform = ApplePlatform.iOS
@@ -1679,7 +1690,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     archiveRequests.Add(request);
                     return CreateSuccessfulArchive(request);
                 },
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -1735,7 +1746,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             CreateXcodeProject(root, "Tactra.xcodeproj");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot);
             var ex = Assert.Throws<ArgumentException>(() => service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -1777,7 +1788,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             CreateXcodeProject(root, "Tactra.xcodeproj");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot);
             var ex = Assert.Throws<ArgumentException>(() => service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -1834,7 +1845,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     archiveRequests.Add(request);
                     return CreateSuccessfulArchive(request);
                 },
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -1909,7 +1920,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     archiveRequests.Add(request);
                     return CreateSuccessfulArchive(request);
                 },
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -1960,7 +1971,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             CreateXcodeProject(root, "Tactra.xcodeproj");
             File.WriteAllText(Path.Combine(root, "dotnet-publish.json"), "{ invalid json");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot);
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -2059,7 +2070,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run in plan mode."),
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
                 archiveAppleApp: _ => throw new InvalidOperationException("Apple archive should not run in plan mode."),
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -2166,7 +2177,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run in plan mode."),
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
                 archiveAppleApp: _ => throw new InvalidOperationException("Apple archive should not run in plan mode."),
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -2275,7 +2286,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run in plan mode."),
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
                 archiveAppleApp: _ => throw new InvalidOperationException("Apple archive should not run in plan mode."),
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -2372,7 +2383,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     archiveRequests.Add(request);
                     return CreateSuccessfulArchive(request);
                 },
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -2449,7 +2460,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     archiveRequests.Add(request);
                     return CreateSuccessfulArchive(request);
                 },
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -2521,7 +2532,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     archiveRequests.Add(request);
                     return CreateSuccessfulArchive(request);
                 },
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -2608,7 +2619,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
                 archiveAppleApp: _ => throw new InvalidOperationException("Apple apps should not run for a tool-only target."),
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -2673,7 +2684,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
                 archiveAppleApp: _ => throw new InvalidOperationException("Apple archive should not run after validation failure."),
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var ex = Assert.Throws<FileNotFoundException>(() => service.Execute(
                 new PowerForgeReleaseSpec
@@ -2732,7 +2743,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
                 archiveAppleApp: _ => throw new InvalidOperationException("Apple archive should not run after validation failure."),
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var ex = Assert.Throws<FileNotFoundException>(() => service.Execute(
                 new PowerForgeReleaseSpec
@@ -2786,7 +2797,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
                 archiveAppleApp: _ => throw new InvalidOperationException("Apple archive should not run after validation failure."),
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var ex = Assert.Throws<InvalidOperationException>(() => service.Execute(
                 new PowerForgeReleaseSpec
@@ -2849,7 +2860,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
                 archiveAppleApp: _ => throw new InvalidOperationException("Apple archive should not run after validation failure."),
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var ex = Assert.Throws<InvalidOperationException>(() => service.Execute(
                 new PowerForgeReleaseSpec
@@ -2904,7 +2915,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             CreateXcodeProject(root, "Tactra.xcodeproj");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot);
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -2958,7 +2969,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run for an Apple-only target."),
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
                 archiveAppleApp: _ => throw new InvalidOperationException("Apple archive should not run in plan mode."),
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -3031,7 +3042,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Directory.CreateDirectory(Path.GetDirectoryName(buildScript)!);
             File.WriteAllText(buildScript, "# test build script");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot);
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -3083,7 +3094,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Directory.CreateDirectory(Path.GetDirectoryName(buildScript)!);
             File.WriteAllText(buildScript, "# test build script");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot);
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -3176,7 +3187,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run in plan mode."),
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
                 archiveAppleApp: _ => throw new InvalidOperationException("Apple archive should not run in plan mode."),
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -3255,7 +3266,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     archiveRequests.Add(request);
                     throw new InvalidOperationException("Archive should not run when SkipBuild is set.");
                 },
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run."), appleAppStateRoot: _appleAppStateRoot);
 
             var ex = Assert.Throws<InvalidOperationException>(() => service.Execute(
                 new PowerForgeReleaseSpec
@@ -3299,7 +3310,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             CreateXcodeProject(root, "Tactra.xcodeproj");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot);
             var ex = Assert.Throws<InvalidOperationException>(() => service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -3344,7 +3355,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             CreateXcodeProject(root, "Tactra.xcodeproj");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot);
             var ex = Assert.Throws<FileNotFoundException>(() => service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -3396,7 +3407,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
                 archiveAppleApp: _ => throw new InvalidOperationException("Archive should not run when archive reuse validation fails."),
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run when archive reuse validation fails."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run when archive reuse validation fails."), appleAppStateRoot: _appleAppStateRoot);
 
             var ex = Assert.Throws<FileNotFoundException>(() => service.Execute(
                 new PowerForgeReleaseSpec
@@ -3443,7 +3454,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             CreateXcodeProject(root, "Tactra.xcodeproj");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot);
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -3491,7 +3502,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Directory.CreateDirectory(archivePath);
             File.WriteAllText(Path.Combine(archivePath, "payload"), "approved archive");
 
-            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
+            var result = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                 new PowerForgeReleaseSpec
                 {
                     AppleApps = new PowerForgeAppleReleaseOptions
@@ -3535,7 +3546,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             var source = Directory.CreateDirectory(Path.Combine(root, "Source"));
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot);
             var ex = Assert.Throws<InvalidOperationException>(() => service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -3578,7 +3589,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             var projectPath = CreateXcodeProject(root, "Tactra.xcodeproj");
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot);
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -3638,7 +3649,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     ExportPath = exportPath,
                     ExportOptionsPlistPath = Path.Combine(exportPath, "ExportOptions.plist"),
                     ProcessResult = new ProcessRunResult(0, "upload-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                });
+                }, appleAppStateRoot: _appleAppStateRoot);
 
             var summaryManifest = Path.Combine(root, "release-manifest.json");
             var result = service.Execute(

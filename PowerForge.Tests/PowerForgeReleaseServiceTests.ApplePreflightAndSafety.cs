@@ -340,7 +340,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             var spec = CreateAppleAutomationSpec(root, keyPath);
             spec.AppleApps!.ScreenshotConfigPath = "screenshots.json";
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                     spec,
                     new PowerForgeReleaseRequest
                     {

@@ -241,6 +241,9 @@ internal sealed class PowerForgeAppleVersionReceipt
 
     public long HighestRemoteBuildNumber { get; set; }
 
+    /// <summary>Highest other-source build reserved locally, separate from Apple's inventory.</summary>
+    public long HighestReservedBuildNumber { get; set; }
+
     public string? HighestRemoteMarketingVersion { get; set; }
 
     public bool ReusedUnreleasedMarketingVersion { get; set; }
@@ -350,6 +353,15 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
     public string? ReadinessSha256 { get; set; }
 
     public bool TestFlightBetaGroupsConfigured { get; set; }
+
+    /// <summary>Groups actually resolved by this attempt's successful TestFlight distribution.</summary>
+    public AppStoreConnectBetaGroupInfo[] DistributedTestFlightBetaGroups { get; set; } = Array.Empty<AppStoreConnectBetaGroupInfo>();
+
+    /// <summary>Retained local export directory produced by an App Store upload, relative to the project root.</summary>
+    public string? UploadExportPath { get; set; }
+
+    /// <summary>Complete filesystem identity of the retained upload export directory; does not authorize upload reuse.</summary>
+    public string? UploadExportSha256 { get; set; }
 
     public AppStoreConnectControlPlaneState? ControlPlane { get; set; }
 

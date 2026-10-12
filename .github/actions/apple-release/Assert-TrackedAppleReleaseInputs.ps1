@@ -5,7 +5,8 @@ param(
     [string] $GitPath = 'git',
     [switch] $SkipToolManifest,
     [switch] $RejectCredentialOverrides,
-    [switch] $AllowMissingProject
+    [switch] $AllowMissingProject,
+    [string[]] $PublisherCheckpointPaths = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -41,6 +42,9 @@ function Assert-TrackedSourceFile {
     $relative = [IO.Path]::GetRelativePath($root, $candidate).Replace('\', '/')
     & $GitPath -C $root ls-files --error-unmatch -- $relative *> $null
     if ($LASTEXITCODE -ne 0) { throw "$Name must be tracked at the exact source commit: $relative" }
+    # Only the pinned local worker supplies paths after canonical checkpoint
+    # receipt/source/diff validation. Ordinary and hosted callers remain strict.
+    if ($PublisherCheckpointPaths -contains $candidate) { return }
     & $GitPath -C $root diff --quiet HEAD -- $relative
     if ($LASTEXITCODE -ne 0) { throw "$Name differs from the exact source commit: $relative" }
 }

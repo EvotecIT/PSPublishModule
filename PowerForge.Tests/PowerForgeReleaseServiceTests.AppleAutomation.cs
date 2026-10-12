@@ -114,7 +114,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
             File.WriteAllText(keyPath, "private-key");
 
-            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
+            var result = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                 CreateAppleAutomationSpec(root, keyPath),
                 new PowerForgeReleaseRequest
                 {
@@ -661,7 +661,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.False(plan.SyncMetadata);
 
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                     spec,
                     new PowerForgeReleaseRequest
                     {
@@ -687,7 +687,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             File.WriteAllText(keyPath, "private-key");
 
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                     CreateAppleAutomationSpec(root, keyPath),
                     new PowerForgeReleaseRequest
                     {
@@ -737,7 +737,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             }
 
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                     spec,
                     new PowerForgeReleaseRequest
                     {
@@ -1566,7 +1566,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         return RunSnapshotGit(root, "rev-parse", "HEAD").Trim();
     }
 
-    private static PowerForgeReleaseService CreateAppleAutomationService(
+    private PowerForgeReleaseService CreateAppleAutomationService(
         Func<AppStoreConnectReleaseStateRequest, AppStoreConnectReleaseStateResult> getState,
         Action<TimeSpan>? delay = null,
         Func<string, long>? getAvailableBytes = null,
@@ -1582,6 +1582,8 @@ public sealed partial class PowerForgeReleaseServiceTests
         Func<AppleNotarizationRequest, AppleNotarizationResult>? notarizeAppleArtifact = null,
         Func<AppStoreConnectApiCredential, AppStoreConnectGovernanceSpec, AppStoreConnectGovernancePlan>? planAppleGovernance = null,
         Func<AppStoreConnectReviewSubmissionRequest, AppStoreConnectReviewSubmissionResult>? submitAppleReview = null,
+        Func<AppStoreConnectBetaAppReviewSubmissionRequest, AppStoreConnectBetaAppReviewSubmissionResult>? submitTestFlightBetaReview = null,
+        Func<AppStoreConnectVersionReleaseRequest, AppStoreConnectVersionReleaseResult>? releaseAppleVersion = null,
         Func<AppStoreConnectApiCredential, AppStoreConnectReleaseReadinessRequest, AppStoreConnectReleaseReadinessResult>? checkAppleReleaseReadiness = null,
         Func<PowerForgeReleaseValidationAction, PowerForgeReleaseValidationContext, string, CancellationToken, PowerForgeReleaseValidationResult>? runReleaseValidation = null)
         => new(
@@ -1608,8 +1610,11 @@ public sealed partial class PowerForgeReleaseServiceTests
             notarizeAppleArtifact: notarizeAppleArtifact,
             planAppleGovernance: planAppleGovernance,
             submitAppleReview: submitAppleReview,
+            submitTestFlightBetaReview: submitTestFlightBetaReview,
+            releaseAppleVersion: releaseAppleVersion,
             checkAppleReleaseReadiness: checkAppleReleaseReadiness,
-            runReleaseValidation: runReleaseValidation);
+            runReleaseValidation: runReleaseValidation,
+            appleAppStateRoot: _appleAppStateRoot);
 
     private static AppStoreConnectReleaseStateResult CreateReleaseState(
         AppStoreConnectReleaseStateRequest request,

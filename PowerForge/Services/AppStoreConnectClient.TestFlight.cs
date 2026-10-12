@@ -30,6 +30,22 @@ public sealed partial class AppStoreConnectClient
     }
 
     /// <summary>
+    /// Lists builds available to a specific TestFlight beta group.
+    /// </summary>
+    public Task<AppStoreConnectBuildInfo[]> GetBuildsForBetaGroupAsync(
+        string betaGroupId,
+        int limit = 200,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(betaGroupId))
+            throw new ArgumentException("Beta group id is required.", nameof(betaGroupId));
+        return GetArrayAsync(
+            $"betaGroups/{Uri.EscapeDataString(betaGroupId.Trim())}/builds?limit={ClampLimit(limit).ToString(CultureInfo.InvariantCulture)}",
+            ParseBuild,
+            cancellationToken);
+    }
+
+    /// <summary>
     /// Lists beta testers, optionally filtering by email.
     /// </summary>
     public Task<AppStoreConnectBetaTesterInfo[]> GetBetaTestersAsync(

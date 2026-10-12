@@ -19,6 +19,8 @@ internal sealed partial class PowerForgeReleaseService
             StartAppleReleaseProgress(applePlan, request);
 
         using var operationLock = AppleReleaseOperationLock.Acquire(applePlan.LockPath, applePlan.Action);
+        using var appLease = HasAppleExecutionMutation(applePlan) ? AppleReleaseAppState.Acquire(applePlan, _appleAppStateRoot) : null;
+        if (HasAppleExecutionMutation(applePlan)) AppleReleaseAppState.AssertMutationAllowed(applePlan, _appleAppStateRoot, beforeMutation: true);
         var cleanup = new PowerForgeAppleReleaseCleanupReceipt();
         PowerForgeAppleAppReleaseResult[] appleResults;
         PowerForgeAppleVersionReceipt? appleVersioning = null;
@@ -33,6 +35,7 @@ internal sealed partial class PowerForgeReleaseService
             if (applePlan.Action == PowerForgeAppleReleaseAction.Version)
             {
                 AppleReleaseSourceSnapshot.ValidateCurrentSourceIfRequired(applePlan);
+                AppleReleaseAppState.AssertMutationAllowed(applePlan, _appleAppStateRoot);
                 appleVersioning = SelectAppleVersion(
                     applePlan,
                     approvedPlan?.Versioning ?? throw new InvalidOperationException(
@@ -43,6 +46,7 @@ internal sealed partial class PowerForgeReleaseService
                      approvedPlan?.ShipPhase == PowerForgeAppleShipPhase.VersionCheckpoint)
             {
                 AppleReleaseSourceSnapshot.ValidateCurrentSourceIfRequired(applePlan);
+                AppleReleaseAppState.AssertMutationAllowed(applePlan, _appleAppStateRoot);
                 appleVersioning = SelectAppleVersion(
                     applePlan,
                     approvedPlan.Versioning ?? throw new InvalidOperationException(
@@ -68,7 +72,7 @@ internal sealed partial class PowerForgeReleaseService
             }
             else
             {
-                appleResults = RunAppleRelease(applePlan, out cleanup);
+                appleResults = RunAppleRelease(applePlan, out cleanup, appLease);
             }
         }
         catch (Exception exception)
@@ -128,6 +132,8 @@ internal sealed partial class PowerForgeReleaseService
     {
         StartAppleReleaseProgress(applePlan, request);
         using var operationLock = AppleReleaseOperationLock.Acquire(applePlan.LockPath, applePlan.Action);
+        using var appLease = AppleReleaseAppState.Acquire(applePlan, _appleAppStateRoot);
+        AppleReleaseAppState.AssertMutationAllowed(applePlan, _appleAppStateRoot, beforeMutation: true);
         PowerForgeAppleAppReleaseResult[] appleResults;
         PowerForgeAppleReleaseReceipt? approvedPlan = null;
         try

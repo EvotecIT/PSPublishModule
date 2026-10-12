@@ -31,7 +31,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     File.WriteAllText(Path.Combine(request.ArchivePath!, "Info.plist"), "checkpointed");
                     return CreateSuccessfulArchive(request);
                 },
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run while checkpointing."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run while checkpointing."), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec
@@ -111,7 +111,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 runDotNetTools: _ => throw new InvalidOperationException("DotNet tools should not run."),
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub should not run."),
                 archiveAppleApp: _ => throw new InvalidOperationException("Archive should not run."),
-                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run while checkpointing."));
+                uploadAppleApp: _ => throw new InvalidOperationException("Upload should not run while checkpointing."), appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
                 new PowerForgeReleaseSpec

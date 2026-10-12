@@ -10,7 +10,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         bool summaryOnly)
     {
         var exception = Assert.Throws<InvalidOperationException>(() =>
-            new PowerForgeReleaseService(new NullLogger()).Execute(
+            new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                 new PowerForgeReleaseSpec(),
                 new PowerForgeReleaseRequest
                 {
@@ -51,7 +51,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 }
             };
 
-            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
+            var result = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                 spec,
                 new PowerForgeReleaseRequest
                 {
@@ -96,7 +96,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             };
 
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                     spec,
                     new PowerForgeReleaseRequest
                     {
@@ -140,7 +140,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             };
 
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                     spec,
                     new PowerForgeReleaseRequest
                     {
