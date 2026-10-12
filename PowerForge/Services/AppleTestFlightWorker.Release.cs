@@ -92,6 +92,7 @@ internal sealed partial class AppleTestFlightWorker
             if (job.Stage == AppleTestFlightJobStage.AppleProcessingPending && (plan.Versioning?.BuildNumber != job.Build || plan.Versioning?.MarketingVersion != job.Version))
                 throw new InvalidOperationException("Processing recovery attempted to allocate a different build.");
             job.PlanSha256 = plan.PlanSha256;
+            _releasingFrom = job.Stage;
             SetStage(AppleTestFlightJobStage.Releasing);
             var result = InvokeShip(plan: false);
             job.Outcomes = result.Targets;

@@ -64,9 +64,24 @@ internal sealed partial class AppleTestFlightWorker
         var error = stderr.GetAwaiter().GetResult();
         if (output.Length > 16 * 1024 * 1024 || error.Length > 16 * 1024 * 1024)
             throw new InvalidOperationException("Local tool output exceeds the bounded response limit.");
+        if (apple && IsLeaseRejection(process.ExitCode, output))
+            throw new AppleTestFlightLeaseBusyException();
         if (process.ExitCode != 0 && !apple)
             throw new AppleTestFlightToolException($"Trusted {name} failed with exit code {process.ExitCode}. Inspect local authentication, source, or repository permissions.");
         return output;
+    }
+
+    internal static bool IsLeaseRejection(int exitCode, string output)
+    {
+        if (exitCode != AppleReleaseLeaseContentionException.ExitCode) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(output.Split('\n', StringSplitOptions.RemoveEmptyEntries).Last().Trim());
+            var value = document.RootElement;
+            return Text(value, "command") == "apple-release" && !value.GetProperty("success").GetBoolean() &&
+                value.GetProperty("exitCode").GetInt32() == exitCode && Text(value, "errorCode") == "AppleAppLeaseBusy";
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException or KeyNotFoundException) { return false; }
     }
 
     private string Git(params string[] arguments) => GitAt(_policy.ConsumerRoot, arguments);
@@ -141,4 +156,5 @@ internal sealed partial class AppleTestFlightWorker
 
 /// <summary>A tool boundary failure that can be retried only outside mutation stages.</summary>
 internal sealed class AppleTestFlightToolException(string message) : Exception(message);
+internal sealed class AppleTestFlightLeaseBusyException() : Exception("Another local checkout owns the app lease; this unstarted mutation will retry.");
 #endif

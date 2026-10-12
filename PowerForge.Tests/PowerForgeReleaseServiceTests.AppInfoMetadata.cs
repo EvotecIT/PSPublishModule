@@ -26,7 +26,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 }
                 """);
 
-            var service = new PowerForgeReleaseService(new NullLogger());
+            var service = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot);
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {

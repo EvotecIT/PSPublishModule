@@ -16,7 +16,7 @@ public sealed partial class AppleTestFlightWorkerTests
             using (var lease = AppleReleaseAppState.Acquire(first, root))
             {
                 lease.Reserve(first, "25");
-                Assert.Throws<InvalidOperationException>(() => AppleReleaseAppState.Acquire(second, root));
+                Assert.Throws<AppleReleaseLeaseContentionException>(() => AppleReleaseAppState.Acquire(second, root));
             }
             // A restarted process must still advance past build 25, even when the
             // remote inventory reports only 22 and no successful upload receipt exists.

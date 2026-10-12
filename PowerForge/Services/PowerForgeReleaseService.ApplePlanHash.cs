@@ -2,7 +2,8 @@ namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
-    private static string ComputeApplePlanSha256(PowerForgeAppleReleaseReceipt receipt)
+    /// <summary>Hashes the same canonical approved intent for execution and read-only checkpoint admission.</summary>
+    internal static string ComputeApplePlanSha256(PowerForgeAppleReleaseReceipt receipt)
     {
         var targets = receipt.Action == PowerForgeAppleReleaseAction.Ship
             ? receipt.Targets.Select(CreateAppleShipIntentHashTarget).ToArray()

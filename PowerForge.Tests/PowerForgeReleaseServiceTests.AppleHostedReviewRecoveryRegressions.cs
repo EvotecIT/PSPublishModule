@@ -306,7 +306,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             spec.AppleApps!.Automation.ReceiptHistoryPath = " ";
 
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                     spec,
                     new PowerForgeReleaseRequest
                     {
@@ -403,7 +403,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             }
 
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                     spec,
                     new PowerForgeReleaseRequest
                     {
@@ -443,7 +443,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             spec.AppleApps.Automation.PlanReceiptPath = "build/powerforge/apple/STATE/plan.json";
 
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                     spec,
                     new PowerForgeReleaseRequest
                     {

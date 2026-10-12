@@ -88,8 +88,8 @@ internal sealed partial class PowerForgeReleaseService
     /// <summary>
     /// Creates a new unified release service.
     /// </summary>
-    public PowerForgeReleaseService(ILogger logger)
-        : this(logger, signAssemblies: null, validateAssemblySigning: null)
+    public PowerForgeReleaseService(ILogger logger, string? appleAppStateRoot = null)
+        : this(logger, signAssemblies: null, validateAssemblySigning: null, appleAppStateRoot: appleAppStateRoot)
     {
     }
 
@@ -99,7 +99,8 @@ internal sealed partial class PowerForgeReleaseService
     public PowerForgeReleaseService(
         ILogger logger,
         Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies,
-        Action<DotNetReleaseBuildAssemblySigningPreflightRequest>? validateAssemblySigning)
+        Action<DotNetReleaseBuildAssemblySigningPreflightRequest>? validateAssemblySigning,
+        string? appleAppStateRoot = null)
         : this(
             logger,
             (request, config, configPath) => new ProjectBuildHostService(logger, signAssemblies, validateAssemblySigning).Execute(request, config, configPath),
@@ -120,7 +121,8 @@ internal sealed partial class PowerForgeReleaseService
             runDotNetToolsWithProgressAndCancellation: (plan, progress, cancellationToken) =>
                 new DotNetPublishPipelineRunner(logger).Run(plan, progress, cancellationToken),
             publishGitHubReleaseWithCancellation: (publishRequest, cancellationToken) =>
-                new GitHubReleasePublisher(logger).PublishRelease(publishRequest, cancellationToken))
+                new GitHubReleasePublisher(logger).PublishRelease(publishRequest, cancellationToken),
+            appleAppStateRoot: appleAppStateRoot)
     {
     }
 
@@ -131,7 +133,8 @@ internal sealed partial class PowerForgeReleaseService
         Func<PowerForgeToolReleasePlan, PowerForgeToolReleaseResult> runTools,
         Func<GitHubReleasePublishRequest, GitHubReleasePublishResult> publishGitHubRelease,
         Func<string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedNuGetAssets = null,
-        Func<string, string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedModuleAssets = null)
+        Func<string, string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedModuleAssets = null,
+        string? appleAppStateRoot = null)
         : this(
             logger,
             executePackages,
@@ -146,7 +149,8 @@ internal sealed partial class PowerForgeReleaseService
             request => new AppleAppArchiveService().UploadArchiveAsync(request).GetAwaiter().GetResult(),
             null,
             restorePublishedNuGetAssets: restorePublishedNuGetAssets,
-            restorePublishedModuleAssets: restorePublishedModuleAssets)
+            restorePublishedModuleAssets: restorePublishedModuleAssets,
+            appleAppStateRoot: appleAppStateRoot)
     {
     }
 

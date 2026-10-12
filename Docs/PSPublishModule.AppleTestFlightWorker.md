@@ -52,7 +52,12 @@ The workflow runs on GitHub-hosted Linux without checking out application code o
 receiving Apple credentials. It retains a small request artifact for 90 days.
 The worker accepts only successful default-branch dispatches using the enrolled
 shared workflow pin and verifies the request and rerun actors have repository
-write permission. Keep the Mac polling within the artifact retention period.
+write permission. Invalid or failed attempts are recorded with a diagnostic and do
+not block later requests. An incomplete attempt holds request ordering for at most
+ten minutes. A successful rerun of a rejected attempt remains eligible; an accepted
+run is applied only once across reruns. Transient observation failures retain the
+request for retry and close the active mutation gate. Keep the Mac polling within
+the artifact retention period.
 
 ## Enroll the trusted Mac
 
@@ -135,7 +140,9 @@ Unstarted automatic intents held by Off or selection labels do not block a later
 manual request. A checkpoint or delivery recovery keeps its place in the queue.
 Removing `testflight` in Selected PRs mode or adding `testflight-skip` cancels that
 unstarted trigger without blocking other eligible PRs. Its request history remains
-recorded; use Build now to request it again. Turning automatic mode Off preserves
+recorded; a source-bound cancelled job receives a terminal `Excluded` error status.
+Failed status writes are retried from durable state. Use Build now to request the
+trigger again. Turning automatic mode Off preserves
 unstarted intent for the next time automatic mode is enabled.
 
 The worker reads Off requests while a release subprocess runs. If GitHub polling
@@ -157,6 +164,11 @@ checks both the working diff and committed tree, retains original qualification
 and checkpoint lineage, and pushes without force only when main is unprotected
 and has no applicable rules. Unexpected graph, behavior, dependency or script
 changes stop for an operator. It replans against the actual committed source.
+A restart before checkpoint publication admits the pending diff only when its
+saved `CheckpointReady` job matches the original current main, integrity-validated
+completed receipt, approved plan hash, target set and version/build. The strict
+entrypoint admits only those validated publisher paths. Other release commands
+retain their normal clean-source requirement.
 Previous-source preview plans are retained under the queue's `previous-plans`
 directory before a fresh plan replaces them; they cannot approve another source.
 The upload engine binds retained export output, including `ExportOptions.plist`,
@@ -169,6 +181,9 @@ against the new latest main. A processing timeout retains the same source and
 build and retries bounded Ship recovery with the original approved intent. A
 restart during mutation is **NeedsOperator**: inspect canonical immutable receipts
 and remote delivery before resuming with the existing pinned Ship commands.
+A positive child-command app-lease rejection means no mutation started and is
+retryable, including when another checkout acquired the lease after preview.
+Interrupted or otherwise ambiguous mutations remain NeedsOperator.
 A NeedsOperator job holds the queue, including later manual requests. After
 inspecting and reconciling the canonical receipts and remote delivery, use the
 same local operator with `apple-testflight retire --job <id> --confirm-reconciled

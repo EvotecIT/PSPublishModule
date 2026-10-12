@@ -52,7 +52,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             CreateXcodeProject(externalRoot, "Outside.xcodeproj", "1.0.0", "1");
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                     new PowerForgeReleaseSpec
                     {
                         AppleApps = new PowerForgeAppleReleaseOptions
@@ -95,7 +95,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             File.WriteAllText(keyPath, "private-key");
 
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                     new PowerForgeReleaseSpec
                     {
                         AppleApps = new PowerForgeAppleReleaseOptions
@@ -537,7 +537,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         {
             CreateXcodeProject(root, "Watch.xcodeproj", "1.0.0", "1");
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                     new PowerForgeReleaseSpec
                     {
                         AppleApps = new PowerForgeAppleReleaseOptions
@@ -581,7 +581,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             CreateXcodeProject(root, "WatchA.xcodeproj", "1.0.0", "1");
             CreateXcodeProject(root, "WatchB.xcodeproj", "1.0.0", "1");
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                     new PowerForgeReleaseSpec
                     {
                         AppleApps = new PowerForgeAppleReleaseOptions

@@ -139,7 +139,7 @@ public sealed partial class AppleTestFlightWorkerTests
             Assert.Contains("PASS pinned behind-main lifecycle", RunTool("pwsh", root, "-NoProfile", "-File", harness,
                 "-Owner", FindRepository(), "-Consumer", consumer, "-First", first));
         }
-        finally { Directory.Delete(root, true); }
+        finally { DeleteSandbox(root); }
     }
 
     [Fact]
@@ -168,10 +168,9 @@ public sealed partial class AppleTestFlightWorkerTests
             using var writer = new FileStream(Path.Combine(directory, "worker.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             foreach (var operation in new[] { "status", "pause", "resume" })
             {
-                var start = new ProcessStartInfo(Environment.ProcessPath!) { WorkingDirectory = root,
+                var start = new ProcessStartInfo("dotnet") { WorkingDirectory = root,
                     RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
                 // testhost is not dotnet; use the configured runtime through PATH.
-                start.FileName = "dotnet";
                 foreach (var value in new[] { cli, "apple-testflight", operation, "--policy", path, "--config", policy.ConfigPath, "--output", "json" })
                     start.ArgumentList.Add(value);
                 start.Environment["POWERFORGE_APPLE_STATE_ROOT"] = root;
@@ -185,7 +184,7 @@ public sealed partial class AppleTestFlightWorkerTests
                 Assert.Equal("Releasing", envelope.RootElement.GetProperty("result").GetProperty("Jobs")[0].GetProperty("Stage").GetString());
             }
         }
-        finally { Directory.Delete(root, true); }
+        finally { DeleteSandbox(root); }
     }
 
     private static void Commit(string root)

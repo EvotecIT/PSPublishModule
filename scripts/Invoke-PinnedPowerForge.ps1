@@ -172,16 +172,26 @@ function Assert-TrackedConsumerInput {
 
 function Get-OptionValue {
     param([Parameter(Mandatory)][string] $Option)
+    $found = $false
+    $result = $null
     for ($index = 0; $index -lt $ArgumentList.Count; $index++) {
+        $value = $null
+        $isMatch = $false
         if ($ArgumentList[$index] -eq $Option) {
             if ($index + 1 -ge $ArgumentList.Count) { throw "Missing value for $Option." }
-            return $ArgumentList[$index + 1]
+            $value = $ArgumentList[$index + 1]
+            $isMatch = $true
+        } elseif ($ArgumentList[$index].StartsWith("$Option=", [StringComparison]::OrdinalIgnoreCase)) {
+            $value = $ArgumentList[$index].Substring($Option.Length + 1)
+            $isMatch = $true
         }
-        if ($ArgumentList[$index].StartsWith("$Option=", [StringComparison]::OrdinalIgnoreCase)) {
-            return $ArgumentList[$index].Substring($Option.Length + 1)
+        if ($isMatch) {
+            if ($found) { throw "Duplicate option at the pinned operator boundary: $Option." }
+            $found = $true
+            $result = $value
         }
     }
-    return $null
+    return $result
 }
 
 function Assert-SafeArguments {
@@ -293,7 +303,8 @@ function Invoke-TrackedInputValidator {
             -GitPath $script:gitPath `
             -SkipToolManifest `
             -RejectCredentialOverrides `
-            -AllowMissingProject:$allowMissingProject
+            -AllowMissingProject:$allowMissingProject `
+            -PublisherCheckpointPaths @($script:publisherCheckpointPaths)
     }
 }
 
@@ -640,7 +651,7 @@ try {
     }
     Assert-SafeArguments
     Assert-FixedAppleToolConfiguration
-    if (-not (Test-AppleWorkerControl)) { Invoke-TrackedInputValidator -SourceCommit $consumerHead }
+    if (-not (Test-AppleWorkerControl) -and -not (Test-AppleWorkerRun)) { Invoke-TrackedInputValidator -SourceCommit $consumerHead }
     Assert-FixedLocalCredentialProfile -Saved $savedCredentialEnvironment
     $forwardedArgumentList = Get-ForwardedArgumentList -SourceCommit $consumerHead
 
@@ -698,6 +709,9 @@ try {
         $resolvedAppleTargets = @(Read-ResolvedAppleTargets -Path $resolutionOutput)
     }
 
+    Register-AppleWorkerCheckpointEvidence -DotNetPath $dotnet -CliAssembly $cliAssembly -NuGetPackagesPath $nugetPackages `
+        -OutputPath (Join-Path $temporaryRoot 'worker-checkpoint-evidence.json')
+    if (Test-AppleWorkerRun) { Invoke-TrackedInputValidator -SourceCommit $consumerHead }
     Register-StandaloneScreenshotEvidence
     Assert-ScreenshotPublicationBinding -SourceCommit $consumerHead -ResolvedTargets $resolvedAppleTargets
     Register-AppleAutomationEvidence -SourceCommit $consumerHead

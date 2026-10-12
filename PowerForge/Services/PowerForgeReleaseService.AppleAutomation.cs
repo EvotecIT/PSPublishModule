@@ -559,6 +559,17 @@ internal sealed partial class PowerForgeReleaseService
                     }
                 }
             }
+            (string? Path, string? Sha256) uploadExport = (null, null);
+            try { uploadExport = CaptureAppleUploadExportEvidence(plan, app, result); }
+            catch (Exception exception)
+            {
+                if (result is not null)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = (string.IsNullOrWhiteSpace(result.ErrorMessage) ? "" : result.ErrorMessage + " ") +
+                        $"Unable to capture upload export evidence for receipt: {exception.Message}";
+                }
+            }
             var readiness = result?.Distribution?.Readiness;
             var betaGroupsConfigured = UsesTestFlight(app) &&
                                        (plan.TestFlightBetaGroupIds.Length > 0 ||
@@ -596,7 +607,6 @@ internal sealed partial class PowerForgeReleaseService
                 plan.Rehearse,
                 result?.Success == true,
                 result?.Upload);
-            var uploadExport = CaptureAppleUploadExportEvidence(plan, app, result);
             return new PowerForgeAppleReleaseTargetReceipt
             {
                 Name = app.Name,

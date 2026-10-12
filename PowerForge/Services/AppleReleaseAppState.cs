@@ -33,7 +33,7 @@ internal sealed class AppleReleaseAppState : IDisposable
         catch (IOException exception)
         {
             state.Dispose();
-            throw new InvalidOperationException("Another checkout owns this app's Apple release lease. Retry after it finishes.", exception);
+            throw new AppleReleaseLeaseContentionException(exception);
         }
         catch { state.Dispose(); throw; }
     }
@@ -177,4 +177,11 @@ internal sealed class AppleReleaseAppState : IDisposable
     }
 
     public void Dispose() { for (var index = _leases.Count - 1; index >= 0; index--) _leases[index].Dispose(); }
+}
+
+/// <summary>The canonical app lease could not be acquired; no release mutation has started.</summary>
+internal sealed class AppleReleaseLeaseContentionException(Exception inner)
+    : InvalidOperationException("Another checkout owns this app's Apple release lease. Retry after it finishes.", inner)
+{
+    internal const int ExitCode = 75;
 }

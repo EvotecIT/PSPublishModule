@@ -10,15 +10,17 @@ internal static partial class Program
         var outputJson = IsJsonOutput(argv);
         try
         {
-            if (argv.Length == 0 || argv[0] is not ("run" or "status" or "pause" or "resume" or "retire"))
+            if (argv.Length == 0 || argv[0] is not ("run" or "status" or "pause" or "resume" or "retire" or "checkpoint-evidence"))
                 throw new ArgumentException("Usage: powerforge apple-testflight <run|status|pause|resume|retire> --policy <absolute-local-policy.json> --config <release.json> [--output json]");
             string? policyPath = null;
             string? config = null;
             string? job = null;
             var reconciled = false;
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (var index = 1; index < argv.Length; index++)
             {
                 var name = argv[index];
+                if (!seen.Add(name)) throw new ArgumentException("Duplicate apple-testflight option: " + name);
                 if (name == "--confirm-reconciled") { reconciled = true; continue; }
                 if (name is not ("--policy" or "--config" or "--output" or "--job") || ++index >= argv.Length)
                     throw new ArgumentException("Unknown or incomplete apple-testflight option.");
@@ -36,6 +38,12 @@ internal static partial class Program
             if (argv[0] == "retire" ? job is null || !reconciled : job is not null || reconciled)
                 throw new ArgumentException("Only retire accepts --job <id> and requires --confirm-reconciled after inspecting canonical receipts and remote delivery.");
             var worker = new AppleTestFlightWorker(policy);
+            if (argv[0] == "checkpoint-evidence")
+            {
+                WriteJson(new CliJsonEnvelope { SchemaVersion = OutputSchemaVersion, Command = "apple-testflight", Success = true,
+                    ExitCode = 0, Result = JsonSerializer.SerializeToElement(worker.PublisherCheckpointEvidence()) });
+                return 0;
+            }
             if (argv[0] is "pause" or "resume") worker.SetPaused(argv[0] == "pause");
             var state = worker.Run(inspectOnly: argv[0] != "run", retireReconciledJob: argv[0] == "retire" ? job : null);
             WriteJson(new CliJsonEnvelope

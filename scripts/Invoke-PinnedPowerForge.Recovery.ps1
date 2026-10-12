@@ -73,3 +73,36 @@ function Register-AppleRecoveryEvidence {
         $null = $script:allowedConsumerEvidencePaths.Add($path)
     }
 }
+
+function Test-AppleWorkerRun {
+    return $ArgumentList.Count -gt 1 -and $ArgumentList[0] -eq 'apple-testflight' -and $ArgumentList[1] -eq 'run'
+}
+
+function Register-AppleWorkerCheckpointEvidence {
+    param(
+        [Parameter(Mandatory)][string] $DotNetPath,
+        [Parameter(Mandatory)][string] $CliAssembly,
+        [Parameter(Mandatory)][string] $NuGetPackagesPath,
+        [Parameter(Mandatory)][string] $OutputPath
+    )
+    $script:publisherCheckpointPaths = @()
+    if (-not (Test-AppleWorkerRun)) { return }
+    $exitCode = Invoke-RedactedProcess -FilePath $DotNetPath -WorkingDirectory $consumer `
+        -Arguments @($CliAssembly, 'apple-testflight', 'checkpoint-evidence', '--policy', (Get-OptionValue -Option '--policy'),
+            '--config', (Get-OptionValue -Option '--config'), '--output', 'json') `
+        -NuGetPackagesPath $NuGetPackagesPath -CaptureStandardOutputPath $OutputPath
+    if ($exitCode -ne 0) { throw 'Canonical worker publisher-checkpoint validation failed; preserve the diff for reconciliation.' }
+    if (-not (Test-Path -LiteralPath $OutputPath -PathType Leaf) -or (Get-Item -LiteralPath $OutputPath).Length -gt 1MB) {
+        throw 'Canonical worker checkpoint evidence is missing or oversized.'
+    }
+    $evidence = Get-Content -LiteralPath $OutputPath -Raw | ConvertFrom-Json
+    if ($evidence.command -ne 'apple-testflight' -or $evidence.success -ne $true -or $null -eq $evidence.result) {
+        throw 'Canonical worker checkpoint evidence has an invalid envelope.'
+    }
+    foreach ($path in @($evidence.result)) {
+        if ($path -isnot [string]) { throw 'Canonical worker checkpoint evidence must contain file paths.' }
+        $full = Get-ContainedAppleRecoveryPath -Path $path -Root $consumer
+        Add-AllowedConsumerEvidencePath -Path $full -Name 'Canonical worker publisher checkpoint'
+        $script:publisherCheckpointPaths += $full
+    }
+}

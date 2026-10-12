@@ -54,6 +54,10 @@ internal sealed class AppleTestFlightRequestRecord
     public string Url { get; set; } = "";
     public string Operation { get; set; } = "";
     public int PullRequest { get; set; }
+    public int Attempt { get; set; }
+    public string? SourceCommit { get; set; }
+    public bool StatusPending { get; set; }
+    public string? Diagnostic { get; set; }
     public DateTimeOffset RecordedAt { get; set; }
 }
 
@@ -71,6 +75,7 @@ internal sealed class AppleTestFlightJob
     public string? Version { get; set; }
     public string? Build { get; set; }
     public string? Diagnostic { get; set; }
+    public bool StatusPending { get; set; }
     public PowerForgeAppleReleaseTargetReceipt[] Outcomes { get; set; } = Array.Empty<PowerForgeAppleReleaseTargetReceipt>();
     public DateTimeOffset UpdatedAt { get; set; }
 }

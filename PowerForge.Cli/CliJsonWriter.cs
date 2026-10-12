@@ -10,6 +10,7 @@ internal sealed class CliJsonEnvelope
     public bool Success { get; init; }
     public int ExitCode { get; init; }
     public string? Error { get; init; }
+    public string? ErrorCode { get; init; }
 
     public string? Config { get; init; }
     public string? ConfigPath { get; init; }
@@ -43,6 +44,9 @@ internal static class CliJsonWriter
 
             if (!string.IsNullOrWhiteSpace(envelope.Error))
                 writer.WriteString("error", envelope.Error);
+
+            if (!string.IsNullOrWhiteSpace(envelope.ErrorCode))
+                writer.WriteString("errorCode", envelope.ErrorCode);
 
             if (!string.IsNullOrWhiteSpace(envelope.Config))
                 writer.WriteString("config", envelope.Config);

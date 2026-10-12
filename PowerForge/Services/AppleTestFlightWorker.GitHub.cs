@@ -8,63 +8,58 @@ internal sealed partial class AppleTestFlightWorker
     private void SyncRequests()
     {
         var runs = Pages($"actions/workflows/{Uri.EscapeDataString(Path.GetFileName(_policy.WorkflowPath))}/runs?event=workflow_dispatch&branch=main", "workflow_runs")
-            .TakeWhile(value => value.GetProperty("created_at").GetDateTimeOffset() >= _policy.AcceptRequestsAfter && value.GetProperty("id").GetInt64() > _state.LastRequestRun)
-            .OrderBy(value => value.GetProperty("id").GetInt64()).ToArray();
-        // A later completed mode change cannot overtake an earlier unfinished request.
-        foreach (var summary in runs)
+            .TakeWhile(value => value.GetProperty("created_at").GetDateTimeOffset() >= _policy.AcceptRequestsAfter).ToArray();
+        ConsumeRequestRuns(_state, runs, DateTimeOffset.UtcNow, ReadRequest, Save);
+        PublishPendingRequestStatuses();
+    }
+
+    private AppleTestFlightRequestRecord ReadRequest(JsonElement summary)
+    {
+        var id = summary.GetProperty("id").GetInt64();
+        var run = Api($"actions/runs/{id}");
+        if (run.GetProperty("run_attempt").GetInt32() != RequestAttempt(summary) || Text(run, "status") != "completed" || Text(run, "conclusion") != "success")
+            throw new AppleTestFlightToolException("Request attempt changed during observation; retry its authoritative current state.");
+        if (Text(run, "event") != "workflow_dispatch" || Text(run, "head_branch") != "main" || Text(run, "path") != _policy.WorkflowPath ||
+            Text(run.GetProperty("head_repository"), "full_name") != _policy.Repository ||
+            !run.GetProperty("referenced_workflows").EnumerateArray().Any(value =>
+                Text(value, "path").StartsWith("EvotecIT/PSPublishModule/.github/workflows/powerforge-apple-testflight-request.yml@", StringComparison.Ordinal) &&
+                string.Equals(Text(value, "sha"), _policy.OwnerCommit, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("TestFlight request did not use the enrolled default-branch workflow and pinned shared request owner.");
+        var actor = Text(run.GetProperty("actor"), "login");
+        var triggeringActor = Text(run.GetProperty("triggering_actor"), "login");
+        RequireMaintainer(actor);
+        RequireMaintainer(triggeringActor);
+        var artifacts = Api($"actions/runs/{id}/artifacts").GetProperty("artifacts").EnumerateArray()
+            .Where(value => Text(value, "name") == "powerforge-testflight-request" && !value.GetProperty("expired").GetBoolean()).ToArray();
+        if (artifacts.Length != 1 || artifacts[0].GetProperty("size_in_bytes").GetInt64() > 65536)
+            throw new InvalidOperationException("The request artifact is absent, ambiguous, expired, or exceeds its size limit.");
+        var directory = Path.Combine(_policy.ScratchRoot, "request-" + id + "-" + Guid.NewGuid().ToString("N"));
+        AppleReleaseAppState.EnsureDirectory(directory);
+        try
         {
-            var id = summary.GetProperty("id").GetInt64();
-            if (id <= _state.LastRequestRun) continue;
-            if (Text(summary, "status") != "completed") break;
-            if (Text(summary, "conclusion") != "success") { _state.LastRequestRun = id; Save(); continue; }
-            var run = Api($"actions/runs/{id}");
-            if (Text(run, "event") != "workflow_dispatch" || Text(run, "head_branch") != "main" || Text(run, "path") != _policy.WorkflowPath ||
-                Text(run.GetProperty("head_repository"), "full_name") != _policy.Repository ||
-                !run.GetProperty("referenced_workflows").EnumerateArray().Any(value =>
-                    Text(value, "path").StartsWith("EvotecIT/PSPublishModule/.github/workflows/powerforge-apple-testflight-request.yml@", StringComparison.Ordinal) &&
-                    Text(value, "sha") == _policy.OwnerCommit))
-                throw new InvalidOperationException("TestFlight request did not use the enrolled default-branch workflow and pinned shared request owner.");
-            var actor = Text(run.GetProperty("actor"), "login");
-            var triggeringActor = Text(run.GetProperty("triggering_actor"), "login");
-            RequireMaintainer(actor);
-            RequireMaintainer(triggeringActor);
-            var artifacts = Api($"actions/runs/{id}/artifacts").GetProperty("artifacts").EnumerateArray()
-                .Where(value => Text(value, "name") == "powerforge-testflight-request" && !value.GetProperty("expired").GetBoolean()).ToArray();
-            if (artifacts.Length != 1 || artifacts[0].GetProperty("size_in_bytes").GetInt64() > 65536)
-                throw new InvalidOperationException("The request artifact is absent, ambiguous, expired, or exceeds its size limit.");
-            var directory = Path.Combine(_policy.ScratchRoot, "request-" + id + "-" + Guid.NewGuid().ToString("N"));
-            AppleReleaseAppState.EnsureDirectory(directory);
-            try
+            Process("gh", _policy.OwnerRoot, new[] { "run", "download", id.ToString(), "--repo", _policy.Repository, "--name", "powerforge-testflight-request", "--dir", directory });
+            var files = Directory.GetFiles(directory, "*", SearchOption.AllDirectories);
+            if (files.Length != 1 || Path.GetFileName(files[0]) != "request.json" || new FileInfo(files[0]).Length > 16384)
+                throw new InvalidOperationException("TestFlight request artifact must contain one bounded request.json.");
+            AppleReleaseAppState.AssertUnlinked(files[0]);
+            using var request = JsonDocument.Parse(File.ReadAllText(files[0]));
+            var value = request.RootElement;
+            if (Text(value, "repository") != _policy.Repository || Text(value, "runId") != id.ToString() ||
+                Text(value, "actor") != actor || Text(value, "sourceRef") != "refs/heads/main" ||
+                !string.Equals(Text(value, "sourceCommit"), Text(run, "head_sha"), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("TestFlight request metadata differs from the authoritative workflow run.");
+            var operation = Text(value, "operation");
+            var numberText = Text(value, "pullRequest");
+            var number = string.IsNullOrEmpty(numberText) ? 0 : int.Parse(numberText, System.Globalization.CultureInfo.InvariantCulture);
+            if (number < 0 || (operation != "Build now" && number != 0)) throw new InvalidOperationException("Only Build now accepts a merged PR number.");
+            return new AppleTestFlightRequestRecord
             {
-                Process("gh", _policy.OwnerRoot, new[] { "run", "download", id.ToString(), "--repo", _policy.Repository, "--name", "powerforge-testflight-request", "--dir", directory });
-                var files = Directory.GetFiles(directory, "*", SearchOption.AllDirectories);
-                if (files.Length != 1 || Path.GetFileName(files[0]) != "request.json" || new FileInfo(files[0]).Length > 16384)
-                    throw new InvalidOperationException("TestFlight request artifact must contain one bounded request.json.");
-                AppleReleaseAppState.AssertUnlinked(files[0]);
-                using var request = JsonDocument.Parse(File.ReadAllText(files[0]));
-                var value = request.RootElement;
-                if (Text(value, "repository") != _policy.Repository || Text(value, "runId") != id.ToString() ||
-                    Text(value, "actor") != actor || Text(value, "sourceRef") != "refs/heads/main" ||
-                    Text(value, "sourceCommit") != Text(run, "head_sha"))
-                    throw new InvalidOperationException("TestFlight request metadata differs from the authoritative workflow run.");
-                var operation = Text(value, "operation");
-                var numberText = Text(value, "pullRequest");
-                var number = string.IsNullOrEmpty(numberText) ? 0 : int.Parse(numberText, System.Globalization.CultureInfo.InvariantCulture);
-                if (number < 0 || (operation != "Build now" && number != 0)) throw new InvalidOperationException("Only Build now accepts a merged PR number.");
-                ApplyRequest(_state, new AppleTestFlightRequestRecord
-                {
-                    Key = "run:" + id, Actor = actor, Operation = operation, PullRequest = number,
-                    Url = Text(run, "html_url"), RecordedAt = run.GetProperty("created_at").GetDateTimeOffset()
-                });
-                if (operation != "Build now")
-                    Api($"statuses/{Text(run, "head_sha")}", "--method", "POST", "-f", "context=powerforge/testflight-mode", "-f", "state=success",
-                        "-f", "description=Mac observed automatic mode: " + _state.Mode, "-f", "target_url=" + Text(run, "html_url"));
-                _state.LastRequestRun = id;
-                Save();
-            }
-            finally { if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true); }
+                Key = "run:" + id, Actor = actor, Operation = operation, PullRequest = number,
+                Url = Text(run, "html_url"), RecordedAt = RequestStartedAt(summary), Attempt = RequestAttempt(summary),
+                SourceCommit = Text(run, "head_sha"), StatusPending = operation != "Build now"
+            };
         }
-        Save();
+        finally { if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true); }
     }
 
     internal static void ApplyRequest(AppleTestFlightWorkerState state, AppleTestFlightRequestRecord request)
@@ -129,12 +124,14 @@ internal sealed partial class AppleTestFlightWorker
             if (labels.Contains("testflight-skip") || (_state.Mode == AppleTestFlightAutomaticMode.SelectedPRs && !labels.Contains("testflight")))
                 excluded.Add(request.Key);
         }
-        ExcludeUnstartedAutomaticRequests(_state, excluded);
+        var cancelled = ExcludeUnstartedAutomaticRequests(_state, excluded);
         Save();
+        foreach (var job in cancelled) PublishStatus(job);
     }
 
-    internal static void ExcludeUnstartedAutomaticRequests(AppleTestFlightWorkerState state, ISet<string> excludedKeys)
+    internal static IReadOnlyList<AppleTestFlightJob> ExcludeUnstartedAutomaticRequests(AppleTestFlightWorkerState state, ISet<string> excludedKeys)
     {
+        var cancelled = new List<AppleTestFlightJob>();
         foreach (var job in state.Jobs.Where(value => value.Automatic && IsUnstarted(value.Stage)).ToArray())
         {
             var excluded = job.RequestKeys.Where(excludedKeys.Contains).ToList();
@@ -143,7 +140,8 @@ internal sealed partial class AppleTestFlightWorker
             if (excluded.Count != job.RequestKeys.Count)
             {
                 held = new AppleTestFlightJob { Id = job.Id + "-excluded-" + AppleReleaseAppState.Hash(string.Join("|", excluded)).Substring(0, 12),
-                    Automatic = true, RequestKeys = excluded,
+                    Automatic = true, RequestKeys = excluded, Source = job.Source, OriginalSource = job.OriginalSource,
+                    Version = job.Version, Build = job.Build,
                     IncludedPullRequests = state.Requests.Where(value => excluded.Contains(value.Key)).Select(value => value.PullRequest).Distinct().ToList() };
                 state.Jobs.Add(held);
                 job.RequestKeys.RemoveAll(excludedKeys.Contains);
@@ -154,7 +152,10 @@ internal sealed partial class AppleTestFlightWorker
             held.Stage = AppleTestFlightJobStage.Excluded;
             held.Diagnostic = "Unstarted automatic trigger cancelled by current selection labels; request history is retained. Use Build now to request it again.";
             held.UpdatedAt = DateTimeOffset.UtcNow;
+            held.StatusPending = true;
+            cancelled.Add(held);
         }
+        return cancelled;
     }
 
     internal static void EnqueueAutomaticRequest(AppleTestFlightWorkerState state, AppleTestFlightRequestRecord request)
@@ -196,18 +197,45 @@ internal sealed partial class AppleTestFlightWorker
         return _policy.RequiredChecks.All(name => jobs.Any(value => Text(value, "name") == name && Text(value, "head_sha") == source && Text(value, "status") == "completed" && Text(value, "conclusion") == "success"));
     }
 
+    internal static string StatusFor(AppleTestFlightJobStage stage) => stage switch
+    {
+        AppleTestFlightJobStage.ReadyInHome => "success",
+        AppleTestFlightJobStage.NeedsOperator => "failure",
+        AppleTestFlightJobStage.Excluded => "error",
+        _ => "pending"
+    };
+
+    private void PublishPendingRequestStatuses()
+    {
+        foreach (var request in _state.Requests.Where(value => value.StatusPending && value.SourceCommit is not null))
+        {
+            try
+            {
+                Api($"statuses/{request.SourceCommit}", "--method", "POST", "-f", "context=powerforge/testflight-mode", "-f", "state=success",
+                    "-f", "description=Mac observed automatic mode: " + _state.Mode, "-f", "target_url=" + request.Url);
+                request.StatusPending = false;
+                Save();
+            }
+            catch (AppleTestFlightToolException) { /* Optional acknowledgement is retried from the durable record. */ }
+        }
+    }
+
     private void PublishStatus(AppleTestFlightJob job)
     {
         if (job.Source is null) return;
+        job.StatusPending = true;
+        Save();
         try
         {
-            var state = job.Stage == AppleTestFlightJobStage.ReadyInHome ? "success" : job.Stage == AppleTestFlightJobStage.NeedsOperator ? "failure" : "pending";
+            var state = StatusFor(job.Stage);
             var description = $"{job.Stage}: {job.Version} ({job.Build}); PRs {string.Join(",", job.IncludedPullRequests)}";
             if (description.Length > 140) description = description.Substring(0, 140);
             Api($"statuses/{job.Source}", "--method", "POST", "-f", "context=powerforge/testflight", "-f", "state=" + state, "-f", "description=" + description,
-                "-f", "target_url=" + (_state.Requests.First(value => job.RequestKeys.Contains(value.Key)).Url));
+                "-f", "target_url=" + (_state.Requests.FirstOrDefault(value => job.RequestKeys.Contains(value.Key))?.Url ?? ""));
+            job.StatusPending = false;
+            Save();
         }
-        catch { job.Diagnostic = (job.Diagnostic ?? "") + " GitHub status publication failed; the local journal remains authoritative."; Save(); }
+        catch { job.Diagnostic = SafeDiagnostic((job.Diagnostic ?? "") + " GitHub status publication failed; the local journal remains authoritative."); Save(); }
     }
 }
 #endif

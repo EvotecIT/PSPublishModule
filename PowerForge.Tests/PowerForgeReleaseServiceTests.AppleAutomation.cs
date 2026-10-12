@@ -114,7 +114,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
             File.WriteAllText(keyPath, "private-key");
 
-            var result = new PowerForgeReleaseService(new NullLogger()).Execute(
+            var result = new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                 CreateAppleAutomationSpec(root, keyPath),
                 new PowerForgeReleaseRequest
                 {
@@ -661,7 +661,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.False(plan.SyncMetadata);
 
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                     spec,
                     new PowerForgeReleaseRequest
                     {
@@ -687,7 +687,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             File.WriteAllText(keyPath, "private-key");
 
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                     CreateAppleAutomationSpec(root, keyPath),
                     new PowerForgeReleaseRequest
                     {
@@ -737,7 +737,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             }
 
             var exception = Assert.Throws<InvalidOperationException>(() =>
-                new PowerForgeReleaseService(new NullLogger()).Execute(
+                new PowerForgeReleaseService(new NullLogger(), appleAppStateRoot: _appleAppStateRoot).Execute(
                     spec,
                     new PowerForgeReleaseRequest
                     {

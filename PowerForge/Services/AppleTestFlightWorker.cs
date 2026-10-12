@@ -20,6 +20,7 @@ internal sealed partial class AppleTestFlightWorker
     private readonly string _gate;
     private AppleTestFlightWorkerState _state = new();
     private AppleTestFlightJob? _running;
+    private AppleTestFlightJobStage? _releasingFrom;
 
     internal AppleTestFlightWorker(AppleTestFlightWorkerPolicy policy)
     {
@@ -48,10 +49,12 @@ internal sealed partial class AppleTestFlightWorker
             held.Diagnostic = "Local operator confirmed remote delivery and canonical receipt reconciliation; held intent retired.";
             held.UpdatedAt = DateTimeOffset.UtcNow;
             Save();
+            PublishStatus(held);
         }
         if (inspectOnly) return _state;
         AssertOwner();
         SyncRequests();
+        foreach (var pendingStatus in _state.Jobs.Where(value => value.StatusPending).ToArray()) PublishStatus(pendingStatus);
         ReconcileAutomaticSelection();
         EnqueueMergedRequests();
         _running = SelectRunnableJob(_state);
@@ -77,7 +80,7 @@ internal sealed partial class AppleTestFlightWorker
         }
         catch (Exception exception)
         {
-            SetStage(FailureStage(_running!.Stage, exception), SafeDiagnostic(exception.Message));
+            SetStage(FailureStage(_running!.Stage, exception, _releasingFrom), SafeDiagnostic(exception.Message));
         }
         finally
         {
@@ -100,8 +103,16 @@ internal sealed partial class AppleTestFlightWorker
         state.Jobs.FirstOrDefault(job => !job.Automatic && job.Stage is not
             (AppleTestFlightJobStage.ReadyInHome or AppleTestFlightJobStage.Excluded));
 
-    internal static AppleTestFlightJobStage FailureStage(AppleTestFlightJobStage stage, Exception exception) =>
-        exception is AppleTestFlightToolException && stage is not (AppleTestFlightJobStage.CheckpointExecuting or
+    internal static AppleTestFlightJobStage FailureStage(AppleTestFlightJobStage stage, Exception exception, AppleTestFlightJobStage? releasingFrom = null) =>
+        exception is AppleTestFlightLeaseBusyException
+            ? stage switch
+            {
+                AppleTestFlightJobStage.CheckpointExecuting => AppleTestFlightJobStage.Planning,
+                AppleTestFlightJobStage.Releasing => releasingFrom == AppleTestFlightJobStage.AppleProcessingPending
+                    ? AppleTestFlightJobStage.AppleProcessingPending : AppleTestFlightJobStage.ReleaseReady,
+                _ => AppleTestFlightJobStage.NeedsOperator
+            }
+            : exception is AppleTestFlightToolException && stage is not (AppleTestFlightJobStage.CheckpointExecuting or
             AppleTestFlightJobStage.PublishingCheckpoint or AppleTestFlightJobStage.Releasing)
             ? stage : AppleTestFlightJobStage.NeedsOperator;
 
@@ -138,6 +149,8 @@ internal sealed partial class AppleTestFlightWorker
             !Regex.IsMatch(policy.OwnerCommit, @"^[0-9a-fA-F]{40}$") || !Regex.IsMatch(policy.BaselineSourceCommit, @"^[0-9a-fA-F]{40}$") ||
             policy.AcceptRequestsAfter == default || policy.AcceptRequestsAfter > DateTimeOffset.UtcNow)
             throw new ArgumentException("Worker needs an exact owner pin, repository, and explicit request enrollment time.");
+        policy.OwnerCommit = policy.OwnerCommit.ToLowerInvariant();
+        policy.BaselineSourceCommit = policy.BaselineSourceCommit.ToLowerInvariant();
         foreach (var root in new[] { policy.ConsumerRoot, policy.OwnerRoot, policy.StateRoot, policy.ScratchRoot })
         {
             if (!Path.IsPathRooted(root) || !Directory.Exists(root))
