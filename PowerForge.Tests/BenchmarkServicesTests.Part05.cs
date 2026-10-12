@@ -895,7 +895,7 @@ New-BenchmarkSuite 'runtime-assert' -OutputRoot '{{escapedRoot}}' {
         var suite = Assert.Single(EvaluateBenchmarkDslWithoutImportedCommands(script));
         var result = new PowerShellBenchmarkRunner().Run(suite);
 
-        Assert.All(result.Samples, sample => Assert.Equal(BenchmarkSampleStatus.Succeeded, sample.Status));
+        Assert.All(result.Samples, sample => Assert.True(sample.Status == BenchmarkSampleStatus.Succeeded, sample.Reason));
     }
 
     [Fact]

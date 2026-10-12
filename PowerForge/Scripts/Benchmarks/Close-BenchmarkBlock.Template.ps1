@@ -4,8 +4,11 @@ $scriptRoot = __POWERFORGE_SCRIPT_ROOT__
 $operationTimerAccessor = $__PowerForgeOperationTimerAccessor
 $captured = @{}
 $capturedFunctions = @{}
+$authoredScopeFound = $false
+$authoredModule = $null
+$preserveCallbackModule = $false
 $skipNames = @(
-    'args', 'input', 'this', 'PSItem', '_', 'Error',
+    'args', 'input', 'this', 'PSItem', '_', 'null', 'Error',
     'PWD', 'captured', 'capturedFunctions', 'scriptText', 'scriptRoot', 'operationTimerAccessor', '__PowerForgeOperationTimerAccessor',
     'BenchmarkCallerFunctions', 'PowerForgeBenchmarkDslCommandAliases', 'PowerForgeBenchmarkDslRuntimeType',
     'ConfirmPreference', 'DebugPreference', 'ErrorActionPreference', 'ErrorView',
@@ -62,6 +65,28 @@ for ($scope = 2; $scope -lt 20; $scope++) {
         break
     }
 
+    # DSL dispatch and generated command parameters are implementation scopes,
+    # not authored values, even when their names match a callback's variables.
+    $scopeInvocation = $null
+    foreach ($variable in $variables) {
+        if ($variable.Name -eq 'MyInvocation') { $scopeInvocation = $variable.Value; break }
+    }
+    if ($null -ne $scopeInvocation -and $null -ne $scopeInvocation.MyCommand) {
+        $scopeCommand = $scopeInvocation.MyCommand
+        if ($scopeCommand.Name -eq '__PowerForgeBenchmarkDslInvoke' -or
+            $scopeCommand.Name -like '__PowerForgeBenchmarkDslCommand_*') { continue }
+        $scopeBlockProperty = $scopeCommand.PSObject.Properties['ScriptBlock']
+        if (-not $authoredScopeFound -and $null -ne $scopeBlockProperty -and
+            $scopeBlockProperty.Value -is [scriptblock]) {
+            $authoredScopeFound = $true
+            $authoredModule = $scopeBlockProperty.Value.Module
+            # An explicit GetNewClosure has its own module. Nested blocks that
+            # merely inherit the author's module still need local scope capture.
+            $preserveCallbackModule = $null -ne $ScriptBlock.Module -and
+                -not [object]::ReferenceEquals($ScriptBlock.Module, $scopeBlockProperty.Value.Module)
+        }
+    }
+
     foreach ($variable in $variables) {
         if ($skipNames -contains $variable.Name) { continue }
         if ($captured.ContainsKey($variable.Name)) { continue }
@@ -75,8 +100,13 @@ foreach ($function in Get-ChildItem -Path Function: -ErrorAction SilentlyContinu
     if ($skipFunctions -contains $function.Name) { continue }
     if ($function.Name -like '__PowerForgeBenchmarkDslCommand_*') { continue }
     if ($function.Name -like '*:*') { continue }
-    if (-not [string]::IsNullOrWhiteSpace($function.Source)) { continue }
-    if (-not [string]::IsNullOrWhiteSpace($function.ModuleName)) { continue }
+    # Helpers declared in closed settings belong to that authored module.
+    # Keep excluding functions supplied by unrelated imported modules.
+    $isAuthoredModuleFunction = $null -ne $authoredModule -and
+        [object]::ReferenceEquals($function.Module, $authoredModule)
+    if (-not $isAuthoredModuleFunction -and
+        (-not [string]::IsNullOrWhiteSpace($function.Source) -or
+         -not [string]::IsNullOrWhiteSpace($function.ModuleName))) { continue }
     if (($function.Options -band [System.Management.Automation.ScopedItemOptions]::Constant) -or
         ($function.Options -band [System.Management.Automation.ScopedItemOptions]::ReadOnly)) { continue }
     if ([string]::IsNullOrWhiteSpace($function.Definition)) { continue }
@@ -84,43 +114,78 @@ foreach ($function in Get-ChildItem -Path Function: -ErrorAction SilentlyContinu
 }
 
 $scriptText = __PowerForgeBenchmarkDslInvoke -Name 'CaptureScriptText' -Arguments ([object[]] @($ScriptBlock, $scriptRoot))
-{
-    $previousFunctions = @{}
-    $missingFunctions = @{}
+$operationBody = [scriptblock]::Create($scriptText)
+$callbackVariables = $captured
+if ($preserveCallbackModule) {
+    # Bound closure values, including null, win over the registering caller.
+    # Retain authored outer variables that the closure did not itself capture.
+    $moduleBindings = @{}
+    foreach ($variable in $ScriptBlock.Module.Invoke({ Get-Variable -Scope Script })) {
+        $moduleBindings[$variable.Name] = $true
+    }
+    $callbackVariables = @{}
+    foreach ($entry in $captured.GetEnumerator()) {
+        if (-not $moduleBindings.ContainsKey($entry.Key)) { $callbackVariables[$entry.Key] = $entry.Value }
+    }
+}
+$operationInvoker = {
+    param(
+        [scriptblock] $__PowerForgeCallbackBlock,
+        [object[]] $__PowerForgeCallbackArguments,
+        [object] $__PowerForgeCallbackTimerAccessor,
+        [object] $__PowerForgeCallbackFunctions,
+        [object] $__PowerForgeCallbackVariables
+    )
+    $ErrorActionPreference = 'Stop'
+    $PSNativeCommandUseErrorActionPreference = $true
+    $PSDefaultParameterValues = @{}
+    $__PowerForgePreviousFunctions = @{}
+    $__PowerForgeMissingFunctions = @{}
     try {
-        foreach ($entry in $capturedFunctions.GetEnumerator()) {
-            $functionPath = "Function:\$($entry.Key)"
-            $existingFunction = Get-Item -Path $functionPath -ErrorAction SilentlyContinue
-            if ($null -eq $existingFunction) {
-                $missingFunctions[$entry.Key] = $true
+        foreach ($__PowerForgeFunction in $__PowerForgeCallbackFunctions.GetEnumerator()) {
+            $__PowerForgeFunctionPath = "Function:\$($__PowerForgeFunction.Key)"
+            $__PowerForgeExistingFunction = Get-Item -Path $__PowerForgeFunctionPath -ErrorAction SilentlyContinue
+            if ($null -eq $__PowerForgeExistingFunction) {
+                $__PowerForgeMissingFunctions[$__PowerForgeFunction.Key] = $true
             } else {
-                $previousFunctions[$entry.Key] = $existingFunction.ScriptBlock
+                $__PowerForgePreviousFunctions[$__PowerForgeFunction.Key] = $__PowerForgeExistingFunction.ScriptBlock
             }
-            Set-Item -Path $functionPath -Value ([scriptblock]::Create([string] $entry.Value)) -ErrorAction Stop
+            Set-Item -Path $__PowerForgeFunctionPath -Value ([scriptblock]::Create([string] $__PowerForgeFunction.Value)) -ErrorAction Stop
         }
-        foreach ($entry in $captured.GetEnumerator()) {
-            Set-Variable -Name $entry.Key -Value $entry.Value -Scope Local
+        foreach ($__PowerForgeVariable in $__PowerForgeCallbackVariables.GetEnumerator()) {
+            Set-Variable -Name $__PowerForgeVariable.Key -Value $__PowerForgeVariable.Value -Scope Local
         }
-        $ErrorActionPreference = 'Stop'
-        $PSNativeCommandUseErrorActionPreference = $true
-        $operationBody = [scriptblock]::Create($scriptText)
-        $operationTimer = $operationTimerAccessor.Invoke()
-        if ($null -ne $operationTimer) { $operationTimer.Start() }
+        $__PowerForgeCallbackTimer = $__PowerForgeCallbackTimerAccessor.Invoke()
+        if ($null -ne $__PowerForgeCallbackTimer) { $__PowerForgeCallbackTimer.Start() }
         try {
-            & $operationBody @args
+            & $__PowerForgeCallbackBlock @__PowerForgeCallbackArguments
         }
         finally {
-            if ($null -ne $operationTimer) { $operationTimer.Stop() }
+            if ($null -ne $__PowerForgeCallbackTimer) { $__PowerForgeCallbackTimer.Stop() }
         }
     }
     finally {
-        foreach ($entry in $capturedFunctions.GetEnumerator()) {
-            $functionPath = "Function:\$($entry.Key)"
-            if ($previousFunctions.ContainsKey($entry.Key)) {
-                Set-Item -Path $functionPath -Value $previousFunctions[$entry.Key] -ErrorAction SilentlyContinue
-            } elseif ($missingFunctions.ContainsKey($entry.Key)) {
-                Remove-Item -Path $functionPath -ErrorAction SilentlyContinue
+        foreach ($__PowerForgeFunction in $__PowerForgeCallbackFunctions.GetEnumerator()) {
+            $__PowerForgeFunctionPath = "Function:\$($__PowerForgeFunction.Key)"
+            if ($__PowerForgePreviousFunctions.ContainsKey($__PowerForgeFunction.Key)) {
+                Set-Item -Path $__PowerForgeFunctionPath -Value $__PowerForgePreviousFunctions[$__PowerForgeFunction.Key] -ErrorAction SilentlyContinue
+            } elseif ($__PowerForgeMissingFunctions.ContainsKey($__PowerForgeFunction.Key)) {
+                Remove-Item -Path $__PowerForgeFunctionPath -ErrorAction SilentlyContinue
             }
         }
     }
+}
+if ($preserveCallbackModule) {
+    $operationBody = $ScriptBlock.Module.NewBoundScriptBlock($operationBody)
+    $operationInvoker = $ScriptBlock.Module.NewBoundScriptBlock($operationInvoker)
+}
+$closed = {
+    # Install context in the body's module and time only the authored body. The
+    # native call operator also supports a closure after its evaluating runspace
+    # has closed; it executes through the runner's active PowerShell context.
+    & $operationInvoker $operationBody ([object[]] $args) $operationTimerAccessor $capturedFunctions $callbackVariables
 }.GetNewClosure()
+if (-not $preserveCallbackModule) {
+    $closed.Module.SessionState.PSVariable.Set('operationInvoker', $closed.Module.NewBoundScriptBlock($operationInvoker))
+}
+$closed
