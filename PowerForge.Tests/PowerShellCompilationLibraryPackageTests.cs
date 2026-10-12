@@ -138,6 +138,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             EmitSource = true
         });
         Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+        Assert.DoesNotContain("NETSDK1210", build.BuildOutput, StringComparison.Ordinal);
 
         var feed = Directory.CreateDirectory(Path.Combine(fixture.RootPath, "net472-feed")).FullName;
         var canceledPath = Path.Combine(feed, "canceled.nupkg");
