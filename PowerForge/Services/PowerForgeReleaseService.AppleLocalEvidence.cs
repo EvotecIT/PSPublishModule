@@ -78,34 +78,11 @@ internal sealed partial class PowerForgeReleaseService
             foreach (var app in plan.Apps)
             {
                 phase = AppleReleaseLocalEvidenceRejectionPhase.ArchiveValidation;
-                EnsurePathWithinProjectRoot(plan.ProjectRoot, app.ArchivePath, "Configured Apple archive");
-                if (!File.Exists(app.ArchivePath) && !Directory.Exists(app.ArchivePath))
-                    continue;
-                var evidence = receipts.Where(receipt => !receipt.PlanOnly && receipt.SchemaVersion >= 4 &&
-                        !string.IsNullOrWhiteSpace(receipt.ReceiptSha256) && GitObjectId.IsFull(receipt.SourceCommit))
-                    .SelectMany(receipt => receipt.Targets.Where(target => IsMatchingAppleReceiptTargetIdentity(plan, app, target) &&
-                            !string.IsNullOrWhiteSpace(target.ArchivePath) && IsSha256(target.ArchiveSha256))
-                        .Select(target => new { Receipt = receipt, Target = target }))
-                    .FirstOrDefault();
-                if (evidence is null)
-                    throw new InvalidOperationException($"The configured Apple archive for '{app.Name}' has no receipt bound to a verified source and target.");
-                // Retained archives remain inert evidence across main advancement.
-                // Actual archive/upload recovery separately requires exact-source
-                // equality; admitting verified ancestral bytes never enables reuse.
-                if (!AppleSourceCommitEvidenceMatches(evidence.Receipt.SourceCommit, plan.SourceCommit))
-                    new HomeAssistantReleaseGitService(GitClient.CreateTrustedSystemClient())
-                        .EnsureContainsMerge(plan.ProjectRoot, evidence.Receipt.SourceCommit!);
-                var receiptArchivePath = ResolveOutputPath(plan.ProjectRoot, evidence.Target.ArchivePath!);
-                EnsurePathWithinProjectRoot(plan.ProjectRoot, receiptArchivePath, "Receipt-bound Apple archive");
-                if (!AppleReleasePathsEqual(Path.GetFullPath(app.ArchivePath), receiptArchivePath, plan.ProjectRoot))
-                    throw new InvalidOperationException($"The receipt archive path for '{app.Name}' differs from its configured archive.");
-                AddLocalAppleArchiveFiles(app.ArchivePath, paths, links);
-                var before = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(app.ArchivePath, "receipt-bound Apple archive");
-                if (!string.Equals(before.Sha256, evidence.Target.ArchiveSha256, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException($"The receipt-bound Apple archive for '{app.Name}' changed.");
-                var after = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(app.ArchivePath, "receipt-bound Apple archive");
-                if (!before.Equals(after))
-                    throw new InvalidOperationException($"The receipt-bound Apple archive for '{app.Name}' changed during evidence inspection.");
+                AddLocalAppleArtifactEvidence(plan, app, receipts, app.ArchivePath,
+                    static target => target.ArchivePath, static target => target.ArchiveSha256, paths, links);
+                if (UsesAppStoreConnect(app))
+                    AddLocalAppleArtifactEvidence(plan, app, receipts, app.ExportPath,
+                        static target => target.UploadExportPath, static target => target.UploadExportSha256, paths, links);
             }
             return new AppleReleaseLocalEvidence
             {
@@ -119,6 +96,45 @@ internal sealed partial class PowerForgeReleaseService
         {
             return RejectLocalAppleEvidence(plan.SourceCommit, phase, exception.Message);
         }
+    }
+
+    private static (string? Path, string? Sha256) CaptureAppleUploadExportEvidence(
+        PowerForgeAppleReleasePlan plan, PowerForgeAppleAppReleaseTargetPlan app, PowerForgeAppleAppReleaseResult? result)
+    {
+        if (!UsesAppStoreConnect(app) || result?.Upload is null || !Directory.Exists(app.ExportPath)) return (null, null);
+        EnsurePathWithinProjectRoot(plan.ProjectRoot, app.ExportPath, "Apple upload export");
+        return (FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ExportPath).Replace('\\', '/'),
+            AppleArchiveUploadSnapshot.CaptureCompleteIdentity(app.ExportPath, "Apple upload export").Sha256);
+    }
+
+    private static void AddLocalAppleArtifactEvidence(PowerForgeAppleReleasePlan plan, PowerForgeAppleAppReleaseTargetPlan app,
+        IReadOnlyCollection<PowerForgeAppleReleaseReceipt> receipts, string artifactPath,
+        Func<PowerForgeAppleReleaseTargetReceipt, string?> receiptPath, Func<PowerForgeAppleReleaseTargetReceipt, string?> receiptSha256,
+        ICollection<string> paths, ICollection<AppleArtifactSymbolicLink> links)
+    {
+        if (string.IsNullOrWhiteSpace(artifactPath)) return;
+        EnsurePathWithinProjectRoot(plan.ProjectRoot, artifactPath, "Configured Apple artifact");
+        if (!File.Exists(artifactPath) && !Directory.Exists(artifactPath)) return;
+        var evidence = receipts.Where(receipt => !receipt.PlanOnly && receipt.SchemaVersion >= 4 &&
+                !string.IsNullOrWhiteSpace(receipt.ReceiptSha256) && GitObjectId.IsFull(receipt.SourceCommit))
+            .SelectMany(receipt => receipt.Targets.Where(target => IsMatchingAppleReceiptTargetIdentity(plan, app, target) &&
+                    !string.IsNullOrWhiteSpace(receiptPath(target)) && IsSha256(receiptSha256(target)))
+                .Select(target => new { Receipt = receipt, Target = target })).FirstOrDefault();
+        if (evidence is null) throw new InvalidOperationException($"The configured Apple artifact for '{app.Name}' has no receipt bound to a verified source and target.");
+        // Historical artifacts are inert evidence. Execution/recovery still
+        // requires exact-source equality and never reuses an upload export.
+        if (!AppleSourceCommitEvidenceMatches(evidence.Receipt.SourceCommit, plan.SourceCommit))
+            new HomeAssistantReleaseGitService(GitClient.CreateTrustedSystemClient()).EnsureContainsMerge(plan.ProjectRoot, evidence.Receipt.SourceCommit!);
+        var boundPath = ResolveOutputPath(plan.ProjectRoot, receiptPath(evidence.Target)!);
+        EnsurePathWithinProjectRoot(plan.ProjectRoot, boundPath, "Receipt-bound Apple artifact");
+        if (!AppleReleasePathsEqual(Path.GetFullPath(artifactPath), boundPath, plan.ProjectRoot))
+            throw new InvalidOperationException($"The receipt artifact path for '{app.Name}' differs from its configured artifact.");
+        AddLocalAppleArchiveFiles(artifactPath, paths, links);
+        var before = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(artifactPath, "receipt-bound Apple artifact");
+        if (!string.Equals(before.Sha256, receiptSha256(evidence.Target), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"The receipt-bound Apple artifact for '{app.Name}' changed.");
+        var after = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(artifactPath, "receipt-bound Apple artifact");
+        if (!before.Equals(after)) throw new InvalidOperationException($"The receipt-bound Apple artifact for '{app.Name}' changed during evidence inspection.");
     }
 
     private static void AddLocalAppleArchiveFiles(

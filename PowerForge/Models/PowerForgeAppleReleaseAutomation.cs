@@ -357,6 +357,12 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
     /// <summary>Groups actually resolved by this attempt's successful TestFlight distribution.</summary>
     public AppStoreConnectBetaGroupInfo[] DistributedTestFlightBetaGroups { get; set; } = Array.Empty<AppStoreConnectBetaGroupInfo>();
 
+    /// <summary>Retained local export directory produced by an App Store upload, relative to the project root.</summary>
+    public string? UploadExportPath { get; set; }
+
+    /// <summary>Complete filesystem identity of the retained upload export directory; does not authorize upload reuse.</summary>
+    public string? UploadExportSha256 { get; set; }
+
     public AppStoreConnectControlPlaneState? ControlPlane { get; set; }
 
     public AppStoreConnectGovernancePlan? Governance { get; set; }

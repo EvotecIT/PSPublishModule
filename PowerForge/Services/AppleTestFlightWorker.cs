@@ -52,6 +52,7 @@ internal sealed partial class AppleTestFlightWorker
         if (inspectOnly) return _state;
         AssertOwner();
         SyncRequests();
+        ReconcileAutomaticSelection();
         EnqueueMergedRequests();
         _running = SelectRunnableJob(_state);
         if (_state.Jobs.Any(job => job.Stage == AppleTestFlightJobStage.NeedsOperator))

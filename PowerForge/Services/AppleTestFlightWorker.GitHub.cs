@@ -117,6 +117,46 @@ internal sealed partial class AppleTestFlightWorker
         }
     }
 
+    private void ReconcileAutomaticSelection()
+    {
+        if (_state.Mode == AppleTestFlightAutomaticMode.Off) return;
+        var excluded = new HashSet<string>(StringComparer.Ordinal);
+        var pending = _state.Jobs.Where(value => value.Automatic && IsUnstarted(value.Stage))
+            .SelectMany(value => value.RequestKeys).ToHashSet(StringComparer.Ordinal);
+        foreach (var request in _state.Requests.Where(value => pending.Contains(value.Key) && value.PullRequest > 0))
+        {
+            var labels = Api($"pulls/{request.PullRequest}").GetProperty("labels").EnumerateArray().Select(value => Text(value, "name")).ToArray();
+            if (labels.Contains("testflight-skip") || (_state.Mode == AppleTestFlightAutomaticMode.SelectedPRs && !labels.Contains("testflight")))
+                excluded.Add(request.Key);
+        }
+        ExcludeUnstartedAutomaticRequests(_state, excluded);
+        Save();
+    }
+
+    internal static void ExcludeUnstartedAutomaticRequests(AppleTestFlightWorkerState state, ISet<string> excludedKeys)
+    {
+        foreach (var job in state.Jobs.Where(value => value.Automatic && IsUnstarted(value.Stage)).ToArray())
+        {
+            var excluded = job.RequestKeys.Where(excludedKeys.Contains).ToList();
+            if (excluded.Count == 0) continue;
+            var held = job;
+            if (excluded.Count != job.RequestKeys.Count)
+            {
+                held = new AppleTestFlightJob { Id = job.Id + "-excluded-" + AppleReleaseAppState.Hash(string.Join("|", excluded)).Substring(0, 12),
+                    Automatic = true, RequestKeys = excluded,
+                    IncludedPullRequests = state.Requests.Where(value => excluded.Contains(value.Key)).Select(value => value.PullRequest).Distinct().ToList() };
+                state.Jobs.Add(held);
+                job.RequestKeys.RemoveAll(excludedKeys.Contains);
+                job.IncludedPullRequests.RemoveAll(held.IncludedPullRequests.Contains);
+                job.Stage = AppleTestFlightJobStage.Queued;
+                job.PlanSha256 = null;
+            }
+            held.Stage = AppleTestFlightJobStage.Excluded;
+            held.Diagnostic = "Unstarted automatic trigger cancelled by current selection labels; request history is retained. Use Build now to request it again.";
+            held.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+    }
+
     internal static void EnqueueAutomaticRequest(AppleTestFlightWorkerState state, AppleTestFlightRequestRecord request)
     {
         if (state.Requests.Any(value => value.Key == request.Key)) return;

@@ -4,7 +4,7 @@ public sealed partial class AppleReleaseWorkflowTests
 {
     [Theory]
     [MemberData(nameof(PinnedRecoveryCases))]
-    public void PinnedAppleRecoveryAdmitsOnlyReceiptBoundOutputs(string scenario, string expectedPhase)
+    public async Task PinnedAppleRecoveryAdmitsOnlyReceiptBoundOutputs(string scenario, string expectedPhase)
     {
         var root = FindRepoRoot();
         var parent = Path.Combine(root, ".test-temp", $"powerforge-recovery-evidence-{Guid.NewGuid():N}");
@@ -67,6 +67,22 @@ public sealed partial class AppleReleaseWorkflowTests
                 ArchivePath = Path.GetRelativePath(consumer, archive.FullName).Replace('\\', '/'),
                 ArchiveSha256 = AppleNotarizationService.ComputeArtifactSha256(archive.FullName)
             };
+            string? exportPath = null;
+            if (scenario.Contains("export", StringComparison.Ordinal))
+            {
+                exportPath = Path.Combine(output, "export", "iOS", "Sample");
+                // Exercise the real producer: exportArchive writes its plist
+                // before the native boundary, even when Apple uploads no IPA.
+                var upload = await new AppleAppArchiveService(new SuccessfulSyntheticExportRunner()).UploadArchiveAsync(new()
+                { ArchivePath = archive.FullName, ExportPath = exportPath });
+                Assert.True(upload.Succeeded);
+                Assert.True(File.Exists(upload.ExportOptionsPlistPath));
+                if (scenario != "unbound-export")
+                {
+                    target.UploadExportPath = Path.GetRelativePath(consumer, exportPath).Replace('\\', '/');
+                    target.UploadExportSha256 = AppleNotarizationService.ComputeArtifactSha256(exportPath);
+                }
+            }
             if (scenario == "escaped-archive")
             {
                 var outside = Directory.CreateDirectory(Path.Combine(parent, "outside.xcarchive"));
@@ -84,7 +100,7 @@ public sealed partial class AppleReleaseWorkflowTests
             });
             var planPath = Path.Combine(output, "release-plan.json");
             byte[]? previousPlan = null;
-            if (scenario == "historical-worker-replan")
+            if (scenario is "historical-worker-replan" or "historical-export")
             {
                 new AppleReleaseReceiptStore().WritePlan(consumer, planPath, new PowerForgeAppleReleaseReceipt
                 { Action = PowerForgeAppleReleaseAction.Ship, PlanOnly = true, SourceCommit = source, PlanSha256 = new string('a', 64) });
@@ -104,6 +120,9 @@ public sealed partial class AppleReleaseWorkflowTests
                     break;
                 case "altered-archive":
                     File.WriteAllText(payload, "changed after receipt");
+                    break;
+                case "altered-export":
+                    File.AppendAllText(Path.Combine(exportPath!, "ExportOptions.plist"), "changed after receipt");
                     break;
                 case "linked-archive":
                     var retained = Path.Combine(parent, "linked-target.xcarchive");
@@ -155,6 +174,10 @@ public sealed partial class AppleReleaseWorkflowTests
     {
         yield return ["valid", ""];
         yield return ["historical-worker-replan", ""];
+        yield return ["valid-export", ""];
+        yield return ["historical-export", ""];
+        yield return ["altered-export", "ArchiveValidation"];
+        yield return ["unbound-export", "ArchiveValidation"];
         yield return ["nonancestor-archive", "ArchiveValidation"];
         yield return ["altered-archive", "ArchiveValidation"];
         yield return ["escaped-archive", "ArchiveValidation"];
@@ -164,6 +187,17 @@ public sealed partial class AppleReleaseWorkflowTests
         {
             yield return ["linked-archive", "ArchiveValidation"];
             yield return ["internal-framework-links", ""];
+        }
+    }
+
+    private sealed class SuccessfulSyntheticExportRunner : IProcessRunner
+    {
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            request.InvokePreStartBoundary();
+            request.InvokeStartBoundary();
+            return Task.FromResult(new ProcessRunResult(0, "synthetic export accepted", string.Empty,
+                request.FileName, TimeSpan.Zero, false));
         }
     }
 

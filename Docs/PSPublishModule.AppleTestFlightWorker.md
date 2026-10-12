@@ -133,6 +133,10 @@ already underway finishes before the next stage checks the gate.
 Status and pause acknowledgement remain available during an active worker pass.
 Unstarted automatic intents held by Off or selection labels do not block a later
 manual request. A checkpoint or delivery recovery keeps its place in the queue.
+Removing `testflight` in Selected PRs mode or adding `testflight-skip` cancels that
+unstarted trigger without blocking other eligible PRs. Its request history remains
+recorded; use Build now to request it again. Turning automatic mode Off preserves
+unstarted intent for the next time automatic mode is enabled.
 
 The worker reads Off requests while a release subprocess runs. If GitHub polling
 fails or the worker heartbeat expires, subsequent mutation stages stop. GitHub
@@ -155,6 +159,10 @@ and has no applicable rules. Unexpected graph, behavior, dependency or script
 changes stop for an operator. It replans against the actual committed source.
 Previous-source preview plans are retained under the queue's `previous-plans`
 directory before a fresh plan replaces them; they cannot approve another source.
+The upload engine binds retained export output, including `ExportOptions.plist`,
+to its immutable receipt. Later pinned entries admit those verified bytes as local
+recovery evidence. Changed or unbound output requires local reconciliation and
+cannot authorize an upload.
 
 If main advances before delivery, the waiting intent returns to qualification
 against the new latest main. A processing timeout retains the same source and

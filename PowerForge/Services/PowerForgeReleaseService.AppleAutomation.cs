@@ -596,6 +596,7 @@ internal sealed partial class PowerForgeReleaseService
                 plan.Rehearse,
                 result?.Success == true,
                 result?.Upload);
+            var uploadExport = CaptureAppleUploadExportEvidence(plan, app, result);
             return new PowerForgeAppleReleaseTargetReceipt
             {
                 Name = app.Name,
@@ -657,6 +658,8 @@ internal sealed partial class PowerForgeReleaseService
                     ? FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/')
                     : null,
                 ArchiveSha256 = result?.ArchiveSha256 ?? result?.ResumedUploadAttestation?.ArchiveSha256,
+                UploadExportPath = uploadExport.Path,
+                UploadExportSha256 = uploadExport.Sha256,
                 UploadAttestationAttemptId = !plan.Rehearse && result?.Upload?.Succeeded == true
                     ? result.UploadAttestationAttemptId
                     : result?.ResumedUploadAttestationAttemptId,

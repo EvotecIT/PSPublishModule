@@ -6,6 +6,49 @@ namespace PowerForge.Tests;
 public sealed partial class AppleTestFlightWorkerTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CancelledAutomaticTriggersDoNotPoisonLaterEligibleRequests(bool cancelWholeCandidate)
+    {
+        var state = new AppleTestFlightWorkerState { Mode = AppleTestFlightAutomaticMode.SelectedPRs };
+        AppleTestFlightWorker.EnqueueAutomaticRequest(state, new() { Key = "pr:1:a", PullRequest = 1 });
+        AppleTestFlightWorker.EnqueueAutomaticRequest(state, new() { Key = "pr:2:b", PullRequest = 2 });
+        var original = Assert.Single(state.Jobs);
+        original.Stage = AppleTestFlightJobStage.WaitingForChecks;
+        var excluded = new HashSet<string>(StringComparer.Ordinal) { "pr:1:a" };
+        if (cancelWholeCandidate) excluded.Add("pr:2:b");
+        AppleTestFlightWorker.ExcludeUnstartedAutomaticRequests(state, excluded);
+        AppleTestFlightWorker.EnqueueAutomaticRequest(state, new() { Key = "pr:3:c", PullRequest = 3 });
+
+        var runnable = Assert.IsType<AppleTestFlightJob>(AppleTestFlightWorker.SelectRunnableJob(state));
+        Assert.Equal(cancelWholeCandidate ? new[] { 3 } : new[] { 2, 3 }, runnable.IncludedPullRequests);
+        Assert.DoesNotContain("pr:1:a", runnable.RequestKeys);
+        Assert.Equal(AppleTestFlightJobStage.Excluded, state.Jobs.Single(job => job.RequestKeys.Contains("pr:1:a")).Stage);
+        Assert.Equal(new[] { "pr:1:a", "pr:2:b", "pr:3:c" },
+            state.Jobs.SelectMany(job => job.RequestKeys).OrderBy(key => key, StringComparer.Ordinal));
+        Assert.Equal(3, state.Requests.Count);
+        // Cancellation preserves idempotency. A fresh explicit request is needed
+        // to rebuild a trigger that was already observed and then deselected.
+        AppleTestFlightWorker.EnqueueAutomaticRequest(state, new() { Key = "pr:1:a", PullRequest = 1 });
+        Assert.DoesNotContain("pr:1:a", runnable.RequestKeys);
+    }
+
+    [Theory]
+    [InlineData((int)AppleTestFlightJobStage.CheckpointReady)]
+    [InlineData((int)AppleTestFlightJobStage.Releasing)]
+    [InlineData((int)AppleTestFlightJobStage.NeedsOperator)]
+    public void SelectionCancellationPreservesStartedAndAmbiguousRecovery(int stageValue)
+    {
+        var stage = (AppleTestFlightJobStage)stageValue;
+        var held = new AppleTestFlightJob { Automatic = true, Stage = stage, RequestKeys = ["pr:1:a"], IncludedPullRequests = [1] };
+        var state = new AppleTestFlightWorkerState { Jobs = [held] };
+        AppleTestFlightWorker.ExcludeUnstartedAutomaticRequests(state, new HashSet<string> { "pr:1:a" });
+        Assert.Same(held, Assert.Single(state.Jobs));
+        Assert.Equal(stage, held.Stage);
+        Assert.Equal(new[] { "pr:1:a" }, held.RequestKeys);
+    }
+
+    [Theory]
     [InlineData((int)AppleTestFlightJobStage.Queued, true)]
     [InlineData((int)AppleTestFlightJobStage.WaitingForChecks, true)]
     [InlineData((int)AppleTestFlightJobStage.Planning, true)]
