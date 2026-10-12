@@ -7,7 +7,7 @@ public enum AppStoreConnectBundleIdPlatform
     iOS,
     /// <summary>A native macOS bundle identifier.</summary>
     macOS,
-    /// <summary>A bundle identifier shared across Apple's platforms.</summary>
+    /// <summary>A universal identifier scope for inventory filtering and responses, not creation.</summary>
     Universal
 }
 

@@ -38,7 +38,6 @@ public sealed partial class AppStoreConnectClientTests
     [Theory]
     [InlineData(AppStoreConnectBundleIdPlatform.iOS, "IOS")]
     [InlineData(AppStoreConnectBundleIdPlatform.macOS, "MAC_OS")]
-    [InlineData(AppStoreConnectBundleIdPlatform.Universal, "UNIVERSAL")]
     public async Task SigningBundleIds_RegisterUsesAppleResourceContract(AppStoreConnectBundleIdPlatform platform, string expected)
     {
         var handler = new SequenceHandler(new SequenceResponse(HttpStatusCode.Created,
@@ -60,6 +59,38 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal("Helper \"native\"", attributes.GetProperty("name").GetString());
         Assert.Equal(expected, attributes.GetProperty("platform").GetString());
         Assert.Equal(3, attributes.EnumerateObject().Count());
+    }
+
+    [Fact]
+    public async Task SigningBundleIds_RegisterPreservesExplicitAppIdPrefixAndUniversalResponse()
+    {
+        var handler = new SequenceHandler(new SequenceResponse(HttpStatusCode.Created, """
+            { "data": { "id": "new-id", "type": "bundleIds", "attributes": {
+              "identifier": "com.example.helper", "platform": "UNIVERSAL", "seedId": "OLDPREFIX" } } }
+            """));
+        using var http = new HttpClient(handler);
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        var result = await client.RegisterBundleIdAsync("com.example.helper", "Helper", AppStoreConnectBundleIdPlatform.macOS, seedId: " OLDPREFIX ");
+
+        using var json = JsonDocument.Parse(Assert.Single(handler.RequestBodies));
+        Assert.Equal("OLDPREFIX", json.RootElement.GetProperty("data").GetProperty("attributes").GetProperty("seedId").GetString());
+        Assert.Equal("OLDPREFIX", result.SeedId);
+        Assert.Equal("UNIVERSAL", result.Platform);
+    }
+
+    [Fact]
+    public async Task SigningBundleIds_UniversalIsInventoryOnlyAndExplicitPrefixCannotBeBlank()
+    {
+        var handler = new SequenceHandler(new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""));
+        using var http = new HttpClient(handler);
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => client.RegisterBundleIdAsync("com.example.helper", "Helper", AppStoreConnectBundleIdPlatform.Universal));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.RegisterBundleIdAsync("com.example.helper", "Helper", AppStoreConnectBundleIdPlatform.macOS, seedId: " "));
+        Assert.Empty(handler.RequestUris);
+        await client.GetBundleIdsAsync(platform: AppStoreConnectBundleIdPlatform.Universal);
+        Assert.Contains("filter%5Bplatform%5D=UNIVERSAL", Assert.Single(handler.RequestUris).Query, StringComparison.Ordinal);
     }
 
     [Theory]
