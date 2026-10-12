@@ -2708,7 +2708,7 @@ internal sealed partial class PowerForgeReleaseService
                 var localExportOnly = plan.Rehearse || direct;
                 using var uploadSnapshot = string.IsNullOrWhiteSpace(approvedArchiveSha256)
                     ? null
-                    : AppleArchiveUploadSnapshot.Create(approvedArchiveInputPath, approvedArchiveSha256!);
+                    : AppleArchiveUploadSnapshot.Create(approvedArchiveInputPath, approvedArchiveSha256!, allowXcodeDistributionHistory: !localExportOnly);
                 using var directExportSnapshot = localExportOnly ? AppleDirectExportSnapshot.Create() : null;
                 using var uploadMutationMonitor = uploadSnapshot is null
                     ? null

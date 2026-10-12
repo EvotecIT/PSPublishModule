@@ -6,6 +6,8 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
     private readonly SnapshotIdentity _identity;
     private readonly string _rootIdentity;
     private readonly AppleArchiveUploadEvidence.Manifest _approvedEntries;
+    private readonly AppleArchiveDistributionHistory? _distributionHistory;
+    private AppleArchiveDistributionHistory.Validation? _validatedDistributionHistory;
     private bool _retainForInvestigation;
     private long _expectedScratchActivityUntilUtcTicks;
     private bool _disposed;
@@ -13,13 +15,15 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
     private AppleArchiveUploadSnapshot(
         string rootPath,
         string archivePath,
-        SnapshotIdentity identity)
+        SnapshotIdentity identity,
+        bool allowXcodeDistributionHistory)
     {
         RootPath = rootPath;
         ArchivePath = archivePath;
         _identity = identity;
         _rootIdentity = ExistingFilePathIdentityResolver.ResolveDirectoryStatus(rootPath).Identity;
         _approvedEntries = AppleArchiveUploadEvidence.CaptureEntries(archivePath);
+        _distributionHistory = allowXcodeDistributionHistory ? AppleArchiveDistributionHistory.TryCreate(archivePath) : null;
     }
 
     internal string RootPath { get; }
@@ -42,7 +46,7 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
             throw new InvalidOperationException("The private Apple upload snapshot container was replaced; it cannot be used for diagnostic writes or cleanup.");
     }
 
-    internal static AppleArchiveUploadSnapshot Create(string archivePath, string expectedSha256)
+    internal static AppleArchiveUploadSnapshot Create(string archivePath, string expectedSha256, bool allowXcodeDistributionHistory = false)
     {
         var source = Path.GetFullPath(archivePath);
         if (!Directory.Exists(source))
@@ -67,7 +71,8 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
             return new AppleArchiveUploadSnapshot(
                 root,
                 snapshotPath,
-                identity);
+                identity,
+                allowXcodeDistributionHistory);
         }
         catch
         {
@@ -93,9 +98,24 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         string expectedSha256,
         bool allowExpectedScratchDirectoryMutation = false)
     {
+        EnsureOwnedRoot();
         var current = CaptureCompleteIdentity(ArchivePath);
         if (!current.Sha256.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase))
         {
+            if (_distributionHistory is not null)
+            {
+                var validation = _distributionHistory.ValidateAppend(ArchivePath);
+                var approvedContentSha256 = AppleNotarizationService.ComputeArtifactSha256WithApprovedArchiveInfoPlist(ArchivePath, validation.ApprovedBytes);
+                if (approvedContentSha256.Equals(expectedSha256, StringComparison.OrdinalIgnoreCase) &&
+                    current.UploadPayloadMutationDigest.Equals(_identity.UploadPayloadMutationDigest, StringComparison.Ordinal))
+                {
+                    validation.ValidateStillSame(ArchivePath);
+                    // Late events may describe the already-bound rewrite. Any later real write,
+                    // replacement or alias changes this identity and remains fatal during drain.
+                    Volatile.Write(ref _validatedDistributionHistory, validation);
+                    return;
+                }
+            }
             throw new InvalidOperationException(
                 $"The private Apple upload snapshot changed while xcodebuild was reading it. Expected '{expectedSha256}', received '{current.Sha256}'. Discard the upload/export result and inspect remote state before retrying.");
         }
@@ -168,16 +188,19 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
             sha256,
             digest,
             approvedFileMutationDigest,
-            new HashSet<string>(identities.Keys, GetPathComparer(archivePath)));
+            new HashSet<string>(identities.Keys, GetPathComparer(archivePath)),
+            ComputeMutationDigest(identities, includeRoot: false, excludeArchiveInfoPlist: true));
     }
 
     private static string ComputeMutationDigest(
         IReadOnlyDictionary<string, string> identities,
-        bool includeRoot)
+        bool includeRoot,
+        bool excludeArchiveInfoPlist = false)
     {
         var canonical = new System.Text.StringBuilder();
         foreach (var pair in identities
                      .Where(pair => includeRoot || !string.Equals(pair.Key, ".", StringComparison.Ordinal))
+                     .Where(pair => !excludeArchiveInfoPlist || !string.Equals(pair.Key, "Info.plist", StringComparison.Ordinal))
                      .OrderBy(static pair => pair.Key, StringComparer.Ordinal))
         {
             canonical.Append(pair.Key.Length).Append(':').Append(pair.Key);
@@ -192,11 +215,23 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
 
     internal bool IsExpectedXcodeExportMutation(FileSystemEventArgs args)
     {
-        if (args is RenamedEventArgs)
-            return false;
-
         var path = Path.GetFullPath(args.FullPath);
         var archiveInfoPlist = Path.Combine(ArchivePath, "Info.plist");
+        var validatedHistory = Volatile.Read(ref _validatedDistributionHistory);
+        if (validatedHistory is not null &&
+            ((path.Equals(archiveInfoPlist, StringComparison.Ordinal) && !validatedHistory.MatchesInfo(ArchivePath)) ||
+             (path.Equals(ArchivePath, StringComparison.Ordinal) && !validatedHistory.MatchesRoot(ArchivePath))))
+            return false;
+        if (args is RenamedEventArgs renamed)
+        {
+            if (_distributionHistory is not null && path.Equals(archiveInfoPlist, StringComparison.Ordinal) &&
+                IsExpectedXcodeExportScratchPath(renamed.OldFullPath))
+            {
+                MarkExpectedScratchActivity();
+                return true;
+            }
+            return false;
+        }
         if ((args.ChangeType == WatcherChangeTypes.Changed ||
              args.ChangeType == WatcherChangeTypes.Created ||
              args.ChangeType == WatcherChangeTypes.Deleted) &&
@@ -209,9 +244,9 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         {
             // macOS can coalesce Xcode's reads of the approved top-level archive manifest
             // into Changed, Created, or Deleted notifications even though the path and bytes
-            // remain unchanged. Renames stay fail-closed above. The complete content and
-            // physical mutation identities are revalidated after export, so a real write,
-            // replacement, deletion, or transient hard-link alias still fails closed.
+            // remain unchanged. Real uploads may also replace this exact file with a bounded
+            // distribution-history append. Final plist semantics, the complete payload and
+            // physical identities are revalidated after export; arbitrary changes stay fatal.
             return true;
         }
 
@@ -229,12 +264,12 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
                 Path.DirectorySeparatorChar == '\\'
                     ? StringComparison.OrdinalIgnoreCase
                     : StringComparison.Ordinal) &&
-            (HasExpectedXcodeExportScratchPath() ||
+            (HasExpectedXcodeExportScratchPath() || _distributionHistory?.HasReplacedInfoPlist(ArchivePath) == true ||
              DateTime.UtcNow.Ticks <= Interlocked.Read(ref _expectedScratchActivityUntilUtcTicks)))
         {
-            // Creating and deleting the approved sandbox scratch file also changes the archive
-            // directory metadata. Accept that companion signal only while recognized scratch
-            // activity is present or has just been observed; unrelated directory changes remain fatal.
+            // Sandbox scratch cleanup and the upload-only Info.plist replacement also change
+            // archive directory metadata. Final validation retains the archive root identity;
+            // every other entry still requires its original physical mutation identity.
             return true;
         }
 
@@ -374,12 +409,14 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
             string sha256,
             string mutationDigest,
             string approvedFileMutationDigest,
-            HashSet<string> approvedFiles)
+            HashSet<string> approvedFiles,
+            string uploadPayloadMutationDigest = "")
         {
             Sha256 = sha256;
             MutationDigest = mutationDigest;
             ApprovedFileMutationDigest = approvedFileMutationDigest;
             ApprovedFiles = approvedFiles;
+            UploadPayloadMutationDigest = uploadPayloadMutationDigest;
         }
 
         internal string Sha256 { get; }
@@ -389,6 +426,8 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         internal string ApprovedFileMutationDigest { get; }
 
         internal HashSet<string> ApprovedFiles { get; }
+
+        internal string UploadPayloadMutationDigest { get; }
 
         public bool Equals(SnapshotIdentity? other)
             => other is not null &&
