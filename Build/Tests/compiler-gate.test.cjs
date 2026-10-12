@@ -79,4 +79,9 @@ test('compiler gate derives an omitted RID from a supported host before reaching
   assert.equal(result.dotnetInvoked, true);
   assert.equal(result.capabilities.runtimeIdentifier, result.hostPlatform === 'Windows' ? 'win-x64' : 'linux-x64');
   assert.equal(result.capabilities.hostPlatform, result.hostPlatform);
+  if (result.hostPlatform === 'Windows') {
+    assert.ok(result.capabilities.requiredFamilies.includes('project Windows launch path'));
+  } else {
+    assert.ok(result.capabilities.excludedRequirements.some(requirement => requirement.family === 'project Windows launch path'));
+  }
 });

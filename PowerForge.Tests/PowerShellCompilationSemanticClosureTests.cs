@@ -204,6 +204,11 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     public void TargetNativeAbiCatalogUsesExplicitPlatformLibraries()
     {
         Assert.True(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", "ld-linux-x86-64.so.2"));
+        Assert.True(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", "QCall"));
+        Assert.True(PowerShellTargetNativeAbiCatalog.Contains("win-x64", "QCall"));
+        Assert.False(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", "/unreviewed/QCall"));
+        Assert.False(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", "QCall.so"));
+        Assert.False(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", "qcall"));
         Assert.True(PowerShellTargetNativeAbiCatalog.Contains("win-x64", "api-ms-win-crt-runtime-l1-1-0.dll"));
         Assert.True(PowerShellTargetNativeAbiCatalog.Contains("win-x64", "msvcrt.dll"));
         Assert.True(PowerShellTargetNativeAbiCatalog.Contains("win-x64", "mi.dll"));

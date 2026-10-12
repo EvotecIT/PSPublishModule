@@ -8,6 +8,47 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationBoundPipelineTests
 {
+    [Fact]
+    public void StrictClosureCertifiesRuntimeProcessReferencesOnlyWithExactTargetEvidence()
+    {
+        using var fixture = new RuntimeFacadeFixture();
+        var caller = fixture.ProcessCaller("Runtime.ProcessCaller");
+        var files = fixture.Files(caller);
+        Assert.True(Verify(files, runtimeIdentifier: "win-x64", graph: fixture.Graph(caller)).Verified);
+
+        var unreviewed = Assert.Throws<InvalidOperationException>(() => Verify(files, runtimeIdentifier: "win-x64"));
+        Assert.Contains("native-process launch reference", unreviewed.Message);
+        foreach (var mismatch in new[] { "hash", "target", "rid", "provenance", "role", "disposition", "exists", "primary" })
+        {
+            var graph = fixture.Graph(caller);
+            var node = graph.Nodes[0];
+            files = fixture.Files(caller);
+            switch (mismatch)
+            {
+                case "hash": node.Identity.Sha256 = new string('0', 64); break;
+                case "target": node.Identity.TargetFramework = "net9.0"; break;
+                case "rid": node.Identity.RuntimeIdentifier = "linux-x64"; break;
+                case "provenance": node.Identity.Provenance = "Provider"; break;
+                case "role": node.Roles = PowerShellCompilationDependencyGraphRole.Dependency; break;
+                case "disposition": node.Disposition = default; break;
+                case "exists": node.Exists = false; break;
+                case "primary": files[0].Role = "Primary"; break;
+            }
+            var error = Assert.Throws<InvalidOperationException>(() => Verify(files, runtimeIdentifier: "win-x64", graph: graph));
+            Assert.Contains("native-process launch reference", error.Message);
+        }
+    }
+
+    [Fact]
+    public void StrictClosureRejectsPowerShellReferencesEvenInExactReviewedRuntimeBytes()
+    {
+        using var fixture = new RuntimeFacadeFixture();
+        var caller = fixture.ProcessCaller("Runtime.ForbiddenCaller", referencesPowerShell: true);
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            Verify(fixture.Files(caller), runtimeIdentifier: "win-x64", graph: fixture.Graph(caller)));
+        Assert.Contains("forbidden PowerShell assembly 'System.Management.Automation'", error.Message);
+    }
+
     [WindowsX64Fact]
     public void StrictClosureCertifiesRuntimeHelperExecutableOnlyWithExactTargetEvidence()
     {
@@ -161,6 +202,17 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             => Write(name, metadata => metadata.AddTypeDefinition(TypeAttributes.Public,
                 metadata.GetOrAddString("Sample"), metadata.GetOrAddString("Value"), default,
                 MetadataTokens.FieldDefinitionHandle(1), MetadataTokens.MethodDefinitionHandle(1)));
+
+        internal string ProcessCaller(string name, bool referencesPowerShell = false)
+            => Write(name, metadata =>
+            {
+                var processAssembly = typeof(System.Diagnostics.Process).Assembly.GetName();
+                var target = metadata.AddAssemblyReference(metadata.GetOrAddString(processAssembly.Name!),
+                    processAssembly.Version!, default, metadata.GetOrAddBlob(processAssembly.GetPublicKey()!), AssemblyFlags.PublicKey, default);
+                var process = metadata.AddTypeReference(target, metadata.GetOrAddString("System.Diagnostics"), metadata.GetOrAddString("Process"));
+                metadata.AddMemberReference(process, metadata.GetOrAddString("Start"), default);
+                if (referencesPowerShell) Reference(metadata, "System.Management.Automation", version);
+            });
 
         internal PowerShellCompilationArtifactFile[] Files(params string[] paths)
             => paths.Select(path => new PowerShellCompilationArtifactFile { Path = path, Role = "RuntimeDependency" }).ToArray();

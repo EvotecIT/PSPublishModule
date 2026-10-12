@@ -144,6 +144,7 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
         }
 
         AddReviewedRuntimePackIdentities(request, managedAssemblies, targetRuntimeAssemblies);
+        VerifyProcessLaunchReferences(request, managedAssemblies);
         VerifyManagedReferenceClosure(managedAssemblies, targetRuntimeAssemblies, compatibleSignedRuntimeAssemblies);
         VerifyUsedFacadeReferences(managedAssemblies, targetRuntimeAssemblies, compatibleSignedRuntimeAssemblies);
         VerifyReviewedDependencyGraph(request, managedAssemblies, result);
@@ -493,14 +494,14 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
                 throw new InvalidOperationException($"Strict runtime-free managed dependency '{displayPath}' references forbidden PowerShell assembly '{name}'.");
         }
 
+        var hasProcessLaunchReference = false;
         foreach (var memberHandle in reader.MemberReferences)
         {
             var member = reader.GetMemberReference(memberHandle);
             if (!reader.GetString(member.Name).Equals(nameof(System.Diagnostics.Process.Start), StringComparison.Ordinal) ||
                 !IsProcessType(reader, member.Parent))
                 continue;
-            if (!allowProcessLaunch)
-                throw new InvalidOperationException($"Strict runtime-free managed dependency '{displayPath}' contains a native-process launch reference.");
+            hasProcessLaunchReference = true;
         }
         var nativeImports = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var methodHandle in reader.MethodDefinitions)
@@ -513,7 +514,11 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
             var name = reader.GetString(module.Name);
             if (!string.IsNullOrWhiteSpace(name)) nativeImports.Add(name);
         }
-        var inspection = new ManagedAssemblyInspection(assemblyIdentity, displayPath, contentSha256, references.ToArray(), nativeImports.ToArray());
+        var inspection = new ManagedAssemblyInspection(assemblyIdentity, displayPath, contentSha256, references.ToArray(), nativeImports.ToArray())
+        {
+            HasProcessLaunchReference = hasProcessLaunchReference,
+            AllowsCompilerOwnedProcessLaunch = allowProcessLaunch
+        };
         ReadFacadeMetadata(reader, inspection);
         managedAssemblies.Add(inspection);
     }
@@ -624,6 +629,8 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
         internal string ContentSha256 { get; }
         internal AssemblyIdentity[] References { get; }
         internal string[] NativeImports { get; }
+        internal bool HasProcessLaunchReference { get; set; }
+        internal bool AllowsCompilerOwnedProcessLaunch { get; set; }
         internal bool IsReviewedRuntimePack { get; set; }
         internal bool IsPureFacade { get; set; }
         internal ManagedTypeReference[] TypeReferences { get; set; } = Array.Empty<ManagedTypeReference>();

@@ -22,7 +22,8 @@ internal static class PowerShellTargetNativeAbiCatalog
 
     private static readonly HashSet<string> LinuxLibraries = new(StringComparer.Ordinal)
     {
-        "__Internal", "ld-linux-x86-64.so.2", "libc", "libc.so", "libc.so.6", "libdl", "libdl.so.2", "libgcc_s.so.1",
+        // CoreLib QCalls enter the CLR directly, using the same library name on Linux and Windows.
+        "__Internal", "QCall", "ld-linux-x86-64.so.2", "libc", "libc.so", "libc.so.6", "libdl", "libdl.so.2", "libgcc_s.so.1",
         "libm", "libm.so.6", "libpthread", "libpthread.so.0", "librt", "librt.so.1", "libstdc++.so.6"
     };
 

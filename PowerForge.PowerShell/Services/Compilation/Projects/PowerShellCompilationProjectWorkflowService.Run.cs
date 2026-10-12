@@ -52,6 +52,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             var selected = SelectArtifacts(current, new[] { artifact.Name }).Single();
             var validated = ValidateBuildReceipt(current, selected, development: true);
             cancellationToken.ThrowIfCancellationRequested();
+            PowerShellCompilationPathSafety.EnsureProcessLaunchPaths(validated.ArtifactPath, current.Root);
             Report("starting", "Starting " + selected.Name + ".");
             var request = new ProcessRunRequest(
                 validated.ArtifactPath, current.Root, options.Arguments, Timeout.InfiniteTimeSpan,

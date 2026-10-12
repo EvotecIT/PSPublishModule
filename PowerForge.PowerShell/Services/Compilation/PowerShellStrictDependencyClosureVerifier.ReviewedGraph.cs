@@ -2,6 +2,23 @@ namespace PowerForge;
 
 internal static partial class PowerShellStrictDependencyClosureVerifier
 {
+    private static void VerifyProcessLaunchReferences(
+        PowerShellStrictDependencyClosureRequest request,
+        IEnumerable<ManagedAssemblyInspection> assemblies)
+    {
+        foreach (var assembly in assemblies.Where(static assembly => assembly.HasProcessLaunchReference))
+        {
+            if (assembly.AllowsCompilerOwnedProcessLaunch) continue;
+            // Linux System.Net.Ping uses the platform ping utility. Runtime implementation
+            // references are trusted only after matching the reviewed target's exact bytes;
+            // compiler output and other delivered dependencies retain the process-launch ban.
+            if (assembly.IsReviewedRuntimePack && !IsCompilerOwnedPrimaryAssembly(request.Files, assembly.DisplayPath))
+                continue;
+            throw new InvalidOperationException(
+                $"Strict runtime-free managed dependency '{assembly.DisplayPath}' contains a native-process launch reference.");
+        }
+    }
+
     private static void AddReviewedRuntimePackIdentities(
         PowerShellStrictDependencyClosureRequest request,
         IReadOnlyCollection<ManagedAssemblyInspection> assemblies,
