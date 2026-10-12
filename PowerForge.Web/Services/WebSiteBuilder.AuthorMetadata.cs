@@ -22,7 +22,11 @@ public static partial class WebSiteBuilder
         if (item?.Meta is null)
             return Array.Empty<string>();
 
-        return ReadMetaStringList(item.Meta, "author_urls", "authors.urls", "authors_urls", "schema.author_urls");
+        var urls = ReadMetaStringList(item.Meta, "author_urls", "authors.urls", "authors_urls", "schema.author_urls");
+        if (urls.Length > 0)
+            return urls;
+        var single = ReadMetaString(item.Meta, "author.url");
+        return string.IsNullOrWhiteSpace(single) ? Array.Empty<string>() : new[] { single.Trim() };
     }
 
     private static object? BuildContentAuthorStructuredData(ContentItem item, string fallbackName)
@@ -38,11 +42,13 @@ public static partial class WebSiteBuilder
         }
 
         var urls = ResolveContentAuthorUrls(item);
+        var authorType = ReadMetaString(item.Meta, "author.type").Equals("Organization", StringComparison.OrdinalIgnoreCase)
+            ? "Organization" : "Person";
         var authors = names.Select((name, index) =>
         {
             var model = new Dictionary<string, object?>
             {
-                ["@type"] = "Person",
+                ["@type"] = authorType,
                 ["name"] = name
             };
             if (index < urls.Length && !string.IsNullOrWhiteSpace(urls[index]))

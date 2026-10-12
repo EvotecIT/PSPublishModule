@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -266,8 +265,8 @@ public sealed class WebPipelineRunnerSitemapMigrationTests
 
         try
         {
-            var port = GetFreePort();
-            (listener, cts, serverTask) = StartSitemapIndexServer(port);
+            var port = LoopbackHttpListener.GetCandidatePort();
+            (listener, cts, serverTask) = StartSitemapIndexServer(ref port);
 
             Directory.CreateDirectory(Path.Combine(root, "_site"));
             File.WriteAllText(Path.Combine(root, "_site", "sitemap.xml"),
@@ -305,11 +304,10 @@ public sealed class WebPipelineRunnerSitemapMigrationTests
         }
     }
 
-    private static (HttpListener listener, CancellationTokenSource cts, Task serverTask) StartSitemapIndexServer(int port)
+    private static (HttpListener listener, CancellationTokenSource cts, Task serverTask) StartSitemapIndexServer(ref int port)
     {
-        var listener = new HttpListener();
-        listener.Prefixes.Add($"http://localhost:{port}/");
-        listener.Start();
+        var listener = LoopbackHttpListener.Start(ref port, host: "localhost");
+        var boundPort = port;
         var cts = new CancellationTokenSource();
         var serverTask = Task.Run(() =>
         {
@@ -344,7 +342,7 @@ public sealed class WebPipelineRunnerSitemapMigrationTests
                     $$"""
                     <?xml version="1.0" encoding="utf-8"?>
                     <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-                      <sitemap><loc>http://127.0.0.1:{{port}}/nested.xml</loc></sitemap>
+                      <sitemap><loc>http://127.0.0.1:{{boundPort}}/nested.xml</loc></sitemap>
                     </sitemapindex>
                     """);
             }
@@ -382,20 +380,6 @@ public sealed class WebPipelineRunnerSitemapMigrationTests
         }
 
         cts?.Dispose();
-    }
-
-    private static int GetFreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        try
-        {
-            return ((IPEndPoint)listener.LocalEndpoint).Port;
-        }
-        finally
-        {
-            listener.Stop();
-        }
     }
 
     private static void TryDeleteDirectory(string path)
