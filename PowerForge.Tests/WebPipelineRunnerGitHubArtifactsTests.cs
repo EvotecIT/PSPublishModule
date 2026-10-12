@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using PowerForge.Web.Cli;
@@ -21,7 +20,7 @@ public sealed class WebPipelineRunnerGitHubArtifactsTests
 
         try
         {
-            var port = GetFreePort();
+            var port = LoopbackHttpListener.GetCandidatePort();
             var artifacts = new[]
             {
                 Artifact(101, "test-results", 20),
@@ -29,7 +28,7 @@ public sealed class WebPipelineRunnerGitHubArtifactsTests
                 Artifact(103, "test-results", 2),
                 Artifact(104, "github-pages", 30)
             };
-            (listener, cts, serverTask, counter) = StartGitHubArtifactsServer(port, artifacts, failDeleteIds: null);
+            (listener, cts, serverTask, counter) = StartGitHubArtifactsServer(ref port, artifacts, failDeleteIds: null);
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
@@ -91,13 +90,13 @@ public sealed class WebPipelineRunnerGitHubArtifactsTests
 
         try
         {
-            var port = GetFreePort();
+            var port = LoopbackHttpListener.GetCandidatePort();
             var artifacts = new[]
             {
                 Artifact(201, "test-results", 40),
                 Artifact(202, "test-results", 35)
             };
-            (listener, cts, serverTask, counter) = StartGitHubArtifactsServer(port, artifacts, failDeleteIds: new[] { 202L });
+            (listener, cts, serverTask, counter) = StartGitHubArtifactsServer(ref port, artifacts, failDeleteIds: new[] { 202L });
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
@@ -151,12 +150,12 @@ public sealed class WebPipelineRunnerGitHubArtifactsTests
 
         try
         {
-            var port = GetFreePort();
+            var port = LoopbackHttpListener.GetCandidatePort();
             var artifacts = new[]
             {
                 Artifact(301, "github-pages", 90)
             };
-            (listener, cts, serverTask, counter) = StartGitHubArtifactsServer(port, artifacts, failDeleteIds: null);
+            (listener, cts, serverTask, counter) = StartGitHubArtifactsServer(ref port, artifacts, failDeleteIds: null);
 
             Environment.SetEnvironmentVariable("GITHUB_REPOSITORY", "EvotecIT/HtmlForgeX");
             Environment.SetEnvironmentVariable("GITHUB_TOKEN", "test-token");
@@ -250,13 +249,13 @@ public sealed class WebPipelineRunnerGitHubArtifactsTests
 
         try
         {
-            var port = GetFreePort();
+            var port = LoopbackHttpListener.GetCandidatePort();
             var artifacts = new[]
             {
                 Artifact(401, "test-results", 40),
                 Artifact(402, "test-results", 35)
             };
-            (listener, cts, serverTask, _) = StartGitHubArtifactsServer(port, artifacts, failDeleteIds: new[] { 401L, 402L });
+            (listener, cts, serverTask, _) = StartGitHubArtifactsServer(ref port, artifacts, failDeleteIds: new[] { 401L, 402L });
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
@@ -307,13 +306,11 @@ public sealed class WebPipelineRunnerGitHubArtifactsTests
     }
 
     private static (HttpListener listener, CancellationTokenSource cts, Task serverTask, RequestCounter counter) StartGitHubArtifactsServer(
-        int port,
+        ref int port,
         IReadOnlyList<FakeArtifact> artifacts,
         IEnumerable<long>? failDeleteIds)
     {
-        var listener = new HttpListener();
-        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-        listener.Start();
+        var listener = LoopbackHttpListener.Start(ref port);
 
         var cts = new CancellationTokenSource();
         var counter = new RequestCounter();
@@ -447,20 +444,6 @@ public sealed class WebPipelineRunnerGitHubArtifactsTests
         }
 
         cts?.Dispose();
-    }
-
-    private static int GetFreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        try
-        {
-            return ((IPEndPoint)listener.LocalEndpoint).Port;
-        }
-        finally
-        {
-            listener.Stop();
-        }
     }
 
     private static void TryDeleteDirectory(string path)

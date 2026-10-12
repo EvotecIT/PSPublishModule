@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using PowerForge.Web.Cli;
@@ -132,10 +131,8 @@ public class WebPipelineRunnerIndexNowTests
 
         try
         {
-            var port = GetFreePort();
-            listener = new HttpListener();
-            listener.Prefixes.Add($"http://127.0.0.1:{port}/indexnow/");
-            listener.Start();
+            var port = LoopbackHttpListener.GetCandidatePort();
+            listener = LoopbackHttpListener.Start(ref port, path: "/indexnow/");
 
             cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             serverTask = Task.Run(async () =>
@@ -239,10 +236,8 @@ public class WebPipelineRunnerIndexNowTests
 
         try
         {
-            var port = GetFreePort();
-            listener = new HttpListener();
-            listener.Prefixes.Add($"http://127.0.0.1:{port}/indexnow/");
-            listener.Start();
+            var port = LoopbackHttpListener.GetCandidatePort();
+            listener = LoopbackHttpListener.Start(ref port, path: "/indexnow/");
 
             cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             serverTask = Task.Run(async () =>
@@ -509,20 +504,6 @@ public class WebPipelineRunnerIndexNowTests
         finally
         {
             TryDeleteDirectory(root);
-        }
-    }
-
-    private static int GetFreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        try
-        {
-            return ((IPEndPoint)listener.LocalEndpoint).Port;
-        }
-        finally
-        {
-            listener.Stop();
         }
     }
 

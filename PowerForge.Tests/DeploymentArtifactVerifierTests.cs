@@ -112,10 +112,8 @@ public sealed class DeploymentArtifactVerifierTests
         try
         {
             var bytes = Encoding.UTF8.GetBytes("deployed");
-            var port = GetFreePort();
-            listener = new HttpListener();
-            listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-            listener.Start();
+            var port = LoopbackHttpListener.GetCandidatePort();
+            listener = LoopbackHttpListener.Start(ref port);
             cancellation = new CancellationTokenSource();
             server = Task.Run(async () =>
             {
@@ -309,14 +307,6 @@ public sealed class DeploymentArtifactVerifierTests
                 return components.Length == 2 ? Uri.UnescapeDataString(components[1]) : string.Empty;
         }
         return string.Empty;
-    }
-
-    private static int GetFreePort()
-    {
-        var probe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
-        probe.Start();
-        try { return ((System.Net.IPEndPoint)probe.LocalEndpoint).Port; }
-        finally { probe.Stop(); }
     }
 
     private static string FindRepoRoot()

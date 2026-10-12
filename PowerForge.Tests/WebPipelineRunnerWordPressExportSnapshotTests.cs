@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -21,8 +20,8 @@ public class WebPipelineRunnerWordPressExportSnapshotTests
 
         try
         {
-            var port = GetFreePort();
-            (listener, cts, serverTask, _) = StartWordPressExportServer(port);
+            var port = LoopbackHttpListener.GetCandidatePort();
+            (listener, cts, serverTask, _) = StartWordPressExportServer(ref port);
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
@@ -135,13 +134,13 @@ public class WebPipelineRunnerWordPressExportSnapshotTests
         try
         {
             var expectedAuth = "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes("demo-user:demo-pass"));
-            var port = GetFreePort();
+            var port = LoopbackHttpListener.GetCandidatePort();
             var options = new WordPressExportServerOptions
             {
                 RequiredAuthorization = expectedAuth
             };
             WordPressExportServerState state;
-            (listener, cts, serverTask, state) = StartWordPressExportServer(port, options);
+            (listener, cts, serverTask, state) = StartWordPressExportServer(ref port, options);
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
@@ -207,12 +206,10 @@ public class WebPipelineRunnerWordPressExportSnapshotTests
     }
 
     private static (HttpListener listener, CancellationTokenSource cts, Task serverTask, WordPressExportServerState state) StartWordPressExportServer(
-        int port,
+        ref int port,
         WordPressExportServerOptions? options = null)
     {
-        var listener = new HttpListener();
-        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-        listener.Start();
+        var listener = LoopbackHttpListener.Start(ref port);
 
         var cts = new CancellationTokenSource();
         var state = new WordPressExportServerState();
@@ -377,20 +374,6 @@ public class WebPipelineRunnerWordPressExportSnapshotTests
         }
 
         cts?.Dispose();
-    }
-
-    private static int GetFreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        try
-        {
-            return ((IPEndPoint)listener.LocalEndpoint).Port;
-        }
-        finally
-        {
-            listener.Stop();
-        }
     }
 
     private static void TryDeleteDirectory(string path)

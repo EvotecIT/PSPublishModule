@@ -21,8 +21,8 @@ public class WebPipelineRunnerCloudflareTests
 
         try
         {
-            var port = GetFreePort();
-            (listener, cts, serverTask, _) = StartCloudflareStatusServer(port, "HIT");
+            var port = LoopbackHttpListener.GetCandidatePort();
+            (listener, cts, serverTask, _) = StartCloudflareStatusServer(ref port, "HIT");
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
@@ -73,8 +73,8 @@ public class WebPipelineRunnerCloudflareTests
 
         try
         {
-            var port = GetFreePort();
-            (listener, cts, serverTask, _) = StartCloudflareStatusServer(port, "MISS");
+            var port = LoopbackHttpListener.GetCandidatePort();
+            (listener, cts, serverTask, _) = StartCloudflareStatusServer(ref port, "MISS");
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
@@ -118,8 +118,8 @@ public class WebPipelineRunnerCloudflareTests
 
         try
         {
-            var port = GetFreePort();
-            (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(port, "HIT");
+            var port = LoopbackHttpListener.GetCandidatePort();
+            (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(ref port, "HIT");
 
             File.WriteAllText(Path.Combine(root, "site.json"),
                 $$"""
@@ -216,7 +216,7 @@ public class WebPipelineRunnerCloudflareTests
 
         try
         {
-            var port = GetFreePort();
+            var port = LoopbackHttpListener.GetCandidatePort();
             const string discoveryPath = "/redirect";
             const string appPath = "/apps/converter/";
             var html = """
@@ -241,7 +241,7 @@ public class WebPipelineRunnerCloudflareTests
                        </html>
                        """;
             (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(
-                port, "HIT", appPath, html, discoveryPath, appPath);
+                ref port, "HIT", appPath, html, discoveryPath, appPath);
 
             File.WriteAllText(Path.Combine(root, "site.json"),
                 $$"""
@@ -307,9 +307,9 @@ public class WebPipelineRunnerCloudflareTests
         Task? serverTask = null;
         try
         {
-            var port = GetFreePort();
+            var port = LoopbackHttpListener.GetCandidatePort();
             (listener, cts, serverTask, _) = StartCloudflareStatusServer(
-                port,
+                ref port,
                 "HIT",
                 redirectPath: "/redirect",
                 redirectTarget: "https://outside.example/apps/converter/");
@@ -384,9 +384,9 @@ public class WebPipelineRunnerCloudflareTests
         Task? serverTask = null;
         try
         {
-            var port = GetFreePort();
+            var port = LoopbackHttpListener.GetCandidatePort();
             (listener, cts, serverTask, _) = StartCloudflareStatusServer(
-                port, "HIT", responseStatus: HttpStatusCode.NotFound);
+                ref port, "HIT", responseStatus: HttpStatusCode.NotFound);
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
                 $$"""
@@ -425,8 +425,8 @@ public class WebPipelineRunnerCloudflareTests
         RequestCounter? requestCounter = null;
         try
         {
-            var port = GetFreePort();
-            (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(port, "HIT");
+            var port = LoopbackHttpListener.GetCandidatePort();
+            (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(ref port, "HIT");
             var baseUrl = $"http://127.0.0.1:{port}";
 
             var exitCode = WebCliCommandHandlers.HandleSubCommand(
@@ -465,11 +465,11 @@ public class WebPipelineRunnerCloudflareTests
         RequestCounter? requestCounter = null;
         try
         {
-            var port = GetFreePort();
+            var port = LoopbackHttpListener.GetCandidatePort();
             const string appPath = "/project/";
             const string assetPath = "/project/_framework/app.abc123.js";
             var html = """<html><body><script src="_framework/app.abc123.js"></script></body></html>""";
-            (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(port, "HIT", appPath, html);
+            (listener, cts, serverTask, requestCounter) = StartCloudflareStatusServer(ref port, "HIT", appPath, html);
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
                 $$"""
@@ -503,8 +503,48 @@ public class WebPipelineRunnerCloudflareTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CloudflareTestServer_UsesBoundPort_WhenAnotherServerClaimsProbedPort(bool httpPrefix)
+    {
+        var port = LoopbackHttpListener.GetCandidatePort();
+        var occupiedPort = port;
+        using var socket = new TcpListener(IPAddress.Loopback, port);
+        using var registration = new HttpListener();
+        if (httpPrefix)
+        {
+            registration.Prefixes.Add($"http://127.0.0.1:{port}/");
+            registration.Start();
+        }
+        else
+        {
+            socket.Start();
+        }
+
+        HttpListener? listener = null;
+        CancellationTokenSource? cts = null;
+        Task? serverTask = null;
+        try
+        {
+            RequestCounter counter;
+            (listener, cts, serverTask, counter) = StartCloudflareStatusServer(ref port, "HIT");
+            Assert.NotEqual(occupiedPort, port);
+            using var client = new HttpClient();
+            using var response = await client.GetAsync($"http://127.0.0.1:{port}/asset.js");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal("HIT", Assert.Single(response.Headers.GetValues("cf-cache-status")));
+            Assert.Equal("ok", await response.Content.ReadAsStringAsync());
+            Assert.Equal("/asset.js", Assert.Single(counter.Paths));
+        }
+        finally
+        {
+            await StopServerAsync(listener, cts, serverTask);
+        }
+    }
+
     private static (HttpListener listener, CancellationTokenSource cts, Task serverTask, RequestCounter requestCounter) StartCloudflareStatusServer(
-        int port,
+        ref int port,
         string cacheStatus,
         string? htmlPath = null,
         string? html = null,
@@ -512,9 +552,7 @@ public class WebPipelineRunnerCloudflareTests
         string? redirectTarget = null,
         HttpStatusCode responseStatus = HttpStatusCode.OK)
     {
-        var listener = new HttpListener();
-        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-        listener.Start();
+        var listener = LoopbackHttpListener.Start(ref port);
 
         var cts = new CancellationTokenSource();
         var requestCounter = new RequestCounter();
@@ -587,20 +625,6 @@ public class WebPipelineRunnerCloudflareTests
         }
 
         cts?.Dispose();
-    }
-
-    private static int GetFreePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        try
-        {
-            return ((IPEndPoint)listener.LocalEndpoint).Port;
-        }
-        finally
-        {
-            listener.Stop();
-        }
     }
 
     private static void TryDeleteDirectory(string path)
