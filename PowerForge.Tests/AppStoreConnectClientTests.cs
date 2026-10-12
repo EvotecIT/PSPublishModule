@@ -338,7 +338,8 @@ public sealed partial class AppStoreConnectClientTests
                     "attributes": {
                       "versionString": "1.0.1",
                       "platform": "IOS",
-                      "appStoreState": "PREPARE_FOR_SUBMISSION"
+                      "appStoreState": "PREPARE_FOR_SUBMISSION",
+                      "releaseType": "MANUAL"
                     }
                   }
                 }
@@ -351,11 +352,13 @@ public sealed partial class AppStoreConnectClientTests
 
         Assert.Equal("version-1", version.Id);
         Assert.Equal("1.0.1", version.VersionString);
+        Assert.Equal("MANUAL", version.ReleaseType);
         Assert.Equal(HttpMethod.Post, handler.Methods[0]);
         Assert.Equal("https://api.appstoreconnect.apple.com/v1/appStoreVersions", handler.RequestUris[0].ToString());
         Assert.Contains("\"type\":\"appStoreVersions\"", handler.RequestBodies[0], StringComparison.Ordinal);
         Assert.Contains("\"platform\":\"IOS\"", handler.RequestBodies[0], StringComparison.Ordinal);
         Assert.Contains("\"versionString\":\"1.0.1\"", handler.RequestBodies[0], StringComparison.Ordinal);
+        Assert.Contains("\"releaseType\":\"MANUAL\"", handler.RequestBodies[0], StringComparison.Ordinal);
         Assert.Contains("\"type\":\"apps\",\"id\":\"app-1\"", handler.RequestBodies[0], StringComparison.Ordinal);
     }
 

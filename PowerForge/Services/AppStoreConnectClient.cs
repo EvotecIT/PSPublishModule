@@ -93,7 +93,7 @@ public sealed partial class AppStoreConnectClient : IDisposable
     }
 
     /// <summary>
-    /// Creates an App Store version for an app and platform.
+    /// Creates an App Store version for an app and platform with manual release after approval.
     /// </summary>
     public Task<AppStoreConnectVersionInfo> CreateVersionAsync(
         string appId,
@@ -114,7 +114,8 @@ public sealed partial class AppStoreConnectClient : IDisposable
                 attributes = new
                 {
                     platform = ToAppStoreConnectPlatform(platform),
-                    versionString = versionString.Trim()
+                    versionString = versionString.Trim(),
+                    releaseType = "MANUAL"
                 },
                 relationships = new
                 {
@@ -794,7 +795,8 @@ public sealed partial class AppStoreConnectClient : IDisposable
             VersionString = GetString(attrs, "versionString"),
             AppStoreState = GetString(attrs, "appStoreState"),
             AppVersionState = GetString(attrs, "appVersionState"),
-            Platform = GetString(attrs, "platform")
+            Platform = GetString(attrs, "platform"),
+            ReleaseType = GetString(attrs, "releaseType")
         };
     }
 
