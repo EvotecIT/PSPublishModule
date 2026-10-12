@@ -1438,6 +1438,7 @@ public static partial class WebSeoDoctor
                 }
 
                 if (type.Equals("Article", StringComparison.OrdinalIgnoreCase) ||
+                    type.Equals("BlogPosting", StringComparison.OrdinalIgnoreCase) ||
                     type.Equals("NewsArticle", StringComparison.OrdinalIgnoreCase))
                 {
                     ValidateArticleLikeProfile(obj, type, relativePath, objectLabel, addIssue);

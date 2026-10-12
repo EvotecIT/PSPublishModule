@@ -11,6 +11,13 @@ public static partial class WebSiteBuilder
         if (config is null || item is null)
             return string.Empty;
 
+        var declaredType = ReadStructuredArticleType(item);
+        if (item.Kind == PageKind.Page && !string.IsNullOrWhiteSpace(declaredType))
+        {
+            var enabled = declaredType == "NewsArticle" ? config.NewsArticle : config.Article;
+            return enabled ? declaredType : string.Empty;
+        }
+
         if (config.NewsArticle && IsNewsLikePage(item))
             return "NewsArticle";
 
@@ -18,6 +25,15 @@ public static partial class WebSiteBuilder
             return "Article";
 
         return string.Empty;
+    }
+
+    // An undated technical guide can explicitly identify itself as an article
+    // without inventing a publication date or changing its content collection.
+    private static string ReadStructuredArticleType(ContentItem item)
+    {
+        var requested = ReadMetaString(item.Meta, "schema.type");
+        return new[] { "Article", "BlogPosting", "NewsArticle" }
+            .FirstOrDefault(type => type.Equals(requested, StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
     }
 
     private static string BuildArticleStructuredDataScript(SiteSpec spec, ContentItem item, string pageUrl, string typeName)
@@ -42,6 +58,14 @@ public static partial class WebSiteBuilder
                 ["name"] = ReadMetaString(item.Meta, "publisher.name", "publisher", "article.publisher", "news.publisher", "schema.publisher")
             }
         };
+
+        if (!string.IsNullOrWhiteSpace(pageUrl))
+        {
+            articleModel["@id"] = pageUrl + "#article";
+            articleModel["url"] = pageUrl;
+        }
+        if (!string.IsNullOrWhiteSpace(item.Language))
+            articleModel["inLanguage"] = item.Language;
 
         var publisherName = ((Dictionary<string, object?>)articleModel["publisher"]!)["name"]?.ToString();
         if (string.IsNullOrWhiteSpace(publisherName))
@@ -75,16 +99,30 @@ public static partial class WebSiteBuilder
         var imageOverride = ReadMetaString(item.Meta, "article.image", "news.image", "schema.image", "social_image");
         if (string.IsNullOrWhiteSpace(imageOverride))
         {
-            var frontMatterImage = ReadMetaString(item.Meta, "image");
+            var frontMatterImage = ResolveSocialImageOverride(item);
             if (IsAbsoluteOrSiteRootedUrl(frontMatterImage))
                 imageOverride = frontMatterImage;
         }
 
         var imagePath = ResolveSocialImagePath(spec, item, string.Empty, item.Title, articleDescription, spec.Name, imageOverride);
+        if (string.IsNullOrWhiteSpace(imageOverride))
+        {
+            // OpenGraph owns card generation. Reuse its observed successful asset;
+            // a projected route alone cannot prove that the renderer produced it.
+            var rootPath = BuildRootPathScope.Value ?? string.Empty;
+            var generatedRoute = ResolveGeneratedSocialCardRoute(spec, item, rootPath);
+            if (!string.IsNullOrWhiteSpace(generatedRoute) &&
+                TryGetGeneratedSocialCardRenderOutcome(generatedRoute, rootPath, out var rendered) && rendered)
+                imagePath = generatedRoute;
+        }
         var localization = ResolveLocalizationConfig(spec);
         var languageBaseUrl = ResolveLanguageBaseUrl(spec, localization, item.Language);
         var image = ResolveAbsoluteUrl(languageBaseUrl, imagePath);
-        if (!string.IsNullOrWhiteSpace(image))
+        // A site-wide logo or brand card does not represent each individual article.
+        // Keep per-article images and generated cards, but omit the generic fallback.
+        var usesSiteFallback = string.IsNullOrWhiteSpace(imageOverride) &&
+            string.Equals(imagePath, spec.Social?.Image, StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(image) && !usesSiteFallback)
             articleModel["image"] = image;
 
         if (item.Tags is { Length: > 0 })

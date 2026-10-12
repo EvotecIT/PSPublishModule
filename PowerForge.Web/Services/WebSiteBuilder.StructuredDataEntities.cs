@@ -52,6 +52,8 @@ public static partial class WebSiteBuilder
             page["mainEntity"] = StructuredReference(FirstStructuredValue(ReadMetaString(item.Meta, "software.id"), pageUrl + "#software"));
         else if (spec.StructuredData?.SoftwareSourceCode == true && HasAnyMetaValue(item.Meta, "source_code"))
             page["mainEntity"] = StructuredReference(FirstStructuredValue(ReadMetaString(item.Meta, "source_code.id"), pageUrl + "#source-code"));
+        else if (spec.StructuredData is not null && !string.IsNullOrWhiteSpace(ResolveStructuredArticleType(spec.StructuredData, item)))
+            page["mainEntity"] = StructuredReference(pageUrl + "#article");
         return page;
     }
 

@@ -818,6 +818,8 @@ public static partial class WebSiteBuilder
             return false;
         if (item.Kind != PageKind.Page)
             return false;
+        if (!string.IsNullOrWhiteSpace(ReadStructuredArticleType(item)))
+            return true;
         if (!string.IsNullOrWhiteSpace(item.Collection) &&
             IsEditorialCollection(item.Collection))
             return true;

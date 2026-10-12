@@ -33,6 +33,39 @@ Contact pages containing FAQs retain both types on that identity, with the
 publisher as their subject and the questions in `mainEntity`. Software entities
 retain their canonical page link through `mainEntityOfPage` when FAQs are present.
 
+## Articles and authors
+
+Blog and news collections are recognized automatically. An undated guide in a
+documentation collection can declare its article type without adding a fictitious
+publication date:
+
+```yaml
+meta.schema.type: Article
+meta.author.name: Example Editorial Team
+meta.author.type: Organization
+meta.author.url: https://publisher.example/about/
+image: /images/event-report.png
+```
+
+Supported explicit types are `Article`, `BlogPosting` and `NewsArticle`; the
+corresponding site-level `Article` or `NewsArticle` switch still controls output.
+Authors default to `Person`. Use `Organization` for an editorial team and give an
+author URL that identifies the person or organization. Existing `author_names`
+and `author_urls` lists describe multiple authors.
+
+Use a representative image from the article, rather than the site's logo. The
+renderer accepts an explicit `article.image` or page image and can use the first
+body image on editorial pages. It omits the generic site-wide social image from
+article markup when no article image or generated article card is available.
+The renderer emits known publication and modification dates; it does not invent a
+publication date for undated guides. With `WebPage` enabled, the canonical page
+and its article reference one another through stable identifiers.
+
+Google's [Article guidance](https://developers.google.com/search/docs/appearance/structured-data/article)
+lists recommended properties rather than required ones. Supply applicable facts
+that agree with the visible content. Search appearance still depends on Google's
+crawl and indexing decisions.
+
 ## Data supplied by a theme
 
 Use `pf.structured_data` when the visible page already gets its facts from
