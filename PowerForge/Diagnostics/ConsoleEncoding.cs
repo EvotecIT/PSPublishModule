@@ -56,18 +56,44 @@ public static class ConsoleEncoding
     }
 
     /// <summary>
-    /// Returns true when the current console can safely render Unicode output.
+    /// Returns true when the current console supports Unicode text. UTF-8 does not
+    /// guarantee that its font can display emoji; use <see cref="ShouldRenderEmoji"/> for those.
+    /// Set POWERFORGE_CONSOLE_MODE to ascii to explicitly select plain characters.
     /// </summary>
     public static bool ShouldRenderUnicode(bool unicodeCapable = true)
     {
         TryEnableUtf8Console(unicodeCapable);
         try
         {
-            return unicodeCapable && Console.OutputEncoding.CodePage == Encoding.UTF8.CodePage;
+            return unicodeCapable && Console.OutputEncoding.CodePage == Encoding.UTF8.CodePage
+                && !string.Equals(Environment.GetEnvironmentVariable("POWERFORGE_CONSOLE_MODE"), "ascii", StringComparison.OrdinalIgnoreCase);
         }
         catch
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Returns whether decorative emoji are appropriate for the current console.
+    /// POWERFORGE_CONSOLE_MODE=unicode keeps Unicode borders with simpler icons;
+    /// rich explicitly enables emoji on older Windows hosts. Automatic selection
+    /// avoids emoji on Windows Server 2016 / Windows 10 build 1607 and earlier.
+    /// Font coverage cannot be inferred from the output encoding alone.
+    /// </summary>
+    public static bool ShouldRenderEmoji(bool unicodeCapable = true)
+        => SelectEmojiSupport(
+            ShouldRenderUnicode(unicodeCapable),
+            Environment.OSVersion.Platform == PlatformID.Win32NT,
+            Environment.OSVersion.Version,
+            Environment.GetEnvironmentVariable("POWERFORGE_CONSOLE_MODE"));
+
+    internal static bool SelectEmojiSupport(bool unicode, bool isWindows, Version osVersion, string? mode)
+    {
+        if (!unicode || string.Equals(mode, "ascii", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(mode, "unicode", StringComparison.OrdinalIgnoreCase)) return false;
+        if (string.Equals(mode, "rich", StringComparison.OrdinalIgnoreCase)) return true;
+        return !isWindows || osVersion.Major > 10
+            || (osVersion.Major == 10 && osVersion.Build > 14393);
     }
 }

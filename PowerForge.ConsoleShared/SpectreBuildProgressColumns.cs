@@ -24,7 +24,7 @@ internal static class SpectreBuildProgressColumns
             },
             new PercentageColumn(),
             new ElapsedTimeColumn(),
-            new SpinnerColumn()
+            CreateSpinner(ConsoleEncoding.ShouldRenderEmoji())
         ];
 
     /// <summary>
@@ -37,7 +37,8 @@ internal static class SpectreBuildProgressColumns
         ConcurrentDictionary<ProgressTask, string> iconLookup,
         ConcurrentDictionary<ProgressTask, DateTimeOffset> startLookup,
         ConcurrentDictionary<ProgressTask, TimeSpan> doneLookup,
-        ProgressColumn? statusColumn = null)
+        ProgressColumn? statusColumn = null,
+        bool? emoji = null)
     {
         if (iconLookup is null) throw new ArgumentNullException(nameof(iconLookup));
         if (startLookup is null) throw new ArgumentNullException(nameof(startLookup));
@@ -65,9 +66,12 @@ internal static class SpectreBuildProgressColumns
         if (includeElapsed)
             columns.Add(new FixedElapsedColumn(startLookup, doneLookup));
 
-        columns.Add(new SpinnerColumn());
+        columns.Add(CreateSpinner(emoji ?? ConsoleEncoding.ShouldRenderEmoji()));
         return columns.ToArray();
     }
+
+    private static SpinnerColumn CreateSpinner(bool emoji)
+        => new SpinnerColumn { Spinner = emoji ? Spinner.Known.Dots : Spinner.Known.Line };
 
     private sealed class StepIconColumn : ProgressColumn
     {

@@ -89,7 +89,9 @@ internal static class SpectrePowerForgeReleaseConsoleUi
         static string Esc(string? value) => Markup.Escape(value ?? string.Empty);
 
         var unicode = ConsoleEncoding.ShouldRenderUnicode(console.Profile.Capabilities.Unicode);
-        var icon = result.Success ? (unicode ? "✅" : "+") : (unicode ? "❌" : "x");
+        console.Profile.Capabilities.Unicode = unicode;
+        var emoji = ConsoleEncoding.ShouldRenderEmoji(console.Profile.Capabilities.Unicode);
+        var icon = result.Success ? (emoji ? "✅" : "+") : (emoji ? "❌" : "x");
         var color = result.Success ? "green" : "red";
         console.Write(new Rule($"[{color}]{icon} Unified release summary[/]").LeftJustified());
 
@@ -208,7 +210,10 @@ internal static class SpectrePowerForgeReleaseConsoleUi
     {
         static string Esc(string? value) => Markup.Escape(value ?? string.Empty);
         var unicode = ConsoleEncoding.ShouldRenderUnicode(console.Profile.Capabilities.Unicode);
-        var title = unicode ? "🚀 PowerForge • Unified release" : "PowerForge • Unified release";
+        console.Profile.Capabilities.Unicode = unicode;
+        var emoji = ConsoleEncoding.ShouldRenderEmoji(console.Profile.Capabilities.Unicode);
+        var title = emoji ? "🚀 PowerForge • Unified release" : "PowerForge • Unified release";
+        if (!unicode) title = title.Replace(" • ", " - ");
         console.Write(new Rule($"[yellow bold underline]{Esc(title)}[/]") { Justification = Justify.Left });
 
         var toolOutputs = CountToolOutputs(spec.Tools);

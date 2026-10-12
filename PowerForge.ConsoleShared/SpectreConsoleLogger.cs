@@ -26,16 +26,16 @@ internal class SpectreConsoleLogger : ILogger
     {
         var console = _console ?? AnsiConsole.Console;
         var safe = Markup.Escape(message ?? string.Empty);
-        var unicode = ConsoleEncoding.ShouldRenderUnicode(console.Profile.Capabilities.Unicode);
+        var emoji = ConsoleEncoding.ShouldRenderEmoji(console.Profile.Capabilities.Unicode);
 
         var (icon, color) = level switch
         {
-            LogLevel.Info => (unicode ? "ℹ️" : "i", "deepskyblue1"),
-            LogLevel.Success => (unicode ? "✅" : "+", "green"),
-            LogLevel.Warning => (unicode ? "⚠️" : "!", "yellow"),
-            LogLevel.Error => (unicode ? "❌" : "x", "red"),
-            LogLevel.Verbose => (unicode ? "🔎" : "v", "grey"),
-            _ => (unicode ? "•" : "?", "grey")
+            LogLevel.Info => (emoji ? "ℹ️" : "i", "deepskyblue1"),
+            LogLevel.Success => (emoji ? "✅" : "+", "green"),
+            LogLevel.Warning => (emoji ? "⚠️" : "!", "yellow"),
+            LogLevel.Error => (emoji ? "❌" : "x", "red"),
+            LogLevel.Verbose => (emoji ? "🔎" : "v", "grey"),
+            _ => (emoji ? "•" : "?", "grey")
         };
 
         icon = NormalizeIcon(icon);

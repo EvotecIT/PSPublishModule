@@ -100,20 +100,22 @@ internal static class SpectreModulePipelineConsoleUi
         static string Icon(string? s) => Esc(NormalizeIcon(s));
 
         var unicode = ConsoleEncoding.ShouldRenderUnicode(console.Profile.Capabilities.Unicode);
+        console.Profile.Capabilities.Unicode = unicode;
+        var emoji = ConsoleEncoding.ShouldRenderEmoji(console.Profile.Capabilities.Unicode);
         var versionText = BuildServices.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
         var packageLaneCount = (plan.ProjectBuilds?.Length ?? 0) + (plan.PackageBuilds?.Length ?? 0);
         var coordinatedRelease = packageLaneCount > 0 || plan.Release is not null;
 
-        var title = unicode
-            ? coordinatedRelease
+        var title = emoji ? coordinatedRelease
                 ? $"🛠️ PowerForge • Coordinated release • {plan.ModuleName} {versionText}"
                 : $"🛠️ PowerForge • {plan.ModuleName} {versionText}"
             : coordinatedRelease
                 ? $"PowerForge • Coordinated release • {plan.ModuleName} {versionText}"
                 : $"PowerForge • {plan.ModuleName} {versionText}";
+        if (!unicode) title = title.Replace(" • ", " - ");
         console.Write(new Rule($"[yellow bold underline]{Esc(title)}[/]") { Justification = Justify.Left });
 
-        var iconColWidth = unicode ? 2 : 3;
+        var iconColWidth = emoji ? 2 : 3;
         var info = new Table()
             .Border(TableBorder.None)
             .HideHeaders()
@@ -125,56 +127,56 @@ internal static class SpectreModulePipelineConsoleUi
             => info.AddRow($"[grey]{Icon(icon)}[/]", $"[grey]{Esc(label)}[/]", valueMarkup);
 
         var cfgText = string.IsNullOrWhiteSpace(configLabel) ? "(discovered)" : configLabel;
-        AddInfoRow(unicode ? "⚙️" : "CFG", "Config", Esc(cfgText));
-        AddInfoRow(unicode ? "📁" : "DIR", "Project", Esc(plan.ProjectRoot));
+        AddInfoRow(emoji ? "⚙️" : "CFG", "Config", Esc(cfgText));
+        AddInfoRow(emoji ? "📁" : "DIR", "Project", Esc(plan.ProjectRoot));
 
         if (coordinatedRelease)
         {
             var scope = packageLaneCount > 0
                 ? $"PowerShell module + {packageLaneCount} NuGet package {(packageLaneCount == 1 ? "lane" : "lanes")}"
                 : "PowerShell module";
-            AddInfoRow(unicode ? "🧭" : "SCP", "Scope", Esc(scope));
+            AddInfoRow(emoji ? "🧭" : "SCP", "Scope", Esc(scope));
 
             var buildOrder = plan.Release?.Configuration?.BuildOrder;
             if (buildOrder is { Length: > 0 })
-                AddInfoRow(unicode ? "↕️" : "ORD", "Build order", Esc(FormatReleaseOrder(buildOrder)));
+                AddInfoRow(emoji ? "↕️" : "ORD", "Build order", Esc(FormatReleaseOrder(buildOrder)));
 
             var publishOrder = plan.Release?.Configuration?.PublishOrder;
             if (publishOrder is { Length: > 0 })
-                AddInfoRow(unicode ? "🚀" : "PUB", "Publish order", Esc(FormatReleaseOrder(publishOrder)));
+                AddInfoRow(emoji ? "🚀" : "PUB", "Publish order", Esc(FormatReleaseOrder(publishOrder)));
         }
 
         var stagingText = string.IsNullOrWhiteSpace(plan.BuildSpec.StagingPath) ? "(temp)" : plan.BuildSpec.StagingPath;
-        AddInfoRow(unicode ? "🧪" : "TMP", "Staging", Esc(stagingText));
+        AddInfoRow(emoji ? "🧪" : "TMP", "Staging", Esc(stagingText));
 
         var frameworks = plan.BuildSpec.Frameworks is { Length: > 0 }
             ? string.Join(", ", plan.BuildSpec.Frameworks)
             : "(auto)";
-        AddInfoRow(unicode ? "🧩" : "TFM", "Frameworks", Esc(frameworks));
+        AddInfoRow(emoji ? "🧩" : "TFM", "Frameworks", Esc(frameworks));
 
         var docsEnabled = plan.DocumentationBuild?.Enable == true;
-        AddInfoRow(unicode ? "📚" : "DOC", "Docs", docsEnabled ? "[green]Enabled[/]" : "[grey]Disabled[/]");
+        AddInfoRow(emoji ? "📚" : "DOC", "Docs", docsEnabled ? "[green]Enabled[/]" : "[grey]Disabled[/]");
 
         var validations = new List<string>();
         if (plan.FileConsistencySettings?.Enable == true) validations.Add("File consistency");
         if (plan.CompatibilitySettings?.Enable == true) validations.Add("Compatibility");
         if (plan.ValidationSettings?.Enable == true) validations.Add("Module validation");
         AddInfoRow(
-            unicode ? "🔎" : "VAL",
+            emoji ? "🔎" : "VAL",
             "Validation",
             validations.Count == 0 ? "[grey]Disabled[/]" : Esc(string.Join(", ", validations)));
 
         AddInfoRow(
-            unicode ? "📦" : "PKG",
+            emoji ? "📦" : "PKG",
             coordinatedRelease ? "Module artefacts" : "Artefacts",
             Esc((plan.Artefacts?.Length ?? 0).ToString()));
         AddInfoRow(
-            unicode ? "🚀" : "PUB",
+            emoji ? "🚀" : "PUB",
             coordinatedRelease ? "Module publishes" : "Publishes",
             Esc((plan.Publishes?.Length ?? 0).ToString()));
-        AddInfoRow(unicode ? "📥" : "INS", "Install", plan.InstallEnabled ? Esc($"{plan.InstallStrategy}, keep {plan.InstallKeepVersions}") : "[grey]Disabled[/]");
+        AddInfoRow(emoji ? "📥" : "INS", "Install", plan.InstallEnabled ? Esc($"{plan.InstallStrategy}, keep {plan.InstallKeepVersions}") : "[grey]Disabled[/]");
 
-        AddInfoRow(unicode ? "🧭" : "STP", coordinatedRelease ? "Coordinated steps" : "Steps", Esc(steps.Length.ToString()));
+        AddInfoRow(emoji ? "🧭" : "STP", coordinatedRelease ? "Coordinated steps" : "Steps", Esc(steps.Length.ToString()));
         console.Write(info);
         console.WriteLine();
     }

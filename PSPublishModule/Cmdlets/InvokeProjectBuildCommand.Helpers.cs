@@ -54,7 +54,8 @@ public sealed partial class InvokeProjectBuildCommand
         int assetsCount,
         IReadOnlyList<ProjectBuildGitHubResult> results)
     {
-        var unicode = AnsiConsole.Profile.Capabilities.Unicode;
+        var unicode = ConsoleEncoding.ShouldRenderUnicode(AnsiConsole.Profile.Capabilities.Unicode);
+        AnsiConsole.Profile.Capabilities.Unicode = unicode;
         var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
         var summary = new ProjectBuildGitHubPublishSummary
         {
@@ -67,7 +68,8 @@ public sealed partial class InvokeProjectBuildCommand
             summary.Results.Add(result);
 
         var display = new ProjectBuildGitHubDisplayService().CreateSummary(summary);
-        var title = unicode ? $"✅ {display.Title}" : display.Title;
+        var title = ConsoleEncoding.ShouldRenderEmoji(AnsiConsole.Profile.Capabilities.Unicode)
+            ? $"✅ {display.Title}" : display.Title;
         AnsiConsole.Write(new Rule($"[green]{title}[/]").LeftJustified());
 
         var table = new Table()

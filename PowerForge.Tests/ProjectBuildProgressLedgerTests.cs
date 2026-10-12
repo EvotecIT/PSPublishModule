@@ -402,7 +402,7 @@ public sealed class ProjectBuildProgressLedgerTests
     [InlineData(nameof(DotNetPublishStepKind.Bundle), "PK")]
     public void SharedKindIcons_DescribeRealReleaseAdapterKinds(string kind, string expected)
     {
-        var rendered = SpectreProgressPresentation.GetKindIcon(kind, unicode: false);
+        var rendered = SpectreProgressPresentation.GetKindIcon(kind, emoji: false);
         Assert.Contains(expected, rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("PF", rendered, StringComparison.Ordinal);
     }

@@ -52,7 +52,9 @@ internal static class SpectreProjectBuildConsoleUi
             {
                 var tasks = phases.ToDictionary(
                     phase => phase,
-                    phase => context.AddTask(BuildPendingLabel(phase), maxValue: 100, autoStart: false));
+                    phase => context.AddTask(presentation.BuildLabel(
+                        new SpectreProgressLedgerItem { Title = BuildPendingLabel(phase) }, null),
+                        maxValue: 100, autoStart: false));
                 reporter = new SpectreProjectBuildProgressReporter(context, tasks, presentation);
 
                 try
@@ -93,7 +95,10 @@ internal static class SpectreProjectBuildConsoleUi
     {
         static string Esc(string? value) => Markup.Escape(value ?? string.Empty);
         var unicode = ConsoleEncoding.ShouldRenderUnicode(console.Profile.Capabilities.Unicode);
-        var title = unicode ? "🛠️ PowerForge • Project build" : "PowerForge • Project build";
+        console.Profile.Capabilities.Unicode = unicode;
+        var emoji = ConsoleEncoding.ShouldRenderEmoji(console.Profile.Capabilities.Unicode);
+        var title = emoji ? "🛠️ PowerForge • Project build" : "PowerForge • Project build";
+        if (!unicode) title = title.Replace(" • ", " - ");
         console.Write(new Rule($"[yellow bold underline]{Esc(title)}[/]") { Justification = Justify.Left });
 
         var actions = new List<string>();
@@ -185,7 +190,7 @@ internal static class SpectreProjectBuildConsoleUi
             if (!_tasks.TryGetValue(phase, out var task)) return;
             var count = GetTerminalCount(phase, completed: true);
             if (!task.IsStarted) task.StartTask();
-            task.Description = BuildLabel(phase, detail, count.Completed, count.Total);
+            task.Description = DescribePhase(task, phase, detail, count.Completed.GetValueOrDefault(), count.Total.GetValueOrDefault());
             task.Value = 100;
             task.StopTask();
             _presentation.MarkTerminal(task, SpectreProgressLedgerState.Completed);
@@ -197,7 +202,7 @@ internal static class SpectreProjectBuildConsoleUi
             _failed.Add(phase);
             var count = GetTerminalCount(phase, completed: false);
             if (!task.IsStarted) task.StartTask();
-            task.Description = BuildLabel(phase, detail, count.Completed, count.Total);
+            task.Description = DescribePhase(task, phase, detail, count.Completed.GetValueOrDefault(), count.Total.GetValueOrDefault());
             task.Value = 100;
             task.StopTask();
             _presentation.MarkTerminal(task, SpectreProgressLedgerState.Failed);
@@ -238,7 +243,7 @@ internal static class SpectreProjectBuildConsoleUi
                 }
 
                 task.StartTask();
-                task.Description = BuildLabel(entry.Key, success ? "not required" : "skipped after failure", null, null);
+                task.Description = DescribePhase(task, entry.Key, success ? "not required" : "skipped after failure", 0, 0);
                 task.Value = 100;
                 task.StopTask();
                 _presentation.MarkTerminal(task, SpectreProgressLedgerState.Skipped);
@@ -317,9 +322,9 @@ internal static class SpectreProjectBuildConsoleUi
                 ? ProgressCounterFormatter.Format(
                     ProgressCounterFormatter.GetProjectBuildScope(phase),
                     completed.GetValueOrDefault(),
-                    total.GetValueOrDefault()) + " — "
+                    total.GetValueOrDefault()) + " - "
                 : string.Empty;
-            var suffix = string.IsNullOrWhiteSpace(detail) ? string.Empty : $" — {detail}";
+            var suffix = string.IsNullOrWhiteSpace(detail) ? string.Empty : $" - {detail}";
             return count + GetPhaseName(phase) + suffix;
         }
     }

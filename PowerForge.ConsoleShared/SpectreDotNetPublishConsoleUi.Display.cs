@@ -15,17 +15,19 @@ internal static partial class SpectreDotNetPublishConsoleUi
         static string Icon(string? s) => Esc(NormalizeIcon(s));
 
         var unicode = ConsoleEncoding.ShouldRenderUnicode(console.Profile.Capabilities.Unicode);
+        console.Profile.Capabilities.Unicode = unicode;
+        var emoji = ConsoleEncoding.ShouldRenderEmoji(console.Profile.Capabilities.Unicode);
         var titleTarget = !string.IsNullOrWhiteSpace(plan.SolutionPath)
             ? Path.GetFileName(plan.SolutionPath)
             : plan.ProjectRoot;
 
-        var title = unicode
-            ? $"📦 dotnet publish • {titleTarget}"
+        var title = emoji ? $"📦 dotnet publish • {titleTarget}"
             : $"dotnet publish • {titleTarget}";
 
+        if (!unicode) title = title.Replace(" • ", " - ");
         console.Write(new Rule($"[yellow bold underline]{Esc(title)}[/]") { Justification = Justify.Left });
 
-        var iconColWidth = unicode ? 2 : 3;
+        var iconColWidth = emoji ? 2 : 3;
         var info = new Table()
             .Border(TableBorder.None)
             .HideHeaders()
@@ -37,11 +39,11 @@ internal static partial class SpectreDotNetPublishConsoleUi
             => info.AddRow($"[grey]{Icon(icon)}[/]", $"[grey]{Esc(label)}[/]", valueMarkup);
 
         var cfgText = string.IsNullOrWhiteSpace(configPath) ? "(discovered)" : configPath;
-        AddInfoRow(unicode ? "⚙️" : "CFG", "Config", Esc(cfgText));
-        AddInfoRow(unicode ? "📁" : "DIR", "Project", Esc(plan.ProjectRoot));
+        AddInfoRow(emoji ? "⚙️" : "CFG", "Config", Esc(cfgText));
+        AddInfoRow(emoji ? "📁" : "DIR", "Project", Esc(plan.ProjectRoot));
         if (!string.IsNullOrWhiteSpace(plan.SolutionPath))
-            AddInfoRow(unicode ? "🧩" : "SLN", "Solution", Esc(plan.SolutionPath));
-        AddInfoRow(unicode ? "⚙️" : "CFG", "Configuration", Esc(plan.Configuration));
+            AddInfoRow(emoji ? "🧩" : "SLN", "Solution", Esc(plan.SolutionPath));
+        AddInfoRow(emoji ? "⚙️" : "CFG", "Configuration", Esc(plan.Configuration));
 
         var runtimes = plan.Targets
             .SelectMany(t => t.Publish.Runtimes ?? Array.Empty<string>())
@@ -50,9 +52,9 @@ internal static partial class SpectreDotNetPublishConsoleUi
             .OrderBy(r => r, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        AddInfoRow(unicode ? "🎯" : "TGT", "Targets", plan.Targets.Length.ToString());
-        AddInfoRow(unicode ? "🖥️" : "RID", "Runtimes", runtimes.Length == 0 ? "(none)" : Esc(string.Join(", ", runtimes)));
-        AddInfoRow(unicode ? "🧾" : "STP", "Steps", (plan.Steps?.Length ?? 0).ToString());
+        AddInfoRow(emoji ? "🎯" : "TGT", "Targets", plan.Targets.Length.ToString());
+        AddInfoRow(emoji ? "🖥️" : "RID", "Runtimes", runtimes.Length == 0 ? "(none)" : Esc(string.Join(", ", runtimes)));
+        AddInfoRow(emoji ? "🧾" : "STP", "Steps", (plan.Steps?.Length ?? 0).ToString());
 
         console.Write(info);
         console.WriteLine();
@@ -89,8 +91,9 @@ internal static partial class SpectreDotNetPublishConsoleUi
     private static void WriteSummary(IAnsiConsole console, DotNetPublishPlan plan, DotNetPublishResult result)
     {
         var unicode = ConsoleEncoding.ShouldRenderUnicode(console.Profile.Capabilities.Unicode);
-        var title = unicode
-            ? (result.Succeeded ? "✅ Summary" : "❌ Summary")
+        console.Profile.Capabilities.Unicode = unicode;
+        var emoji = ConsoleEncoding.ShouldRenderEmoji(console.Profile.Capabilities.Unicode);
+        var title = emoji ? (result.Succeeded ? "✅ Summary" : "❌ Summary")
             : "Summary";
 
         console.Write(new Rule($"[grey]{Markup.Escape(title)}[/]") { Justification = Justify.Left });
@@ -144,7 +147,7 @@ internal static partial class SpectreDotNetPublishConsoleUi
 
             if (tail is not null && !string.IsNullOrWhiteSpace(tail))
             {
-                var header = unicode ? "📄 Output tail" : "Output tail";
+                var header = emoji ? "📄 Output tail" : "Output tail";
                 console.WriteLine();
                 console.Write(new Rule($"[grey]{Markup.Escape(header)}[/]") { Justification = Justify.Left });
 

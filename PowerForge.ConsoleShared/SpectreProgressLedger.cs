@@ -224,7 +224,8 @@ internal sealed class SpectreProgressLedger
                     .Where(value => !string.IsNullOrWhiteSpace(value)));
             table.AddRow(
                 $"[{color}]{icon}[/]",
-                SpectreProgressPresentation.GetKindIcon(snapshot.Kind, unicode),
+                SpectreProgressPresentation.GetKindIcon(snapshot.Kind,
+                    ConsoleEncoding.ShouldRenderEmoji(console.Profile.Capabilities.Unicode)),
                 $"[{color}]{Esc($"{ordinal} {snapshot.Title}")}[/]",
                 $"[{color}]{Esc(result)}[/]",
                 $"[deepskyblue1]{Esc(FormatDuration(snapshot.Duration))}[/]");
