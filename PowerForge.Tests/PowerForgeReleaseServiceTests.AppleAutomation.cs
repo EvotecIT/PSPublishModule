@@ -1566,7 +1566,7 @@ public sealed partial class PowerForgeReleaseServiceTests
         return RunSnapshotGit(root, "rev-parse", "HEAD").Trim();
     }
 
-    private static PowerForgeReleaseService CreateAppleAutomationService(
+    private PowerForgeReleaseService CreateAppleAutomationService(
         Func<AppStoreConnectReleaseStateRequest, AppStoreConnectReleaseStateResult> getState,
         Action<TimeSpan>? delay = null,
         Func<string, long>? getAvailableBytes = null,
@@ -1609,7 +1609,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             planAppleGovernance: planAppleGovernance,
             submitAppleReview: submitAppleReview,
             checkAppleReleaseReadiness: checkAppleReleaseReadiness,
-            runReleaseValidation: runReleaseValidation);
+            runReleaseValidation: runReleaseValidation,
+            appleAppStateRoot: _appleAppStateRoot);
 
     private static AppStoreConnectReleaseStateResult CreateReleaseState(
         AppStoreConnectReleaseStateRequest request,

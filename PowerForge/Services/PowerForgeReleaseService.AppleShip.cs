@@ -163,6 +163,7 @@ internal sealed partial class PowerForgeReleaseService
             PreviousMarketingVersion = versioning.PreviousMarketingVersion,
             PreviousBuildNumber = versioning.PreviousBuildNumber,
             HighestRemoteBuildNumber = versioning.HighestRemoteBuildNumber,
+            HighestReservedBuildNumber = versioning.HighestReservedBuildNumber,
             HighestRemoteMarketingVersion = versioning.HighestRemoteMarketingVersion,
             ReusedUnreleasedMarketingVersion = versioning.ReusedUnreleasedMarketingVersion,
             Changed = false

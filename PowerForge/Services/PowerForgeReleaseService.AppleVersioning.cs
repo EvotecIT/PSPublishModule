@@ -654,6 +654,7 @@ internal sealed partial class PowerForgeReleaseService
         versioning.RequestedMarketingVersion = approved.RequestedMarketingVersion;
         versioning.MarketingVersionPattern = approved.MarketingVersionPattern;
         versioning.HighestRemoteMarketingVersion = approved.HighestRemoteMarketingVersion;
+        versioning.HighestReservedBuildNumber = approved.HighestReservedBuildNumber;
         versioning.ReusedUnreleasedMarketingVersion = approved.ReusedUnreleasedMarketingVersion;
         versioning.SourcePath = approved.SourcePath;
         foreach (var app in plan.Apps)
@@ -751,10 +752,12 @@ internal sealed partial class PowerForgeReleaseService
         }
 
         var requestedVersion = resolution?.MarketingVersion ?? requested;
+        var highestReserved = AppleReleaseAppState.HighestReserved(plan, plan.SourceCommit, currentBuild, _appleAppStateRoot);
+        var allocationFloor = Math.Max(highestRemote, highestReserved);
         var nextBuild = string.Equals(current.MarketingVersion, requestedVersion, StringComparison.OrdinalIgnoreCase) &&
-                        currentBuild > highestRemote
+                        currentBuild > allocationFloor
             ? currentBuild
-            : checked(Math.Max(currentBuild, highestRemote) + 1);
+            : checked(Math.Max(currentBuild, allocationFloor) + 1);
         var receipt = source.Update(
             plan.VersionSourcePath!,
             approvedContent,
@@ -763,6 +766,7 @@ internal sealed partial class PowerForgeReleaseService
             highestRemote,
             whatIf);
         receipt.RequestedMarketingVersion = requested;
+        receipt.HighestReservedBuildNumber = highestReserved;
         receipt.MarketingVersionPattern = resolution?.Pattern;
         receipt.HighestRemoteMarketingVersion = resolution?.HighestRemoteMarketingVersion;
         receipt.ReusedUnreleasedMarketingVersion = resolution?.ReusedUnreleasedMarketingVersion == true;

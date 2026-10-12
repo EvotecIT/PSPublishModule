@@ -1,0 +1,178 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+
+namespace PowerForge;
+
+/// <summary>Machine-local app ownership and delivery reservations shared by every checkout.</summary>
+internal sealed class AppleReleaseAppState : IDisposable
+{
+    private readonly List<FileStream> _leases = new();
+    private readonly string[] _directories;
+
+    internal static string Root => ResolveRoot();
+
+    private AppleReleaseAppState(string[] directories) => _directories = directories;
+
+    internal static AppleReleaseAppState Acquire(PowerForgeAppleReleasePlan plan, string? stateRoot = null)
+    {
+        var directories = Directories(plan, stateRoot);
+        var state = new AppleReleaseAppState(directories);
+        try
+        {
+            foreach (var directory in directories)
+            {
+                EnsureDirectory(directory);
+                var path = Path.Combine(directory, "operation.lock");
+                AssertUnlinked(path);
+                state._leases.Add(new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None));
+            }
+            return state;
+        }
+        catch (IOException exception)
+        {
+            state.Dispose();
+            throw new InvalidOperationException("Another checkout owns this app's Apple release lease. Retry after it finishes.", exception);
+        }
+        catch { state.Dispose(); throw; }
+    }
+
+    internal static long HighestReserved(PowerForgeAppleReleasePlan plan, string? source, long current, string? stateRoot = null)
+    {
+        if (string.IsNullOrWhiteSpace(source)) return 0;
+        long highest = 0;
+        foreach (var directory in Directories(plan, stateRoot))
+        {
+            foreach (var reservation in ReadReservations(directory))
+            {
+                // Resuming this exact source keeps its build identity. Other source commits
+                // must advance beyond every attempt, including deliveries absent from Apple APIs.
+                if ((reservation.Identity ?? reservation.Build.ToString(System.Globalization.CultureInfo.InvariantCulture)) == current.ToString(System.Globalization.CultureInfo.InvariantCulture) && !string.IsNullOrWhiteSpace(source) &&
+                    string.Equals(reservation.Source, source, StringComparison.OrdinalIgnoreCase)) continue;
+                highest = Math.Max(highest, reservation.Build);
+            }
+        }
+        return highest;
+    }
+
+    internal void Reserve(PowerForgeAppleReleasePlan plan, string build, string? bundleId = null)
+    {
+        if (string.IsNullOrWhiteSpace(plan.SourceCommit)) return;
+        if (!Regex.IsMatch(build, @"^[0-9]+(?:\.[0-9]+){0,2}$") || !long.TryParse(build.Split('.')[0], out var number) || number <= 0)
+            throw new InvalidOperationException("Apple delivery reservation needs a valid numeric Apple build identity.");
+        foreach (var directory in _directories.Where(value => bundleId is null || Path.GetFileName(value) == Hash(bundleId.Trim().ToLowerInvariant())))
+        {
+            var reservations = ReadReservations(directory).ToList();
+            var existing = reservations.SingleOrDefault(value => (value.Identity ?? value.Build.ToString(System.Globalization.CultureInfo.InvariantCulture)) == build);
+            if (existing is not null)
+            {
+                if (string.IsNullOrWhiteSpace(plan.SourceCommit) || existing.Source != plan.SourceCommit)
+                    throw new InvalidOperationException($"Apple build {number} is already reserved for another source.");
+                continue;
+            }
+            reservations.Add(new Reservation { Build = number, Identity = build, Source = plan.SourceCommit, ReservedAt = DateTimeOffset.UtcNow });
+            AtomicWrite(Path.Combine(directory, "reservations.json"), reservations);
+        }
+    }
+
+    internal static void AssertMutationAllowed(PowerForgeAppleReleasePlan plan, string? stateRoot = null)
+    {
+        foreach (var directory in Directories(plan, stateRoot))
+            if (File.Exists(Path.Combine(directory, "paused")))
+                throw new InvalidOperationException("Apple operations for this app are paused by the local operator.");
+        var gate = Environment.GetEnvironmentVariable("POWERFORGE_APPLE_WORKER_GATE");
+        if (string.IsNullOrWhiteSpace(gate)) return;
+        if (!GateAllowsMutation(gate, DateTimeOffset.UtcNow))
+            throw new InvalidOperationException("TestFlight worker is Off, paused, or has lost its request heartbeat. The next mutating stage is held.");
+    }
+
+    internal static bool GateAllowsMutation(string gate, DateTimeOffset now)
+    {
+        AssertUnlinked(gate);
+        using var document = JsonDocument.Parse(File.ReadAllText(gate));
+        var value = document.RootElement;
+        return value.GetProperty("Allowed").GetBoolean() && value.GetProperty("ExpiresAt").GetDateTimeOffset() > now;
+    }
+
+    internal static string AppDirectory(string bundleId) => Path.Combine(Root, "apps", Hash(bundleId.Trim().ToLowerInvariant()));
+
+    internal static void AtomicWrite<T>(string path, T value)
+    {
+        AssertUnlinked(path);
+        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            var bytes = JsonSerializer.SerializeToUtf8Bytes(value);
+            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            { stream.Write(bytes, 0, bytes.Length); stream.Flush(true); }
+            if (File.Exists(path)) File.Replace(temporary, path, null);
+            else File.Move(temporary, path);
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+
+    internal static void AssertUnlinked(string path)
+    {
+        for (var current = Path.GetFullPath(path); !string.IsNullOrEmpty(current); current = Path.GetDirectoryName(current))
+        {
+            if ((File.Exists(current) || Directory.Exists(current)) &&
+                (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException($"Apple local state must not traverse linked paths: {current}");
+        }
+    }
+
+    internal static void EnsureDirectory(string path)
+    {
+        AssertUnlinked(path);
+        Directory.CreateDirectory(path);
+#if NET8_0_OR_GREATER
+        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+#endif
+    }
+
+    private static string ResolveRoot()
+    {
+        var configured = Environment.GetEnvironmentVariable("POWERFORGE_APPLE_STATE_ROOT");
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            if (!Path.IsPathRooted(configured) || !Directory.Exists(configured))
+                throw new InvalidOperationException("POWERFORGE_APPLE_STATE_ROOT must identify an existing absolute local directory on the mounted development volume.");
+            AssertUnlinked(configured);
+            return Path.GetFullPath(configured);
+        }
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PowerForge", "Apple");
+    }
+
+    private static string[] Directories(PowerForgeAppleReleasePlan plan, string? stateRoot = null) => plan.Apps
+        .Select(app => app.BundleId?.Trim().ToLowerInvariant())
+        .Where(static value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.Ordinal)
+        .Select(value => Path.Combine(stateRoot ?? Root, "apps", Hash(value!)))
+        .OrderBy(static value => value, StringComparer.Ordinal).ToArray();
+
+    internal static string Hash(string value)
+    {
+        using var hash = SHA256.Create();
+        return BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(value))).Replace("-", "").ToLowerInvariant();
+    }
+
+    private static Reservation[] ReadReservations(string directory)
+    {
+        var path = Path.Combine(directory, "reservations.json");
+        AssertUnlinked(path);
+        if (!File.Exists(path)) return Array.Empty<Reservation>();
+        return JsonSerializer.Deserialize<Reservation[]>(File.ReadAllText(path)) ??
+               throw new InvalidOperationException("Apple build reservation journal is empty or invalid.");
+    }
+
+    internal sealed class Reservation
+    {
+        // Integer allocation advances beyond the first component of a dotted manual build.
+        public long Build { get; set; }
+        public string? Identity { get; set; }
+        public string? Source { get; set; }
+        public DateTimeOffset ReservedAt { get; set; }
+    }
+
+    public void Dispose() { for (var index = _leases.Count - 1; index >= 0; index--) _leases[index].Dispose(); }
+}

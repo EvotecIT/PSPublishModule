@@ -51,6 +51,7 @@ internal sealed partial class PowerForgeReleaseService
         "Artifacts/DotNetPublish/Store/{storePackage}/{target}/{rid}/{framework}/{style}";
 
     private readonly ILogger _logger;
+    private readonly string? _appleAppStateRoot;
     private readonly Func<ProjectBuildHostRequest, ProjectBuildConfiguration, string, ProjectBuildHostExecutionResult> _executePackages;
     private readonly Func<PowerForgeToolReleaseSpec, string, PowerForgeReleaseRequest, PowerForgeToolReleasePlan> _planTools;
     private readonly Func<PowerForgeToolReleasePlan, IPowerForgeReleaseProgressReporterV2?, CancellationToken, PowerForgeToolReleaseResult> _runTools;
@@ -188,7 +189,8 @@ internal sealed partial class PowerForgeReleaseService
         Func<string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedNuGetAssets = null,
         Func<string, string, string, IEnumerable<string>, CancellationToken, string[]>? restorePublishedModuleAssets = null,
         Func<VirusTotalMonitorPublishRequest, CancellationToken, VirusTotalMonitorPublishResult>? publishVirusTotalMonitor = null,
-        Func<PowerForgeReleaseValidationAction, PowerForgeReleaseValidationContext, string, CancellationToken, PowerForgeReleaseValidationResult>? runReleaseValidation = null)
+        Func<PowerForgeReleaseValidationAction, PowerForgeReleaseValidationContext, string, CancellationToken, PowerForgeReleaseValidationResult>? runReleaseValidation = null,
+        string? appleAppStateRoot = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _executePackages = executePackages ?? throw new ArgumentNullException(nameof(executePackages));
@@ -234,6 +236,7 @@ internal sealed partial class PowerForgeReleaseService
             new AppleNotarizationService().NotarizeAsync(request).GetAwaiter().GetResult());
         _generateAppleProject = generateAppleProject ?? (app => new AppleProjectGenerationService().Generate(app));
         _delay = delay ?? Thread.Sleep;
+        _appleAppStateRoot = appleAppStateRoot;
         _appleArtifactService = appleArtifactService ?? new AppleReleaseArtifactService();
         _appleReceiptStore = appleReceiptStore ?? new AppleReleaseReceiptStore();
         _executeModuleBuild = executeModuleBuild
@@ -2387,7 +2390,8 @@ internal sealed partial class PowerForgeReleaseService
 
     private PowerForgeAppleAppReleaseResult[] RunAppleRelease(
         PowerForgeAppleReleasePlan plan,
-        out PowerForgeAppleReleaseCleanupReceipt cleanup)
+        out PowerForgeAppleReleaseCleanupReceipt cleanup,
+        AppleReleaseAppState? deliveryReservations = null)
     {
         using var sourceSnapshot = AppleReleaseSourceSnapshot.CreateIfRequired(plan);
         cleanup = new PowerForgeAppleReleaseCleanupReceipt();
@@ -2620,6 +2624,8 @@ internal sealed partial class PowerForgeReleaseService
             try
             {
                 var resumedUpload = resumedByApp[app];
+                if (plan.Upload && !plan.Rehearse && !resumedUpload && UsesAppStoreConnect(app))
+                    deliveryReservations?.Reserve(plan, ResolveAppleDistributionValues(app, result.VersionUpdate).BuildNumber, app.BundleId);
                 using var archiveBuildSnapshot = plan.Archive && !resumedUpload
                     ? AppleArchiveBuildSnapshot.Create(app.ArchivePath)
                     : null;
@@ -2652,6 +2658,7 @@ internal sealed partial class PowerForgeReleaseService
                     ReportAppleProgress(plan, app, PowerForgeReleaseProgressItemState.Started, "Preparing exact-source archive");
                     var directArchive = app.DistributionRoute == AppleDistributionRoute.DirectNotarized;
                     using var sourceMutationMonitor = sourceSnapshot?.MonitorChanges();
+                    AppleReleaseAppState.AssertMutationAllowed(plan, _appleAppStateRoot);
                     var archive = _archiveAppleApp(new AppleAppArchiveRequest
                     {
                         ProjectPath = sourceSnapshot?.MapPath(app.ProjectPath) ?? app.ProjectPath,
@@ -2717,6 +2724,7 @@ internal sealed partial class PowerForgeReleaseService
                 var uploadRemoteMutationStarted = false;
                 try
                 {
+                    AppleReleaseAppState.AssertMutationAllowed(plan, _appleAppStateRoot);
                     upload = _uploadAppleApp(new AppleAppArchiveUploadRequest
                     {
                         ArchivePath = uploadSnapshot?.ArchivePath ?? app.ArchivePath,
@@ -2926,6 +2934,7 @@ internal sealed partial class PowerForgeReleaseService
                 ShouldRunAppleShipTestFlightDistribution(plan, app))
             {
                 var testFlightValues = valuesByApp[app];
+                AppleReleaseAppState.AssertMutationAllowed(plan, _appleAppStateRoot);
                 result.TestFlight = _distributeTestFlight(new AppStoreConnectTestFlightDistributionRequest
                 {
                     Credential = CreateAppStoreConnectCredential(plan),

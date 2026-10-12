@@ -3,8 +3,11 @@ using System.Diagnostics;
 
 namespace PowerForge.Tests;
 
-public sealed partial class PowerForgeReleaseServiceTests
+public sealed partial class PowerForgeReleaseServiceTests : IDisposable
 {
+    private readonly string _appleAppStateRoot = CreateSandbox();
+    public void Dispose() => TryDelete(_appleAppStateRoot);
+
     [Fact]
     public void ModuleReleasePlan_LegacyScriptWithoutFramework_PreservesHostFallback()
     {

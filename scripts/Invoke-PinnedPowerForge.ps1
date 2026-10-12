@@ -10,6 +10,8 @@ param(
     [ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')]
     [string] $ExpectedConsumerRepository,
 
+    [switch] $LoadFixedLocalAppleProfile,
+
     [Parameter(Mandatory, Position = 0, ValueFromRemainingArguments)]
     [string[]] $ArgumentList
 )
@@ -174,7 +176,7 @@ function Get-OptionValue {
 }
 
 function Assert-SafeArguments {
-    if ($ArgumentList.Count -lt 1 -or $ArgumentList[0] -notin @('apple-release', 'apple-deploy', 'apple-screenshots', 'apple-governance', 'apple-review-details')) {
+    if ($ArgumentList.Count -lt 1 -or $ArgumentList[0] -notin @('apple-release', 'apple-deploy', 'apple-screenshots', 'apple-governance', 'apple-review-details', 'apple-testflight')) {
         throw 'Pinned local operator accepts only Apple PowerForge commands.'
     }
     foreach ($forbidden in @('--key-path', '--key-id', '--issuer-id')) {
@@ -186,7 +188,7 @@ function Assert-SafeArguments {
         throw 'UploadExisting is forbidden at the pinned local operator boundary because existing archive bytes lack reviewed provenance.'
     }
     $config = Get-OptionValue -Option '--config'
-    $requiresConfig = $command -in @('apple-release', 'apple-deploy') -or
+    $requiresConfig = $command -in @('apple-release', 'apple-deploy', 'apple-testflight') -or
         ($command -eq 'apple-screenshots' -and $operation -ne 'manifests') -or
         $command -eq 'apple-review-details' -or
         ($command -eq 'apple-governance' -and $operation -ne 'snapshot')
@@ -203,12 +205,24 @@ function Assert-SafeArguments {
             Assert-TrackedConsumerInput -Value $value -Option $option
         }
     }
-    if ($command -in @('apple-release', 'apple-deploy') -and $config) {
+    if ($command -in @('apple-release', 'apple-deploy', 'apple-testflight') -and $config) {
         $script:validatedReleaseConfigPaths += Resolve-OptionPath -Value $config
     }
     $releaseConfig = Get-OptionValue -Option '--release-config'
     if ($releaseConfig) {
         $script:validatedReleaseConfigPaths += Resolve-OptionPath -Value $releaseConfig
+    }
+    if ($command -eq 'apple-testflight') {
+        $policy = Get-OptionValue -Option '--policy'
+        if (-not $policy -or -not [IO.Path]::IsPathRooted($policy)) { throw 'apple-testflight requires an absolute machine-local --policy path.' }
+        Assert-UnlinkedPath -Path $policy -Name 'Local TestFlight policy'
+        $localPolicy = Get-Content -LiteralPath $policy -Raw | ConvertFrom-Json
+        if ([IO.Path]::GetFullPath($localPolicy.ConsumerRoot) -ne $consumer -or
+            $localPolicy.Repository -ne $ExpectedConsumerRepository -or
+            [IO.Path]::GetFullPath($localPolicy.OwnerRoot) -ne $toolRoot -or
+            $localPolicy.OwnerCommit -ne $ExpectedCommit -or $localPolicy.ConfigPath -ne $config) {
+            throw 'Local TestFlight policy must bind this exact operator, consumer, repository, and release config.'
+        }
     }
     foreach ($option in @('--capture-provenance', '--reviewed-plan')) {
         $value = Get-OptionValue -Option $option
@@ -379,6 +393,25 @@ function Assert-FixedLocalCredentialProfile {
     }
 }
 
+function Read-FixedLocalAppleProfile {
+    $profileRoot = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.appstoreconnect'
+    $profilePath = Join-Path $profileRoot 'env'
+    Assert-UnlinkedPath -Path $profilePath -Name 'Fixed local Apple environment'
+    Assert-PrivateUnixPath -Path $profileRoot -Directory $true -Description 'App Store Connect profile directory'
+    Assert-PrivateUnixPath -Path $profilePath -Directory $false -Description 'App Store Connect environment file'
+    $values = @{}
+    foreach ($line in [IO.File]::ReadAllLines($profilePath)) {
+        if ($line -match '^\s*(?:#.*)?$') { continue }
+        $assignment = [regex]::Match($line, '^\s*(?:export\s+)?(?<name>APP_STORE_CONNECT_(?:KEY_ID|ISSUER_ID|PRIVATE_KEY_PATH)|ASC_(?:KEY_ID|ISSUER_ID|PRIVATE_KEY_PATH))\s*=\s*(?:"(?<value>[^"\r\n]*)"|''(?<value>[^''\r\n]*)''|(?<value>[^\s;`|&<>]+))\s*$')
+        if (-not $assignment.Success) { throw 'The fixed local Apple environment accepts only literal credential assignments and comments.' }
+        $value = $assignment.Groups['value'].Value
+        $value = $value.Replace('${HOME}', [Environment]::GetFolderPath('UserProfile')).Replace('$HOME', [Environment]::GetFolderPath('UserProfile'))
+        if ($value.Contains('$') -or $value.Contains('`')) { throw 'The fixed local Apple environment must not execute shell expressions.' }
+        $values[$assignment.Groups['name'].Value] = $value
+    }
+    return $values
+}
+
 function New-TrackedToolSnapshot {
     param([Parameter(Mandatory)][string] $TarPath)
     $snapshotRoot = Join-Path $temporaryRoot 'tool-source'
@@ -541,7 +574,7 @@ function Invoke-RedactedProcess {
         PATH = $(if ($IsMacOS) { '/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin' } elseif ($IsWindows) { "$env:SystemRoot\System32;$env:SystemRoot" } else { '/usr/bin:/bin:/usr/sbin:/sbin' })
         TMPDIR = [IO.Path]::GetTempPath()
     }
-    foreach ($name in @('USER', 'LOGNAME', 'SHELL', 'SSH_AUTH_SOCK', 'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'SSL_CERT_FILE', 'SSL_CERT_DIR')) {
+    foreach ($name in @('USER', 'LOGNAME', 'SHELL', 'SSH_AUTH_SOCK', 'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'POWERFORGE_APPLE_STATE_ROOT', 'POWERFORGE_APPLE_WORKER_GATE')) {
         $value = [Environment]::GetEnvironmentVariable($name)
         if (-not [string]::IsNullOrWhiteSpace($value)) { $safeEnvironment[$name] = $value }
     }
@@ -577,6 +610,7 @@ function Invoke-RedactedProcess {
 try {
     New-Item -ItemType Directory -Path $temporaryRoot -Force | Out-Null
     $savedCredentialEnvironment = Suspend-AppleCredentialEnvironment
+    if ($LoadFixedLocalAppleProfile) { $savedCredentialEnvironment = Read-FixedLocalAppleProfile }
     Set-SafeGitEnvironment
     $script:gitPath = Resolve-FixedTool -Name git
     $toolHead = Assert-CleanRepository -Root $toolRoot -Name 'PSPublishModule source' -RequiredCommit $ExpectedCommit -ExpectedRepository 'EvotecIT/PSPublishModule'

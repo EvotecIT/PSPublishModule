@@ -640,6 +640,7 @@ internal sealed partial class PowerForgeReleaseService
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray(),
                 TestFlightBetaGroupsConfigured = betaGroupsConfigured,
+                DistributedTestFlightBetaGroups = result?.TestFlight?.VerifiedBetaGroups ?? Array.Empty<AppStoreConnectBetaGroupInfo>(),
                 ControlPlane = result?.RemoteState?.ControlPlane,
                 Governance = result?.Governance,
                 ArchiveCreated = result?.Archive?.Succeeded == true,

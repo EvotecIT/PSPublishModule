@@ -241,6 +241,9 @@ internal sealed class PowerForgeAppleVersionReceipt
 
     public long HighestRemoteBuildNumber { get; set; }
 
+    /// <summary>Highest other-source build reserved locally, separate from Apple's inventory.</summary>
+    public long HighestReservedBuildNumber { get; set; }
+
     public string? HighestRemoteMarketingVersion { get; set; }
 
     public bool ReusedUnreleasedMarketingVersion { get; set; }
@@ -350,6 +353,9 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
     public string? ReadinessSha256 { get; set; }
 
     public bool TestFlightBetaGroupsConfigured { get; set; }
+
+    /// <summary>Groups actually resolved by this attempt's successful TestFlight distribution.</summary>
+    public AppStoreConnectBetaGroupInfo[] DistributedTestFlightBetaGroups { get; set; } = Array.Empty<AppStoreConnectBetaGroupInfo>();
 
     public AppStoreConnectControlPlaneState? ControlPlane { get; set; }
 
