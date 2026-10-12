@@ -223,6 +223,8 @@ jobs:
                 $null = $discovery.WaitForExit(5000)
                 throw 'Simulator capture discovery timed out before capture.'
               }
+              # The timed wait observes exit before redirected output is drained.
+              $discovery.WaitForExit()
               if ($discovery.ExitCode -ne 0) { throw 'Simulator capture discovery failed before capture.' }
             } finally { $discovery.Dispose() }
             $inventory = Get-Content -LiteralPath $inventoryPath -Raw | ConvertFrom-Json
