@@ -17,6 +17,8 @@ Keep `$powerforge` as an absolute path so you can work from your own project dir
 
 Keep the project directory and final executable path compact on Windows. Restore acquires dependencies in an isolated temporary workspace and retains its verified lock and environment under the project. This permits deep internal package paths without changing machine long-path policy; it does not remove Windows process-launch limits on the final executable or working directory. On Windows Server 2025 with long-path policy disabled, the qualification workflow uses a 249-character project path, a 238-character executable path, and internal package paths up to 397 characters. See the [distribution evidence](PowerForge.PowerShellCompilation.Assessment.md#windows-distribution-checkpoint) for the tested scope.
 
+Installation adds a content-addressed directory beneath the project root. Leave room for that directory even when the build output path is short: on Windows, the executable and its working-directory paths must each remain below 260 characters. The installer checks the final paths before extracting or reusing an installation and reports their lengths if the project root needs shortening. Test, run and watch apply the same launch check. Binary-module validation checks its PowerShell host and working directory; library metadata inspection does not launch a process. These are [Windows process-launch constraints](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw), separate from filesystem long-path support.
+
 ## Create and run an executable
 
 Create a project directory and save `main.ps1` there:

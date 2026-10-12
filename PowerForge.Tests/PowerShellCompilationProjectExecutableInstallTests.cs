@@ -5,6 +5,58 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
+    [WindowsFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Project_ExecutableInstallRejectsUnlaunchablePathBeforeCreatingInstallation()
+    {
+        using var fixture = ArtifactFixture.Create("return 7", compactPath: true);
+        var root = Path.Combine(fixture.RootPath, "O'Brien Zażółć " + new string('p', 225 - fixture.RootPath.Length - 16));
+        Assert.Equal(225, root.Length);
+        Directory.CreateDirectory(root);
+        var source = Path.Combine(root, "main.ps1");
+        File.Copy(fixture.ScriptPath, source);
+        var project = Path.Combine(root, "p.json");
+        var manifests = new PowerShellCompilationProjectManifestService();
+        var target = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Strict,
+            "net10.0", RuntimeInformation.RuntimeIdentifier, selfContained: false, singleFile: false,
+            PowerShellCompilationExecutableOptimization.None, explicitContract: true);
+        var manifest = manifests.Create(project, source, "D", target);
+        var artifact = Assert.Single(manifest.Artifacts);
+        artifact.Name = "x";
+        artifact.OutputDirectory = "out";
+        artifact.DependencyLock = ".powerforge/locks/x.lock.json";
+        manifests.Save(project, manifest);
+        var workflow = new PowerShellCompilationProjectWorkflowService();
+        AssertProjectSuccess(workflow.Lock(project));
+        AssertProjectSuccess(workflow.Restore(project));
+        var build = workflow.Build(project);
+        AssertProjectSuccess(build);
+        var primary = Assert.Single(build.Targets).Path!;
+        Assert.True(primary.Length < 260);
+        AssertProjectSuccess(workflow.Test(project));
+        var pack = workflow.Pack(project);
+        AssertProjectSuccess(pack);
+        var package = Assert.Single(pack.Targets).Path!;
+        var packageHash = PowerShellCompilationProjectManifestService.ComputeSha256(package);
+        var primaryHash = PowerShellCompilationProjectManifestService.ComputeSha256(primary);
+        var installs = Path.Combine(root, ".powerforge", "i");
+        Assert.False(Directory.Exists(installs));
+
+        var install = workflow.Install(project);
+
+        Assert.False(install.Succeeded);
+        var message = Assert.Single(install.Targets).Message;
+        Assert.Contains("Windows process launch", message, StringComparison.Ordinal);
+        Assert.Contains("shorter than 260 characters", message, StringComparison.Ordinal);
+        Assert.Contains("Executable path/command length:", message, StringComparison.Ordinal);
+        Assert.Contains("working-directory length:", message, StringComparison.Ordinal);
+        Assert.Contains("Shorten the project or output root", message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(installs));
+        Assert.Equal(packageHash, PowerShellCompilationProjectManifestService.ComputeSha256(package));
+        Assert.Equal(primaryHash, PowerShellCompilationProjectManifestService.ComputeSha256(primary));
+    }
+
     [Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Project_ExecutablePackagePreservesQualifiedPermissionsAndRunsAfterInstall()

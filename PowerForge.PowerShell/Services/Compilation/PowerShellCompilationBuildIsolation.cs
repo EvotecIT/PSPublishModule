@@ -23,7 +23,7 @@ internal static class PowerShellCompilationBuildIsolation
         File.WriteAllText(
             Path.Combine(directory, "NuGet.Config"),
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>" + Environment.NewLine +
-            $"<configuration><packageSources>{packageSources}</packageSources></configuration>" + Environment.NewLine,
+            $"<configuration><packageSources>{packageSources}</packageSources><fallbackPackageFolders><clear /></fallbackPackageFolders></configuration>" + Environment.NewLine,
             utf8);
 
         if (requireSdkSelection && !File.Exists(Path.Combine(directory, "global.json")))

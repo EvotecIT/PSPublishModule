@@ -176,12 +176,13 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 var primaryRelative = FrameworkCompatibility.GetRelativePath(
                     validated.OutputRoot,
                     validated.ArtifactPath).Replace('\\', '/');
+                var installedPrimary = Path.GetFullPath(Path.Combine(installRoot, "artifact", primaryRelative.Replace('/', Path.DirectorySeparatorChar)));
+                PowerShellCompilationPathSafety.EnsureContained(installRoot, installedPrimary, "Installed primary artifact escapes its qualified installation root.");
+                EnsureArtifactLaunchPaths(artifact, installedPrimary);
                 if (Directory.Exists(installRoot))
                     EnsureInstalledPackageMatches(packagePath, installRoot, validated.Files);
                 else
                     InstallPackageAtomically(packagePath, installRoot, validated.Files);
-                var installedPrimary = Path.GetFullPath(Path.Combine(installRoot, "artifact", primaryRelative.Replace('/', Path.DirectorySeparatorChar)));
-                PowerShellCompilationPathSafety.EnsureContained(installRoot, installedPrimary, "Installed primary artifact escapes its qualified installation root.");
                 if (!File.Exists(installedPrimary)) throw new FileNotFoundException("Installed primary artifact is missing.", installedPrimary);
                 var actualHash = PowerShellCompilationProjectManifestService.ComputeSha256(installedPrimary);
                 if (!actualHash.Equals(artifactSha256, StringComparison.OrdinalIgnoreCase))
@@ -285,6 +286,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
 
     private static void RunExecutable(string path)
     {
+        PowerShellCompilationPathSafety.EnsureProcessLaunchPaths(path, Path.GetDirectoryName(path)!);
         var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
             path,
             Path.GetDirectoryName(path)!,
@@ -314,9 +316,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         var desktop = targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase);
         if (desktop && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             throw new PlatformNotSupportedException("Testing a net472 binary module requires Windows PowerShell 5.1 on Windows.");
-        var host = desktop
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe")
-            : "pwsh";
+        var host = GetModuleTestHost(targetFramework);
+        PowerShellCompilationPathSafety.EnsureProcessLaunchPaths(host, Path.GetDirectoryName(manifestPath)!);
         const string script = "$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules'); " +
                               "Import-Module -Name $env:POWERFORGE_MODULE_TEST_PATH -Force -ErrorAction Stop; 'ok'";
         var encodedCommand = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
@@ -333,6 +334,20 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         if (!run.Succeeded || !run.StdOut.Trim().Equals("ok", StringComparison.Ordinal))
             throw new InvalidOperationException($"Clean module import failed with exit {run.ExitCode}: {run.StdOut}{Environment.NewLine}{run.StdErr}".Trim());
     }
+
+    private static void EnsureArtifactLaunchPaths(PowerShellCompilationProjectArtifact artifact, string path)
+    {
+        if (artifact.Target.ArtifactKind == PowerShellCompilationArtifactKind.Executable)
+            PowerShellCompilationPathSafety.EnsureProcessLaunchPaths(path, Path.GetDirectoryName(path)!);
+        else if (artifact.Target.ArtifactKind == PowerShellCompilationArtifactKind.BinaryModule)
+            PowerShellCompilationPathSafety.EnsureProcessLaunchPaths(
+                GetModuleTestHost(artifact.Target.TargetFramework), Path.GetDirectoryName(path)!);
+    }
+
+    private static string GetModuleTestHost(string targetFramework)
+        => targetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe")
+            : "pwsh";
 
     private static void InstallPackageAtomically(string packagePath, string installRoot, QualifiedProjectFile[] files)
     {

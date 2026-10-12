@@ -122,6 +122,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("$buildParameters.ExpectedSourceRevision = $ExpectedCommit", script, StringComparison.Ordinal);
         Assert.Contains("$buildParameters.SourceInputPath = [string[]] $explicitInputPaths", script, StringComparison.Ordinal);
         Assert.Contains("ModuleHostPath = Join-Path $toolSnapshotRoot", script, StringComparison.Ordinal);
+        Assert.Contains("ModuleSkipInstall = $true", script, StringComparison.Ordinal);
         Assert.Contains("[string] $ModuleHostPath", buildProject, StringComparison.Ordinal);
         Assert.Contains("New-PowerForgeReleaseEvidenceWorkspace", script, StringComparison.Ordinal);
         Assert.Contains("[IO.Path]::GetTempPath()", evidenceWorkspace, StringComparison.Ordinal);

@@ -32,7 +32,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string publishDirectory,
         string? runtimeIdentifier,
         bool restoreCompleted,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? authenticatedPackageRoot = null)
     {
         var arguments = new List<string>
         {
@@ -50,12 +51,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             arguments.Add(runtimeIdentifier!);
         }
 
-        var run = new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(
-                "dotnet",
-                Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
-                arguments,
-                TimeSpan.FromSeconds(spec.TimeoutSeconds),
-                GetNuGetEnvironment(spec)), cancellationToken)
+        var run = new ProcessRunner(ownProcessTree: true).RunAsync(CreateSdkProcessRequest(
+                spec, projectPath, arguments, authenticatedPackageRoot), cancellationToken)
             .GetAwaiter()
             .GetResult();
         cancellationToken.ThrowIfCancellationRequested();
@@ -69,12 +66,19 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationBuildSpec spec,
         string projectPath,
         string? runtimeIdentifier,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? authenticatedPackageRoot = null)
     {
         var arguments = new List<string>
         {
             "restore", projectPath, "--nologo", "--verbosity", "minimal"
         };
+        if (authenticatedPackageRoot is not null)
+        {
+            arguments.Add("--configfile");
+            arguments.Add(Path.Combine(Path.GetDirectoryName(projectPath)!, "NuGet.Config"));
+            arguments.Add("--force");
+        }
         if (spec.OfflineRestore)
         {
             arguments.Add("--ignore-failed-sources");
@@ -92,22 +96,31 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             arguments.Add("--runtime");
             arguments.Add(runtimeIdentifier!);
         }
-        var run = new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(
-            "dotnet",
-            Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
-            arguments,
-            TimeSpan.FromSeconds(spec.TimeoutSeconds),
-            GetNuGetEnvironment(spec)), cancellationToken).GetAwaiter().GetResult();
+        var run = new ProcessRunner(ownProcessTree: true).RunAsync(CreateSdkProcessRequest(
+            spec, projectPath, arguments, authenticatedPackageRoot), cancellationToken).GetAwaiter().GetResult();
         cancellationToken.ThrowIfCancellationRequested();
         var output = string.IsNullOrWhiteSpace(run.StdErr) ? run.StdOut : run.StdOut + Environment.NewLine + run.StdErr;
         return new GeneratedBuildProcessResult(run.ExitCode, output, run.TimedOut);
     }
 
-    private static IReadOnlyDictionary<string, string?>? GetNuGetEnvironment(PowerShellCompilationBuildSpec spec)
+    private static ProcessRunRequest CreateSdkProcessRequest(PowerShellCompilationBuildSpec spec, string projectPath,
+        IReadOnlyList<string> arguments, string? authenticatedPackageRoot)
     {
-        if (string.IsNullOrWhiteSpace(spec.NuGetPackageRoot))
+        var directory = Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory();
+        var timeout = TimeSpan.FromSeconds(spec.TimeoutSeconds);
+        return RequiresAuthenticatedSdkPublish(spec)
+            ? PowerShellCompilationSdkProcessEnvironment.CreateRequest(
+                PowerShellCompilationToolchainFingerprint.ResolveSelectedSdk(), directory, arguments, timeout,
+                authenticatedPackageRoot ?? spec.NuGetPackageRoot)
+            : new ProcessRunRequest("dotnet", directory, arguments, timeout, GetNuGetEnvironment(spec, authenticatedPackageRoot));
+    }
+
+    private static IReadOnlyDictionary<string, string?>? GetNuGetEnvironment(PowerShellCompilationBuildSpec spec, string? authenticatedPackageRoot = null)
+    {
+        var configuredRoot = authenticatedPackageRoot ?? spec.NuGetPackageRoot;
+        if (string.IsNullOrWhiteSpace(configuredRoot))
             return null;
-        var root = Path.GetFullPath(spec.NuGetPackageRoot!.Trim().Trim('"'));
+        var root = Path.GetFullPath(configuredRoot!.Trim().Trim('"'));
         Directory.CreateDirectory(root);
         return new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {

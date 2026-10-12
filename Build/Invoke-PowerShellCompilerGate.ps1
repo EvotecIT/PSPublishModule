@@ -46,6 +46,7 @@ $requiredFamilies = @{
     'hosted lifecycle validation compatibility' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridLifecyclePreservesUnrepresentedValidationMetadata*'
 }
 $windowsRequiredFamilies = @{
+    'project Windows launch path' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_ExecutableInstallRejectsUnlaunchablePathBeforeCreatingInstallation*'
     'project run' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_RunRebuildsEditedSource*'
     'project launch integrity' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_RunRejectsArtifactReplacementAtLaunchBoundary*'
     'project watch lifecycle' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_WatchStopsRunningApplication*'

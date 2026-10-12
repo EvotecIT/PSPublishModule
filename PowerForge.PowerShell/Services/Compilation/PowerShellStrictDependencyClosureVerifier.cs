@@ -42,6 +42,7 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
         PowerShellCompilationDependencyLockHasher.EnsureValid(request.DependencyGraph, nameof(request.DependencyGraph));
+        PowerShellCompilationRuntimePackAuthority.EnsureInputOwnership(request.DependencyGraph, request.ProviderLock);
         var result = new PowerShellCompilationDependencyClosure
         {
             TargetFramework = request.TargetFramework,
@@ -52,6 +53,49 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
         var compatibleSignedRuntimeAssemblies = PowerShellTargetRuntimeAssemblyCatalog.ReadCompatibleSignedVersions(request.TargetFramework);
         var managedAssemblies = new List<ManagedAssemblyInspection>();
         var nativeLibraries = new List<NativeLibraryInspection>();
+        InspectDeliveredFiles(request, result, managedAssemblies, nativeLibraries);
+
+        AddReviewedRuntimePackIdentities(request, managedAssemblies, targetRuntimeAssemblies);
+        VerifyProcessLaunchReferences(request, managedAssemblies);
+        VerifyManagedReferenceClosure(managedAssemblies, targetRuntimeAssemblies, compatibleSignedRuntimeAssemblies);
+        VerifyUsedFacadeReferences(managedAssemblies, targetRuntimeAssemblies, compatibleSignedRuntimeAssemblies);
+        VerifyReviewedDependencyGraph(request, managedAssemblies, result);
+        VerifyReviewedNativeDependencyGraph(request, nativeLibraries, result);
+        VerifyNativeReferenceClosure(request, managedAssemblies, result);
+        result.Verified = result.Limitations.Count == 0;
+        return result;
+    }
+
+    /// <summary>Reads fresh SDK output before provider replacement, staging or signing.</summary>
+    internal static IReadOnlyDictionary<string, string> CaptureRuntimeOutputHashes(PowerShellStrictDependencyClosureRequest request)
+    {
+        PowerShellCompilationRuntimePackAuthority.EnsureInputOwnership(request.DependencyGraph, request.ProviderLock);
+        var result = new PowerShellCompilationDependencyClosure();
+        var assemblies = new List<ManagedAssemblyInspection>();
+        InspectDeliveredFiles(request, result, assemblies, new List<NativeLibraryInspection>());
+        if (result.Limitations.Count > 0)
+            throw new InvalidOperationException("Authenticated SDK output inspection failed: " + string.Join(" ", result.Limitations));
+        var hashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var node in request.DependencyGraph.Nodes.Where(node => request.RuntimePackAuthority?.Matches(node.Identity) == true &&
+                     node.Kind == PowerShellCompilationDependencyNodeKind.ManagedLibrary &&
+                     Version.TryParse(node.Identity.Version, out _)))
+        {
+            var identity = node.Identity;
+            var key = PowerShellTargetRuntimeAssemblyCatalog.CreateStableKey(identity.Name, Version.Parse(identity.Version),
+                identity.PublicKeyToken, identity.Culture, identity.Retargetable, identity.ContentType);
+            var delivered = assemblies.Where(assembly => assembly.Identity.StableKey.Equals(key, StringComparison.OrdinalIgnoreCase) &&
+                !IsCompilerOwnedPrimaryAssembly(request.Files, assembly.DisplayPath)).ToArray();
+            if (delivered.Length > 1)
+                throw new InvalidOperationException($"Fresh SDK output repeats runtime identity '{identity.Name}'.");
+            if (delivered.Length == 1) hashes.Add(identity.Source, delivered[0].ContentSha256);
+        }
+        return hashes;
+    }
+
+    private static void InspectDeliveredFiles(PowerShellStrictDependencyClosureRequest request,
+        PowerShellCompilationDependencyClosure result, List<ManagedAssemblyInspection> managedAssemblies,
+        List<NativeLibraryInspection> nativeLibraries)
+    {
         foreach (var file in request.Files.OrderBy(static file => file.Path, StringComparer.OrdinalIgnoreCase))
         {
             result.InspectedFiles++;
@@ -143,14 +187,6 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
                 result.Limitations.Add($"Runtime dependency format is not currently certifiable: {Path.GetFileName(file.Path)}");
         }
 
-        AddReviewedRuntimePackIdentities(request, managedAssemblies, targetRuntimeAssemblies);
-        VerifyManagedReferenceClosure(managedAssemblies, targetRuntimeAssemblies, compatibleSignedRuntimeAssemblies);
-        VerifyUsedFacadeReferences(managedAssemblies, targetRuntimeAssemblies, compatibleSignedRuntimeAssemblies);
-        VerifyReviewedDependencyGraph(request, managedAssemblies, result);
-        VerifyReviewedNativeDependencyGraph(request, nativeLibraries, result);
-        VerifyNativeReferenceClosure(request, managedAssemblies, result);
-        result.Verified = result.Limitations.Count == 0;
-        return result;
     }
 
     internal static bool IsPowerShellSource(string path)
@@ -493,14 +529,14 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
                 throw new InvalidOperationException($"Strict runtime-free managed dependency '{displayPath}' references forbidden PowerShell assembly '{name}'.");
         }
 
+        var hasProcessLaunchReference = false;
         foreach (var memberHandle in reader.MemberReferences)
         {
             var member = reader.GetMemberReference(memberHandle);
             if (!reader.GetString(member.Name).Equals(nameof(System.Diagnostics.Process.Start), StringComparison.Ordinal) ||
                 !IsProcessType(reader, member.Parent))
                 continue;
-            if (!allowProcessLaunch)
-                throw new InvalidOperationException($"Strict runtime-free managed dependency '{displayPath}' contains a native-process launch reference.");
+            hasProcessLaunchReference = true;
         }
         var nativeImports = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var methodHandle in reader.MethodDefinitions)
@@ -513,7 +549,11 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
             var name = reader.GetString(module.Name);
             if (!string.IsNullOrWhiteSpace(name)) nativeImports.Add(name);
         }
-        var inspection = new ManagedAssemblyInspection(assemblyIdentity, displayPath, contentSha256, references.ToArray(), nativeImports.ToArray());
+        var inspection = new ManagedAssemblyInspection(assemblyIdentity, displayPath, contentSha256, references.ToArray(), nativeImports.ToArray())
+        {
+            HasProcessLaunchReference = hasProcessLaunchReference,
+            AllowsCompilerOwnedProcessLaunch = allowProcessLaunch
+        };
         ReadFacadeMetadata(reader, inspection);
         managedAssemblies.Add(inspection);
     }
@@ -624,7 +664,10 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
         internal string ContentSha256 { get; }
         internal AssemblyIdentity[] References { get; }
         internal string[] NativeImports { get; }
+        internal bool HasProcessLaunchReference { get; set; }
+        internal bool AllowsCompilerOwnedProcessLaunch { get; set; }
         internal bool IsReviewedRuntimePack { get; set; }
+        internal bool IsAuthenticatedRuntimePack { get; set; }
         internal bool IsPureFacade { get; set; }
         internal ManagedTypeReference[] TypeReferences { get; set; } = Array.Empty<ManagedTypeReference>();
         internal ManagedTypeReference[] ForwardedTypes { get; set; } = Array.Empty<ManagedTypeReference>();

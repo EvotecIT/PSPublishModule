@@ -11,6 +11,22 @@ internal static class PowerShellCompilationPathSafety
 
     internal static FileSystemPathComparer PathComparer { get; } = new();
 
+    /// <summary>
+    /// Refuses Windows process launch paths at MAX_PATH before callers publish an installation
+    /// or start a process. Long-path filesystem support does not remove CreateProcess limits.
+    /// </summary>
+    internal static void EnsureProcessLaunchPaths(string executablePath, string workingDirectory)
+    {
+        const int windowsMaxPath = 260; // Includes the terminating null character.
+        if (!IsWindows || executablePath.Length < windowsMaxPath && workingDirectory.Length < windowsMaxPath)
+            return;
+        throw new InvalidOperationException(
+            "Windows process launch requires executable and working-directory paths shorter than 260 characters " +
+            "(MAX_PATH includes the terminating null). " +
+            $"Executable path/command length: {executablePath.Length}; working-directory length: {workingDirectory.Length}. " +
+            "Shorten the project or output root before testing, running, or installing this artifact.");
+    }
+
     internal static void EnsureContained(string root, string path, string error)
     {
         var normalizedRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;

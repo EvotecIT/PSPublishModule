@@ -376,7 +376,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
 
             var resolvedPackageLockSha256 = PrepareExactNuGetClosureLock(spec, projectPath);
             GeneratedBuildProcessResult? restore = null;
-            if (spec.UseBuildCache || !string.IsNullOrWhiteSpace(spec.NuGetLockFilePath))
+            var authenticatedPublishRequired = RequiresAuthenticatedSdkPublish(spec);
+            if (authenticatedPublishRequired || spec.UseBuildCache || !string.IsNullOrWhiteSpace(spec.NuGetLockFilePath))
             {
                 failureStage = PowerShellCompilationFailureStage.Restore;
                 restore = RunDotNetRestore(spec, projectPath, runtimeIdentifier, cancellationToken);
@@ -385,7 +386,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 if (restore.ExitCode != 0)
                     throw new InvalidOperationException($"Generated .NET restore failed with exit code {restore.ExitCode}.{Environment.NewLine}{BoundOutput(restore.Output)}");
             }
-            var buildCache = PowerShellCompilationArtifactBuildCache.CreateEvidence(
+            var authenticatedPublish = authenticatedPublishRequired ? PrepareAuthenticatedSdkPublish(spec, workspace, projectPath,
+                runtimeIdentifier!, dependencyGraph, toolchain, providerResolution.Lock, cancellationToken) : null;
+            var buildCache = authenticatedPublish is not null
+                ? new PowerShellCompilationBuildCacheEvidence { Reason = "RequiresFreshAuthenticatedSdkPublish" }
+                : PowerShellCompilationArtifactBuildCache.CreateEvidence(
                 spec,
                 workspace,
                 targetContract,
@@ -394,12 +399,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             failureStage = spec.Optimization == PowerShellCompilationExecutableOptimization.None
                 ? PowerShellCompilationFailureStage.Build
                 : PowerShellCompilationFailureStage.Optimization;
-            var process = PowerShellCompilationArtifactBuildCache.TryRestore(spec, buildCache, publishDirectory)
+            var process = authenticatedPublish is null && PowerShellCompilationArtifactBuildCache.TryRestore(spec, buildCache, publishDirectory)
                 ? new GeneratedBuildProcessResult(0, "PowerForge compilation build cache: verified content-addressed hit.", timedOut: false)
-                : RunDotNetBuild(spec, projectPath, publishDirectory, runtimeIdentifier, restoreCompleted: restore is not null, cancellationToken);
+                : RunDotNetBuild(spec, projectPath, publishDirectory, runtimeIdentifier, restoreCompleted: restore is not null, cancellationToken,
+                    authenticatedPublish?.PackageRoot);
             cancellationToken.ThrowIfCancellationRequested();
             result.BuildOutput = BoundOutput(string.Join(Environment.NewLine,
-                new[] { restore?.Output, process.Output }.Where(static output => !string.IsNullOrWhiteSpace(output))));
+                new[] { restore?.Output, authenticatedPublish?.RestoreOutput, process.Output }.Where(static output => !string.IsNullOrWhiteSpace(output))));
             if (process.TimedOut)
                 throw new TimeoutException($"Generated .NET build exceeded {spec.TimeoutSeconds} seconds.");
             if (process.ExitCode != 0)
@@ -407,7 +413,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 failureExitCode = process.ExitCode;
                 throw new InvalidOperationException($"Generated .NET build failed with exit code {process.ExitCode}.");
             }
-            PowerShellCompilationArtifactBuildCache.Store(spec, buildCache, publishDirectory);
+            if (authenticatedPublish is not null)
+                CompleteAuthenticatedSdkPublish(authenticatedPublish, spec, workspace, artifactName, publishDirectory,
+                    runtimeIdentifier!, dependencyGraph, toolchain, providerResolution.Lock);
+            else PowerShellCompilationArtifactBuildCache.Store(spec, buildCache, publishDirectory);
             VerifyDependencyInputsHaveNotDrifted(spec, dependencyGraph);
 
             failureStage = PowerShellCompilationFailureStage.Publication;
@@ -507,7 +516,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         spec.Optimization,
                         providerResolution.Lock.Packages.Length == 0 ? null : providerResolution.Lock,
                         commandProviderInputs.Any(static provider =>
-                            provider.Adapter.Cancellation == PowerShellCompilationProviderCancellation.ProcessIsolated)));
+                            provider.Adapter.Cancellation == PowerShellCompilationProviderCancellation.ProcessIsolated),
+                        authenticatedPublish?.Authority ?? PowerShellCompilationRuntimePackAuthority.Authenticate(dependencyGraph,
+                            spec.TargetFramework, runtimeIdentifier ?? string.Empty, spec.NuGetPackageRoot, cancellationToken)));
                     EnsureStrictDependencyClosureCertified(dependencyClosure);
                 }
                 var artifactPath = PowerShellArtifactSetPublisher.RebasePath(stagedArtifact.PrimaryPath, artifactStagingDirectory, spec.OutputDirectory);

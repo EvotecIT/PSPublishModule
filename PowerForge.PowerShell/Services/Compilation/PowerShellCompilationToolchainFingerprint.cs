@@ -9,29 +9,24 @@ internal static class PowerShellCompilationToolchainFingerprint
 {
     private static readonly ConcurrentDictionary<string, string> SdkHashes = new(StringComparer.OrdinalIgnoreCase);
 
-    internal static string ComputeSdkSha256(string sdkVersion)
+    internal static string ComputeSdkSha256(string sdkVersion, bool forceRefresh = false)
     {
         var selection = ResolveSelectedSdk();
         if (!selection.Version.Equals(sdkVersion, StringComparison.Ordinal))
             throw new InvalidOperationException($"Selected dotnet SDK '{selection.Version}' does not match requested provenance version '{sdkVersion}'.");
-        return SdkHashes.GetOrAdd(selection.RootPath, ComputeToolchainSha256);
+        return forceRefresh ? ComputeToolchainSha256(selection.RootPath) : SdkHashes.GetOrAdd(selection.RootPath, ComputeToolchainSha256);
     }
 
     internal static PowerShellCompilationSdkSelection ResolveSelectedSdk()
     {
-        var versionRun = new ProcessRunner().RunAsync(new ProcessRunRequest(
-            "dotnet",
-            Directory.GetCurrentDirectory(),
-            new[] { "--version" },
-            TimeSpan.FromSeconds(30))).GetAwaiter().GetResult();
+        using var environment = PowerShellCompilationWorkspace.Create(keep: false);
+        var versionRun = new ProcessRunner().RunAsync(PowerShellCompilationSdkProcessEnvironment.CreateDiscoveryRequest(
+            Directory.GetCurrentDirectory(), environment.Path, new[] { "--version" })).GetAwaiter().GetResult();
         if (!versionRun.Succeeded || string.IsNullOrWhiteSpace(versionRun.StdOut))
             throw new InvalidOperationException("Unable to resolve the selected dotnet SDK version for PowerShell compilation.");
         var sdkVersion = versionRun.StdOut.Trim();
-        var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
-            "dotnet",
-            Directory.GetCurrentDirectory(),
-            new[] { "--list-sdks" },
-            TimeSpan.FromSeconds(30))).GetAwaiter().GetResult();
+        var run = new ProcessRunner().RunAsync(PowerShellCompilationSdkProcessEnvironment.CreateDiscoveryRequest(
+            Directory.GetCurrentDirectory(), environment.Path, new[] { "--list-sdks" })).GetAwaiter().GetResult();
         if (!run.Succeeded)
             throw new InvalidOperationException("Unable to enumerate installed dotnet SDK paths for build-cache provenance.");
         var sdkRoot = run.StdOut.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
@@ -67,6 +62,17 @@ internal static class PowerShellCompilationToolchainFingerprint
         if (string.IsNullOrWhiteSpace(version))
             throw new InvalidOperationException($"Selected dotnet SDK '{selection.Version}' has no Microsoft.NETCore.App runtime-pack identity for '{targetFramework}'.");
         return version!;
+    }
+
+    internal static string ResolveILLinkPackVersion(string targetFramework)
+    {
+        var selection = ResolveSelectedSdk();
+        var document = XDocument.Load(Path.Combine(selection.RootPath, "Microsoft.NETCoreSdk.BundledVersions.props"), LoadOptions.None);
+        var linker = document.Descendants().SingleOrDefault(element => element.Name.LocalName == "KnownILLinkPack" &&
+            (string?)element.Attribute("Include") == "Microsoft.NET.ILLink.Tasks" &&
+            string.Equals((string?)element.Attribute("TargetFramework"), targetFramework, StringComparison.OrdinalIgnoreCase));
+        return (string?)linker?.Attribute("ILLinkPackVersion") ??
+            throw new InvalidOperationException($"Selected dotnet SDK '{selection.Version}' has no ILLink package identity for '{targetFramework}'.");
     }
 
     private static string ComputeToolchainSha256(string sdkRoot)

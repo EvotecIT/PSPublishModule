@@ -3,6 +3,16 @@ namespace PowerForge;
 /// <summary>Applies the target loader's documented file-name probing rules without accepting arbitrary suffixes.</summary>
 internal static class PowerShellNativeLibraryName
 {
+    /// <summary>Native ELF DT_NEEDED entries use exact SONAMEs, unlike managed DllImport probing.</summary>
+    internal static bool CanResolveNativeImport(string runtimeIdentifier, string requestedName, string deliveredName)
+    {
+        if (string.IsNullOrWhiteSpace(runtimeIdentifier)) return false;
+        if (runtimeIdentifier.StartsWith("linux-", StringComparison.OrdinalIgnoreCase))
+            return !string.IsNullOrWhiteSpace(requestedName) && !string.IsNullOrWhiteSpace(deliveredName) &&
+                   requestedName.Equals(deliveredName, StringComparison.Ordinal);
+        return CanResolve(runtimeIdentifier, requestedName, deliveredName);
+    }
+
     internal static bool FileNamesEqual(string runtimeIdentifier, string left, string right)
     {
         if (string.IsNullOrWhiteSpace(runtimeIdentifier) || string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right)) return false;
