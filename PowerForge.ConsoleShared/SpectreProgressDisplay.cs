@@ -171,10 +171,20 @@ internal static class SpectreProgressDisplay
         {
             _console = console;
             _context = context;
-            _timer = new Timer(_ =>
+            _timer = new Timer(_ => RefreshFromTimer(), null, 100, 100);
+        }
+
+        private void RefreshFromTimer()
+        {
+            // External host writes can wait for user input. Skip a tick rather
+            // than accumulating blocked thread-pool callbacks behind that prompt.
+            if (!Monitor.TryEnter(_gate)) return;
+            try
             {
-                try { Refresh(); } catch { /* A refresh must not terminate the build. */ }
-            }, null, 100, 100);
+                if (!_closed && !Suspended) _context.Refresh();
+            }
+            catch { /* A refresh must not terminate the build. */ }
+            finally { Monitor.Exit(_gate); }
         }
 
         internal void TrackHeight(int height) => _height = Math.Max(_height, height);

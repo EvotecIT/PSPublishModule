@@ -7,6 +7,52 @@ namespace PowerForge.Tests;
 public sealed class SpectreModuleProgressTests
 {
     [Fact]
+    public void TimerRefresh_DoesNotWaitForAnExternalWarningPrompt()
+    {
+        using var writer = new StringWriter();
+        var console = CreateConsole(writer, 80);
+        using var promptReady = new ManualResetEventSlim();
+        using var releasePrompt = new ManualResetEventSlim();
+        using var timerReturned = new ManualResetEventSlim();
+        SpectreProgressDisplay.Run(console, [new TaskDescriptionColumn()], context =>
+        {
+            context.AddTask("Build module", maxValue: 1);
+            // Invoke the real timer entry point while an external host write owns
+            // the display gate. A separate thread makes the lock contention
+            // deterministic without measuring or exhausting the thread pool.
+            var current = typeof(SpectreProgressDisplay).GetField("Current",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.GetValue(null)!;
+            var session = current.GetType().GetProperty("Value")!.GetValue(current)!;
+            var refresh = session.GetType().GetMethod("RefreshFromTimer",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+            var prompt = Task.Run(() => SpectreProgressDisplay.WriteExternal(() =>
+            {
+                promptReady.Set();
+                releasePrompt.Wait();
+            }));
+            var tick = new Thread(() =>
+            {
+                try { refresh.Invoke(session, null); }
+                finally { timerReturned.Set(); }
+            }) { IsBackground = true };
+            try
+            {
+                Assert.True(promptReady.Wait(TimeSpan.FromSeconds(10)));
+                tick.Start();
+                Assert.True(timerReturned.Wait(TimeSpan.FromSeconds(2)),
+                    "A timer callback waited for the external warning prompt.");
+            }
+            finally
+            {
+                releasePrompt.Set();
+                Assert.True(prompt.Wait(TimeSpan.FromSeconds(10)));
+                if ((tick.ThreadState & ThreadState.Unstarted) == 0)
+                    Assert.True(tick.Join(TimeSpan.FromSeconds(10)));
+            }
+        });
+    }
+
+    [Fact]
     public async Task CapturedLoggerContext_RetainsMessagesBeforeAndAfterDisplayCloses()
     {
         using var writer = new StringWriter();

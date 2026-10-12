@@ -5,8 +5,10 @@ namespace PowerForge.Tests;
 
 public sealed class ModuleSigningProgressTests
 {
-    [Fact]
-    public void SigningScript_StreamsCertificatePrecheckRetryAndFileMilestones()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SigningScript_StreamsCertificatePrecheckRetryAndFileMilestones(bool overwrite)
     {
         if (Path.DirectorySeparatorChar != '\\') return;
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -14,7 +16,7 @@ public sealed class ModuleSigningProgressTests
         {
             var files = new[] { Path.Combine(root.FullName, "One.psm1"), Path.Combine(root.FullName, "Two.ps1") };
             foreach (var file in files) File.WriteAllText(file, "# signing progress fixture");
-            var updates = new List<string>();
+            var updates = new List<(int Completed, int Total, string Detail)>();
             var runner = new CallbackRunner(request =>
             {
                 // Replace only external certificate/provider operations in the actual signing script.
@@ -33,7 +35,7 @@ public sealed class ModuleSigningProgressTests
                 function Set-AuthenticodeSignature {
                   [CmdletBinding()] param([string]$FilePath,[object]$Certificate,[string]$TimestampServer,[object]$IncludeChain,[string]$HashAlgorithm,[switch]$Force)
                   $script:calls++
-                  [pscustomobject]@{Status=$(if($script:calls -eq 1){'UnknownError'}else{'Valid'});StatusMessage='fixture'}
+                  [pscustomobject]@{Status=$(if($script:calls -eq 2){'UnknownError'}else{'Valid'});StatusMessage='fixture'}
                 }
                 function Start-Sleep { param([int]$Milliseconds) }
                 """;
@@ -44,13 +46,15 @@ public sealed class ModuleSigningProgressTests
             });
             var operations = new PowerShellModulePipelineHostedOperations(runner, new NullLogger(), isWindows: true);
             var result = operations.SignModuleOutput("Demo", root.FullName, files, ["*.psm1", "*.ps1"], [],
-                new SigningOptionsConfiguration { CertificateThumbprint = "ABC" },
-                (_, _, detail) => updates.Add(detail));
+                new SigningOptionsConfiguration { CertificateThumbprint = "ABC", OverwriteSigned = overwrite },
+                (completed, total, detail) => updates.Add((completed, total, detail)));
             Assert.Equal(2, result.SignedNew);
-            Assert.Contains(updates, detail => detail.StartsWith("Loading signing certificate"));
-            Assert.Contains(updates, detail => detail.StartsWith("Checking existing signatures 2/2"));
-            Assert.Contains(updates, detail => detail.Contains("retry 2/15"));
-            Assert.Contains(updates, detail => detail == "Signing and timestamping 2/2: Two.ps1");
+            Assert.Contains(updates, update => update.Detail.StartsWith("Loading signing certificate"));
+            Assert.Contains(updates, update => update.Detail.StartsWith("Checking existing signatures 2/2"));
+            var retry = Assert.Single(updates, update => update.Detail.Contains("retry 2/15"));
+            Assert.Equal(1, retry.Completed);
+            Assert.Equal(2, retry.Total);
+            Assert.Contains(updates, update => update.Detail == "Signing and timestamping 2/2: Two.ps1");
         }
         finally { root.Delete(true); }
     }

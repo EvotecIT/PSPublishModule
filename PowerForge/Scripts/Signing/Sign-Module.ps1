@@ -156,6 +156,8 @@ function Invoke-WithFileRetry {
     [Parameter(Mandatory = $true)] [scriptblock]$ScriptBlock,
     [Parameter(Mandatory = $true)] [string]$FilePath,
     [Parameter(Mandatory = $true)] [string]$Action,
+    [Parameter(Mandatory = $true)] [int]$Completed,
+    [Parameter(Mandatory = $true)] [int]$Total,
     [int]$MaxAttempts = 15,
     [scriptblock]$ShouldRetryResult
   )
@@ -182,7 +184,7 @@ function Invoke-WithFileRetry {
       }
     }
 
-    EmitSigningProgress 0 0 ("{0}: retry {1}/{2} for {3}" -f $Action, ($attempt + 1), $MaxAttempts, [IO.Path]::GetFileName($FilePath))
+    EmitSigningProgress -completed $Completed -total $Total -detail ("{0}: retry {1}/{2} for {3}" -f $Action, ($attempt + 1), $MaxAttempts, [IO.Path]::GetFileName($FilePath))
     Start-Sleep -Milliseconds $delay
     $delay = [Math]::Min($delay * 2, 5000)
   }
@@ -346,7 +348,7 @@ try {
       EmitSigningProgress 0 0 ("Checking existing signatures {0}/{1}: {2}" -f $checkedFiles, @($all).Count, $f.Substring($rootPrefix.Length))
       try {
         Clear-SigningCloudPlacementAttributes -filePath $f
-        $sig = Invoke-WithFileRetry -FilePath $f -Action 'Get-AuthenticodeSignature' -ScriptBlock {
+        $sig = Invoke-WithFileRetry -FilePath $f -Action 'Get-AuthenticodeSignature' -Completed 0 -Total 0 -ScriptBlock {
           Get-AuthenticodeSignature -FilePath $f -ErrorAction Stop
         }
         $status = [string]$sig.Status
@@ -404,12 +406,12 @@ try {
       }
       try {
         if ($overwrite) {
-          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -MaxAttempts $signingMaxAttempts -ShouldRetryResult $retryUnknownSigningResult -ScriptBlock {
+          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -Completed ($processedTargets - 1) -Total $attempted -MaxAttempts $signingMaxAttempts -ShouldRetryResult $retryUnknownSigningResult -ScriptBlock {
             Clear-SigningCloudPlacementAttributes -filePath $f
             Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer $ts -IncludeChain All -HashAlgorithm SHA256 -Force -ErrorAction Stop
           }
         } else {
-          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -MaxAttempts $signingMaxAttempts -ShouldRetryResult $retryUnknownSigningResult -ScriptBlock {
+          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -Completed ($processedTargets - 1) -Total $attempted -MaxAttempts $signingMaxAttempts -ShouldRetryResult $retryUnknownSigningResult -ScriptBlock {
             Clear-SigningCloudPlacementAttributes -filePath $f
             Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer $ts -IncludeChain All -HashAlgorithm SHA256 -ErrorAction Stop
           }
@@ -461,7 +463,7 @@ try {
       EmitSigningProgress 0 0 ("Checking existing signatures {0}/{1}: {2}" -f $checkedFiles, @($all).Count, $f.Substring($rootPrefix.Length))
       try {
         Clear-SigningCloudPlacementAttributes -filePath $f
-        $sig = Invoke-WithFileRetry -FilePath $f -Action 'Get-OpenAuthenticodeSignature' -ScriptBlock {
+        $sig = Invoke-WithFileRetry -FilePath $f -Action 'Get-OpenAuthenticodeSignature' -Completed 0 -Total 0 -ScriptBlock {
           Get-OpenAuthenticodeSignature -FilePath $f -ErrorAction Stop
         }
         $status = [string]$sig.SStatus
@@ -508,12 +510,12 @@ try {
       $wasSigned = $preStatus[$f] -ne 'NotSigned'
       try {
         if ($overwrite) {
-          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-OpenAuthenticodeSignature' -ShouldRetryResult $retryUnknownSigningResult -ScriptBlock {
+          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-OpenAuthenticodeSignature' -Completed ($processedTargets - 1) -Total $attempted -ShouldRetryResult $retryUnknownSigningResult -ScriptBlock {
             Clear-SigningCloudPlacementAttributes -filePath $f
             Set-OpenAuthenticodeSignature -FilePath $f -Certificate $cert -TimeStampServer $ts -IncludeChain WholeChain -HashAlgorithm SHA256 -Force -ErrorAction Stop
           }
         } else {
-          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-OpenAuthenticodeSignature' -ShouldRetryResult $retryUnknownSigningResult -ScriptBlock {
+          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-OpenAuthenticodeSignature' -Completed ($processedTargets - 1) -Total $attempted -ShouldRetryResult $retryUnknownSigningResult -ScriptBlock {
             Clear-SigningCloudPlacementAttributes -filePath $f
             Set-OpenAuthenticodeSignature -FilePath $f -Certificate $cert -TimeStampServer $ts -IncludeChain WholeChain -HashAlgorithm SHA256 -ErrorAction Stop
           }
