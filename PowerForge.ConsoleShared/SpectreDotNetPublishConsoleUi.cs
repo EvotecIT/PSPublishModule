@@ -66,7 +66,7 @@ internal static partial class SpectreDotNetPublishConsoleUi
         return result!;
     }
 
-    private sealed class Reporter : IDotNetPublishProgressReporter
+    private sealed class Reporter : IDotNetPublishProgressReporterV2
     {
         private readonly SpectreProgressLedger _ledger;
         private readonly IReadOnlyDictionary<string, SpectreProgressLedgerItem> _items;
@@ -79,6 +79,22 @@ internal static partial class SpectreDotNetPublishConsoleUi
 
         public void StepStarting(DotNetPublishStep step)
             => Update(step, SpectreProgressLedgerState.Started);
+
+        public void StepProgress(DotNetPublishStep step, string kind, string detail)
+        {
+            if (!_items.TryGetValue(step.Key, out var item)) return;
+            _ledger.Update(new SpectreProgressLedgerItem
+            {
+                Key = item.Key,
+                GroupKey = item.GroupKey,
+                GroupTitle = item.GroupTitle,
+                Title = kind == "Signing" ? $"Sign outputs ({step.TargetName ?? "release evidence"})" : item.Title,
+                Kind = kind == "Signing" ? kind : item.Kind,
+                CounterLabel = item.CounterLabel,
+                Position = item.Position,
+                Total = item.Total
+            }, SpectreProgressLedgerState.Started, detail);
+        }
 
         public void StepCompleted(DotNetPublishStep step)
             => Update(step, SpectreProgressLedgerState.Completed);

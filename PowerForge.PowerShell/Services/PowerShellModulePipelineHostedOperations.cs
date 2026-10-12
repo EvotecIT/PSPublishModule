@@ -192,7 +192,12 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         }
 
         _logger.Info($"Running lifecycle action '{name}' at {action.At}.");
-        var result = _runner.Run(request);
+        var result = _runner.Run(request.WithOutputLineReceived(line =>
+        {
+            if (!string.IsNullOrWhiteSpace(line)) _logger.Info(line);
+        }));
+        // Warning preferences and prompts belong on the synchronous host thread.
+        if (!string.IsNullOrWhiteSpace(result.StdErr)) _logger.Warn(result.StdErr.TrimEnd());
         return new ModulePipelineActionResult
         {
             Name = name,

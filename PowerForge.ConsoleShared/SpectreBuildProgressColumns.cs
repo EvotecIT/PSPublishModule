@@ -92,6 +92,8 @@ internal static class SpectreBuildProgressColumns
 
     private sealed class LeftDescriptionColumn : ProgressColumn
     {
+        protected override bool NoWrap => true;
+
         public override IRenderable Render(RenderOptions options, ProgressTask task, TimeSpan deltaTime)
         {
             var text = new Text(task.Description ?? string.Empty);
@@ -102,6 +104,8 @@ internal static class SpectreBuildProgressColumns
 
     private sealed class LeftMarkupDescriptionColumn : ProgressColumn
     {
+        protected override bool NoWrap => true;
+
         public override IRenderable Render(RenderOptions options, ProgressTask task, TimeSpan deltaTime)
             => new Markup(task.Description ?? string.Empty)
             {

@@ -10,6 +10,8 @@ public sealed class SpectreProgressRoutesTests
     [InlineData("project", 60)]
     [InlineData("project", 120)]
     [InlineData("executable", 60)]
+    [InlineData("portable-signing", 60)]
+    [InlineData("unified-signing", 60)]
     [InlineData("release", 60)]
     [InlineData("status", 60)]
     public void Routes_ShowCurrentOperationAndPreserveDiagnosticsBelowProgress(string route, int width)
@@ -36,31 +38,42 @@ public sealed class SpectreProgressRoutesTests
                     return new ProjectBuildWorkflowResult { Result = new ProjectBuildResult { Success = true } };
                 });
         }
-        else if (route == "executable")
+        else if (route is "executable" or "portable-signing")
         {
-            var step = new DotNetPublishStep { Key = "sign", Kind = DotNetPublishStepKind.MsiSign, InstallerId = detail };
+            var step = new DotNetPublishStep { Key = "sign", Kind = route == "executable" ? DotNetPublishStepKind.MsiSign : DotNetPublishStepKind.Publish, InstallerId = detail, TargetName = "Sample" };
             SpectreDotNetPublishConsoleUi.RunInteractive(console, new DotNetPublishPlan { Steps = [step] }, null,
                 progress =>
                 {
                     progress.StepStarting(step);
+                    if (route == "portable-signing")
+                        ((IDotNetPublishProgressReporterV2)progress).StepProgress(step, "Signing", detail);
                     Diagnostic();
                     progress.StepCompleted(step);
                     return new DotNetPublishResult { Succeeded = true };
                 });
         }
-        else if (route == "release")
+        else if (route is "release" or "unified-signing")
         {
             var spec = new PowerForgeReleaseSpec
             {
-                Module = new PowerForgeModuleReleaseOptions { ModuleName = "Sample" }
+                Module = new PowerForgeModuleReleaseOptions { ModuleName = "Sample" },
+                Tools = route == "unified-signing" ? new PowerForgeToolReleaseSpec() : null
             };
+            var phase = route == "unified-signing" ? PowerForgeReleaseProgressPhase.Tools : PowerForgeReleaseProgressPhase.Module;
             SpectrePowerForgeReleaseConsoleUi.RunInteractive(console, spec,
-                new PowerForgeReleaseRequest { ModuleOnly = true },
+                new PowerForgeReleaseRequest { ModuleOnly = route == "release", ToolsOnly = route == "unified-signing" },
                 progress =>
                 {
-                    progress.PhaseStarted(PowerForgeReleaseProgressPhase.Module, 0, detail);
+                    progress.PhaseStarted(phase, 0, detail);
+                    if (route == "unified-signing")
+                    {
+                        var step = new DotNetPublishStep { Key = "publish", Kind = DotNetPublishStepKind.Publish, TargetName = "Sample" };
+                        var adapter = new DotNetPublishReleaseProgressAdapter((IPowerForgeReleaseProgressReporterV2)progress, new DotNetPublishPlan { Steps = [step] });
+                        adapter.StepStarting(step);
+                        adapter.StepProgress(step, "Signing", detail);
+                    }
                     Diagnostic();
-                    progress.PhaseCompleted(PowerForgeReleaseProgressPhase.Module);
+                    progress.PhaseCompleted(phase);
                     return new PowerForgeReleaseResult { Success = true };
                 });
         }
@@ -75,8 +88,11 @@ public sealed class SpectreProgressRoutesTests
         Assert.Contains(detail, normalized);
         Assert.Contains("running", normalized);
         Assert.DoesNotContain("5%", normalized);
-        if (route is "project" or "executable")
+        if (route == "unified-signing") Assert.DoesNotContain("99%", normalized);
+        if (route is "project" or "executable" or "portable-signing" or "unified-signing")
             Assert.Contains("PIN, password, touch", normalized);
+        if (route is "portable-signing" or "unified-signing")
+            Assert.Contains("Current: Sign outputs (Sample)", normalized);
         var lastProgress = plain.LastIndexOf("done", StringComparison.Ordinal);
         var lastDiagnostic = plain.LastIndexOf("Complete recovery instructions", StringComparison.Ordinal);
         Assert.True(lastProgress >= 0 && lastDiagnostic > lastProgress, plain);

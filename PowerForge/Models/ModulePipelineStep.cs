@@ -33,6 +33,8 @@ public enum ModulePipelineStepKind
     PackageBuild = 12,
     /// <summary>Prepare external files before module staging.</summary>
     ExternalAsset = 13,
+    /// <summary>Compile or restore the staged PowerShell binary module.</summary>
+    Compilation = 14,
 }
 
 /// <summary>
@@ -200,6 +202,14 @@ public sealed class ModulePipelineStep
             }
         }
         AddActionSteps(steps, plan, ModulePipelineActionStage.AfterFormatting);
+
+        if (plan.BuildSpec.PowerShellCompilation?.Enabled == true)
+        {
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Compilation,
+                key: "build:compile",
+                title: plan.BuildSpec.ReuseStaging ? "Restore compiled module" : "Compile PowerShell module"));
+        }
 
         // Signing follows formatting and precedes docs, validation and tests.
         AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeSigning);

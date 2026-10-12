@@ -272,13 +272,16 @@ internal sealed class SpectreProgressLedger
         }
         else if (IsTerminal(state))
         {
+            var wasStarted = task.IsStarted;
             if (!task.IsStarted)
                 task.StartTask();
 
             task.IsIndeterminate = false;
             task.Value = task.MaxValue;
             task.StopTask();
-            entry.Duration = entry.Item.Duration ?? task.ElapsedTime ?? TimeSpan.Zero;
+            entry.Duration = state == SpectreProgressLedgerState.Skipped && !wasStarted
+                ? null
+                : entry.Item.Duration ?? task.ElapsedTime ?? TimeSpan.Zero;
             _presentation?.MarkTerminal(task, state, entry.Duration);
         }
     }

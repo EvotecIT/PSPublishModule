@@ -9,6 +9,7 @@ namespace PowerForge;
 public sealed class ModuleBuildHostService
 {
     private readonly IPowerShellRunner _powerShellRunner;
+    private readonly ILogger? _diagnostics;
 
     /// <summary>
     /// Creates a new host service using the default PowerShell runner.
@@ -18,9 +19,10 @@ public sealed class ModuleBuildHostService
     {
     }
 
-    internal ModuleBuildHostService(IPowerShellRunner powerShellRunner)
+    internal ModuleBuildHostService(IPowerShellRunner powerShellRunner, ILogger? diagnostics = null)
     {
         _powerShellRunner = powerShellRunner ?? throw new ArgumentNullException(nameof(powerShellRunner));
+        _diagnostics = diagnostics;
     }
 
     /// <summary>
@@ -103,6 +105,8 @@ public sealed class ModuleBuildHostService
                 var failure = ForwardProtocol(line, progress, artefactOutputs);
                 if (!string.IsNullOrWhiteSpace(failure))
                     progressFailure = failure;
+                if (progress is not null && !string.IsNullOrWhiteSpace(line) && !ModulePipelineProgressProtocol.IsProtocolLine(line))
+                    _diagnostics?.Info(line);
             };
         var runRequest = requiredRuntimeMajor > 0
             ? PowerShellRunRequest.ForCompatibleCommand(

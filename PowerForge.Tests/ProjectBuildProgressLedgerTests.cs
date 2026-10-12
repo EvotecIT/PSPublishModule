@@ -600,8 +600,10 @@ public sealed class ProjectBuildProgressLedgerTests
         }
     }
 
-    [Fact]
-    public void Execute_ReportsEverySignedPackageAsDurableWork()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Execute_ReportsEverySignedPackageAsDurableWork(bool timeout)
     {
         var root = Directory.CreateDirectory(Path.Combine(
             Path.GetTempPath(),
@@ -610,6 +612,11 @@ public sealed class ProjectBuildProgressLedgerTests
         try
         {
             WriteProject(root.FullName, "Sample.Signed");
+            if (timeout)
+            {
+                WriteProject(root.FullName, "Sample.Second");
+                WriteProject(root.FullName, "Sample.Third");
+            }
             var progress = new RecordingProjectBuildProgress();
             DotNetRepositoryReleaseService.PackageSigningHandler signer = (
                 IReadOnlyList<string> packages,
@@ -619,9 +626,18 @@ public sealed class ProjectBuildProgressLedgerTests
                 out string[] failedPackages,
                 out string error) =>
             {
-                foreach (var package in packages)
+                for (var index = 0; index < packages.Count; index++)
                 {
+                    var package = packages[index];
                     signingProgress?.Invoke(package, 1, null);
+                    if (timeout && index == 1)
+                    {
+                        signingProgress?.Invoke(package, 0,
+                            new DotNetNuGetSignResult(-1, "", "timed out", "dotnet", TimeSpan.FromSeconds(3), true, "timed out"));
+                        failedPackages = packages.Skip(index).ToArray();
+                        error = "Signing timed out; remaining packages were not attempted.";
+                        return false;
+                    }
                     signingProgress?.Invoke(package, 0,
                         new DotNetNuGetSignResult(0, "", "", "dotnet", TimeSpan.FromMilliseconds(42), false, null));
                 }
@@ -652,11 +668,12 @@ public sealed class ProjectBuildProgressLedgerTests
                 validateAssemblySigning: null,
                 progress);
 
-            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(!timeout, result.Success);
             var signingItems = progress.Planned
                 .Where(item => item.Phase == ProjectBuildProgressPhase.PackageSigning)
                 .ToArray();
-            var signingItem = Assert.Single(signingItems);
+            Assert.Equal(timeout ? 3 : 1, signingItems.Length);
+            var signingItem = signingItems[0];
             Assert.EndsWith(".nupkg", signingItem.Title, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(progress.Updates, update =>
                 update.Item.Key == signingItem.Key &&
@@ -667,6 +684,18 @@ public sealed class ProjectBuildProgressLedgerTests
                 update.State == ProjectBuildProgressItemState.Completed);
             Assert.Equal("signed", completed.Detail);
             Assert.Equal(TimeSpan.FromMilliseconds(42), completed.Item.Duration);
+            if (timeout)
+            {
+                var failed = Assert.Single(progress.Updates, update =>
+                    update.Item.Key == signingItems[1].Key && update.State == ProjectBuildProgressItemState.Failed);
+                Assert.Equal(TimeSpan.FromSeconds(3), failed.Item.Duration);
+                var skipped = Assert.Single(progress.Updates, update =>
+                    update.Item.Key == signingItems[2].Key && update.State == ProjectBuildProgressItemState.Skipped);
+                Assert.Null(skipped.Item.Duration);
+                Assert.Contains("not attempted", skipped.Detail);
+                Assert.DoesNotContain(progress.Updates, update =>
+                    update.Item.Key == signingItems[2].Key && update.State == ProjectBuildProgressItemState.Started);
+            }
         }
         finally
         {

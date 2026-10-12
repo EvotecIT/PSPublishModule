@@ -115,7 +115,8 @@ internal static partial class Program
             }
 
             var result = RunWithStatus(outputJson, cli, $"Running {prepared.TargetName}", () =>
-                service.RunAsync(loaded.Value, loaded.FullPath, request).GetAwaiter().GetResult(), value => value.Succeeded);
+                service.RunAsync(loaded.Value, loaded.FullPath, request).GetAwaiter().GetResult(), value => value.Succeeded,
+                outputIsCaptured: request.CaptureOutput && request.CaptureError);
 
             var exitCode = result.Succeeded ? 0 : (result.ExitCode == 0 ? 1 : result.ExitCode);
 

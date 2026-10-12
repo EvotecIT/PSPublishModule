@@ -88,8 +88,10 @@ public sealed partial class DotNetRepositoryReleaseService
         progress?.PhaseStarted(ProjectBuildProgressPhase.PackageSigning, packages.Length, "Signing NuGet packages");
         var signedCount = 0;
         var reportedPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var attemptedPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         void ReportSigning(string package, int attempt, DotNetNuGetSignResult? outcome)
         {
+            attemptedPackages.Add(package);
             var detail = outcome is null
                 ? $"Signing and timestamping (attempt {attempt}/2)"
                 : outcome.Succeeded ? "signed" : outcome.ErrorMessage ?? "signing failed";
@@ -125,12 +127,15 @@ public sealed partial class DotNetRepositoryReleaseService
             {
                 if (reportedPackages.Contains(package)) continue;
                 bool failed = failedPackages.Contains(package, StringComparer.OrdinalIgnoreCase);
+                bool attempted = attemptedPackages.Contains(package);
                 UpdateArtifactProgress(
                     detailedProgress,
                     items[package],
-                    failed ? ProjectBuildProgressItemState.Failed : ProjectBuildProgressItemState.Completed,
-                    failed ? error : "signed; publication blocked by another package signing failure",
-                    watch.Elapsed);
+                    failed ? attempted ? ProjectBuildProgressItemState.Failed : ProjectBuildProgressItemState.Skipped
+                        : ProjectBuildProgressItemState.Completed,
+                    failed ? attempted ? error : "not attempted; skipped after signing failure"
+                        : "signed; publication blocked by another package signing failure",
+                    attempted ? watch.Elapsed : null);
             }
 
             progress?.PhaseFailed(ProjectBuildProgressPhase.PackageSigning, error);

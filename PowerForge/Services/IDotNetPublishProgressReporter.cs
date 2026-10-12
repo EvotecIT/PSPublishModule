@@ -15,3 +15,9 @@ public interface IDotNetPublishProgressReporter
     void StepFailed(DotNetPublishStep step, Exception error);
 }
 
+/// <summary>Optional sub-operation detail for hosts that render work inside a planned step.</summary>
+internal interface IDotNetPublishProgressReporterV2 : IDotNetPublishProgressReporter
+{
+    void StepProgress(DotNetPublishStep step, string kind, string detail);
+}
+

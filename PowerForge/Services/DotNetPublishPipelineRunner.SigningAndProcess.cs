@@ -9,7 +9,7 @@ namespace PowerForge;
 
 public sealed partial class DotNetPublishPipelineRunner
 {
-    private string[] TrySignOutput(string outputDir, DotNetPublishSignOptions sign)
+    private string[] TrySignOutput(string outputDir, DotNetPublishSignOptions sign, Action<string>? progress = null)
     {
         if (sign is null || !sign.Enabled) return Array.Empty<string>();
         var targets = new List<string>();
@@ -24,14 +24,15 @@ public sealed partial class DotNetPublishPipelineRunner
             // ignore
         }
 
-        return TrySignFiles(targets, outputDir, sign, scope: "publish outputs");
+        return TrySignFiles(targets, outputDir, sign, scope: "publish outputs", progress);
     }
 
     private string[] TrySignFiles(
         IEnumerable<string> files,
         string workingDirectory,
         DotNetPublishSignOptions sign,
-        string? scope)
+        string? scope,
+        Action<string>? progress = null)
     {
         if (sign is null || !sign.Enabled)
             return Array.Empty<string>();
@@ -107,8 +108,10 @@ public sealed partial class DotNetPublishPipelineRunner
 
         try
         {
-            foreach (var file in targets)
+            for (var index = 0; index < targets.Length; index++)
             {
+                var file = targets[index];
+                progress?.Invoke($"Signing file {index + 1}/{targets.Length}: {Path.GetFileName(file)}");
                 if (!File.Exists(file))
                 {
                     HandlePolicy(sign.OnSignFailure, $"Signing target not found: {file}");
@@ -167,6 +170,7 @@ public sealed partial class DotNetPublishPipelineRunner
         }
         finally
         {
+            progress?.Invoke(string.Empty);
             DeleteAzureArtifactSigningMetadata(metadataRoot, signingFailure);
         }
 
@@ -174,6 +178,18 @@ public sealed partial class DotNetPublishPipelineRunner
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static void ReportSigningProgress(IDotNetPublishProgressReporter progress, DotNetPublishStep step, string detail)
+        => (progress as IDotNetPublishProgressReporterV2)?.StepProgress(
+            step, string.IsNullOrEmpty(detail) ? step.Kind.ToString() : "Signing", detail);
+
+    private byte[] SignPortableInventoryWithProgress(
+        byte[] content, DotNetPublishSignOptions sign, Action<string>? progress, string target)
+    {
+        progress?.Invoke($"Signing portable inventory: {target}");
+        try { return _signPortableInventory(content, sign); }
+        finally { progress?.Invoke(string.Empty); }
     }
 
     internal byte[] SignPortableInventory(byte[] content, DotNetPublishSignOptions sign)

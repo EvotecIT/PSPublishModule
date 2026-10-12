@@ -6,8 +6,11 @@ namespace PowerForge.Tests;
 
 public sealed class ModulePipelineStepTests
 {
-    [Fact]
-    public void Create_IncludesBuildSubsteps()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Create_IncludesBuildSubsteps(bool compile, bool reuseStaging)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -29,12 +32,21 @@ public sealed class ModulePipelineStepTests
             };
 
             var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            plan.BuildSpec.PowerShellCompilation = new PowerShellModuleCompilationConfiguration { Enabled = compile };
+            plan.BuildSpec.ReuseStaging = reuseStaging;
             var steps = ModulePipelineStep.Create(plan);
 
             Assert.Contains(steps, s => s.Key == "build:stage");
             Assert.Contains(steps, s => s.Key == "build:build");
             Assert.Contains(steps, s => s.Key == "build:prepare");
             Assert.Contains(steps, s => s.Key == "build:manifest");
+            if (compile)
+            {
+                var compilation = Assert.Single(steps, s => s.Kind == ModulePipelineStepKind.Compilation);
+                Assert.Equal(reuseStaging ? "Restore compiled module" : "Compile PowerShell module", compilation.Title);
+                Assert.True(Array.IndexOf(steps, compilation) > Array.FindIndex(steps, s => s.Key == "build:manifest"));
+            }
+            else Assert.DoesNotContain(steps, s => s.Kind == ModulePipelineStepKind.Compilation);
         }
         finally
         {

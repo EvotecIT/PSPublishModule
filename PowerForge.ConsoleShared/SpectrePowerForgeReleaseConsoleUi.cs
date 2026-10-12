@@ -51,7 +51,10 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                 var tasks = phases.ToDictionary(
                     phase => phase,
                     phase => context.AddTask(
-                        $"{phaseCounters[phase]} — {phaseNames[phase]} — pending",
+                        presentation.BuildLabel(new SpectreProgressLedgerItem
+                        {
+                            Title = $"{phaseCounters[phase]} — {phaseNames[phase]}"
+                        }, "pending"),
                         maxValue: 100,
                         autoStart: false));
                 foreach (var entry in tasks)
@@ -300,7 +303,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
         {
             if (!_tasks.TryGetValue(phase, out var task)) return;
             if (!task.IsStarted) task.StartTask();
-            task.Description = Label(phase, detail);
+            task.Description = BuildPhaseLabel(phase, detail);
             task.Value = 100;
             task.StopTask();
             _presentation.MarkTerminal(task, SpectreProgressLedgerState.Completed);
@@ -311,7 +314,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
             if (!_tasks.TryGetValue(phase, out var task)) return;
             _failed.Add(phase);
             if (!task.IsStarted) task.StartTask();
-            task.Description = Label(phase, detail);
+            task.Description = BuildPhaseLabel(phase, detail);
             task.Value = 100;
             task.StopTask();
             _presentation.MarkTerminal(task, SpectreProgressLedgerState.Failed);
@@ -334,10 +337,11 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                 {
                     phaseTask.StartTask();
                     _presentation.MarkStarted(phaseTask, phase.ToString());
+                    phaseTask.IsIndeterminate = true;
                     phaseTask.Value = 0;
                 }
 
-                phaseTask.Description = Label(phase, $"{CountItems(phase)} detailed step(s)");
+                phaseTask.Description = BuildPhaseLabel(phase, $"{CountItems(phase)} detailed step(s)");
             }
         }
 
@@ -360,8 +364,6 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                     _ => SpectreProgressLedgerState.Planned
                 },
                 detail);
-
-            UpdatePhaseProgress(item.Phase);
         }
 
         public void FinishRemaining(bool success)
@@ -384,7 +386,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
                 }
 
                 entry.Value.StartTask();
-                entry.Value.Description = Label(entry.Key, success ? "not required" : "skipped after failure");
+                entry.Value.Description = BuildPhaseLabel(entry.Key, success ? "not required" : "skipped after failure");
                 entry.Value.Value = 100;
                 entry.Value.StopTask();
                 _presentation.MarkTerminal(entry.Value, SpectreProgressLedgerState.Skipped);
@@ -407,22 +409,8 @@ internal static class SpectrePowerForgeReleaseConsoleUi
             return _phaseCounters[phase] + " — " + _phaseNames[phase] + suffix;
         }
 
-        private void UpdatePhaseProgress(PowerForgeReleaseProgressPhase phase)
-        {
-            if (!_tasks.TryGetValue(phase, out var phaseTask) ||
-                !phaseTask.IsStarted ||
-                phaseTask.IsFinished)
-            {
-                return;
-            }
-
-            if (_ledger.GetItemCount(phase.ToString()) == 0)
-                return;
-
-            var completed = _ledger.GetCompletionRatio(phase.ToString());
-            phaseTask.IsIndeterminate = false;
-            phaseTask.Value = Math.Min(99d, completed * 100d);
-        }
+        private string BuildPhaseLabel(PowerForgeReleaseProgressPhase phase, string? detail)
+            => _presentation.BuildLabel(new SpectreProgressLedgerItem { Title = Label(phase, null) }, detail);
 
         private int CountItems(PowerForgeReleaseProgressPhase phase)
             => _ledger.GetItemCount(phase.ToString());

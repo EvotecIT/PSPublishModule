@@ -237,7 +237,7 @@ internal sealed partial class PowerForgeReleaseService
         _appleArtifactService = appleArtifactService ?? new AppleReleaseArtifactService();
         _appleReceiptStore = appleReceiptStore ?? new AppleReleaseReceiptStore();
         _executeModuleBuild = executeModuleBuild
-            ?? ((moduleRequest, cancellationToken) => new ModuleBuildHostService()
+            ?? ((moduleRequest, cancellationToken) => new ModuleBuildHostService(new PowerShellRunner(), _logger)
                 .ExecuteBuildAsync(moduleRequest, cancellationToken)
                 .GetAwaiter()
                 .GetResult());

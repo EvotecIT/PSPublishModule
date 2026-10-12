@@ -178,6 +178,7 @@ internal sealed class SpectreProgressPresentation
         {
             ModulePipelineStepKind.Versioning => unicode ? "[lightskyblue1]🏷[/]" : "[lightskyblue1]VR[/]",
             ModulePipelineStepKind.Build => unicode ? "[cyan]🔨[/]" : "[cyan]BL[/]",
+            ModulePipelineStepKind.Compilation => unicode ? "[cyan]🔨[/]" : "[cyan]BL[/]",
             ModulePipelineStepKind.Documentation => unicode ? "[deepskyblue1]📝[/]" : "[deepskyblue1]DC[/]",
             ModulePipelineStepKind.Formatting => unicode ? "[mediumpurple3]🎨[/]" : "[mediumpurple3]FM[/]",
             ModulePipelineStepKind.Signing => unicode ? "[gold3]🔏[/]" : "[gold3]SG[/]",

@@ -221,7 +221,7 @@ internal sealed class ProjectBuildReleaseProgressAdapter : IProjectBuildProgress
     }
 }
 
-internal sealed class DotNetPublishReleaseProgressAdapter : IDotNetPublishProgressReporter
+internal sealed class DotNetPublishReleaseProgressAdapter : IDotNetPublishProgressReporterV2
 {
     private readonly IPowerForgeReleaseProgressReporterV2 _release;
     private readonly IReadOnlyDictionary<string, PowerForgeReleaseProgressItem> _items;
@@ -247,6 +247,20 @@ internal sealed class DotNetPublishReleaseProgressAdapter : IDotNetPublishProgre
 
     public void StepStarting(DotNetPublishStep step)
         => Update(step, PowerForgeReleaseProgressItemState.Started);
+
+    public void StepProgress(DotNetPublishStep step, string kind, string detail)
+    {
+        if (!_items.TryGetValue(step.Key, out var item)) return;
+        _release.ItemUpdated(new PowerForgeReleaseProgressItem
+        {
+            Phase = item.Phase,
+            Key = item.Key,
+            Title = kind == "Signing" ? $"Sign outputs ({step.TargetName ?? "release evidence"})" : item.Title,
+            Kind = kind,
+            Position = item.Position,
+            Total = item.Total
+        }, PowerForgeReleaseProgressItemState.Started, detail);
+    }
 
     public void StepCompleted(DotNetPublishStep step)
         => Update(step, PowerForgeReleaseProgressItemState.Completed);
