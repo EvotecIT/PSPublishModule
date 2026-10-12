@@ -45,7 +45,13 @@ public sealed class DotNetReleaseBuildContractTests
         try
         {
             var project = Path.Combine(root, "Sample.csproj");
-            File.WriteAllText(project, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><VersionPrefix>1.0.0</VersionPrefix></PropertyGroup></Project>");
+            File.WriteAllText(project, """
+                <Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework><VersionPrefix>1.0.0</VersionPrefix></PropertyGroup>
+                  <Target Name="VerifyCapturedBuildLifetime" BeforeTargets="BeforeBuild;Pack">
+                    <Error Condition="'$(MSBUILDDISABLENODEREUSE)' != '1' Or '$(DOTNET_CLI_USE_MSBUILD_SERVER)' != '0'" Text="Captured release builds must use request-scoped MSBuild workers." />
+                  </Target>
+                </Project>
+                """);
             File.WriteAllText(Path.Combine(root, "Sample.cs"), "public static class Sample { public static int Value => 42; }");
             action(project);
         }

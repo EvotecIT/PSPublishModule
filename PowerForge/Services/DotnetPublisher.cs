@@ -294,6 +294,7 @@ public sealed class DotnetPublisher
             CreateNoWindow = true
         };
         ProcessStartInfoEncoding.TryApplyUtf8(psi);
+        DotNetProcessLifetime.DisableBuildServerReuse(psi);
 
 #if NET472
         psi.Arguments = BuildWindowsArgumentString(args);
@@ -405,6 +406,7 @@ public sealed class DotnetPublisher
             CreateNoWindow = true
         };
         ProcessStartInfoEncoding.TryApplyUtf8(psi);
+        DotNetProcessLifetime.DisableBuildServerReuse(psi);
 
 #if NET472
         psi.Arguments = BuildWindowsArgumentString(args);

@@ -995,6 +995,7 @@ public sealed partial class DotNetPublishPipelineRunner
         };
         ProcessStartInfoEncoding.TryApplyUtf8(psi);
 
+        DotNetProcessLifetime.DisableBuildServerReuse(psi);
         if (environmentVariables is not null)
         {
             foreach (var variable in environmentVariables)

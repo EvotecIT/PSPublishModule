@@ -131,6 +131,8 @@ public sealed class SamplePlugin : IPluginContract
                 runProcess: psi =>
                 {
                     invoked = true;
+                    Assert.Equal("1", psi.EnvironmentVariables[DotNetProcessLifetime.DisableNodeReuseEnvironmentVariable]);
+                    Assert.Equal("0", psi.EnvironmentVariables[DotNetProcessLifetime.DisableCliMsBuildServerEnvironmentVariable]);
                     var outputPath = ExtractOptionValue(psi.Arguments, "-o")
                         ?? throw new InvalidOperationException("Publish output path was not provided.");
 
@@ -313,6 +315,8 @@ public sealed class Two : IPluginContract {}
                 new NullLogger(),
                 runProcess: psi =>
                 {
+                    Assert.Equal("1", psi.EnvironmentVariables[DotNetProcessLifetime.DisableNodeReuseEnvironmentVariable]);
+                    Assert.Equal("0", psi.EnvironmentVariables[DotNetProcessLifetime.DisableCliMsBuildServerEnvironmentVariable]);
                     var outputPath = ExtractOptionValue(psi.Arguments, "-o")
                         ?? throw new InvalidOperationException("Pack output path was not provided.");
 
