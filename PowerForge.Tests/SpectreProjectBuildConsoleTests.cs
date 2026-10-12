@@ -25,7 +25,7 @@ public sealed class SpectreProjectBuildConsoleTests
             });
         Assert.True(result.Result.Success);
         Assert.Contains("plan prepared", writer.ToString());
-        Assert.Contains("100%", writer.ToString());
+        Assert.Contains("done", writer.ToString());
         Assert.DoesNotContain("stale metadata", writer.ToString());
     }
 

@@ -12,6 +12,12 @@
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+function EmitSigningProgress([int]$completed, [int]$total, [string]$detail) {
+  $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($detail))
+  # Write directly so progress never becomes a signature or retry return value.
+  [Console]::Out.WriteLine(('PFSIGN::PROGRESS::{0}:{1}:{2}' -f $completed, $total, $b64))
+  [Console]::Out.Flush()
+}
 function DecodeLines([string]$b64) {
   if ([string]::IsNullOrWhiteSpace($b64)) { return @() }
   $text = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($b64))
@@ -176,6 +182,7 @@ function Invoke-WithFileRetry {
       }
     }
 
+    EmitSigningProgress 0 0 ("{0}: retry {1}/{2} for {3}" -f $Action, ($attempt + 1), $MaxAttempts, [IO.Path]::GetFileName($FilePath))
     Start-Sleep -Milliseconds $delay
     $delay = [Math]::Min($delay * 2, 5000)
   }
@@ -216,6 +223,7 @@ try {
   }
 
   # Resolve certificate
+  EmitSigningProgress 0 0 'Loading signing certificate; the certificate provider may request a PIN or consent'
   $cert = $null
   $flags = [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable -bor `
            [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet
@@ -243,6 +251,7 @@ try {
   $thisTp = ($cert.Thumbprint -replace '\s','').ToUpperInvariant()
 
   # Select signable files only from the final module package file set.
+  EmitSigningProgress 0 0 'Selecting files from the finalized module package'
   $pathComparison = if ([System.IO.Path]::DirectorySeparatorChar -eq '\') {
     [System.StringComparison]::OrdinalIgnoreCase
   } else {
@@ -331,7 +340,10 @@ try {
       throw "Set-AuthenticodeSignature is not available."
     }
 
+    $checkedFiles = 0
     foreach ($f in $all) {
+      $checkedFiles++
+      EmitSigningProgress 0 0 ("Checking existing signatures {0}/{1}: {2}" -f $checkedFiles, @($all).Count, $f.Substring($rootPrefix.Length))
       try {
         Clear-SigningCloudPlacementAttributes -filePath $f
         $sig = Invoke-WithFileRetry -FilePath $f -Action 'Get-AuthenticodeSignature' -ScriptBlock {
@@ -377,7 +389,10 @@ try {
     $targets = $all | Where-Object { $preDisposition[$_] -eq 'Target' }
     $attempted = $targets.Count
 
+    $processedTargets = 0
     foreach ($f in $targets) {
+      EmitSigningProgress $processedTargets $attempted ("Signing and timestamping {0}/{1}: {2}" -f ($processedTargets + 1), $attempted, $f.Substring($rootPrefix.Length))
+      $processedTargets++
       if ($precheckFailures.ContainsKey($f)) { [void]$precheckFailures.Remove($f) }
       $wasSigned = $preStatus[$f] -ne 'NotSigned'
       if ($deferRemainingSigningTargets) {
@@ -440,7 +455,10 @@ try {
       throw "OpenAuthenticode is required on non-Windows for signing. Install the OpenAuthenticode module."
     }
 
+    $checkedFiles = 0
     foreach ($f in $all) {
+      $checkedFiles++
+      EmitSigningProgress 0 0 ("Checking existing signatures {0}/{1}: {2}" -f $checkedFiles, @($all).Count, $f.Substring($rootPrefix.Length))
       try {
         Clear-SigningCloudPlacementAttributes -filePath $f
         $sig = Invoke-WithFileRetry -FilePath $f -Action 'Get-OpenAuthenticodeSignature' -ScriptBlock {
@@ -482,7 +500,10 @@ try {
     $targets = $all | Where-Object { $preDisposition[$_] -eq 'Target' }
     $attempted = $targets.Count
 
+    $processedTargets = 0
     foreach ($f in $targets) {
+      EmitSigningProgress $processedTargets $attempted ("Signing and timestamping {0}/{1}: {2}" -f ($processedTargets + 1), $attempted, $f.Substring($rootPrefix.Length))
+      $processedTargets++
       if ($precheckFailures.ContainsKey($f)) { [void]$precheckFailures.Remove($f) }
       $wasSigned = $preStatus[$f] -ne 'NotSigned'
       try {
@@ -524,6 +545,7 @@ try {
     }
   }
 
+  EmitSigningProgress $attempted $attempted 'Signing attempts finished; checking results'
   EmitSummary `
     -totalMatched @($files).Count `
     -totalAfterExclude @($all).Count `

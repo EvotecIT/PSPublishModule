@@ -423,7 +423,7 @@ public sealed class ModulePipelineMissingAnalysisServiceTests
             string[] packageFilePaths,
             string[] includePatterns,
             string[] excludeSubstrings,
-            SigningOptionsConfiguration signing)
+            SigningOptionsConfiguration signing, Action<int, int, string>? progress = null)
             => throw new InvalidOperationException("Not used in this test.");
     }
 

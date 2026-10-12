@@ -81,7 +81,8 @@ internal static class SpectreModulePipelineConsoleUi
                     failure = ex;
                     ledger.FinishRemaining(success: false);
                 }
-            });
+            },
+            activeStatus: presentation.RenderActiveStatus);
 
         if (failure is not null)
             ExceptionDispatchInfo.Capture(failure).Throw();

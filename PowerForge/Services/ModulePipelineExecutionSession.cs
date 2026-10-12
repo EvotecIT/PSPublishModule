@@ -68,6 +68,7 @@ internal sealed class ModulePipelineExecutionSession
 
     internal ModulePipelineStep? StageStep => GetStep("build:stage");
     internal ModulePipelineStep? BuildStep => GetStep("build:build");
+    internal ModulePipelineStep? PrepareStep => GetStep("build:prepare");
     internal ModulePipelineStep? ManifestStep => GetStep("build:manifest");
     internal ModulePipelineStep? DocsExtractStep => GetStep("docs:extract");
     internal ModulePipelineStep? DocsWriteStep => GetStep("docs:write");

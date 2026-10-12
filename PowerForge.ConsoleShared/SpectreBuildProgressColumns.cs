@@ -36,7 +36,8 @@ internal static class SpectreBuildProgressColumns
         int barWidth,
         ConcurrentDictionary<ProgressTask, string> iconLookup,
         ConcurrentDictionary<ProgressTask, DateTimeOffset> startLookup,
-        ConcurrentDictionary<ProgressTask, TimeSpan> doneLookup)
+        ConcurrentDictionary<ProgressTask, TimeSpan> doneLookup,
+        ProgressColumn? statusColumn = null)
     {
         if (iconLookup is null) throw new ArgumentNullException(nameof(iconLookup));
         if (startLookup is null) throw new ArgumentNullException(nameof(startLookup));
@@ -59,7 +60,7 @@ internal static class SpectreBuildProgressColumns
             });
         }
 
-        columns.Add(new PercentageColumn());
+        columns.Add(statusColumn ?? new PercentageColumn());
 
         if (includeElapsed)
             columns.Add(new FixedElapsedColumn(startLookup, doneLookup));
@@ -125,12 +126,12 @@ internal static class SpectreBuildProgressColumns
         public override IRenderable Render(RenderOptions options, ProgressTask task, TimeSpan deltaTime)
         {
             if (_done.TryGetValue(task, out var elapsed))
-                return new Markup($"[blue]{FormatElapsed(elapsed)}[/]");
+                return new Markup($"[deepskyblue1]{FormatElapsed(elapsed)}[/]");
 
             if (_start.TryGetValue(task, out var startedAt))
-                return new Markup($"[blue]{FormatElapsed(DateTimeOffset.Now - startedAt)}[/]");
+                return new Markup($"[deepskyblue1]{FormatElapsed(DateTimeOffset.Now - startedAt)}[/]");
 
-            return new Markup("[blue]00:00[/]");
+            return new Markup("[grey]  -- [/]");
         }
     }
 

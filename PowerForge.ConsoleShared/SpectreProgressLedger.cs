@@ -76,7 +76,7 @@ internal sealed class SpectreProgressLedger
             // Spectre keeps task insertion order. The full plan is materialized
             // before any updates so an out-of-order start cannot move a row.
             ApplyUpdate(entry, state, detail);
-            _context.Refresh();
+            SpectreProgressDisplay.Refresh(_context);
         }
     }
 
@@ -133,7 +133,7 @@ internal sealed class SpectreProgressLedger
             }
 
             RefreshTasks();
-            _context.Refresh();
+            SpectreProgressDisplay.Refresh(_context);
         }
     }
 
@@ -148,7 +148,7 @@ internal sealed class SpectreProgressLedger
             }
 
             _visibleTasks.Clear();
-            _context.Refresh();
+            SpectreProgressDisplay.Refresh(_context);
         }
     }
 
@@ -257,6 +257,7 @@ internal sealed class SpectreProgressLedger
         entry.ProgressFraction = ResolveProgressFraction(entry.Item, state);
 
         var task = EnsureVisibleTask(entry);
+        _presentation?.SetDetail(task, entry.Item, state, detail);
         task.Description = BuildLiveLabel(entry);
 
         if (state == SpectreProgressLedgerState.Started)

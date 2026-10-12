@@ -2,6 +2,9 @@ using System;
 using System.Collections.Concurrent;
 using PowerForge;
 using Spectre.Console;
+using Spectre.Console.Rendering;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace PowerForge.ConsoleShared;
 
@@ -14,6 +17,9 @@ internal sealed class SpectreProgressPresentation
     private readonly ConcurrentDictionary<ProgressTask, string> _icons = new();
     private readonly ConcurrentDictionary<ProgressTask, DateTimeOffset> _started = new();
     private readonly ConcurrentDictionary<ProgressTask, TimeSpan> _completed = new();
+    private readonly ConcurrentDictionary<ProgressTask, SpectreProgressLedgerState> _states = new();
+    private readonly ConcurrentDictionary<ProgressTask, string> _details = new();
+    private readonly ConcurrentDictionary<ProgressTask, bool> _signing = new();
     private readonly bool _unicode;
     private readonly bool _includeBar;
     private readonly bool _includeElapsed;
@@ -23,13 +29,13 @@ internal sealed class SpectreProgressPresentation
 
     internal SpectreProgressPresentation(int viewportWidth, bool unicode)
     {
-        var width = Math.Max(60, viewportWidth);
+        var width = Math.Max(40, viewportWidth);
         _unicode = unicode;
-        _includeElapsed = width >= 100;
+        _includeElapsed = true;
         _barWidth = ComputeBarWidth(width);
         _includeBar = _barWidth > 0;
 
-        const int percentWidth = 5;
+        const int percentWidth = 7;
         var elapsedWidth = _includeElapsed ? 8 : 0;
         const int spinnerWidth = 2;
         const int iconWidth = 2;
@@ -54,7 +60,24 @@ internal sealed class SpectreProgressPresentation
             _barWidth,
             _icons,
             _started,
-            _completed);
+            _completed,
+            new StepStateColumn(_states));
+
+    internal void SetDetail(ProgressTask task, SpectreProgressLedgerItem item, SpectreProgressLedgerState state, string? detail)
+    {
+        _states[task] = state;
+        _details[task] = string.IsNullOrWhiteSpace(detail) ? item.Title : $"{item.Title}: {detail}";
+        _signing[task] = string.Equals(item.Kind, nameof(ModulePipelineStepKind.Signing), StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal IRenderable? RenderActiveStatus(IReadOnlyList<ProgressTask> tasks)
+    {
+        var task = tasks.LastOrDefault(task => task.IsStarted && !task.IsFinished);
+        if (task is null || !_details.TryGetValue(task, out var detail)) return null;
+        var status = new Text("Current: " + detail, new Style(Color.Cyan1));
+        if (!_signing.TryGetValue(task, out var signing) || !signing) return status;
+        return new Rows(status, new Text(ModuleSigningProgressProtocol.UserGuidance, new Style(Color.Yellow)));
+    }
 
     internal string BuildLabel(SpectreProgressLedgerItem item, string? detail)
     {
@@ -90,6 +113,7 @@ internal sealed class SpectreProgressPresentation
     internal void MarkStarted(ProgressTask task, string? kind)
     {
         Register(task, kind);
+        _states[task] = SpectreProgressLedgerState.Started;
         _started.TryAdd(task, DateTimeOffset.Now);
     }
 
@@ -101,6 +125,7 @@ internal sealed class SpectreProgressPresentation
         if (task is null) throw new ArgumentNullException(nameof(task));
 
         _icons[task] = GetStateIcon(state, _unicode);
+        _states[task] = state;
         if (duration.HasValue)
         {
             _completed[task] = duration.Value;
@@ -119,6 +144,9 @@ internal sealed class SpectreProgressPresentation
         _icons.TryRemove(task, out _);
         _started.TryRemove(task, out _);
         _completed.TryRemove(task, out _);
+        _states.TryRemove(task, out _);
+        _details.TryRemove(task, out _);
+        _signing.TryRemove(task, out _);
     }
 
     internal static string GetKindIcon(string? kind, bool unicode)
@@ -182,7 +210,7 @@ internal sealed class SpectreProgressPresentation
         if (viewportWidth >= 120) return 18;
         if (viewportWidth >= 100) return 14;
         if (viewportWidth >= 80) return 12;
-        return 10;
+        return 0;
     }
 
     private static string PadOrEllipsis(string input, int width)
@@ -198,5 +226,22 @@ internal sealed class SpectreProgressPresentation
         if (width == 1)
             return "…";
         return input.Substring(0, width - 1) + "…";
+    }
+
+    private sealed class StepStateColumn(ConcurrentDictionary<ProgressTask, SpectreProgressLedgerState> states) : ProgressColumn
+    {
+        public override IRenderable Render(RenderOptions options, ProgressTask task, TimeSpan deltaTime)
+        {
+            states.TryGetValue(task, out var state);
+            var text = state switch
+            {
+                SpectreProgressLedgerState.Completed => "done",
+                SpectreProgressLedgerState.Failed => "failed",
+                SpectreProgressLedgerState.Skipped => "skipped",
+                SpectreProgressLedgerState.Started => task.IsIndeterminate ? "running" : $"{task.Percentage:0}%",
+                _ => "queued"
+            };
+            return new Text(text.PadLeft(7));
+        }
     }
 }

@@ -388,7 +388,7 @@ internal static class SpectrePowerForgeReleaseConsoleUi
 
             _ledger.FinishRemaining(success);
             _ledger.ClearLiveTasks();
-            _context.Refresh();
+            SpectreProgressDisplay.Refresh(_context);
         }
 
         public void WriteLedger()
