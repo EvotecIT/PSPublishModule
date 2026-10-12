@@ -490,7 +490,7 @@ jobs:
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --no-build --no-restore --nologo
-          --filter 'FullyQualifiedName~PowerShellCompilationArtifactBuilderTests.Project_ExecutablePackagePreservesQualifiedPermissionsAndRunsAfterInstall|FullyQualifiedName~PowerShellCompilationArtifactBuilderTests.Project_LinuxBundledSelfContainedRuntimeClosureRunsAfterInstall'
+          --filter 'FullyQualifiedName~PowerShellCompilationArtifactBuilderTests.Project_ExecutablePackagePreservesQualifiedPermissionsAndRunsAfterInstall|FullyQualifiedName~PowerShellCompilationArtifactBuilderTests.Project_LinuxBundledSelfContainedRuntimeClosureRunsAfterInstall|FullyQualifiedName~PowerShellCompilationArtifactBuilderTests.Project_LinuxTrimmedRuntimeClosurePreservesAuthenticatedCallersAfterInstall'
 
       - uses: actions/setup-node@v6
         with:

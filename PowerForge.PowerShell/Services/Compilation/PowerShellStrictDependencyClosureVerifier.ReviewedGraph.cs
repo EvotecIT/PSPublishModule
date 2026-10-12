@@ -12,7 +12,7 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
             // Linux System.Net.Ping uses the platform ping utility. Runtime implementation
             // references are trusted only after matching the reviewed target's exact bytes;
             // compiler output and other delivered dependencies retain the process-launch ban.
-            if (assembly.IsReviewedRuntimePack && !IsCompilerOwnedPrimaryAssembly(request.Files, assembly.DisplayPath))
+            if (assembly.IsAuthenticatedRuntimePack && !IsCompilerOwnedPrimaryAssembly(request.Files, assembly.DisplayPath))
                 continue;
             throw new InvalidOperationException(
                 $"Strict runtime-free managed dependency '{assembly.DisplayPath}' contains a native-process launch reference.");
@@ -43,9 +43,13 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
             var key = PowerShellTargetRuntimeAssemblyCatalog.CreateStableKey(identity.Name, version,
                 identity.PublicKeyToken, identity.Culture, identity.Retargetable, identity.ContentType);
             foreach (var assembly in assemblies.Where(assembly => assembly.Identity.StableKey.Equals(key, StringComparison.OrdinalIgnoreCase) &&
-                                          assembly.ContentSha256.Equals(identity.Sha256, StringComparison.OrdinalIgnoreCase)))
+                         !IsCompilerOwnedPrimaryAssembly(request.Files, assembly.DisplayPath)))
             {
+                var authenticated = request.RuntimePackAuthority?.MatchesDelivered(identity, assembly.ContentSha256,
+                    request.DependencyGraph.LockSha256) == true;
+                if (!authenticated && !assembly.ContentSha256.Equals(identity.Sha256, StringComparison.OrdinalIgnoreCase)) continue;
                 assembly.IsReviewedRuntimePack = true;
+                assembly.IsAuthenticatedRuntimePack = authenticated;
                 targetRuntimeAssemblies.Add(key);
             }
         }
@@ -114,8 +118,8 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
                     $"Strict runtime-free delivered dependency '{assembly.Identity.DisplayName}' has no SHA-256 content identity in the reviewed dependency graph.");
             var exact = contentHashes.Contains(assembly.ContentSha256, StringComparer.OrdinalIgnoreCase);
             var sdkTransformed = !exact &&
-                request.Optimization is PowerShellCompilationExecutableOptimization.Trimmed or PowerShellCompilationExecutableOptimization.NativeAot &&
-                candidates.Any(static node => node.Identity.Provenance.Equals("DotNetRuntimePack", StringComparison.Ordinal));
+                candidates.Any(node => request.RuntimePackAuthority?.MatchesDelivered(node.Identity, assembly.ContentSha256,
+                    request.DependencyGraph.LockSha256) == true);
             if (!exact && !sdkTransformed)
                 throw new InvalidOperationException(
                     $"Strict runtime-free delivered dependency '{assembly.Identity.DisplayName}' does not match the SHA-256 content identity in the reviewed dependency graph.");
@@ -125,7 +129,7 @@ internal static partial class PowerShellStrictDependencyClosureVerifier
                 Identity = assembly.Identity.DisplayName,
                 DeliveredSha256 = assembly.ContentSha256,
                 ReviewedInputSha256 = contentHashes.OrderBy(static hash => hash, StringComparer.OrdinalIgnoreCase).ToArray(),
-                Derivation = sdkTransformed ? "SdkOptimization" : "Exact"
+                Derivation = sdkTransformed ? "AuthenticatedSdkOptimization" : "Exact"
             });
         }
 

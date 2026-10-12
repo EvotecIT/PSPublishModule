@@ -7,6 +7,53 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationProviderPackageTests
 {
+    [Theory]
+    [InlineData("libc", "libc.so.6")]
+    [InlineData("libc.so", "libc.so.6")]
+    [InlineData("libdl", "libdl.so.2")]
+    [InlineData("libm", "libm.so.6")]
+    [InlineData("libpthread", "libpthread.so.0")]
+    [InlineData("librt", "librt.so.1")]
+    public void ProviderElfClosureRequiresExactTargetAbiSonames(string managedAlias, string soname)
+    {
+        var caller = new PowerShellCompilationProviderNativeAsset
+        {
+            Path = "runtimes/linux-x64/native/libbridge.so", FileName = "libbridge.so",
+            RuntimeIdentifier = "linux-x64", ImportedLibraries = new[] { managedAlias }
+        };
+        Assert.True(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", managedAlias));
+        var rejected = Assert.Throws<InvalidOperationException>(() =>
+            PowerShellCompilationProviderPackageReader.EnsureNativeImportClosure(new[] { caller }, "provider.nupkg"));
+        Assert.Contains(managedAlias, rejected.Message, StringComparison.Ordinal);
+        caller.ImportedLibraries = new[] { soname };
+        PowerShellCompilationProviderPackageReader.EnsureNativeImportClosure(new[] { caller }, "provider.nupkg");
+    }
+
+    [Theory]
+    [InlineData("QCall")]
+    [InlineData("__Internal")]
+    [InlineData("System.Native")]
+    [InlineData("System.Globalization.Native")]
+    public void ProviderElfClosureDoesNotApplyManagedProbingOrIntrinsicAuthority(string import)
+    {
+        var caller = new PowerShellCompilationProviderNativeAsset
+        {
+            Path = "runtimes/linux-x64/native/libbridge.so", FileName = "libbridge.so",
+            RuntimeIdentifier = "linux-x64", ImportedLibraries = new[] { import }
+        };
+        var alias = new PowerShellCompilationProviderNativeAsset
+        {
+            Path = "runtimes/linux-x64/native/lib" + import + ".so", FileName = "lib" + import + ".so",
+            RuntimeIdentifier = "linux-x64"
+        };
+        Assert.True(PowerShellNativeLibraryName.CanResolve("linux-x64", import, alias.FileName));
+        var rejected = Assert.Throws<InvalidOperationException>(() =>
+            PowerShellCompilationProviderPackageReader.EnsureNativeImportClosure(new[] { caller, alias }, "provider.nupkg"));
+        Assert.Contains(import, rejected.Message, StringComparison.Ordinal);
+        caller.ImportedLibraries = new[] { alias.FileName };
+        PowerShellCompilationProviderPackageReader.EnsureNativeImportClosure(new[] { caller, alias }, "provider.nupkg");
+    }
+
     [WindowsFact]
     public void ProviderNativeAssetIsLockedSelectedByExactRidAndValidatedBeforeUse()
     {

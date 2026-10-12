@@ -204,8 +204,19 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     public void TargetNativeAbiCatalogUsesExplicitPlatformLibraries()
     {
         Assert.True(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", "ld-linux-x86-64.so.2"));
-        Assert.True(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", "QCall"));
-        Assert.True(PowerShellTargetNativeAbiCatalog.Contains("win-x64", "QCall"));
+        foreach (var alias in new[] { "libc", "libc.so", "libdl", "libm", "libpthread", "librt" })
+        {
+            Assert.True(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", alias));
+            Assert.False(PowerShellTargetNativeAbiCatalog.ContainsNativeImport("linux-x64", alias));
+        }
+        foreach (var soname in new[] { "ld-linux-x86-64.so.2", "libc.so.6", "libdl.so.2", "libgcc_s.so.1", "libm.so.6", "libpthread.so.0", "librt.so.1", "libstdc++.so.6" })
+            Assert.True(PowerShellTargetNativeAbiCatalog.ContainsNativeImport("linux-x64", soname));
+        foreach (var runtimeIdentifier in new[] { "win-x64", "linux-x64", "osx-arm64" })
+        foreach (var intrinsic in new[] { "QCall", "__Internal", "System.Globalization.Native", "System.Native" })
+        {
+            Assert.False(PowerShellTargetNativeAbiCatalog.Contains(runtimeIdentifier, intrinsic));
+            Assert.False(PowerShellTargetNativeAbiCatalog.ContainsNativeImport(runtimeIdentifier, intrinsic));
+        }
         Assert.False(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", "/unreviewed/QCall"));
         Assert.False(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", "QCall.so"));
         Assert.False(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", "qcall"));
@@ -216,6 +227,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         foreach (var import in new[] { "rpcrt4.dll", "sspicli.dll", "httpapi.dll", "websocket.dll", "mswsock.dll", "xolehlp.dll", "kernel32", "oleaut32", "user32" })
         {
             Assert.True(PowerShellTargetNativeAbiCatalog.Contains("win-x64", import));
+            Assert.True(PowerShellTargetNativeAbiCatalog.ContainsNativeImport("win-x64", import));
             Assert.False(PowerShellTargetNativeAbiCatalog.Contains("linux-x64", import));
         }
         Assert.False(PowerShellTargetNativeAbiCatalog.Contains("win-x64", @"C:\unreviewed\kernel32.dll"));
@@ -322,8 +334,11 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.Contains("absent from the delivered artifact closure", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void StrictClosureVerifierRecordsSdkTransformedRuntimePackContentOnlyForOptimizedBuilds()
+    [Theory]
+    [InlineData(PowerShellCompilationExecutableOptimization.None)]
+    [InlineData(PowerShellCompilationExecutableOptimization.Trimmed)]
+    [InlineData(PowerShellCompilationExecutableOptimization.NativeAot)]
+    public void StrictClosureVerifierRejectsForgedSdkTransformationWithoutProducerAuthority(PowerShellCompilationExecutableOptimization optimization)
     {
         var source = PowerShellGeneratedTypePolicy.GetTargetRuntimeAssemblyPaths("net10.0")
             .Single(path => Path.GetFileName(path).Equals("System.Collections.Concurrent.dll", StringComparison.OrdinalIgnoreCase));
@@ -355,15 +370,41 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         };
         var files = new[] { new PowerShellCompilationArtifactFile { Path = source, Role = "RuntimeDependency" } };
 
-        Assert.Throws<InvalidOperationException>(() => Verify(files, graph: graph));
-        var optimized = Verify(files, graph: graph, optimization: PowerShellCompilationExecutableOptimization.Trimmed);
+        var rejected = Assert.Throws<InvalidOperationException>(() => Verify(files, graph: graph, optimization: optimization));
+        Assert.Contains("does not match the SHA-256 content identity", rejected.Message);
+    }
 
-        Assert.True(optimized.Verified);
-        Assert.Equal(1, optimized.TransformedManagedAssemblies);
-        var delivered = Assert.Single(optimized.DeliveredDependencies);
-        Assert.Equal("SdkOptimization", delivered.Derivation);
-        Assert.Equal(new string('a', 64), Assert.Single(delivered.ReviewedInputSha256));
-        Assert.NotEqual(delivered.ReviewedInputSha256[0], delivered.DeliveredSha256);
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AuthenticatedSdkRuntimeInputsRejectUserOrProviderIdentityShadowing(bool provider)
+    {
+        var runtime = new PowerShellCompilationDependencyNode
+        {
+            Exists = true,
+            Kind = PowerShellCompilationDependencyNodeKind.ManagedLibrary,
+            Identity = new PowerShellCompilationDependencyIdentity { Name = "System.Private.CoreLib", Provenance = "DotNetRuntimePack" }
+        };
+        var user = new PowerShellCompilationDependencyNode
+        {
+            Exists = true,
+            Kind = PowerShellCompilationDependencyNodeKind.ManagedLibrary,
+            Identity = new PowerShellCompilationDependencyIdentity { Name = "System.Private.CoreLib", Provenance = "ModuleRequiredAssembly" }
+        };
+        var graph = new PowerShellCompilationDependencyGraph { Nodes = provider ? new[] { runtime } : new[] { runtime, user } };
+        var providerLock = provider ? new PowerShellCompilationProviderLock
+        {
+            Packages = new[] { new PowerShellCompilationProviderPackageLockEntry
+            {
+                Assemblies = new[] { new PowerShellCompilationProviderAssembly { AssemblyName = "System.Private.CoreLib" } }
+            } }
+        } : null;
+
+        var rejected = Assert.Throws<InvalidOperationException>(() => PowerShellCompilationRuntimePackAuthority.EnsureInputOwnership(graph, providerLock));
+        Assert.Contains("cannot replace an authenticated runtime assembly", rejected.Message);
+        if (provider) providerLock!.Packages[0].Assemblies[0].AssemblyName = "Provider.Owned";
+        else user.Identity.Name = "User.Owned";
+        PowerShellCompilationRuntimePackAuthority.EnsureInputOwnership(graph, providerLock);
     }
 
     [Fact]

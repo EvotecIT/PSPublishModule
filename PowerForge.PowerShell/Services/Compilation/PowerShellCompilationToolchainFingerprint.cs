@@ -9,12 +9,12 @@ internal static class PowerShellCompilationToolchainFingerprint
 {
     private static readonly ConcurrentDictionary<string, string> SdkHashes = new(StringComparer.OrdinalIgnoreCase);
 
-    internal static string ComputeSdkSha256(string sdkVersion)
+    internal static string ComputeSdkSha256(string sdkVersion, bool forceRefresh = false)
     {
         var selection = ResolveSelectedSdk();
         if (!selection.Version.Equals(sdkVersion, StringComparison.Ordinal))
             throw new InvalidOperationException($"Selected dotnet SDK '{selection.Version}' does not match requested provenance version '{sdkVersion}'.");
-        return SdkHashes.GetOrAdd(selection.RootPath, ComputeToolchainSha256);
+        return forceRefresh ? ComputeToolchainSha256(selection.RootPath) : SdkHashes.GetOrAdd(selection.RootPath, ComputeToolchainSha256);
     }
 
     internal static PowerShellCompilationSdkSelection ResolveSelectedSdk()
@@ -67,6 +67,17 @@ internal static class PowerShellCompilationToolchainFingerprint
         if (string.IsNullOrWhiteSpace(version))
             throw new InvalidOperationException($"Selected dotnet SDK '{selection.Version}' has no Microsoft.NETCore.App runtime-pack identity for '{targetFramework}'.");
         return version!;
+    }
+
+    internal static string ResolveILLinkPackVersion(string targetFramework)
+    {
+        var selection = ResolveSelectedSdk();
+        var document = XDocument.Load(Path.Combine(selection.RootPath, "Microsoft.NETCoreSdk.BundledVersions.props"), LoadOptions.None);
+        var linker = document.Descendants().SingleOrDefault(element => element.Name.LocalName == "KnownILLinkPack" &&
+            (string?)element.Attribute("Include") == "Microsoft.NET.ILLink.Tasks" &&
+            string.Equals((string?)element.Attribute("TargetFramework"), targetFramework, StringComparison.OrdinalIgnoreCase));
+        return (string?)linker?.Attribute("ILLinkPackVersion") ??
+            throw new InvalidOperationException($"Selected dotnet SDK '{selection.Version}' has no ILLink package identity for '{targetFramework}'.");
     }
 
     private static string ComputeToolchainSha256(string sdkRoot)

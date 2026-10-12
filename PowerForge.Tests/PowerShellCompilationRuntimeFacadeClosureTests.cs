@@ -9,12 +9,15 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationBoundPipelineTests
 {
     [Fact]
-    public void StrictClosureCertifiesRuntimeProcessReferencesOnlyWithExactTargetEvidence()
+    public void StrictClosureRejectsRuntimeProcessReferencesWithoutAuthenticatedPackageBytes()
     {
         using var fixture = new RuntimeFacadeFixture();
         var caller = fixture.ProcessCaller("Runtime.ProcessCaller");
         var files = fixture.Files(caller);
-        Assert.True(Verify(files, runtimeIdentifier: "win-x64", graph: fixture.Graph(caller)).Verified);
+        // Even an exact, self-authored target graph is not independent publisher authority.
+        var forged = Assert.Throws<InvalidOperationException>(() =>
+            Verify(files, runtimeIdentifier: "win-x64", graph: fixture.Graph(caller)));
+        Assert.Contains("native-process launch reference", forged.Message);
 
         var unreviewed = Assert.Throws<InvalidOperationException>(() => Verify(files, runtimeIdentifier: "win-x64"));
         Assert.Contains("native-process launch reference", unreviewed.Message);
@@ -40,6 +43,21 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     }
 
     [Fact]
+    public void StrictClosureRejectsForgedRuntimeNativeCallersIncludingCoreLibIntrinsics()
+    {
+        using var fixture = new RuntimeFacadeFixture();
+        foreach (var name in new[] { "System.Private.CoreLib", "Runtime.UntrustedCaller" })
+        foreach (var import in new[] { "QCall", "__Internal", "System.Globalization.Native", "kernel32.dll" })
+        {
+            var caller = fixture.NativeCaller(name, import);
+            var graph = fixture.Graph(caller);
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                Verify(fixture.Files(caller), runtimeIdentifier: "win-x64", graph: graph));
+            Assert.Contains("only exact reviewed", error.Message);
+        }
+    }
+
+    [Fact]
     public void StrictClosureRejectsPowerShellReferencesEvenInExactReviewedRuntimeBytes()
     {
         using var fixture = new RuntimeFacadeFixture();
@@ -50,7 +68,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     }
 
     [WindowsX64Fact]
-    public void StrictClosureCertifiesRuntimeHelperExecutableOnlyWithExactTargetEvidence()
+    public void StrictClosureRejectsRuntimeHelperExecutableWithoutAuthenticatedPackageBytes()
     {
         var helper = Path.Combine(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "createdump.exe");
         Assert.True(File.Exists(helper), "The Windows .NET runtime must supply createdump.exe for this closure fixture.");
@@ -70,10 +88,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
                 Disposition = PowerShellCompilationDependencyGraphDisposition.PrivateRestored, Identity = identity
             } }
         };
-        var accepted = Verify(files, runtimeIdentifier: "win-x64", graph: graph);
-        Assert.True(accepted.Verified, string.Join(Environment.NewLine, accepted.Limitations));
-        Assert.Equal(identity.Sha256, Assert.Single(accepted.DeliveredNativeDependencies).DeliveredSha256);
-        Assert.NotEmpty(accepted.TargetAbiNativeImports);
+        Assert.False(Verify(files, runtimeIdentifier: "win-x64", graph: graph).Verified);
         Assert.False(Verify(files, runtimeIdentifier: "win-x64").Verified);
         identity.TargetFramework = "net9.0";
         Assert.False(Verify(files, runtimeIdentifier: "win-x64", graph: graph).Verified);
@@ -212,6 +227,16 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
                 var process = metadata.AddTypeReference(target, metadata.GetOrAddString("System.Diagnostics"), metadata.GetOrAddString("Process"));
                 metadata.AddMemberReference(process, metadata.GetOrAddString("Start"), default);
                 if (referencesPowerShell) Reference(metadata, "System.Management.Automation", version);
+            });
+
+        internal string NativeCaller(string name, string import)
+            => Write(name, metadata =>
+            {
+                var method = metadata.AddMethodDefinition(MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.PinvokeImpl,
+                    MethodImplAttributes.PreserveSig, metadata.GetOrAddString("Invoke"),
+                    metadata.GetOrAddBlob(new byte[] { 0, 0, 1 }), 0, MetadataTokens.ParameterHandle(1));
+                metadata.AddMethodImport(method, MethodImportAttributes.ExactSpelling, metadata.GetOrAddString("Invoke"),
+                    metadata.AddModuleReference(metadata.GetOrAddString(import)));
             });
 
         internal PowerShellCompilationArtifactFile[] Files(params string[] paths)

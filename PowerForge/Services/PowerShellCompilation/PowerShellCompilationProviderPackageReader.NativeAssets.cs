@@ -108,8 +108,8 @@ public sealed partial class PowerShellCompilationProviderPackageReader
         {
             var delivered = nativeAssets.Any(candidate =>
                 candidate.RuntimeIdentifier.Equals(asset.RuntimeIdentifier, StringComparison.Ordinal) &&
-                PowerShellNativeLibraryName.CanResolve(asset.RuntimeIdentifier, import, candidate.FileName));
-            if (delivered || PowerShellTargetNativeAbiCatalog.Contains(asset.RuntimeIdentifier, import)) continue;
+                PowerShellNativeLibraryName.CanResolveNativeImport(asset.RuntimeIdentifier, import, candidate.FileName));
+            if (delivered || PowerShellTargetNativeAbiCatalog.ContainsNativeImport(asset.RuntimeIdentifier, import)) continue;
             throw new InvalidOperationException(
                 $"Provider package '{packagePath}' native asset '{asset.Path}' imports '{import}', which is neither another exact asset for '{asset.RuntimeIdentifier}' nor part of that target operating-system ABI.");
         }
