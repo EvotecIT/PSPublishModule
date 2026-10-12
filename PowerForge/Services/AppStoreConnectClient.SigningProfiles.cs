@@ -11,6 +11,7 @@ public sealed partial class AppStoreConnectClient
         CancellationToken cancellationToken = default)
         => GetArrayAsync("certificates" + BuildQuery(new Dictionary<string, string?>
         {
+            ["fields[certificates]"] = "name,certificateType,activated,serialNumber,expirationDate,certificateContent",
             ["limit"] = ClampLimit(limit).ToString(CultureInfo.InvariantCulture)
         }), ParseSigningCertificate, cancellationToken);
 

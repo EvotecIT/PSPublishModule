@@ -42,7 +42,8 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal("MAC_OS", profile.Platform);
         Assert.Equal("ACTIVE", profile.ProfileState);
         Assert.Equal("UE9GSUxF", profile.ProfileContent);
-        Assert.Equal("?limit=200", handler.RequestUris[0].Query);
+        Assert.Contains("fields%5Bcertificates%5D=name%2CcertificateType%2Cactivated%2CserialNumber%2CexpirationDate%2CcertificateContent", handler.RequestUris[0].Query, StringComparison.Ordinal);
+        Assert.Contains("limit=200", handler.RequestUris[0].Query, StringComparison.Ordinal);
         Assert.EndsWith("bundleIds/bundle%2Fid/profiles?limit=1", handler.RequestUris[2].AbsoluteUri, StringComparison.OrdinalIgnoreCase);
     }
 
