@@ -30,26 +30,23 @@ public sealed partial class AppStoreConnectClient
     }
 
     /// <summary>
-    /// Creates an App Store profile for an existing bundle identifier and public signing
-    /// certificate resources. Capabilities and App Group associations must already be configured.
+    /// Creates an App Store profile for an existing bundle identifier and one public distribution
+    /// certificate resource. Capabilities and App Group associations must already be configured.
     /// Does not create or revoke certificates, change capabilities, or install files locally.
     /// </summary>
     public Task<AppStoreConnectProvisioningProfileInfo> CreateAppStoreProvisioningProfileAsync(
         string bundleIdResourceId,
         string name,
         AppStoreConnectAppStoreProfileType profileType,
-        string[] certificateIds,
+        string certificateId,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(bundleIdResourceId))
             throw new ArgumentException("Bundle identifier resource id is required.", nameof(bundleIdResourceId));
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Profile name is required.", nameof(name));
-        if (certificateIds is null || certificateIds.Length == 0 || certificateIds.Any(string.IsNullOrWhiteSpace))
-            throw new ArgumentException("At least one nonblank certificate resource id is required.", nameof(certificateIds));
-        var ids = certificateIds.Select(id => id.Trim()).ToArray();
-        if (ids.Distinct(StringComparer.Ordinal).Count() != ids.Length)
-            throw new ArgumentException("Certificate resource ids must be unique.", nameof(certificateIds));
+        if (string.IsNullOrWhiteSpace(certificateId))
+            throw new ArgumentException("One distribution certificate resource id is required.", nameof(certificateId));
         var appleProfileType = profileType switch
         {
             AppStoreConnectAppStoreProfileType.iOS => "IOS_APP_STORE",
@@ -66,7 +63,7 @@ public sealed partial class AppStoreConnectClient
                 relationships = new
                 {
                     bundleId = new { data = new { type = "bundleIds", id = bundleIdResourceId.Trim() } },
-                    certificates = new { data = ids.Select(id => new { type = "certificates", id }).ToArray() }
+                    certificates = new { data = new[] { new { type = "certificates", id = certificateId.Trim() } } }
                 }
             }
         };

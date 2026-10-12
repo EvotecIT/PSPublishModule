@@ -48,7 +48,7 @@ public sealed partial class AppStoreConnectClientTests
     [InlineData(AppStoreConnectAppStoreProfileType.iOS, "IOS_APP_STORE")]
     [InlineData(AppStoreConnectAppStoreProfileType.macOS, "MAC_APP_STORE")]
     [InlineData(AppStoreConnectAppStoreProfileType.MacCatalyst, "MAC_CATALYST_APP_STORE")]
-    public async Task SigningProfiles_CreatesOnlyRequestedBundleAndCertificates(AppStoreConnectAppStoreProfileType type, string expected)
+    public async Task SigningProfiles_CreatesRequestedBundleWithOneDistributionCertificate(AppStoreConnectAppStoreProfileType type, string expected)
     {
         var handler = new SequenceHandler(new SequenceResponse(HttpStatusCode.Created, """
             { "data": { "id": "profile-new", "type": "profiles", "attributes": { "uuid": "uuid-new", "profileContent": "Q01T" } } }
@@ -56,7 +56,7 @@ public sealed partial class AppStoreConnectClientTests
         using var http = new HttpClient(handler);
         using var client = new AppStoreConnectClient(CreateCredential(), http);
 
-        var result = await client.CreateAppStoreProvisioningProfileAsync(" bundle-1 ", " Helper Store ", type, new[] { " cert-1 ", "cert-2" });
+        var result = await client.CreateAppStoreProvisioningProfileAsync(" bundle-1 ", " Helper Store ", type, " cert-1 ");
 
         Assert.Equal("profile-new", result.Id);
         Assert.Equal("Q01T", result.ProfileContent);
@@ -69,7 +69,9 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal("Helper Store", data.GetProperty("attributes").GetProperty("name").GetString());
         var links = data.GetProperty("relationships");
         Assert.Equal("bundle-1", links.GetProperty("bundleId").GetProperty("data").GetProperty("id").GetString());
-        Assert.Equal(new[] { "cert-1", "cert-2" }, links.GetProperty("certificates").GetProperty("data").EnumerateArray().Select(x => x.GetProperty("id").GetString()));
+        var certificate = Assert.Single(links.GetProperty("certificates").GetProperty("data").EnumerateArray());
+        Assert.Equal("certificates", certificate.GetProperty("type").GetString());
+        Assert.Equal("cert-1", certificate.GetProperty("id").GetString());
         Assert.False(links.TryGetProperty("devices", out _));
     }
 
@@ -80,12 +82,10 @@ public sealed partial class AppStoreConnectClientTests
         using var http = new HttpClient(handler);
         using var client = new AppStoreConnectClient(CreateCredential(), http);
         await Assert.ThrowsAsync<ArgumentException>(() => client.GetBundleIdProfilesAsync(" "));
-        await Assert.ThrowsAsync<ArgumentException>(() => client.CreateAppStoreProvisioningProfileAsync("", "Name", AppStoreConnectAppStoreProfileType.macOS, new[] { "cert" }));
-        await Assert.ThrowsAsync<ArgumentException>(() => client.CreateAppStoreProvisioningProfileAsync("id", "", AppStoreConnectAppStoreProfileType.macOS, new[] { "cert" }));
-        await Assert.ThrowsAsync<ArgumentException>(() => client.CreateAppStoreProvisioningProfileAsync("id", "Name", AppStoreConnectAppStoreProfileType.macOS, Array.Empty<string>()));
-        await Assert.ThrowsAsync<ArgumentException>(() => client.CreateAppStoreProvisioningProfileAsync("id", "Name", AppStoreConnectAppStoreProfileType.macOS, new[] { " " }));
-        await Assert.ThrowsAsync<ArgumentException>(() => client.CreateAppStoreProvisioningProfileAsync("id", "Name", AppStoreConnectAppStoreProfileType.macOS, new[] { "cert", " cert " }));
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.CreateAppStoreProvisioningProfileAsync("id", "Name", (AppStoreConnectAppStoreProfileType)99, new[] { "cert" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.CreateAppStoreProvisioningProfileAsync("", "Name", AppStoreConnectAppStoreProfileType.macOS, "cert"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.CreateAppStoreProvisioningProfileAsync("id", "", AppStoreConnectAppStoreProfileType.macOS, "cert"));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.CreateAppStoreProvisioningProfileAsync("id", "Name", AppStoreConnectAppStoreProfileType.macOS, " "));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.CreateAppStoreProvisioningProfileAsync("id", "Name", (AppStoreConnectAppStoreProfileType)99, "cert"));
         Assert.Empty(handler.RequestUris);
     }
 }
