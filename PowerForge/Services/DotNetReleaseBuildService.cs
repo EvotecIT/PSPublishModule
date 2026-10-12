@@ -408,6 +408,7 @@ public sealed class DotNetReleaseBuildService
         };
         ProcessStartInfoEncoding.TryApplyUtf8(psi);
 
+        DotNetProcessLifetime.DisableBuildServerReuse(psi);
         using var p = Process.Start(psi);
         if (p is null) return 1;
         stdOut = p.StandardOutput.ReadToEnd();

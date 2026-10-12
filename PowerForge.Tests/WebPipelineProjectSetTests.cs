@@ -15,7 +15,10 @@ public sealed class WebPipelineProjectSetTests
             foreach (var name in new[] { "Shared", "First", "Second" }) Directory.CreateDirectory(Path.Combine(root, name));
             File.WriteAllText(Path.Combine(root, "Shared", "Shared.csproj"), """
                 <Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
-                <Target Name="RecordBuild" BeforeTargets="CoreCompile"><WriteLinesToFile File="../shared-builds.txt" Lines="build" Overwrite="false" /></Target></Project>
+                <Target Name="RecordBuild" BeforeTargets="CoreCompile">
+                  <Error Condition="'$(MSBUILDDISABLENODEREUSE)' != '1' Or '$(DOTNET_CLI_USE_MSBUILD_SERVER)' != '0'" Text="Captured project-set builds must use request-scoped MSBuild workers." />
+                  <WriteLinesToFile File="../shared-builds.txt" Lines="build" Overwrite="false" />
+                </Target></Project>
                 """);
             var source = Path.Combine(root, "Shared", "Value.cs");
             File.WriteAllText(source, "public static class Value { public const string Text = \"first\"; }");

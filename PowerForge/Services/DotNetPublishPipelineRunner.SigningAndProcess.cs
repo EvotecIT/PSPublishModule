@@ -938,6 +938,10 @@ public sealed partial class DotNetPublishPipelineRunner
 
     private static bool IsApprovedDotNetChildAmbientEnvironmentVariable(string name)
         => IsApprovedControlledBuildEnvironmentVariable(name) ||
+           // Sanitizer-generated removals must not erase the runner's lifetime defaults.
+           // Explicit caller values (including null) are still copied before filtering.
+           name.Equals(DotNetProcessLifetime.DisableNodeReuseEnvironmentVariable, StringComparison.OrdinalIgnoreCase) ||
+           name.Equals(DotNetProcessLifetime.DisableCliMsBuildServerEnvironmentVariable, StringComparison.OrdinalIgnoreCase) ||
            name.Equals("APPDATA", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("HOME", StringComparison.OrdinalIgnoreCase) ||
            name.Equals("LOCALAPPDATA", StringComparison.OrdinalIgnoreCase) ||
@@ -995,6 +999,7 @@ public sealed partial class DotNetPublishPipelineRunner
         };
         ProcessStartInfoEncoding.TryApplyUtf8(psi);
 
+        DotNetProcessLifetime.DisableBuildServerReuse(psi);
         if (environmentVariables is not null)
         {
             foreach (var variable in environmentVariables)

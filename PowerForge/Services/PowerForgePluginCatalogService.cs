@@ -439,6 +439,7 @@ internal sealed class PowerForgePluginCatalogService
             CreateNoWindow = true
         };
         ProcessStartInfoEncoding.TryApplyUtf8(psi);
+        DotNetProcessLifetime.DisableBuildServerReuse(psi);
 
         var args = new List<string>
         {
@@ -484,6 +485,7 @@ internal sealed class PowerForgePluginCatalogService
             CreateNoWindow = true
         };
         ProcessStartInfoEncoding.TryApplyUtf8(psi);
+        DotNetProcessLifetime.DisableBuildServerReuse(psi);
 
         var args = new List<string>
         {

@@ -126,6 +126,8 @@ public sealed class PowerForgeToolReleaseServiceTests
                 progress.Updates);
             Assert.NotNull(captured);
             Assert.Contains("/p:RestoreLockedMode=false", captured!.Arguments, StringComparison.Ordinal);
+            Assert.Equal("1", captured.EnvironmentVariables[DotNetProcessLifetime.DisableNodeReuseEnvironmentVariable]);
+            Assert.Equal("0", captured.EnvironmentVariables[DotNetProcessLifetime.DisableCliMsBuildServerEnvironmentVariable]);
             Assert.Contains(
                 "/p:NuGetLockFilePath=obj/PowerForge.ToolRelease.packages.lock.json",
                 captured.Arguments,

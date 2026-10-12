@@ -127,6 +127,8 @@ public static partial class WebDotNetRunner
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        ProcessStartInfoEncoding.TryApplyUtf8(startInfo);
+        DotNetProcessLifetime.DisableBuildServerReuse(startInfo);
         foreach (var arg in args)
             startInfo.ArgumentList.Add(arg);
 

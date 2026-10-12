@@ -262,6 +262,7 @@ public sealed partial class DotNetPublishPipelineRunner
         };
         ProcessStartInfoEncoding.TryApplyUtf8(psi);
 
+        DotNetProcessLifetime.DisableBuildServerReuse(psi);
         foreach (var entry in environment ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase))
             psi.Environment[entry.Key] = entry.Value ?? string.Empty;
 

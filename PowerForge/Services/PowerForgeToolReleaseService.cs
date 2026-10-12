@@ -461,6 +461,7 @@ internal sealed partial class PowerForgeToolReleaseService
             CreateNoWindow = true
         };
         ProcessStartInfoEncoding.TryApplyUtf8(psi);
+        DotNetProcessLifetime.DisableBuildServerReuse(psi);
 
         var args = new List<string>
         {

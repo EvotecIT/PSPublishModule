@@ -449,6 +449,8 @@ public static class WebWebsiteRunner
 
         foreach (var argument in arguments)
             startInfo.ArgumentList.Add(argument);
+        ProcessStartInfoEncoding.TryApplyUtf8(startInfo);
+        DotNetProcessLifetime.DisableBuildServerReuse(startInfo);
         if (environmentVariables is not null)
         {
             foreach (var pair in environmentVariables)
