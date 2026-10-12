@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedAtUtc": "2026-10-12T12:10:51.2998151Z",
+  "recordedAtUtc": "2026-10-12T15:31:34.5099149Z",
   "state": "bounded-source-platform-and-signed-target-qualification-with-hosted-trust-remediation-and-public-release-pending",
   "baselineSourceCommit": "3bf263de3f39759fb21202e812728b47b85b05dc",
   "previousWindowsLedger": "m30-public-distribution-3.0.168.json",
@@ -513,5 +513,61 @@
     "runtimePackArchiveSha256": "dec12c4b4ed5d2739669243756493090bb0f7b013a33a0eb84ec77428a8ab1ca",
     "existingAssertions": "Signed runtime authority/tamper controls (bundled); fresh authenticated SDK derivation/cache-hit refusal (trimmed); build,test,pack,install,repeat-install,direct installed entry7/exit0,hash and Unix mode parity.",
     "qualificationLimit": "Focused fixture proof; no new Full, public-release, runtime-absent or all-network-cold claim"
+  },
+  "secondHostedRemediationWave": {
+    "publishedBase": "1a4fb694f7fe65e2fa847fe25a1a1f89d330fa7f",
+    "repairCommit": "10a4b3973af8a433b2926b38dece41bdeeb738cd",
+    "actualBuildCommit": "d9ea1e03311effd50836b41f38f2838ce692ed40",
+    "reviewCommit": "827c89a811fcfe054332edd9364ea67d6b30a168",
+    "reviewCommitDelta": "Only the Linux CI filter adds the controlled SDK environment test class; compiled production and test source is unchanged",
+    "sourceManifestSha256": "9ff04deb77593a0ebd2c3f8adbcbe73da9cda59cd7f88a182b01568f1995c400",
+    "defectOrigins": [
+      "P2 introduced by first-wave authentication: System.Version rejected valid NuGet preview and RC runtime-pack versions",
+      "P1 introduced by SDK-derived authority: inherited resolver and custom-target inputs could supply unrecorded producer code",
+      "Ancestor Directory.Build.rsp is a pre-existing implicit MSBuild input reached by the new producer authority; real restore and publish sentinel imports were reproduced"
+    ],
+    "versionIdentity": "NuGetVersion grammar accepts stable, preview and RC identities while exact target, package layout, signed archive and entry-hash authority remain required",
+    "controlledProducer": "Strict trimmed initial restore, authenticated restore and publish use the selected absolute SDK host, an explicit child environment and no automatic response files",
+    "siblingClosure": "Controlled SDK discovery; private user-extension paths; disabled wildcard/workload imports and server reuse; canonical Windows shell; explicit NuGet package/HTTP/shared locking paths selected before private home/TEMP",
+    "compatibilityBoundary": "Normal module/library/nontrim/NativeAOT build requests retain their prior inherited environment. SDK discovery uses the controlled environment. No new public API or production dependency.",
+    "sdk": "10.0.303",
+    "runtime": "10.0.11",
+    "windows": {
+      "failed": 0,
+      "passed": 16,
+      "explicitLinuxSkips": 2,
+      "net10Net472Net8Builds": "Zero warnings and errors",
+      "actualPoisonedTrimmedBuild": "Caller sentinel absent, dependency closure verified, output 7 / exit 0, private workspace released"
+    },
+    "linux": {
+      "failed": 0,
+      "passed": 13,
+      "skipped": 0,
+      "canonicalProfiles": "Bundled and trimmed each pass nine operations through repeated installation and direct execution",
+      "actualPoisonedTrimmedBuild": "Resolver/custom-target/CLR and ancestor response-file inputs excluded; actual output 7 / exit 0 and workspace released"
+    },
+    "testDllSha256": "fe9c5b67e051b4e2330e05747462cd99525e5dda0fe52b8a3119dad6b069605d",
+    "localReview": "Fresh bounded read-only SDK process-input closure found no actionable P0-P3 finding; prior launch/runtime/native reviews retain their original scopes",
+    "runtimeAbsent": {
+      "fixture": "Newly extracted authenticated UbuntuBase 24.04.5 amd64; guest ICU74 only",
+      "noInstalledDotNetBeforeAndAfter": true,
+      "noHostRuntimeBind": true,
+      "bothInstalledPayloadsOutput": "7 / exit 0 / empty stderr, hashes and executable modes unchanged",
+      "bundledPrimarySha256": "c9973602cc32726a68737712261ecd28e3d683f126f973b0f96626762676da94",
+      "trimmedPrimarySha256": "8e38a7c177f4e985d8b22be930084fbafe3aa2966b81296e0e35e6c2d4804ddb",
+      "trimmedPrimaryBytes": 15430145,
+      "trimmedPackageSha256": "1dcd0065fc63f2c7b55067f911210f0ef1cc706f1a5fecf87ee794c25206027e",
+      "trimmedPackageBytes": 6500067,
+      "transformedManagedAssemblies": 12,
+      "cacheReason": "RequiresFreshAuthenticatedSdkPublish",
+      "frameworkDependentControl": "Tiny SDK-only control exits 131 for missing .NET; this does not qualify another PowerForge FD profile",
+      "receiptSha256": "8298733b66ca46f0b227e9d59c199bf3111629fff86124c6cc58411b1e8aba82"
+    },
+    "limits": [
+      "Selected stable SDK 10.0.303 and runtime 10.0.11 Windows/Linux proof; no full preview-SDK qualification",
+      "No new Full, macOS, NativeAOT, signing or public-release replay; earlier packets retain exact candidates",
+      "Hosted CI, automatic review settlement, source integration and the corrected public release remain required",
+      "Rootfs is an isolated OS fixture, not physical-target qualification"
+    ]
   }
 }
