@@ -77,7 +77,8 @@ function Assert-CleanRepository {
         [string] $RequiredCommit,
         [string] $RequiredBranch,
         [string] $ExpectedRepository,
-        [switch] $DeferContentCheck
+        [switch] $DeferContentCheck,
+        [switch] $AllowBehindMain
     )
     Assert-UnlinkedDirectory -Path $Root -Name $Name
     if ((Invoke-GitText -Root $Root -Arguments @('rev-parse', '--is-inside-work-tree')) -ne 'true') {
@@ -93,7 +94,15 @@ function Assert-CleanRepository {
         if ($branch -ne $RequiredBranch) { throw "$Name must be on '$RequiredBranch', not '$branch'." }
         Invoke-GitText -Root $Root -Arguments @('fetch', '--quiet', 'origin', $RequiredBranch) | Out-Null
         $remote = (Invoke-GitText -Root $Root -Arguments @('rev-parse', "refs/remotes/origin/$RequiredBranch")).ToLowerInvariant()
-        if ($head -ne $remote) { throw "$Name HEAD '$head' does not match origin/$RequiredBranch '$remote'." }
+        if ($head -ne $remote) {
+            if (-not $AllowBehindMain -or $RequiredBranch -ne 'main') {
+                throw "$Name HEAD '$head' does not match origin/$RequiredBranch '$remote'."
+            }
+            # Only the worker control plane may enter strictly behind main. Its
+            # source/evidence checks still run before the worker fast-forwards;
+            # every child Ship call retains the exact latest-main requirement.
+            Invoke-GitText -Root $Root -Arguments @('merge-base', '--is-ancestor', $head, $remote) | Out-Null
+        }
     }
     if (-not $DeferContentCheck) {
         $status = Invoke-GitText -Root $Root -Arguments @('status', '--porcelain=v1', '--untracked-files=all')
@@ -615,7 +624,8 @@ try {
     $script:gitPath = Resolve-FixedTool -Name git
     $toolHead = Assert-CleanRepository -Root $toolRoot -Name 'PSPublishModule source' -RequiredCommit $ExpectedCommit -ExpectedRepository 'EvotecIT/PSPublishModule'
     $consumerRequiredBranch = if ($ArgumentList.Count -gt 0 -and $ArgumentList[0] -eq 'apple-deploy') { $null } else { $requiredBranch }
-    $consumerHead = Assert-CleanRepository -Root $consumer -Name 'Consumer source' -RequiredBranch $consumerRequiredBranch -ExpectedRepository $ExpectedConsumerRepository -DeferContentCheck
+    $workerEntry = $ArgumentList.Count -gt 0 -and $ArgumentList[0] -eq 'apple-testflight'
+    $consumerHead = Assert-CleanRepository -Root $consumer -Name 'Consumer source' -RequiredBranch $consumerRequiredBranch -ExpectedRepository $ExpectedConsumerRepository -DeferContentCheck -AllowBehindMain:$workerEntry
     Assert-NoReplaceRefs -Root $toolRoot -Name 'PSPublishModule source'
     Assert-NoReplaceRefs -Root $consumer -Name 'Consumer source'
     $scriptRelative = [IO.Path]::GetRelativePath($toolRoot, $PSCommandPath).Replace('\', '/')
@@ -630,7 +640,7 @@ try {
     }
     Assert-SafeArguments
     Assert-FixedAppleToolConfiguration
-    Invoke-TrackedInputValidator -SourceCommit $consumerHead
+    if (-not (Test-AppleWorkerControl)) { Invoke-TrackedInputValidator -SourceCommit $consumerHead }
     Assert-FixedLocalCredentialProfile -Saved $savedCredentialEnvironment
     $forwardedArgumentList = Get-ForwardedArgumentList -SourceCommit $consumerHead
 

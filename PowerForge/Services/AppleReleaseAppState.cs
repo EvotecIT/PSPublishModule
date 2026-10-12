@@ -98,12 +98,14 @@ internal sealed class AppleReleaseAppState : IDisposable
     internal static string AppDirectory(string bundleId) => Path.Combine(Root, "apps", Hash(bundleId.Trim().ToLowerInvariant()));
 
     internal static void AtomicWrite<T>(string path, T value)
+        => AtomicWriteBytes(path, JsonSerializer.SerializeToUtf8Bytes(value));
+
+    internal static void AtomicWriteBytes(string path, byte[] bytes)
     {
         AssertUnlinked(path);
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            var bytes = JsonSerializer.SerializeToUtf8Bytes(value);
             using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             { stream.Write(bytes, 0, bytes.Length); stream.Flush(true); }
             if (File.Exists(path)) File.Replace(temporary, path, null);

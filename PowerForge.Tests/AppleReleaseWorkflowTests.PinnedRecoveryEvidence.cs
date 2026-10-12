@@ -82,8 +82,26 @@ public sealed partial class AppleReleaseWorkflowTests
                 Success = true,
                 Targets = [target]
             });
+            var planPath = Path.Combine(output, "release-plan.json");
+            byte[]? previousPlan = null;
+            if (scenario == "historical-worker-replan")
+            {
+                new AppleReleaseReceiptStore().WritePlan(consumer, planPath, new PowerForgeAppleReleaseReceipt
+                { Action = PowerForgeAppleReleaseAction.Ship, PlanOnly = true, SourceCommit = source, PlanSha256 = new string('a', 64) });
+                previousPlan = File.ReadAllBytes(planPath);
+                File.WriteAllText(Path.Combine(project.FullName, "project.pbxproj"),
+                    "{ MARKETING_VERSION = 1.0; CURRENT_PROJECT_VERSION = 8; }");
+                Run("git", consumer, "add", ".").EnsureSuccess();
+                CommitTrackedReleaseSandbox(consumer, "Publisher checkpoint");
+                source = Run("git", consumer, "rev-parse", "HEAD").EnsureSuccess().StandardOutput.Trim();
+            }
             switch (scenario)
             {
+                case "nonancestor-archive":
+                    Run("git", consumer, "checkout", "--orphan", "unrelated").EnsureSuccess();
+                    CommitTrackedReleaseSandbox(consumer, "Unrelated source");
+                    source = Run("git", consumer, "rev-parse", "HEAD").EnsureSuccess().StandardOutput.Trim();
+                    break;
                 case "altered-archive":
                     File.WriteAllText(payload, "changed after receipt");
                     break;
@@ -105,6 +123,20 @@ public sealed partial class AppleReleaseWorkflowTests
             var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
             var cli = Path.Combine(root, "PowerForge.Cli", "bin", configuration, "net10.0", "PowerForge.Cli.dll");
             Assert.True(File.Exists(cli), $"PowerForge CLI test dependency was not built: {cli}");
+            if (previousPlan is not null)
+            {
+                Run("pwsh", parent, "-NoLogo", "-NoProfile", "-File", harness,
+                    "-Owner", root, "-Consumer", consumer, "-Cli", cli, "-Source", source, "-WorkerOnly").EnsureSuccess();
+                var retained = Path.Combine(parent, "retained-plans");
+                AppleTestFlightWorker.RetainPreviousSourcePlan(consumer, planPath, source, retained);
+                Assert.False(File.Exists(planPath));
+                Assert.Equal(previousPlan, File.ReadAllBytes(Directory.GetFiles(retained).Single()));
+                // This is the same canonical writer used by Ship --plan. The
+                // actual admission/recovery subprocess must accept the new source
+                // while preserving and hashing the prior source's archive.
+                new AppleReleaseReceiptStore().WritePlan(consumer, planPath, new PowerForgeAppleReleaseReceipt
+                { Action = PowerForgeAppleReleaseAction.Ship, PlanOnly = true, SourceCommit = source, PlanSha256 = new string('b', 64) });
+            }
             var result = Run("pwsh", parent, "-NoLogo", "-NoProfile", "-File", harness,
                 "-Owner", root, "-Consumer", consumer, "-Cli", cli, "-Source", source,
                 "-ExpectedPhase", expectedPhase);
@@ -122,6 +154,8 @@ public sealed partial class AppleReleaseWorkflowTests
     public static IEnumerable<object[]> PinnedRecoveryCases()
     {
         yield return ["valid", ""];
+        yield return ["historical-worker-replan", ""];
+        yield return ["nonancestor-archive", "ArchiveValidation"];
         yield return ["altered-archive", "ArchiveValidation"];
         yield return ["escaped-archive", "ArchiveValidation"];
         yield return ["active-journal-lock", "JournalLockValidation"];
@@ -134,7 +168,7 @@ public sealed partial class AppleReleaseWorkflowTests
     }
 
     private const string PinnedRecoveryHarness = """
-        param([string] $Owner, [string] $Consumer, [string] $Cli, [string] $Source, [string] $ExpectedPhase)
+        param([string] $Owner, [string] $Consumer, [string] $Cli, [string] $Source, [string] $ExpectedPhase, [switch] $WorkerOnly)
         $ErrorActionPreference = 'Stop'
         $consumer = [IO.Path]::GetFullPath($Consumer)
         $script:gitPath = (Get-Command git -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
@@ -160,9 +194,20 @@ public sealed partial class AppleReleaseWorkflowTests
             $node -is [Management.Automation.Language.CommandAst] -and
             $node.GetCommandName() -in @('Register-AppleAutomationEvidence', 'Register-AppleRecoveryEvidence', 'Assert-ConsumerRepositoryContent')
         }, $true)
-        foreach ($action in @('Status', 'Upload')) {
+        if($ExpectedPhase -eq 'JournalLockValidation') {
+            foreach($control in @('status','pause','resume')) {
+                $script:allowedConsumerEvidencePaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+                $ArgumentList=@('apple-testflight',$control,'--config','powerforge.release.json')
+                foreach($command in $admissionCommands) { Invoke-Expression $command.Extent.Text }
+            }
+        }
+        if($WorkerOnly) { $commands = ,@('apple-testflight','run') } else {
+            $commands = @(@('apple-release','Status'), @('apple-release','Upload'), @('apple-testflight','run'),
+              @('apple-testflight','status'), @('apple-testflight','pause'), @('apple-testflight','resume'))
+        }
+        foreach ($commandArguments in $commands) {
             $script:allowedConsumerEvidencePaths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-            $ArgumentList = @('apple-release', $action, '--config', 'powerforge.release.json')
+            $ArgumentList = @($commandArguments) + @('--config', 'powerforge.release.json')
             try {
                 foreach ($command in $admissionCommands) { Invoke-Expression $command.Extent.Text }
             } catch {
@@ -177,6 +222,14 @@ public sealed partial class AppleReleaseWorkflowTests
             }
             if (-not [string]::IsNullOrWhiteSpace($ExpectedPhase)) { throw 'Untrusted recovery evidence was accepted.' }
         }
+        if($WorkerOnly) {
+            $ArgumentList=@('apple-release','Ship','--config','powerforge.release.json','--plan')
+            try { Register-AppleAutomationEvidence -SourceCommit $Source; throw 'Ordinary Ship accepted a stale plan.' }
+            catch { if($_.Exception.Message -notlike '*not bounded to the exact*'){throw} }
+            'PASS stale plan retained for worker only'
+            exit 0
+        }
+        $ArgumentList=@('apple-testflight','run','--config','powerforge.release.json')
         $unexpected = Join-Path $consumer 'build/unreviewed.bin'
         [IO.File]::WriteAllText($unexpected, 'unreviewed output')
         try { Assert-ConsumerRepositoryContent; throw 'Unrelated ignored output was accepted.' }

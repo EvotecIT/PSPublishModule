@@ -6,6 +6,35 @@ namespace PowerForge;
 
 internal sealed partial class AppleTestFlightWorker
 {
+    private void RetainPreviousSourcePlan()
+    {
+        var automation = ReadSpec().AppleApps!.Automation;
+        RetainPreviousSourcePlan(_policy.ConsumerRoot, ContainedPath(_policy.ConsumerRoot, automation.PlanReceiptPath),
+            _running!.Source!, Path.Combine(_directory, "previous-plans"));
+    }
+
+    internal static void RetainPreviousSourcePlan(string consumerRoot, string path, string source, string retainedDirectory)
+    {
+        AppleReleaseAppState.AssertUnlinked(path);
+        if (!File.Exists(path)) return;
+        if (new FileInfo(path).Length > 32 * 1024 * 1024) throw new InvalidOperationException("Retained Apple plan exceeds its size bound.");
+        var bytes = File.ReadAllBytes(path);
+        var receipt = JsonSerializer.Deserialize<PowerForgeAppleReleaseReceipt>(bytes, Json)
+                      ?? throw new InvalidOperationException("Retained Apple plan is invalid.");
+        if (receipt.SourceCommit == source) return;
+        if (!receipt.PlanOnly || !GitObjectId.IsFull(receipt.SourceCommit) ||
+            receipt.PlanSha256 is null || !Regex.IsMatch(receipt.PlanSha256, "^[0-9a-fA-F]{64}$"))
+            throw new InvalidOperationException("Only an ancestral source-bound preview plan may be retired before replanning.");
+        using var process = System.Diagnostics.Process.Start(CreateProcess(Tool("git"), consumerRoot,
+            new[] { "-c", "core.hooksPath=/dev/null", "-C", consumerRoot, "merge-base", "--is-ancestor", receipt.SourceCommit!, source }))!;
+        if (!process.WaitForExit(30000)) { process.Kill(entireProcessTree: true); throw new AppleTestFlightToolException("Could not verify retained plan ancestry."); }
+        if (process.ExitCode != 0) throw new InvalidOperationException("Retained Apple plan source is not an ancestor of the new candidate.");
+        AppleReleaseAppState.EnsureDirectory(retainedDirectory);
+        var retained = Path.Combine(retainedDirectory, receipt.SourceCommit + "-" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant() + ".json");
+        AppleReleaseAppState.AtomicWriteBytes(retained, bytes);
+        File.Delete(path);
+    }
+
     private PowerForgeReleaseSpec ReadSpec()
     {
         var spec = JsonSerializer.Deserialize<PowerForgeReleaseSpec>(File.ReadAllText(ContainedPath(_policy.ConsumerRoot, _policy.ConfigPath)), Json)
@@ -110,7 +139,8 @@ internal sealed partial class AppleTestFlightWorker
 
     internal static void ValidatePlan(PowerForgeAppleReleaseReceipt plan, AppleTestFlightJob job, AppleTestFlightWorkerPolicy? policy = null)
     {
-        if (!plan.Success || !plan.PlanOnly || plan.Action != PowerForgeAppleReleaseAction.Ship || plan.SourceCommit != job.Source ||
+        if (!plan.Success) throw new AppleTestFlightToolException("Ship preview did not succeed; retain this nonmutating stage and retry inventory observation.");
+        if (!plan.PlanOnly || plan.Action != PowerForgeAppleReleaseAction.Ship || plan.SourceCommit != job.Source ||
             plan.PlanSha256?.Length != 64 || plan.Versioning is null || plan.Targets.Length == 0 ||
             plan.Targets.Any(value => value.ShipToAppStoreReview || (value.ShipToTestFlight && value.TestFlightPolicy != AppleTestFlightPolicy.Internal)))
             throw new InvalidOperationException("Ship plan exceeds the standing internal-beta policy or has stale source identity.");

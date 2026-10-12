@@ -82,14 +82,19 @@ internal sealed partial class PowerForgeReleaseService
                 if (!File.Exists(app.ArchivePath) && !Directory.Exists(app.ArchivePath))
                     continue;
                 var evidence = receipts.Where(receipt => !receipt.PlanOnly && receipt.SchemaVersion >= 4 &&
-                        !string.IsNullOrWhiteSpace(receipt.ReceiptSha256) &&
-                        AppleSourceCommitEvidenceMatches(receipt.SourceCommit, plan.SourceCommit))
+                        !string.IsNullOrWhiteSpace(receipt.ReceiptSha256) && GitObjectId.IsFull(receipt.SourceCommit))
                     .SelectMany(receipt => receipt.Targets.Where(target => IsMatchingAppleReceiptTargetIdentity(plan, app, target) &&
                             !string.IsNullOrWhiteSpace(target.ArchivePath) && IsSha256(target.ArchiveSha256))
                         .Select(target => new { Receipt = receipt, Target = target }))
                     .FirstOrDefault();
                 if (evidence is null)
-                    throw new InvalidOperationException($"The configured Apple archive for '{app.Name}' has no receipt bound to this source and target.");
+                    throw new InvalidOperationException($"The configured Apple archive for '{app.Name}' has no receipt bound to a verified source and target.");
+                // Retained archives remain inert evidence across main advancement.
+                // Actual archive/upload recovery separately requires exact-source
+                // equality; admitting verified ancestral bytes never enables reuse.
+                if (!AppleSourceCommitEvidenceMatches(evidence.Receipt.SourceCommit, plan.SourceCommit))
+                    new HomeAssistantReleaseGitService(GitClient.CreateTrustedSystemClient())
+                        .EnsureContainsMerge(plan.ProjectRoot, evidence.Receipt.SourceCommit!);
                 var receiptArchivePath = ResolveOutputPath(plan.ProjectRoot, evidence.Target.ArchivePath!);
                 EnsurePathWithinProjectRoot(plan.ProjectRoot, receiptArchivePath, "Receipt-bound Apple archive");
                 if (!AppleReleasePathsEqual(Path.GetFullPath(app.ArchivePath), receiptArchivePath, plan.ProjectRoot))

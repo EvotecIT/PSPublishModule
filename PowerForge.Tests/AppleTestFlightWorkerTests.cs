@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace PowerForge.Tests;
 
-public sealed class AppleTestFlightWorkerTests
+public sealed partial class AppleTestFlightWorkerTests
 {
     [Fact]
     public void AppLease_SerializesIndependentCheckouts_AndRetainsFailedDeliveryReservation()
@@ -94,7 +94,7 @@ public sealed class AppleTestFlightWorkerTests
     [Fact]
     public void AdjacentAutomaticRequests_SharePendingCandidate_AndAmbiguityHoldsLaterRequests()
     {
-        var state = new AppleTestFlightWorkerState();
+        var state = new AppleTestFlightWorkerState { Mode = AppleTestFlightAutomaticMode.EveryMergedPR };
         AppleTestFlightWorker.EnqueueAutomaticRequest(state, new() { Key = "pr:1:a", PullRequest = 1 });
         AppleTestFlightWorker.EnqueueAutomaticRequest(state, new() { Key = "pr:2:b", PullRequest = 2 });
         AppleTestFlightWorker.EnqueueAutomaticRequest(state, new() { Key = "pr:2:b", PullRequest = 2 });

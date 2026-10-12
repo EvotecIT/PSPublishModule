@@ -52,7 +52,7 @@ internal sealed partial class AppleTestFlightWorker
             {
                 process.Kill(entireProcessTree: true);
                 process.WaitForExit();
-                throw new TimeoutException("Local tool exceeded its bounded run. Reconcile retained release receipts before retrying.");
+                throw new AppleTestFlightToolException("Local tool exceeded its bounded run. Inspect retained receipts before retrying a mutation.");
             }
             if (apple)
             {
@@ -65,7 +65,7 @@ internal sealed partial class AppleTestFlightWorker
         if (output.Length > 16 * 1024 * 1024 || error.Length > 16 * 1024 * 1024)
             throw new InvalidOperationException("Local tool output exceeds the bounded response limit.");
         if (process.ExitCode != 0 && !apple)
-            throw new InvalidOperationException($"Trusted {name} failed with exit code {process.ExitCode}. {SafeDiagnostic(apple ? error : "Inspect local authentication, source, or repository permissions.")}");
+            throw new AppleTestFlightToolException($"Trusted {name} failed with exit code {process.ExitCode}. Inspect local authentication, source, or repository permissions.");
         return output;
     }
 
@@ -114,6 +114,7 @@ internal sealed partial class AppleTestFlightWorker
     private PowerForgeAppleReleaseReceipt InvokeShip(bool plan)
     {
         AssertOwner();
+        if (plan) RetainPreviousSourcePlan();
         var startedAt = DateTimeOffset.UtcNow;
         var arguments = new List<string> { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", Path.Combine(_policy.OwnerRoot, "scripts/Invoke-PinnedPowerForge.ps1"), "-ExpectedCommit", _policy.OwnerCommit,
             "-ConsumerRoot", _policy.ConsumerRoot, "-ExpectedConsumerRepository", _policy.Repository,
@@ -129,10 +130,15 @@ internal sealed partial class AppleTestFlightWorker
         var spec = ReadSpec();
         var automation = spec.AppleApps!.Automation;
         var path = ContainedPath(_policy.ConsumerRoot, plan ? automation.PlanReceiptPath : automation.ReceiptPath);
+        if (plan && !File.Exists(path)) throw new AppleTestFlightToolException("Ship preview produced no fresh plan; retry this nonmutating stage.");
         var receipt = JsonSerializer.Deserialize<PowerForgeAppleReleaseReceipt>(File.ReadAllText(path), Json) ?? throw new InvalidOperationException("Ship receipt is missing.");
+        if (plan && receipt.CheckedAt < startedAt) throw new AppleTestFlightToolException("Ship preview produced no fresh plan; retry this nonmutating stage.");
         if (receipt.SourceCommit != _running!.Source || receipt.Action != PowerForgeAppleReleaseAction.Ship || receipt.PlanOnly != plan || receipt.CheckedAt < startedAt)
             throw new InvalidOperationException("Ship receipt is stale or belongs to another source or action.");
         return receipt;
     }
 }
+
+/// <summary>A tool boundary failure that can be retried only outside mutation stages.</summary>
+internal sealed class AppleTestFlightToolException(string message) : Exception(message);
 #endif

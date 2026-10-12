@@ -19,7 +19,8 @@ function Register-AppleRecoveryEvidence {
         [Parameter(Mandatory)][string] $NuGetPackagesPath,
         [Parameter(Mandatory)][string] $OutputPath
     )
-    if ($ArgumentList[0] -ne 'apple-release') { return }
+    if ($ArgumentList[0] -notin @('apple-release', 'apple-testflight')) { return }
+    if (Test-AppleWorkerControl) { return }
 
     $configPath = Resolve-OptionPath -Value (Get-OptionValue -Option '--config')
     $exitCode = Invoke-RedactedProcess `

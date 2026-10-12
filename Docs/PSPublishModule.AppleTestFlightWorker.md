@@ -130,6 +130,9 @@ including manually queued GitHub requests. Automatic Off affects automatic work;
 manual Build now remains available unless locally paused. Changes are checked
 before version mutation, each archive, each upload and group assignment. An upload
 already underway finishes before the next stage checks the gate.
+Status and pause acknowledgement remain available during an active worker pass.
+Unstarted automatic intents held by Off or selection labels do not block a later
+manual request. A checkpoint or delivery recovery keeps its place in the queue.
 
 The worker reads Off requests while a release subprocess runs. If GitHub polling
 fails or the worker heartbeat expires, subsequent mutation stages stop. GitHub
@@ -150,6 +153,8 @@ checks both the working diff and committed tree, retains original qualification
 and checkpoint lineage, and pushes without force only when main is unprotected
 and has no applicable rules. Unexpected graph, behavior, dependency or script
 changes stop for an operator. It replans against the actual committed source.
+Previous-source preview plans are retained under the queue's `previous-plans`
+directory before a fresh plan replaces them; they cannot approve another source.
 
 If main advances before delivery, the waiting intent returns to qualification
 against the new latest main. A processing timeout retains the same source and
@@ -165,6 +170,9 @@ operator acknowledgement; it does not cancel or roll back an Apple delivery.
 The worker never assumes an interrupted upload failed or blindly allocates a
 replacement. Recovery of a delivered historical source after main advances is
 also an operator hold under the strict latest-main source policy.
+Transient tool failures outside a mutation stage retain that stage and retry on
+the next scheduled pass. Terminal validation failures and interrupted mutations
+require reconciliation.
 
 Internal group access is read back for the exact build (or verified from the
 group's automatic access to all builds). Assignment success alone does not mark

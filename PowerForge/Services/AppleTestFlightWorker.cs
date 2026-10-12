@@ -33,14 +33,13 @@ internal sealed partial class AppleTestFlightWorker
     internal AppleTestFlightWorkerState Run(bool inspectOnly = false, string? retireReconciledJob = null)
     {
         AppleReleaseAppState.EnsureDirectory(_directory);
-        using var lease = new FileStream(Path.Combine(_directory, "worker.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-        AppleReleaseAppState.AssertUnlinked(_journal);
-        _state = File.Exists(_journal)
-            ? JsonSerializer.Deserialize<AppleTestFlightWorkerState>(File.ReadAllText(_journal), Json) ?? throw new InvalidOperationException("Worker journal is invalid.")
-            : new AppleTestFlightWorkerState { Repository = _policy.Repository };
-        if (_state.SchemaVersion != 1 || _state.Repository != _policy.Repository)
-            throw new InvalidOperationException("Worker journal schema or repository does not match policy.");
-        _state.Paused = _policy.Targets.Any(target => File.Exists(Path.Combine(AppleReleaseAppState.AppDirectory(target.BundleId), "paused")));
+        // queue.json is atomically replaced. Inspection and pause acknowledgement
+        // must remain available while the writer holds its process lease.
+        if (inspectOnly && retireReconciledJob is null) return LoadState();
+        var lockPath = Path.Combine(_directory, "worker.lock");
+        AppleReleaseAppState.AssertUnlinked(lockPath);
+        using var lease = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        _state = LoadState();
         if (retireReconciledJob is not null)
         {
             var held = _state.Jobs.SingleOrDefault(value => value.Id == retireReconciledJob && value.Stage == AppleTestFlightJobStage.NeedsOperator)
@@ -61,28 +60,63 @@ internal sealed partial class AppleTestFlightWorker
             Save();
             return _state;
         }
-        if (_running is null) { Save(); return _state; }
+        if (_running is null) { CloseGate(); Save(); return _state; }
         try
         {
-            if (!UpdateGate()) { SetStage(_running.Stage, "Automatic work is Off, excluded, or locally paused; existing recovery stage is preserved."); return _state; }
+            while (!UpdateGate())
+            {
+                SetStage(_running.Stage, "Automatic work is Off, excluded, or locally paused; existing recovery stage is preserved.");
+                if (!_running.Automatic || !IsUnstarted(_running.Stage)) return _state;
+                // An untouched automatic intent must not starve a later explicit
+                // request. A checkpoint or delivery recovery still owns ordering.
+                _running = SelectManualBehindHeldIntent(_state);
+                if (_running is null) return _state;
+            }
             Advance(_running);
         }
         catch (Exception exception)
         {
-            SetStage(AppleTestFlightJobStage.NeedsOperator, SafeDiagnostic(exception.Message));
+            SetStage(FailureStage(_running!.Stage, exception), SafeDiagnostic(exception.Message));
         }
         finally
         {
-            AppleReleaseAppState.AtomicWrite(_gate, new { Allowed = false, ExpiresAt = DateTimeOffset.UtcNow });
+            CloseGate();
             Save();
-            PublishStatus(_running);
+            if (_running is not null) PublishStatus(_running);
         }
         return _state;
     }
 
     internal static AppleTestFlightJob? SelectRunnableJob(AppleTestFlightWorkerState state) =>
         state.Jobs.Any(job => job.Stage == AppleTestFlightJobStage.NeedsOperator) ? null :
-        state.Jobs.FirstOrDefault(job => job.Stage is not (AppleTestFlightJobStage.ReadyInHome or AppleTestFlightJobStage.Excluded));
+        state.Jobs.FirstOrDefault(job => job.Stage is not (AppleTestFlightJobStage.ReadyInHome or AppleTestFlightJobStage.Excluded) &&
+            !(job.Automatic && state.Mode == AppleTestFlightAutomaticMode.Off && IsUnstarted(job.Stage)));
+
+    internal static bool IsUnstarted(AppleTestFlightJobStage stage) => stage is
+        AppleTestFlightJobStage.Queued or AppleTestFlightJobStage.WaitingForChecks or AppleTestFlightJobStage.Planning;
+
+    internal static AppleTestFlightJob? SelectManualBehindHeldIntent(AppleTestFlightWorkerState state) =>
+        state.Jobs.FirstOrDefault(job => !job.Automatic && job.Stage is not
+            (AppleTestFlightJobStage.ReadyInHome or AppleTestFlightJobStage.Excluded));
+
+    internal static AppleTestFlightJobStage FailureStage(AppleTestFlightJobStage stage, Exception exception) =>
+        exception is AppleTestFlightToolException && stage is not (AppleTestFlightJobStage.CheckpointExecuting or
+            AppleTestFlightJobStage.PublishingCheckpoint or AppleTestFlightJobStage.Releasing)
+            ? stage : AppleTestFlightJobStage.NeedsOperator;
+
+    private AppleTestFlightWorkerState LoadState()
+    {
+        AppleReleaseAppState.AssertUnlinked(_journal);
+        var state = File.Exists(_journal)
+            ? JsonSerializer.Deserialize<AppleTestFlightWorkerState>(File.ReadAllText(_journal), Json) ?? throw new InvalidOperationException("Worker journal is invalid.")
+            : new AppleTestFlightWorkerState { Repository = _policy.Repository };
+        if (state.SchemaVersion != 1 || state.Repository != _policy.Repository)
+            throw new InvalidOperationException("Worker journal schema or repository does not match policy.");
+        state.Paused = _policy.Targets.Any(target => File.Exists(Path.Combine(AppleReleaseAppState.AppDirectory(target.BundleId), "paused")));
+        return state;
+    }
+
+    private void CloseGate() => AppleReleaseAppState.AtomicWrite(_gate, new { Allowed = false, ExpiresAt = DateTimeOffset.UtcNow });
 
     internal void SetPaused(bool paused)
     {

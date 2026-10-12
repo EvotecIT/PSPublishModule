@@ -261,6 +261,10 @@ function Read-ResolvedAppleTargets {
 }
 
 function Assert-ConsumerRepositoryContent {
+    # Controls execute only pinned owner code and touch local markers/journal.
+    # The tracked config and local policy are still checked by Assert-SafeArguments;
+    # incomplete build bytes are intentionally outside this read-only boundary.
+    if (Test-AppleWorkerControl) { return }
     $paths = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($arguments in @(
         @('diff', '--name-only', 'HEAD', '--'),
@@ -282,9 +286,17 @@ function Assert-ConsumerRepositoryContent {
     }
 }
 
+function Test-AppleWorkerControl {
+    return $ArgumentList.Count -gt 1 -and $ArgumentList[0] -eq 'apple-testflight' -and
+        $ArgumentList[1] -in @('status', 'pause', 'resume')
+}
+
 function Register-AppleAutomationEvidence {
     param([Parameter(Mandatory)][string] $SourceCommit)
-    if ($ArgumentList[0] -ne 'apple-release') { return }
+    if ($ArgumentList[0] -notin @('apple-release', 'apple-testflight')) { return }
+    # Controls inspect only the trusted local queue/markers. In-progress archive
+    # bytes and receipt transactions cannot be validated as completed evidence.
+    if (Test-AppleWorkerControl) { return }
 
     $releaseConfigPath = Resolve-OptionPath -Value (Get-OptionValue -Option '--config')
     $release = Get-Content -LiteralPath $releaseConfigPath -Raw | ConvertFrom-Json
@@ -348,9 +360,18 @@ function Register-AppleAutomationEvidence {
     if (-not (Test-Path -LiteralPath $planPath -PathType Leaf)) { return }
     $plan = Get-Content -LiteralPath $planPath -Raw | ConvertFrom-Json
     if ($plan.planOnly -ne $true -or
-        -not ([string]$plan.sourceCommit).Equals($SourceCommit, [StringComparison]::OrdinalIgnoreCase) -or
+        ([string]$plan.sourceCommit) -notmatch '^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$' -or
         ([string]$plan.planSha256) -notmatch '^[0-9A-Fa-f]{64}$') {
         throw 'Apple release plan receipt is not bounded to the exact consumer source commit.'
+    }
+    if (-not ([string]$plan.sourceCommit).Equals($SourceCommit, [StringComparison]::OrdinalIgnoreCase)) {
+        if ($ArgumentList[0] -ne 'apple-testflight') {
+            throw 'Apple release plan receipt is not bounded to the exact consumer source commit.'
+        }
+        # A worker may inspect retained ancestral plan evidence. This never
+        # approves execution: the worker preserves it outside source and replans
+        # before calling the unchanged, exact-source Ship mutation boundary.
+        Invoke-GitText -Root $consumer -Arguments @('merge-base', '--is-ancestor', [string]$plan.sourceCommit, $SourceCommit) | Out-Null
     }
     if (-not [string]::IsNullOrWhiteSpace($expectedPlanSha256)) {
         $requestedAction = if ($ArgumentList.Count -gt 1) { [string]$ArgumentList[1] } else { '' }
