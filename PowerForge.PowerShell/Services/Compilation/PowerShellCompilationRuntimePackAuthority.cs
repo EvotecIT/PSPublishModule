@@ -1,3 +1,5 @@
+using NuGet.Versioning;
+
 namespace PowerForge;
 
 /// <summary>Binds runtime privileges to Microsoft-authenticated bytes from the exact selected package.</summary>
@@ -112,7 +114,7 @@ internal sealed class PowerShellCompilationRuntimePackAuthority
         var segments = identity.Source.Split('/');
         if (segments.Length is not (4 or 5) || segments[0] != "runtime-pack" ||
             !segments[1].Equals("microsoft.netcore.app.runtime." + _runtimeIdentifier, StringComparison.OrdinalIgnoreCase) ||
-            !Version.TryParse(segments[2], out _) ||
+            !NuGetVersion.TryParse(segments[2], out _) ||
             (segments.Length == 5 && segments[3] != "native")) return false;
         var fileName = segments[segments.Length - 1];
         if (fileName.Length == 0 || fileName is "." or ".." || fileName.IndexOf('\\') >= 0) return false;

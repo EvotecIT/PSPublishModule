@@ -106,13 +106,17 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationDependencyGraph dependencyGraph,
         CancellationToken cancellationToken)
     {
-        var sdkVersion = PowerShellCompilationToolchainFingerprint.ResolveSelectedSdk().Version;
+        var sdk = PowerShellCompilationToolchainFingerprint.ResolveSelectedSdk();
+        var sdkVersion = sdk.Version;
         WriteSdkSelection(workspace, sdkVersion);
-        var workspaceSdk = new ProcessRunner().RunAsync(new ProcessRunRequest(
-            "dotnet",
-            workspace,
-            new[] { "--version" },
-            TimeSpan.FromSeconds(30)), cancellationToken).GetAwaiter().GetResult();
+        var arguments = new[] { "--version" };
+        var timeout = TimeSpan.FromSeconds(30);
+        var request = target.Mode == PowerShellCompilationMode.Strict &&
+                      target.ArtifactKind == PowerShellCompilationArtifactKind.Executable &&
+                      target.Deployment == PowerShellCompilationDeploymentModel.Trimmed
+            ? PowerShellCompilationSdkProcessEnvironment.CreateRequest(sdk, workspace, arguments, timeout)
+            : new ProcessRunRequest("dotnet", workspace, arguments, timeout);
+        var workspaceSdk = new ProcessRunner().RunAsync(request, cancellationToken).GetAwaiter().GetResult();
         cancellationToken.ThrowIfCancellationRequested();
         if (!workspaceSdk.Succeeded || !workspaceSdk.StdOut.Trim().Equals(sdkVersion, StringComparison.Ordinal))
             throw new InvalidOperationException("Generated compilation workspace did not select the recorded dotnet SDK identity.");

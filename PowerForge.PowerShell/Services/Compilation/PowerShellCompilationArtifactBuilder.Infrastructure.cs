@@ -51,12 +51,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             arguments.Add(runtimeIdentifier!);
         }
 
-        var run = new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(
-                "dotnet",
-                Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
-                arguments,
-                TimeSpan.FromSeconds(spec.TimeoutSeconds),
-                GetNuGetEnvironment(spec, authenticatedPackageRoot)), cancellationToken)
+        var run = new ProcessRunner(ownProcessTree: true).RunAsync(CreateSdkProcessRequest(
+                spec, projectPath, arguments, authenticatedPackageRoot), cancellationToken)
             .GetAwaiter()
             .GetResult();
         cancellationToken.ThrowIfCancellationRequested();
@@ -100,15 +96,23 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             arguments.Add("--runtime");
             arguments.Add(runtimeIdentifier!);
         }
-        var run = new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(
-            "dotnet",
-            Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
-            arguments,
-            TimeSpan.FromSeconds(spec.TimeoutSeconds),
-            GetNuGetEnvironment(spec, authenticatedPackageRoot)), cancellationToken).GetAwaiter().GetResult();
+        var run = new ProcessRunner(ownProcessTree: true).RunAsync(CreateSdkProcessRequest(
+            spec, projectPath, arguments, authenticatedPackageRoot), cancellationToken).GetAwaiter().GetResult();
         cancellationToken.ThrowIfCancellationRequested();
         var output = string.IsNullOrWhiteSpace(run.StdErr) ? run.StdOut : run.StdOut + Environment.NewLine + run.StdErr;
         return new GeneratedBuildProcessResult(run.ExitCode, output, run.TimedOut);
+    }
+
+    private static ProcessRunRequest CreateSdkProcessRequest(PowerShellCompilationBuildSpec spec, string projectPath,
+        IReadOnlyList<string> arguments, string? authenticatedPackageRoot)
+    {
+        var directory = Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory();
+        var timeout = TimeSpan.FromSeconds(spec.TimeoutSeconds);
+        return RequiresAuthenticatedSdkPublish(spec)
+            ? PowerShellCompilationSdkProcessEnvironment.CreateRequest(
+                PowerShellCompilationToolchainFingerprint.ResolveSelectedSdk(), directory, arguments, timeout,
+                authenticatedPackageRoot ?? spec.NuGetPackageRoot)
+            : new ProcessRunRequest("dotnet", directory, arguments, timeout, GetNuGetEnvironment(spec, authenticatedPackageRoot));
     }
 
     private static IReadOnlyDictionary<string, string?>? GetNuGetEnvironment(PowerShellCompilationBuildSpec spec, string? authenticatedPackageRoot = null)

@@ -315,6 +315,8 @@ Self-contained targets, including trimmed and NativeAOT targets, require the act
 
 Prepare that prerequisite with an ordinary temporary .NET project targeting the same framework and RID, using the same SDK selection and NuGet package root. For example, restore that project with `dotnet restore --runtime win-x64 --property:SelfContained=true` for a Windows x64 target, then return to the compiler's analyze → lock → restore workflow. Keep the downloaded runtime package archive in the configured cache for signature verification. This preparation acquires build inputs; it does not install a shared runtime on the deployment target.
 
+Use `global.json` to select the SDK for Strict trimmed builds. Their generated restore and publish processes use a compiler-owned environment that excludes ambient MSBuild resolver and custom-target overrides and automatic response files. NuGet package, HTTP-cache and shared locking locations are selected explicitly before the compiler creates its private process home and workspace.
+
 ## Use the PSPublishModule cmdlet
 
 The cmdlet is a thin PowerShell surface over the same artifact builder:

@@ -19,19 +19,14 @@ internal static class PowerShellCompilationToolchainFingerprint
 
     internal static PowerShellCompilationSdkSelection ResolveSelectedSdk()
     {
-        var versionRun = new ProcessRunner().RunAsync(new ProcessRunRequest(
-            "dotnet",
-            Directory.GetCurrentDirectory(),
-            new[] { "--version" },
-            TimeSpan.FromSeconds(30))).GetAwaiter().GetResult();
+        using var environment = PowerShellCompilationWorkspace.Create(keep: false);
+        var versionRun = new ProcessRunner().RunAsync(PowerShellCompilationSdkProcessEnvironment.CreateDiscoveryRequest(
+            Directory.GetCurrentDirectory(), environment.Path, new[] { "--version" })).GetAwaiter().GetResult();
         if (!versionRun.Succeeded || string.IsNullOrWhiteSpace(versionRun.StdOut))
             throw new InvalidOperationException("Unable to resolve the selected dotnet SDK version for PowerShell compilation.");
         var sdkVersion = versionRun.StdOut.Trim();
-        var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
-            "dotnet",
-            Directory.GetCurrentDirectory(),
-            new[] { "--list-sdks" },
-            TimeSpan.FromSeconds(30))).GetAwaiter().GetResult();
+        var run = new ProcessRunner().RunAsync(PowerShellCompilationSdkProcessEnvironment.CreateDiscoveryRequest(
+            Directory.GetCurrentDirectory(), environment.Path, new[] { "--list-sdks" })).GetAwaiter().GetResult();
         if (!run.Succeeded)
             throw new InvalidOperationException("Unable to enumerate installed dotnet SDK paths for build-cache provenance.");
         var sdkRoot = run.StdOut.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
