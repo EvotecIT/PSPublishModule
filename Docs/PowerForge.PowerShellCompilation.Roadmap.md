@@ -1,6 +1,6 @@
 # PowerShell Compilation Architecture Roadmap
 
-Last updated: 2026-10-11
+Last updated: 2026-10-12
 
 This roadmap is the execution plan for growing PowerForge PowerShell compilation without turning the analyzer, transpiler, command handling, or C# emitter into increasingly coupled catch-all components.
 
