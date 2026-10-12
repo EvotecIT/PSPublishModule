@@ -448,7 +448,19 @@ function Read-FixedLocalAppleProfile {
         $assignment = [regex]::Match($line, '^\s*(?:export\s+)?(?<name>APP_STORE_CONNECT_(?:KEY_ID|ISSUER_ID|PRIVATE_KEY_PATH)|ASC_(?:KEY_ID|ISSUER_ID|PRIVATE_KEY_PATH))\s*=\s*(?:"(?<value>[^"\r\n]*)"|''(?<value>[^''\r\n]*)''|(?<value>[^\s;`|&<>]+))\s*$')
         if (-not $assignment.Success) { throw 'The fixed local Apple environment accepts only literal credential assignments and comments.' }
         $value = $assignment.Groups['value'].Value
-        $value = $value.Replace('${HOME}', [Environment]::GetFolderPath('UserProfile')).Replace('$HOME', [Environment]::GetFolderPath('UserProfile'))
+        # Resolve whole-value references only from earlier canonical assignments;
+        # never inherit values from the caller environment or evaluate shell text.
+        $reference = [regex]::Match($value, '^\$(?:(?<name>APP_STORE_CONNECT_(?:KEY_ID|ISSUER_ID|PRIVATE_KEY_PATH))|\{(?<name>APP_STORE_CONNECT_(?:KEY_ID|ISSUER_ID|PRIVATE_KEY_PATH))\})$')
+        if ($reference.Success) {
+            $name = $reference.Groups['name'].Value
+            if (-not $values.ContainsKey($name)) { throw 'The fixed local Apple environment references an undefined credential variable.' }
+            $value = $values[$name]
+        } else {
+            $homeReference = [regex]::Match($value, '^\$(?:HOME|\{HOME\})(?=$|/)')
+            if ($homeReference.Success) {
+                $value = [Environment]::GetFolderPath('UserProfile') + $value.Substring($homeReference.Length)
+            }
+        }
         if ($value.Contains('$') -or $value.Contains('`')) { throw 'The fixed local Apple environment must not execute shell expressions.' }
         $values[$assignment.Groups['name'].Value] = $value
     }

@@ -79,7 +79,11 @@ failed deliveries absent from Apple's build list.
 
 Keep credentials in the existing private `~/.appstoreconnect` profile. The pinned
 operator's `-LoadFixedLocalAppleProfile` switch reads literal credential assignments
-from `~/.appstoreconnect/env`; it does not execute shell code. Existing validated
+from `~/.appstoreconnect/env`. Aliases can reference an earlier canonical issuer,
+key id, or key-path assignment with `$NAME` or `${NAME}`, for example
+`ASC_KEY_ID="$APP_STORE_CONNECT_KEY_ID"`. Paths can start with `$HOME/` or
+`${HOME}/`. The reader rejects other variable expressions and does not execute
+shell code. Existing validated
 credential environment variables remain supported without that switch. Never
 copy Apple credentials into GitHub secrets or a LaunchAgent plist.
 
