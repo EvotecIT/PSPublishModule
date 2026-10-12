@@ -5,6 +5,10 @@ namespace PowerForge.ConsoleShared;
 
 internal class SpectreConsoleLogger : ILogger
 {
+    private readonly IAnsiConsole? _console;
+
+    internal SpectreConsoleLogger(IAnsiConsole? console = null) => _console = console;
+
     public bool IsVerbose { get; set; }
 
     public void Info(string message) => Write(LogLevel.Info, message);
@@ -18,10 +22,11 @@ internal class SpectreConsoleLogger : ILogger
         Write(LogLevel.Verbose, message);
     }
 
-    private static void Write(LogLevel level, string message)
+    private void Write(LogLevel level, string message)
     {
+        var console = _console ?? AnsiConsole.Console;
         var safe = Markup.Escape(message ?? string.Empty);
-        var unicode = ConsoleEncoding.ShouldRenderUnicode(AnsiConsole.Profile.Capabilities.Unicode);
+        var unicode = ConsoleEncoding.ShouldRenderUnicode(console.Profile.Capabilities.Unicode);
 
         var (icon, color) = level switch
         {
@@ -42,7 +47,11 @@ internal class SpectreConsoleLogger : ILogger
             .AddColumn(new TableColumn("m"));
 
         table.AddRow($"[{color}]{icon}[/]", safe);
-        AnsiConsole.Write(table);
+        if (!SpectreProgressDisplay.TryWriteDiagnostic(console, table))
+        {
+            console.Write(table);
+            console.WriteLine();
+        }
     }
 
     private static string NormalizeIcon(string? icon)

@@ -1,10 +1,93 @@
 using PowerForge.ConsoleShared;
 using Spectre.Console;
+using System.Text.RegularExpressions;
 
 namespace PowerForge.Tests;
 
 public sealed class SpectreModuleProgressTests
 {
+    [Fact]
+    public async Task CapturedLoggerContext_RetainsMessagesBeforeAndAfterDisplayCloses()
+    {
+        using var writer = new StringWriter();
+        var console = CreateConsole(writer, 80);
+        var logger = new SpectreConsoleLogger(console);
+        using var ready = new ManualResetEventSlim();
+        using var resume = new ManualResetEventSlim();
+        Task? producer = null;
+        try
+        {
+            SpectreProgressDisplay.Run(console, [new TaskDescriptionColumn()], context =>
+            {
+                context.AddTask("Build module", maxValue: 1);
+                logger.Warn("Diagnostic accepted before closure.");
+                producer = Task.Run(() =>
+                {
+                    ready.Set();
+                    resume.Wait();
+                    logger.Error("Diagnostic delivered after closure.");
+                });
+                Assert.True(ready.Wait(TimeSpan.FromSeconds(10)));
+            });
+        }
+        finally
+        {
+            resume.Set();
+            if (producer is not null) await producer;
+        }
+        var plain = Regex.Replace(writer.ToString(), @"\x1b\[[0-?]*[ -/]*[@-~]", string.Empty);
+        Assert.Contains("Diagnostic accepted before closure.", plain);
+        Assert.Contains("Diagnostic delivered after closure.", plain);
+    }
+
+    [Theory]
+    [InlineData(60, false)]
+    [InlineData(120, false)]
+    [InlineData(60, true)]
+    public void Diagnostics_FollowProgressWithBlankLinesAndRetainCompleteMessages(int width, bool fail)
+    {
+        using var writer = new StringWriter();
+        var console = CreateConsole(writer, width);
+        var logger = new SpectreConsoleLogger(console);
+        var error = Record.Exception(() => SpectreProgressDisplay.Run(console, [new TaskDescriptionColumn()], context =>
+        {
+            var task = context.AddTask("Build module", maxValue: 1);
+            logger.Warn("Warning: certificate provider may require a PIN.");
+            logger.Error("Error: " + new string('x', 500) + " complete diagnostic suffix.");
+            SpectreProgressDisplay.Refresh(context);
+            if (fail) throw new InvalidOperationException("build failed");
+            task.Value = 1;
+            task.StopTask();
+        }));
+        if (fail) Assert.Equal("build failed", Assert.IsType<InvalidOperationException>(error).Message);
+        else Assert.Null(error);
+        writer.WriteLine("Next section");
+        var plain = Regex.Replace(writer.ToString(), @"\x1b\[[0-?]*[ -/]*[@-~]", string.Empty);
+        var finalProgress = plain.LastIndexOf("Build module", StringComparison.Ordinal);
+        var finalLog = plain[finalProgress..];
+        Assert.Contains("Messages (2; complete log follows progress)", plain);
+        Assert.Matches(@"Build module[^\r\n]*\r?\n[ \t]*\r?\n", finalLog);
+        Assert.Contains("Warning: certificate provider may require a PIN.", finalLog);
+        Assert.Contains("complete diagnostic suffix.", finalLog);
+        Assert.Matches(@"complete diagnostic suffix\.[^\r\n]*\r?\n[ \t]*\r?\nNext section", finalLog);
+    }
+
+    [Fact]
+    public void Completion_LeavesBlankLineBeforeNextSectionWithoutDiagnostics()
+    {
+        using var writer = new StringWriter();
+        var console = CreateConsole(writer, 80);
+        SpectreProgressDisplay.Run(console, [new TaskDescriptionColumn()], context =>
+        {
+            var task = context.AddTask("Completed build", maxValue: 1);
+            task.Value = 1;
+            task.StopTask();
+        });
+        writer.WriteLine("Next section");
+        var plain = Regex.Replace(writer.ToString(), @"\x1b\[[0-?]*[ -/]*[@-~]", string.Empty);
+        Assert.Matches(@"Completed build[^\r\n]*\r?\n[ \t]*\r?\nNext section", plain);
+    }
+
     [Theory]
     [InlineData(60)]
     [InlineData(80)]

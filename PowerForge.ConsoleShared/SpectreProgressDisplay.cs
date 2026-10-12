@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -23,6 +24,9 @@ internal static class SpectreProgressDisplay
         if (Current.Value is { } session) session.WriteExternal(write);
         else write();
     }
+
+    internal static bool TryWriteDiagnostic(IAnsiConsole console, IRenderable message)
+        => Current.Value?.TryWriteDiagnostic(console, message) == true;
 
     internal static void Refresh(ProgressContext context)
     {
@@ -49,7 +53,7 @@ internal static class SpectreProgressDisplay
         IRenderable? finalFrame = null;
         var viewport = new SpectreProgressViewportState();
         DisplaySession? session = null;
-        console.Progress()
+        var progress = console.Progress()
             .AutoRefresh(false)
             .AutoClear(true)
             .HideCompleted(false)
@@ -59,13 +63,15 @@ internal static class SpectreProgressDisplay
                 if (session?.Suspended == true) return new Text(string.Empty);
                 finalFrame = renderable;
                 taskObserver?.Invoke(tasks);
-                var status = activeStatus?.Invoke(tasks);
+                var status = session?.WithDiagnostics(activeStatus?.Invoke(tasks));
                 var frame = status is null
                     ? viewport.Project(renderable, tasks, Math.Max(1, console.Profile.Height - 2))
                     : new ActiveProgressRenderable(renderable, tasks, status, viewport, console.Profile.Height);
                 return new TrackedRenderable(frame, session, console.Profile.Height);
-            })
-            .Start(context =>
+            });
+        try
+        {
+            progress.Start(context =>
             {
                 using var display = new DisplaySession(console, context);
                 session = display;
@@ -79,9 +85,21 @@ internal static class SpectreProgressDisplay
                     Sessions.Remove(context);
                 }
             });
-
-        if (finalFrame is not null)
-            console.Write(finalFrame);
+        }
+        finally
+        {
+            if (finalFrame is not null)
+            {
+                console.Write(finalFrame);
+                console.WriteLine();
+            }
+            if (session is not null)
+                foreach (var diagnostic in session.Diagnostics)
+                {
+                    console.Write(diagnostic);
+                    console.WriteLine();
+                }
+        }
     }
 
     private sealed class TrackedRenderable(IRenderable inner, DisplaySession? session, int height) : IRenderable
@@ -124,9 +142,30 @@ internal static class SpectreProgressDisplay
         private readonly ProgressContext _context;
         private readonly IAnsiConsole _console;
         private readonly Timer _timer;
+        private readonly ConcurrentQueue<IRenderable> _diagnostics = new();
         private bool _closed;
         private int _height;
         internal bool Suspended { get; private set; }
+        internal IRenderable[] Diagnostics => _diagnostics.ToArray();
+
+        internal bool TryWriteDiagnostic(IAnsiConsole console, IRenderable message)
+        {
+            lock (_gate)
+            {
+                if (!ReferenceEquals(console, _console) || _closed) return false;
+                _diagnostics.Enqueue(message);
+                return true;
+            }
+        }
+
+        internal IRenderable? WithDiagnostics(IRenderable? status)
+        {
+            var messages = Diagnostics;
+            if (messages.Length == 0) return status;
+            var diagnostics = new SpectreProgressDiagnostics(
+                messages[messages.Length - 1], messages.Length, Math.Max(3, _console.Profile.Height / 3));
+            return status is null ? diagnostics : new Rows(status, diagnostics);
+        }
 
         internal DisplaySession(IAnsiConsole console, ProgressContext context)
         {
@@ -150,6 +189,11 @@ internal static class SpectreProgressDisplay
         {
             lock (_gate)
             {
+                if (_closed)
+                {
+                    write();
+                    return;
+                }
                 Suspended = true;
                 try
                 {
@@ -171,6 +215,7 @@ internal static class SpectreProgressDisplay
                     if (_console.Profile.Capabilities.Ansi)
                         _console.WriteAnsi(writer =>
                         {
+                            writer.Write("\r\n");
                             for (var row = 1; row < _height; row++) writer.Write("\r\n");
                             writer.HideCursor();
                         });
