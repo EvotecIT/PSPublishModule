@@ -63,6 +63,8 @@ Atom writers require explicit feed/entry IDs, update dates, and a feed author or
 
 Inline Atom XML media content retains its element structure and namespaces. XML and XHTML bodies are parsed with the same DTD prohibition and size bounds as feed input; text, escaped HTML and binary Base64 bodies remain text. Remote content is not fetched.
 
+JSON Feed marks known HTML/XHTML content as `content_html`. Other explicit media types are preserved as literal `content_text`, including serialized XML and Base64; the writer does not decode binary bodies. An unspecified content type retains the HTML default.
+
 `SitemapWriter.Create` writes an explicit URL set or index. `Partition` accepts URL XML elements, preserving extension elements, and returns documents bounded by the 50,000-entry and 50 MiB limits. File names, index URLs, ownership markers, and obsolete-file removal remain caller decisions. The bundled sitemaps.org schemas validate the base protocol; extensions require their own validation.
 
 ## Embed structured data

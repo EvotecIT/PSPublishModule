@@ -69,7 +69,7 @@ public static class SyndicationWriter
                 var content = new XElement(Atom + "content", new XAttribute("type", item.ContentType ?? "html"));
                 if (string.Equals(item.ContentType, "xhtml", StringComparison.OrdinalIgnoreCase))
                     content.Add(ProtocolXml.Parse("<div xmlns=\"http://www.w3.org/1999/xhtml\">" + item.Content + "</div>").Root);
-                else if (AtomContentFormat.IsXmlMediaType(item.ContentType))
+                else if (FeedContentFormat.IsXmlMediaType(item.ContentType))
                     content.Add(ProtocolXml.Parse("<fragment>" + item.Content + "</fragment>").Root!.Nodes());
                 else content.Value = item.Content!;
                 entry.Add(content);
@@ -95,7 +95,7 @@ public static class SyndicationWriter
             AddOptional(model, "summary", item.Summary);
             // JSON Feed requires content_text or content_html even when the site omits full article bodies.
             bool hasContent = !string.IsNullOrEmpty(item.Content);
-            model[string.Equals(item.ContentType, "text", StringComparison.OrdinalIgnoreCase) || !hasContent ? "content_text" : "content_html"]
+            model[hasContent && FeedContentFormat.IsHtmlContent(item.ContentType) ? "content_html" : "content_text"]
                 = hasContent ? item.Content : item.Summary ?? string.Empty;
             if (item.Published.HasValue) model["date_published"] = item.Published.Value.ToString("O", CultureInfo.InvariantCulture);
             if (item.Updated.HasValue) model["date_modified"] = item.Updated.Value.ToString("O", CultureInfo.InvariantCulture);

@@ -146,7 +146,7 @@ public static class SyndicationReader {
             return EmptyToNull(string.Concat(nodes.Select(static node => node.ToString(SaveOptions.DisableFormatting))));
         }
 
-        if (AtomContentFormat.IsXmlMediaType(content.Attribute("type")?.Value)) {
+        if (FeedContentFormat.IsXmlMediaType(content.Attribute("type")?.Value)) {
             return EmptyToNull(string.Concat(content.Nodes().Select(static node => node.ToString(SaveOptions.DisableFormatting))));
         }
 

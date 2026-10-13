@@ -64,4 +64,31 @@ public sealed class AtomContentContractsTests
         Authors = new[] { new FeedAuthor { Name = "Editor" } },
         Items = new[] { new SyndicationItem { Id = "urn:item", Title = "Item", Updated = DateTimeOffset.UtcNow, ContentType = type, Content = body } }
     };
+
+    [Theory]
+    [InlineData("text/plain", "content_text")]
+    [InlineData("TEXT/PLAIN; charset=utf-8", "content_text")]
+    [InlineData("application/xml", "content_text")]
+    [InlineData("image/png", "content_text")]
+    [InlineData("html", "content_html")]
+    [InlineData("xhtml", "content_html")]
+    [InlineData("TEXT/HTML; charset=utf-8", "content_html")]
+    [InlineData("application/xhtml+xml", "content_html")]
+    public void JsonFeedUsesHtmlOnlyForHtmlContent(string type, string expectedField)
+    {
+        const string body = "<b>literal or markup according to type</b>";
+        var feed = MakeFeed(type, body);
+        var json = SyndicationWriter.WriteJsonFeed(feed);
+#if NETFRAMEWORK
+        var root = (Dictionary<string, object>)new System.Web.Script.Serialization.JavaScriptSerializer().DeserializeObject(json);
+        var item = (Dictionary<string, object>)Assert.Single((object[])root["items"]);
+        Assert.Equal(body, item[expectedField]);
+        Assert.False(item.ContainsKey(expectedField == "content_text" ? "content_html" : "content_text"));
+#else
+        using var root = System.Text.Json.JsonDocument.Parse(json);
+        var item = Assert.Single(root.RootElement.GetProperty("items").EnumerateArray());
+        Assert.Equal(body, item.GetProperty(expectedField).GetString());
+        Assert.False(item.TryGetProperty(expectedField == "content_text" ? "content_html" : "content_text", out _));
+#endif
+    }
 }
