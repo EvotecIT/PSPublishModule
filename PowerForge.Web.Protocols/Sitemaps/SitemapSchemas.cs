@@ -17,7 +17,7 @@ public static class SitemapSchemas
     private static readonly string[] SchemaNotes =
     {
         "These files mirror the published sitemaps.org XSDs for strict offline schema validation.",
-        "They do not allow PowerForge-generated XHTML language alternate links or Google extension elements.",
+        "Foreign extensions, including XHTML alternate links and Google extensions, require their corresponding schemas.",
         "Pair them with content checks for protocol rules that the published XSDs do not fully encode."
     };
 

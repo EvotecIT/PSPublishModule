@@ -21,7 +21,7 @@ public static class SyndicationReader {
             return new SyndicationFeed {
                 Title = ElementValue(root, "title"),
                 Id = EmptyToNull(ElementValue(root, "id")),
-                Description = EmptyToNull(ElementValue(root, "subtitle")),
+                Description = EmptyToNull(ElementValue(root, root.Name.NamespaceName == "http://purl.org/atom/ns#" ? "tagline" : "subtitle")),
                 Authors = ParseAuthors(root, baseUri, atom: true),
                 Extensions = ReadExtensions(root, atom: true),
                 Url = GetAtomLink(root, baseUri),
@@ -42,7 +42,7 @@ public static class SyndicationReader {
             Authors = channel == null ? Array.Empty<FeedAuthor>() : ParseAuthors(channel, baseUri, atom: false),
             Extensions = channel == null ? Array.Empty<XElement>() : ReadExtensions(channel, atom: false, consumedLink: selfLink),
             // The channel's own link, not an atom:link rel="self" that many RSS 2.0 feeds also carry.
-            Url = channel == null ? string.Empty : ResolveUrl(ElementValue(channel, channel.Name.Namespace, "link"), baseUri),
+            Url = channel == null ? string.Empty : ResolveElementUrl(FirstChild(channel, "link"), baseUri),
             Updated = channel == null ? null : TryParseDate(FirstNonEmpty(ElementValue(channel, "lastBuildDate"), ElementValue(channel, "pubDate"),
                 ElementValue(channel, DublinCore, "date"))),
             SourceFeedUrl = rssSource,
@@ -64,9 +64,9 @@ public static class SyndicationReader {
         List<SyndicationItem> items = new();
         foreach (XElement item in elements) {
             string title = ElementValue(item, "title");
-            string link = ResolveUrl(ElementValue(item, "link"), baseUri);
+            string link = ResolveElementUrl(FirstChild(item, "link"), baseUri);
             if (string.IsNullOrWhiteSpace(link) && !string.Equals(FirstChild(item, "guid")?.Attribute("isPermaLink")?.Value?.Trim(), "false", StringComparison.OrdinalIgnoreCase)) {
-                link = ResolveUrl(ElementValue(item, "guid"), baseUri);
+                link = ResolveElementUrl(FirstChild(item, "guid"), baseUri);
             }
 
             XElement? guid = FirstChild(item, "guid");
@@ -160,6 +160,9 @@ public static class SyndicationReader {
         return alternate == null ? string.Empty : ResolveUrl(alternate.Attribute("href")?.Value ?? string.Empty, EffectiveBase(alternate, baseUri));
     }
 
+    private static string ResolveElementUrl(XElement? element, Uri? baseUri) =>
+        element == null ? string.Empty : ResolveUrl(element.Value, EffectiveBase(element, baseUri));
+
     private static Uri? EffectiveBase(XElement element, Uri? baseUri) {
         foreach (var ancestor in element.AncestorsAndSelf().Reverse()) {
             var value = ancestor.Attribute(XNamespace.Xml + "base")?.Value;
@@ -192,7 +195,7 @@ public static class SyndicationReader {
             : element.Name == DublinCore + "creator" || element.Name == parent.Name.Namespace + "author")
         .Select(element => new FeedAuthor {
             Name = atom ? ElementValue(element, "name") : element.Value.Trim(),
-            Url = atom ? EmptyToNull(ResolveUrl(ElementValue(element, "uri"), EffectiveBase(FirstChild(element, "uri") ?? element, baseUri))) : null
+            Url = atom ? EmptyToNull(ResolveElementUrl(FirstChild(element, element.Name.NamespaceName == "http://purl.org/atom/ns#" ? "url" : "uri"), baseUri)) : null
         }).ToArray();
 
     private static IReadOnlyList<XElement> ReadExtensions(XElement parent, bool atom, XElement? consumedLink = null) =>
