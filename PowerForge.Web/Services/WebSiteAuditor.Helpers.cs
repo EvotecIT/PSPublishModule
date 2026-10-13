@@ -207,7 +207,7 @@ public static partial class WebSiteAuditor
         if (!IsPathWithinRoot(NormalizeRootPath(siteRoot), candidate))
             return false;
 
-        if (isExplicitDir)
+        if (isExplicitDir || Directory.Exists(candidate))
         {
             var dir = candidate.TrimEnd(Path.DirectorySeparatorChar);
             var indexPath = Path.Combine(dir, "index.html");
@@ -279,7 +279,7 @@ public static partial class WebSiteAuditor
         if (!IsPathWithinRoot(NormalizeRootPath(siteRoot), candidate))
             return false;
 
-        if (isDirectoryHint)
+        if (isDirectoryHint || Directory.Exists(candidate))
         {
             var indexPath = Path.Combine(candidate.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), "index.html");
             if (File.Exists(indexPath))
