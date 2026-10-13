@@ -34,18 +34,19 @@ public static class SyndicationReader {
         XElement? channel = root.Name == XName.Get("RDF", "http://www.w3.org/1999/02/22-rdf-syntax-ns#")
             ? root.Element(XName.Get("channel", "http://purl.org/rss/1.0/"))
             : root.Name == XName.Get("rss") ? root.Element("channel") : null;
+        XElement? selfLink = channel?.Elements(XName.Get("link", "http://www.w3.org/2005/Atom"))
+            .FirstOrDefault(link => link.Attribute("rel")?.Value == "self" && !string.IsNullOrWhiteSpace(link.Attribute("href")?.Value));
         return new SyndicationFeed {
             Title = channel == null ? string.Empty : ElementValue(channel, channel.Name.Namespace, "title"),
             Description = channel == null ? null : EmptyToNull(ElementValue(channel, "description")),
             Authors = channel == null ? Array.Empty<FeedAuthor>() : ParseAuthors(channel, baseUri, atom: false),
-            Extensions = channel == null ? Array.Empty<XElement>() : ReadExtensions(channel, atom: false),
+            Extensions = channel == null ? Array.Empty<XElement>() : ReadExtensions(channel, atom: false, consumedLink: selfLink),
             // The channel's own link, not an atom:link rel="self" that many RSS 2.0 feeds also carry.
             Url = channel == null ? string.Empty : ResolveUrl(ElementValue(channel, channel.Name.Namespace, "link"), baseUri),
             Updated = channel == null ? null : TryParseDate(FirstNonEmpty(ElementValue(channel, "lastBuildDate"), ElementValue(channel, "pubDate"),
                 ElementValue(channel, DublinCore, "date"))),
-            SourceFeedUrl = sourceFeedUrl ?? (channel == null ? null : EmptyToNull(ResolveUrl(
-                channel.Elements(XName.Get("link", "http://www.w3.org/2005/Atom"))
-                    .FirstOrDefault(link => link.Attribute("rel")?.Value == "self")?.Attribute("href")?.Value ?? string.Empty, baseUri))),
+            SourceFeedUrl = sourceFeedUrl ?? (selfLink == null ? null : EmptyToNull(ResolveUrl(
+                selfLink.Attribute("href")!.Value, EffectiveBase(selfLink, baseUri)))),
             Items = ParseRssItems(channel == null ? Enumerable.Empty<XElement>()
                 : root.Name.LocalName == "RDF" ? root.Elements(XName.Get("item", "http://purl.org/rss/1.0/"))
                 : channel.Elements("item"), baseUri, sourceFeedUrl)
@@ -187,14 +188,18 @@ public static class SyndicationReader {
             Url = atom ? EmptyToNull(ResolveUrl(ElementValue(element, "uri"), EffectiveBase(FirstChild(element, "uri") ?? element, baseUri))) : null
         }).ToArray();
 
-    private static IReadOnlyList<XElement> ReadExtensions(XElement parent, bool atom) =>
+    private static IReadOnlyList<XElement> ReadExtensions(XElement parent, bool atom, XElement? consumedLink = null) =>
         parent.Elements().Where(element => element.Name.Namespace != parent.Name.Namespace
-            && element.Name != DublinCore + "creator" && element.Name != DublinCore + "date"
-            && element.Name != DublinCoreTerms + "created" && element.Name != DublinCoreTerms + "modified"
-            && element.Name != DublinCoreTerms + "date" && element.Name != ContentModule + "encoded"
-            && !(element.Name == XName.Get("link", "http://www.w3.org/2005/Atom") && element.Attribute("rel")?.Value == "self"
-                && parent.Name.LocalName == "channel"))
+            && element != consumedLink && !IsMappedExtension(element, parent, atom))
         .Select(element => new XElement(element)).ToArray();
+
+    private static bool IsMappedExtension(XElement element, XElement parent, bool atom) {
+        if (atom) return parent.Name.LocalName == "entry" && element.Name == DublinCore + "date";
+        if (element.Name == DublinCore + "creator" || element.Name == DublinCore + "date") return true;
+        return parent.Name.LocalName == "item" && (element.Name == DublinCoreTerms + "created"
+            || element.Name == DublinCoreTerms + "modified" || element.Name == DublinCoreTerms + "date"
+            || element.Name == ContentModule + "encoded");
+    }
 
     private static string FirstNonEmpty(params string[] values) {
         foreach (string value in values) {
