@@ -70,9 +70,10 @@ public sealed class RestoreDrill
                     await DatabaseCapture.VerifySqliteAsync(path, source.ValidationQueries, captured, true, token);
                 else
                 {
+                    Safety.DemandFreeSpace(options.WorkRoot, options.MinimumFreeBytes, captured.SizeBytes);
                     var copy = Path.Combine(run, expectedEntry);
                     File.Copy(path, copy);
-                    await VerifySqlServerAsync(source, captured, copy, run, token);
+                    await VerifySqlServerAsync(source, captured, copy, run, options.MinimumFreeBytes, token);
                 }
             }
             state.Stamp = manifest.Stamp;
@@ -96,11 +97,12 @@ public sealed class RestoreDrill
     }
 
     private static async Task VerifySqlServerAsync(DatabaseSource source, CapturedDatabase captured,
-        string path, string run, CancellationToken token)
+        string path, string run, long minimumFreeBytes, CancellationToken token)
     {
         var expected = captured.SqlIdentity ?? throw new InvalidDataException("SQL backup identity absent.");
         using var client = new SqlServer();
         var files = await client.ReadDiskBackupFileListAsync(source.ConnectionString, path, 7200, token);
+        Safety.DemandFreeSpace(run, minimumFreeBytes, files.Aggregate(0L, (total, file) => checked(total + file.SizeBytes)));
         var target = "PowerForgeRestore_" + Guid.NewGuid().ToString("N");
         var moves = files.Select((f, index) => (f.LogicalName, Path: Path.Combine(run, target + "-" + index + (f.FileType == "L" ? ".ldf" : ".mdf"))))
             .ToDictionary(f => f.LogicalName, f => f.Path);

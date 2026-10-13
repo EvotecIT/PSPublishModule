@@ -41,6 +41,13 @@ internal static class Safety
         return Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, token));
     }
 
+    internal static void DemandFreeSpace(string path, long reserve, long requiredBytes = 0)
+    {
+        if (reserve < 0 || requiredBytes < 0 || requiredBytes > long.MaxValue - reserve ||
+            new DriveInfo(Path.GetPathRoot(path)!).AvailableFreeSpace < reserve + requiredBytes)
+            throw new IOException("Insufficient free staging space.");
+    }
+
     internal static void WriteJson(string path, object value)
     {
         DemandPhysical(path);

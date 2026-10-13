@@ -3,6 +3,7 @@ import datetime as dt
 import json
 import os
 import pathlib
+import re
 import subprocess
 
 UTC = dt.timezone.utc
@@ -15,7 +16,10 @@ NAS_SCRIPT = '/usr/bin/python3 ' + NAS_TOOL + ' --config ' + NAS_CONFIG + ' main
 
 
 def timestamp(value):
-    result = dt.datetime.fromisoformat(value.replace('Z', '+00:00'))
+    value = value.replace('Z', '+00:00')
+    value = re.sub(r'\.(\d+)(?=[+-]\d{2}:\d{2}$)',
+                   lambda match: '.' + match.group(1).ljust(6, '0')[:6], value)
+    result = dt.datetime.fromisoformat(value)
     if result.tzinfo is None:
         raise ValueError('Backup timestamps require offsets')
     return result.astimezone(UTC)

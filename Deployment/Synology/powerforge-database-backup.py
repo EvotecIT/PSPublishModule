@@ -81,6 +81,9 @@ def write_json(path, value):
 class Receiver:
     def __init__(self, config):
         self.config = config
+        if (type(config.get('minimumFreeBytes')) is not int or config['minimumFreeBytes'] < 0 or
+                type(config.get('maxArchiveBytes')) is not int or config['maxArchiveBytes'] < 1):
+            raise ValueError('Capacity limit and free-space reserve must be non-negative integer byte counts')
         databases = config.get('databases')
         configurations = config.get('configurationIds', [])
         if (not isinstance(databases, dict) or not databases or

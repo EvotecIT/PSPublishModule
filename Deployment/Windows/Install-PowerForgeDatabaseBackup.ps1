@@ -17,6 +17,7 @@ $ErrorActionPreference = 'Stop'
 $operatorSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $trustedOwners = @('S-1-5-18', 'S-1-5-32-544', $operatorSid)
 $trustedWriters = $trustedOwners
+$sql = if ($SqlDatabase) { Get-DatabaseBackupSqlPermissionBatch -Database $SqlDatabase } else { $null }
 foreach ($path in @($InstallRoot, $BuildSource, $ConfigSource, $AccessSource)) {
     if (-not [IO.Path]::IsPathRooted($path)) { throw 'Installation paths must be absolute.' }
     for ($check = $path; $check; $check = Split-Path -Path $check -Parent) {
@@ -91,9 +92,7 @@ $statusAcl = Get-Acl -LiteralPath $statusPath
 $statusAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($MonitorIdentity, 'ReadAndExecute', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
 Set-Acl -LiteralPath $statusPath -AclObject $statusAcl
 $plan | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $statusPath 'installation.json') -Encoding UTF8
-if ($SqlDatabase) {
-    if ($SqlDatabase -notmatch '^[A-Za-z0-9_]+$') { throw 'SQL database name must use simple identifiers.' }
-    $sql = "IF SUSER_ID(N'NT AUTHORITY\SYSTEM') IS NULL CREATE LOGIN [NT AUTHORITY\SYSTEM] FROM WINDOWS; GRANT CREATE ANY DATABASE TO [NT AUTHORITY\SYSTEM]; USE [$SqlDatabase]; IF USER_ID(N'NT AUTHORITY\SYSTEM') IS NULL CREATE USER [NT AUTHORITY\SYSTEM] FOR LOGIN [NT AUTHORITY\SYSTEM]; ALTER ROLE db_backupoperator ADD MEMBER [NT AUTHORITY\SYSTEM];"
+if ($sql) {
     & sqlcmd -S $SqlServer -E -C -b -Q $sql
     if ($LASTEXITCODE -ne 0) { throw 'SQL backup permission setup failed.' }
 }

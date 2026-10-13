@@ -30,6 +30,18 @@ class HealthContracts(unittest.TestCase):
         self.assertTrue(result['healthy'])
         self.assertEqual(3, len(result['databases']))
 
+    def test_dotnet_fractional_timestamps_work_for_all_health_time_boundaries(self):
+        values = self.fixture()
+        def dotnet(value):
+            return value.strftime('%Y-%m-%dT%H:%M:%S') + '.1234567+00:00'
+        values[2].update(nextRunUtc=dotnet(values[-1] + dt.timedelta(hours=20)), running=True,
+                         currentRun={'status': 'running', 'startedAtUtc': dotnet(values[-1] - dt.timedelta(hours=1))})
+        values[4]['completedAtUtc'] = dotnet(values[-1] - dt.timedelta(hours=1))
+        for database in values[1]['latest']['databases']:
+            database['capturedAtUtc'] = dotnet(values[-1] - dt.timedelta(hours=1))
+        self.assertTrue(H.evaluate(*values)['healthy'])
+        self.assertEqual(123456, H.timestamp('2026-10-13T11:00:00.1234567Z').microsecond)
+
     def test_failed_latest_attempt_is_not_hidden_by_previous_success(self):
         values = self.fixture()
         values[2]['currentRun'] = {'status': 'failed', 'stage': 'transfer'}

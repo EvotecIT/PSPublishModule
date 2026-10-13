@@ -97,6 +97,12 @@ class ReceiverContracts(unittest.TestCase):
             self.upload()
         capacity.assert_called_once_with(self.receiver.incoming)
 
+    def test_invalid_capacity_policy_is_rejected_before_upload(self):
+        for field, values in (('minimumFreeBytes', (-1, True, 1.5, None)), ('maxArchiveBytes', (0, -1, True, 1.5, None))):
+            for value in values:
+                with self.subTest(field=field, value=value), self.assertRaisesRegex(ValueError, 'free-space reserve'):
+                    R.Receiver(dict(self.config, **{field: value}))
+
     def test_receiver_rejects_storage_owned_by_another_identity(self):
         with patch.object(R.os, 'geteuid', return_value=os.geteuid() + 1):
             with self.assertRaisesRegex(ValueError, 'owned by the receiver identity'):

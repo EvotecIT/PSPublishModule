@@ -37,8 +37,7 @@ public sealed class DatabaseBackupRunner
                 else if (Path.GetFileName(stale).StartsWith("restore-", StringComparison.Ordinal)) held.Add(stale);
             }
             state.HeldStagingPaths = held.ToArray();
-            if (new DriveInfo(Path.GetPathRoot(options.WorkRoot)!).AvailableFreeSpace < options.MinimumFreeBytes)
-                throw new IOException("Insufficient free staging space.");
+            Safety.DemandFreeSpace(options.WorkRoot, options.MinimumFreeBytes);
             options.ValidateCaptureInputs();
             Directory.CreateDirectory(run);
             File.WriteAllText(Path.Combine(run, ".powerforge-backup-run"), "powerforge-database-backup-v1\n");

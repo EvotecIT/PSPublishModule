@@ -6,6 +6,11 @@ $plan = Get-DatabaseBackupInstallationPlan -InstallRoot 'D:\Custom Backup' -Task
 if ($plan.taskLimitMinutes -ne 660 -or $plan.dailyAt -ne '04:35' -or $plan.installRoot -ne 'D:\Custom Backup') { throw 'Custom installation plan differs.' }
 $defaultPlan = Get-DatabaseBackupInstallationPlan -InstallRoot 'D:\Backup' -TaskName 'Backup' -DailyAt '03:00'
 if ($defaultPlan.timeoutMinutes -ne 240 -or $defaultPlan.taskLimitMinutes -ne 300) { throw 'Omitted timeout did not preserve the runner default.' }
+foreach ($database in @("sample`n", 'sample];SELECT 1--', '')) {
+    $rejected = $false
+    try { Get-DatabaseBackupSqlPermissionBatch -Database $database | Out-Null } catch { $rejected = $true }
+    if (-not $rejected) { throw 'Unsafe SQL permission target was accepted.' }
+}
 $previousCulture = [Threading.Thread]::CurrentThread.CurrentCulture
 try {
     $culture = $previousCulture.Clone(); $culture.DateTimeFormat.TimeSeparator = '.'

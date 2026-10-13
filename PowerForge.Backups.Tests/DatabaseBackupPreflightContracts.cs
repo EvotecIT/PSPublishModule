@@ -152,4 +152,30 @@ public sealed partial class DatabaseBackupContracts
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern uint GetShortPathName(string longPath, StringBuilder shortPath, uint capacity);
+
+    [Fact]
+    public async Task SqlRestoreReservesSpaceBeforeCopyOrProviderUse()
+    {
+        var options = ValidOptions(); options.MinimumFreeBytes = long.MaxValue;
+        options.Databases = [new() { Id = "sample", Provider = "sqlserver", Database = "sample", ConnectionString = "invalid" }];
+        var selected = Path.Combine(_root, "download"); Directory.CreateDirectory(selected);
+        var backup = Path.Combine(selected, "sample.bak"); File.WriteAllText(backup, "synthetic SQL backup");
+        var captured = new CapturedDatabase { Id = "sample", Provider = "sqlserver", Entry = "sample.bak", Verified = true,
+            SizeBytes = new FileInfo(backup).Length, Sha256 = await Safety.HashAsync(backup, CancellationToken.None),
+            SqlIdentity = new("sample", Guid.NewGuid(), "synthetic", Guid.NewGuid()) };
+        var manifest = new CaptureManifest { HostId = options.HostId, Stamp = "synthetic", CreatedAtUtc = DateTimeOffset.UtcNow };
+        manifest.Databases.Add(captured);
+        var manifestPath = Path.Combine(selected, "manifest.json"); Safety.WriteJson(manifestPath, manifest);
+        var header = new { schemaVersion = 2, format = "native", hostId = options.HostId, files = new[] {
+            new CapturedFile(captured.Entry, captured.SizeBytes, captured.Sha256),
+            new CapturedFile("manifest.json", new FileInfo(manifestPath).Length, await Safety.HashAsync(manifestPath, CancellationToken.None)) } };
+        var capture = Path.Combine(selected, "capture.json"); Safety.WriteJson(capture, header);
+        var captureHash = await Safety.HashAsync(capture, CancellationToken.None);
+        await Assert.ThrowsAsync<IOException>(() => new RestoreDrill().VerifyAsync(options, selected, captureHash));
+        using var state = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(_root, "restore-drill.json")));
+        Assert.Equal("failed", state.RootElement.GetProperty("status").GetString());
+        Assert.False(state.RootElement.GetProperty("healthy").GetBoolean());
+        Assert.Empty(Directory.EnumerateDirectories(options.WorkRoot));
+        Assert.Equal("synthetic SQL backup", File.ReadAllText(backup));
+    }
 }

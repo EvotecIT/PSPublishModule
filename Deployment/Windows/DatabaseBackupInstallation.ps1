@@ -30,6 +30,28 @@ function Assert-DatabaseBackupRootsSeparate {
     }
 }
 
+function Get-DatabaseBackupSqlPermissionBatch {
+    param([string] $Database)
+    if ($Database -notmatch '\A[A-Za-z0-9_]+\z') { throw 'SQL database name must use simple identifiers.' }
+    @"
+SET XACT_ABORT ON;
+IF DB_ID(N'$Database') IS NULL THROW 51000, 'The backup target database does not exist.', 1;
+BEGIN TRY
+    BEGIN TRANSACTION;
+    IF SUSER_ID(N'NT AUTHORITY\SYSTEM') IS NULL CREATE LOGIN [NT AUTHORITY\SYSTEM] FROM WINDOWS;
+    GRANT CREATE ANY DATABASE TO [NT AUTHORITY\SYSTEM];
+    USE [$Database];
+    IF USER_ID(N'NT AUTHORITY\SYSTEM') IS NULL CREATE USER [NT AUTHORITY\SYSTEM] FOR LOGIN [NT AUTHORITY\SYSTEM];
+    IF IS_ROLEMEMBER(N'db_backupoperator', N'NT AUTHORITY\SYSTEM') <> 1 ALTER ROLE db_backupoperator ADD MEMBER [NT AUTHORITY\SYSTEM];
+    COMMIT TRANSACTION;
+END TRY
+BEGIN CATCH
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+    THROW;
+END CATCH;
+"@
+}
+
 function Assert-DatabaseBackupNamespaceAclTrusted {
     param([Security.AccessControl.DirectorySecurity] $Security, [string[]] $TrustedOwners, [string[]] $TrustedWriters)
     if ($Security.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin $TrustedOwners) {
