@@ -192,6 +192,12 @@ foreach ($invalid in @('id','head_sha','repository','action')) {
     Invoke-Case "Automatic event mismatch $invalid rejected" { & $gate } $true
 }
 $env:GITHUB_EVENT_NAME='workflow_dispatch'
+$env:GITHUB_EVENT_NAME='workflow_run'
+$eventProof | ConvertTo-Json -Depth 5 | Set-Content $env:GITHUB_EVENT_PATH
+$env:GITHUB_SHA='b' * 40
+Invoke-Case 'Automatic quality source survives later default-branch merge' { & $gate } $false
+$env:GITHUB_SHA=$eventProof.workflow_run.head_sha
+$env:GITHUB_EVENT_NAME='workflow_dispatch'
 $env:NPM_EXECUTE='true';$env:SOURCE_PRIVATE='true'
 $global:npmQualification_registryIntegrity=$global:npmQualification_integrity
 $global:npmQualification_existingStatus=200
@@ -203,6 +209,10 @@ function global:Invoke-WebRequest {
 }
 Invoke-Case 'Already published exact bytes succeed without another upload' { & $publisher } $false
 if ($global:npmQualification_publishCalls -ne 0) { throw 'A retry uploaded again.' }
+$env:NPM_EXECUTE='false'
+Invoke-Case 'Published exact-byte dry run succeeds without occupied-version npm call' { & $publisher } $false
+if ($global:npmQualification_publishCalls -ne 0) { throw 'An occupied-version dry run reached npm publish.' }
+$env:NPM_EXECUTE='true'
 $global:npmQualification_existingIntegrity='sha512-wrong'
 Invoke-Case 'Existing different bytes block without an upload' { & $publisher } $true
 if ($global:npmQualification_publishCalls -ne 0) { throw 'Conflicting version reached upload.' }

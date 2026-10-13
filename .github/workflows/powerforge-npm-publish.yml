@@ -49,6 +49,7 @@ permissions:
 concurrency:
   group: npm-publish-${{ github.repository }}-${{ inputs.package-name }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   publish:
@@ -73,6 +74,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $sourceSha = $env:GITHUB_SHA
           if ($env:GITHUB_EVENT_NAME -cnotin @('workflow_dispatch', 'workflow_run') -or
               $env:GITHUB_REF -ne "refs/heads/$env:DEFAULT_BRANCH") {
               throw 'npm publication requires a default-branch dispatch or completed quality run.'
@@ -80,11 +82,12 @@ jobs:
           if ($env:GITHUB_EVENT_NAME -eq 'workflow_run') {
               $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
               if ($event.action -cne 'completed' -or [string]$event.workflow_run.id -cne $env:QUALITY_RUN -or
-                  $event.workflow_run.head_sha -cne $env:GITHUB_SHA -or
                   $event.workflow_run.head_repository.full_name -cne $env:GITHUB_REPOSITORY) {
                   throw 'The release event does not identify this repository''s qualifying source run.'
               }
+              $sourceSha = [string]$event.workflow_run.head_sha
           }
+          if ($sourceSha -notmatch '^[a-fA-F0-9]{40}$') { throw 'Invalid qualified source commit.' }
           $environmentPath = [Uri]::EscapeDataString($env:RELEASE_ENVIRONMENT)
           $environmentJson = & gh api "repos/$env:GITHUB_REPOSITORY/environments/$environmentPath"
           if ($LASTEXITCODE -ne 0) { throw 'Cannot read the protected release environment.' }
@@ -101,7 +104,7 @@ jobs:
           $runJson = & gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:QUALITY_RUN"
           if ($LASTEXITCODE -ne 0) { throw 'Cannot read the quality run.' }
           $run = $runJson | ConvertFrom-Json
-          if ($run.head_sha -ne $env:GITHUB_SHA -or $run.head_branch -ne $env:DEFAULT_BRANCH -or
+          if ($run.head_sha -ne $sourceSha -or $run.head_branch -ne $env:DEFAULT_BRANCH -or
               $run.event -ne 'push' -or $run.status -ne 'completed' -or $run.conclusion -ne 'success' -or
               ($run.path -split '@', 2)[0] -ne ".github/workflows/$env:QUALITY_WORKFLOW") {
               throw 'The supplied quality run does not qualify this default-branch commit.'
@@ -155,7 +158,7 @@ jobs:
           }
           $integrity = 'sha512-' + [Convert]::ToBase64String(
               [Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($archive)))
-          if ($env:NPM_EXECUTE -eq 'true' -and $env:NPM_BOOTSTRAP -ne 'true') {
+          if ($env:NPM_BOOTSTRAP -ne 'true') {
               $versionUrl = 'https://registry.npmjs.org/' + [Uri]::EscapeDataString($env:NPM_PACKAGE) + '/' + $env:NPM_VERSION
               $existingVersion = Invoke-WebRequest -Uri $versionUrl -SkipHttpErrorCheck
               if ($existingVersion.StatusCode -eq 200) {

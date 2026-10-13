@@ -8,7 +8,8 @@ the shared workflow owns archive identity, publication and registry verification
 The caller uploads one `.tgz` as a workflow artifact and passes its package name,
 three-part version and SHA256. It also supplies a successful `push` run of its
 quality workflow for the exact default-branch commit being released. Publication
-requires a deliberate `workflow_dispatch` on that branch. `publish` defaults to
+accepts a `workflow_dispatch` on that branch or a completed `workflow_run` event
+for the same qualifying run. `publish` defaults to
 `false`, which validates the archive and runs `npm publish --dry-run`.
 
 Required inputs are `artifact-name`, `package-name`, `version`, `sha256`,
@@ -28,6 +29,21 @@ The workflow does not change versions, commit files, create tags,
 publish GitHub releases or dispatch downstream repositories.
 
 ## npm setup
+
+For automatic releases, call the shared `npm-release-version` action after the
+successful default-branch Quality run. It selects a patch version above public
+and reserved versions, using the package manifest as a minimum, and atomically
+reserves an `npm-v` tag for the source commit. It never pushes to the default
+branch. Retrying the commit reuses that reservation. See the
+[action inputs and version rules](../.github/actions/npm-release-version/README.md).
+The caller sets the selected package version, qualifies the archive, and calls
+the publisher. This supports normal checked PR merges without an administrator
+exception or a follow-up version-only PR.
+
+Before uploading an ordinary OIDC release, the publisher checks whether that
+version is already public. Matching archive SHA512 and required provenance let
+a retry finish without another upload. Conflicting bytes or an unavailable
+registry stop the release.
 
 Configure the trusted publisher for the package on npm with the calling GitHub
 organization, repository, **calling workflow filename** and release environment.
@@ -54,9 +70,11 @@ Bind the same environment name in npm's
 trust settings so a branch cannot replace the caller and reuse its publishing
 identity.
 
-The allowed branch also needs a trusted update boundary. Use environment-required
-reviewers where the GitHub plan supports them, or restrict default-branch updates
-to release maintainers. An environment name in YAML alone provides no protection.
+Protect the allowed branch with the repository's normal pull-request and check
+requirements. Use required reviews where repository policy calls for them.
+Administrators do not need to be the only people allowed to merge. The npm
+environment prevents deployments from other branches; it does not replace the
+repository's source review policy.
 
 The package must already exist before npm allows trusted-publisher configuration.
 For a new package, the first qualified publication uses `publish: true`,
