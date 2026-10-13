@@ -58,7 +58,7 @@ foreach ($mode in @('complete', 'stalled', 'trickling')) {
         if (-not $headersSent.IsSet) { throw 'The deadline test never received response headers.' }
         if ($mode -eq 'complete') {
             if ($failed -or $response.StatusCode -ne 200 -or $response.Content -cne '{"verified":true}') { throw 'The real transport did not return complete registry metadata.' }
-        } elseif (-not $failed -or $clock.Elapsed.TotalSeconds -ge 10 -or $message -notmatch 'cancel|timeout') {
+        } elseif (-not $failed -or $clock.Elapsed.TotalSeconds -ge 3 -or $message -notmatch 'cancel|timeout') {
             throw "The real $mode response was not stopped by the total request deadline: $message"
         }
         $results.Add([pscustomobject]@{case=$mode;headersReceived=$headersSent.IsSet;failed=$failed;elapsedSeconds=$clock.Elapsed.TotalSeconds;message=$message})
