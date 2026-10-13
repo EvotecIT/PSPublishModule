@@ -54,6 +54,7 @@ public sealed partial class DatabaseBackupContracts
     public async Task UnusableTransferInputsFailBeforeDatabaseCapture(string missing)
     {
         var options = ValidOptions();
+        options.MinimumFreeBytes = 0;
         foreach (var file in new[] { options.Destination.SshExecutable, options.Destination.IdentityFile, options.Destination.KnownHostsFile })
             File.WriteAllText(file, "synthetic input");
         if (missing == "empty-recovery")
