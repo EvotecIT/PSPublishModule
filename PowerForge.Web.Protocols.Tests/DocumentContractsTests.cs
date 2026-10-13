@@ -29,6 +29,7 @@ public sealed class DocumentContractsTests
         {
             Title = "A & B", Url = "https://example.org/", Id = "urn:feed:1", SourceFeedUrl = "https://example.org/feed",
             Updated = published.AddDays(1), Description = "News",
+            Authors = new[] { new FeedAuthor { Name = "Editorial team", Url = "https://example.org/team" } },
             Items = new[] { new SyndicationItem
             {
                 Id = "opaque-42", Url = "https://example.org/news", Title = "A < B", Summary = "Summary",
@@ -41,6 +42,7 @@ public sealed class DocumentContractsTests
         {
             var parsed = SyndicationReader.ParseSyndicationFeed(xml);
             Assert.Equal(feed.Title, parsed.Title);
+            Assert.Equal("Editorial team", Assert.Single(parsed.Authors).Name);
             var item = Assert.Single(parsed.Items);
             Assert.Equal("opaque-42", item.Id);
             Assert.False(item.IdIsPermaLink);
@@ -51,6 +53,19 @@ public sealed class DocumentContractsTests
             Assert.Equal("<p>Full & body</p>", item.Content);
             Assert.Equal("5", Assert.Single(item.Extensions).Value);
         }
+        var json = SyndicationWriter.WriteJsonFeed(feed);
+#if NETFRAMEWORK
+        var payload = new System.Web.Script.Serialization.JavaScriptSerializer().DeserializeObject(json);
+        var authors = (object[])((Dictionary<string, object>)payload)["authors"];
+        var author = (Dictionary<string, object>)Assert.Single(authors);
+        Assert.Equal("Editorial team", author["name"]);
+        Assert.Equal("https://example.org/team", author["url"]);
+#else
+        using var payload = System.Text.Json.JsonDocument.Parse(json);
+        var author = Assert.Single(payload.RootElement.GetProperty("authors").EnumerateArray());
+        Assert.Equal("Editorial team", author.GetProperty("name").GetString());
+        Assert.Equal("https://example.org/team", author.GetProperty("url").GetString());
+#endif
     }
 
     [Fact]

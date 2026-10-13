@@ -7,7 +7,8 @@ internal static class ProtocolJson
     {
 #if NETFRAMEWORK
         // Framework provides this serializer in-box. Modern targets use System.Text.Json in-box.
-        var json = new System.Web.Script.Serialization.JavaScriptSerializer().Serialize(value);
+        // The Framework default of 2 MiB rejects valid 10,000-URL IndexNow batches.
+        var json = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue }.Serialize(value);
 #else
         var json = System.Text.Json.JsonSerializer.Serialize(value,
             new System.Text.Json.JsonSerializerOptions { WriteIndented = indented });

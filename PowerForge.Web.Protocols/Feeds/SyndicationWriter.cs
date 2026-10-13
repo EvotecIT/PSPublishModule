@@ -19,6 +19,7 @@ public static class SyndicationWriter
         if (!string.IsNullOrWhiteSpace(feed.SourceFeedUrl)) channel.Add(new XElement(Atom + "link",
             new XAttribute("href", feed.SourceFeedUrl), new XAttribute("rel", "self"), new XAttribute("type", "application/rss+xml")));
         if (feed.Updated.HasValue) channel.Add(new XElement("lastBuildDate", feed.Updated.Value.UtcDateTime.ToString("r", CultureInfo.InvariantCulture)));
+        channel.Add(feed.Authors.Select(author => new XElement(Dc + "creator", author.Name)));
         foreach (var item in feed.Items)
         {
             var element = new XElement("item", new XElement("title", item.Title), new XElement("link", item.Url),
@@ -90,20 +91,24 @@ public static class SyndicationWriter
             if (item.Published.HasValue) model["date_published"] = item.Published.Value.ToString("O", CultureInfo.InvariantCulture);
             if (item.Updated.HasValue) model["date_modified"] = item.Updated.Value.ToString("O", CultureInfo.InvariantCulture);
             if (item.Categories.Count > 0) model["tags"] = item.Categories;
-            if (item.Authors.Count > 0) model["authors"] = item.Authors.Select(author =>
-            {
-                var value = new Dictionary<string, object?> { ["name"] = author.Name };
-                if (!string.IsNullOrWhiteSpace(author.Url)) value["url"] = author.Url;
-                return value;
-            }).ToArray();
+            if (item.Authors.Count > 0) model["authors"] = item.Authors.Select(JsonAuthor).ToArray();
             return model;
         }).ToArray();
-        return ProtocolJson.Serialize(new Dictionary<string, object?>
+        var document = new Dictionary<string, object?>
         {
             ["version"] = "https://jsonfeed.org/version/1.1", ["title"] = feed.Title,
             ["home_page_url"] = feed.Url, ["feed_url"] = feed.SourceFeedUrl,
             ["description"] = feed.Description, ["items"] = items
-        }, indented: true);
+        };
+        if (feed.Authors.Count > 0) document["authors"] = feed.Authors.Select(JsonAuthor).ToArray();
+        return ProtocolJson.Serialize(document, indented: true);
+    }
+
+    private static Dictionary<string, object?> JsonAuthor(FeedAuthor author)
+    {
+        var value = new Dictionary<string, object?> { ["name"] = author.Name };
+        if (!string.IsNullOrWhiteSpace(author.Url)) value["url"] = author.Url;
+        return value;
     }
 
     private static XElement AtomAuthor(FeedAuthor author) => new(Atom + "author", new XElement(Atom + "name", author.Name),

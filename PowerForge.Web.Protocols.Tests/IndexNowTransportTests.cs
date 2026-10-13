@@ -7,6 +7,35 @@ namespace PowerForge.Web.Protocols.Tests;
 public sealed class IndexNowTransportTests
 {
     [Fact]
+    public async Task MaximumBatchCanExceedTwoMillionJsonCharacters()
+    {
+        int calls = 0;
+        var urls = Enumerable.Range(0, 10000).Select(i => "https://example.org/" + new string('a', 220) + "/" + i).ToArray();
+        using var client = new HttpClient(new Handler(async request =>
+        {
+            calls++;
+            var json = await request.Content!.ReadAsStringAsync();
+            Assert.True(json.Length > 2097152);
+#if NETFRAMEWORK
+            var payload = new System.Web.Script.Serialization.JavaScriptSerializer { MaxJsonLength = int.MaxValue }
+                .Deserialize<Dictionary<string, object>>(json);
+            Assert.Equal(urls, ((System.Collections.IEnumerable)payload["urlList"]).Cast<string>());
+#else
+            using var payload = System.Text.Json.JsonDocument.Parse(json);
+            Assert.Equal(urls, payload.RootElement.GetProperty("urlList").EnumerateArray().Select(url => url.GetString()));
+#endif
+            return new HttpResponseMessage(HttpStatusCode.Accepted);
+        }));
+        var result = await IndexNowSubmitter.SubmitAsync(new IndexNowSubmissionOptions
+        {
+            Key = "test-key", Urls = urls, BatchSize = 10000, RetryCount = 0
+        }, client);
+        Assert.True(result.Success);
+        Assert.Equal(10000, result.UrlCount);
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
     public async Task PlatformSerializerAndTransportPreserveTheWireContract()
     {
         int calls = 0;
