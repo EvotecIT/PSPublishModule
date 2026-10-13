@@ -26,6 +26,17 @@ function Export-WorkflowStep([string] $Name, [string] $Destination) {
 }
 Export-WorkflowStep 'Require successful quality checks for this default-branch commit' (Join-Path $scriptsRoot 'quality.ps1')
 Export-WorkflowStep 'Verify archive identity and publish the same bytes' (Join-Path $scriptsRoot 'archive.ps1')
+$publisherPath = Join-Path $scriptsRoot 'archive.ps1'
+$publisherText = [IO.File]::ReadAllText($publisherPath)
+$publisherAst = [Management.Automation.Language.Parser]::ParseInput($publisherText, [ref]$null, [ref]$null)
+$transport = $publisherAst.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-NpmRegistryRequest' }, $true)
+if (-not $transport) { throw 'The literal registry HTTP transport is missing.' }
+$transportPath = Join-Path $scriptsRoot 'registry-http.ps1'
+[IO.File]::WriteAllText($transportPath, $transport.Extent.Text)
+$httpProofPath = if ($OutputPath) { "$OutputPath.http.json" } else { Join-Path $routeRoot 'registry-http-results.json' }
+& (Join-Path $PSScriptRoot 'test-npm-registry-http.ps1') -TransportPath $transportPath -OutputPath $httpProofPath
+# Replace only HTTP transport for the policy cases; the real extracted transport runs above.
+[IO.File]::WriteAllText($publisherPath, $publisherText.Remove($transport.Extent.StartOffset, $transport.Extent.EndOffset - $transport.Extent.StartOffset))
 $package = Join-Path $routeRoot 'package'
 New-Item -ItemType Directory -Path $package | Out-Null
 @{name='@example/widget';version='0.1.0';repository=@{url='git+https://github.com/example/widget.git'}} | ConvertTo-Json | Set-Content (Join-Path $package 'package.json')
@@ -86,9 +97,9 @@ function global:Start-Sleep {
     $global:npmQualification_sleeps.Add($Seconds)
     $global:npmQualification_now = $global:npmQualification_now.AddSeconds($Seconds)
 }
-function global:Get-RegistryReadbackFixture {
+function global:Get-RegistryReadbackFixture([double] $TimeoutSeconds) {
     $global:npmQualification_viewCalls++
-    $global:npmQualification_now = $global:npmQualification_now.AddSeconds($global:npmQualification_readbackSeconds)
+    $global:npmQualification_now = $global:npmQualification_now.AddSeconds([Math]::Min($global:npmQualification_readbackSeconds, $TimeoutSeconds))
     if ($global:npmQualification_viewCalls -le $global:npmQualification_pendingReads) {
         if ($global:npmQualification_readbackStatus -eq 0) { throw [Net.Http.HttpRequestException]::new('Synthetic transport failure') }
         return [pscustomobject]@{StatusCode=$global:npmQualification_readbackStatus}
@@ -111,6 +122,13 @@ function global:Get-NpmProvenanceFixture {
     $content=@{attestations=@(@{predicateType='https://slsa.dev/provenance/v1';bundle=@{dsseEnvelope=$envelope}})} | ConvertTo-Json -Depth 12 -Compress
     return [pscustomobject]@{StatusCode=200;Content=$content}
 }
+function global:Invoke-NpmRegistryRequest([string] $Url, [double] $TimeoutSeconds) {
+    if ($TimeoutSeconds -le 0 -or $TimeoutSeconds -gt 15) { throw 'Registry requests must have a finite total deadline.' }
+    $global:npmQualification_requestTimeouts.Add($TimeoutSeconds)
+    if ($Url -like 'https://registry.npmjs.org/-/npm/v1/attestations/*') { return Get-NpmProvenanceFixture }
+    if ($Url -ne 'https://registry.npmjs.org/%40example%2Fwidget/0.1.0') { throw 'Unexpected registry readback URL.' }
+    return Get-RegistryReadbackFixture $TimeoutSeconds
+}
 function global:npm {
     $global:LASTEXITCODE = 0
     if ($args[0] -eq 'publish') { $global:npmQualification_npmSource=$env:GITHUB_SHA; $global:npmQualification_publishCalls++; $global:npmQualification_publishArguments = @($args); return 'MOCK: no registry mutation' }
@@ -121,6 +139,7 @@ function Invoke-Case([string]$Name,[scriptblock]$Operation,[bool]$Reject) {
     $global:npmQualification_attestationReads=0
     $global:npmQualification_now = [DateTime]::SpecifyKind([DateTime]'2026-01-01', [DateTimeKind]::Utc)
     $global:npmQualification_sleeps = [Collections.Generic.List[int]]::new()
+    $global:npmQualification_requestTimeouts = [Collections.Generic.List[double]]::new()
     $failed=$false; $failure=''
     try { & $Operation | Out-Null } catch { $failed=$true; $failure=$_.Exception.Message }
     if ($failed -ne $Reject) { throw "Unexpected outcome for $Name`: $failure" }
@@ -135,16 +154,8 @@ $global:npmQualification_publishedName=$env:NPM_PACKAGE
 $gate = Join-Path $scriptsRoot 'quality.ps1'
 $publisher = Join-Path $scriptsRoot 'archive.ps1'
 function global:Invoke-WebRequest {
-    param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck, [int]$ConnectionTimeoutSeconds, [int]$OperationTimeoutSeconds)
-    if ($Uri.AbsoluteUri -like 'https://registry.npmjs.org/-/npm/v1/attestations/*') {
-        if ($ConnectionTimeoutSeconds -ne 15 -or $OperationTimeoutSeconds -ne 15) { throw 'Attestation reads must bound connection and response-body stalls.' }
-        return Get-NpmProvenanceFixture
-    }
+    param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck)
     if ($Uri.AbsoluteUri -ne 'https://registry.npmjs.org/%40example%2Fwidget/0.1.0') { throw 'Unexpected registry check.' }
-    if ($global:npmQualification_publishCalls -gt 0) {
-        if ($ConnectionTimeoutSeconds -ne 15 -or $OperationTimeoutSeconds -ne 15 -or $Headers['Cache-Control'] -cne 'no-cache') { throw 'Readback requires bounded fresh registry requests.' }
-        return Get-RegistryReadbackFixture
-    }
     return [pscustomobject]@{StatusCode=404}
 }
 
@@ -207,7 +218,12 @@ if ($global:npmQualification_publishCalls -ne 1 -or ($global:npmQualification_sl
 $global:npmQualification_readbackSeconds=15
 Invoke-Case 'Slow registry reads consume the verification deadline' { & $publisher } $true
 if ($global:npmQualification_publishCalls -ne 1 -or ($global:npmQualification_sleeps | Measure-Object -Sum).Sum -ge 1800 -or
-    $global:npmQualification_now -gt ([DateTime]'2026-01-01').AddSeconds(1815)) { throw 'The deadline must include time spent reading the registry.' }
+    $global:npmQualification_now -gt ([DateTime]'2026-01-01').AddSeconds(1800)) { throw 'The deadline must include time spent reading the registry.' }
+$global:npmQualification_pendingReads=26
+$global:npmQualification_readbackSeconds=14.5
+Invoke-Case 'Late metadata visibility caps the attestation request by the remaining window' { & $publisher } $false
+if ($global:npmQualification_publishCalls -ne 1 -or $global:npmQualification_attestationReads -ne 1 -or
+    $global:npmQualification_requestTimeouts[-1] -ge 15 -or $global:npmQualification_requestTimeouts[-1] -le 0) { throw 'The attestation read must share the remaining verification deadline.' }
 $global:npmQualification_readbackSeconds=0
 $global:npmQualification_pendingReads=0
 $global:npmQualification_pendingProvenanceReads=2
@@ -243,12 +259,7 @@ Invoke-Case 'Bootstrap cannot run as a dry run' { & $publisher } $true
 $env:NPM_EXECUTE='true'; $env:NODE_AUTH_TOKEN=''
 Invoke-Case 'Bootstrap missing credential rejected' { & $publisher } $true
 function global:Invoke-WebRequest {
-    param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck, [int]$ConnectionTimeoutSeconds, [int]$OperationTimeoutSeconds)
-    if ($Uri.AbsoluteUri -like 'https://registry.npmjs.org/-/npm/v1/attestations/*') {
-        if ($ConnectionTimeoutSeconds -ne 15 -or $OperationTimeoutSeconds -ne 15) { throw 'Attestation reads must bound connection and response-body stalls.' }
-        return Get-NpmProvenanceFixture
-    }
-    if ($Uri.AbsoluteUri -eq 'https://registry.npmjs.org/%40example%2Fwidget/0.1.0' -and $global:npmQualification_publishCalls -gt 0) { return Get-RegistryReadbackFixture }
+    param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck)
     $global:npmQualification_metadataAuthenticated = $Headers.Authorization -ceq "Bearer $env:NODE_AUTH_TOKEN"
     if ($Uri.AbsoluteUri -ne 'https://registry.npmjs.org/%40example%2Fwidget') { throw 'Unexpected metadata destination.' }
     if ($global:npmQualification_privatePackage) {
@@ -298,13 +309,8 @@ $global:npmQualification_registryIntegrity=$global:npmQualification_integrity
 $global:npmQualification_existingStatus=200
 $global:npmQualification_existingIntegrity=$global:npmQualification_integrity
 function global:Invoke-WebRequest {
-    param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck, [int]$ConnectionTimeoutSeconds, [int]$OperationTimeoutSeconds)
-    if ($Uri.AbsoluteUri -like 'https://registry.npmjs.org/-/npm/v1/attestations/*') {
-        if ($ConnectionTimeoutSeconds -ne 15 -or $OperationTimeoutSeconds -ne 15) { throw 'Attestation reads must bound connection and response-body stalls.' }
-        return Get-NpmProvenanceFixture
-    }
+    param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck)
     if ($Uri.AbsoluteUri -ne 'https://registry.npmjs.org/%40example%2Fwidget/0.1.0') { throw 'Unexpected registry check.' }
-    if ($global:npmQualification_publishCalls -gt 0) { return Get-RegistryReadbackFixture }
     $dist=@{integrity=$global:npmQualification_existingIntegrity}
     if ($global:npmQualification_registryProvenance) { $dist.attestations=@{provenance=@{predicateType='https://slsa.dev/provenance/v1'}} }
     return [pscustomobject]@{StatusCode=$global:npmQualification_existingStatus;Content=(@{name=$env:NPM_PACKAGE;version=$env:NPM_VERSION;dist=$dist} | ConvertTo-Json -Depth 5)}

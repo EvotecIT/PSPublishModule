@@ -58,7 +58,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 50
     environment: ${{ inputs.environment-name }}
     env:
       GH_TOKEN: ${{ github.token }}
@@ -166,9 +166,29 @@ jobs:
           $integrity = 'sha512-' + [Convert]::ToBase64String(
               [Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($archive)))
           $archiveSha512 = [Convert]::ToHexString([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($archive))).ToLowerInvariant()
-          function Read-NpmRegistry([string] $Url) {
+          $verificationDeadline = [DateTime]::MaxValue
+          function Invoke-NpmRegistryRequest([string] $Url, [double] $TimeoutSeconds) {
+              $client = [Net.Http.HttpClient]::new()
+              $response = $null
               try {
-                  $response = Invoke-WebRequest -Uri $Url -SkipHttpErrorCheck -ConnectionTimeoutSeconds 15 -OperationTimeoutSeconds 15 -Headers @{ 'Cache-Control' = 'no-cache' }
+                  $client.Timeout = [TimeSpan]::FromSeconds($TimeoutSeconds)
+                  $client.DefaultRequestHeaders.Add('Cache-Control', 'no-cache')
+                  # Include the entire body in HttpClient's total request timeout.
+                  $response = $client.GetAsync($Url, [Net.Http.HttpCompletionOption]::ResponseContentRead).GetAwaiter().GetResult()
+                  return [pscustomobject]@{
+                      StatusCode = [int]$response.StatusCode
+                      Content = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+                  }
+              } finally {
+                  if ($response) { $response.Dispose() }
+                  $client.Dispose()
+              }
+          }
+          function Read-NpmRegistry([string] $Url) {
+              $remainingSeconds = ($verificationDeadline - (Get-Date).ToUniversalTime()).TotalSeconds
+              if ($remainingSeconds -le 0) { return $null }
+              try {
+                  $response = Invoke-NpmRegistryRequest -Url $Url -TimeoutSeconds ([Math]::Min([double]15, $remainingSeconds))
               } catch {
                   Write-Warning 'The registry read failed; publication verification will retry without uploading again.'
                   return $null
@@ -257,11 +277,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'npm publication or dry run failed.' }
           if ($env:NPM_EXECUTE -eq 'true') {
               $verified = $false
-              $deadline = (Get-Date).ToUniversalTime().AddMinutes(30)
+              $verificationDeadline = (Get-Date).ToUniversalTime().AddMinutes(30)
               $delaySeconds = 5
               $versionUrl = 'https://registry.npmjs.org/' + [Uri]::EscapeDataString($env:NPM_PACKAGE) + '/' + $env:NPM_VERSION
               Write-Output 'npm accepted the upload. Waiting up to 30 minutes for registry identity, integrity and required provenance; no further upload will be attempted.'
-              while ((Get-Date).ToUniversalTime() -lt $deadline) {
+              while ((Get-Date).ToUniversalTime() -lt $verificationDeadline) {
                   $response = Read-NpmRegistry $versionUrl
                   if ($response) {
                       $published = $response.Content | ConvertFrom-Json
@@ -269,7 +289,7 @@ jobs:
                       if ($published.dist.integrity -cne $integrity) { throw 'Published archive integrity does not match.' }
                       if (Test-PublishedProvenance $published.dist) { $verified = $true; break }
                   }
-                  $remainingSeconds = [Math]::Floor(($deadline - (Get-Date).ToUniversalTime()).TotalSeconds)
+                  $remainingSeconds = [Math]::Floor(($verificationDeadline - (Get-Date).ToUniversalTime()).TotalSeconds)
                   if ($remainingSeconds -le 0) { break }
                   $sleepSeconds = [Math]::Min($delaySeconds, $remainingSeconds)
                   Write-Output "Registry verification is pending; checking again in $sleepSeconds seconds without repeating publication."
