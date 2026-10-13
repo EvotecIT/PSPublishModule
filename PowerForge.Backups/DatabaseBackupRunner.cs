@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -18,7 +19,7 @@ public sealed class DatabaseBackupRunner
         timeout.CancelAfter(TimeSpan.FromMinutes(options.TimeoutMinutes));
         var token = timeout.Token;
         var state = new BackupRunState { HostId = options.HostId, StartedAtUtc = DateTimeOffset.UtcNow, Status = "running", Stage = "preflight" };
-        state.Stamp = state.StartedAtUtc.ToString("yyyyMMdd'T'HHmmss'Z'") + "-" + Guid.NewGuid().ToString("N")[..8];
+        state.Stamp = state.StartedAtUtc.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N")[..8];
         var run = Path.Combine(options.WorkRoot, state.Stamp);
         void Stage(string value) { state.Stage = value; Safety.WriteJson(options.StatePath, state); log(value); }
         try

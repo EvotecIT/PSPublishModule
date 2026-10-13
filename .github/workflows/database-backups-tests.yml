@@ -44,6 +44,9 @@ jobs:
       - run: python -B -m unittest discover -s Deployment/Monitoring -v
       - if: runner.os == 'Windows'
         shell: powershell
-        run: ./Deployment/Windows/Test-DatabaseBackupInstallation.ps1 -TemporaryRoot $env:TEMP
+        run: ./Deployment/Windows/Test-DatabaseBackupInstallation.ps1 -TemporaryRoot $env:TEMP -IncludePrivilegedCreation
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./Deployment/Windows/Test-DatabaseBackupInstallation.ps1 -TemporaryRoot $env:TEMP -IncludePrivilegedCreation
       - if: runner.os == 'Linux'
         run: python3 -B -m unittest discover -s Deployment/Synology -v

@@ -14,6 +14,9 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'DatabaseBackupInstallation.ps1')
+$operatorSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$trustedOwners = @('S-1-5-18', 'S-1-5-32-544', $operatorSid)
+$trustedWriters = $trustedOwners
 foreach ($path in @($InstallRoot, $BuildSource, $ConfigSource, $AccessSource)) {
     if (-not [IO.Path]::IsPathRooted($path)) { throw 'Installation paths must be absolute.' }
     for ($check = $path; $check; $check = Split-Path -Path $check -Parent) {
@@ -21,6 +24,10 @@ foreach ($path in @($InstallRoot, $BuildSource, $ConfigSource, $AccessSource)) {
             throw 'Installation path traverses a reparse point.'
         }
     }
+}
+foreach ($path in @($BuildSource, $ConfigSource, $AccessSource)) {
+    Assert-DatabaseBackupNamespaceTrusted -Path $path -TrustedOwners $trustedOwners -TrustedWriters $trustedWriters
+    Assert-DatabaseBackupTreeTrusted -Path $path -TrustedOwners $trustedOwners -TrustedWriters $trustedWriters
 }
 $config = Get-Content -LiteralPath $ConfigSource -Raw | ConvertFrom-Json
 $planParameters = @{ InstallRoot = $InstallRoot; TaskName = $TaskName; DailyAt = $DailyAt }
@@ -53,10 +60,9 @@ if (Test-Path -LiteralPath $InstallRoot) {
     }
 }
 if ($existing -and $existing.State -eq 'Running') { throw 'This backup task is running; installation is held.' }
-$operatorSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $sqlSid = (New-Object Security.Principal.NTAccount($SqlServiceIdentity)).Translate([Security.Principal.SecurityIdentifier]).Value
-$trustedOwners = @('S-1-5-18', 'S-1-5-32-544', $operatorSid)
-$trustedWriters = $trustedOwners
+Assert-DatabaseBackupNamespaceTrusted -Path $InstallRoot -TrustedOwners $trustedOwners -TrustedWriters $trustedWriters
+Assert-DatabaseBackupNamespaceTrusted -Path $config.workRoot -TrustedOwners $trustedOwners -TrustedWriters $trustedWriters
 Assert-DatabaseBackupTreeTrusted -Path $InstallRoot -TrustedOwners $trustedOwners -TrustedWriters $trustedWriters
 Assert-DatabaseBackupTreeTrusted -Path $config.workRoot -TrustedOwners ($trustedOwners + $sqlSid) -TrustedWriters ($trustedWriters + $sqlSid)
 $wasEnabled = -not $existing -or $existing.State -ne 'Disabled'

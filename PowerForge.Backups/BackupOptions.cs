@@ -45,7 +45,7 @@ public sealed class BackupOptions
             throw new InvalidDataException("Unique database sources are required.");
         foreach (var source in Databases)
         {
-            if (!Regex.IsMatch(source.Id, "^[a-z][a-z0-9-]{0,31}$") || source.Provider is not ("sqlite" or "sqlserver"))
+            if (!IsPortableFileId(source.Id) || source.Provider is not ("sqlite" or "sqlserver"))
                 throw new InvalidDataException("Invalid database id or provider.");
             if (source.Provider == "sqlite")
             {
@@ -60,12 +60,15 @@ public sealed class BackupOptions
             throw new InvalidDataException("Recovery file ids must be unique.");
         foreach (var file in RecoveryFiles)
         {
-            if (!Regex.IsMatch(file.Id, "^[a-z][a-z0-9-]{0,31}$")) throw new InvalidDataException("Invalid recovery file id.");
+            if (!IsPortableFileId(file.Id)) throw new InvalidDataException("Invalid recovery file id.");
             Safety.DemandAbsolute(file.Path);
             if (Safety.Overlaps(WorkRoot, file.Path)) throw new InvalidDataException("Recovery files overlap staging.");
         }
         DemandSeparatedStorage([]);
     }
+
+    private static bool IsPortableFileId(string id) => Regex.IsMatch(id, "^[a-z][a-z0-9-]{0,31}$") &&
+        !Regex.IsMatch(id, "^(con|prn|aux|nul|com[1-9]|lpt[1-9])$");
 
     /// <summary>Rejects output aliases before a runner or restore drill can write to protected inputs.</summary>
     internal void DemandSeparatedStorage(IEnumerable<string> additionalInputs)

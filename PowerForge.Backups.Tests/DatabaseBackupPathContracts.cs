@@ -4,6 +4,38 @@ namespace PowerForge.Backups.Tests;
 
 public sealed partial class DatabaseBackupContracts
 {
+    [Fact]
+    public async Task CaptureStampUsesTheGregorianCalendarUnderANonGregorianCulture()
+    {
+        var previous = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("th-TH");
+            var options = ValidOptions(); options.MinimumFreeBytes = long.MaxValue;
+            await Assert.ThrowsAsync<IOException>(() => new DatabaseBackupRunner().RunAsync(options));
+            using var state = System.Text.Json.JsonDocument.Parse(File.ReadAllText(options.StatePath));
+            var started = state.RootElement.GetProperty("startedAtUtc").GetDateTimeOffset();
+            Assert.StartsWith(started.ToString("yyyyMMdd'T'HHmmss'Z'", System.Globalization.CultureInfo.InvariantCulture) + "-",
+                state.RootElement.GetProperty("stamp").GetString());
+        }
+        finally { System.Globalization.CultureInfo.CurrentCulture = previous; }
+    }
+
+    [Theory]
+    [InlineData("aux")]
+    [InlineData("con")]
+    [InlineData("nul")]
+    [InlineData("prn")]
+    [InlineData("com1")]
+    [InlineData("lpt9")]
+    public void PortableDatabaseAndRecoveryIdsRejectWindowsDeviceNames(string id)
+    {
+        var options = ValidOptions(); options.Databases[0].Id = id;
+        Assert.Throws<InvalidDataException>(options.Validate);
+        options = ValidOptions(); options.RecoveryFiles = [new() { Id = id, Path = Path.Combine(_root, "service.json") }];
+        Assert.Throws<InvalidDataException>(options.Validate);
+    }
+
     [Theory]
     [InlineData("recovery")]
     [InlineData("sqlite")]

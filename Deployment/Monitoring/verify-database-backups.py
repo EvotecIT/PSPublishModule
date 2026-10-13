@@ -103,7 +103,7 @@ def windows_schedule_command(installation):
     arguments = 'run "' + root + r'\config.json' + '"'
     return ("$ErrorActionPreference='Stop';$t=Get-ScheduledTask -TaskName " + literal(installation['taskName']) +
             ";$i=$t|Get-ScheduledTaskInfo;$limit=[Xml.XmlConvert]::ToTimeSpan($t.Settings.ExecutionTimeLimit);" +
-            "[pscustomobject]@{enabled=($t.State -ne 'Disabled');daily=(@($t.Triggers).Count -eq 1 -and $t.Triggers[0].DaysInterval -eq 1 -and ([datetime]$t.Triggers[0].StartBoundary).ToString('HH:mm') -eq " + literal(daily) +
+            "[pscustomobject]@{enabled=($t.State -ne 'Disabled');daily=(@($t.Triggers).Count -eq 1 -and $t.Triggers[0].DaysInterval -eq 1 -and ([datetime]$t.Triggers[0].StartBoundary).ToString('HH:mm',[Globalization.CultureInfo]::InvariantCulture) -eq " + literal(daily) +
             ");expectedAction=(@($t.Actions).Count -eq 1 -and $t.Actions.Execute -eq " + literal(execute) +
             " -and $t.Actions.Arguments -eq " + literal(arguments) +
             " -and $t.Principal.UserId -in @('SYSTEM','S-1-5-18') -and $limit.TotalMinutes -eq " + str(installation['taskLimitMinutes']) +

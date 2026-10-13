@@ -10,7 +10,7 @@ function Get-DatabaseBackupInstallationPlan {
         schemaVersion = 1
         installRoot = [IO.Path]::GetFullPath($InstallRoot).TrimEnd('\')
         taskName = $TaskName
-        dailyAt = $time.ToString('HH:mm')
+        dailyAt = $time.ToString('HH:mm', [Globalization.CultureInfo]::InvariantCulture)
         timeoutMinutes = $TimeoutMinutes
         taskLimitMinutes = $TimeoutMinutes + 60
     }
@@ -27,6 +27,37 @@ function Assert-DatabaseBackupRootsSeparate {
     if ($installation.StartsWith($staging, [StringComparison]::OrdinalIgnoreCase) -or
         $staging.StartsWith($installation, [StringComparison]::OrdinalIgnoreCase)) {
         throw 'Installation and staging roots must be separate, without overlap.'
+    }
+}
+
+function Assert-DatabaseBackupNamespaceAclTrusted {
+    param([Security.AccessControl.DirectorySecurity] $Security, [string[]] $TrustedOwners, [string[]] $TrustedWriters)
+    if ($Security.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin $TrustedOwners) {
+        throw 'A backup parent directory has an untrusted owner.'
+    }
+    $descriptor = New-Object Security.AccessControl.RawSecurityDescriptor($Security.GetSecurityDescriptorBinaryForm(), 0)
+    if ($null -eq $descriptor.DiscretionaryAcl) { throw 'A backup parent directory has no restrictive DACL.' }
+    foreach ($rule in $Security.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+        if ($rule.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) { continue }
+        # DELETE, DELETE_CHILD, WRITE_DAC, WRITE_OWNER and GENERIC_ALL replace ancestor authority.
+        if ($rule.AccessControlType -eq 'Allow' -and ([long]$rule.FileSystemRights -band 0x100D0040) -ne 0 -and
+            $rule.IdentityReference.Value -notin $TrustedWriters) {
+            throw 'A backup parent directory permits untrusted namespace replacement.'
+        }
+    }
+}
+
+function Assert-DatabaseBackupNamespaceTrusted {
+    param([string] $Path, [string[]] $TrustedOwners, [string[]] $TrustedWriters)
+    # Windows volume roots normally belong to the TrustedInstaller service.
+    $trustedInstaller = 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'
+    for ($parent = Split-Path -Path $Path -Parent; $parent; $parent = Split-Path -Path $parent -Parent) {
+        $item = Get-Item -LiteralPath $parent -Force -ErrorAction Stop
+        if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw 'Backup parents must be existing physical directories provisioned by a trusted operator.'
+        }
+        Assert-DatabaseBackupNamespaceAclTrusted -Security (Get-Acl -LiteralPath $parent -ErrorAction Stop) `
+            -TrustedOwners ($TrustedOwners + $trustedInstaller) -TrustedWriters ($TrustedWriters + $trustedInstaller)
     }
 }
 
@@ -64,10 +95,12 @@ function Assert-DatabaseBackupTreeTrusted {
 function Set-DatabaseBackupTreeSecurity {
     param([string] $Path, [string[]] $TrustedOwners, [string[]] $TrustedWriters,
           [string] $AdditionalFullControl, [string] $RootReadIdentity)
-    if (Test-Path -LiteralPath $Path) {
+    $Path = [IO.Path]::GetFullPath($Path).TrimEnd('\')
+    if ($Path -eq [IO.Path]::GetPathRoot($Path).TrimEnd('\')) { throw 'Managed backup security cannot target a volume root.' }
+    Assert-DatabaseBackupNamespaceTrusted -Path $Path -TrustedOwners $TrustedOwners -TrustedWriters $TrustedWriters
+    $existed = Test-Path -LiteralPath $Path
+    if ($existed) {
         Assert-DatabaseBackupTreeTrusted -Path $Path -TrustedOwners $TrustedOwners -TrustedWriters $TrustedWriters
-    } else {
-        New-Item -ItemType Directory -Path $Path -ErrorAction Stop | Out-Null
     }
     $administrator = New-Object Security.Principal.SecurityIdentifier('S-1-5-32-544')
     $security = New-Object Security.AccessControl.DirectorySecurity
@@ -80,11 +113,20 @@ function Set-DatabaseBackupTreeSecurity {
     if ($RootReadIdentity) {
         $security.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($RootReadIdentity, 'ReadAndExecute', 'None', 'None', 'Allow')))
     }
-    Set-Acl -LiteralPath $Path -AclObject $security
+    if ($existed) {
+        Set-Acl -LiteralPath $Path -AclObject $security
+    } elseif ($PSVersionTable.PSEdition -eq 'Desktop') {
+        # Supply the private DACL at creation rather than briefly inheriting broad parent grants.
+        [IO.Directory]::CreateDirectory($Path, $security) | Out-Null
+    } else {
+        [IO.FileSystemAclExtensions]::Create((New-Object IO.DirectoryInfo($Path)), $security)
+    }
     # Check again after taking control, before traversing or consuming any descendants.
+    Assert-DatabaseBackupNamespaceTrusted -Path $Path -TrustedOwners $TrustedOwners -TrustedWriters $TrustedWriters
     Assert-DatabaseBackupTreeTrusted -Path $Path -TrustedOwners $TrustedOwners -TrustedWriters $TrustedWriters
+    $rootPath = (Get-Item -LiteralPath $Path -Force).FullName.TrimEnd('\')
     $items = @(Get-DatabaseBackupTreeItems -Path $Path)
-    foreach ($item in $items | Where-Object { $_.FullName -ne $Path }) {
+    foreach ($item in $items | Where-Object { $_.FullName.TrimEnd('\') -ine $rootPath }) {
         $childSecurity = if ($item.PSIsContainer) { New-Object Security.AccessControl.DirectorySecurity } else { New-Object Security.AccessControl.FileSecurity }
         $childSecurity.SetOwner($administrator)
         $childSecurity.SetAccessRuleProtection($false, $false)

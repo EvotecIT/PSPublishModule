@@ -32,7 +32,7 @@ class HealthContracts(unittest.TestCase):
 
     def test_failed_latest_attempt_is_not_hidden_by_previous_success(self):
         values = self.fixture()
-        values[2]['currentRun'] = {'status': 'failed', 'stage': 'encrypt'}
+        values[2]['currentRun'] = {'status': 'failed', 'stage': 'transfer'}
         self.assertFalse(H.evaluate(*values)['healthy'])
 
     def test_running_job_with_fresh_verified_prior_capture_is_healthy(self):
@@ -69,6 +69,7 @@ class HealthContracts(unittest.TestCase):
         policy = {'schemaVersion': 1, 'installRoot': "D:\\Backup ' recovery", 'taskName': "Custom 'backup", 'dailyAt': '04:35', 'timeoutMinutes': 600, 'taskLimitMinutes': 660}
         encoded = json.dumps(policy).replace("'", "''")
         fixture = "$policy='" + encoded + "'|ConvertFrom-Json;function Get-ScheduledTask { param($TaskName);if($TaskName -ne $policy.taskName){throw 'Wrong task queried'};[pscustomobject]@{State='Ready';Triggers=@([pscustomobject]@{DaysInterval=1;StartBoundary='2026-01-01T04:35:00'});Actions=@([pscustomobject]@{Execute=($policy.installRoot+'\\app\\PowerForge.Backups.Cli.exe');Arguments=('run \"'+$policy.installRoot+'\\config.json\"')});Principal=[pscustomobject]@{UserId='SYSTEM'};Settings=[pscustomobject]@{ExecutionTimeLimit='PT11H'}}};function Get-ScheduledTaskInfo { [pscustomobject]@{LastTaskResult=0;NextRunTime=([datetime]::UtcNow.AddHours(20))} };"
+        fixture = "$culture=[Globalization.CultureInfo]::GetCultureInfo('th-TH').Clone();$culture.DateTimeFormat.TimeSeparator='.';[Threading.Thread]::CurrentThread.CurrentCulture=$culture;" + fixture
         for limit, expected in [(660, True), (659, False)]:
             command = H.windows_schedule_command(dict(policy, timeoutMinutes=limit-60, taskLimitMinutes=limit))
             process = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', fixture + command], capture_output=True, timeout=30)
