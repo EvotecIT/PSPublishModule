@@ -23,6 +23,7 @@
   <ItemGroup>
     <None Remove="README.md" />
     <None Include="README.md" Pack="true" PackagePath="\" />
+    <ProjectReference Include="..\PowerForge.Web.Protocols\PowerForge.Web.Protocols.csproj" />
     <ProjectReference Include="..\PowerForge\PowerForge.csproj">
       <GlobalPropertiesToRemove>PublishAot;RuntimeIdentifier;SelfContained</GlobalPropertiesToRemove>
     </ProjectReference>
@@ -52,8 +53,6 @@
     <EmbeddedResource Include="Assets\Audit\layout.js" />
     <EmbeddedResource Include="Assets\Media\media-viewer.v1.js" />
     <EmbeddedResource Include="Assets\Media\media-viewer.v1.css" />
-    <EmbeddedResource Include="Assets\SitemapProtocol\sitemap.xsd" />
-    <EmbeddedResource Include="Assets\SitemapProtocol\siteindex.xsd" />
   </ItemGroup>
 
 </Project>

@@ -1,6 +1,10 @@
 {
   "version": 1,
   "dependencies": {
-    "net8.0": {}
+    "net8.0": {
+      "powerforge.web.protocols": {
+        "type": "Project"
+      }
+    }
   }
 }

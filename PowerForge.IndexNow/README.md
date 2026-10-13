@@ -20,4 +20,4 @@ if (!result.Success) {
 
 The default transport disables redirects and disposes its own HTTP client. A supplied `HttpClient` remains owned by the caller; configure its transport to disable redirects. `DryRun` constructs and validates batches without sending requests. The synchronous `Submit` entry point serves command-line callers.
 
-The library has no package dependencies. The PowerForge website CLI uses this same engine for its `indexnow` pipeline task.
+The implementation lives in `PowerForge.Web.Protocols`, which has no external runtime package dependencies. This package forwards its public types to that assembly for compatibility with existing callers. New applications can reference `PowerForge.Web.Protocols` directly and keep the same `PowerForge.IndexNow` namespace. The PowerForge website CLI uses this shared engine for its `indexnow` pipeline task.

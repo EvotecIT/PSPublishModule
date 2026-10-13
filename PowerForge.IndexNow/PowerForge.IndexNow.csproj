@@ -9,4 +9,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PowerForge.Web.Protocols\PowerForge.Web.Protocols.csproj" />
+  </ItemGroup>
 </Project>

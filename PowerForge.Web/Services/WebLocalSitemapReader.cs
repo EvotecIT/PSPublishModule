@@ -29,29 +29,17 @@ internal static class WebLocalSitemapReader
             const long maxBytes = 50L * 1024 * 1024;
             if (new FileInfo(input).Length > maxBytes)
                 throw new InvalidOperationException("Sitemap exceeds the 50 MiB protocol limit.");
-            using var reader = XmlReader.Create(input, new XmlReaderSettings
+            var document = PowerForge.Web.Protocols.Sitemaps.SitemapReader.Read(File.ReadAllText(input), strict: true);
+            if (!document.IsIndex)
             {
-                DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null, MaxCharactersInDocument = maxBytes
-            });
-            var document = XDocument.Load(reader);
-            var xmlRoot = document.Root ?? throw new InvalidOperationException("Sitemap has no root element.");
-            if (xmlRoot.Name.LocalName == "urlset")
-            {
-                foreach (var url in xmlRoot.Elements().Where(node => node.Name.LocalName == "url"))
-                {
-                    var loc = url.Elements().FirstOrDefault(node => node.Name.LocalName == "loc")?.Value.Trim();
-                    if (string.IsNullOrWhiteSpace(loc)) throw new InvalidOperationException("Sitemap URL entry has no location.");
-                    entries.Add(new Entry(loc,
-                        url.Elements().FirstOrDefault(node => node.Name.LocalName == "lastmod")?.Value.Trim(), input));
-                }
+                entries.AddRange(document.Entries.Select(entry => new Entry(entry.Url, entry.LastModifiedText, input)));
                 return;
             }
-            if (xmlRoot.Name.LocalName != "sitemapindex") throw new InvalidOperationException("Unsupported sitemap XML root.");
             if (site is null || site.Scheme is not ("http" or "https"))
                 throw new InvalidOperationException("A local sitemap index requires an HTTP(S) baseUrl and matching siteRoot.");
-            foreach (var sitemap in xmlRoot.Elements().Where(node => node.Name.LocalName == "sitemap"))
+            foreach (var sitemap in document.Entries)
             {
-                var loc = sitemap.Elements().FirstOrDefault(node => node.Name.LocalName == "loc")?.Value.Trim();
+                var loc = sitemap.Url;
                 if (!Uri.TryCreate(site, loc, out var child) || child.Scheme != site.Scheme || child.Authority != site.Authority ||
                     child.UserInfo.Length > 0 || child.Query.Length > 0 || child.Fragment.Length > 0)
                     throw new InvalidOperationException("A local sitemap index contains a location outside its configured host.");

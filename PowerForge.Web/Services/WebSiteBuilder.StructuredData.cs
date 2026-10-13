@@ -203,10 +203,9 @@ public static partial class WebSiteBuilder
             : string.Join(Environment.NewLine, scripts.Where(static script => !string.IsNullOrWhiteSpace(script)));
     }
 
-    private static string BuildJsonLdScript(object payload)
+    private static string BuildJsonLdScript(IReadOnlyDictionary<string, object?> payload)
     {
-        var json = JsonSerializer.Serialize(payload);
-        return $"<script type=\"application/ld+json\">{json}</script>";
+        return PowerForge.Web.Protocols.StructuredData.JsonLdWriter.WriteScript(payload);
     }
 
 }

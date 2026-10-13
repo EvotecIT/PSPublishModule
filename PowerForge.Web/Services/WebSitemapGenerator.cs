@@ -319,17 +319,8 @@ public static partial class WebSitemapGenerator
         return href.StartsWith("/", StringComparison.Ordinal) ? href : "/" + href;
     }
 
-    private static XDocument CreateSitemapDocument(string? browserStylesheetHref, XElement root)
-    {
-        return string.IsNullOrWhiteSpace(browserStylesheetHref)
-            ? new XDocument(new XDeclaration("1.0", "UTF-8", null), root)
-            : new XDocument(
-                new XDeclaration("1.0", "UTF-8", null),
-                new XProcessingInstruction(
-                    "xml-stylesheet",
-                    $"type=\"text/css\" href=\"{browserStylesheetHref}\""),
-                root);
-    }
+    private static XDocument CreateSitemapDocument(string? browserStylesheetHref, XElement root) =>
+        PowerForge.Web.Protocols.Sitemaps.SitemapWriter.CreateDocument(root, browserStylesheetHref);
 
     private static XAttribute[] CreateSchemaAttributes(string schemaLocation)
     {
