@@ -123,6 +123,32 @@ public sealed partial class DatabaseBackupContracts
         Assert.False(Directory.Exists(options.WorkRoot));
     }
 
+    [Theory]
+    [InlineData("\\\\?\\")]
+    [InlineData("\\\\.\\")]
+    [InlineData("//?/")]
+    [InlineData("//./")]
+    [InlineData("\\\\?/")]
+    [InlineData("\\\\./")]
+    [InlineData("\\??\\")]
+    public async Task WindowsDeviceNamespaceAliasesAreRejectedBeforeOutput(string prefix)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var options = ValidOptions(); var target = Path.Combine(_root, "protected-input.json");
+        File.WriteAllText(target, "preserve the input");
+        options.StatePath = target; options.RecoveryFiles = [new() { Id = "service", Path = prefix + target }];
+        Assert.Throws<InvalidDataException>(options.Validate);
+        options = ValidOptions(); options.StatePath = prefix + target;
+        Assert.Throws<InvalidDataException>(options.Validate);
+        options = ValidOptions(); options.Databases[0].Database = prefix + target;
+        Assert.Throws<InvalidDataException>(options.Validate);
+        Assert.Throws<InvalidDataException>(() => BackupOptions.Load(prefix + target));
+        options = ValidOptions();
+        await Assert.ThrowsAsync<InvalidDataException>(() => new RestoreDrill().VerifyAsync(options, prefix + _root, new string('0', 64)));
+        Assert.Equal("preserve the input", File.ReadAllText(target));
+        Assert.False(Directory.Exists(options.WorkRoot));
+    }
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern uint GetShortPathName(string longPath, StringBuilder shortPath, uint capacity);
 }

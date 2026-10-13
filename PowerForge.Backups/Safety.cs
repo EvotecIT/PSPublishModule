@@ -9,6 +9,13 @@ internal static class Safety
     {
         if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path))
             throw new InvalidDataException("An absolute local path is required.");
+        if (OperatingSystem.IsWindows())
+        {
+            var full = Path.GetFullPath(path).Replace('/', '\\');
+            if (full.StartsWith(@"\\?\", StringComparison.Ordinal) || full.StartsWith(@"\\.\", StringComparison.Ordinal) ||
+                full.StartsWith(@"\??\", StringComparison.Ordinal))
+                throw new InvalidDataException("Windows device and NT namespace paths are not supported.");
+        }
     }
 
     internal static bool Overlaps(string left, string right)

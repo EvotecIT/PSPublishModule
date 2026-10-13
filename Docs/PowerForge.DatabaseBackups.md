@@ -12,6 +12,8 @@ The configuration lists explicit database ids, providers and paths or SQL Server
 
 Preflight rejects state outputs that overlap a database, SQLite sidecar, recovery configuration, SSH credential/pin file, executable or the loaded configuration itself. State and its companion receipts remain outside staging. Staging uses a dedicated directory rather than a volume root. Restore drills also reject output/staging paths that overlap the selected recovery folder before writing anything there.
 
+Use ordinary fully qualified Windows paths. Device/NT namespace prefixes (`\\?\`, `\\.\` and `\??\`), including alternate separator spellings, are rejected because they bypass normal filename canonicalization; ordinary DOS short names are normalized by the supported .NET runtime.
+
 The worker checks that the SSH executable, identity, host pins and recovery files are readable and non-empty before capturing any database. Null source inventories or validation-query arrays are rejected during configuration validation. Portable identifiers must match in full, including the final character.
 
 Each SQLite capture passes `quick_check` and configured representative count queries. The set includes a SHA-256 inventory and copies of explicitly selected service configuration. Protected secrets retain their original protection. Keep the recovery credentials for machine-bound DPAPI and environment references in a separate secure credential store so a replacement machine can reprovision them.
