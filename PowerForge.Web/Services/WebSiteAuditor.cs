@@ -249,7 +249,7 @@ public static partial class WebSiteAuditor
             var generatedRoutes = GetRouteFileSet();
             foreach (var requiredRoute in requiredRoutes)
             {
-                var candidates = ResolveRequiredRouteCandidates(requiredRoute);
+                var candidates = ResolveRequiredRouteCandidates(requiredRoute, siteRoot);
                 if (candidates.Length == 0)
                     continue;
 
@@ -276,7 +276,7 @@ public static partial class WebSiteAuditor
             var generatedRoutes = GetRouteFileSet();
             foreach (var forbiddenRoute in forbiddenRoutes)
             {
-                var candidates = ResolveRequiredRouteCandidates(forbiddenRoute);
+                var candidates = ResolveRequiredRouteCandidates(forbiddenRoute, siteRoot);
                 if (candidates.Length == 0)
                     continue;
 
