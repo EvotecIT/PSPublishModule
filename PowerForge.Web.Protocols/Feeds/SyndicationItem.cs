@@ -7,7 +7,7 @@ namespace PowerForge.Web.Protocols.Feeds;
 /// Represents a normalized item from an RSS or Atom feed.
 /// </summary>
 public sealed class SyndicationItem {
-    /// <summary>Atom content kind (text, html or xhtml), when known.</summary>
+    /// <summary>Atom content kind (text, html, xhtml or a media type), when known.</summary>
     public string? ContentType { get; set; }
     /// <summary>Item title.</summary>
     public string Title { get; set; } = string.Empty;
