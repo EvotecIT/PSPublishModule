@@ -81,6 +81,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Test npm release version reservations
+        shell: pwsh
+        run: |
+          ./.github/scripts/test-npm-release-version.ps1
+          ./.github/scripts/test-npm-publish.ps1
+
       - name: Validate website workflows
         shell: bash
         run: |

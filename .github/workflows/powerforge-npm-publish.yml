@@ -73,9 +73,17 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          if ($env:GITHUB_EVENT_NAME -ne 'workflow_dispatch' -or
+          if ($env:GITHUB_EVENT_NAME -cnotin @('workflow_dispatch', 'workflow_run') -or
               $env:GITHUB_REF -ne "refs/heads/$env:DEFAULT_BRANCH") {
-              throw 'npm publication requires a deliberate default-branch dispatch.'
+              throw 'npm publication requires a default-branch dispatch or completed quality run.'
+          }
+          if ($env:GITHUB_EVENT_NAME -eq 'workflow_run') {
+              $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+              if ($event.action -cne 'completed' -or [string]$event.workflow_run.id -cne $env:QUALITY_RUN -or
+                  $event.workflow_run.head_sha -cne $env:GITHUB_SHA -or
+                  $event.workflow_run.head_repository.full_name -cne $env:GITHUB_REPOSITORY) {
+                  throw 'The release event does not identify this repository''s qualifying source run.'
+              }
           }
           $environmentPath = [Uri]::EscapeDataString($env:RELEASE_ENVIRONMENT)
           $environmentJson = & gh api "repos/$env:GITHUB_REPOSITORY/environments/$environmentPath"
@@ -147,6 +155,20 @@ jobs:
           }
           $integrity = 'sha512-' + [Convert]::ToBase64String(
               [Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($archive)))
+          if ($env:NPM_EXECUTE -eq 'true' -and $env:NPM_BOOTSTRAP -ne 'true') {
+              $versionUrl = 'https://registry.npmjs.org/' + [Uri]::EscapeDataString($env:NPM_PACKAGE) + '/' + $env:NPM_VERSION
+              $existingVersion = Invoke-WebRequest -Uri $versionUrl -SkipHttpErrorCheck
+              if ($existingVersion.StatusCode -eq 200) {
+                  $published = $existingVersion.Content | ConvertFrom-Json
+                  if ($published.name -cne $env:NPM_PACKAGE -or $published.version -cne $env:NPM_VERSION -or
+                      $published.dist.integrity -cne $integrity -or ($requireProvenance -and -not $published.dist.attestations.provenance)) {
+                      throw 'An existing npm version differs from the qualified archive or required provenance.'
+                  }
+                  "Already verified: $env:NPM_PACKAGE@$env:NPM_VERSION; no repeat upload." >> $env:GITHUB_STEP_SUMMARY
+                  exit 0
+              }
+              if ($existingVersion.StatusCode -ne 404) { throw 'Cannot establish whether this npm version is already published.' }
+          }
           if ($env:NPM_BOOTSTRAP -eq 'true') {
               if ($env:NPM_EXECUTE -ne 'true' -or [string]::IsNullOrWhiteSpace($env:NODE_AUTH_TOKEN)) {
                   throw 'Bootstrap requires an explicit publication and the environment NPM_BOOTSTRAP_TOKEN secret.'

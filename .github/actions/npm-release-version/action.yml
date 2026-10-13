@@ -1,0 +1,41 @@
+name: Reserve an npm release version
+description: Select one patch version per qualified source commit without writing to the default branch.
+inputs:
+  package-json:
+    description: Package manifest in the checked-out source.
+    default: package.json
+  version:
+    description: Optional exact version for an explicit dispatch.
+    default: ''
+  tag-prefix:
+    description: Repository tag namespace reserved for npm releases.
+    default: npm-v
+  reserve:
+    description: Create the immutable version reservation; false only computes a dry-run version.
+    default: 'false'
+  quality-run-id:
+    description: Successful push quality run for this exact default-branch source commit.
+    required: true
+  quality-workflow:
+    default: quality.yml
+outputs:
+  version:
+    description: Three-part npm release version.
+    value: ${{ steps.version.outputs.version }}
+  tag:
+    description: Tag binding the selected version to this source commit.
+    value: ${{ steps.version.outputs.tag }}
+runs:
+  using: composite
+  steps:
+    - id: version
+      shell: pwsh
+      env:
+        PACKAGE_MANIFEST: ${{ inputs.package-json }}
+        REQUESTED_VERSION: ${{ inputs.version }}
+        RELEASE_TAG_PREFIX: ${{ inputs.tag-prefix }}
+        RESERVE_VERSION: ${{ inputs.reserve }}
+        QUALITY_RUN: ${{ inputs.quality-run-id }}
+        QUALITY_WORKFLOW: ${{ inputs.quality-workflow }}
+        ACTION_ROOT: ${{ github.action_path }}
+      run: '& "$env:ACTION_ROOT/Resolve-NpmReleaseVersion.ps1"'
