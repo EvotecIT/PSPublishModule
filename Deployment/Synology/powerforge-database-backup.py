@@ -23,7 +23,11 @@ def utc_now():
 
 
 def timestamp(value):
-    result = dt.datetime.fromisoformat(value.replace('Z', '+00:00'))
+    # DSM Python 3.8 accepts only three or six fractional digits; .NET emits up to seven.
+    value = value.replace('Z', '+00:00')
+    value = re.sub(r'\.(\d+)(?=[+-]\d{2}:\d{2}$)',
+                   lambda match: '.' + match.group(1).ljust(6, '0')[:6], value)
+    result = dt.datetime.fromisoformat(value)
     if result.tzinfo is None:
         raise ValueError('Timestamp must include its UTC offset')
     return result.astimezone(UTC)

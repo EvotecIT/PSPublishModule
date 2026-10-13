@@ -32,17 +32,18 @@ class ReceiverContracts(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def upload(self, days=0, suffix='01234567', mutate=None):
-        now = (R.utc_now() - dt.timedelta(days=days)).replace(microsecond=0)
+    def upload(self, days=0, suffix='01234567', mutate=None, dotnet_timestamp=False):
+        now = (R.utc_now() - dt.timedelta(days=days, seconds=1)).replace(microsecond=0)
+        created = now.strftime('%Y-%m-%dT%H:%M:%S') + '.1234567+00:00' if dotnet_timestamp else now.isoformat()
         stamp = now.strftime('%Y%m%dT%H%M%SZ') + '-' + suffix
         database = b'SQLite format 3\x00synthetic-fixture'
-        databases = [{'id': 'sample', 'provider': 'sqlite', 'entry': 'sample.sqlite', 'capturedAtUtc': now.isoformat(),
+        databases = [{'id': 'sample', 'provider': 'sqlite', 'entry': 'sample.sqlite', 'capturedAtUtc': created,
                       'verified': True, 'sizeBytes': len(database), 'sha256': hashlib.sha256(database).hexdigest()}]
         manifest = json.dumps({'schemaVersion': 2, 'format': 'native', 'hostId': 'sample', 'stamp': stamp, 'databases': databases, 'files': []}).encode()
         files = [{'entry': name, 'sizeBytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()} for name, data in [('sample.sqlite', database), ('manifest.json', manifest)]]
         body = database + manifest
         header = {'schemaVersion': 2, 'format': 'native', 'hostId': 'sample', 'stamp': stamp,
-                  'createdAtUtc': now.isoformat(), 'sizeBytes': len(body), 'databases': databases, 'files': files}
+                  'createdAtUtc': created, 'sizeBytes': len(body), 'databases': databases, 'files': files}
         if mutate:
             mutate(header)
         return self.receiver.receive(io.BytesIO(json.dumps(header).encode() + b'\n' + body))
@@ -54,6 +55,16 @@ class ReceiverContracts(unittest.TestCase):
         self.assertTrue(status['latest']['checksumPass'])
         self.assertEqual(receipt['captureSha256'], status['latest']['captureSha256'])
         self.assertEqual([], list(self.receiver.incoming.iterdir()))
+
+    def test_dotnet_fractional_timestamps_pass_upload_status_and_maintenance(self):
+        receipt = self.upload(dotnet_timestamp=True)
+        status = self.receiver.status(verify=True)
+        self.assertEqual(receipt['stamp'], status['latest']['stamp'])
+        self.assertEqual(123456, R.timestamp(status['latest']['createdAtUtc']).microsecond)
+        self.assertTrue(self.receiver.maintain()['healthy'])
+        for fraction in ('1', '12', '123', '1234', '12345', '123456', '1234567'):
+            self.assertEqual(int(fraction.ljust(6, '0')[:6]),
+                             R.timestamp('2026-10-13T08:18:15.' + fraction + '+00:00').microsecond)
 
     def test_corrupt_upload_never_becomes_a_completed_recovery_point(self):
         with self.assertRaises(ValueError):
