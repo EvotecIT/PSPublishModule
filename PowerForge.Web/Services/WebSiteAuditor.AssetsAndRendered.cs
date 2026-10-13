@@ -214,7 +214,8 @@ public static partial class WebSiteAuditor
     private static bool IsPathWithinRoot(string normalizedRoot, string candidatePath)
     {
         var full = Path.GetFullPath(candidatePath);
-        return full.StartsWith(normalizedRoot, FileSystemPathComparison);
+        return full.Equals(normalizedRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), FileSystemPathComparison) ||
+               full.StartsWith(normalizedRoot, FileSystemPathComparison);
     }
 
     private static string BuildIssueKey(string severity, string category, string? path, string hint)
