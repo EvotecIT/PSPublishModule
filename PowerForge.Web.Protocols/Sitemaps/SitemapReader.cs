@@ -10,7 +10,9 @@ public static class SitemapReader
     public static SitemapDocument Read(string xml, Uri? baseUri = null, bool strict = false)
     {
         var root = ProtocolXml.Parse(xml).Root;
-        if (root is null || (root.Name.LocalName != "urlset" && root.Name.LocalName != "sitemapindex"))
+        if (root is null || (root.Name.LocalName != "urlset" && root.Name.LocalName != "sitemapindex")
+            || (strict ? root.Name.NamespaceName != SitemapWriter.Namespace
+                : root.Name.NamespaceName.Length != 0 && root.Name.NamespaceName != SitemapWriter.Namespace))
         {
             if (strict) throw new InvalidOperationException("Unsupported sitemap XML root.");
             return new SitemapDocument();

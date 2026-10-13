@@ -15,7 +15,8 @@ public static class SyndicationReader {
             return new SyndicationFeed { SourceFeedUrl = sourceFeedUrl };
         }
 
-        if (string.Equals(root.Name.LocalName, "feed", StringComparison.OrdinalIgnoreCase)) {
+        if (root.Name == XName.Get("feed", "http://www.w3.org/2005/Atom")
+            || root.Name == XName.Get("feed", "http://purl.org/atom/ns#")) {
             return new SyndicationFeed {
                 Title = ElementValue(root, "title"),
                 Id = EmptyToNull(ElementValue(root, "id")),
@@ -42,15 +43,18 @@ public static class SyndicationReader {
             Url = channel == null ? string.Empty : ResolveUrl(ElementValue(channel, channel.Name.Namespace, "link"), baseUri),
             Updated = channel == null ? null : TryParseDate(FirstNonEmpty(ElementValue(channel, "lastBuildDate"), ElementValue(channel, "pubDate"),
                 ElementValue(channel, DublinCore, "date"))),
-            SourceFeedUrl = sourceFeedUrl,
-            Items = ParseRssItems(document, baseUri, sourceFeedUrl)
+            SourceFeedUrl = sourceFeedUrl ?? (channel == null ? null : EmptyToNull(ResolveUrl(
+                channel.Elements(XName.Get("link", "http://www.w3.org/2005/Atom"))
+                    .FirstOrDefault(link => link.Attribute("rel")?.Value == "self")?.Attribute("href")?.Value ?? string.Empty, baseUri))),
+            Items = ParseRssItems(channel == null ? Enumerable.Empty<XElement>()
+                : root.Name.LocalName == "RDF" ? root.Elements(XName.Get("item", "http://purl.org/rss/1.0/"))
+                : channel.Elements("item"), baseUri, sourceFeedUrl)
         };
     }
 
-    private static IReadOnlyList<SyndicationItem> ParseRssItems(XDocument document, Uri? baseUri, string? sourceFeedUrl) {
+    private static IReadOnlyList<SyndicationItem> ParseRssItems(IEnumerable<XElement> elements, Uri? baseUri, string? sourceFeedUrl) {
         List<SyndicationItem> items = new();
-        foreach (XElement item in document.Descendants().Where(static element => string.Equals(element.Name.LocalName, "item", StringComparison.OrdinalIgnoreCase)
-            && (element.Name.NamespaceName.Length == 0 || element.Name.NamespaceName == "http://purl.org/rss/1.0/"))) {
+        foreach (XElement item in elements) {
             string title = ElementValue(item, "title");
             string link = ResolveUrl(ElementValue(item, "link"), baseUri);
             if (string.IsNullOrWhiteSpace(link) && !string.Equals(FirstChild(item, "guid")?.Attribute("isPermaLink")?.Value?.Trim(), "false", StringComparison.OrdinalIgnoreCase)) {
@@ -188,7 +192,8 @@ public static class SyndicationReader {
             && element.Name != DublinCore + "creator" && element.Name != DublinCore + "date"
             && element.Name != DublinCoreTerms + "created" && element.Name != DublinCoreTerms + "modified"
             && element.Name != DublinCoreTerms + "date" && element.Name != ContentModule + "encoded"
-            && !(element.Name.NamespaceName == "http://www.w3.org/2005/Atom" && element.Name.LocalName == "link"))
+            && !(element.Name == XName.Get("link", "http://www.w3.org/2005/Atom") && element.Attribute("rel")?.Value == "self"
+                && parent.Name.LocalName == "channel"))
         .Select(element => new XElement(element)).ToArray();
 
     private static string FirstNonEmpty(params string[] values) {

@@ -40,7 +40,7 @@ public sealed class WebSitemapConsumerIntegrityTests
             File.WriteAllText(pipeline, $$"""{"steps":[{"task":"indexnow","baseUrl":"https://example.test/","sitemap":"sitemap.xml","key":"fixture","dryRun":true,"reportPath":"part.xml"{{state}}}]}""");
             Assert.False(WebPipelineRunner.RunPipeline(pipeline, logger: null).Success);
             Assert.Equal(leafXml, File.ReadAllText(leaf));
-            File.WriteAllText(Path.Combine(root, "sitemap.xml"), "<sitemapindex><sitemap><loc>https://other.test/part.xml</loc></sitemap></sitemapindex>");
+            File.WriteAllText(Path.Combine(root, "sitemap.xml"), "<sitemapindex xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\"><sitemap><loc>https://other.test/part.xml</loc></sitemap></sitemapindex>");
             Assert.Throws<InvalidOperationException>(() => WebLocalSitemapReader.Read(Path.Combine(root, "sitemap.xml"), "https://example.test/"));
         });
     }
