@@ -168,7 +168,7 @@ jobs:
           $archiveSha512 = [Convert]::ToHexString([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($archive))).ToLowerInvariant()
           function Read-NpmRegistry([string] $Url) {
               try {
-                  $response = Invoke-WebRequest -Uri $Url -SkipHttpErrorCheck -TimeoutSec 15 -Headers @{ 'Cache-Control' = 'no-cache' }
+                  $response = Invoke-WebRequest -Uri $Url -SkipHttpErrorCheck -ConnectionTimeoutSeconds 15 -OperationTimeoutSeconds 15 -Headers @{ 'Cache-Control' = 'no-cache' }
               } catch {
                   Write-Warning 'The registry read failed; publication verification will retry without uploading again.'
                   return $null

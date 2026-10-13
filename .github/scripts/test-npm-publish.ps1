@@ -135,11 +135,14 @@ $global:npmQualification_publishedName=$env:NPM_PACKAGE
 $gate = Join-Path $scriptsRoot 'quality.ps1'
 $publisher = Join-Path $scriptsRoot 'archive.ps1'
 function global:Invoke-WebRequest {
-    param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck, [int]$TimeoutSec)
-    if ($Uri.AbsoluteUri -like 'https://registry.npmjs.org/-/npm/v1/attestations/*') { return Get-NpmProvenanceFixture }
+    param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck, [int]$ConnectionTimeoutSeconds, [int]$OperationTimeoutSeconds)
+    if ($Uri.AbsoluteUri -like 'https://registry.npmjs.org/-/npm/v1/attestations/*') {
+        if ($ConnectionTimeoutSeconds -ne 15 -or $OperationTimeoutSeconds -ne 15) { throw 'Attestation reads must bound connection and response-body stalls.' }
+        return Get-NpmProvenanceFixture
+    }
     if ($Uri.AbsoluteUri -ne 'https://registry.npmjs.org/%40example%2Fwidget/0.1.0') { throw 'Unexpected registry check.' }
     if ($global:npmQualification_publishCalls -gt 0) {
-        if ($TimeoutSec -ne 15 -or $Headers['Cache-Control'] -cne 'no-cache') { throw 'Readback requires bounded fresh registry requests.' }
+        if ($ConnectionTimeoutSeconds -ne 15 -or $OperationTimeoutSeconds -ne 15 -or $Headers['Cache-Control'] -cne 'no-cache') { throw 'Readback requires bounded fresh registry requests.' }
         return Get-RegistryReadbackFixture
     }
     return [pscustomobject]@{StatusCode=404}
@@ -240,8 +243,11 @@ Invoke-Case 'Bootstrap cannot run as a dry run' { & $publisher } $true
 $env:NPM_EXECUTE='true'; $env:NODE_AUTH_TOKEN=''
 Invoke-Case 'Bootstrap missing credential rejected' { & $publisher } $true
 function global:Invoke-WebRequest {
-    param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck, [int]$TimeoutSec)
-    if ($Uri.AbsoluteUri -like 'https://registry.npmjs.org/-/npm/v1/attestations/*') { return Get-NpmProvenanceFixture }
+    param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck, [int]$ConnectionTimeoutSeconds, [int]$OperationTimeoutSeconds)
+    if ($Uri.AbsoluteUri -like 'https://registry.npmjs.org/-/npm/v1/attestations/*') {
+        if ($ConnectionTimeoutSeconds -ne 15 -or $OperationTimeoutSeconds -ne 15) { throw 'Attestation reads must bound connection and response-body stalls.' }
+        return Get-NpmProvenanceFixture
+    }
     if ($Uri.AbsoluteUri -eq 'https://registry.npmjs.org/%40example%2Fwidget/0.1.0' -and $global:npmQualification_publishCalls -gt 0) { return Get-RegistryReadbackFixture }
     $global:npmQualification_metadataAuthenticated = $Headers.Authorization -ceq "Bearer $env:NODE_AUTH_TOKEN"
     if ($Uri.AbsoluteUri -ne 'https://registry.npmjs.org/%40example%2Fwidget') { throw 'Unexpected metadata destination.' }
@@ -292,8 +298,11 @@ $global:npmQualification_registryIntegrity=$global:npmQualification_integrity
 $global:npmQualification_existingStatus=200
 $global:npmQualification_existingIntegrity=$global:npmQualification_integrity
 function global:Invoke-WebRequest {
-    param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck, [int]$TimeoutSec)
-    if ($Uri.AbsoluteUri -like 'https://registry.npmjs.org/-/npm/v1/attestations/*') { return Get-NpmProvenanceFixture }
+    param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck, [int]$ConnectionTimeoutSeconds, [int]$OperationTimeoutSeconds)
+    if ($Uri.AbsoluteUri -like 'https://registry.npmjs.org/-/npm/v1/attestations/*') {
+        if ($ConnectionTimeoutSeconds -ne 15 -or $OperationTimeoutSeconds -ne 15) { throw 'Attestation reads must bound connection and response-body stalls.' }
+        return Get-NpmProvenanceFixture
+    }
     if ($Uri.AbsoluteUri -ne 'https://registry.npmjs.org/%40example%2Fwidget/0.1.0') { throw 'Unexpected registry check.' }
     if ($global:npmQualification_publishCalls -gt 0) { return Get-RegistryReadbackFixture }
     $dist=@{integrity=$global:npmQualification_existingIntegrity}
