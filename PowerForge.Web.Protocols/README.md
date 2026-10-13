@@ -59,13 +59,13 @@ var output = SyndicationWriter.WriteRss(new SyndicationFeed
 });
 ```
 
-Atom writers require explicit feed/entry IDs, update dates, and a feed author or authors on every entry. JSON Feed requires entry IDs and supplies `content_text` from the summary when a full body is absent. The library does not invent publication dates, authors, site identities, or ordering.
+Atom writers require absolute feed/entry IRIs, update dates, and a feed author or authors on every entry. JSON Feed requires entry IDs and supplies `content_text` from the summary when a full body is absent. The library does not invent publication dates, authors, site identities, or ordering.
 
 Inline Atom XML media content retains its element structure and namespaces. XML and XHTML bodies are parsed with the same DTD prohibition and size bounds as feed input; text, escaped HTML and binary Base64 bodies remain text. Remote content is not fetched.
 
 JSON Feed marks known HTML/XHTML content as `content_html`. Other explicit media types are preserved as literal `content_text`, including serialized XML and Base64; the writer does not decode binary bodies. An unspecified content type retains the HTML default.
 
-`SitemapWriter.Create` writes an explicit URL set or index. `Partition` accepts URL XML elements, preserving extension elements, and returns documents bounded by the 50,000-entry and 50 MiB limits. File names, index URLs, ownership markers, and obsolete-file removal remain caller decisions. The bundled sitemaps.org schemas validate the base protocol; extensions require their own validation.
+`SitemapWriter.Create` writes a nonempty URL set or index and validates location lengths and XML date values. The stream reader honors XML encoding declarations and leaves the input stream open. `Partition` accepts URL XML elements, preserving extension elements, and returns documents bounded by the 50,000-entry and 50 MiB limits. Empty partitions return no documents. File names, index URLs, ownership markers, and obsolete-file removal remain caller decisions. The bundled sitemaps.org schemas validate the base protocol; extensions require their own validation.
 
 ## Embed structured data
 

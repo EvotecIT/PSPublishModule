@@ -14,8 +14,21 @@ public sealed class WriterInputContractsTests
         => Assert.Throws<ArgumentException>(() => SitemapWriter.Create(new SitemapDocument { IsIndex = index }));
 
     [Fact]
-    public void EmptyPartitionsAreRejectedBeforePublishing()
-        => Assert.Throws<ArgumentException>(() => SitemapWriter.Partition(Array.Empty<XElement>()));
+    public void EmptySelectionsProduceNoSitemapDocuments()
+        => Assert.Empty(SitemapWriter.Partition(Array.Empty<XElement>()));
+
+    [Theory]
+    [InlineData("http://a.co")]
+    [InlineData("  http://a.co  ")]
+    public void LocationLowerBoundCannotBeSatisfiedByWhitespace(string location)
+    {
+        foreach (bool index in new[] { false, true })
+            Assert.Throws<ArgumentException>(() => SitemapWriter.Create(new SitemapDocument { IsIndex = index,
+                Entries = new[] { new SitemapEntry { Url = location, IsSitemap = index } } }));
+        XNamespace ns = SitemapWriter.Namespace;
+        Assert.Throws<ArgumentException>(() => SitemapWriter.Partition(new[] { new XElement(ns + "url", new XElement(ns + "loc", location)) }));
+        Assert.Single(SitemapWriter.Create(new SitemapDocument { Entries = new[] { new SitemapEntry { Url = "http://a.co/" } } }).Root!.Elements());
+    }
 
     [Theory]
     [InlineData("yesterday")]

@@ -20,7 +20,7 @@ public static partial class WebSitemapGenerator
             SaveSitemapDocument(partitions[0], outputPath);
             paths.Add(outputPath);
         }
-        else
+        else if (partitions.Count > 1)
         {
             // The original path remains the discovery endpoint and becomes an index.
             for (var index = 0; index < partitions.Count; index++)
@@ -34,6 +34,11 @@ public static partial class WebSitemapGenerator
             }
             WriteSitemapIndex(siteRoot, baseUrl, outputPath, stylesheet,
                 DateTime.UtcNow.ToString("yyyy-MM-dd"), paths.Cast<string?>().ToArray());
+        }
+        else
+        {
+            // This configured output is no longer published when its selection becomes empty.
+            File.Delete(outputPath);
         }
         var retained = paths.ToHashSet(StringComparer.Ordinal);
         var prefix = Path.GetFileNameWithoutExtension(outputPath) + ".part-";

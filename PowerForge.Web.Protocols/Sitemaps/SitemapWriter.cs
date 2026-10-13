@@ -90,16 +90,16 @@ public static class SitemapWriter
             if (bytes + addition > partitionByteLimit) throw new InvalidDataException("A sitemap entry exceeds the uncompressed sitemap size limit.");
             current.Root!.Add(new XElement(entry)); bytes += addition; count++;
         }
-        if (count == 0) throw new ArgumentException("A sitemap requires at least one entry.", nameof(entries));
-        AddVerified(current);
+        if (count > 0) AddVerified(current);
         return result;
     }
 
     private static void ValidateLocation(string? location, string parameterName)
     {
-        if (location == null || location.Length > 2048 || !Uri.TryCreate(location, UriKind.Absolute, out var uri)
+        location = location?.Trim();
+        if (location == null || location.Length < 12 || location.Length > 2048 || !Uri.TryCreate(location, UriKind.Absolute, out var uri)
             || (uri.Scheme != "http" && uri.Scheme != "https"))
-            throw new ArgumentException("A sitemap location must be an absolute HTTP(S) URL of at most 2,048 characters.", parameterName);
+            throw new ArgumentException("A sitemap location must be an absolute HTTP(S) URL of 12 to 2,048 characters.", parameterName);
     }
 
     private static void ValidateLastModified(string? value, string parameterName)
