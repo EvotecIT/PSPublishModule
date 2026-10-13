@@ -252,7 +252,7 @@ public static partial class WebSiteAuditor
 
         var indexCandidate = Path.Combine(candidate, "index.html");
         if (!File.Exists(indexCandidate) &&
-            TryResolveLocalizedAliasTarget(siteRoot, baseDir, relative, isDirectoryHint: true, out var localizedIndexFallback))
+            TryResolveLocalizedAliasTarget(siteRoot, baseDir, relative, isDirectoryHint: false, out var localizedIndexFallback))
         {
             resolvedPath = localizedIndexFallback;
             return true;
@@ -2019,7 +2019,7 @@ public static partial class WebSiteAuditor
         return normalized;
     }
 
-    private static string[] ResolveRequiredRouteCandidates(string route)
+    private static string[] ResolveRequiredRouteCandidates(string route, string siteRoot)
     {
         var normalized = StripQueryAndFragment(route).Trim();
         if (string.IsNullOrWhiteSpace(normalized))
@@ -2052,7 +2052,7 @@ public static partial class WebSiteAuditor
         {
             candidates.Add(normalized);
         }
-        else if (Path.HasExtension(normalized))
+        else if (Path.HasExtension(normalized) && !Directory.Exists(Path.Combine(siteRoot, normalized.Replace('/', Path.DirectorySeparatorChar))))
         {
             candidates.Add(normalized);
         }

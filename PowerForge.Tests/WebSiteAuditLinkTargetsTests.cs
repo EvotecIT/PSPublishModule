@@ -133,6 +133,37 @@ public sealed class WebSiteAuditLinkTargetsTests : IDisposable
         "<!doctype html><html><head><title>Install</title></head><body><a href=\"" +
         System.Net.WebUtility.HtmlEncode(href) + "\">Install</a></body></html>");
 
+    [Fact]
+    public void Audit_AppliesRouteAssertionsToDottedHtmlDirectories()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "guide.v2"));
+        File.WriteAllText(Path.Combine(_root, "guide.v2", "index.html"), "<html><head><title>Guide</title></head><body>Guide</body></html>");
+        var required = WebSiteAuditor.Audit(new WebAuditOptions {
+            SiteRoot = _root, CheckLinks = false, CheckAssets = false, NavRequired = false, RequiredRoutes = ["/guide.v2"]
+        });
+        Assert.Equal(0, required.MissingRequiredRouteCount);
+        var forbidden = WebSiteAuditor.Audit(new WebAuditOptions {
+            SiteRoot = _root, CheckLinks = false, CheckAssets = false, NavRequired = false, ForbiddenRoutes = ["/guide.v2"]
+        });
+        Assert.Equal(1, forbidden.PresentForbiddenRouteCount);
+    }
+
+    [Theory]
+    [InlineData("guide.html", "/guide")]
+    [InlineData("guide.htm", "/guide")]
+    [InlineData("catalog", "/catalog")]
+    public void Audit_ResolvesLocalizedFlatFilesWithoutForcingDirectoryMode(string target, string href)
+    {
+        string page = Path.Combine(_root, "pl", "page");
+        Directory.CreateDirectory(page);
+        File.WriteAllText(Path.Combine(_root, "pl", target), "<html><head><title>Target</title></head><body>Target</body></html>");
+        File.WriteAllText(Path.Combine(page, "index.html"), "<html><head><title>Page</title></head><body><a href=\"" + href + "\">Target</a></body></html>");
+        var result = Audit();
+        Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
+        Assert.Equal(0, result.BrokenLinkCount);
+        Assert.Equal(1, result.LinkCount);
+    }
+
     private WebAuditResult Audit() => WebSiteAuditor.Audit(new WebAuditOptions
     {
         SiteRoot = _root,
