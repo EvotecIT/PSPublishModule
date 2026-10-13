@@ -79,6 +79,6 @@ var script = JsonLdWriter.WriteScript(new Dictionary<string, object?>
 
 Use JSON-compatible dictionaries, arrays, strings, numbers, booleans and null. Supply dates as ISO strings. Script-sensitive characters are escaped. This API does not load remote contexts, expand or compact JSON-LD, reason about RDF, choose Schema.org entities, or promise search-engine eligibility.
 
-## IndexNow compatibility
+## IndexNow
 
-IndexNow types retain the `PowerForge.IndexNow` namespace. Reference `PowerForge.Web.Protocols` for new consumers; the `PowerForge.IndexNow` package forwards its existing public types to this assembly so already-compiled callers can migrate without a namespace or type-identity change. Transport uses an optional caller-owned `HttpClient`; durable queues, checkpoints and operational retry scheduling belong to the application.
+Reference `PowerForge.Web.Protocols` and import `PowerForge.Web.Protocols.IndexNow`. Existing consumers of the retired `PowerForge.IndexNow` package must update their package reference and namespace, then rebuild. Transport uses an optional caller-owned `HttpClient`; durable queues, checkpoints and operational retry scheduling belong to the application.

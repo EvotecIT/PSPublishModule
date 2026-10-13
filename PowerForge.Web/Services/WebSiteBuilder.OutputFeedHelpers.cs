@@ -61,6 +61,9 @@ public static partial class WebSiteBuilder
         {
             Title = ResolveFeedChannelTitle(spec, item), Description = ResolveFeedChannelDescription(spec, item),
             Url = Absolute(item.OutputPath), SourceFeedUrl = Absolute(route), Id = Absolute(route),
+            Authors = format == "atom" ? new[] { new PowerForge.Web.Protocols.Feeds.FeedAuthor
+                { Name = string.IsNullOrWhiteSpace(spec.Name) ? ResolveFeedChannelTitle(spec, item) : spec.Name } }
+                : Array.Empty<PowerForge.Web.Protocols.Feeds.FeedAuthor>(),
             Updated = format == "atom" ? selected.Where(entry => entry.Date.HasValue)
                 .Select(entry => new DateTimeOffset(entry.Date!.Value.ToUniversalTime())).DefaultIfEmpty(now).Max() : null,
             Items = selected.Select(entry =>

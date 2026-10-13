@@ -9,7 +9,7 @@ using PowerForge.Web.Protocols;
 
 using System.Threading;
 
-namespace PowerForge.IndexNow;
+namespace PowerForge.Web.Protocols.IndexNow;
 
 /// <summary>Submits public URLs using the IndexNow protocol without a host or CLI dependency.</summary>
 public static class IndexNowSubmitter

@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.Json;
 using PowerForge.Web;
 
-using PowerForge.IndexNow;
+using PowerForge.Web.Protocols.IndexNow;
 
 namespace PowerForge.Web.Cli;
 

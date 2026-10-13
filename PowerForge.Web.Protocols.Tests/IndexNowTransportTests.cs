@@ -1,6 +1,6 @@
 using System.Net;
 using System.Net.Http;
-using PowerForge.IndexNow;
+using PowerForge.Web.Protocols.IndexNow;
 
 namespace PowerForge.Web.Protocols.Tests;
 

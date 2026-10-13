@@ -1,6 +1,6 @@
 using System.Net;
 using System.Text.Json;
-using PowerForge.IndexNow;
+using PowerForge.Web.Protocols.IndexNow;
 
 namespace PowerForge.Tests;
 

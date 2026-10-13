@@ -82,7 +82,7 @@ public sealed class DocumentContractsTests
     {
         var feed = SyndicationReader.ParseSyndicationFeed("""
             <feed xmlns="http://www.w3.org/2005/Atom"><id>urn:feed:1</id><title>Feed</title><updated>2026-10-01T00:00:00Z</updated>
-              <entry><id>urn:entry:1</id><title>Item</title><updated>2026-10-01T00:00:00Z</updated>
+              <author><name>Publisher</name></author><entry><id>urn:entry:1</id><title>Item</title><updated>2026-10-01T00:00:00Z</updated>
               <content type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><p>A &amp; B</p></div></content></entry></feed>
             """);
         var xml = XDocument.Parse(SyndicationWriter.WriteAtom(feed));

@@ -45,6 +45,8 @@ public static class SyndicationWriter
         if (feed is null) throw new ArgumentNullException(nameof(feed));
         if (string.IsNullOrWhiteSpace(feed.Id) || !feed.Updated.HasValue)
             throw new ArgumentException("Atom requires a feed identifier and update date.", nameof(feed));
+        if (feed.Authors.Count == 0 && (feed.Items.Count == 0 || feed.Items.Any(item => item.Authors.Count == 0)))
+            throw new ArgumentException("Atom requires a feed author or an author for every entry.", nameof(feed));
         var root = new XElement(Atom + "feed", new XElement(Atom + "title", feed.Title), new XElement(Atom + "id", feed.Id),
             new XElement(Atom + "updated", feed.Updated.Value.ToString("O", CultureInfo.InvariantCulture)),
             new XElement(Atom + "subtitle", feed.Description ?? string.Empty),
@@ -85,7 +87,10 @@ public static class SyndicationWriter
         var items = feed.Items.Select(item =>
         {
             if (string.IsNullOrWhiteSpace(item.Id)) throw new ArgumentException("JSON Feed requires a stable entry identifier.", nameof(feed));
-            var model = new Dictionary<string, object?> { ["id"] = item.Id, ["url"] = item.Url, ["title"] = item.Title, ["summary"] = item.Summary };
+            var model = new Dictionary<string, object?> { ["id"] = item.Id };
+            AddOptional(model, "url", item.Url);
+            AddOptional(model, "title", item.Title);
+            AddOptional(model, "summary", item.Summary);
             // JSON Feed requires content_text or content_html even when the site omits full article bodies.
             model[string.Equals(item.ContentType, "text", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(item.Content) ? "content_text" : "content_html"] = item.Content ?? item.Summary ?? string.Empty;
             if (item.Published.HasValue) model["date_published"] = item.Published.Value.ToString("O", CultureInfo.InvariantCulture);
@@ -97,11 +102,18 @@ public static class SyndicationWriter
         var document = new Dictionary<string, object?>
         {
             ["version"] = "https://jsonfeed.org/version/1.1", ["title"] = feed.Title,
-            ["home_page_url"] = feed.Url, ["feed_url"] = feed.SourceFeedUrl,
-            ["description"] = feed.Description, ["items"] = items
+            ["items"] = items
         };
+        AddOptional(document, "home_page_url", feed.Url);
+        AddOptional(document, "feed_url", feed.SourceFeedUrl);
+        AddOptional(document, "description", feed.Description);
         if (feed.Authors.Count > 0) document["authors"] = feed.Authors.Select(JsonAuthor).ToArray();
         return ProtocolJson.Serialize(document, indented: true);
+    }
+
+    private static void AddOptional(Dictionary<string, object?> model, string name, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value)) model[name] = value;
     }
 
     private static Dictionary<string, object?> JsonAuthor(FeedAuthor author)

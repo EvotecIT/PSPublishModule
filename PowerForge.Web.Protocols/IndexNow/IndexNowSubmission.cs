@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace PowerForge.IndexNow;
+namespace PowerForge.Web.Protocols.IndexNow;
 
 /// <summary>URL selection, endpoint configuration, and bounded retry settings for one submission.</summary>
 public sealed class IndexNowSubmissionOptions
