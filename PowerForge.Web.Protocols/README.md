@@ -34,7 +34,7 @@ var sitemap = SitemapReader.Read(sitemapXml, new Uri(sitemapUrl));
 // The application decides whether to traverse an index and which pages to fetch.
 ```
 
-Feed models normalize supported metadata, including identifiers, separate publication/update dates, authors, categories, and content. Unknown foreign-namespace extension elements are retained. This is not a lossless XML editor: original prefixes, whitespace, and every optional format construct are not preserved. RSS IDs marked `isPermaLink="false"` are not used as fallback article URLs. Feed and item source URLs use the caller-supplied source first, then a resolved Atom self link when available.
+Feed models normalize supported metadata, including identifiers, separate publication/update dates, authors, categories, and content. Unknown foreign-namespace extension elements are retained. This is not a lossless XML editor: original prefixes, whitespace, and every optional format construct are not preserved. RSS 1.0 uses its declared RDF sequence when present, otherwise document order. RSS IDs marked `isPermaLink="false"` are not used as fallback article URLs. Feed and item source URLs use the caller-supplied source first, then a resolved Atom self link when available.
 
 ## Write publisher-selected entries
 
@@ -61,11 +61,11 @@ var output = SyndicationWriter.WriteRss(new SyndicationFeed
 
 Atom writers require absolute feed/entry IRIs, update dates, and a feed author or authors on every entry. JSON Feed requires entry IDs and supplies `content_text` from the summary when a full body is absent. The library does not invent publication dates, authors, site identities, or ordering.
 
-Inline Atom XML media content retains its element structure and namespaces. XML and XHTML bodies are parsed with the same DTD prohibition and size bounds as feed input; text, escaped HTML and binary Base64 bodies remain text. Remote content is not fetched.
+Inline Atom XML media content retains its element structure and namespaces. XML and XHTML bodies are parsed with the same DTD prohibition and size bounds as feed input; text, escaped HTML and binary Base64 bodies remain text. Out-of-line Atom content references are exposed as ContentSourceUrl, resolved against XML bases, and preserved by Atom writing without fetching the target.
 
 JSON Feed marks known HTML/XHTML content as `content_html`. Other explicit media types are preserved as literal `content_text`, including serialized XML and Base64; the writer does not decode binary bodies. An unspecified content type retains the HTML default.
 
-`SitemapWriter.Create` writes a nonempty URL set or index and validates location lengths and XML date values. The stream reader honors XML encoding declarations and leaves the input stream open. `Partition` accepts URL XML elements, preserving extension elements, and returns documents bounded by the 50,000-entry and 50 MiB limits. Empty partitions return no documents. File names, index URLs, ownership markers, and obsolete-file removal remain caller decisions. The bundled sitemaps.org schemas validate the base protocol; extensions require their own validation.
+`SitemapWriter.Create` writes a nonempty URL set or index and URL-escapes locations, validates their final length, and validates XML date values. The stream reader honors XML encoding declarations and leaves the input stream open. `Partition` accepts URL XML elements, preserving extension elements, and returns documents bounded by the 50,000-entry and 50 MiB limits. Empty partitions return no documents. File names, index URLs, ownership markers, and obsolete-file removal remain caller decisions. The bundled sitemaps.org schemas validate the base protocol; extensions require their own validation.
 
 ## Embed structured data
 

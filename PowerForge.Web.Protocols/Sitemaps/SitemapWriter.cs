@@ -26,10 +26,10 @@ public static class SitemapWriter
         var root = new XElement(ns + (sitemap.IsIndex ? "sitemapindex" : "urlset"), sitemap.Entries.Select(entry =>
         {
             if (entry.IsSitemap != sitemap.IsIndex) throw new ArgumentException("Sitemap entries must match the document kind.", nameof(sitemap));
-            ValidateLocation(entry.Url, nameof(sitemap));
+            string location = NormalizeLocation(entry.Url, nameof(sitemap));
             string? date = entry.LastModifiedText ?? entry.LastModified?.ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture);
             ValidateLastModified(date, nameof(sitemap));
-            return new XElement(ns + (sitemap.IsIndex ? "sitemap" : "url"), new XElement(ns + "loc", entry.Url),
+            return new XElement(ns + (sitemap.IsIndex ? "sitemap" : "url"), new XElement(ns + "loc", location),
                 date is null ? null : new XElement(ns + "lastmod", date), entry.Extensions.Select(e => new XElement(e)));
         }));
         var document = CreateDocument(root, stylesheet);
@@ -79,27 +79,33 @@ public static class SitemapWriter
         foreach (var entry in entries)
         {
             if (entry.Name != XName.Get("url", Namespace)) throw new ArgumentException("URL-set partitions require sitemap url elements.", nameof(entries));
-            ValidateLocation(entry.Element(XName.Get("loc", Namespace))?.Value, nameof(entries));
+            var normalized = new XElement(entry);
+            var location = normalized.Element(XName.Get("loc", Namespace));
+            string escapedLocation = NormalizeLocation(location?.Value, nameof(entries));
+            location!.Value = escapedLocation;
             ValidateLastModified(entry.Element(XName.Get("lastmod", Namespace))?.Value, nameof(entries));
             // Standalone element serialization repeats namespace declarations, giving a conservative bound.
-            long addition = Encoding.UTF8.GetByteCount(entry.ToString(SaveOptions.DisableFormatting)) + 32;
+            long addition = Encoding.UTF8.GetByteCount(normalized.ToString(SaveOptions.DisableFormatting)) + 32;
             if (count > 0 && (count == entryLimit || bytes + addition > partitionByteLimit))
             {
                 AddVerified(current); current = Make(); bytes = GetUtf8Size(current); count = 0;
             }
             if (bytes + addition > partitionByteLimit) throw new InvalidDataException("A sitemap entry exceeds the uncompressed sitemap size limit.");
-            current.Root!.Add(new XElement(entry)); bytes += addition; count++;
+            current.Root!.Add(normalized); bytes += addition; count++;
         }
         if (count > 0) AddVerified(current);
         return result;
     }
 
-    private static void ValidateLocation(string? location, string parameterName)
+    private static string NormalizeLocation(string? location, string parameterName)
     {
         location = location?.Trim();
         if (location == null || location.Length < 12 || location.Length > 2048 || !Uri.TryCreate(location, UriKind.Absolute, out var uri)
             || (uri.Scheme != "http" && uri.Scheme != "https"))
             throw new ArgumentException("A sitemap location must be an absolute HTTP(S) URL of 12 to 2,048 characters.", parameterName);
+        string escaped = uri.AbsoluteUri;
+        if (escaped.Length > 2048) throw new ArgumentException("The URL-escaped sitemap location exceeds 2,048 characters.", parameterName);
+        return escaped;
     }
 
     private static void ValidateLastModified(string? value, string parameterName)

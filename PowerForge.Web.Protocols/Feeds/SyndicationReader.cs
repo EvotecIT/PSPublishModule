@@ -3,7 +3,7 @@ using System.Xml.Linq;
 namespace PowerForge.Web.Protocols.Feeds;
 /// <summary>Reads RSS and Atom documents without fetching resources or interpreting source policy.</summary>
 public static class SyndicationReader {
-    /// <summary>Reads the feed metadata and entries in document order. Markup remains untrusted.</summary>
+    /// <summary>Reads metadata and entries in publisher order (RSS 1.0 sequence when present). Markup remains untrusted.</summary>
     public static SyndicationFeed ParseSyndicationFeed(string xml, Uri? baseUri = null, string? sourceFeedUrl = null) {
         if (xml == null) {
             throw new ArgumentNullException(nameof(xml));
@@ -47,9 +47,28 @@ public static class SyndicationReader {
                 ElementValue(channel, DublinCore, "date"))),
             SourceFeedUrl = rssSource,
             Items = ParseRssItems(channel == null ? Enumerable.Empty<XElement>()
-                : root.Name.LocalName == "RDF" ? root.Elements(XName.Get("item", "http://purl.org/rss/1.0/"))
+                : root.Name.LocalName == "RDF" ? OrderedRdfItems(root, channel, baseUri)
                 : channel.Elements("item"), baseUri, rssSource)
         };
+    }
+
+    private static IEnumerable<XElement> OrderedRdfItems(XElement root, XElement channel, Uri? baseUri) {
+        XNamespace rss = "http://purl.org/rss/1.0/";
+        XNamespace rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+        var items = root.Elements(rss + "item").ToArray();
+        var sequence = channel.Element(rss + "items")?.Element(rdf + "Seq");
+        if (sequence == null) return items;
+        var lookup = new Dictionary<string, XElement>(StringComparer.Ordinal);
+        foreach (var item in items) {
+            string key = ResolveUrl(item.Attribute(rdf + "about")?.Value ?? string.Empty, EffectiveBase(item, baseUri));
+            if (key.Length > 0 && !lookup.ContainsKey(key)) lookup.Add(key, item);
+        }
+        var ordered = new List<XElement>();
+        foreach (var reference in sequence.Elements(rdf + "li")) {
+            string key = ResolveUrl(reference.Attribute(rdf + "resource")?.Value ?? string.Empty, EffectiveBase(reference, baseUri));
+            if (lookup.TryGetValue(key, out var item)) ordered.Add(item);
+        }
+        return ordered;
     }
 
     private static string? ResolveSourceFeedUrl(XElement? container, XNamespace ns, Uri? baseUri,
@@ -98,6 +117,8 @@ public static class SyndicationReader {
         List<SyndicationItem> items = new();
         foreach (XElement entry in root.Elements().Where(element => element.Name.Namespace == root.Name.Namespace && string.Equals(element.Name.LocalName, "entry", StringComparison.OrdinalIgnoreCase))) {
             string link = GetAtomLink(entry, baseUri);
+            XElement? content = FirstChild(entry, "content");
+            string? contentSource = content?.Attribute("src")?.Value;
             items.Add(new SyndicationItem {
                 Title = ElementValue(entry, "title"),
                 Url = link,
@@ -111,12 +132,19 @@ public static class SyndicationReader {
                 Categories = ParseCategories(entry, atom: true),
                 Authors = ParseAuthors(entry, baseUri, atom: true),
                 Extensions = ReadExtensions(entry, atom: true),
-                ContentType = EmptyToNull(FirstChild(entry, "content")?.Attribute("type")?.Value) ?? "text",
-                Content = AtomContent(FirstChild(entry, "content"))
+                ContentType = EmptyToNull(content?.Attribute("type")?.Value) ?? (contentSource == null ? "text" : null),
+                ContentSourceUrl = contentSource == null ? null : ResolveContentSource(contentSource, content!, baseUri),
+                Content = contentSource == null ? AtomContent(content) : null
             });
         }
 
         return items;
+    }
+
+    private static string ResolveContentSource(string source, XElement content, Uri? baseUri) {
+        var effectiveBase = EffectiveBase(content, baseUri);
+        return effectiveBase != null && Uri.TryCreate(effectiveBase, source, out var resolved)
+            ? resolved.AbsoluteUri : ResolveUrl(source, effectiveBase);
     }
 
     /// <summary>RSS category text or the Atom category term (label when there is no term), trimmed, in order, without duplicates.</summary>

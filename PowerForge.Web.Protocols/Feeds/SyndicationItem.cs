@@ -9,6 +9,8 @@ namespace PowerForge.Web.Protocols.Feeds;
 public sealed class SyndicationItem {
     /// <summary>Atom content kind (text, html, xhtml or a media type), when known.</summary>
     public string? ContentType { get; set; }
+    /// <summary>Resolved Atom out-of-line content reference. Reading never fetches this URL.</summary>
+    public string? ContentSourceUrl { get; set; }
     /// <summary>Item title.</summary>
     public string Title { get; set; } = string.Empty;
 

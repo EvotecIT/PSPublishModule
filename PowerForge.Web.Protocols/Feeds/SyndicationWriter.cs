@@ -55,6 +55,7 @@ public static class SyndicationWriter
         if (!string.IsNullOrWhiteSpace(feed.SourceFeedUrl)) root.Add(new XElement(Atom + "link", new XAttribute("href", feed.SourceFeedUrl),
             new XAttribute("rel", "self"), new XAttribute("type", "application/atom+xml")));
         root.Add(feed.Authors.Select(AtomAuthor));
+        root.Add(feed.Extensions.Select(e => new XElement(e)));
         foreach (var item in feed.Items)
         {
             if (string.IsNullOrWhiteSpace(item.Id) || !item.Updated.HasValue)
@@ -66,7 +67,14 @@ public static class SyndicationWriter
                 new XElement(Atom + "summary", item.Summary ?? string.Empty));
             if (item.Published.HasValue) entry.Add(new XElement(Atom + "published", item.Published.Value.ToString("O", CultureInfo.InvariantCulture)));
             entry.Add(item.Authors.Select(AtomAuthor));
-            if (!string.IsNullOrWhiteSpace(item.Content))
+            if (item.ContentSourceUrl != null)
+            {
+                if (item.Content != null) throw new ArgumentException("Atom content cannot have both a source reference and an inline body.", nameof(feed));
+                var content = new XElement(Atom + "content", new XAttribute("src", item.ContentSourceUrl));
+                if (!string.IsNullOrWhiteSpace(item.ContentType)) content.Add(new XAttribute("type", item.ContentType));
+                entry.Add(content);
+            }
+            else if (!string.IsNullOrWhiteSpace(item.Content))
             {
                 var content = new XElement(Atom + "content", new XAttribute("type", item.ContentType ?? "html"));
                 if (string.Equals(item.ContentType, "xhtml", StringComparison.OrdinalIgnoreCase))
@@ -80,7 +88,6 @@ public static class SyndicationWriter
             entry.Add(item.Extensions.Select(e => new XElement(e)));
             root.Add(entry);
         }
-        root.Add(feed.Extensions.Select(e => new XElement(e)));
         return new XDocument(root).ToString(SaveOptions.DisableFormatting);
     }
 

@@ -112,9 +112,9 @@ public sealed class DocumentContractsTests
     public void PartitionUsesUtf8BytesBeforeReachingTheEntryLimit()
     {
         XNamespace ns = SitemapWriter.Namespace;
-        string path = new string('\u0142', 1800);
+        string body = new string('\u0142', 1800);
         var entries = Enumerable.Range(0, 16000).Select(i => new XElement(ns + "url",
-            new XElement(ns + "loc", "https://example.org/" + path + "/" + i)));
+            new XElement(ns + "loc", "https://example.org/" + i), new XElement(XName.Get("caption", "urn:example"), body)));
         var partitions = SitemapWriter.Partition(entries);
         Assert.Equal(2, partitions.Count);
         Assert.Equal(16000, partitions.Sum(p => p.Root!.Elements().Count()));
