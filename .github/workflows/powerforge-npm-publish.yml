@@ -28,6 +28,10 @@ on:
         description: Existing protected release environment, restricted to the default branch.
         required: true
         type: string
+      release-tag-prefix:
+        description: Reservation namespace from npm-release-version; empty for a manually versioned archive.
+        type: string
+        default: ''
       publish:
         description: Publish when true; otherwise validate and perform npm's dry run.
         type: boolean
@@ -49,6 +53,7 @@ permissions:
 concurrency:
   group: npm-publish-${{ github.repository }}-${{ inputs.package-name }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   publish:
@@ -67,16 +72,27 @@ jobs:
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       SOURCE_PRIVATE: ${{ github.event.repository.private }}
       RELEASE_ENVIRONMENT: ${{ inputs.environment-name }}
+      RELEASE_TAG_PREFIX: ${{ inputs.release-tag-prefix }}
       NPM_CONFIG_REGISTRY: https://registry.npmjs.org
     steps:
       - name: Require successful quality checks for this default-branch commit
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          if ($env:GITHUB_EVENT_NAME -ne 'workflow_dispatch' -or
+          $sourceSha = $env:GITHUB_SHA
+          if ($env:GITHUB_EVENT_NAME -cnotin @('workflow_dispatch', 'workflow_run') -or
               $env:GITHUB_REF -ne "refs/heads/$env:DEFAULT_BRANCH") {
-              throw 'npm publication requires a deliberate default-branch dispatch.'
+              throw 'npm publication requires a default-branch dispatch or completed quality run.'
           }
+          if ($env:GITHUB_EVENT_NAME -eq 'workflow_run') {
+              $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+              if ($event.action -cne 'completed' -or [string]$event.workflow_run.id -cne $env:QUALITY_RUN -or
+                  $event.workflow_run.head_repository.full_name -cne $env:GITHUB_REPOSITORY) {
+                  throw 'The release event does not identify this repository''s qualifying source run.'
+              }
+              $sourceSha = [string]$event.workflow_run.head_sha
+          }
+          if ($sourceSha -notmatch '^[a-fA-F0-9]{40}$') { throw 'Invalid qualified source commit.' }
           $environmentPath = [Uri]::EscapeDataString($env:RELEASE_ENVIRONMENT)
           $environmentJson = & gh api "repos/$env:GITHUB_REPOSITORY/environments/$environmentPath"
           if ($LASTEXITCODE -ne 0) { throw 'Cannot read the protected release environment.' }
@@ -93,11 +109,12 @@ jobs:
           $runJson = & gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:QUALITY_RUN"
           if ($LASTEXITCODE -ne 0) { throw 'Cannot read the quality run.' }
           $run = $runJson | ConvertFrom-Json
-          if ($run.head_sha -ne $env:GITHUB_SHA -or $run.head_branch -ne $env:DEFAULT_BRANCH -or
+          if ($run.head_sha -ne $sourceSha -or $run.head_branch -ne $env:DEFAULT_BRANCH -or
               $run.event -ne 'push' -or $run.status -ne 'completed' -or $run.conclusion -ne 'success' -or
               ($run.path -split '@', 2)[0] -ne ".github/workflows/$env:QUALITY_WORKFLOW") {
               throw 'The supplied quality run does not qualify this default-branch commit.'
           }
+          "QUALIFIED_SOURCE_SHA=$sourceSha" >> $env:GITHUB_ENV
 
       - name: Download the qualified archive
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -127,6 +144,7 @@ jobs:
               throw 'Source repository visibility is required before publication.'
           }
           $requireProvenance = $env:SOURCE_PRIVATE -eq 'false'
+          if ($env:QUALIFIED_SOURCE_SHA -notmatch '^[a-fA-F0-9]{40}$') { throw 'A validated package source commit is required.' }
           if ($env:NPM_SHA256 -notmatch '^[a-fA-F0-9]{64}$' -or
               $env:NPM_VERSION -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') {
               throw 'A three-part version and SHA256 are required.'
@@ -147,6 +165,41 @@ jobs:
           }
           $integrity = 'sha512-' + [Convert]::ToBase64String(
               [Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($archive)))
+          $archiveSha512 = [Convert]::ToHexString([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($archive))).ToLowerInvariant()
+          function Test-PublishedProvenance($Dist) {
+              if (-not $requireProvenance) { return $true }
+              if (-not $Dist.attestations.provenance) { return $false }
+              $url = 'https://registry.npmjs.org/-/npm/v1/attestations/' + [Uri]::EscapeDataString($env:NPM_PACKAGE) + '@' + $env:NPM_VERSION
+              $response = Invoke-WebRequest -Uri $url -SkipHttpErrorCheck
+              if ($response.StatusCode -ne 200) { return $false }
+              $attestations = $response.Content | ConvertFrom-Json
+              foreach ($attestation in $attestations.attestations) {
+                  if ($attestation.predicateType -cne 'https://slsa.dev/provenance/v1') { continue }
+                  $payload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($attestation.bundle.dsseEnvelope.payload)) | ConvertFrom-Json
+                  $dependency = @($payload.predicate.buildDefinition.resolvedDependencies | Where-Object {
+                      $_.uri -ceq "git+https://github.com/$env:GITHUB_REPOSITORY@$env:GITHUB_REF" -and
+                      $_.digest.gitCommit -ceq $env:QUALIFIED_SOURCE_SHA
+                  })
+                  $subject = @($payload.subject | Where-Object { $_.digest.sha512 -ceq $archiveSha512 })
+                  if ($dependency.Count -ne 1 -or $subject.Count -ne 1) { throw 'Published provenance does not identify the qualified source and archive.' }
+                  return $true
+              }
+              return $false
+          }
+          if ($env:NPM_BOOTSTRAP -ne 'true') {
+              $versionUrl = 'https://registry.npmjs.org/' + [Uri]::EscapeDataString($env:NPM_PACKAGE) + '/' + $env:NPM_VERSION
+              $existingVersion = Invoke-WebRequest -Uri $versionUrl -SkipHttpErrorCheck
+              if ($existingVersion.StatusCode -eq 200) {
+                  $published = $existingVersion.Content | ConvertFrom-Json
+                  if ($published.name -cne $env:NPM_PACKAGE -or $published.version -cne $env:NPM_VERSION -or
+                      $published.dist.integrity -cne $integrity -or -not (Test-PublishedProvenance $published.dist)) {
+                      throw 'An existing npm version differs from the qualified archive or required provenance.'
+                  }
+                  "Already verified: $env:NPM_PACKAGE@$env:NPM_VERSION; no repeat upload." >> $env:GITHUB_STEP_SUMMARY
+                  exit 0
+              }
+              if ($existingVersion.StatusCode -ne 404) { throw 'Cannot establish whether this npm version is already published.' }
+          }
           if ($env:NPM_BOOTSTRAP -eq 'true') {
               if ($env:NPM_EXECUTE -ne 'true' -or [string]::IsNullOrWhiteSpace($env:NODE_AUTH_TOKEN)) {
                   throw 'Bootstrap requires an explicit publication and the environment NPM_BOOTSTRAP_TOKEN secret.'
@@ -159,9 +212,36 @@ jobs:
                   throw 'Bootstrap requires an authenticated registry check confirming that the package does not exist.'
               }
           }
+          if ($requireProvenance -and $env:QUALIFIED_SOURCE_SHA -cne $env:GITHUB_SHA) {
+              throw 'Public-source provenance requires the qualified source to match GitHub''s OIDC source identity. Wait for successful quality checks on that source before releasing.'
+          }
           $publishArgs = @('publish', $archive, '--ignore-scripts', "--provenance=$($requireProvenance.ToString().ToLowerInvariant())", '--access', 'public',
               '--registry', 'https://registry.npmjs.org')
           if ($env:NPM_EXECUTE -ne 'true') { $publishArgs += '--dry-run' }
+          if ($env:RELEASE_TAG_PREFIX) {
+              if ($env:RELEASE_TAG_PREFIX -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw 'Invalid release reservation namespace.' }
+              $refsJson = & gh api "repos/$env:GITHUB_REPOSITORY/git/matching-refs/tags/$env:RELEASE_TAG_PREFIX" --paginate --slurp
+              if ($LASTEXITCODE -ne 0) { throw 'Cannot recheck release reservations before publication.' }
+              $prefix = "refs/tags/$env:RELEASE_TAG_PREFIX"
+              $reservations = @((($refsJson | ConvertFrom-Json) | ForEach-Object { $_ }) | Where-Object {
+                  $_.ref.StartsWith($prefix, [StringComparison]::Ordinal) -and
+                  $_.ref.Substring($prefix.Length) -match '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$'
+              })
+              $current = @($reservations | Where-Object { $_.ref -ceq "$prefix$env:NPM_VERSION" })
+              if ($env:NPM_EXECUTE -eq 'true' -and ($current.Count -ne 1 -or
+                  $current[0].object.type -cne 'commit' -or $current[0].object.sha -cne $env:QUALIFIED_SOURCE_SHA)) {
+                  throw 'The release version is not reserved for the qualified source.'
+              }
+              $highest = $reservations | Sort-Object { [Version]::Parse($_.ref.Substring($prefix.Length)) } -Descending | Select-Object -First 1
+              if ($highest -and $highest.object.sha -cne $env:QUALIFIED_SOURCE_SHA) {
+                  if ($highest.object.type -cne 'commit' -or $highest.object.sha -notmatch '^[a-fA-F0-9]{40}$') { throw 'Invalid reserved source identity.' }
+                  $comparisonJson = & gh api "repos/$env:GITHUB_REPOSITORY/compare/$env:QUALIFIED_SOURCE_SHA...$($highest.object.sha)"
+                  if ($LASTEXITCODE -ne 0) { throw 'Cannot recheck release source ancestry.' }
+                  if (($comparisonJson | ConvertFrom-Json).status -cne 'behind') {
+                      throw 'A newer or diverged source reservation prevents this upload. Run version selection again before retrying.'
+                  }
+              }
+          }
           & npm @publishArgs
           if ($LASTEXITCODE -ne 0) { throw 'npm publication or dry run failed.' }
           if ($env:NPM_EXECUTE -eq 'true') {
@@ -171,7 +251,7 @@ jobs:
                   if ($LASTEXITCODE -eq 0) {
                       $dist = $distJson | ConvertFrom-Json
                       if ($dist.integrity -cne $integrity) { throw 'Published archive integrity does not match.' }
-                      if (-not $requireProvenance -or $dist.attestations.provenance) { $verified = $true; break }
+                      if (Test-PublishedProvenance $dist) { $verified = $true; break }
                   }
                   Start-Sleep -Seconds 4
               }
