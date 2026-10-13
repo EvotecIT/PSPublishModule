@@ -21,7 +21,11 @@ jobs:
   contracts:
     strategy:
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            python: '3.13'
+          - os: ubuntu-22.04
+            python: '3.8'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
@@ -31,7 +35,7 @@ jobs:
           dotnet-version: '10.0.303'
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: ${{ matrix.python }}
       - run: dotnet test PowerForge.Backups.Tests/PowerForge.Backups.Tests.csproj -c Release
       - run: python -B -m unittest discover -s Deployment/Monitoring -v
       - if: runner.os == 'Linux'
