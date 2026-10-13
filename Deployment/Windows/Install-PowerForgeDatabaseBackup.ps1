@@ -23,8 +23,11 @@ foreach ($path in @($InstallRoot, $BuildSource, $ConfigSource, $AccessSource)) {
     }
 }
 $config = Get-Content -LiteralPath $ConfigSource -Raw | ConvertFrom-Json
-$plan = Get-DatabaseBackupInstallationPlan -InstallRoot $InstallRoot -TaskName $TaskName -DailyAt $DailyAt -TimeoutMinutes $config.timeoutMinutes
+$planParameters = @{ InstallRoot = $InstallRoot; TaskName = $TaskName; DailyAt = $DailyAt }
+if ($config.PSObject.Properties['timeoutMinutes']) { $planParameters.TimeoutMinutes = $config.timeoutMinutes }
+$plan = Get-DatabaseBackupInstallationPlan @planParameters
 $InstallRoot = $plan.installRoot
+Assert-DatabaseBackupRootsSeparate -InstallRoot $InstallRoot -WorkRoot $config.workRoot
 if (-not [IO.Path]::IsPathRooted($config.workRoot) -or -not (Test-Path -LiteralPath ([IO.Path]::GetPathRoot($config.workRoot)))) {
     throw 'Configured staging volume is not mounted.'
 }

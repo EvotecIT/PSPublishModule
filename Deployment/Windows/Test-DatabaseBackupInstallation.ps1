@@ -4,6 +4,8 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'DatabaseBackupInstallation.ps1')
 $plan = Get-DatabaseBackupInstallationPlan -InstallRoot 'D:\Custom Backup' -TaskName "Custom 'backup" -DailyAt '04:35' -TimeoutMinutes 600
 if ($plan.taskLimitMinutes -ne 660 -or $plan.dailyAt -ne '04:35' -or $plan.installRoot -ne 'D:\Custom Backup') { throw 'Custom installation plan differs.' }
+$defaultPlan = Get-DatabaseBackupInstallationPlan -InstallRoot 'D:\Backup' -TaskName 'Backup' -DailyAt '03:00'
+if ($defaultPlan.timeoutMinutes -ne 240 -or $defaultPlan.taskLimitMinutes -ne 300) { throw 'Omitted timeout did not preserve the runner default.' }
 foreach ($timeout in @(0,1441)) {
     $rejected = $false
     try { Get-DatabaseBackupInstallationPlan -InstallRoot 'D:\Backup' -TaskName 'Backup' -DailyAt '03:00' -TimeoutMinutes $timeout | Out-Null }
@@ -20,6 +22,14 @@ try {
     $acl.SetAccessRuleProtection($true,$false)
     $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule((New-Object Security.Principal.SecurityIdentifier($sid)), 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
     Set-Acl -LiteralPath $root -AclObject $acl
+    $unchangedSecurity = (Get-Acl -LiteralPath $root).Sddl
+    foreach ($layout in @(@($root,$root), @($root,(Join-Path $root 'work')), @((Join-Path $root 'agent'),$root))) {
+        $rejected = $false
+        try { Assert-DatabaseBackupRootsSeparate -InstallRoot $layout[0] -WorkRoot $layout[1] }
+        catch { $rejected = $true }
+        if (-not $rejected -or (Get-Acl -LiteralPath $root).Sddl -ne $unchangedSecurity) { throw 'Overlapping roots were accepted or mutated.' }
+    }
+    Assert-DatabaseBackupRootsSeparate -InstallRoot (Join-Path $root 'agent') -WorkRoot (Join-Path $root 'work')
     $file = Join-Path $root 'config.json'
     Set-Content -LiteralPath $file -Value '{}'
     Assert-DatabaseBackupTreeTrusted -Path $root -TrustedOwners @($sid) -TrustedWriters @($sid)

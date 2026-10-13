@@ -1,5 +1,5 @@
 function Get-DatabaseBackupInstallationPlan {
-    param([string] $InstallRoot, [string] $TaskName, [string] $DailyAt, [int] $TimeoutMinutes)
+    param([string] $InstallRoot, [string] $TaskName, [string] $DailyAt, [int] $TimeoutMinutes = 240)
     if (-not [IO.Path]::IsPathRooted($InstallRoot) -or [string]::IsNullOrWhiteSpace($TaskName) -or $TaskName.Contains('\')) {
         throw 'An absolute installation root and a task name without a task folder are required.'
     }
@@ -13,6 +13,16 @@ function Get-DatabaseBackupInstallationPlan {
         dailyAt = $time.ToString('HH:mm')
         timeoutMinutes = $TimeoutMinutes
         taskLimitMinutes = $TimeoutMinutes + 60
+    }
+}
+
+function Assert-DatabaseBackupRootsSeparate {
+    param([string] $InstallRoot, [string] $WorkRoot)
+    $installation = [IO.Path]::GetFullPath($InstallRoot).TrimEnd('\') + '\'
+    $staging = [IO.Path]::GetFullPath($WorkRoot).TrimEnd('\') + '\'
+    if ($installation.StartsWith($staging, [StringComparison]::OrdinalIgnoreCase) -or
+        $staging.StartsWith($installation, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Installation and staging roots must be separate, without overlap.'
     }
 }
 

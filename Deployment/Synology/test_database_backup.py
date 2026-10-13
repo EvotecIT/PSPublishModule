@@ -78,6 +78,19 @@ class ReceiverContracts(unittest.TestCase):
             self.receiver.maintain()
         self.assertEqual(before, json.loads((self.root / 'maintenance.json').read_text())['dailyKeepers'])
 
+    def test_daily_selection_is_directory_flushed_before_maintenance_succeeds(self):
+        trusted = self.upload()
+        committed = []
+        flush = R.sync_directory
+        def observe(directory):
+            if directory == self.root:
+                committed.append(json.loads((self.root / 'maintenance.json').read_text())['dailyKeepers'])
+            flush(directory)
+        with patch.object(R, 'sync_directory', side_effect=observe):
+            result = self.receiver.maintain()
+        self.assertEqual([result['dailyKeepers']], committed)
+        self.assertEqual(trusted['stamp'], committed[0][trusted['stamp'][:8]])
+
     def test_complete_upload_is_published_with_bound_receipt_and_reverified(self):
         receipt = self.upload()
         status = self.receiver.status(verify=True)

@@ -68,6 +68,7 @@ def write_json(path, value):
         stream.flush()
         os.fsync(stream.fileno())
     temporary.replace(path)
+    sync_directory(path.parent)
 
 
 class Receiver:
