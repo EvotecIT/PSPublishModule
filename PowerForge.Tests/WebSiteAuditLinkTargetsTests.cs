@@ -112,6 +112,23 @@ public sealed class WebSiteAuditLinkTargetsTests : IDisposable
         Assert.Equal(expectedWarning, result.Warnings.Any(warning => warning.Contains("missing referrerpolicy", StringComparison.Ordinal)));
     }
 
+    [Theory]
+    [InlineData(".", "site.v1")]
+    [InlineData("nested/..", "site.v1")]
+    [InlineData("guide.v2", "site")]
+    [InlineData("guide.v2/", "site")]
+    public void Audit_ResolvesExistingDirectoriesRegardlessOfPeriods(string href, string rootName)
+    {
+        string site = Path.Combine(_root, rootName);
+        Directory.CreateDirectory(Path.Combine(site, "guide.v2"));
+        File.WriteAllText(Path.Combine(site, "guide.v2", "index.html"), "<html><head><title>Guide</title></head><body>Guide</body></html>");
+        File.WriteAllText(Path.Combine(site, "index.html"), "<html><head><title>Home</title></head><body><a href=\"" + href + "\">Page</a></body></html>");
+        var result = WebSiteAuditor.Audit(new WebAuditOptions { SiteRoot = site, CheckAssets = false, NavRequired = false });
+        Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
+        Assert.Equal(1, result.LinkCount);
+        Assert.Equal(0, result.BrokenLinkCount);
+    }
+
     private void WritePage(string href) => File.WriteAllText(Path.Combine(_root, "index.html"),
         "<!doctype html><html><head><title>Install</title></head><body><a href=\"" +
         System.Net.WebUtility.HtmlEncode(href) + "\">Install</a></body></html>");
