@@ -23,7 +23,7 @@ try {
     $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule((New-Object Security.Principal.SecurityIdentifier($sid)), 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
     Set-Acl -LiteralPath $root -AclObject $acl
     $unchangedSecurity = (Get-Acl -LiteralPath $root).Sddl
-    foreach ($layout in @(@($root,$root), @($root,(Join-Path $root 'work')), @((Join-Path $root 'agent'),$root))) {
+    foreach ($layout in @(@($root,$root), @($root,(Join-Path $root 'work')), @((Join-Path $root 'agent'),$root), @($root,[IO.Path]::GetPathRoot($root)))) {
         $rejected = $false
         try { Assert-DatabaseBackupRootsSeparate -InstallRoot $layout[0] -WorkRoot $layout[1] }
         catch { $rejected = $true }
@@ -32,6 +32,10 @@ try {
     Assert-DatabaseBackupRootsSeparate -InstallRoot (Join-Path $root 'agent') -WorkRoot (Join-Path $root 'work')
     $file = Join-Path $root 'config.json'
     Set-Content -LiteralPath $file -Value '{}'
+    # Elevated hosts may default new files to Administrators ownership.
+    $fileAcl = Get-Acl -LiteralPath $file
+    $fileAcl.SetOwner((New-Object Security.Principal.SecurityIdentifier($sid)))
+    Set-Acl -LiteralPath $file -AclObject $fileAcl
     Assert-DatabaseBackupTreeTrusted -Path $root -TrustedOwners @($sid) -TrustedWriters @($sid)
     $rejected = $false
     try { Assert-DatabaseBackupTreeTrusted -Path $root -TrustedOwners @('S-1-5-18') -TrustedWriters @($sid) }

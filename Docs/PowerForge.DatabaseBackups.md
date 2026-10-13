@@ -8,6 +8,8 @@ The Windows scheduled task runs without an interactive login. A separate NAS tas
 
 The configuration lists explicit database ids, providers and paths or SQL Server connection strings. SQL Server uses a checksummed `COPY_ONLY` full backup followed by native verification. SQLite uses DbaClientX's online backup API, including a held snapshot for WAL databases. Captures are independent points in time; the manifest records each database's capture time. Cross-service ingestion and cursors need application checks during recovery.
 
+Preflight rejects state outputs that overlap a database, SQLite sidecar, recovery configuration, SSH credential/pin file, executable or the loaded configuration itself. State and its companion receipts remain outside staging. Staging uses a dedicated directory rather than a volume root. Restore drills also reject output/staging paths that overlap the selected recovery folder before writing anything there.
+
 Each SQLite capture passes `quick_check` and configured representative count queries. The set includes a SHA-256 inventory and copies of explicitly selected service configuration. Protected secrets retain their original protection. Keep the recovery credentials for machine-bound DPAPI and environment references in a separate secure credential store so a replacement machine can reprovision them.
 
 The NAS rereads each stored file, verifies its size and SHA-256, binds the capture metadata to a verification receipt, and publishes the complete directory atomically. SSH protects and compresses transport; stored databases use their normal formats. The workstation removes its marked temporary capture directory after the attempt. Failures remain visible in `latest-run.json`; the previous successful receipt remains in `last-success.json`.
@@ -22,16 +24,19 @@ The SQL Server task identity needs `db_backupoperator` on the selected database 
 
 Install `Deployment/Synology/powerforge-database-backup.py` as a root-owned, non-writable executable and provide a private root-owned JSON configuration. Required configuration fields are `root`, `hostId`, `databases` (id-to-provider map), `configurationIds`, `keepDaily`, `maxAgeHours`, `maxArchiveBytes` (total set size ceiling) and `minimumFreeBytes`. Create the root marker `.powerforge-database-backup-root` containing `powerforge-database-backup-v1`, with private permissions and physical `snapshots` and `incoming` child directories.
 
-Create private `.receiver.lock` and `.catalog.lock` files in that root. The receiver/maintenance lock serializes writers; the short catalog guard protects publication and deletion while status reads the previous completed set during uploads. Publication flushes populated directories before acknowledging completion. New uploads must be within `maxAgeHours`; this does not restrict inspection of retained older captures. Maintenance records its daily selections outside the upload inventory and preserves them on failure. Before deleting same-day alternatives, retention rehashes the retained copies for that day. Upload credentials still authorize new backup content; checksums alone do not prove an uncompromised producer, and independent local receipts and restore checks remain required.
+Create private, root-owned `.receiver.lock` and `.catalog.lock` files in that root. Managed directories, markers, receipts and recovery files must also be private and root-owned. The receiver/maintenance lock serializes writers; the short catalog guard protects publication and deletion while status reads the previous completed set during uploads. Publication flushes populated directories before acknowledging completion. The recovery manifest must agree with the header's database/configuration inventories and capture identity. New uploads must be within `maxAgeHours`; this does not restrict inspection of retained older captures. Maintenance records its daily selections outside the upload inventory and preserves them on failure. Each maintenance run rehashes every retained daily recovery point before deleting alternatives. Upload credentials still authorize new backup content; checksums alone do not prove an uncompromised producer, and independent local receipts and restore checks remain required.
 
 Bind a dedicated Ed25519 public key to a fixed source address, `restrict`, and a forced command invoking the receiver with its exact configuration path and `forced` operation. Preserve unrelated authorized keys. Use DSM's supported Task Scheduler interface to run the receiver's `maintain` operation daily. Do not edit its scheduler database.
 
 ## Run and recover
 
 ```text
+PowerForge.Backups.Cli validate <machine-local-config.json>
 PowerForge.Backups.Cli run <machine-local-config.json>
 PowerForge.Backups.Cli restore-drill <config.json> <selected-native-nas-folder> <expected-capture-sha256>
 ```
+
+`validate` checks configuration and path separation without starting a backup or opening databases. The Windows installer runs it before changing the installation and requires its projected state at `status/latest-run.json` under the installation root.
 
 Retrieve the selected native folder from the NAS through the operator access path and pin its `capture.json` SHA-256 from the NAS receipt. The upload key cannot retrieve or remove prior sets. The drill rejects links and unsafe entry paths, verifies database and configuration hashes, performs SQLite `integrity_check`, and restores SQL Server under a generated new database name. DbaClientX refuses replacement of an existing database. Disposable SQL connections disable pooling. The drill checks the restored database and removes its owned database/files after validation; failed attempts and cleanup failures replace current drill health.
 

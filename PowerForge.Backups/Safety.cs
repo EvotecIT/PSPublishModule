@@ -39,7 +39,11 @@ internal static class Safety
         DemandPhysical(path);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temporary = path + ".tmp-" + Guid.NewGuid().ToString("N");
-        File.WriteAllText(temporary, JsonSerializer.Serialize(value, BackupOptions.Json));
+        using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        {
+            JsonSerializer.Serialize(output, value, BackupOptions.Json);
+            output.Flush(true);
+        }
         File.Move(temporary, path, true);
     }
 

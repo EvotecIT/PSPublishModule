@@ -74,17 +74,39 @@ def write_json(path, value):
 class Receiver:
     def __init__(self, config):
         self.config = config
+        self.owner = os.geteuid()
         self.root = canonical(config['root'])
-        if not self.root.is_dir() or (self.root / '.powerforge-database-backup-root').read_text().strip() != MARKER:
+        if not self.root.is_dir():
+            raise ValueError('Backup root missing')
+        self.demand_managed(self.root)
+        self.demand_managed(self.root / '.powerforge-database-backup-root')
+        if (self.root / '.powerforge-database-backup-root').read_text().strip() != MARKER:
             raise ValueError('Backup root marker missing')
         if not 7 <= config['keepDaily'] <= 90 or not 1 <= config['maxAgeHours'] <= 168:
             raise ValueError('Invalid retention/freshness policy')
-        if self.root.stat().st_mode & 0o077:
-            raise ValueError('Backup root must be private')
         self.snapshots = canonical(self.root / 'snapshots')
         self.incoming = canonical(self.root / 'incoming')
         if not self.snapshots.is_dir() or not self.incoming.is_dir():
             raise ValueError('Backup storage directories missing')
+        for path in (self.snapshots, self.incoming, self.root / '.powerforge-database-backup-root', self.root / '.receiver.lock', self.root / '.catalog.lock'):
+            self.demand_managed(path)
+
+    def demand_managed(self, path):
+        canonical(path)
+        metadata = path.stat()
+        if metadata.st_uid != self.owner or metadata.st_mode & 0o077:
+            raise ValueError('Managed backup storage must be private and owned by the receiver identity')
+
+    def validate_manifest(self, manifest, header):
+        expected = [file for file in header['files'] if file['entry'].startswith('config/')]
+        files = manifest.get('files', [])
+        if not isinstance(files, list) or not all(isinstance(file, dict) for file in files):
+            raise ValueError('Invalid recovery file manifest')
+        if (manifest.get('schemaVersion') != 2 or manifest.get('format') != 'native' or
+                manifest.get('databases') != header['databases'] or manifest.get('hostId') != header['hostId'] or
+                manifest.get('stamp') != header['stamp'] or timestamp(manifest['createdAtUtc']) != timestamp(header['createdAtUtc']) or
+                sorted(files, key=lambda file: file.get('entry', '')) != sorted(expected, key=lambda file: file['entry'])):
+            raise ValueError('Native recovery manifest differs')
 
     @contextlib.contextmanager
     def catalog_guard(self, exclusive=False):
@@ -161,8 +183,7 @@ class Receiver:
             if stream.read(1):
                 raise ValueError('Unexpected trailing upload data')
             manifest = json.loads((partial / 'manifest.json').read_text())
-            if manifest.get('schemaVersion') != 2 or manifest.get('format') != 'native' or manifest.get('databases') != header['databases'] or manifest.get('hostId') != header['hostId'] or manifest.get('stamp') != header['stamp']:
-                raise ValueError('Native recovery manifest differs')
+            self.validate_manifest(manifest, header)
             (partial / 'capture.json').write_bytes(line[:-1])
             checksums = ''.join(f['sha256'] + '  ' + f['entry'] + '\n' for f in header['files'])
             checksums += digest(partial / 'capture.json') + '  capture.json\n'
@@ -187,14 +208,17 @@ class Receiver:
 
     def inspect(self, folder, verify=False):
         canonical(folder)
+        self.demand_managed(folder)
         if folder.parent != self.snapshots or not STAMP.fullmatch(folder.name):
             raise ValueError('Unsafe snapshot identity')
         for name in ('READY', 'capture.json', 'SHA256SUMS', 'VERIFIED', 'manifest.json'):
             if not canonical(folder / name).is_file():
                 raise ValueError('Required snapshot file missing')
+            self.demand_managed(folder / name)
         if (folder / 'READY').read_text().strip() != MARKER:
             raise ValueError('Invalid completion marker')
         header = self.validate_header(json.loads((folder / 'capture.json').read_text()))
+        self.validate_manifest(json.loads((folder / 'manifest.json').read_text()), header)
         receipt = json.loads((folder / 'VERIFIED').read_text())
         capture_hash = digest(folder / 'capture.json')
         if header['stamp'] != folder.name or receipt.get('stamp') != folder.name or receipt.get('verified') is not True or receipt.get('captureSha256') != capture_hash:
@@ -204,6 +228,8 @@ class Receiver:
             raise ValueError('Snapshot checksum metadata differs')
         for file in header['files']:
             path = canonical(folder / file['entry'])
+            self.demand_managed(path.parent)
+            self.demand_managed(path)
             if not path.is_file() or path.stat().st_size != file['sizeBytes']:
                 raise ValueError('Native backup file missing or size differs')
             if verify and digest(path) != file['sha256']:
@@ -220,6 +246,8 @@ class Receiver:
             raise ValueError('No completed database backup')
         latest = self.inspect(folders[-1], verify)
         age = (utc_now() - timestamp(latest['createdAtUtc'])).total_seconds()
+        if (self.root / 'maintenance.json').exists():
+            self.demand_managed(self.root / 'maintenance.json')
         return {'healthy': -300 <= age <= self.config['maxAgeHours'] * 3600, 'latest': latest, 'ageSeconds': age,
                 'snapshotCount': len(folders), 'dailyCount': len({p.name[:8] for p in folders}),
                 'keepDaily': self.config['keepDaily'], 'maxAgeHours': self.config['maxAgeHours'],
@@ -237,6 +265,8 @@ class Receiver:
 
     def maintain(self):
         started = utc_now().isoformat()
+        if (self.root / 'maintenance.json').exists():
+            self.demand_managed(self.root / 'maintenance.json')
         previous = json.loads((self.root / 'maintenance.json').read_text()) if (self.root / 'maintenance.json').exists() else {}
         pinned = previous.get('dailyKeepers', {})
         if not isinstance(pinned, dict):
@@ -261,7 +291,7 @@ class Receiver:
                         name = pinned.get(day, folder.name)
                         if not isinstance(name, str) or not STAMP.fullmatch(name) or name[:8] != day:
                             raise ValueError('Invalid retained daily point identity')
-                        self.inspect(self.snapshots / name)
+                        self.inspect(self.snapshots / name, verify=name != latest['latest']['stamp'])
                         keep.add(name)
                         selected_days.add(day)
             daily_keepers = {name[:8]: name for name in keep}
@@ -269,10 +299,6 @@ class Receiver:
             # Also retain the newest receipt so normal same-day retries remain monitorable.
             keep.add(latest['latest']['stamp'])
             removals = [folder for folder in folders if STAMP.fullmatch(folder.name) and folder.name not in keep]
-            losing_alternatives = {folder.name[:8] for folder in removals}
-            for name in keep:
-                if name[:8] in losing_alternatives:
-                    self.inspect(self.snapshots / name, verify=True)
             removed = 0
             with self.catalog_guard(exclusive=True):
                 for folder in removals:

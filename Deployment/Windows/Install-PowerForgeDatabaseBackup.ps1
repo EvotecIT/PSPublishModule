@@ -28,6 +28,11 @@ if ($config.PSObject.Properties['timeoutMinutes']) { $planParameters.TimeoutMinu
 $plan = Get-DatabaseBackupInstallationPlan @planParameters
 $InstallRoot = $plan.installRoot
 Assert-DatabaseBackupRootsSeparate -InstallRoot $InstallRoot -WorkRoot $config.workRoot
+& (Join-Path $BuildSource 'PowerForge.Backups.Cli.exe') validate $ConfigSource
+if ($LASTEXITCODE -ne 0) { throw 'Backup configuration validation failed before installation.' }
+if ([IO.Path]::GetFullPath($config.statePath) -ine (Join-Path $InstallRoot 'status\latest-run.json')) {
+    throw 'Installed state must use the installation status/latest-run.json path.'
+}
 if (-not [IO.Path]::IsPathRooted($config.workRoot) -or -not (Test-Path -LiteralPath ([IO.Path]::GetPathRoot($config.workRoot)))) {
     throw 'Configured staging volume is not mounted.'
 }

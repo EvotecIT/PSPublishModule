@@ -18,6 +18,10 @@ function Get-DatabaseBackupInstallationPlan {
 
 function Assert-DatabaseBackupRootsSeparate {
     param([string] $InstallRoot, [string] $WorkRoot)
+    if (-not [IO.Path]::IsPathRooted($WorkRoot) -or
+        [IO.Path]::GetFullPath($WorkRoot).TrimEnd('\') -eq [IO.Path]::GetPathRoot($WorkRoot).TrimEnd('\')) {
+        throw 'Staging requires a dedicated absolute directory, not a volume root.'
+    }
     $installation = [IO.Path]::GetFullPath($InstallRoot).TrimEnd('\') + '\'
     $staging = [IO.Path]::GetFullPath($WorkRoot).TrimEnd('\') + '\'
     if ($installation.StartsWith($staging, [StringComparison]::OrdinalIgnoreCase) -or

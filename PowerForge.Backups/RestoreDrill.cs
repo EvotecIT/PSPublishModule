@@ -12,6 +12,7 @@ public sealed class RestoreDrill
         Action<string>? log = null, CancellationToken cancellationToken = default)
     {
         options.Validate();
+        options.DemandSeparatedStorage([Path.GetFullPath(selectedFolder)]);
         log ??= _ => { };
         Safety.DemandPhysical(options.WorkRoot);
         Directory.CreateDirectory(options.WorkRoot);

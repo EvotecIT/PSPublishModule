@@ -18,6 +18,7 @@ spec.loader.exec_module(R)
 
 class ReceiverContracts(unittest.TestCase):
     def setUp(self):
+        self.original_umask = os.umask(0o077)
         self.temp = tempfile.TemporaryDirectory()
         self.root = pathlib.Path(self.temp.name).resolve()
         self.root.chmod(0o700)
@@ -31,18 +32,27 @@ class ReceiverContracts(unittest.TestCase):
         self.receiver = R.Receiver(self.config)
 
     def tearDown(self):
-        self.temp.cleanup()
+        try:
+            self.temp.cleanup()
+        finally:
+            os.umask(self.original_umask)
 
-    def upload(self, days=0, suffix='01234567', mutate=None, dotnet_timestamp=False, backfill=False):
+    def upload(self, days=0, suffix='01234567', mutate=None, dotnet_timestamp=False, backfill=False, mutate_manifest=None):
         now = (R.utc_now() - dt.timedelta(days=days, seconds=1)).replace(microsecond=0)
         created = now.strftime('%Y-%m-%dT%H:%M:%S') + '.1234567+00:00' if dotnet_timestamp else now.isoformat()
         stamp = now.strftime('%Y%m%dT%H%M%SZ') + '-' + suffix
         database = b'SQLite format 3\x00synthetic-fixture'
         databases = [{'id': 'sample', 'provider': 'sqlite', 'entry': 'sample.sqlite', 'capturedAtUtc': created,
                       'verified': True, 'sizeBytes': len(database), 'sha256': hashlib.sha256(database).hexdigest()}]
-        manifest = json.dumps({'schemaVersion': 2, 'format': 'native', 'hostId': 'sample', 'stamp': stamp, 'databases': databases, 'files': []}).encode()
-        files = [{'entry': name, 'sizeBytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()} for name, data in [('sample.sqlite', database), ('manifest.json', manifest)]]
-        body = database + manifest
+        recovery = [('config/' + identity + '.json', b'{"service":"synthetic-fixture"}') for identity in self.config.get('configurationIds', [])]
+        recovery_files = [{'entry': name, 'sizeBytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()} for name, data in recovery]
+        manifest_data = {'schemaVersion': 2, 'format': 'native', 'hostId': 'sample', 'stamp': stamp, 'createdAtUtc': created, 'databases': databases, 'files': recovery_files}
+        if mutate_manifest:
+            mutate_manifest(manifest_data)
+        manifest = json.dumps(manifest_data).encode()
+        entries = [('sample.sqlite', database)] + recovery + [('manifest.json', manifest)]
+        files = [{'entry': name, 'sizeBytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()} for name, data in entries]
+        body = b''.join(data for _, data in entries)
         header = {'schemaVersion': 2, 'format': 'native', 'hostId': 'sample', 'stamp': stamp,
                   'createdAtUtc': created, 'sizeBytes': len(body), 'databases': databases, 'files': files}
         if mutate:
@@ -59,6 +69,38 @@ class ReceiverContracts(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'freshness window'):
             self.upload(days=14, backfill=True)
         self.assertEqual([trusted['stamp']], [p.name for p in self.receiver.snapshots.iterdir()])
+
+    def test_receiver_rejects_storage_owned_by_another_identity(self):
+        with patch.object(R.os, 'geteuid', return_value=os.geteuid() + 1):
+            with self.assertRaisesRegex(ValueError, 'owned by the receiver identity'):
+                R.Receiver(self.config)
+
+    def test_managed_directories_and_locks_require_trusted_ownership(self):
+        stat = pathlib.Path.stat
+        for target in (self.root / 'snapshots', self.root / 'incoming', self.root / '.receiver.lock', self.root / '.catalog.lock'):
+            def changed(path, *args, **kwargs):
+                metadata = stat(path, *args, **kwargs)
+                if path == target:
+                    values = list(metadata); values[4] = metadata.st_uid + 1
+                    return os.stat_result(values)
+                return metadata
+            with self.subTest(path=target.name), patch.object(pathlib.Path, 'stat', changed):
+                with self.assertRaisesRegex(ValueError, 'owned by the receiver identity'):
+                    R.Receiver(self.config)
+
+    def test_recovery_inventory_mismatch_is_rejected_before_publication(self):
+        self.config['configurationIds'] = ['service']
+        for mutation in (lambda manifest: manifest.update(files=[]), lambda manifest: manifest['files'][0].update(sha256='0' * 64)):
+            with self.assertRaisesRegex(ValueError, 'recovery manifest differs'):
+                self.upload(mutate_manifest=mutation)
+            self.assertEqual([], list(self.receiver.snapshots.iterdir()))
+            self.assertEqual([], list(self.receiver.incoming.iterdir()))
+
+    def test_configuration_inventory_remains_bound_during_status_and_maintenance(self):
+        self.config['configurationIds'] = ['service']
+        receipt = self.upload()
+        self.assertTrue(self.receiver.status(verify=True)['healthy'])
+        self.assertEqual(receipt['stamp'], self.receiver.maintain()['verifiedStamp'])
 
     def test_same_day_upload_cannot_replace_a_previously_retained_daily_point(self):
         trusted = self.upload()
@@ -182,6 +224,17 @@ class ReceiverContracts(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.receiver.maintain()
         self.assertTrue((self.receiver.snapshots / intact['stamp']).exists())
+        self.assertFalse(json.loads((self.root / 'maintenance.json').read_text())['healthy'])
+
+    def test_corruption_in_an_older_unique_daily_point_is_detected(self):
+        self.upload()
+        older = self.upload(days=1)
+        self.receiver.maintain()
+        path = self.receiver.snapshots / older['stamp'] / 'sample.sqlite'
+        path.write_bytes(b'X' * path.stat().st_size)
+        with self.assertRaisesRegex(ValueError, 'hash mismatch'):
+            self.receiver.maintain()
+        self.assertTrue((self.receiver.snapshots / older['stamp']).exists())
         self.assertFalse(json.loads((self.root / 'maintenance.json').read_text())['healthy'])
 
 

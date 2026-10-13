@@ -23,6 +23,7 @@ public sealed class BackupOptions
         var options = JsonSerializer.Deserialize<BackupOptions>(File.ReadAllText(path), Json)
             ?? throw new InvalidDataException("Backup configuration is empty.");
         options.Validate();
+        options.DemandSeparatedStorage([Path.GetFullPath(path)]);
         return options;
     }
 
@@ -34,6 +35,8 @@ public sealed class BackupOptions
             throw new InvalidDataException("Invalid time or space budget.");
         foreach (var path in new[] { WorkRoot, StatePath, Destination.IdentityFile, Destination.KnownHostsFile, Destination.SshExecutable })
             Safety.DemandAbsolute(path);
+        if (Path.GetFullPath(WorkRoot).TrimEnd(Path.DirectorySeparatorChar) == Path.GetPathRoot(WorkRoot)!.TrimEnd(Path.DirectorySeparatorChar))
+            throw new InvalidDataException("Staging requires a dedicated directory, not a volume root.");
         if (!Regex.IsMatch(Destination.Host, "^[a-zA-Z0-9][a-zA-Z0-9.-]{0,252}$") ||
             !Regex.IsMatch(Destination.User, "^[a-zA-Z_][a-zA-Z0-9_-]{0,31}$") || Destination.Port is < 1 or > 65535)
             throw new InvalidDataException("Invalid SSH destination.");
@@ -60,6 +63,28 @@ public sealed class BackupOptions
             Safety.DemandAbsolute(file.Path);
             if (Safety.Overlaps(WorkRoot, file.Path)) throw new InvalidDataException("Recovery files overlap staging.");
         }
+        DemandSeparatedStorage([]);
+    }
+
+    /// <summary>Rejects output aliases before a runner or restore drill can write to protected inputs.</summary>
+    internal void DemandSeparatedStorage(IEnumerable<string> additionalInputs)
+    {
+        var statusDirectory = Path.GetDirectoryName(StatePath)!;
+        var outputs = new[] { StatePath, Path.Combine(statusDirectory, "last-success.json"),
+            Path.Combine(statusDirectory, "restore-drill.json"), Path.Combine(statusDirectory, "restore-drill-success.json") };
+        for (var i = 0; i < outputs.Length; i++)
+        {
+            if (Safety.Overlaps(WorkRoot, outputs[i]) || outputs.Take(i).Any(other => Safety.Overlaps(other, outputs[i])))
+                throw new InvalidDataException("Durable state outputs must be distinct and outside staging.");
+        }
+        var inputs = Databases.Where(d => d.Provider == "sqlite")
+            .SelectMany(d => new[] { d.Database, d.Database + "-wal", d.Database + "-shm", d.Database + "-journal" })
+            .Concat(RecoveryFiles.Select(f => f.Path))
+            .Concat([Destination.IdentityFile, Destination.KnownHostsFile, Destination.SshExecutable])
+            .Concat(additionalInputs);
+        foreach (var input in inputs)
+            if (Safety.Overlaps(WorkRoot, input) || outputs.Any(output => Safety.Overlaps(output, input)))
+                throw new InvalidDataException("Backup outputs overlap a protected input.");
     }
 }
 

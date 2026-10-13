@@ -24,6 +24,19 @@ public sealed class DatabaseBackupContracts : IDisposable
         Assert.Equal(1, Assert.Single(captured.ValidationCounts));
         Assert.Equal(2L, Convert.ToInt64(await client.ExecuteScalarAsync(source, "SELECT COUNT(*) FROM facts")));
         await DatabaseCapture.VerifySqliteAsync(Path.Combine(run, captured.Entry), spec.ValidationQueries, captured, true, CancellationToken.None);
+        var options = ValidOptions(); options.Databases = [spec];
+        var manifest = new CaptureManifest { HostId = options.HostId, Stamp = "synthetic-capture", CreatedAtUtc = DateTimeOffset.UtcNow };
+        manifest.Databases.Add(captured);
+        var manifestPath = Path.Combine(run, "manifest.json"); Safety.WriteJson(manifestPath, manifest);
+        var header = new { schemaVersion = 2, format = "native", hostId = options.HostId, stamp = manifest.Stamp,
+            createdAtUtc = manifest.CreatedAtUtc, sizeBytes = captured.SizeBytes + new FileInfo(manifestPath).Length,
+            databases = manifest.Databases, files = new[] { new CapturedFile(captured.Entry, captured.SizeBytes, captured.Sha256),
+                new CapturedFile("manifest.json", new FileInfo(manifestPath).Length, await Safety.HashAsync(manifestPath, CancellationToken.None)) } };
+        var capturePath = Path.Combine(run, "capture.json"); Safety.WriteJson(capturePath, header);
+        await new RestoreDrill().VerifyAsync(options, run, await Safety.HashAsync(capturePath, CancellationToken.None));
+        using var restored = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(_root, "restore-drill.json")));
+        Assert.True(restored.RootElement.GetProperty("healthy").GetBoolean());
+        Assert.Empty(Directory.EnumerateDirectories(options.WorkRoot));
     }
 
     [Fact]
@@ -57,9 +70,10 @@ public sealed class DatabaseBackupContracts : IDisposable
     public async Task FailedRestoreAttemptReplacesPreviouslyHealthyAttemptStatus()
     {
         var options = ValidOptions();
-        File.WriteAllText(Path.Combine(_root, "capture.json"), "synthetic");
+        var selected = Path.Combine(_root, "download"); Directory.CreateDirectory(selected);
+        File.WriteAllText(Path.Combine(selected, "capture.json"), "synthetic");
         File.WriteAllText(Path.Combine(_root, "restore-drill.json"), "{\"healthy\":true}");
-        await Assert.ThrowsAsync<InvalidDataException>(() => new RestoreDrill().VerifyAsync(options, _root, new string('0', 64)));
+        await Assert.ThrowsAsync<InvalidDataException>(() => new RestoreDrill().VerifyAsync(options, selected, new string('0', 64)));
         using var state = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(_root, "restore-drill.json")));
         Assert.False(state.RootElement.GetProperty("healthy").GetBoolean());
         Assert.Equal("failed", state.RootElement.GetProperty("status").GetString());
@@ -70,6 +84,73 @@ public sealed class DatabaseBackupContracts : IDisposable
     public void InvalidHostIdentityCannotEnterSshOrDestinationProtocol()
     {
         var options = ValidOptions(); options.HostId = "../../other";
+        Assert.Throws<InvalidDataException>(options.Validate);
+    }
+
+    [Theory]
+    [InlineData("sqlite")]
+    [InlineData("sqlite-wal")]
+    [InlineData("sqlite-shm")]
+    [InlineData("sqlite-journal")]
+    [InlineData("recovery")]
+    [InlineData("ssh-key")]
+    [InlineData("ssh-pins")]
+    [InlineData("ssh-executable")]
+    [InlineData("success-companion")]
+    [InlineData("restore-companion")]
+    public async Task ProtectedInputsCannotBeReplacedByAnyRunStateOutput(string alias)
+    {
+        var options = ValidOptions();
+        var input = alias switch
+        {
+            "sqlite" => options.Databases[0].Database,
+            "sqlite-wal" => options.Databases[0].Database + "-wal",
+            "sqlite-shm" => options.Databases[0].Database + "-shm",
+            "sqlite-journal" => options.Databases[0].Database + "-journal",
+            "ssh-key" => options.Destination.IdentityFile,
+            "ssh-pins" => options.Destination.KnownHostsFile,
+            "ssh-executable" => options.Destination.SshExecutable,
+            "success-companion" => Path.Combine(_root, "last-success.json"),
+            "restore-companion" => Path.Combine(_root, "restore-drill.json"),
+            _ => Path.Combine(_root, "service.json")
+        };
+        if (alias is "recovery" or "success-companion" or "restore-companion")
+            options.RecoveryFiles = [new() { Id = "service", Path = input }];
+        if (alias is not ("success-companion" or "restore-companion")) options.StatePath = input;
+        File.WriteAllText(input, "preserve the protected input");
+        await Assert.ThrowsAsync<InvalidDataException>(() => new DatabaseBackupRunner().RunAsync(options));
+        Assert.Equal("preserve the protected input", File.ReadAllText(input));
+        Assert.False(Directory.Exists(options.WorkRoot));
+    }
+
+    [Fact]
+    public void LoadingConfigurationRejectsOutputsThatWouldReplaceThatConfiguration()
+    {
+        var options = ValidOptions();
+        var path = Path.Combine(_root, "config.json"); options.StatePath = path;
+        var original = System.Text.Json.JsonSerializer.Serialize(options, BackupOptions.Json);
+        File.WriteAllText(path, original);
+        Assert.Throws<InvalidDataException>(() => BackupOptions.Load(path));
+        Assert.Equal(original, File.ReadAllText(path));
+    }
+
+    [Fact]
+    public async Task RestoreDrillCannotWriteIntoTheSelectedRecoveryFolder()
+    {
+        var options = ValidOptions();
+        var selected = Path.Combine(_root, "download"); Directory.CreateDirectory(selected);
+        options.StatePath = Path.Combine(selected, "state.json");
+        var receipt = Path.Combine(selected, "restore-drill.json");
+        File.WriteAllText(receipt, "preserve selected recovery files");
+        await Assert.ThrowsAsync<InvalidDataException>(() => new RestoreDrill().VerifyAsync(options, selected, new string('0', 64)));
+        Assert.Equal("preserve selected recovery files", File.ReadAllText(receipt));
+        Assert.False(Directory.Exists(options.WorkRoot));
+    }
+
+    [Fact]
+    public void StagingCannotUseAnEntireMountedVolume()
+    {
+        var options = ValidOptions(); options.WorkRoot = Path.GetPathRoot(_root)!;
         Assert.Throws<InvalidDataException>(options.Validate);
     }
 
