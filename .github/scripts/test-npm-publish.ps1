@@ -80,8 +80,28 @@ function global:gh {
     if ($args[1] -like 'repos/example/widget/compare/*') { return @{status=$global:npmQualification_comparison} | ConvertTo-Json -Compress }
     throw 'Unexpected GitHub metadata request.'
 }
-function global:Start-Sleep { param([int]$Seconds) }
+function global:Get-Date { $global:npmQualification_now }
+function global:Start-Sleep {
+    param([int]$Seconds)
+    $global:npmQualification_sleeps.Add($Seconds)
+    $global:npmQualification_now = $global:npmQualification_now.AddSeconds($Seconds)
+}
+function global:Get-RegistryReadbackFixture {
+    $global:npmQualification_viewCalls++
+    $global:npmQualification_now = $global:npmQualification_now.AddSeconds($global:npmQualification_readbackSeconds)
+    if ($global:npmQualification_viewCalls -le $global:npmQualification_pendingReads) {
+        if ($global:npmQualification_readbackStatus -eq 0) { throw [Net.Http.HttpRequestException]::new('Synthetic transport failure') }
+        return [pscustomobject]@{StatusCode=$global:npmQualification_readbackStatus}
+    }
+    $dist = @{integrity=$global:npmQualification_registryIntegrity}
+    if ($global:npmQualification_registryProvenance -and $global:npmQualification_viewCalls -gt $global:npmQualification_pendingProvenanceReads) { $dist.attestations=@{provenance=@{predicateType='https://slsa.dev/provenance/v1'}} }
+    return [pscustomobject]@{StatusCode=200;Content=(@{name=$global:npmQualification_publishedName;version=$env:NPM_VERSION;dist=$dist} | ConvertTo-Json -Depth 5)}
+}
 function global:Get-NpmProvenanceFixture {
+    $global:npmQualification_attestationReads++
+    if ($global:npmQualification_attestationReads -le $global:npmQualification_pendingAttestationReads) {
+        return [pscustomobject]@{StatusCode=404}
+    }
     $payload=@{
         predicateType='https://slsa.dev/provenance/v1'
         subject=@(@{digest=@{sha512=$global:npmQualification_attestedArchive}})
@@ -94,27 +114,34 @@ function global:Get-NpmProvenanceFixture {
 function global:npm {
     $global:LASTEXITCODE = 0
     if ($args[0] -eq 'publish') { $global:npmQualification_npmSource=$env:GITHUB_SHA; $global:npmQualification_publishCalls++; $global:npmQualification_publishArguments = @($args); return 'MOCK: no registry mutation' }
-    if ($args[0] -eq 'view') {
-        $global:npmQualification_viewCalls++
-        $dist = @{integrity=$global:npmQualification_registryIntegrity}
-        if ($global:npmQualification_registryProvenance) { $dist.attestations=@{provenance=@{predicateType='https://slsa.dev/provenance/v1'}} }
-        $dist | ConvertTo-Json -Depth 5; return
-    }
     throw 'Unexpected npm operation in qualification fixture.'
 }
 function Invoke-Case([string]$Name,[scriptblock]$Operation,[bool]$Reject) {
     $global:npmQualification_publishCalls=0; $global:npmQualification_viewCalls=0; $global:npmQualification_publishArguments=@()
+    $global:npmQualification_attestationReads=0
+    $global:npmQualification_now = [DateTime]::SpecifyKind([DateTime]'2026-01-01', [DateTimeKind]::Utc)
+    $global:npmQualification_sleeps = [Collections.Generic.List[int]]::new()
     $failed=$false; $failure=''
     try { & $Operation | Out-Null } catch { $failed=$true; $failure=$_.Exception.Message }
     if ($failed -ne $Reject) { throw "Unexpected outcome for $Name`: $failure" }
-    $global:npmQualification_results.Add([pscustomobject]@{case=$Name;rejected=$failed;publishCalls=$global:npmQualification_publishCalls;viewCalls=$global:npmQualification_viewCalls;message=$failure})
+    $global:npmQualification_results.Add([pscustomobject]@{case=$Name;rejected=$failed;publishCalls=$global:npmQualification_publishCalls;viewCalls=$global:npmQualification_viewCalls;waitSeconds=($global:npmQualification_sleeps | Measure-Object -Sum).Sum;message=$failure})
 }
+$global:npmQualification_pendingReads=0
+$global:npmQualification_readbackSeconds=0
+$global:npmQualification_pendingProvenanceReads=0
+$global:npmQualification_pendingAttestationReads=0
+$global:npmQualification_readbackStatus=404
+$global:npmQualification_publishedName=$env:NPM_PACKAGE
 $gate = Join-Path $scriptsRoot 'quality.ps1'
 $publisher = Join-Path $scriptsRoot 'archive.ps1'
 function global:Invoke-WebRequest {
-    param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck)
+    param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck, [int]$TimeoutSec)
     if ($Uri.AbsoluteUri -like 'https://registry.npmjs.org/-/npm/v1/attestations/*') { return Get-NpmProvenanceFixture }
     if ($Uri.AbsoluteUri -ne 'https://registry.npmjs.org/%40example%2Fwidget/0.1.0') { throw 'Unexpected registry check.' }
+    if ($global:npmQualification_publishCalls -gt 0) {
+        if ($TimeoutSec -ne 15 -or $Headers['Cache-Control'] -cne 'no-cache') { throw 'Readback requires bounded fresh registry requests.' }
+        return Get-RegistryReadbackFixture
+    }
     return [pscustomobject]@{StatusCode=404}
 }
 
@@ -155,9 +182,47 @@ $env:NPM_VERSION='0.1.0'; $env:GITHUB_REPOSITORY='example/other'
 Invoke-Case 'Wrong provenance repository rejected before publisher' { & $publisher } $true
 $env:GITHUB_REPOSITORY='example/widget'; $env:NPM_EXECUTE='true'; $global:npmQualification_registryIntegrity=$global:npmQualification_integrity
 Invoke-Case 'Public registry identity and provenance accepted' { & $publisher; if ($global:npmQualification_publishCalls -ne 1 -or $global:npmQualification_viewCalls -ne 1 -or $global:npmQualification_publishArguments -contains '--dry-run') { throw 'Publication verification contract failed' } } $false
+$global:npmQualification_pendingReads=27
+Invoke-Case 'Accepted upload becomes visible after twenty-four minutes without another upload' { & $publisher } $false
+if ($global:npmQualification_publishCalls -ne 1 -or $global:npmQualification_viewCalls -ne 28 -or
+    ($global:npmQualification_sleeps | Measure-Object -Sum).Sum -lt 1440 -or
+    ($global:npmQualification_sleeps | Measure-Object -Maximum).Maximum -gt 60) { throw 'Delayed visibility must back off, keep checking and upload only once.' }
+$global:npmQualification_pendingReads=2
+foreach ($status in @(404,408,429,503,0)) {
+    $global:npmQualification_readbackStatus=$status
+    Invoke-Case "Temporary registry read failure $status settles after one upload" { & $publisher } $false
+    if ($global:npmQualification_publishCalls -ne 1 -or $global:npmQualification_viewCalls -ne 3) { throw 'Transient read recovery repeated or skipped publication.' }
+}
+$global:npmQualification_readbackStatus=403
+Invoke-Case 'Registry authorization failure stops verification immediately' { & $publisher } $true
+if ($global:npmQualification_publishCalls -ne 1 -or $global:npmQualification_viewCalls -ne 1 -or $global:npmQualification_sleeps.Count -ne 0) { throw 'Authorization failure must not wait or upload again.' }
+$global:npmQualification_readbackStatus=404
+$global:npmQualification_pendingReads=[int]::MaxValue
+Invoke-Case 'Permanent publication invisibility fails at the bounded deadline' { & $publisher } $true
+if ($global:npmQualification_publishCalls -ne 1 -or ($global:npmQualification_sleeps | Measure-Object -Sum).Sum -ne 1800 -or
+    $global:npmQualification_results[-1].message -notlike '*within 30 minutes*') { throw 'Visibility exhaustion must preserve the accepted upload and report its deadline.' }
+$global:npmQualification_readbackSeconds=15
+Invoke-Case 'Slow registry reads consume the verification deadline' { & $publisher } $true
+if ($global:npmQualification_publishCalls -ne 1 -or ($global:npmQualification_sleeps | Measure-Object -Sum).Sum -ge 1800 -or
+    $global:npmQualification_now -gt ([DateTime]'2026-01-01').AddSeconds(1815)) { throw 'The deadline must include time spent reading the registry.' }
+$global:npmQualification_readbackSeconds=0
+$global:npmQualification_pendingReads=0
+$global:npmQualification_pendingProvenanceReads=2
+Invoke-Case 'Public metadata waits for required provenance after one upload' { & $publisher } $false
+if ($global:npmQualification_publishCalls -ne 1 -or $global:npmQualification_viewCalls -ne 3) { throw 'Delayed provenance metadata repeated publication.' }
+$global:npmQualification_pendingProvenanceReads=0
+$global:npmQualification_pendingAttestationReads=2
+Invoke-Case 'Public attestation endpoint visibility settles after one upload' { & $publisher } $false
+if ($global:npmQualification_publishCalls -ne 1 -or $global:npmQualification_attestationReads -ne 3) { throw 'Delayed attestation visibility repeated publication.' }
+$global:npmQualification_pendingAttestationReads=0
+$global:npmQualification_publishedName='@example/other'
+Invoke-Case 'Wrong public package identity stops verification immediately' { & $publisher } $true
+if ($global:npmQualification_viewCalls -ne 1 -or $global:npmQualification_sleeps.Count -ne 0) { throw 'Identity mismatch must not be retried.' }
+$global:npmQualification_publishedName=$env:NPM_PACKAGE
 $global:npmQualification_registryProvenance=$false
 Invoke-Case 'Public source still requires registry provenance' { & $publisher } $true
-if ($global:npmQualification_publishCalls -ne 1 -or $global:npmQualification_viewCalls -ne 10) { throw 'Provenance read verification must never republish.' }
+if ($global:npmQualification_publishCalls -ne 1 -or $global:npmQualification_viewCalls -lt 10 -or
+    ($global:npmQualification_sleeps | Measure-Object -Sum).Sum -ne 1800) { throw 'Provenance read verification must wait boundedly and never republish.' }
 $env:SOURCE_PRIVATE='true'
 Invoke-Case 'Private source verifies integrity without unsupported provenance' { & $publisher; if ($global:npmQualification_publishCalls -ne 1 -or $global:npmQualification_viewCalls -ne 1 -or $global:npmQualification_publishArguments -notcontains '--provenance=false') { throw 'Private source publication contract failed.' } } $false
 $global:npmQualification_registryIntegrity='sha512-wrong'
@@ -175,8 +240,9 @@ Invoke-Case 'Bootstrap cannot run as a dry run' { & $publisher } $true
 $env:NPM_EXECUTE='true'; $env:NODE_AUTH_TOKEN=''
 Invoke-Case 'Bootstrap missing credential rejected' { & $publisher } $true
 function global:Invoke-WebRequest {
-    param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck)
+    param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck, [int]$TimeoutSec)
     if ($Uri.AbsoluteUri -like 'https://registry.npmjs.org/-/npm/v1/attestations/*') { return Get-NpmProvenanceFixture }
+    if ($Uri.AbsoluteUri -eq 'https://registry.npmjs.org/%40example%2Fwidget/0.1.0' -and $global:npmQualification_publishCalls -gt 0) { return Get-RegistryReadbackFixture }
     $global:npmQualification_metadataAuthenticated = $Headers.Authorization -ceq "Bearer $env:NODE_AUTH_TOKEN"
     if ($Uri.AbsoluteUri -ne 'https://registry.npmjs.org/%40example%2Fwidget') { throw 'Unexpected metadata destination.' }
     if ($global:npmQualification_privatePackage) {
@@ -226,9 +292,10 @@ $global:npmQualification_registryIntegrity=$global:npmQualification_integrity
 $global:npmQualification_existingStatus=200
 $global:npmQualification_existingIntegrity=$global:npmQualification_integrity
 function global:Invoke-WebRequest {
-    param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck)
+    param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck, [int]$TimeoutSec)
     if ($Uri.AbsoluteUri -like 'https://registry.npmjs.org/-/npm/v1/attestations/*') { return Get-NpmProvenanceFixture }
     if ($Uri.AbsoluteUri -ne 'https://registry.npmjs.org/%40example%2Fwidget/0.1.0') { throw 'Unexpected registry check.' }
+    if ($global:npmQualification_publishCalls -gt 0) { return Get-RegistryReadbackFixture }
     $dist=@{integrity=$global:npmQualification_existingIntegrity}
     if ($global:npmQualification_registryProvenance) { $dist.attestations=@{provenance=@{predicateType='https://slsa.dev/provenance/v1'}} }
     return [pscustomobject]@{StatusCode=$global:npmQualification_existingStatus;Content=(@{name=$env:NPM_PACKAGE;version=$env:NPM_VERSION;dist=$dist} | ConvertTo-Json -Depth 5)}
