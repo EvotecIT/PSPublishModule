@@ -2,6 +2,8 @@
 
 PowerForge.Backups captures consistent SQL Server and SQLite databases and sends their native files and service configuration to a restricted Synology receiver. Each completed folder contains ordinary `.bak`, `.sqlite` and JSON files. DbaClientX owns database capture and SQL Server restore safety. The backup library owns the transfer receipt, local state and disposable restore drill; the CLI supplies command dispatch.
 
+Capture identifiers use Gregorian UTC timestamps regardless of the workstation's culture. Database and recovery-file identifiers must be portable lowercase names; Windows device basenames such as `aux` and `con` are rejected. Redirected SSH output is bounded while reading, and an input or output failure stops the child before waiting for completion.
+
 The Windows scheduled task runs without an interactive login. A separate NAS task verifies stored native files and retains successful captures from fourteen distinct days. Once maintenance selects a daily recovery point, later uploads cannot replace that selection. The latest complete capture is also retained so same-day retries remain available. Failed or stale backups hold retention. The upload key permits only the receiver protocol, with no shell, forwarding, deletion or retention command.
 
 ## Capture and verification
