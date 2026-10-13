@@ -81,6 +81,23 @@ public sealed class WebSiteAuditLinkTargetsTests : IDisposable
     }
 
     [Theory]
+    [InlineData(".")]
+    [InlineData("nested/..")]
+    public void Audit_DoesNotUseASiblingHtmlFileForTheRootDirectory(string href)
+    {
+        string sibling = _root + ".html";
+        File.WriteAllText(sibling, "outside the generated site");
+        try
+        {
+            File.WriteAllText(Path.Combine(_root, "page.html"), "<html><body><a href=\"" + href + "\">Home</a></body></html>");
+            var result = Audit();
+            Assert.False(result.Success);
+            Assert.Equal(1, result.BrokenLinkCount);
+        }
+        finally { File.Delete(sibling); }
+    }
+
+    [Theory]
     [InlineData("data:text/html,Hello", false)]
     [InlineData("https://example.test/frame", true)]
     [InlineData("//example.test/frame", true)]
