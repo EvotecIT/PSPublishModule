@@ -24,8 +24,7 @@ public static class SitemapWriter
         var root = new XElement(ns + (sitemap.IsIndex ? "sitemapindex" : "urlset"), sitemap.Entries.Select(entry =>
         {
             if (entry.IsSitemap != sitemap.IsIndex) throw new ArgumentException("Sitemap entries must match the document kind.", nameof(sitemap));
-            if (!Uri.TryCreate(entry.Url, UriKind.Absolute, out var uri) || (uri.Scheme != "http" && uri.Scheme != "https"))
-                throw new ArgumentException("A sitemap location must be an absolute HTTP(S) URL.", nameof(sitemap));
+            ValidateLocation(entry.Url, nameof(sitemap));
             string? date = entry.LastModifiedText ?? entry.LastModified?.ToString("O", CultureInfo.InvariantCulture);
             return new XElement(ns + (sitemap.IsIndex ? "sitemap" : "url"), new XElement(ns + "loc", entry.Url),
                 date is null ? null : new XElement(ns + "lastmod", date), entry.Extensions.Select(e => new XElement(e)));
@@ -77,6 +76,7 @@ public static class SitemapWriter
         foreach (var entry in entries)
         {
             if (entry.Name != XName.Get("url", Namespace)) throw new ArgumentException("URL-set partitions require sitemap url elements.", nameof(entries));
+            ValidateLocation(entry.Element(XName.Get("loc", Namespace))?.Value, nameof(entries));
             // Standalone element serialization repeats namespace declarations, giving a conservative bound.
             long addition = Encoding.UTF8.GetByteCount(entry.ToString(SaveOptions.DisableFormatting)) + 32;
             if (count > 0 && (count == entryLimit || bytes + addition > partitionByteLimit))
@@ -88,6 +88,13 @@ public static class SitemapWriter
         }
         AddVerified(current);
         return result;
+    }
+
+    private static void ValidateLocation(string? location, string parameterName)
+    {
+        if (location == null || location.Length > 2048 || !Uri.TryCreate(location, UriKind.Absolute, out var uri)
+            || (uri.Scheme != "http" && uri.Scheme != "https"))
+            throw new ArgumentException("A sitemap location must be an absolute HTTP(S) URL of at most 2,048 characters.", parameterName);
     }
 
     /// <summary>Measures the compact UTF-8 XML payload, including its declaration.</summary>

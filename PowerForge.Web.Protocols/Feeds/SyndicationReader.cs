@@ -17,6 +17,7 @@ public static class SyndicationReader {
 
         if (root.Name == XName.Get("feed", "http://www.w3.org/2005/Atom")
             || root.Name == XName.Get("feed", "http://purl.org/atom/ns#")) {
+            string? effectiveSource = ResolveSourceFeedUrl(root, root.Name.Namespace, baseUri, sourceFeedUrl, out _);
             return new SyndicationFeed {
                 Title = ElementValue(root, "title"),
                 Id = EmptyToNull(ElementValue(root, "id")),
@@ -26,16 +27,15 @@ public static class SyndicationReader {
                 Url = GetAtomLink(root, baseUri),
                 // Atom 0.3 feeds use modified.
                 Updated = TryParseDate(FirstNonEmpty(ElementValue(root, "updated"), ElementValue(root, "modified"))),
-                SourceFeedUrl = sourceFeedUrl,
-                Items = ParseAtomItems(root, baseUri, sourceFeedUrl)
+                SourceFeedUrl = effectiveSource,
+                Items = ParseAtomItems(root, baseUri, effectiveSource)
             };
         }
 
         XElement? channel = root.Name == XName.Get("RDF", "http://www.w3.org/1999/02/22-rdf-syntax-ns#")
             ? root.Element(XName.Get("channel", "http://purl.org/rss/1.0/"))
             : root.Name == XName.Get("rss") ? root.Element("channel") : null;
-        XElement? selfLink = channel?.Elements(XName.Get("link", "http://www.w3.org/2005/Atom"))
-            .FirstOrDefault(link => link.Attribute("rel")?.Value == "self" && !string.IsNullOrWhiteSpace(link.Attribute("href")?.Value));
+        string? rssSource = ResolveSourceFeedUrl(channel, "http://www.w3.org/2005/Atom", baseUri, sourceFeedUrl, out var selfLink);
         return new SyndicationFeed {
             Title = channel == null ? string.Empty : ElementValue(channel, channel.Name.Namespace, "title"),
             Description = channel == null ? null : EmptyToNull(ElementValue(channel, "description")),
@@ -45,12 +45,19 @@ public static class SyndicationReader {
             Url = channel == null ? string.Empty : ResolveUrl(ElementValue(channel, channel.Name.Namespace, "link"), baseUri),
             Updated = channel == null ? null : TryParseDate(FirstNonEmpty(ElementValue(channel, "lastBuildDate"), ElementValue(channel, "pubDate"),
                 ElementValue(channel, DublinCore, "date"))),
-            SourceFeedUrl = sourceFeedUrl ?? (selfLink == null ? null : EmptyToNull(ResolveUrl(
-                selfLink.Attribute("href")!.Value, EffectiveBase(selfLink, baseUri)))),
+            SourceFeedUrl = rssSource,
             Items = ParseRssItems(channel == null ? Enumerable.Empty<XElement>()
                 : root.Name.LocalName == "RDF" ? root.Elements(XName.Get("item", "http://purl.org/rss/1.0/"))
-                : channel.Elements("item"), baseUri, sourceFeedUrl)
+                : channel.Elements("item"), baseUri, rssSource)
         };
+    }
+
+    private static string? ResolveSourceFeedUrl(XElement? container, XNamespace ns, Uri? baseUri,
+        string? explicitSource, out XElement? selfLink) {
+        selfLink = container?.Elements(ns + "link").FirstOrDefault(link => link.Attribute("rel")?.Value == "self"
+            && !string.IsNullOrWhiteSpace(link.Attribute("href")?.Value));
+        return explicitSource ?? (selfLink == null ? null : EmptyToNull(ResolveUrl(
+            selfLink.Attribute("href")!.Value, EffectiveBase(selfLink, baseUri))));
     }
 
     private static IReadOnlyList<SyndicationItem> ParseRssItems(IEnumerable<XElement> elements, Uri? baseUri, string? sourceFeedUrl) {
