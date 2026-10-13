@@ -153,16 +153,26 @@ public sealed class DocumentContractsTests
         Assert.Equal(value, ReadJson(JsonLdWriter.Serialize(document))["headline"]);
     }
 
-    [Fact]
-    public void JsonFeedProvidesRequiredContentWhenFullContentIsOmitted()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void JsonFeedProvidesRequiredContentWhenFullContentIsOmitted(string? content)
     {
         var json = SyndicationWriter.WriteJsonFeed(new SyndicationFeed
         {
-            Title = "News", Items = new[] { new SyndicationItem { Id = "42", Summary = "Short summary" } }
+            Title = "News", Items = new[] { new SyndicationItem { Id = "42", Content = content, Summary = "Short summary" } }
         });
         Assert.Contains("content_text", json);
         Assert.Contains("Short summary", json);
         Assert.Contains("https://jsonfeed.org/version/1.1", json);
+#if NETFRAMEWORK
+        var model = new System.Web.Script.Serialization.JavaScriptSerializer().Deserialize<Dictionary<string, object>>(json);
+        var entry = Assert.IsType<Dictionary<string, object>>(Assert.Single(Assert.IsAssignableFrom<System.Collections.IEnumerable>(model["items"])));
+        Assert.Equal("Short summary", entry["content_text"]);
+#else
+        using var model = System.Text.Json.JsonDocument.Parse(json);
+        Assert.Equal("Short summary", Assert.Single(model.RootElement.GetProperty("items").EnumerateArray()).GetProperty("content_text").GetString());
+#endif
     }
 
     private static IDictionary<string, object?> ReadJson(string json)

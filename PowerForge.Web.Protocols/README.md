@@ -34,7 +34,7 @@ var sitemap = SitemapReader.Read(sitemapXml, new Uri(sitemapUrl));
 // The application decides whether to traverse an index and which pages to fetch.
 ```
 
-Feed models normalize supported metadata, including identifiers, separate publication/update dates, authors, categories, and content. Unknown foreign-namespace extension elements are retained. This is not a lossless XML editor: original prefixes, whitespace, and every optional format construct are not preserved. RSS IDs marked `isPermaLink="false"` are not used as fallback article URLs.
+Feed models normalize supported metadata, including identifiers, separate publication/update dates, authors, categories, and content. Unknown foreign-namespace extension elements are retained. This is not a lossless XML editor: original prefixes, whitespace, and every optional format construct are not preserved. RSS IDs marked `isPermaLink="false"` are not used as fallback article URLs. Feed and item source URLs use the caller-supplied source first, then a resolved Atom self link when available.
 
 ## Write publisher-selected entries
 
@@ -59,7 +59,7 @@ var output = SyndicationWriter.WriteRss(new SyndicationFeed
 });
 ```
 
-Atom writers require explicit feed/entry IDs and update dates. JSON Feed requires entry IDs and supplies `content_text` from the summary when a full body is absent. The library does not invent publication dates, authors, site identities, or ordering.
+Atom writers require explicit feed/entry IDs, update dates, and a feed author or authors on every entry. JSON Feed requires entry IDs and supplies `content_text` from the summary when a full body is absent. The library does not invent publication dates, authors, site identities, or ordering.
 
 `SitemapWriter.Create` writes an explicit URL set or index. `Partition` accepts URL XML elements, preserving extension elements, and returns documents bounded by the 50,000-entry and 50 MiB limits. File names, index URLs, ownership markers, and obsolete-file removal remain caller decisions. The bundled sitemaps.org schemas validate the base protocol; extensions require their own validation.
 

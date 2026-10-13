@@ -1,4 +1,6 @@
 using System.Xml.Linq;
+using System.Xml;
+using System.Xml.Schema;
 using PowerForge.Web.Protocols.Feeds;
 using PowerForge.Web.Protocols.Sitemaps;
 
@@ -55,5 +57,25 @@ public sealed class FeedSourceAndSitemapLimitTests
         string location = "https://example.org/" + new string('a', 2048 - "https://example.org/".Length);
         Assert.Single(SitemapWriter.Partition(new[] { new XElement(ns + "url", new XElement(ns + "loc", location)) }));
         Assert.Throws<ArgumentException>(() => SitemapWriter.Partition(new[] { new XElement(ns + "url", new XElement(ns + "loc", location + "a")) }));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TypedModificationDatesValidateAgainstBundledSchemas(bool index)
+    {
+        var date = new DateTimeOffset(2026, 10, 13, 11, 44, 36, TimeSpan.FromHours(2)).AddTicks(1234567);
+        var entry = new SitemapEntry { Url = "https://example.org/page", IsSitemap = index, LastModified = date };
+        var input = new SitemapDocument { IsIndex = index, Entries = new[] { entry } };
+        var output = SitemapWriter.Create(input);
+        var schemas = new XmlSchemaSet();
+        using var reader = XmlReader.Create(new StringReader(index ? SitemapSchemas.GetSitemapIndexSchema() : SitemapSchemas.GetSitemapSchema()));
+        schemas.Add(SitemapWriter.Namespace, reader);
+        var failures = new List<string>();
+        output.Validate(schemas, (_, args) => failures.Add(args.Message));
+        Assert.Empty(failures);
+        Assert.Equal("2026-10-13T11:44:36+02:00", Assert.Single(SitemapReader.Read(output.ToString()).Entries).LastModifiedText);
+        entry.LastModifiedText = "2026-10-13";
+        Assert.Equal("2026-10-13", Assert.Single(SitemapReader.Read(SitemapWriter.Create(input).ToString()).Entries).LastModifiedText);
     }
 }

@@ -92,7 +92,9 @@ public static class SyndicationWriter
             AddOptional(model, "title", item.Title);
             AddOptional(model, "summary", item.Summary);
             // JSON Feed requires content_text or content_html even when the site omits full article bodies.
-            model[string.Equals(item.ContentType, "text", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(item.Content) ? "content_text" : "content_html"] = item.Content ?? item.Summary ?? string.Empty;
+            bool hasContent = !string.IsNullOrEmpty(item.Content);
+            model[string.Equals(item.ContentType, "text", StringComparison.OrdinalIgnoreCase) || !hasContent ? "content_text" : "content_html"]
+                = hasContent ? item.Content : item.Summary ?? string.Empty;
             if (item.Published.HasValue) model["date_published"] = item.Published.Value.ToString("O", CultureInfo.InvariantCulture);
             if (item.Updated.HasValue) model["date_modified"] = item.Updated.Value.ToString("O", CultureInfo.InvariantCulture);
             if (item.Categories.Count > 0) model["tags"] = item.Categories;

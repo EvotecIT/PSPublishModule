@@ -25,7 +25,7 @@ public static class SitemapWriter
         {
             if (entry.IsSitemap != sitemap.IsIndex) throw new ArgumentException("Sitemap entries must match the document kind.", nameof(sitemap));
             ValidateLocation(entry.Url, nameof(sitemap));
-            string? date = entry.LastModifiedText ?? entry.LastModified?.ToString("O", CultureInfo.InvariantCulture);
+            string? date = entry.LastModifiedText ?? entry.LastModified?.ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture);
             return new XElement(ns + (sitemap.IsIndex ? "sitemap" : "url"), new XElement(ns + "loc", entry.Url),
                 date is null ? null : new XElement(ns + "lastmod", date), entry.Extensions.Select(e => new XElement(e)));
         }));
