@@ -69,6 +69,8 @@ public static class SyndicationWriter
                 var content = new XElement(Atom + "content", new XAttribute("type", item.ContentType ?? "html"));
                 if (string.Equals(item.ContentType, "xhtml", StringComparison.OrdinalIgnoreCase))
                     content.Add(ProtocolXml.Parse("<div xmlns=\"http://www.w3.org/1999/xhtml\">" + item.Content + "</div>").Root);
+                else if (AtomContentFormat.IsXmlMediaType(item.ContentType))
+                    content.Add(ProtocolXml.Parse("<fragment>" + item.Content + "</fragment>").Root!.Nodes());
                 else content.Value = item.Content!;
                 entry.Add(content);
             }
