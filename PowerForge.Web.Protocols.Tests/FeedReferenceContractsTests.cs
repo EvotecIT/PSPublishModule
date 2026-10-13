@@ -72,6 +72,24 @@ public sealed class FeedReferenceContractsTests
     }
 
     [Fact]
+    public void EmptyReferencesResolveToTheirXmlBaseWhileMissingAttributesDoNotMatch()
+    {
+        var feed = SyndicationReader.ParseSyndicationFeed("""
+            <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns="http://purl.org/rss/1.0/">
+              <channel><items><rdf:Seq><rdf:li rdf:resource="https://example.org/a"/><rdf:li xml:base="https://example.org/b" rdf:resource=""/><rdf:li xml:base="https://example.org/c"/></rdf:Seq></items></channel>
+              <item xml:base="https://example.org/a" rdf:about=""><title>A</title></item>
+              <item rdf:about="https://example.org/b"><title>B</title></item>
+              <item xml:base="https://example.org/c"><title>Missing</title></item>
+            </rdf:RDF>
+            """);
+        Assert.Equal(new[] { "A", "B" }, feed.Items.Select(i => i.Title));
+        var atom = SyndicationReader.ParseSyndicationFeed("""
+            <feed xmlns="http://www.w3.org/2005/Atom"><entry><content xml:base="https://example.org/body" src=""/></entry></feed>
+            """);
+        Assert.Equal("https://example.org/body", Assert.Single(atom.Items).ContentSourceUrl);
+    }
+
+    [Fact]
     public void EscapingCannotExceedTheLocationLimit()
     {
         string location = "https://example.org/" + new string('é', 400);

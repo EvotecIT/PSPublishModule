@@ -60,12 +60,15 @@ public static class SyndicationReader {
         if (sequence == null) return items;
         var lookup = new Dictionary<string, XElement>(StringComparer.Ordinal);
         foreach (var item in items) {
-            string key = ResolveUrl(item.Attribute(rdf + "about")?.Value ?? string.Empty, EffectiveBase(item, baseUri));
+            var about = item.Attribute(rdf + "about");
+            string key = about == null ? string.Empty : ResolveReference(about.Value, item, baseUri);
             if (key.Length > 0 && !lookup.ContainsKey(key)) lookup.Add(key, item);
         }
         var ordered = new List<XElement>();
         foreach (var reference in sequence.Elements(rdf + "li")) {
-            string key = ResolveUrl(reference.Attribute(rdf + "resource")?.Value ?? string.Empty, EffectiveBase(reference, baseUri));
+            var resource = reference.Attribute(rdf + "resource");
+            if (resource == null) continue;
+            string key = ResolveReference(resource.Value, reference, baseUri);
             if (lookup.TryGetValue(key, out var item)) ordered.Add(item);
         }
         return ordered;
@@ -133,7 +136,7 @@ public static class SyndicationReader {
                 Authors = ParseAuthors(entry, baseUri, atom: true),
                 Extensions = ReadExtensions(entry, atom: true),
                 ContentType = EmptyToNull(content?.Attribute("type")?.Value) ?? (contentSource == null ? "text" : null),
-                ContentSourceUrl = contentSource == null ? null : ResolveContentSource(contentSource, content!, baseUri),
+                ContentSourceUrl = contentSource == null ? null : ResolveReference(contentSource, content!, baseUri),
                 Content = contentSource == null ? AtomContent(content) : null
             });
         }
@@ -141,7 +144,7 @@ public static class SyndicationReader {
         return items;
     }
 
-    private static string ResolveContentSource(string source, XElement content, Uri? baseUri) {
+    private static string ResolveReference(string source, XElement content, Uri? baseUri) {
         var effectiveBase = EffectiveBase(content, baseUri);
         return effectiveBase != null && Uri.TryCreate(effectiveBase, source, out var resolved)
             ? resolved.AbsoluteUri : ResolveUrl(source, effectiveBase);
