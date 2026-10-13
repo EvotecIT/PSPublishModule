@@ -7,9 +7,8 @@ import subprocess
 
 UTC = dt.timezone.utc
 EXPECTED = {'ddct': 'sqlserver', 'ddnext': 'sqlite', 'sectigo': 'sqlite'}
-TASK = 'Evotec Database Backups'
 NAS_TASK = 'Evotec database backup verification and retention'
-INSTALL = pathlib.Path(os.environ.get('ProgramData', r'C:\ProgramData')) / 'PowerForge/DatabaseBackups'
+INSTALL = pathlib.Path(os.environ.get('EVOTEC_DATABASE_BACKUP_ROOT', str(pathlib.Path(os.environ.get('ProgramData', r'C:\ProgramData')) / 'PowerForge/DatabaseBackups')))
 NAS_CONFIG = '/usr/local/etc/powerforge-database-backup-evomagic.json'
 NAS_TOOL = '/usr/local/sbin/powerforge-database-backup'
 NAS_SCRIPT = '/usr/bin/python3 ' + NAS_TOOL + ' --config ' + NAS_CONFIG + ' maintain'
@@ -54,7 +53,10 @@ def evaluate(local, nas, schedule, nas_schedule, restore, now=None):
         problems.append('Latest attempt left staging requiring cleanup')
     if current.get('status') == 'failed':
         problems.append('Most recent backup attempt failed at ' + str(current.get('stage')))
-    if current.get('status') == 'running' and (not current.get('startedAtUtc') or (now - timestamp(current['startedAtUtc'])).total_seconds() > 5 * 3600):
+    run_budget = schedule.get('runBudgetMinutes')
+    if type(run_budget) is not int or not 1 <= run_budget <= 1500:
+        problems.append('Windows backup run budget missing or invalid')
+    elif current.get('status') == 'running' and (not current.get('startedAtUtc') or (now - timestamp(current['startedAtUtc'])).total_seconds() > run_budget * 60):
         problems.append('Backup attempt has exceeded its run budget')
     rows = []
     databases = latest.get('databases', [])
@@ -82,6 +84,30 @@ def run_json(arguments, timeout=40):
     if process.returncode:
         raise RuntimeError('Backup health command failed with exit ' + str(process.returncode))
     return json.loads(process.stdout.decode('utf-8-sig'))
+
+
+def windows_schedule_command(installation):
+    """Compare the actual SYSTEM task with the installer's non-secret policy receipt."""
+    if installation.get('schemaVersion') != 1 or not isinstance(installation.get('taskName'), str) or not installation['taskName'] or '\\' in installation['taskName']:
+        raise ValueError('Installed task identity is invalid')
+    daily = installation.get('dailyAt', '')
+    if dt.datetime.strptime(daily, '%H:%M').strftime('%H:%M') != daily:
+        raise ValueError('Installed daily time is invalid')
+    timeout = installation.get('timeoutMinutes')
+    if type(timeout) is not int or not 1 <= timeout <= 1440 or installation.get('taskLimitMinutes') != timeout + 60:
+        raise ValueError('Installed backup time budget is invalid')
+    def literal(value):
+        return "'" + value.replace("'", "''") + "'"
+    root = installation['installRoot'].rstrip('\\/')
+    execute = root + r'\app\PowerForge.Backups.Cli.exe'
+    arguments = 'run "' + root + r'\config.json' + '"'
+    return ("$ErrorActionPreference='Stop';$t=Get-ScheduledTask -TaskName " + literal(installation['taskName']) +
+            ";$i=$t|Get-ScheduledTaskInfo;$limit=[Xml.XmlConvert]::ToTimeSpan($t.Settings.ExecutionTimeLimit);" +
+            "[pscustomobject]@{enabled=($t.State -ne 'Disabled');daily=(@($t.Triggers).Count -eq 1 -and $t.Triggers[0].DaysInterval -eq 1 -and ([datetime]$t.Triggers[0].StartBoundary).ToString('HH:mm') -eq " + literal(daily) +
+            ");expectedAction=(@($t.Actions).Count -eq 1 -and $t.Actions.Execute -eq " + literal(execute) +
+            " -and $t.Actions.Arguments -eq " + literal(arguments) +
+            " -and $t.Principal.UserId -in @('SYSTEM','S-1-5-18') -and $limit.TotalMinutes -eq " + str(installation['taskLimitMinutes']) +
+            ");runBudgetMinutes=[int]$limit.TotalMinutes;lastResult=$i.LastTaskResult;running=($t.State -eq 'Running');nextRunUtc=$i.NextRunTime.ToUniversalTime().ToString('o')}|ConvertTo-Json -Compress")
 
 
 def main():
@@ -112,8 +138,10 @@ def main():
         current = json.loads((INSTALL / 'status/latest-run.json').read_text(encoding='utf-8-sig'))
         restore_path = INSTALL / 'status/restore-drill.json'
         restore = json.loads(restore_path.read_text(encoding='utf-8-sig')) if restore_path.exists() else {}
-        # Fixed command and installation paths; no credential discovery or writes.
-        command = "$ErrorActionPreference='Stop';$t=Get-ScheduledTask -TaskName 'Evotec Database Backups';$i=$t|Get-ScheduledTaskInfo;[pscustomobject]@{enabled=($t.State -ne 'Disabled');daily=(@($t.Triggers).Count -eq 1 -and $t.Triggers[0].DaysInterval -eq 1 -and ([datetime]$t.Triggers[0].StartBoundary).ToString('HH:mm') -eq '03:00');expectedAction=($t.Actions.Execute -eq 'C:\\ProgramData\\PowerForge\\DatabaseBackups\\app\\PowerForge.Backups.Cli.exe' -and $t.Actions.Arguments -eq 'run \"C:\\ProgramData\\PowerForge\\DatabaseBackups\\config.json\"' -and $t.Principal.UserId -in @('SYSTEM','S-1-5-18'));lastResult=$i.LastTaskResult;running=($t.State -eq 'Running');nextRunUtc=$i.NextRunTime.ToUniversalTime().ToString('o')}|ConvertTo-Json -Compress"
+        installation = json.loads((INSTALL / 'status/installation.json').read_text(encoding='utf-8-sig'))
+        if pathlib.Path(installation['installRoot']).resolve() != INSTALL.resolve():
+            raise ValueError('Installed policy belongs to a different installation root')
+        command = windows_schedule_command(installation)
         schedule = run_json(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', command])
         schedule['currentRun'] = {k: current.get(k) for k in ('status', 'stage', 'startedAtUtc', 'completedAtUtc', 'cleanupErrorType', 'heldStagingPaths')}
         return evaluate(local, nas, schedule, nas_schedule, restore)

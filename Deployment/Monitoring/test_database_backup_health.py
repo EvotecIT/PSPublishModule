@@ -1,6 +1,9 @@
 import datetime as dt
 import importlib.util
 import pathlib
+import json
+import subprocess
+import sys
 import unittest
 
 spec = importlib.util.spec_from_file_location('health', pathlib.Path(__file__).with_name('verify-database-backups.py'))
@@ -17,7 +20,7 @@ class HealthContracts(unittest.TestCase):
                'latest': {'verified': True, 'manifestSha256': 'manifest', 'stamp': 'capture', 'captureSha256': 'hash',
                           'databases': [{'id': k, 'provider': v, 'verified': True, 'sizeBytes': 100, 'capturedAtUtc': stamp} for k, v in H.EXPECTED.items()]},
                'maintenance': {'healthy': True, 'completedAtUtc': stamp}}
-        task = {'enabled': True, 'daily': True, 'expectedAction': True, 'lastResult': 0,
+        task = {'enabled': True, 'daily': True, 'expectedAction': True, 'lastResult': 0, 'runBudgetMinutes': 300,
                 'nextRunUtc': (now + dt.timedelta(hours=20)).isoformat(), 'currentRun': {'status': 'success'}}
         restore = {'healthy': True, 'databaseIds': list(H.EXPECTED), 'completedAtUtc': stamp}
         return local, nas, task, {'healthy': True}, restore, now
@@ -53,6 +56,27 @@ class HealthContracts(unittest.TestCase):
         values = self.fixture()
         values[2]['currentRun'] = {'status': 'success', 'cleanupErrorType': 'IOException'}
         self.assertFalse(H.evaluate(*values)['healthy'])
+
+    def test_configured_long_run_budget_does_not_fail_at_the_default_limit(self):
+        values = self.fixture()
+        values[2].update(running=True, runBudgetMinutes=660, currentRun={'status': 'running', 'startedAtUtc': (values[-1] - dt.timedelta(hours=6)).isoformat()})
+        self.assertTrue(H.evaluate(*values)['healthy'])
+        values[2]['currentRun']['startedAtUtc'] = (values[-1] - dt.timedelta(hours=12)).isoformat()
+        self.assertFalse(H.evaluate(*values)['healthy'])
+
+    @unittest.skipUnless(sys.platform == 'win32', 'Uses Windows Task Scheduler value types')
+    def test_custom_installation_is_checked_and_changed_action_is_detected(self):
+        policy = {'schemaVersion': 1, 'installRoot': "D:\\Backup ' recovery", 'taskName': "Custom 'backup", 'dailyAt': '04:35', 'timeoutMinutes': 600, 'taskLimitMinutes': 660}
+        encoded = json.dumps(policy).replace("'", "''")
+        fixture = "$policy='" + encoded + "'|ConvertFrom-Json;function Get-ScheduledTask { param($TaskName);if($TaskName -ne $policy.taskName){throw 'Wrong task queried'};[pscustomobject]@{State='Ready';Triggers=@([pscustomobject]@{DaysInterval=1;StartBoundary='2026-01-01T04:35:00'});Actions=@([pscustomobject]@{Execute=($policy.installRoot+'\\app\\PowerForge.Backups.Cli.exe');Arguments=('run \"'+$policy.installRoot+'\\config.json\"')});Principal=[pscustomobject]@{UserId='SYSTEM'};Settings=[pscustomobject]@{ExecutionTimeLimit='PT11H'}}};function Get-ScheduledTaskInfo { [pscustomobject]@{LastTaskResult=0;NextRunTime=([datetime]::UtcNow.AddHours(20))} };"
+        for limit, expected in [(660, True), (659, False)]:
+            command = H.windows_schedule_command(dict(policy, timeoutMinutes=limit-60, taskLimitMinutes=limit))
+            process = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', fixture + command], capture_output=True, timeout=30)
+            self.assertEqual(0, process.returncode, process.stderr.decode(errors='replace'))
+            result = json.loads(process.stdout.decode('utf-8-sig'))
+            self.assertTrue(result['daily'])
+            self.assertEqual(expected, result['expectedAction'])
+            self.assertEqual(660, result['runBudgetMinutes'])
 
 
 if __name__ == '__main__':

@@ -131,6 +131,8 @@ class Receiver:
         if len(line) > 65536 or not line.endswith(b'\n'):
             raise ValueError('Invalid protocol header')
         header = self.validate_header(json.loads(line))
+        if (utc_now() - timestamp(header['createdAtUtc'])).total_seconds() > self.config['maxAgeHours'] * 3600:
+            raise ValueError('New uploads must be within the capture freshness window')
         if shutil.disk_usage(self.root).free < header['sizeBytes'] + self.config['minimumFreeBytes']:
             raise OSError('Insufficient NAS space')
         final = canonical(self.snapshots / header['stamp'])
@@ -234,6 +236,10 @@ class Receiver:
 
     def maintain(self):
         started = utc_now().isoformat()
+        previous = json.loads((self.root / 'maintenance.json').read_text()) if (self.root / 'maintenance.json').exists() else {}
+        pinned = previous.get('dailyKeepers', {})
+        if not isinstance(pinned, dict):
+            raise ValueError('Invalid retained daily point record')
         try:
             removed_partial = 0
             # Exclusive receiver lock establishes inactivity; retain recent or uncertain contents.
@@ -251,8 +257,16 @@ class Receiver:
                     self.inspect(folder)
                     day = folder.name[:8]
                     if day not in selected_days and len(selected_days) < self.config['keepDaily']:
-                        keep.add(folder.name)
+                        name = pinned.get(day, folder.name)
+                        if not isinstance(name, str) or not STAMP.fullmatch(name) or name[:8] != day:
+                            raise ValueError('Invalid retained daily point identity')
+                        self.inspect(self.snapshots / name)
+                        keep.add(name)
                         selected_days.add(day)
+            daily_keepers = {name[:8]: name for name in keep}
+            # An upload cannot replace a point already adopted by trusted maintenance.
+            # Also retain the newest receipt so normal same-day retries remain monitorable.
+            keep.add(latest['latest']['stamp'])
             removals = [folder for folder in folders if STAMP.fullmatch(folder.name) and folder.name not in keep]
             losing_alternatives = {folder.name[:8] for folder in removals}
             for name in keep:
@@ -266,12 +280,12 @@ class Receiver:
                 sync_directory(self.snapshots)
             result = {'healthy': True, 'startedAtUtc': started, 'completedAtUtc': utc_now().isoformat(),
                       'verifiedStamp': latest['latest']['stamp'], 'removed': removed, 'removedPartial': removed_partial,
-                      'retainedDaily': len(selected_days)}
+                      'retainedDaily': len(selected_days), 'dailyKeepers': daily_keepers}
             write_json(self.root / 'maintenance.json', result)
             return result
         except Exception as exc:
             write_json(self.root / 'maintenance.json', {'healthy': False, 'startedAtUtc': started,
-                       'completedAtUtc': utc_now().isoformat(), 'errorType': type(exc).__name__})
+                       'completedAtUtc': utc_now().isoformat(), 'errorType': type(exc).__name__, 'dailyKeepers': pinned})
             raise
 
 

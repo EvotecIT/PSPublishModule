@@ -9,6 +9,7 @@ import pathlib
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('receiver', pathlib.Path(__file__).with_name('powerforge-database-backup.py'))
 R = importlib.util.module_from_spec(spec)
@@ -32,7 +33,7 @@ class ReceiverContracts(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def upload(self, days=0, suffix='01234567', mutate=None, dotnet_timestamp=False):
+    def upload(self, days=0, suffix='01234567', mutate=None, dotnet_timestamp=False, backfill=False):
         now = (R.utc_now() - dt.timedelta(days=days, seconds=1)).replace(microsecond=0)
         created = now.strftime('%Y-%m-%dT%H:%M:%S') + '.1234567+00:00' if dotnet_timestamp else now.isoformat()
         stamp = now.strftime('%Y%m%dT%H%M%SZ') + '-' + suffix
@@ -46,7 +47,36 @@ class ReceiverContracts(unittest.TestCase):
                   'createdAtUtc': created, 'sizeBytes': len(body), 'databases': databases, 'files': files}
         if mutate:
             mutate(header)
-        return self.receiver.receive(io.BytesIO(json.dumps(header).encode() + b'\n' + body))
+        stream = io.BytesIO(json.dumps(header).encode() + b'\n' + body)
+        if backfill:
+            return self.receiver.receive(stream)
+        # Historical fixtures were uploaded on their capture day, not backfilled today.
+        with patch.object(R, 'utc_now', return_value=now + dt.timedelta(seconds=1)):
+            return self.receiver.receive(stream)
+
+    def test_upload_cannot_backfill_history_outside_the_freshness_window(self):
+        trusted = self.upload()
+        with self.assertRaisesRegex(ValueError, 'freshness window'):
+            self.upload(days=14, backfill=True)
+        self.assertEqual([trusted['stamp']], [p.name for p in self.receiver.snapshots.iterdir()])
+
+    def test_same_day_upload_cannot_replace_a_previously_retained_daily_point(self):
+        trusted = self.upload()
+        self.receiver.maintain()
+        self.upload(suffix='89abcdef')
+        result = self.receiver.maintain()
+        self.assertEqual(trusted['stamp'], result['dailyKeepers'][trusted['stamp'][:8]])
+        self.assertTrue((self.receiver.snapshots / trusted['stamp']).exists())
+        self.assertTrue(self.receiver.status()['healthy'])
+
+    def test_failed_maintenance_does_not_forget_adopted_daily_points(self):
+        trusted = self.upload()
+        before = self.receiver.maintain()['dailyKeepers']
+        archive = self.receiver.snapshots / trusted['stamp'] / 'sample.sqlite'
+        archive.write_bytes(b'X' * archive.stat().st_size)
+        with self.assertRaises(ValueError):
+            self.receiver.maintain()
+        self.assertEqual(before, json.loads((self.root / 'maintenance.json').read_text())['dailyKeepers'])
 
     def test_complete_upload_is_published_with_bound_receipt_and_reverified(self):
         receipt = self.upload()

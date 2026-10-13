@@ -13,6 +13,7 @@ param(
     [string] $SqlServiceIdentity = 'NT SERVICE\MSSQLSERVER'
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'DatabaseBackupInstallation.ps1')
 foreach ($path in @($InstallRoot, $BuildSource, $ConfigSource, $AccessSource)) {
     if (-not [IO.Path]::IsPathRooted($path)) { throw 'Installation paths must be absolute.' }
     for ($check = $path; $check; $check = Split-Path -Path $check -Parent) {
@@ -22,6 +23,8 @@ foreach ($path in @($InstallRoot, $BuildSource, $ConfigSource, $AccessSource)) {
     }
 }
 $config = Get-Content -LiteralPath $ConfigSource -Raw | ConvertFrom-Json
+$plan = Get-DatabaseBackupInstallationPlan -InstallRoot $InstallRoot -TaskName $TaskName -DailyAt $DailyAt -TimeoutMinutes $config.timeoutMinutes
+$InstallRoot = $plan.installRoot
 if (-not [IO.Path]::IsPathRooted($config.workRoot) -or -not (Test-Path -LiteralPath ([IO.Path]::GetPathRoot($config.workRoot)))) {
     throw 'Configured staging volume is not mounted.'
 }
@@ -42,40 +45,35 @@ if (Test-Path -LiteralPath $InstallRoot) {
     }
 }
 if ($existing -and $existing.State -eq 'Running') { throw 'This backup task is running; installation is held.' }
+$operatorSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$sqlSid = (New-Object Security.Principal.NTAccount($SqlServiceIdentity)).Translate([Security.Principal.SecurityIdentifier]).Value
+$trustedOwners = @('S-1-5-18', 'S-1-5-32-544', $operatorSid)
+$trustedWriters = $trustedOwners
+Assert-DatabaseBackupTreeTrusted -Path $InstallRoot -TrustedOwners $trustedOwners -TrustedWriters $trustedWriters
+Assert-DatabaseBackupTreeTrusted -Path $config.workRoot -TrustedOwners ($trustedOwners + $sqlSid) -TrustedWriters ($trustedWriters + $sqlSid)
 $wasEnabled = -not $existing -or $existing.State -ne 'Disabled'
 if ($existing) { Disable-ScheduledTask -TaskName $TaskName | Out-Null }
-New-Item -ItemType Directory -Path $InstallRoot -Force | Out-Null
-$acl = New-Object Security.AccessControl.DirectorySecurity
-$acl.SetAccessRuleProtection($true, $false)
-foreach ($sid in @('S-1-5-18','S-1-5-32-544')) {
-    $identity = New-Object Security.Principal.SecurityIdentifier($sid)
-    $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($identity, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
+if (-not (Test-Path -LiteralPath $config.workRoot)) {
+    Set-DatabaseBackupTreeSecurity -Path $config.workRoot -TrustedOwners ($trustedOwners + $sqlSid) -TrustedWriters ($trustedWriters + $sqlSid) -AdditionalFullControl $SqlServiceIdentity
 }
-$acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($MonitorIdentity, 'ReadAndExecute', 'None', 'None', 'Allow')))
-Set-Acl -LiteralPath $InstallRoot -AclObject $acl
-Set-Content -LiteralPath (Join-Path $InstallRoot '.powerforge-database-backup-install') -Value 'powerforge-database-backup-v1'
-foreach ($name in @('app','access','tools','status')) { New-Item -ItemType Directory -Path (Join-Path $InstallRoot $name) -Force | Out-Null }
-New-Item -ItemType Directory -Path $config.workRoot -Force | Out-Null
 try { $workerGuard = [IO.File]::Open((Join-Path $config.workRoot '.run.lock'), 'OpenOrCreate', 'ReadWrite', 'None') }
 catch {
     if ($existing -and $wasEnabled) { Enable-ScheduledTask -TaskName $TaskName | Out-Null }
     throw 'A backup or restore worker is active; installation is held.'
 }
 try {
+Set-DatabaseBackupTreeSecurity -Path $InstallRoot -TrustedOwners $trustedOwners -TrustedWriters $trustedWriters -RootReadIdentity $MonitorIdentity
+Set-DatabaseBackupTreeSecurity -Path $config.workRoot -TrustedOwners ($trustedOwners + $sqlSid) -TrustedWriters ($trustedWriters + $sqlSid) -AdditionalFullControl $SqlServiceIdentity
+Set-Content -LiteralPath (Join-Path $InstallRoot '.powerforge-database-backup-install') -Value 'powerforge-database-backup-v1'
+foreach ($name in @('app','access','tools','status')) { New-Item -ItemType Directory -Path (Join-Path $InstallRoot $name) -Force | Out-Null }
 Get-ChildItem -LiteralPath $BuildSource -Force | Copy-Item -Destination (Join-Path $InstallRoot 'app') -Recurse -Force
 Get-ChildItem -LiteralPath $AccessSource -File | Copy-Item -Destination (Join-Path $InstallRoot 'access') -Force
 Copy-Item -LiteralPath $ConfigSource -Destination (Join-Path $InstallRoot 'config.json') -Force
-New-Item -ItemType Directory -Path $config.workRoot -Force | Out-Null
-$workAcl = New-Object Security.AccessControl.DirectorySecurity
-$workAcl.SetAccessRuleProtection($true, $false)
-foreach ($identity in @('SYSTEM','BUILTIN\Administrators',$SqlServiceIdentity)) {
-    $workAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($identity, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
-}
-Set-Acl -LiteralPath $config.workRoot -AclObject $workAcl
 $statusPath = Join-Path $InstallRoot 'status'
 $statusAcl = Get-Acl -LiteralPath $statusPath
 $statusAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($MonitorIdentity, 'ReadAndExecute', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
 Set-Acl -LiteralPath $statusPath -AclObject $statusAcl
+$plan | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $statusPath 'installation.json') -Encoding UTF8
 if ($SqlDatabase) {
     if ($SqlDatabase -notmatch '^[A-Za-z0-9_]+$') { throw 'SQL database name must use simple identifiers.' }
     $sql = "IF SUSER_ID(N'NT AUTHORITY\SYSTEM') IS NULL CREATE LOGIN [NT AUTHORITY\SYSTEM] FROM WINDOWS; GRANT CREATE ANY DATABASE TO [NT AUTHORITY\SYSTEM]; USE [$SqlDatabase]; IF USER_ID(N'NT AUTHORITY\SYSTEM') IS NULL CREATE USER [NT AUTHORITY\SYSTEM] FOR LOGIN [NT AUTHORITY\SYSTEM]; ALTER ROLE db_backupoperator ADD MEMBER [NT AUTHORITY\SYSTEM];"
@@ -85,7 +83,7 @@ if ($SqlDatabase) {
 $action = New-ScheduledTaskAction -Execute (Join-Path $InstallRoot 'app\PowerForge.Backups.Cli.exe') -Argument ('run "' + (Join-Path $InstallRoot 'config.json') + '"') -WorkingDirectory (Join-Path $InstallRoot 'app')
 $trigger = New-ScheduledTaskTrigger -Daily -At $DailyAt
 $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
-$settings = New-ScheduledTaskSettingsSet -Disable -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 5) -RestartCount 2 -RestartInterval (New-TimeSpan -Minutes 15) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+$settings = New-ScheduledTaskSettingsSet -Disable -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes $plan.taskLimitMinutes) -RestartCount 2 -RestartInterval (New-TimeSpan -Minutes 15) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Consistent native SQL Server and SQLite backup sets with NAS verification.' -Force | Out-Null
 $scheduler = New-Object -ComObject 'Schedule.Service'
 $scheduler.Connect()
