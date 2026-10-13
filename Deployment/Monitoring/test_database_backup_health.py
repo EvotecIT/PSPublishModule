@@ -12,9 +12,9 @@ class HealthContracts(unittest.TestCase):
     def fixture(self):
         now = dt.datetime.now(dt.timezone.utc)
         stamp = now.isoformat()
-        local = {'status': 'success', 'stamp': 'capture', 'archiveSha256': 'hash'}
+        local = {'status': 'success', 'stamp': 'capture', 'captureSha256': 'hash'}
         nas = {'healthy': True, 'keepDaily': 14, 'maxAgeHours': 30, 'snapshotCount': 1,
-               'latest': {'verified': True, 'manifestSha256': 'manifest', 'stamp': 'capture', 'sha256': 'hash',
+               'latest': {'verified': True, 'manifestSha256': 'manifest', 'stamp': 'capture', 'captureSha256': 'hash',
                           'databases': [{'id': k, 'provider': v, 'verified': True, 'sizeBytes': 100, 'capturedAtUtc': stamp} for k, v in H.EXPECTED.items()]},
                'maintenance': {'healthy': True, 'completedAtUtc': stamp}}
         task = {'enabled': True, 'daily': True, 'expectedAction': True, 'lastResult': 0,
@@ -47,6 +47,11 @@ class HealthContracts(unittest.TestCase):
         values = self.fixture()
         values[1]['maintenance'] = {}
         values[4].clear()
+        self.assertFalse(H.evaluate(*values)['healthy'])
+
+    def test_manual_success_with_cleanup_failure_is_visible(self):
+        values = self.fixture()
+        values[2]['currentRun'] = {'status': 'success', 'cleanupErrorType': 'IOException'}
         self.assertFalse(H.evaluate(*values)['healthy'])
 
 

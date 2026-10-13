@@ -8,7 +8,7 @@ internal static class DatabaseCapture
         Action<string> log, CancellationToken token)
     {
         var destination = Path.Combine(run, source.Id + (source.Provider == "sqlite" ? ".sqlite" : ".bak"));
-        var result = new CapturedDatabase { Id = source.Id, Provider = source.Provider };
+        var result = new CapturedDatabase { Id = source.Id, Provider = source.Provider, CapturedAtUtc = DateTimeOffset.UtcNow };
         if (source.Provider == "sqlite")
         {
             Safety.DemandPhysical(source.Database);
@@ -22,7 +22,6 @@ internal static class DatabaseCapture
             });
             await client.BackupDatabaseAsync(source.Database, destination, SqliteBackupMethod.Auto,
                 new SqliteBackupOptions { PagesPerStep = 1024 }, progress, token);
-            result.CapturedAtUtc = DateTimeOffset.UtcNow;
             await VerifySqliteAsync(destination, source.ValidationQueries, result, false, token);
         }
         else
@@ -31,7 +30,6 @@ internal static class DatabaseCapture
             var backup = await client.BackupDatabaseCopyOnlyToDiskAsync(source.ConnectionString, source.Database,
                 run, 7200, token);
             File.Move(backup.ServerBackupPath, destination);
-            result.CapturedAtUtc = DateTimeOffset.UtcNow;
             var identity = backup.Header.Identity;
             result.SqlIdentity = new(identity.SourceDatabaseName, identity.BackupSetGuid, identity.MediaName, identity.MediaSetId);
         }

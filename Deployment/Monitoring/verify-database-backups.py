@@ -32,7 +32,7 @@ def evaluate(local, nas, schedule, nas_schedule, restore, now=None):
         problems.append('NAS retention/freshness policy differs')
     if not latest.get('verified') or not latest.get('manifestSha256'):
         problems.append('NAS verification receipt missing')
-    if local.get('status') != 'success' or local.get('stamp') != latest.get('stamp') or local.get('archiveSha256') != latest.get('sha256'):
+    if local.get('status') != 'success' or local.get('stamp') != latest.get('stamp') or local.get('captureSha256') != latest.get('captureSha256'):
         problems.append('Local successful capture and NAS receipt differ')
     if local.get('cleanupErrorType'):
         problems.append('Local backup staging cleanup failed')
@@ -50,6 +50,8 @@ def evaluate(local, nas, schedule, nas_schedule, restore, now=None):
     if restore.get('healthy') is not True or set(restore.get('databaseIds', [])) != set(EXPECTED) or not restore.get('completedAtUtc') or not -300 <= (now - timestamp(restore['completedAtUtc'])).total_seconds() <= 30 * 86400:
         problems.append('Database restore drill missing, failed or older than 30 days')
     current = schedule.get('currentRun') or {}
+    if current.get('cleanupErrorType') or current.get('heldStagingPaths'):
+        problems.append('Latest attempt left staging requiring cleanup')
     if current.get('status') == 'failed':
         problems.append('Most recent backup attempt failed at ' + str(current.get('stage')))
     if current.get('status') == 'running' and (not current.get('startedAtUtc') or (now - timestamp(current['startedAtUtc'])).total_seconds() > 5 * 3600):
@@ -111,7 +113,7 @@ def main():
         # Fixed command and installation paths; no credential discovery or writes.
         command = "$ErrorActionPreference='Stop';$t=Get-ScheduledTask -TaskName 'Evotec Database Backups';$i=$t|Get-ScheduledTaskInfo;[pscustomobject]@{enabled=($t.State -ne 'Disabled');daily=(@($t.Triggers).Count -eq 1 -and $t.Triggers[0].DaysInterval -eq 1);expectedAction=($t.Actions.Execute -eq 'C:\\ProgramData\\PowerForge\\DatabaseBackups\\app\\PowerForge.Backups.Cli.exe' -and $t.Actions.Arguments -eq 'run \"C:\\ProgramData\\PowerForge\\DatabaseBackups\\config.json\"' -and $t.Principal.UserId -in @('SYSTEM','S-1-5-18'));lastResult=$i.LastTaskResult;running=($t.State -eq 'Running');nextRunUtc=$i.NextRunTime.ToUniversalTime().ToString('o')}|ConvertTo-Json -Compress"
         schedule = run_json(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', command])
-        schedule['currentRun'] = {k: current.get(k) for k in ('status', 'stage', 'startedAtUtc', 'completedAtUtc', 'cleanupErrorType')}
+        schedule['currentRun'] = {k: current.get(k) for k in ('status', 'stage', 'startedAtUtc', 'completedAtUtc', 'cleanupErrorType', 'heldStagingPaths')}
         return evaluate(local, nas, schedule, nas_schedule, restore)
     except Exception as error:
         message = type(error).__name__ + ': ' + str(error)[:180]

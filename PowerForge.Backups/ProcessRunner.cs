@@ -40,7 +40,7 @@ internal static class ProcessRunner
     }
 
     internal static string[] SshArguments(SshDestination destination, string command) =>
-    ["-i", destination.IdentityFile, "-p", destination.Port.ToString(), "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+    ["-C", "-i", destination.IdentityFile, "-p", destination.Port.ToString(), "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
         "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + destination.KnownHostsFile,
         "-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3",
         destination.User + "@" + destination.Host, command];

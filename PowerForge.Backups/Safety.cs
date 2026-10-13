@@ -43,15 +43,25 @@ internal static class Safety
         File.Move(temporary, path, true);
     }
 
-    internal static void RemoveOwnedRun(string root, string run)
+    internal static long RemoveOwnedRun(string root, string run)
     {
         DemandPhysical(root);
         DemandPhysical(run);
         if (!string.Equals(Path.GetDirectoryName(run), Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar),
                 OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) ||
-            !File.Exists(Path.Combine(run, ".powerforge-backup-run")))
+            !File.Exists(Path.Combine(run, ".powerforge-backup-run")) ||
+            File.ReadAllText(Path.Combine(run, ".powerforge-backup-run")).Trim() != "powerforge-database-backup-v1")
             throw new IOException("Refusing to remove an unmarked backup run.");
-        foreach (var path in Directory.EnumerateFileSystemEntries(run, "*", SearchOption.AllDirectories)) DemandPhysical(path);
+        long bytes = 0;
+        var pending = new Stack<string>(); pending.Push(run);
+        while (pending.TryPop(out var directory))
+            foreach (var path in Directory.EnumerateFileSystemEntries(directory))
+            {
+                DemandPhysical(path);
+                if (Directory.Exists(path)) pending.Push(path);
+                else bytes += new FileInfo(path).Length;
+            }
         Directory.Delete(run, true);
+        return bytes;
     }
 }

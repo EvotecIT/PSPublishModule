@@ -3,14 +3,12 @@ using System.Text.RegularExpressions;
 
 namespace PowerForge.Backups;
 
-/// <summary>Machine-local configuration for a consistent encrypted database backup set.</summary>
+/// <summary>Machine-local configuration for a consistent native database backup set.</summary>
 public sealed class BackupOptions
 {
     public string HostId { get; set; } = "";
     public string WorkRoot { get; set; } = "";
     public string StatePath { get; set; } = "";
-    public string AgeExecutable { get; set; } = "";
-    public string Recipient { get; set; } = "";
     public int TimeoutMinutes { get; set; } = 240;
     public long MinimumFreeBytes { get; set; } = 150L * 1024 * 1024 * 1024;
     public SshDestination Destination { get; set; } = new();
@@ -34,10 +32,8 @@ public sealed class BackupOptions
             throw new InvalidDataException("A portable host id is required.");
         if (TimeoutMinutes is < 1 or > 1440 || MinimumFreeBytes < 0)
             throw new InvalidDataException("Invalid time or space budget.");
-        foreach (var path in new[] { WorkRoot, StatePath, AgeExecutable, Destination.IdentityFile, Destination.KnownHostsFile, Destination.SshExecutable })
+        foreach (var path in new[] { WorkRoot, StatePath, Destination.IdentityFile, Destination.KnownHostsFile, Destination.SshExecutable })
             Safety.DemandAbsolute(path);
-        if (!Regex.IsMatch(Recipient, "^age1[a-z0-9]{58}$"))
-            throw new InvalidDataException("An age X25519 public recipient is required.");
         if (!Regex.IsMatch(Destination.Host, "^[a-zA-Z0-9][a-zA-Z0-9.-]{0,252}$") ||
             !Regex.IsMatch(Destination.User, "^[a-zA-Z_][a-zA-Z0-9_-]{0,31}$") || Destination.Port is < 1 or > 65535)
             throw new InvalidDataException("Invalid SSH destination.");
@@ -90,5 +86,4 @@ public sealed class RecoveryFile
 {
     public string Id { get; set; } = "";
     public string Path { get; set; } = "";
-    public bool RecoverDpapiSecrets { get; set; }
 }

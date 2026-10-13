@@ -5,7 +5,6 @@ param(
     [Parameter(Mandatory)][string] $BuildSource,
     [Parameter(Mandatory)][string] $ConfigSource,
     [Parameter(Mandatory)][string] $AccessSource,
-    [Parameter(Mandatory)][string] $AgeSource,
     [Parameter(Mandatory)][string] $MonitorIdentity,
     [string] $TaskName = 'Evotec Database Backups',
     [string] $DailyAt = '03:00',
@@ -14,7 +13,7 @@ param(
     [string] $SqlServiceIdentity = 'NT SERVICE\MSSQLSERVER'
 )
 $ErrorActionPreference = 'Stop'
-foreach ($path in @($InstallRoot, $BuildSource, $ConfigSource, $AccessSource, $AgeSource)) {
+foreach ($path in @($InstallRoot, $BuildSource, $ConfigSource, $AccessSource)) {
     if (-not [IO.Path]::IsPathRooted($path)) { throw 'Installation paths must be absolute.' }
     for ($check = $path; $check; $check = Split-Path -Path $check -Parent) {
         if ((Test-Path -LiteralPath $check) -and ((Get-Item -LiteralPath $check -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
@@ -49,8 +48,6 @@ Set-Content -LiteralPath (Join-Path $InstallRoot '.powerforge-database-backup-in
 foreach ($name in @('app','access','tools','status')) { New-Item -ItemType Directory -Path (Join-Path $InstallRoot $name) -Force | Out-Null }
 Get-ChildItem -LiteralPath $BuildSource -Force | Copy-Item -Destination (Join-Path $InstallRoot 'app') -Recurse -Force
 Get-ChildItem -LiteralPath $AccessSource -File | Copy-Item -Destination (Join-Path $InstallRoot 'access') -Force
-Copy-Item -LiteralPath (Join-Path $AgeSource 'age.exe') -Destination (Join-Path $InstallRoot 'tools\age.exe') -Force
-Copy-Item -LiteralPath (Join-Path $AgeSource 'LICENSE') -Destination (Join-Path $InstallRoot 'tools\age-LICENSE') -Force
 Copy-Item -LiteralPath $ConfigSource -Destination (Join-Path $InstallRoot 'config.json') -Force
 New-Item -ItemType Directory -Path $config.workRoot -Force | Out-Null
 $workAcl = New-Object Security.AccessControl.DirectorySecurity
@@ -73,5 +70,5 @@ $action = New-ScheduledTaskAction -Execute (Join-Path $InstallRoot 'app\PowerFor
 $trigger = New-ScheduledTaskTrigger -Daily -At $DailyAt
 $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 5) -RestartCount 2 -RestartInterval (New-TimeSpan -Minutes 15) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Consistent encrypted SQL Server and SQLite backup sets with NAS verification.' -Force | Out-Null
+Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Consistent native SQL Server and SQLite backup sets with NAS verification.' -Force | Out-Null
 Get-ScheduledTask -TaskName $TaskName | Select-Object TaskName,State

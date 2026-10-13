@@ -54,13 +54,16 @@ public sealed class DatabaseBackupContracts : IDisposable
     }
 
     [Fact]
-    public async Task WrongSelectedArchiveDigestFailsBeforeCreatingRestoreOutput()
+    public async Task FailedRestoreAttemptReplacesPreviouslyHealthyAttemptStatus()
     {
-        var archive = Path.Combine(_root, "archive.age"); File.WriteAllText(archive, "synthetic");
         var options = ValidOptions();
-        await Assert.ThrowsAsync<InvalidDataException>(() => new RestoreDrill().VerifyAsync(options, archive,
-            Path.Combine(_root, "identity"), new string('0', 64)));
-        Assert.Empty(Directory.EnumerateDirectories(_root));
+        File.WriteAllText(Path.Combine(_root, "capture.json"), "synthetic");
+        File.WriteAllText(Path.Combine(_root, "restore-drill.json"), "{\"healthy\":true}");
+        await Assert.ThrowsAsync<InvalidDataException>(() => new RestoreDrill().VerifyAsync(options, _root, new string('0', 64)));
+        using var state = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(_root, "restore-drill.json")));
+        Assert.False(state.RootElement.GetProperty("healthy").GetBoolean());
+        Assert.Equal("failed", state.RootElement.GetProperty("status").GetString());
+        Assert.Empty(Directory.EnumerateDirectories(options.WorkRoot));
     }
 
     [Fact]
@@ -73,7 +76,6 @@ public sealed class DatabaseBackupContracts : IDisposable
     private BackupOptions ValidOptions() => new()
     {
         HostId = "sample", WorkRoot = Path.Combine(_root, "work"), StatePath = Path.Combine(_root, "state.json"),
-        AgeExecutable = Path.Combine(_root, "age"), Recipient = "age1" + new string('q', 58),
         Destination = new() { Host = "nas.example", IdentityFile = Path.Combine(_root, "key"),
             KnownHostsFile = Path.Combine(_root, "known_hosts"), SshExecutable = Path.Combine(_root, "ssh") },
         Databases = [new() { Id = "sample", Provider = "sqlite", Database = Path.Combine(_root, "live.sqlite") }]

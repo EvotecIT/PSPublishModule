@@ -1,15 +1,15 @@
 namespace PowerForge.Backups;
 
-/// <summary>Non-secret inventory bound to an encrypted recovery archive.</summary>
+/// <summary>Non-secret inventory bound to a native recovery set.</summary>
 public sealed class CaptureManifest
 {
-    public int SchemaVersion { get; set; } = 1;
+    public int SchemaVersion { get; set; } = 2;
+    public string Format { get; set; } = "native";
     public string HostId { get; set; } = "";
     public string Stamp { get; set; } = "";
     public DateTimeOffset CreatedAtUtc { get; set; }
     public List<CapturedDatabase> Databases { get; set; } = [];
     public List<CapturedFile> Files { get; set; } = [];
-    public int RecoveredSecretCount { get; set; }
 }
 
 public sealed class CapturedDatabase
@@ -39,9 +39,11 @@ public sealed class BackupRunState
     public DateTimeOffset StartedAtUtc { get; set; }
     public DateTimeOffset? CompletedAtUtc { get; set; }
     public string? ErrorType { get; set; }
-    public string? ArchiveSha256 { get; set; }
-    public long ArchiveBytes { get; set; }
+    public string? CaptureSha256 { get; set; }
+    public long TransferBytes { get; set; }
     public CaptureManifest? Manifest { get; set; }
     public DateTimeOffset? NasVerifiedAtUtc { get; set; }
     public string? CleanupErrorType { get; set; }
+    public long CleanupLogicalBytes { get; set; }
+    public string[] HeldStagingPaths { get; set; } = [];
 }
