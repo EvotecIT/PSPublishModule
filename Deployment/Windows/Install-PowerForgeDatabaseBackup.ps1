@@ -32,12 +32,18 @@ $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 if ($existing -and ($existing.Actions.Execute -ne (Join-Path $InstallRoot 'app\PowerForge.Backups.Cli.exe'))) {
     throw 'A task with this name belongs to another installation.'
 }
-if ($existing -and $existing.State -eq 'Running') { throw 'This backup task is running; installation is held.' }
-$wasEnabled = -not $existing -or $existing.State -ne 'Disabled'
-if ($existing) { Disable-ScheduledTask -TaskName $TaskName | Out-Null }
 if ((Test-Path -LiteralPath $InstallRoot) -and -not (Test-Path -LiteralPath (Join-Path $InstallRoot '.powerforge-database-backup-install'))) {
     throw 'Existing installation root is not marked.'
 }
+if (Test-Path -LiteralPath $InstallRoot) {
+    $installedConfig = Get-Content -LiteralPath (Join-Path $InstallRoot 'config.json') -Raw | ConvertFrom-Json
+    if ([IO.Path]::GetFullPath($installedConfig.workRoot).TrimEnd('\') -ine [IO.Path]::GetFullPath($config.workRoot).TrimEnd('\')) {
+        throw 'An ordinary installation update cannot change its staging root; migrate it separately.'
+    }
+}
+if ($existing -and $existing.State -eq 'Running') { throw 'This backup task is running; installation is held.' }
+$wasEnabled = -not $existing -or $existing.State -ne 'Disabled'
+if ($existing) { Disable-ScheduledTask -TaskName $TaskName | Out-Null }
 New-Item -ItemType Directory -Path $InstallRoot -Force | Out-Null
 $acl = New-Object Security.AccessControl.DirectorySecurity
 $acl.SetAccessRuleProtection($true, $false)
@@ -79,9 +85,11 @@ if ($SqlDatabase) {
 $action = New-ScheduledTaskAction -Execute (Join-Path $InstallRoot 'app\PowerForge.Backups.Cli.exe') -Argument ('run "' + (Join-Path $InstallRoot 'config.json') + '"') -WorkingDirectory (Join-Path $InstallRoot 'app')
 $trigger = New-ScheduledTaskTrigger -Daily -At $DailyAt
 $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
-$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 5) -RestartCount 2 -RestartInterval (New-TimeSpan -Minutes 15) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+$settings = New-ScheduledTaskSettingsSet -Disable -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 5) -RestartCount 2 -RestartInterval (New-TimeSpan -Minutes 15) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Consistent native SQL Server and SQLite backup sets with NAS verification.' -Force | Out-Null
-if (-not $wasEnabled) { Disable-ScheduledTask -TaskName $TaskName | Out-Null }
+$workerGuard.Dispose()
+$workerGuard = $null
+if ($wasEnabled) { Enable-ScheduledTask -TaskName $TaskName | Out-Null }
 Get-ScheduledTask -TaskName $TaskName | Select-Object TaskName,State
 }
 catch {
@@ -89,4 +97,4 @@ catch {
     if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) { Disable-ScheduledTask -TaskName $TaskName | Out-Null }
     throw
 }
-finally { $workerGuard.Dispose() }
+finally { if ($null -ne $workerGuard) { $workerGuard.Dispose() } }
