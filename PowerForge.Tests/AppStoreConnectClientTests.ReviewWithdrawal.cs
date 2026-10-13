@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text;
 
 namespace PowerForge.Tests;
 
@@ -278,4 +279,65 @@ public sealed partial class AppStoreConnectClientTests
             : new[] { WithdrawalItem(versionId, itemState) } });
 
     private static SequenceResponse WithdrawalResponse(object value) => new(HttpStatusCode.OK, JsonSerializer.Serialize(value));
+
+    [Fact]
+    public async Task ReviewWithdrawal_requests_included_app_and_build_for_native_links_only_version_projection()
+    {
+        var inventory = WithdrawalInventory().Take(5).ToArray();
+        inventory[0] = WithdrawalResponse(new { data = new[] { new { id = "version-2", type = "appStoreVersions",
+            attributes = new { versionString = "2.2", platform = "MAC_OS", appStoreState = "WAITING_FOR_REVIEW", appVersionState = "WAITING_FOR_REVIEW" } } } });
+        var handler = new NativeWithdrawalProjectionHandler(inventory);
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var plan = await new AppStoreConnectReviewSubmissionService(client).PlanWithdrawalAsync(WithdrawalRequest());
+        Assert.Equal("version-2", plan.AppStoreVersionId);
+        Assert.Equal("build-28", plan.BuildId);
+        Assert.Equal("WAITING_FOR_REVIEW", plan.AppVersionState);
+        Assert.Equal(6, handler.Requests.Count);
+        Assert.All(handler.Requests, request => Assert.Equal(HttpMethod.Get, request.Method));
+        Assert.Contains("include=app%2Cbuild", handler.Requests[^1].Uri.Query);
+    }
+
+    [Fact]
+    public async Task ReviewWithdrawal_refuses_links_only_response_even_with_requested_inclusion()
+    {
+        var handler = new NativeWithdrawalProjectionHandler(WithdrawalInventory().Take(5).ToArray(), supplyBindings: false);
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new AppStoreConnectReviewSubmissionService(client).PlanWithdrawalAsync(WithdrawalRequest()));
+        Assert.Contains("unambiguous app/build", error.Message);
+        Assert.Equal(6, handler.Requests.Count);
+        Assert.All(handler.Requests, request => Assert.Equal(HttpMethod.Get, request.Method));
+        Assert.Contains("include=app%2Cbuild", handler.Requests[^1].Uri.Query);
+    }
+
+    private sealed class NativeWithdrawalProjectionHandler(SequenceResponse[] inventory, bool supplyBindings = true) : HttpMessageHandler
+    {
+        public List<(HttpMethod Method, Uri Uri)> Requests { get; } = new();
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            Requests.Add((request.Method, request.RequestUri!));
+            if (Requests.Count <= inventory.Length)
+            {
+                var response = inventory[Requests.Count - 1];
+                return Task.FromResult(new HttpResponseMessage(response.StatusCode) { Content = new StringContent(response.Content, Encoding.UTF8, "application/json") });
+            }
+            // Native producer evidence: sparse fields alone returned no app relationship,
+            // only build.links.related, and no included resources. Requesting documented
+            // relationship inclusion is the compatibility contract under test.
+            var includesBindings = supplyBindings && request.RequestUri!.Query.Contains("include=app%2Cbuild", StringComparison.Ordinal);
+            object relationships = includesBindings ? new
+            {
+                app = new { data = new { type = "apps", id = "app-1" } },
+                build = new { data = new { type = "builds", id = "build-28" } }
+            } : new
+            {
+                build = new { links = new { related = "https://api.appstoreconnect.apple.com/v1/appStoreVersions/version-2/build" } }
+            };
+            var body = JsonSerializer.Serialize(new { data = new { id = "version-2", type = "appStoreVersions",
+                attributes = new { versionString = "2.2", platform = "MAC_OS", appStoreState = "WAITING_FOR_REVIEW", appVersionState = "WAITING_FOR_REVIEW" }, relationships } });
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
+        }
+    }
 }

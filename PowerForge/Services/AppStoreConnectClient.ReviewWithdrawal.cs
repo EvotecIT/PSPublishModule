@@ -14,7 +14,8 @@ public sealed partial class AppStoreConnectClient
             throw new ArgumentException("App Store version relationship id is required.", nameof(appStoreVersionRelationshipId));
         var query = new Dictionary<string, string?>
         {
-            ["fields[appStoreVersions]"] = "versionString,platform,appStoreState,appVersionState,app,build"
+            ["fields[appStoreVersions]"] = "versionString,platform,appStoreState,appVersionState,app,build",
+            ["include"] = "app,build"
         };
         using var document = await GetJsonAsync(
             $"appStoreVersions/{Uri.EscapeDataString(appStoreVersionRelationshipId.Trim())}" + BuildQuery(query),
