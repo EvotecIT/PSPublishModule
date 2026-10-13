@@ -35,7 +35,7 @@ if ($config.PSObject.Properties['timeoutMinutes']) { $planParameters.TimeoutMinu
 $plan = Get-DatabaseBackupInstallationPlan @planParameters
 $InstallRoot = $plan.installRoot
 Assert-DatabaseBackupRootsSeparate -InstallRoot $InstallRoot -WorkRoot $config.workRoot
-& (Join-Path $BuildSource 'PowerForge.Backups.Cli.exe') validate $ConfigSource
+& (Join-Path $BuildSource 'PowerForge.Backups.Cli.exe') validate-config $ConfigSource
 if ($LASTEXITCODE -ne 0) { throw 'Backup configuration validation failed before installation.' }
 if ([IO.Path]::GetFullPath($config.statePath) -ine (Join-Path $InstallRoot 'status\latest-run.json')) {
     throw 'Installed state must use the installation status/latest-run.json path.'
@@ -83,6 +83,9 @@ foreach ($name in @('app','access','tools','status')) { New-Item -ItemType Direc
 Get-ChildItem -LiteralPath $BuildSource -Force | Copy-Item -Destination (Join-Path $InstallRoot 'app') -Recurse -Force
 Get-ChildItem -LiteralPath $AccessSource -File | Copy-Item -Destination (Join-Path $InstallRoot 'access') -Force
 Copy-Item -LiteralPath $ConfigSource -Destination (Join-Path $InstallRoot 'config.json') -Force
+Assert-DatabaseBackupTransferInputsTrusted -Destination $config.destination -TrustedOwners $trustedOwners -TrustedWriters $trustedWriters
+& (Join-Path $InstallRoot 'app\PowerForge.Backups.Cli.exe') validate (Join-Path $InstallRoot 'config.json')
+if ($LASTEXITCODE -ne 0) { throw 'Installed transfer inputs are unavailable; task remains disabled.' }
 $statusPath = Join-Path $InstallRoot 'status'
 $statusAcl = Get-Acl -LiteralPath $statusPath
 $statusAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($MonitorIdentity, 'ReadAndExecute', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))

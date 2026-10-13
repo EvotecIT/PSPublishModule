@@ -119,6 +119,26 @@ try {
                 if (-not $security.AreAccessRulesProtected -or $writer.Count -eq 0) { throw 'Noncanonical root lost private permissions or its designated writer.' }
                 Assert-DatabaseBackupTreeTrusted -Path $privateRoot -TrustedOwners @('S-1-5-18','S-1-5-32-544') -TrustedWriters $trusted
             }
+            $transferPaths = @((Join-Path $privateRoot 'ssh.exe'), (Join-Path $privateRoot 'identity'), (Join-Path $privateRoot 'known_hosts'))
+            foreach ($transferPath in $transferPaths) { Set-Content -LiteralPath $transferPath -Value 'synthetic transfer input' }
+            $destination = [pscustomobject]@{ sshExecutable = $transferPaths[0]; identityFile = $transferPaths[1]; knownHostsFile = $transferPaths[2] }
+            try {
+                Assert-DatabaseBackupTransferInputsTrusted -Destination $destination -TrustedOwners $trusted -TrustedWriters $trusted
+                foreach ($transferPath in $transferPaths) {
+                    $originalAcl = Get-Acl -LiteralPath $transferPath
+                    $unsafeAcl = Get-Acl -LiteralPath $transferPath
+                    $unsafeAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($everyone,'Write','Allow')))
+                    Set-Acl -LiteralPath $transferPath -AclObject $unsafeAcl
+                    $rejected = $false
+                    try { Assert-DatabaseBackupTransferInputsTrusted -Destination $destination -TrustedOwners $trusted -TrustedWriters $trusted }
+                    catch { $rejected = $true }
+                    Set-Acl -LiteralPath $transferPath -AclObject $originalAcl
+                    if (-not $rejected) { throw 'An untrusted SSH tool, identity or pin writer was accepted.' }
+                }
+                'TRANSFER_INPUT_TRUST_CONTRACTS_PASSED'
+            } finally {
+                foreach ($transferPath in $transferPaths) { Remove-Item -LiteralPath $transferPath -ErrorAction Stop }
+            }
             $security.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($everyone,'Modify','Allow')))
             Set-Acl -LiteralPath $privateRoot -AclObject $security
             $unchangedUntrustedAcl = (Get-Acl -LiteralPath $privateRoot).Sddl

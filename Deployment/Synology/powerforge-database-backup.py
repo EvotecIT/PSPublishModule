@@ -17,6 +17,12 @@ import uuid
 UTC = dt.timezone.utc
 MARKER = 'powerforge-database-backup-v1'
 STAMP = re.compile(r'^\d{8}T\d{6}Z-[0-9a-f]{8}$')
+MAX_METADATA_BYTES = 1024 * 1024
+
+
+def portable_file_id(value):
+    return (isinstance(value, str) and re.fullmatch(r'[a-z][a-z0-9-]{0,31}', value) is not None and
+            re.fullmatch(r'con|prn|aux|nul|com[1-9]|lpt[1-9]', value) is None)
 
 
 def utc_now():
@@ -75,6 +81,13 @@ def write_json(path, value):
 class Receiver:
     def __init__(self, config):
         self.config = config
+        databases = config.get('databases')
+        configurations = config.get('configurationIds', [])
+        if (not isinstance(databases, dict) or not databases or
+                any(not portable_file_id(identity) or provider not in ('sqlite', 'sqlserver') for identity, provider in databases.items()) or
+                not isinstance(configurations, list) or any(not portable_file_id(identity) for identity in configurations) or
+                len(set(configurations)) != len(configurations)):
+            raise ValueError('A non-empty portable database inventory and unique recovery IDs are required')
         self.owner = os.geteuid()
         self.root = canonical(config['root'])
         if not self.root.is_dir():
@@ -92,6 +105,8 @@ class Receiver:
         self.incoming = canonical(self.root / 'incoming')
         if not self.snapshots.is_dir() or not self.incoming.is_dir():
             raise ValueError('Backup storage directories missing')
+        if self.snapshots.stat().st_dev != self.incoming.stat().st_dev:
+            raise ValueError('Incoming and snapshots must share a filesystem for atomic publication')
         for path in (self.snapshots, self.incoming, self.root / '.powerforge-database-backup-root', self.root / '.receiver.lock', self.root / '.catalog.lock'):
             self.demand_managed(path)
 
@@ -141,6 +156,8 @@ class Receiver:
         for file in files:
             if type(file.get('sizeBytes')) is not int or file['sizeBytes'] <= 0 or not re.fullmatch('[a-f0-9]{64}', file.get('sha256', '')):
                 raise ValueError('Invalid native file metadata')
+            if file['entry'] == 'manifest.json' and file['sizeBytes'] > MAX_METADATA_BYTES:
+                raise ValueError('Native recovery metadata size exceeds its bound')
         if sum(f['sizeBytes'] for f in files) != header['sizeBytes']:
             raise ValueError('Native file size inventory differs')
         inventory = {f['entry']: f for f in files}
@@ -160,7 +177,7 @@ class Receiver:
         header = self.validate_header(json.loads(line))
         if (utc_now() - timestamp(header['createdAtUtc'])).total_seconds() > self.config['maxAgeHours'] * 3600:
             raise ValueError('New uploads must be within the capture freshness window')
-        if shutil.disk_usage(self.root).free < header['sizeBytes'] + self.config['minimumFreeBytes']:
+        if shutil.disk_usage(self.incoming).free < header['sizeBytes'] + self.config['minimumFreeBytes']:
             raise OSError('Insufficient NAS space')
         final = canonical(self.snapshots / header['stamp'])
         if final.exists():
@@ -221,6 +238,9 @@ class Receiver:
             if not canonical(folder / name).is_file():
                 raise ValueError('Required snapshot file missing')
             self.demand_managed(folder / name)
+            limit = 65536 if name == 'capture.json' else MAX_METADATA_BYTES
+            if (folder / name).stat().st_size > limit:
+                raise ValueError('Stored recovery metadata size exceeds its bound')
         if (folder / 'READY').read_text().strip() != MARKER:
             raise ValueError('Invalid completion marker')
         header = self.validate_header(json.loads((folder / 'capture.json').read_text()))

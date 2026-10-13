@@ -70,6 +70,33 @@ class ReceiverContracts(unittest.TestCase):
             self.upload(days=14, backfill=True)
         self.assertEqual([trusted['stamp']], [p.name for p in self.receiver.snapshots.iterdir()])
 
+    def test_empty_or_nonportable_database_and_recovery_inventories_are_rejected(self):
+        for databases in ({}, None, {'sample': 'unknown'}, {'sample\n': 'sqlite'}, {'con': 'sqlite'}):
+            with self.subTest(databases=databases), self.assertRaisesRegex(ValueError, 'inventory'):
+                R.Receiver(dict(self.config, databases=databases))
+        for configurations in (None, ['service', 'service'], ['service\n'], ['nul']):
+            with self.subTest(configurations=configurations), self.assertRaisesRegex(ValueError, 'inventory'):
+                R.Receiver(dict(self.config, configurationIds=configurations))
+
+    def test_cross_filesystem_publication_is_rejected_before_receive(self):
+        stat = pathlib.Path.stat
+        def changed(path, *args, **kwargs):
+            metadata = stat(path, *args, **kwargs)
+            if path == self.root / 'incoming':
+                values = list(metadata); values[2] = metadata.st_dev + 1
+                return os.stat_result(values)
+            return metadata
+        with patch.object(pathlib.Path, 'stat', changed):
+            with self.assertRaisesRegex(ValueError, 'share a filesystem'):
+                R.Receiver(self.config)
+        self.assertEqual([], list(self.receiver.incoming.iterdir()))
+
+    def test_capacity_check_uses_the_filesystem_receiving_the_bytes(self):
+        disk_usage = R.shutil.disk_usage
+        with patch.object(R.shutil, 'disk_usage', wraps=disk_usage) as capacity:
+            self.upload()
+        capacity.assert_called_once_with(self.receiver.incoming)
+
     def test_receiver_rejects_storage_owned_by_another_identity(self):
         with patch.object(R.os, 'geteuid', return_value=os.geteuid() + 1):
             with self.assertRaisesRegex(ValueError, 'owned by the receiver identity'):
@@ -95,6 +122,23 @@ class ReceiverContracts(unittest.TestCase):
                 self.upload(mutate_manifest=mutation)
             self.assertEqual([], list(self.receiver.snapshots.iterdir()))
             self.assertEqual([], list(self.receiver.incoming.iterdir()))
+
+    def test_oversized_recovery_metadata_is_rejected_before_it_can_be_parsed(self):
+        self.config['maxArchiveBytes'] = 3 * 1024 * 1024
+        with self.assertRaisesRegex(ValueError, 'metadata size'):
+            self.upload(mutate_manifest=lambda manifest: manifest.update(padding='x' * (1024 * 1024)))
+        self.assertEqual([], list(self.receiver.snapshots.iterdir()))
+        self.assertEqual([], list(self.receiver.incoming.iterdir()))
+        trusted = self.upload()
+        manifest = self.receiver.snapshots / trusted['stamp'] / 'manifest.json'
+        manifest.write_bytes(manifest.read_bytes() + b' ' * (1024 * 1024))
+        loads = R.json.loads
+        def bounded_loads(text, *args, **kwargs):
+            self.assertLessEqual(len(text), 1024 * 1024, 'Oversized metadata reached the JSON parser')
+            return loads(text, *args, **kwargs)
+        with patch.object(R.json, 'loads', side_effect=bounded_loads):
+            with self.assertRaisesRegex(ValueError, 'metadata size'):
+                self.receiver.status()
 
     def test_configuration_inventory_remains_bound_during_status_and_maintenance(self):
         self.config['configurationIds'] = ['service']

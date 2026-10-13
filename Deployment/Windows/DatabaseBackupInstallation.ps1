@@ -92,6 +92,16 @@ function Assert-DatabaseBackupTreeTrusted {
     }
 }
 
+function Assert-DatabaseBackupTransferInputsTrusted {
+    param($Destination, [string[]] $TrustedOwners, [string[]] $TrustedWriters)
+    $trustedInstaller = 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'
+    foreach ($path in @($Destination.sshExecutable, $Destination.identityFile, $Destination.knownHostsFile)) {
+        if ([string]::IsNullOrWhiteSpace($path) -or -not (Test-Path -LiteralPath $path -PathType Leaf)) { throw 'Required SSH transfer input is missing.' }
+        Assert-DatabaseBackupNamespaceTrusted -Path $path -TrustedOwners $TrustedOwners -TrustedWriters $TrustedWriters
+        Assert-DatabaseBackupTreeTrusted -Path $path -TrustedOwners ($TrustedOwners + $trustedInstaller) -TrustedWriters ($TrustedWriters + $trustedInstaller)
+    }
+}
+
 function Set-DatabaseBackupTreeSecurity {
     param([string] $Path, [string[]] $TrustedOwners, [string[]] $TrustedWriters,
           [string] $AdditionalFullControl, [string] $RootReadIdentity)

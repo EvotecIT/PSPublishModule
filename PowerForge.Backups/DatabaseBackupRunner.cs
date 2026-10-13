@@ -28,7 +28,7 @@ public sealed class DatabaseBackupRunner
             var held = new List<string>();
             foreach (var stale in Directory.EnumerateDirectories(options.WorkRoot))
             {
-                if (Regex.IsMatch(Path.GetFileName(stale), "^\\d{8}T\\d{6}Z-[a-f0-9]{8}$") &&
+                if (Regex.IsMatch(Path.GetFileName(stale), "\\A[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8}\\z") &&
                     File.Exists(Path.Combine(stale, ".powerforge-backup-run")))
                 {
                     try { state.CleanupLogicalBytes += Safety.RemoveOwnedRun(options.WorkRoot, stale); }
@@ -39,8 +39,7 @@ public sealed class DatabaseBackupRunner
             state.HeldStagingPaths = held.ToArray();
             if (new DriveInfo(Path.GetPathRoot(options.WorkRoot)!).AvailableFreeSpace < options.MinimumFreeBytes)
                 throw new IOException("Insufficient free staging space.");
-            foreach (var file in options.RecoveryFiles)
-                if (!File.Exists(file.Path)) throw new FileNotFoundException("Required recovery configuration is missing.");
+            options.ValidateCaptureInputs();
             Directory.CreateDirectory(run);
             File.WriteAllText(Path.Combine(run, ".powerforge-backup-run"), "powerforge-database-backup-v1\n");
             var manifest = new CaptureManifest { HostId = options.HostId, Stamp = state.Stamp, CreatedAtUtc = state.StartedAtUtc };

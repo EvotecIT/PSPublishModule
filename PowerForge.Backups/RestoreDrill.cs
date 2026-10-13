@@ -28,7 +28,7 @@ public sealed class RestoreDrill
         {
             Safety.DemandPhysical(selectedFolder);
             var capturePath = Path.Combine(selectedFolder, "capture.json");
-            if (!Regex.IsMatch(expectedCaptureSha256, "^[a-f0-9]{64}$") || await Safety.HashAsync(capturePath, token) != expectedCaptureSha256)
+            if (!Regex.IsMatch(expectedCaptureSha256, "\\A[a-f0-9]{64}\\z") || await Safety.HashAsync(capturePath, token) != expectedCaptureSha256)
                 throw new InvalidDataException("Selected native NAS capture digest differs.");
             var header = JsonSerializer.Deserialize<NativeTransferHeader>(File.ReadAllText(capturePath), BackupOptions.Json)
                 ?? throw new InvalidDataException("Selected native capture is empty.");
@@ -36,7 +36,7 @@ public sealed class RestoreDrill
                 throw new InvalidDataException("Native capture format or source differs.");
             foreach (var file in header.Files)
             {
-                if (!Regex.IsMatch(file.Entry, "^([a-z][a-z0-9-]{0,31}\\.(sqlite|bak)|config/[a-z][a-z0-9-]{0,31}\\.json|manifest\\.json)$"))
+                if (!Regex.IsMatch(file.Entry, "\\A([a-z][a-z0-9-]{0,31}\\.(sqlite|bak)|config/[a-z][a-z0-9-]{0,31}\\.json|manifest\\.json)\\z"))
                     throw new InvalidDataException("Unsafe native file entry.");
                 var path = Path.Combine(selectedFolder, file.Entry.Replace('/', Path.DirectorySeparatorChar));
                 Safety.DemandPhysical(path);

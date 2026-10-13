@@ -30,16 +30,20 @@ public sealed class BackupOptions
 
     public void Validate()
     {
-        if (!Regex.IsMatch(HostId, "^[a-z0-9][a-z0-9-]{0,63}$"))
+        if (string.IsNullOrEmpty(HostId) || !Regex.IsMatch(HostId, "\\A[a-z0-9][a-z0-9-]{0,63}\\z"))
             throw new InvalidDataException("A portable host id is required.");
+        if (Destination is null || Databases is null || RecoveryFiles is null ||
+            Databases.Any(source => source is null) || RecoveryFiles.Any(file => file is null))
+            throw new InvalidDataException("Destination, database and recovery inventories must not be null.");
         if (TimeoutMinutes is < 1 or > 1440 || MinimumFreeBytes < 0)
             throw new InvalidDataException("Invalid time or space budget.");
         foreach (var path in new[] { WorkRoot, StatePath, Destination.IdentityFile, Destination.KnownHostsFile, Destination.SshExecutable })
             Safety.DemandAbsolute(path);
         if (Path.GetFullPath(WorkRoot).TrimEnd(Path.DirectorySeparatorChar) == Path.GetPathRoot(WorkRoot)!.TrimEnd(Path.DirectorySeparatorChar))
             throw new InvalidDataException("Staging requires a dedicated directory, not a volume root.");
-        if (!Regex.IsMatch(Destination.Host, "^[a-zA-Z0-9][a-zA-Z0-9.-]{0,252}$") ||
-            !Regex.IsMatch(Destination.User, "^[a-zA-Z_][a-zA-Z0-9_-]{0,31}$") || Destination.Port is < 1 or > 65535)
+        if (string.IsNullOrEmpty(Destination.Host) || string.IsNullOrEmpty(Destination.User) ||
+            !Regex.IsMatch(Destination.Host, "\\A[a-zA-Z0-9][a-zA-Z0-9.-]{0,252}\\z") ||
+            !Regex.IsMatch(Destination.User, "\\A[a-zA-Z_][a-zA-Z0-9_-]{0,31}\\z") || Destination.Port is < 1 or > 65535)
             throw new InvalidDataException("Invalid SSH destination.");
         if (Databases.Length == 0 || Databases.Select(d => d.Id).Distinct().Count() != Databases.Length)
             throw new InvalidDataException("Unique database sources are required.");
@@ -47,6 +51,8 @@ public sealed class BackupOptions
         {
             if (!IsPortableFileId(source.Id) || source.Provider is not ("sqlite" or "sqlserver"))
                 throw new InvalidDataException("Invalid database id or provider.");
+            if (source.ValidationQueries is null || source.ValidationQueries.Any(string.IsNullOrWhiteSpace))
+                throw new InvalidDataException("Validation queries must be a non-null array of non-empty strings.");
             if (source.Provider == "sqlite")
             {
                 Safety.DemandAbsolute(source.Database);
@@ -67,8 +73,20 @@ public sealed class BackupOptions
         DemandSeparatedStorage([]);
     }
 
-    private static bool IsPortableFileId(string id) => Regex.IsMatch(id, "^[a-z][a-z0-9-]{0,31}$") &&
-        !Regex.IsMatch(id, "^(con|prn|aux|nul|com[1-9]|lpt[1-9])$");
+    private static bool IsPortableFileId(string id) => !string.IsNullOrEmpty(id) && Regex.IsMatch(id, "\\A[a-z][a-z0-9-]{0,31}\\z") &&
+        !Regex.IsMatch(id, "\\A(con|prn|aux|nul|com[1-9]|lpt[1-9])\\z");
+
+    /// <summary>Checks local transfer prerequisites before an expensive capture; it does not contact the NAS.</summary>
+    public void ValidateCaptureInputs()
+    {
+        Validate();
+        foreach (var path in new[] { Destination.SshExecutable, Destination.IdentityFile, Destination.KnownHostsFile }.Concat(RecoveryFiles.Select(file => file.Path)))
+        {
+            Safety.DemandPhysical(path);
+            using var input = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            if (input.Length == 0) throw new InvalidDataException("A required SSH or recovery input is empty.");
+        }
+    }
 
     /// <summary>Rejects output aliases before a runner or restore drill can write to protected inputs.</summary>
     internal void DemandSeparatedStorage(IEnumerable<string> additionalInputs)
