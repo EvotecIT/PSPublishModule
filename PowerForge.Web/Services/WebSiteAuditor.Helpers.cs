@@ -177,14 +177,6 @@ public static partial class WebSiteAuditor
         return false;
     }
 
-    private static bool IsExternalLink(string href)
-    {
-        if (string.IsNullOrWhiteSpace(href)) return false;
-        if (href.StartsWith("//")) return true;
-        return href.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-               href.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
-    }
-
     private static string StripQueryAndFragment(string href)
     {
         var trimmed = href.Trim();
@@ -235,7 +227,7 @@ public static partial class WebSiteAuditor
             return true;
         }
 
-        if (Path.HasExtension(candidate))
+        if (File.Exists(candidate) || Path.HasExtension(candidate))
         {
             if (!File.Exists(candidate) &&
                 TryResolveLocalizedAliasTarget(siteRoot, baseDir, relative, isDirectoryHint: false, out var localizedFilePath))
@@ -356,7 +348,7 @@ public static partial class WebSiteAuditor
         if (baseElement is null) return null;
         var href = baseElement.GetAttribute("href");
         if (string.IsNullOrWhiteSpace(href)) return null;
-        if (IsExternalLink(href)) return null;
+        if (WebLinkClassifier.IsExternalLink(href)) return null;
         if (!href.StartsWith("/", StringComparison.OrdinalIgnoreCase))
         {
             return null;
@@ -1748,7 +1740,7 @@ public static partial class WebSiteAuditor
             if (requireIframeReferrerPolicy)
             {
                 var referrerPolicy = (iframe.GetAttribute("referrerpolicy") ?? string.Empty).Trim();
-                if (IsExternalLink(src) && string.IsNullOrWhiteSpace(referrerPolicy))
+                if (TryGetExternalOrigin(src, out _) && string.IsNullOrWhiteSpace(referrerPolicy))
                     iframeMissingReferrerPolicy.Add(src);
             }
 
@@ -2015,7 +2007,7 @@ public static partial class WebSiteAuditor
         var normalized = StripQueryAndFragment(href).Trim();
         if (string.IsNullOrWhiteSpace(normalized)) return string.Empty;
 
-        if (IsExternalLink(normalized))
+        if (WebLinkClassifier.IsExternalLink(normalized))
             return normalized;
 
         if (!normalized.StartsWith("/", StringComparison.Ordinal))
@@ -2032,7 +2024,7 @@ public static partial class WebSiteAuditor
         var normalized = StripQueryAndFragment(route).Trim();
         if (string.IsNullOrWhiteSpace(normalized))
             return Array.Empty<string>();
-        if (IsExternalLink(normalized))
+        if (WebLinkClassifier.IsExternalLink(normalized))
             return Array.Empty<string>();
 
         normalized = normalized.Replace('\\', '/');

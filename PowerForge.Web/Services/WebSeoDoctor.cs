@@ -384,7 +384,7 @@ public static partial class WebSeoDoctor
                          .Where(static href => !string.IsNullOrWhiteSpace(href))
                          .Select(static href => href!.Trim()))
             {
-                if (ShouldSkipLink(href) || IsExternalLink(href))
+                if (ShouldSkipLink(href) || WebLinkClassifier.IsExternalLink(href))
                     continue;
                 if (!TryResolveLocalTarget(siteRoot, baseDir, href, out var resolvedPath))
                     continue;
@@ -2282,16 +2282,6 @@ public static partial class WebSeoDoctor
         return false;
     }
 
-    private static bool IsExternalLink(string href)
-    {
-        if (string.IsNullOrWhiteSpace(href))
-            return false;
-        if (href.StartsWith("//", StringComparison.Ordinal))
-            return true;
-        return href.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-               href.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
-    }
-
     private static string StripQueryAndFragment(string href)
     {
         var trimmed = href.Trim();
@@ -2319,7 +2309,7 @@ public static partial class WebSeoDoctor
         if (baseElement is null) return null;
         var href = baseElement.GetAttribute("href");
         if (string.IsNullOrWhiteSpace(href)) return null;
-        if (IsExternalLink(href)) return null;
+        if (WebLinkClassifier.IsExternalLink(href)) return null;
         if (!href.StartsWith("/", StringComparison.Ordinal))
             return null;
         return href.TrimEnd('/');
@@ -2363,7 +2353,7 @@ public static partial class WebSeoDoctor
             return true;
         }
 
-        if (Path.HasExtension(candidate))
+        if (File.Exists(candidate) || Path.HasExtension(candidate))
         {
             resolvedPath = candidate;
             return true;
