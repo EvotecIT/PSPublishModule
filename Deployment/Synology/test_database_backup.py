@@ -141,6 +141,39 @@ class ReceiverContracts(unittest.TestCase):
         self.assertEqual(receipt['captureSha256'], status['latest']['captureSha256'])
         self.assertEqual([], list(self.receiver.incoming.iterdir()))
 
+    def test_stalled_header_and_body_release_the_writer_lock_at_the_nas_deadline(self):
+        trusted = self.upload()
+        self.config['receiveTimeoutSeconds'] = 1
+        receiver = R.Receiver(self.config)
+        header = json.loads((receiver.snapshots / trusted['stamp'] / 'capture.json').read_text())
+        header['stamp'] = header['stamp'][:-8] + '89abcdef'
+        for payload in (b'', json.dumps(header).encode() + b'\n'):
+            with self.subTest(header_sent=bool(payload)):
+                read_fd, write_fd = os.pipe()
+                try:
+                    with os.fdopen(read_fd, 'rb') as reader:
+                        if payload:
+                            os.write(write_fd, payload)
+                        with self.assertRaisesRegex(TimeoutError, 'time budget exceeded'):
+                            R.dispatch(receiver, 'receive', reader)
+                finally:
+                    os.close(write_fd)
+                self.assertEqual([], list(receiver.incoming.iterdir()))
+                self.assertEqual(trusted['stamp'], R.dispatch(receiver, 'maintain')['verifiedStamp'])
+
+    def test_post_rename_sync_failure_preserves_published_copy_and_original_error(self):
+        sync = R.sync_directory
+        def fail_incoming(directory):
+            if directory == self.receiver.incoming:
+                raise OSError('synthetic publication synchronization failure')
+            sync(directory)
+        with patch.object(R, 'sync_directory', side_effect=fail_incoming):
+            with self.assertRaisesRegex(OSError, 'synthetic publication synchronization failure'):
+                self.upload()
+        self.assertEqual([], list(self.receiver.incoming.iterdir()))
+        self.assertEqual(1, len(list(self.receiver.snapshots.iterdir())))
+        self.assertTrue(self.receiver.status(verify=True)['healthy'])
+
     def test_dotnet_fractional_timestamps_pass_upload_status_and_maintenance(self):
         receipt = self.upload(dotnet_timestamp=True)
         status = self.receiver.status(verify=True)

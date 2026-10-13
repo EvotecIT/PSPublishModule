@@ -20,6 +20,7 @@ public sealed class BackupOptions
     /// <summary>Loads configuration without logging connection strings or credentials.</summary>
     public static BackupOptions Load(string path)
     {
+        Safety.DemandPhysical(path);
         var options = JsonSerializer.Deserialize<BackupOptions>(File.ReadAllText(path), Json)
             ?? throw new InvalidDataException("Backup configuration is empty.");
         options.Validate();
@@ -69,11 +70,13 @@ public sealed class BackupOptions
     /// <summary>Rejects output aliases before a runner or restore drill can write to protected inputs.</summary>
     internal void DemandSeparatedStorage(IEnumerable<string> additionalInputs)
     {
+        Safety.DemandPhysical(WorkRoot);
         var statusDirectory = Path.GetDirectoryName(StatePath)!;
         var outputs = new[] { StatePath, Path.Combine(statusDirectory, "last-success.json"),
             Path.Combine(statusDirectory, "restore-drill.json"), Path.Combine(statusDirectory, "restore-drill-success.json") };
         for (var i = 0; i < outputs.Length; i++)
         {
+            Safety.DemandPhysical(outputs[i]);
             if (Safety.Overlaps(WorkRoot, outputs[i]) || outputs.Take(i).Any(other => Safety.Overlaps(other, outputs[i])))
                 throw new InvalidDataException("Durable state outputs must be distinct and outside staging.");
         }
@@ -83,8 +86,11 @@ public sealed class BackupOptions
             .Concat([Destination.IdentityFile, Destination.KnownHostsFile, Destination.SshExecutable])
             .Concat(additionalInputs);
         foreach (var input in inputs)
+        {
+            Safety.DemandPhysical(input);
             if (Safety.Overlaps(WorkRoot, input) || outputs.Any(output => Safety.Overlaps(output, input)))
                 throw new InvalidDataException("Backup outputs overlap a protected input.");
+        }
     }
 }
 

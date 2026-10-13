@@ -3,7 +3,7 @@ using PowerForge.Backups;
 
 namespace PowerForge.Backups.Tests;
 
-public sealed class DatabaseBackupContracts : IDisposable
+public sealed partial class DatabaseBackupContracts : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "PowerForgeBackupTest-" + Guid.NewGuid().ToString("N"));
 

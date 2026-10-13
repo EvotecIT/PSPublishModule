@@ -10,6 +10,7 @@ import os
 import pathlib
 import re
 import shutil
+import signal
 import sys
 import uuid
 
@@ -84,6 +85,9 @@ class Receiver:
             raise ValueError('Backup root marker missing')
         if not 7 <= config['keepDaily'] <= 90 or not 1 <= config['maxAgeHours'] <= 168:
             raise ValueError('Invalid retention/freshness policy')
+        self.receive_timeout_seconds = config.get('receiveTimeoutSeconds', 18000)
+        if type(self.receive_timeout_seconds) is not int or not 1 <= self.receive_timeout_seconds <= 86400:
+            raise ValueError('Invalid receive time budget')
         self.snapshots = canonical(self.root / 'snapshots')
         self.incoming = canonical(self.root / 'incoming')
         if not self.snapshots.is_dir() or not self.incoming.is_dir():
@@ -203,7 +207,9 @@ class Receiver:
                 sync_directory(self.snapshots)
             return receipt
         except BaseException:
-            self.remove(partial, self.incoming, '.powerforge-incoming')
+            # After rename, preserve the verified snapshot and the original publication error.
+            if partial.exists():
+                self.remove(partial, self.incoming, '.powerforge-incoming')
             raise
 
     def inspect(self, folder, verify=False):
@@ -316,6 +322,20 @@ class Receiver:
             raise
 
 
+@contextlib.contextmanager
+def receive_deadline(seconds):
+    """Bound header, body and publication time independently of the SSH client."""
+    def expired(signum, frame):
+        raise TimeoutError('NAS receive time budget exceeded')
+    previous_handler = signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+
+
 def dispatch(receiver, operation, stream=None):
     if operation == 'status':
         with receiver.catalog_guard():
@@ -324,7 +344,8 @@ def dispatch(receiver, operation, stream=None):
     with lock_path.open('r+') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if operation == 'receive':
-            return receiver.receive(stream)
+            with receive_deadline(receiver.receive_timeout_seconds):
+                return receiver.receive(stream)
         if operation == 'maintain':
             return receiver.maintain()
         with receiver.catalog_guard():
