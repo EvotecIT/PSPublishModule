@@ -32,6 +32,9 @@ $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 if ($existing -and ($existing.Actions.Execute -ne (Join-Path $InstallRoot 'app\PowerForge.Backups.Cli.exe'))) {
     throw 'A task with this name belongs to another installation.'
 }
+if ($existing -and $existing.State -eq 'Running') { throw 'This backup task is running; installation is held.' }
+$wasEnabled = -not $existing -or $existing.State -ne 'Disabled'
+if ($existing) { Disable-ScheduledTask -TaskName $TaskName | Out-Null }
 if ((Test-Path -LiteralPath $InstallRoot) -and -not (Test-Path -LiteralPath (Join-Path $InstallRoot '.powerforge-database-backup-install'))) {
     throw 'Existing installation root is not marked.'
 }
@@ -46,6 +49,13 @@ $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($Moni
 Set-Acl -LiteralPath $InstallRoot -AclObject $acl
 Set-Content -LiteralPath (Join-Path $InstallRoot '.powerforge-database-backup-install') -Value 'powerforge-database-backup-v1'
 foreach ($name in @('app','access','tools','status')) { New-Item -ItemType Directory -Path (Join-Path $InstallRoot $name) -Force | Out-Null }
+New-Item -ItemType Directory -Path $config.workRoot -Force | Out-Null
+try { $workerGuard = [IO.File]::Open((Join-Path $config.workRoot '.run.lock'), 'OpenOrCreate', 'ReadWrite', 'None') }
+catch {
+    if ($existing -and $wasEnabled) { Enable-ScheduledTask -TaskName $TaskName | Out-Null }
+    throw 'A backup or restore worker is active; installation is held.'
+}
+try {
 Get-ChildItem -LiteralPath $BuildSource -Force | Copy-Item -Destination (Join-Path $InstallRoot 'app') -Recurse -Force
 Get-ChildItem -LiteralPath $AccessSource -File | Copy-Item -Destination (Join-Path $InstallRoot 'access') -Force
 Copy-Item -LiteralPath $ConfigSource -Destination (Join-Path $InstallRoot 'config.json') -Force
@@ -71,4 +81,12 @@ $trigger = New-ScheduledTaskTrigger -Daily -At $DailyAt
 $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 5) -RestartCount 2 -RestartInterval (New-TimeSpan -Minutes 15) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Consistent native SQL Server and SQLite backup sets with NAS verification.' -Force | Out-Null
+if (-not $wasEnabled) { Disable-ScheduledTask -TaskName $TaskName | Out-Null }
 Get-ScheduledTask -TaskName $TaskName | Select-Object TaskName,State
+}
+catch {
+    # Keep a failed update disabled; never launch a partially replaced installation.
+    if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) { Disable-ScheduledTask -TaskName $TaskName | Out-Null }
+    throw
+}
+finally { $workerGuard.Dispose() }

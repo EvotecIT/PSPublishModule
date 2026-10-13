@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Restricted native database backup receiver, status, verification and retention."""
 import argparse
+import contextlib
 import datetime as dt
 import fcntl
 import hashlib
@@ -46,6 +47,14 @@ def digest(path):
     return value.hexdigest()
 
 
+def sync_directory(path):
+    descriptor = os.open(str(canonical(path)), os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def write_json(path, value):
     canonical(path)
     temporary = path.with_name(path.name + '.tmp-' + uuid.uuid4().hex)
@@ -71,6 +80,13 @@ class Receiver:
         self.incoming = canonical(self.root / 'incoming')
         if not self.snapshots.is_dir() or not self.incoming.is_dir():
             raise ValueError('Backup storage directories missing')
+
+    @contextlib.contextmanager
+    def catalog_guard(self, exclusive=False):
+        # Upload bytes and checksum reads never hold this short publication/deletion guard.
+        with canonical(self.root / '.catalog.lock').open('r+') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+            yield
 
     def validate_header(self, header):
         if header.get('schemaVersion') != 2 or header.get('format') != 'native' or header.get('hostId') != self.config['hostId'] or not STAMP.fullmatch(header.get('stamp', '')):
@@ -151,12 +167,12 @@ class Receiver:
             for name in ('capture.json', 'SHA256SUMS', 'VERIFIED', 'READY'):
                 with (partial / name).open('rb') as committed:
                     os.fsync(committed.fileno())
-            partial.rename(final)
-            fd = os.open(str(self.snapshots), os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(fd)
-            finally:
-                os.close(fd)
+            for directory, _, _ in os.walk(str(partial), topdown=False, followlinks=False):
+                sync_directory(pathlib.Path(directory))
+            with self.catalog_guard(exclusive=True):
+                partial.rename(final)
+                sync_directory(self.incoming)
+                sync_directory(self.snapshots)
             return receipt
         except BaseException:
             self.remove(partial, self.incoming, '.powerforge-incoming')
@@ -233,11 +249,17 @@ class Receiver:
                     if day not in selected_days and len(selected_days) < self.config['keepDaily']:
                         keep.add(folder.name)
                         selected_days.add(day)
+            removals = [folder for folder in folders if STAMP.fullmatch(folder.name) and folder.name not in keep]
+            losing_alternatives = {folder.name[:8] for folder in removals}
+            for name in keep:
+                if name[:8] in losing_alternatives:
+                    self.inspect(self.snapshots / name, verify=True)
             removed = 0
-            for folder in folders:
-                if STAMP.fullmatch(folder.name) and folder.name not in keep:
+            with self.catalog_guard(exclusive=True):
+                for folder in removals:
                     self.remove(folder, self.snapshots, 'READY')
                     removed += 1
+                sync_directory(self.snapshots)
             result = {'healthy': True, 'startedAtUtc': started, 'completedAtUtc': utc_now().isoformat(),
                       'verifiedStamp': latest['latest']['stamp'], 'removed': removed, 'removedPartial': removed_partial,
                       'retainedDaily': len(selected_days)}
@@ -247,6 +269,21 @@ class Receiver:
             write_json(self.root / 'maintenance.json', {'healthy': False, 'startedAtUtc': started,
                        'completedAtUtc': utc_now().isoformat(), 'errorType': type(exc).__name__})
             raise
+
+
+def dispatch(receiver, operation, stream=None):
+    if operation == 'status':
+        with receiver.catalog_guard():
+            return receiver.status()
+    lock_path = canonical(receiver.root / '.receiver.lock')
+    with lock_path.open('r+') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if operation == 'receive':
+            return receiver.receive(stream)
+        if operation == 'maintain':
+            return receiver.maintain()
+        with receiver.catalog_guard():
+            return receiver.status(verify=True)
 
 
 def main():
@@ -266,15 +303,7 @@ def main():
         if os.environ.get('SSH_ORIGINAL_COMMAND') != 'receive':
             raise PermissionError('Restricted key permits only receive')
         operation = 'receive'
-    lock_path = canonical(receiver.root / '.receiver.lock')
-    with lock_path.open('a') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        if operation == 'receive':
-            result = receiver.receive(sys.stdin.buffer)
-        elif operation == 'maintain':
-            result = receiver.maintain()
-        else:
-            result = receiver.status(verify=operation == 'verify')
+    result = dispatch(receiver, operation, sys.stdin.buffer)
     print(json.dumps(result))
     return 0 if result.get('healthy', True) else 1
 

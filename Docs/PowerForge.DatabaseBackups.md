@@ -2,7 +2,7 @@
 
 PowerForge.Backups captures consistent SQL Server and SQLite databases and sends their native files and service configuration to a restricted Synology receiver. Each completed folder contains ordinary `.bak`, `.sqlite` and JSON files. DbaClientX owns database capture and SQL Server restore safety. The backup library owns the transfer receipt, local state and disposable restore drill; the CLI supplies command dispatch.
 
-The Windows scheduled task runs without an interactive login. A separate NAS task verifies stored ciphertext and retains the newest successful capture from each of fourteen distinct days. Failed or stale backups hold retention. The upload key permits only the receiver protocol, with no shell, forwarding, deletion or retention command.
+The Windows scheduled task runs without an interactive login. A separate NAS task verifies stored native files and retains the newest successful capture from each of fourteen distinct days. Failed or stale backups hold retention. The upload key permits only the receiver protocol, with no shell, forwarding, deletion or retention command.
 
 ## Capture and verification
 
@@ -21,6 +21,8 @@ Build the CLI for the workstation platform. Configuration, the dedicated SSH key
 The SQL Server task identity needs `db_backupoperator` on the selected database and `CREATE ANY DATABASE` for native backup verification. The initial restore drill runs under an operator identity that can create, check and drop its disposable database. Neither task changes the source database's recovery model.
 
 Install `Deployment/Synology/powerforge-database-backup.py` as a root-owned, non-writable executable and provide a private root-owned JSON configuration. Required configuration fields are `root`, `hostId`, `databases` (id-to-provider map), `configurationIds`, `keepDaily`, `maxAgeHours`, `maxArchiveBytes` (total set size ceiling) and `minimumFreeBytes`. Create the root marker `.powerforge-database-backup-root` containing `powerforge-database-backup-v1`, with private permissions and physical `snapshots` and `incoming` child directories.
+
+Create private `.receiver.lock` and `.catalog.lock` files in that root. The receiver/maintenance lock serializes writers; the short catalog guard protects publication and deletion while status reads the previous completed set during uploads. Publication flushes populated directories before acknowledging completion. Before deleting same-day alternatives, retention rehashes the retained copy for that day.
 
 Bind a dedicated Ed25519 public key to a fixed source address, `restrict`, and a forced command invoking the receiver with its exact configuration path and `forced` operation. Preserve unrelated authorized keys. Use DSM's supported Task Scheduler interface to run the receiver's `maintain` operation daily. Do not edit its scheduler database.
 

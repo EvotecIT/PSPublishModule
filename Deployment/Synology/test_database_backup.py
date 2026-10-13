@@ -1,5 +1,6 @@
 """Hermetic receiver contracts; run on Linux with python3 -B -m unittest."""
 import datetime as dt
+import fcntl
 import hashlib
 import importlib.util
 import io
@@ -22,6 +23,8 @@ class ReceiverContracts(unittest.TestCase):
         (self.root / '.powerforge-database-backup-root').write_text(R.MARKER)
         (self.root / 'snapshots').mkdir()
         (self.root / 'incoming').mkdir()
+        (self.root / '.receiver.lock').touch()
+        (self.root / '.catalog.lock').touch()
         self.config = {'root': str(self.root), 'hostId': 'sample', 'keepDaily': 14, 'maxAgeHours': 30,
                        'maxArchiveBytes': 1024 * 1024, 'minimumFreeBytes': 0, 'databases': {'sample': 'sqlite'}}
         self.receiver = R.Receiver(self.config)
@@ -107,6 +110,25 @@ class ReceiverContracts(unittest.TestCase):
         result = self.receiver.maintain()
         self.assertEqual(1, result['removedPartial'])
         self.assertFalse(folder.exists())
+
+    def test_status_reads_previous_completed_set_while_writer_lock_is_held(self):
+        receipt = self.upload()
+        with (self.root / '.receiver.lock').open('r+') as writer:
+            fcntl.flock(writer, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            result = R.dispatch(self.receiver, 'status')
+        self.assertTrue(result['healthy'])
+        self.assertEqual(receipt['stamp'], result['latest']['stamp'])
+
+    def test_corrupted_older_day_keeper_preserves_its_intact_alternative(self):
+        self.upload()
+        intact = self.upload(days=1, suffix='01234567')
+        corrupted = self.upload(days=1, suffix='89abcdef')
+        path = self.receiver.snapshots / corrupted['stamp'] / 'sample.sqlite'
+        path.write_bytes(b'X' * path.stat().st_size)
+        with self.assertRaises(ValueError):
+            self.receiver.maintain()
+        self.assertTrue((self.receiver.snapshots / intact['stamp']).exists())
+        self.assertFalse(json.loads((self.root / 'maintenance.json').read_text())['healthy'])
 
 
 if __name__ == '__main__':

@@ -31,7 +31,7 @@ public sealed class DatabaseBackupRunner
                     File.Exists(Path.Combine(stale, ".powerforge-backup-run")))
                 {
                     try { state.CleanupLogicalBytes += Safety.RemoveOwnedRun(options.WorkRoot, stale); }
-                    catch (IOException) { held.Add(stale); }
+                    catch (Exception error) when (error is IOException or UnauthorizedAccessException) { held.Add(stale); }
                 }
                 else if (Path.GetFileName(stale).StartsWith("restore-", StringComparison.Ordinal)) held.Add(stale);
             }
@@ -57,6 +57,7 @@ public sealed class DatabaseBackupRunner
                 var entry = "config/" + file.Id + ".json";
                 var destination = Path.Combine(run, "config", file.Id + ".json");
                 File.Copy(file.Path, destination);
+                File.SetAttributes(destination, File.GetAttributes(destination) & ~FileAttributes.ReadOnly);
                 manifest.Files.Add(new(entry, new FileInfo(destination).Length, await Safety.HashAsync(destination, token)));
             }
             Safety.WriteJson(Path.Combine(run, "manifest.json"), manifest);
