@@ -87,6 +87,15 @@ $trigger = New-ScheduledTaskTrigger -Daily -At $DailyAt
 $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
 $settings = New-ScheduledTaskSettingsSet -Disable -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 5) -RestartCount 2 -RestartInterval (New-TimeSpan -Minutes 15) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Consistent native SQL Server and SQLite backup sets with NAS verification.' -Force | Out-Null
+$scheduler = New-Object -ComObject 'Schedule.Service'
+$scheduler.Connect()
+$registered = $scheduler.GetFolder('\').GetTask($TaskName)
+$descriptor = New-Object Security.AccessControl.RawSecurityDescriptor($registered.GetSecurityDescriptor(4))
+$monitorSid = (New-Object Security.Principal.NTAccount($MonitorIdentity)).Translate([Security.Principal.SecurityIdentifier])
+# Task Scheduler uses file access masks; FileGenericRead excludes task execution and changes.
+$readAce = New-Object Security.AccessControl.CommonAce('None', 'AccessAllowed', 0x120089, $monitorSid, $false, $null)
+$descriptor.DiscretionaryAcl.InsertAce($descriptor.DiscretionaryAcl.Count, $readAce)
+$registered.SetSecurityDescriptor($descriptor.GetSddlForm([Security.AccessControl.AccessControlSections]::Access), 0)
 $workerGuard.Dispose()
 $workerGuard = $null
 if ($wasEnabled) { Enable-ScheduledTask -TaskName $TaskName | Out-Null }

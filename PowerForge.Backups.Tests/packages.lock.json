@@ -294,8 +294,8 @@
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
-        "resolved": "10.0.12",
-        "contentHash": "wO0W8VDMeRJZakRySOmemAnrBZMwEFRlbfBtATxUiLf2I3IhSRnCp1Vt157NWptdE4IJ7eftd5n8q9LtaKHFTQ=="
+        "resolved": "9.0.13",
+        "contentHash": "t8S9IDpjJKsLpLkeBdW8cWtcPyYqrGu93Dej1RO6WwuL/lkFSqWlan3rMJfortqz1mRIh+sys2AFsSA6jWJ3Jg=="
       },
       "xunit.abstractions": {
         "type": "Transitive",
@@ -341,8 +341,7 @@
         "type": "Project",
         "dependencies": {
           "DBAClientX.SQLite": "[1.0.14, )",
-          "DBAClientX.SqlServer": "[1.0.14, )",
-          "System.Security.Cryptography.ProtectedData": "[10.0.12, )"
+          "DBAClientX.SqlServer": "[1.0.14, )"
         }
       }
     }

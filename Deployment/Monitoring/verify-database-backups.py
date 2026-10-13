@@ -105,13 +105,15 @@ def main():
         daily = detail.get('schedule', {})
         nas_schedule = {'healthy': task_detail.get('success') is True and detail.get('enable') is True and detail.get('owner') == 'root'
                         and detail.get('extra', {}).get('script') == NAS_SCRIPT and daily.get('repeat_hour') == 0
+                        and daily.get('date_type') == 0 and daily.get('repeat_date') == 0
+                        and daily.get('hour') == 7 and daily.get('minute') == 30
                         and daily.get('week_day') == '0,1,2,3,4,5,6', 'taskId': task.get('id'), 'nextRun': task.get('next_trigger_time')}
         local = json.loads((INSTALL / 'status/last-success.json').read_text(encoding='utf-8-sig'))
         current = json.loads((INSTALL / 'status/latest-run.json').read_text(encoding='utf-8-sig'))
         restore_path = INSTALL / 'status/restore-drill.json'
         restore = json.loads(restore_path.read_text(encoding='utf-8-sig')) if restore_path.exists() else {}
         # Fixed command and installation paths; no credential discovery or writes.
-        command = "$ErrorActionPreference='Stop';$t=Get-ScheduledTask -TaskName 'Evotec Database Backups';$i=$t|Get-ScheduledTaskInfo;[pscustomobject]@{enabled=($t.State -ne 'Disabled');daily=(@($t.Triggers).Count -eq 1 -and $t.Triggers[0].DaysInterval -eq 1);expectedAction=($t.Actions.Execute -eq 'C:\\ProgramData\\PowerForge\\DatabaseBackups\\app\\PowerForge.Backups.Cli.exe' -and $t.Actions.Arguments -eq 'run \"C:\\ProgramData\\PowerForge\\DatabaseBackups\\config.json\"' -and $t.Principal.UserId -in @('SYSTEM','S-1-5-18'));lastResult=$i.LastTaskResult;running=($t.State -eq 'Running');nextRunUtc=$i.NextRunTime.ToUniversalTime().ToString('o')}|ConvertTo-Json -Compress"
+        command = "$ErrorActionPreference='Stop';$t=Get-ScheduledTask -TaskName 'Evotec Database Backups';$i=$t|Get-ScheduledTaskInfo;[pscustomobject]@{enabled=($t.State -ne 'Disabled');daily=(@($t.Triggers).Count -eq 1 -and $t.Triggers[0].DaysInterval -eq 1 -and ([datetime]$t.Triggers[0].StartBoundary).ToString('HH:mm') -eq '03:00');expectedAction=($t.Actions.Execute -eq 'C:\\ProgramData\\PowerForge\\DatabaseBackups\\app\\PowerForge.Backups.Cli.exe' -and $t.Actions.Arguments -eq 'run \"C:\\ProgramData\\PowerForge\\DatabaseBackups\\config.json\"' -and $t.Principal.UserId -in @('SYSTEM','S-1-5-18'));lastResult=$i.LastTaskResult;running=($t.State -eq 'Running');nextRunUtc=$i.NextRunTime.ToUniversalTime().ToString('o')}|ConvertTo-Json -Compress"
         schedule = run_json(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', command])
         schedule['currentRun'] = {k: current.get(k) for k in ('status', 'stage', 'startedAtUtc', 'completedAtUtc', 'cleanupErrorType', 'heldStagingPaths')}
         return evaluate(local, nas, schedule, nas_schedule, restore)
