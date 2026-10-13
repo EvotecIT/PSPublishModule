@@ -7,6 +7,23 @@ namespace PowerForge.Tests;
 public sealed class WebSitemapConsumerIntegrityTests
 {
     [Theory]
+    [InlineData("utf-16")]
+    [InlineData("iso-8859-1")]
+    public void LocalSitemapReaderHonorsXmlEncodingDeclarations(string encodingName)
+    {
+        WithSite(root =>
+        {
+            var path = Path.Combine(root, "sitemap.xml");
+            string xml = $"<?xml version='1.0' encoding='{encodingName}'?><urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'><url><loc>https://example.test/café</loc></url></urlset>";
+            File.WriteAllBytes(path, System.Text.Encoding.GetEncoding(encodingName).GetBytes(xml));
+            var result = WebLocalSitemapReader.Read(path, "https://example.test/");
+            Assert.Equal("https://example.test/café", Assert.Single(result.Entries).Url);
+            // The reader has released the file after returning.
+            using var exclusive = File.Open(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        });
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void IndexNowReadsLocalIndexLeavesAndProtectsThemFromOutputs(bool stateful)

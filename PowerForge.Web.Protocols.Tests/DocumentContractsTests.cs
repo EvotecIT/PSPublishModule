@@ -32,7 +32,7 @@ public sealed class DocumentContractsTests
             Authors = new[] { new FeedAuthor { Name = "Editorial team", Url = "https://example.org/team" } },
             Items = new[] { new SyndicationItem
             {
-                Id = "opaque-42", Url = "https://example.org/news", Title = "A < B", Summary = "Summary",
+                Id = "urn:opaque:42", Url = "https://example.org/news", Title = "A < B", Summary = "Summary",
                 Published = published, Updated = published.AddHours(1), Content = "<p>Full & body</p>", ContentType = "html",
                 Categories = new[] { "News" }, Authors = new[] { new FeedAuthor { Name = "Alice", Url = "https://example.org/alice" } },
                 Extensions = new[] { new XElement(XName.Get("rating", "urn:example:extension"), "5") }
@@ -44,7 +44,7 @@ public sealed class DocumentContractsTests
             Assert.Equal(feed.Title, parsed.Title);
             Assert.Equal("Editorial team", Assert.Single(parsed.Authors).Name);
             var item = Assert.Single(parsed.Items);
-            Assert.Equal("opaque-42", item.Id);
+            Assert.Equal("urn:opaque:42", item.Id);
             Assert.False(item.IdIsPermaLink);
             Assert.Equal(published, item.Published);
             Assert.Equal(published.AddHours(1), item.Updated);

@@ -45,6 +45,7 @@ public static class SyndicationWriter
         if (feed is null) throw new ArgumentNullException(nameof(feed));
         if (string.IsNullOrWhiteSpace(feed.Id) || !feed.Updated.HasValue)
             throw new ArgumentException("Atom requires a feed identifier and update date.", nameof(feed));
+        ValidateAtomIdentifier(feed.Id!, nameof(feed));
         if (feed.Authors.Count == 0 && (feed.Items.Count == 0 || feed.Items.Any(item => item.Authors.Count == 0)))
             throw new ArgumentException("Atom requires a feed author or an author for every entry.", nameof(feed));
         var root = new XElement(Atom + "feed", new XElement(Atom + "title", feed.Title), new XElement(Atom + "id", feed.Id),
@@ -58,6 +59,7 @@ public static class SyndicationWriter
         {
             if (string.IsNullOrWhiteSpace(item.Id) || !item.Updated.HasValue)
                 throw new ArgumentException("Atom requires entry identifiers and update dates.", nameof(feed));
+            ValidateAtomIdentifier(item.Id!, nameof(feed));
             var entry = new XElement(Atom + "entry", new XElement(Atom + "title", item.Title), new XElement(Atom + "id", item.Id),
                 new XElement(Atom + "link", new XAttribute("href", item.Url)),
                 new XElement(Atom + "updated", item.Updated.Value.ToString("O", CultureInfo.InvariantCulture)),
@@ -125,6 +127,15 @@ public static class SyndicationWriter
         var value = new Dictionary<string, object?> { ["name"] = author.Name };
         if (!string.IsNullOrWhiteSpace(author.Url)) value["url"] = author.Url;
         return value;
+    }
+
+    private static void ValidateAtomIdentifier(string value, string parameterName)
+    {
+        int colon = value.IndexOf(':');
+        if (colon <= 0 || !Uri.CheckSchemeName(value.Substring(0, colon))
+            || value.Any(c => char.IsWhiteSpace(c) || char.IsControl(c))
+            || !Uri.TryCreate(value, UriKind.Absolute, out _))
+            throw new ArgumentException("Atom feed and entry identifiers must be absolute IRIs.", parameterName);
     }
 
     private static XElement AtomAuthor(FeedAuthor author) => new(Atom + "author", new XElement(Atom + "name", author.Name),

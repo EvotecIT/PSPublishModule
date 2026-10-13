@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
+using System.Xml.Schema;
 
 namespace PowerForge.Web.Protocols.Sitemaps;
 
@@ -19,6 +20,7 @@ public static class SitemapWriter
     public static XDocument Create(SitemapDocument sitemap, string? stylesheet = null)
     {
         if (sitemap is null) throw new ArgumentNullException(nameof(sitemap));
+        if (sitemap.Entries.Count == 0) throw new ArgumentException("A sitemap requires at least one entry.", nameof(sitemap));
         XNamespace ns = Namespace;
         if (sitemap.Entries.Count > MaximumEntries) throw new ArgumentException("Partition the sitemap before writing more than 50,000 entries.", nameof(sitemap));
         var root = new XElement(ns + (sitemap.IsIndex ? "sitemapindex" : "urlset"), sitemap.Entries.Select(entry =>
@@ -26,6 +28,7 @@ public static class SitemapWriter
             if (entry.IsSitemap != sitemap.IsIndex) throw new ArgumentException("Sitemap entries must match the document kind.", nameof(sitemap));
             ValidateLocation(entry.Url, nameof(sitemap));
             string? date = entry.LastModifiedText ?? entry.LastModified?.ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture);
+            ValidateLastModified(date, nameof(sitemap));
             return new XElement(ns + (sitemap.IsIndex ? "sitemap" : "url"), new XElement(ns + "loc", entry.Url),
                 date is null ? null : new XElement(ns + "lastmod", date), entry.Extensions.Select(e => new XElement(e)));
         }));
@@ -77,6 +80,7 @@ public static class SitemapWriter
         {
             if (entry.Name != XName.Get("url", Namespace)) throw new ArgumentException("URL-set partitions require sitemap url elements.", nameof(entries));
             ValidateLocation(entry.Element(XName.Get("loc", Namespace))?.Value, nameof(entries));
+            ValidateLastModified(entry.Element(XName.Get("lastmod", Namespace))?.Value, nameof(entries));
             // Standalone element serialization repeats namespace declarations, giving a conservative bound.
             long addition = Encoding.UTF8.GetByteCount(entry.ToString(SaveOptions.DisableFormatting)) + 32;
             if (count > 0 && (count == entryLimit || bytes + addition > partitionByteLimit))
@@ -86,6 +90,7 @@ public static class SitemapWriter
             if (bytes + addition > partitionByteLimit) throw new InvalidDataException("A sitemap entry exceeds the uncompressed sitemap size limit.");
             current.Root!.Add(new XElement(entry)); bytes += addition; count++;
         }
+        if (count == 0) throw new ArgumentException("A sitemap requires at least one entry.", nameof(entries));
         AddVerified(current);
         return result;
     }
@@ -95,6 +100,22 @@ public static class SitemapWriter
         if (location == null || location.Length > 2048 || !Uri.TryCreate(location, UriKind.Absolute, out var uri)
             || (uri.Scheme != "http" && uri.Scheme != "https"))
             throw new ArgumentException("A sitemap location must be an absolute HTTP(S) URL of at most 2,048 characters.", parameterName);
+    }
+
+    private static void ValidateLastModified(string? value, string parameterName)
+    {
+        if (value == null) return;
+        var names = new NameTable();
+        foreach (var code in new[] { XmlTypeCode.Date, XmlTypeCode.DateTime })
+        {
+            try
+            {
+                XmlSchemaType.GetBuiltInSimpleType(code).Datatype!.ParseValue(value, names, null);
+                return;
+            }
+            catch (XmlSchemaException) { }
+        }
+        throw new ArgumentException("Sitemap lastmod must be an XML date or dateTime.", parameterName);
     }
 
     /// <summary>Measures the compact UTF-8 XML payload, including its declaration.</summary>

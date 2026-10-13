@@ -8,8 +8,14 @@ public static class SitemapReader
 {
     /// <summary>Reads URL-set or index entries. Strict mode rejects unsupported roots and missing locations.</summary>
     public static SitemapDocument Read(string xml, Uri? baseUri = null, bool strict = false)
+        => ReadRoot(ProtocolXml.Parse(xml).Root, baseUri, strict);
+
+    /// <summary>Reads XML with encoding detection. The caller retains ownership of the stream.</summary>
+    public static SitemapDocument Read(Stream input, Uri? baseUri = null, bool strict = false)
+        => ReadRoot(ProtocolXml.Parse(input).Root, baseUri, strict);
+
+    private static SitemapDocument ReadRoot(XElement? root, Uri? baseUri, bool strict)
     {
-        var root = ProtocolXml.Parse(xml).Root;
         if (root is null || (root.Name.LocalName != "urlset" && root.Name.LocalName != "sitemapindex")
             || (strict ? root.Name.NamespaceName != SitemapWriter.Namespace
                 : root.Name.NamespaceName.Length != 0 && root.Name.NamespaceName != SitemapWriter.Namespace))

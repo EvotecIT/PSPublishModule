@@ -9,11 +9,20 @@ internal static class ProtocolXml
     {
         if (xml is null) throw new ArgumentNullException(nameof(xml));
         using var input = new StringReader(xml);
-        using var reader = XmlReader.Create(input, new XmlReaderSettings
-        {
-            DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null,
-            MaxCharactersInDocument = 64L * 1024 * 1024
-        });
+        using var reader = XmlReader.Create(input, Settings());
         return XDocument.Load(reader, LoadOptions.PreserveWhitespace);
     }
+
+    internal static XDocument Parse(Stream input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        using var reader = XmlReader.Create(input, Settings());
+        return XDocument.Load(reader, LoadOptions.PreserveWhitespace);
+    }
+
+    private static XmlReaderSettings Settings() => new()
+    {
+            DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null,
+            MaxCharactersInDocument = 64L * 1024 * 1024, CloseInput = false
+    };
 }

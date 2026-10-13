@@ -29,7 +29,8 @@ internal static class WebLocalSitemapReader
             const long maxBytes = 50L * 1024 * 1024;
             if (new FileInfo(input).Length > maxBytes)
                 throw new InvalidOperationException("Sitemap exceeds the 50 MiB protocol limit.");
-            var document = PowerForge.Web.Protocols.Sitemaps.SitemapReader.Read(File.ReadAllText(input), strict: true);
+            using var stream = File.OpenRead(input);
+            var document = PowerForge.Web.Protocols.Sitemaps.SitemapReader.Read(stream, strict: true);
             if (!document.IsIndex)
             {
                 entries.AddRange(document.Entries.Select(entry => new Entry(entry.Url, entry.LastModifiedText, input)));
