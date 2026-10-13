@@ -53,6 +53,34 @@ public sealed class WebSiteAuditLinkTargetsTests : IDisposable
     }
 
     [Theory]
+    [InlineData("catalog")]
+    [InlineData("catalog.html")]
+    public void Audit_RejectsExistingFilesInASiblingWithTheSameRootPrefix(string fileName)
+    {
+        string sibling = _root + "-backup";
+        Directory.CreateDirectory(sibling);
+        try
+        {
+            File.WriteAllText(Path.Combine(sibling, fileName), "outside the generated site");
+            WritePage("../" + Path.GetFileName(sibling) + "/" + fileName);
+            var result = Audit();
+            // Unresolvable external paths are excluded, as in SEO; they must never count as resolved site links.
+            Assert.Equal(0, result.LinkCount);
+        }
+        finally { Directory.Delete(sibling, true); }
+    }
+
+    [Fact]
+    public void Audit_ResolvesTheSiteRootToItsIndex()
+    {
+        WritePage("/");
+        var result = Audit();
+        Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
+        Assert.Equal(1, result.LinkCount);
+        Assert.Equal(0, result.BrokenLinkCount);
+    }
+
+    [Theory]
     [InlineData("data:text/html,Hello", false)]
     [InlineData("https://example.test/frame", true)]
     [InlineData("//example.test/frame", true)]

@@ -204,7 +204,7 @@ public static partial class WebSiteAuditor
 
         var candidateBase = isRooted ? siteRoot : baseDir;
         var candidate = Path.GetFullPath(Path.Combine(candidateBase, relative));
-        if (!candidate.StartsWith(siteRoot, StringComparison.OrdinalIgnoreCase))
+        if (!IsPathWithinRoot(NormalizeRootPath(siteRoot), candidate))
             return false;
 
         if (isExplicitDir)
@@ -276,7 +276,7 @@ public static partial class WebSiteAuditor
 
         var combinedRelative = Path.Combine(languagePrefix, relative.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         var candidate = Path.GetFullPath(Path.Combine(siteRoot, combinedRelative));
-        if (!candidate.StartsWith(siteRoot, StringComparison.OrdinalIgnoreCase))
+        if (!IsPathWithinRoot(NormalizeRootPath(siteRoot), candidate))
             return false;
 
         if (isDirectoryHint)
