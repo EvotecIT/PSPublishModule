@@ -81,6 +81,8 @@ def write_json(path, value):
 class Receiver:
     def __init__(self, config):
         self.config = config
+        if not isinstance(config.get('hostId'), str) or re.fullmatch(r'[a-z0-9][a-z0-9-]{0,63}', config['hostId']) is None:
+            raise ValueError('A portable lowercase host identity is required')
         if (type(config.get('minimumFreeBytes')) is not int or config['minimumFreeBytes'] < 0 or
                 type(config.get('maxArchiveBytes')) is not int or config['maxArchiveBytes'] < 1):
             raise ValueError('Capacity limit and free-space reserve must be non-negative integer byte counts')
@@ -186,9 +188,11 @@ class Receiver:
         if final.exists():
             raise ValueError('Capture already exists')
         partial = canonical(self.incoming / (header['stamp'] + '-' + uuid.uuid4().hex))
-        partial.mkdir(mode=0o700)
-        (partial / '.powerforge-incoming').write_text(MARKER)
+        created = False
         try:
+            partial.mkdir(mode=0o700)
+            created = True
+            (partial / '.powerforge-incoming').write_text(MARKER)
             for file in header['files']:
                 path = canonical(partial / file['entry'])
                 path.parent.mkdir(mode=0o700, exist_ok=True)
@@ -228,9 +232,27 @@ class Receiver:
             return receipt
         except BaseException:
             # After rename, preserve the verified snapshot and the original publication error.
-            if partial.exists():
-                self.remove(partial, self.incoming, '.powerforge-incoming')
+            if created and partial.exists():
+                self.remove_incoming(partial)
             raise
+
+    def remove_incoming(self, folder):
+        """Remove a marked upload or an interrupted, empty marker initialization only."""
+        self.demand_managed(folder)
+        if folder.parent != self.incoming or re.fullmatch(r'\d{8}T\d{6}Z-[0-9a-f]{8}-[0-9a-f]{32}', folder.name) is None:
+            raise ValueError('Invalid incoming cleanup identity')
+        marker = folder / '.powerforge-incoming'
+        entries = list(folder.iterdir())
+        if not entries:
+            folder.rmdir()
+        elif entries == [marker]:
+            self.demand_managed(marker)
+            if not marker.is_file() or marker.stat().st_size > len(MARKER) or not MARKER.startswith(marker.read_text()):
+                raise ValueError('Unrecognized partial marker; cleanup held')
+            marker.unlink()
+            folder.rmdir()
+        else:
+            self.remove(folder, self.incoming, '.powerforge-incoming')
 
     def inspect(self, folder, verify=False):
         canonical(folder)
@@ -305,7 +327,7 @@ class Receiver:
             # Exclusive receiver lock establishes inactivity; retain recent or uncertain contents.
             for folder in self.incoming.iterdir():
                 if re.fullmatch(r'\d{8}T\d{6}Z-[0-9a-f]{8}-[0-9a-f]{32}', folder.name) and utc_now().timestamp() - folder.stat().st_mtime > 86400:
-                    self.remove(folder, self.incoming, '.powerforge-incoming')
+                    self.remove_incoming(folder)
                     removed_partial += 1
             latest = self.status(verify=True)
             if not latest['healthy']:

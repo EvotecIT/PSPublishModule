@@ -78,6 +78,45 @@ class ReceiverContracts(unittest.TestCase):
             with self.subTest(configurations=configurations), self.assertRaisesRegex(ValueError, 'inventory'):
                 R.Receiver(dict(self.config, configurationIds=configurations))
 
+    def test_host_identity_matches_the_sender_contract_before_any_upload(self):
+        for identity in (None, '', 'Sample', 'sample\n', '-sample', 'a' * 65, 12):
+            with self.subTest(identity=identity), self.assertRaisesRegex(ValueError, 'host identity'):
+                R.Receiver(dict(self.config, hostId=identity))
+        R.Receiver(dict(self.config, hostId='0-sample'))
+
+    def test_marker_initialization_failure_cleans_only_the_created_upload(self):
+        write_text = pathlib.Path.write_text
+        for contents in (None, '', R.MARKER[:5]):
+            def failing(path, text, *args, **kwargs):
+                if path.name == '.powerforge-incoming':
+                    if contents is not None:
+                        write_text(path, contents)
+                    raise OSError('Synthetic marker write failure')
+                return write_text(path, text, *args, **kwargs)
+            with self.subTest(contents=contents), patch.object(pathlib.Path, 'write_text', failing):
+                with self.assertRaisesRegex(OSError, 'marker write failure'):
+                    self.upload()
+            self.assertEqual([], list(self.receiver.incoming.iterdir()))
+
+    def test_maintenance_recovers_old_interrupted_marker_initialization(self):
+        self.upload()
+        for index, contents in enumerate((None, '', R.MARKER[:5])):
+            folder = self.receiver.incoming / ('20260101T000000Z-01234567-' + str(index) * 32)
+            folder.mkdir()
+            if contents is not None:
+                (folder / '.powerforge-incoming').write_text(contents)
+            os.utime(folder, (0, 0))
+        result = self.receiver.maintain()
+        self.assertTrue(result['healthy'])
+        self.assertEqual(3, result['removedPartial'])
+        self.assertEqual([], list(self.receiver.incoming.iterdir()))
+        valuable = self.receiver.incoming / ('20260101T000000Z-01234567-' + 'a' * 32)
+        valuable.mkdir()
+        (valuable / 'unknown').write_text('preserve')
+        with self.assertRaises((ValueError, FileNotFoundError)):
+            self.receiver.remove_incoming(valuable)
+        self.assertEqual('preserve', (valuable / 'unknown').read_text())
+
     def test_cross_filesystem_publication_is_rejected_before_receive(self):
         stat = pathlib.Path.stat
         def changed(path, *args, **kwargs):

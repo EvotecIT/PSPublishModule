@@ -39,6 +39,8 @@ public sealed class DatabaseBackupRunner
             state.HeldStagingPaths = held.ToArray();
             Safety.DemandFreeSpace(options.WorkRoot, options.MinimumFreeBytes);
             options.ValidateCaptureInputs();
+            Safety.DemandFreeSpace(options.WorkRoot, options.MinimumFreeBytes,
+                await CaptureCapacity.EstimateSetAsync(options, token));
             Directory.CreateDirectory(run);
             File.WriteAllText(Path.Combine(run, ".powerforge-backup-run"), "powerforge-database-backup-v1\n");
             var manifest = new CaptureManifest { HostId = options.HostId, Stamp = state.Stamp, CreatedAtUtc = state.StartedAtUtc };
@@ -46,6 +48,8 @@ public sealed class DatabaseBackupRunner
             foreach (var source in options.Databases)
             {
                 Stage("capture-" + source.Id);
+                // Refresh the estimate immediately before each write, accounting for earlier captures.
+                Safety.DemandFreeSpace(run, options.MinimumFreeBytes, await CaptureCapacity.EstimateAsync(source, token));
                 manifest.Databases.Add(await DatabaseCapture.CaptureAsync(source, run, log, token));
             }
             Stage("configuration");
@@ -66,7 +70,8 @@ public sealed class DatabaseBackupRunner
             state.TransferBytes = files.Sum(f => f.SizeBytes);
             var header = new { schemaVersion = 2, format = "native", hostId = options.HostId, stamp = state.Stamp,
                 createdAtUtc = state.StartedAtUtc, sizeBytes = state.TransferBytes, databases = manifest.Databases, files };
-            var bytes = JsonSerializer.SerializeToUtf8Bytes(header, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            Stage("validate-transfer-header");
+            var bytes = SerializeTransferHeader(header);
             state.CaptureSha256 = Convert.ToHexStringLower(SHA256.HashData(bytes));
             Stage("transfer");
             var response = await ProcessRunner.RunAsync(options.Destination.SshExecutable,
@@ -107,5 +112,14 @@ public sealed class DatabaseBackupRunner
             if (state.Status == "success") Safety.WriteJson(Path.Combine(Path.GetDirectoryName(options.StatePath)!, "last-success.json"), state);
         }
         return state;
+    }
+
+    internal static byte[] SerializeTransferHeader(object header)
+    {
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(header, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        // The receiver's 64 KiB line bound includes the newline written by this sender.
+        if (bytes.Length >= 65536)
+            throw new InvalidDataException("Native backup transfer header exceeds the receiver's 64 KiB limit; reduce the database or validation inventory.");
+        return bytes;
     }
 }

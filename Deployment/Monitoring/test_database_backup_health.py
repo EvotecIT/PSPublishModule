@@ -52,6 +52,39 @@ class HealthContracts(unittest.TestCase):
         values[2].update(running=True, lastResult=267009, currentRun={'status': 'running', 'startedAtUtc': values[-1].isoformat()})
         self.assertTrue(H.evaluate(*values)['healthy'])
 
+    def test_receipt_snapshot_retries_a_publication_crossing_the_nas_read(self):
+        before = ({'stamp': 'old'}, {'status': 'running'})
+        after = ({'stamp': 'new'}, {'status': 'success'})
+        reads = iter((before, after, after, after))
+        nas_reads = iter(({'stamp': 'old'}, {'stamp': 'new'}))
+        local, nas = H.read_backup_snapshot(lambda: next(reads), lambda: next(nas_reads))
+        self.assertEqual(after, local)
+        self.assertEqual({'stamp': 'new'}, nas)
+        unstable = iter(range(6))
+        with self.assertRaisesRegex(RuntimeError, 'changed repeatedly'):
+            H.read_backup_snapshot(lambda: next(unstable), lambda: {})
+
+    def test_nas_publication_handover_is_identified_and_time_bounded(self):
+        values = self.fixture()
+        values[0]['stamp'] = 'previous'
+        values[1]['latest']['verifiedAtUtc'] = values[-1].isoformat()
+        values[2].update(running=True, currentRun={'status': 'running', 'stage': 'transfer',
+                          'stamp': 'capture', 'captureSha256': 'hash', 'startedAtUtc': values[-1].isoformat()})
+        result = H.evaluate(*values)
+        self.assertTrue(result['healthy'])
+        self.assertTrue(result['receiptPending'])
+        values[1]['latest']['verifiedAtUtc'] = (values[-1] + dt.timedelta(seconds=5)).isoformat()
+        self.assertTrue(H.evaluate(*values)['healthy'])
+        values[1]['latest']['verifiedAtUtc'] = (values[-1] + dt.timedelta(seconds=301)).isoformat()
+        self.assertFalse(H.evaluate(*values)['healthy'])
+        values[1]['latest']['verifiedAtUtc'] = (values[-1] - dt.timedelta(seconds=301)).isoformat()
+        self.assertFalse(H.evaluate(*values)['healthy'])
+        values[1]['latest']['verifiedAtUtc'] = values[-1].isoformat()
+        values[2]['currentRun']['status'] = 'failed'
+        self.assertFalse(H.evaluate(*values)['healthy'])
+        values[2]['currentRun'].update(status='running', captureSha256='different')
+        self.assertFalse(H.evaluate(*values)['healthy'])
+
     def test_stale_database_and_disabled_schedule_remain_failures(self):
         values = self.fixture()
         values[1]['latest']['databases'][0]['capturedAtUtc'] = (values[-1] - dt.timedelta(hours=31)).isoformat()

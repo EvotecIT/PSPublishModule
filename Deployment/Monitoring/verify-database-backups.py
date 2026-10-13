@@ -35,7 +35,19 @@ def evaluate(local, nas, schedule, nas_schedule, restore, now=None):
         problems.append('NAS retention/freshness policy differs')
     if not latest.get('verified') or not latest.get('manifestSha256'):
         problems.append('NAS verification receipt missing')
-    if local.get('status') != 'success' or local.get('stamp') != latest.get('stamp') or local.get('captureSha256') != latest.get('captureSha256'):
+    current = schedule.get('currentRun') or {}
+    receipts_match = (local.get('status') == 'success' and local.get('stamp') == latest.get('stamp') and
+                      local.get('captureSha256') == latest.get('captureSha256'))
+    # NAS publication precedes the final local success receipt. Allow only a short, identified
+    # handover, never a failed/unknown attempt or an arbitrary mismatch with an old capture.
+    receipt_pending = (not receipts_match and current.get('status') in ('running', 'success') and
+                       current.get('stage') in ('transfer', 'complete') and
+                       (schedule.get('running') or current.get('status') == 'success') and
+                       current.get('stamp') == latest.get('stamp') and
+                       current.get('captureSha256') == latest.get('captureSha256') and
+                       bool(latest.get('verifiedAtUtc')) and
+                       -300 <= (now - timestamp(latest['verifiedAtUtc'])).total_seconds() <= 300)
+    if not receipt_pending and not receipts_match:
         problems.append('Local successful capture and NAS receipt differ')
     if local.get('cleanupErrorType'):
         problems.append('Local backup staging cleanup failed')
@@ -52,7 +64,6 @@ def evaluate(local, nas, schedule, nas_schedule, restore, now=None):
         problems.append('NAS scheduled verification/retention missing, failed or stale')
     if restore.get('healthy') is not True or set(restore.get('databaseIds', [])) != set(EXPECTED) or not restore.get('completedAtUtc') or not -300 <= (now - timestamp(restore['completedAtUtc'])).total_seconds() <= 30 * 86400:
         problems.append('Database restore drill missing, failed or older than 30 days')
-    current = schedule.get('currentRun') or {}
     if current.get('cleanupErrorType') or current.get('heldStagingPaths'):
         problems.append('Latest attempt left staging requiring cleanup')
     if current.get('status') == 'failed':
@@ -80,7 +91,18 @@ def evaluate(local, nas, schedule, nas_schedule, restore, now=None):
                      'restoreDrillAtUtc': restore.get('completedAtUtc'), 'snapshotCount': nas.get('snapshotCount'),
                      'retentionDaily': nas.get('keepDaily')})
     return {'healthy': all(r['healthy'] for r in rows), 'checkedAtUtc': now.isoformat(), 'databases': rows,
-            'windowsSchedule': schedule, 'nasSchedule': nas_schedule}
+            'windowsSchedule': schedule, 'nasSchedule': nas_schedule, 'receiptPending': receipt_pending}
+
+
+def read_backup_snapshot(read_local, read_nas):
+    """Bracket the remote read with local reads; retry a publication that straddles them."""
+    for _ in range(3):
+        before = read_local()
+        nas = read_nas()
+        after = read_local()
+        if before == after:
+            return after, nas
+    raise RuntimeError('Backup receipts changed repeatedly during monitoring; retry the health scan')
 
 
 def run_json(arguments, timeout=40):
@@ -123,7 +145,6 @@ def main():
         identity = subprocess.run(ssh + ['hostname'], capture_output=True, timeout=20)
         if identity.returncode or identity.stdout.decode().strip() != host['expectedHostname']:
             raise RuntimeError('Synology identity verification failed')
-        nas = run_json(ssh + ['/usr/bin/python3 ' + NAS_TOOL + ' --config ' + NAS_CONFIG + ' status'])
         # Query DSM supported API, then project only this exact task's schedule/action fields.
         task_command = "/usr/syno/bin/synowebapi --exec api=SYNO.Core.TaskScheduler method=list version=2 2>/dev/null"
         listing = run_json(ssh + [task_command])
@@ -138,8 +159,6 @@ def main():
                         and daily.get('date_type') == 0 and daily.get('repeat_date') == 0
                         and daily.get('hour') == 7 and daily.get('minute') == 30
                         and daily.get('week_day') == '0,1,2,3,4,5,6', 'taskId': task.get('id'), 'nextRun': task.get('next_trigger_time')}
-        local = json.loads((INSTALL / 'status/last-success.json').read_text(encoding='utf-8-sig'))
-        current = json.loads((INSTALL / 'status/latest-run.json').read_text(encoding='utf-8-sig'))
         restore_path = INSTALL / 'status/restore-drill.json'
         restore = json.loads(restore_path.read_text(encoding='utf-8-sig')) if restore_path.exists() else {}
         installation = json.loads((INSTALL / 'status/installation.json').read_text(encoding='utf-8-sig'))
@@ -147,7 +166,12 @@ def main():
             raise ValueError('Installed policy belongs to a different installation root')
         command = windows_schedule_command(installation)
         schedule = run_json(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', command])
-        schedule['currentRun'] = {k: current.get(k) for k in ('status', 'stage', 'startedAtUtc', 'completedAtUtc', 'cleanupErrorType', 'heldStagingPaths')}
+        def local_receipts():
+            return tuple(json.loads((INSTALL / ('status/' + name)).read_text(encoding='utf-8-sig'))
+                         for name in ('last-success.json', 'latest-run.json'))
+        (local, current), nas = read_backup_snapshot(local_receipts, lambda: run_json(
+            ssh + ['/usr/bin/python3 ' + NAS_TOOL + ' --config ' + NAS_CONFIG + ' status']))
+        schedule['currentRun'] = {k: current.get(k) for k in ('status', 'stage', 'stamp', 'captureSha256', 'startedAtUtc', 'completedAtUtc', 'cleanupErrorType', 'heldStagingPaths')}
         return evaluate(local, nas, schedule, nas_schedule, restore)
     except Exception as error:
         message = type(error).__name__ + ': ' + str(error)[:180]
