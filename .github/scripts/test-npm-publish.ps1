@@ -1,3 +1,4 @@
+param([string] $OutputPath)
 $ErrorActionPreference = 'Stop'
 $routeRoot = Join-Path ([IO.Path]::GetTempPath()) ('powerforge-npm-publisher-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $routeRoot | Out-Null
@@ -44,6 +45,7 @@ $env:NPM_EXECUTE = 'false'
 $env:NPM_BOOTSTRAP = 'false'
 $env:SOURCE_PRIVATE = 'false'
 $env:RELEASE_ENVIRONMENT = 'npm-release'
+$env:RELEASE_TAG_PREFIX = ''
 $env:RUNNER_TEMP = Join-Path $routeRoot 'fixture'
 $env:GITHUB_STEP_SUMMARY = Join-Path $routeRoot 'fixture-summary.md'
 $env:GITHUB_ENV=Join-Path $routeRoot 'job-env'
@@ -71,6 +73,11 @@ function global:gh {
     if ($args[1] -eq 'repos/example/widget/environments/npm-release') { return $global:npmQualification_environment | ConvertTo-Json -Depth 5 -Compress }
     if ($args[1] -eq 'repos/example/widget/environments/npm-release/deployment-branch-policies') { return $global:npmQualification_policies | ConvertTo-Json -Depth 5 -Compress }
     if ($args[1] -eq "repos/example/widget/actions/runs/$env:QUALITY_RUN") { return $global:npmQualification_run | ConvertTo-Json -Compress }
+    if ($args[1] -eq 'repos/example/widget/git/matching-refs/tags/npm-v') {
+        if ('--paginate' -notin $args -or '--slurp' -notin $args) { throw 'Reservation recheck must read all pages.' }
+        return ConvertTo-Json -InputObject @($global:npmQualification_reservations) -Depth 10 -Compress
+    }
+    if ($args[1] -like 'repos/example/widget/compare/*') { return @{status=$global:npmQualification_comparison} | ConvertTo-Json -Compress }
     throw 'Unexpected GitHub metadata request.'
 }
 function global:Start-Sleep { param([int]$Seconds) }
@@ -222,7 +229,9 @@ function global:Invoke-WebRequest {
     param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck)
     if ($Uri.AbsoluteUri -like 'https://registry.npmjs.org/-/npm/v1/attestations/*') { return Get-NpmProvenanceFixture }
     if ($Uri.AbsoluteUri -ne 'https://registry.npmjs.org/%40example%2Fwidget/0.1.0') { throw 'Unexpected registry check.' }
-    return [pscustomobject]@{StatusCode=$global:npmQualification_existingStatus;Content=(@{name=$env:NPM_PACKAGE;version=$env:NPM_VERSION;dist=@{integrity=$global:npmQualification_existingIntegrity}} | ConvertTo-Json -Depth 5)}
+    $dist=@{integrity=$global:npmQualification_existingIntegrity}
+    if ($global:npmQualification_registryProvenance) { $dist.attestations=@{provenance=@{predicateType='https://slsa.dev/provenance/v1'}} }
+    return [pscustomobject]@{StatusCode=$global:npmQualification_existingStatus;Content=(@{name=$env:NPM_PACKAGE;version=$env:NPM_VERSION;dist=$dist} | ConvertTo-Json -Depth 5)}
 }
 Invoke-Case 'Already published exact bytes succeed without another upload' { & $publisher } $false
 if ($global:npmQualification_publishCalls -ne 0) { throw 'A retry uploaded again.' }
@@ -243,7 +252,29 @@ $global:npmQualification_registryIntegrity=$global:npmQualification_integrity
 $global:npmQualification_registryProvenance=$true
 $env:SOURCE_PRIVATE='false'; $env:NPM_EXECUTE='true'
 $env:GITHUB_SHA='b' * 40
-Invoke-Case 'Public-source npm process receives qualified checkout SHA, not newer workflow tip' { & $publisher; if ($global:npmQualification_npmSource -cne $env:QUALIFIED_SOURCE_SHA) { throw 'npm inherited the wrong provenance source.' } } $false
+$global:npmQualification_existingStatus=200
+$global:npmQualification_existingIntegrity=$global:npmQualification_integrity
+Invoke-Case 'Verified existing public version can be reconciled after GitHub tip advances' { & $publisher } $false
+if ($global:npmQualification_publishCalls -ne 0 -or $env:GITHUB_SHA -cne ('b' * 40)) { throw 'Existing public reconciliation uploaded or changed identity.' }
+$env:NPM_EXECUTE='false'
+Invoke-Case 'Verified existing public dry run needs no new signing identity' { & $publisher } $false
+if ($global:npmQualification_publishCalls -ne 0) { throw 'Existing public dry run reached upload.' }
+$global:npmQualification_existingStatus=404; $env:NPM_EXECUTE='true'
+Invoke-Case 'Public source rejects mismatched OIDC identity before an upload' { & $publisher } $true
+if ($global:npmQualification_publishCalls -ne 0 -or $env:GITHUB_SHA -cne ('b' * 40)) { throw 'OIDC mismatch reached publication or changed GitHub source identity.' }
+$env:NPM_EXECUTE='false'
+Invoke-Case 'Public dry run rejects a provenance identity it cannot publish' { & $publisher } $true
+if ($global:npmQualification_publishCalls -ne 0) { throw 'Provenance mismatch reached npm.' }
+$env:NPM_EXECUTE='true'; $env:SOURCE_PRIVATE='true'
+Invoke-Case 'Private source keeps actual OIDC workflow identity for a qualified older archive' {
+    & $publisher
+    if ($global:npmQualification_npmSource -cne ('b' * 40) -or $global:npmQualification_publishArguments -notcontains '--provenance=false') { throw 'Private source changed GitHub identity or enabled provenance.' }
+} $false
+$env:SOURCE_PRIVATE='false'; $env:GITHUB_SHA=$env:QUALIFIED_SOURCE_SHA
+Invoke-Case 'Matching public source publishes with unchanged GitHub identity' {
+    & $publisher
+    if ($global:npmQualification_npmSource -cne $env:QUALIFIED_SOURCE_SHA) { throw 'Public source identity changed.' }
+} $false
 $global:npmQualification_attestedSource='b' * 40
 Invoke-Case 'Wrong attested source rejected after one upload without repeating' { & $publisher } $true
 if ($global:npmQualification_publishCalls -ne 1) { throw 'Provenance source verification repeated publication.' }
@@ -251,11 +282,37 @@ $global:npmQualification_attestedSource=$env:QUALIFIED_SOURCE_SHA
 $global:npmQualification_attestedArchive='0' * 128
 Invoke-Case 'Wrong attested archive rejected after one upload without repeating' { & $publisher } $true
 if ($global:npmQualification_publishCalls -ne 1) { throw 'Provenance artifact verification repeated publication.' }
+$global:npmQualification_attestedArchive=[Convert]::ToHexString([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($Archive))).ToLowerInvariant()
+$env:RELEASE_TAG_PREFIX='npm-v'
+$currentReservation=@{ref='refs/tags/npm-v0.1.0';object=@{type='commit';sha=$env:QUALIFIED_SOURCE_SHA}}
+$newerReservation=@{ref='refs/tags/npm-v0.1.1';object=@{type='commit';sha=('b' * 40)}}
+$global:npmQualification_reservations=@(@($currentReservation,$newerReservation))
+$global:npmQualification_comparison='ahead'
+Invoke-Case 'Newer reservation appearing during the build blocks the old archive before upload' { & $publisher } $true
+if ($global:npmQualification_publishCalls -ne 0) { throw 'A newer source reservation reached an older upload.' }
+$global:npmQualification_comparison='behind'
+Invoke-Case 'A newer source can recover above an ancestor reservation' { & $publisher } $false
+if ($global:npmQualification_publishCalls -ne 1) { throw 'Newer source did not publish once.' }
+$global:npmQualification_comparison='diverged'
+Invoke-Case 'Diverged reserved source blocks publication' { & $publisher } $true
+if ($global:npmQualification_publishCalls -ne 0) { throw 'Diverged source reached publication.' }
+$global:npmQualification_reservations=@(@($newerReservation))
+Invoke-Case 'Missing current reservation blocks an automatic upload' { & $publisher } $true
+$global:npmQualification_reservations=@(@(@{ref='refs/tags/npm-v0.1.0';object=@{type='commit';sha=('b' * 40)}}))
+Invoke-Case 'Version reserved by another source blocks an automatic upload' { & $publisher } $true
+$global:npmQualification_reservations=@(@($currentReservation))
+Invoke-Case 'Exact reservation accepts one verified upload' { & $publisher } $false
+if ($global:npmQualification_publishCalls -ne 1) { throw 'Reserved upload was repeated or skipped.' }
+$env:NPM_EXECUTE='false'; $global:npmQualification_reservations=@(@())
+Invoke-Case 'Nonpublishing dry run does not require a new reservation' { & $publisher } $false
+if ($global:npmQualification_publishArguments -notcontains '--dry-run') { throw 'Unreserved dry run attempted publication.' }
+$env:NPM_EXECUTE='true'; $env:RELEASE_TAG_PREFIX=''
 $env:QUALIFIED_SOURCE_SHA=''
 Invoke-Case 'Missing validated provenance source blocks before upload' { & $publisher } $true
 if ($global:npmQualification_publishCalls -ne 0) { throw 'Unbound source reached publication.' }
 
-$global:npmQualification_results | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $routeRoot 'workflow-contract-results.json')
+$resultPath = if ($OutputPath) { $OutputPath } else { Join-Path $routeRoot 'workflow-contract-results.json' }
+$global:npmQualification_results | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $resultPath
 Write-Output "$($global:npmQualification_results.Count) release contracts passed; npm network mutations were replaced only at the process boundary."
 
 } finally {

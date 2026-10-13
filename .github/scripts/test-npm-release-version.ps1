@@ -14,7 +14,11 @@ function global:git { $global:LASTEXITCODE = 0; return $global:npmVersionFixture
 function global:gh {
     $global:LASTEXITCODE = 0
     if ($args[1] -like '*/actions/runs/*') { return $global:npmVersionFixture.Quality | ConvertTo-Json -Compress }
-    if ($args[1] -like '*/compare/*') { return @{status=$global:npmVersionFixture.Comparison} | ConvertTo-Json -Compress }
+    if ($args[1] -like '*/compare/*') {
+        $sha = $args[1].Split('...')[-1]
+        $status = if ($global:npmVersionFixture.Comparisons.ContainsKey($sha)) { $global:npmVersionFixture.Comparisons[$sha] } else { $global:npmVersionFixture.Comparison }
+        return @{status=$status} | ConvertTo-Json -Compress
+    }
     if ($args[1] -like '*/git/matching-refs/*') {
         if ('--paginate' -notin $args -or '--slurp' -notin $args) { throw 'Tag discovery must include every page.' }
         $pages = @($global:npmVersionFixture.Pages)
@@ -61,7 +65,7 @@ function Reset-Fixture {
         ConvertTo-Json | Set-Content -LiteralPath $env:PACKAGE_MANIFEST
     $global:npmVersionFixture = @{
         Quality=@{head_sha=$env:GITHUB_SHA;head_branch='main';event='push';status='completed';conclusion='success';path='.github/workflows/quality.yml'}
-        Pages=@(@()); Creates=0; Collision=$false; CreatedRef=''; Status=200; Comparison='behind'; Checkout=$env:GITHUB_SHA
+        Pages=@(@()); Creates=0; Collision=$false; CreatedRef=''; Status=200; Comparison='behind'; Comparisons=@{}; Checkout=$env:GITHUB_SHA
         PublicSourceKnown=$true; SeedVersion='0.1.0'
         Registry='{"name":"@example/widget","versions":{"0.1.0":{}}}'
     }
@@ -132,6 +136,27 @@ try {
     Assert-Case 'Retry cannot bypass unknown public source ancestry' {
         $global:npmVersionFixture.PublicSourceKnown=$false
         $global:npmVersionFixture.Pages=@(@((New-Reservation '0.0.9' $env:GITHUB_SHA)))
+    } -Reject
+    Assert-Case 'Newer unpublished reservation suppresses an older first release' {
+        $global:npmVersionFixture.Pages=@(@((New-Reservation '0.1.2' ('b' * 40))))
+        $global:npmVersionFixture.Comparisons[('b' * 40)]='ahead'
+    } '0.1.2' 0 -Included
+    Assert-Case 'Retry cannot pass a newer unpublished reservation' {
+        $global:npmVersionFixture.Pages=@(@((New-Reservation '0.1.1' $env:GITHUB_SHA),(New-Reservation '0.1.2' ('b' * 40))))
+        $global:npmVersionFixture.Comparisons[('b' * 40)]='ahead'
+    } '0.1.2' 0 -Included
+    Assert-Case 'Explicit higher version cannot release older source' {
+        $global:npmVersionFixture.Pages=@(@((New-Reservation '0.1.2' ('b' * 40))))
+        $global:npmVersionFixture.Comparisons[('b' * 40)]='ahead'
+        $env:REQUESTED_VERSION='0.1.3'
+    } '0.1.2' 0 -Included
+    Assert-Case 'Diverged unpublished reservation stops version selection' {
+        $global:npmVersionFixture.Pages=@(@((New-Reservation '0.1.2' ('b' * 40))))
+        $global:npmVersionFixture.Comparisons[('b' * 40)]='diverged'
+    } -Reject
+    Assert-Case 'Annotated reservation cannot hide source ancestry' {
+        $ref=New-Reservation '0.1.2' ('b' * 40); $ref.object.type='tag'
+        $global:npmVersionFixture.Pages=@(@($ref))
     } -Reject
     if ($OutputPath) { $results | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $OutputPath }
     Write-Host "npm release version contracts passed: $($results.Count)."

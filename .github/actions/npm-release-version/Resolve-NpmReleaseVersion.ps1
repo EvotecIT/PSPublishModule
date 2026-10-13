@@ -67,6 +67,24 @@ $reservations = @(
     }
 )
 $current = @($reservations | Where-Object { $_.Ref.object.type -ceq 'commit' -and $_.Ref.object.sha -ceq $sourceSha } | Sort-Object Version -Descending)
+$highestReservation = $reservations | Sort-Object Version -Descending | Select-Object -First 1
+if ($highestReservation) {
+    if ($highestReservation.Ref.object.type -cne 'commit' -or
+        $highestReservation.Ref.object.sha -notmatch '^[a-fA-F0-9]{40}$') {
+        throw 'Release reservations must identify source commits directly.'
+    }
+    if ($highestReservation.Ref.object.sha -cne $sourceSha) {
+        $comparison = Read-GitHubJson -Arguments @("repos/$env:GITHUB_REPOSITORY/compare/$sourceSha...$($highestReservation.Ref.object.sha)")
+        if ($comparison.status -ceq 'ahead') {
+            # A newer source owns the release, even while its upload is still pending.
+            "version=$($highestReservation.Version)" >> $env:GITHUB_OUTPUT
+            "tag=$env:RELEASE_TAG_PREFIX$($highestReservation.Version)" >> $env:GITHUB_OUTPUT
+            'should-release=false' >> $env:GITHUB_OUTPUT
+            return
+        }
+        if ($comparison.status -cne 'behind') { throw 'Reserved source history diverged; reconcile release tags before retrying.' }
+    }
+}
 $uri = 'https://registry.npmjs.org/' + [Uri]::EscapeDataString($manifest.name)
 $response = Invoke-WebRequest -Uri $uri -SkipHttpErrorCheck
 if ($response.StatusCode -notin @(200, 404)) { throw 'Cannot determine published npm versions.' }

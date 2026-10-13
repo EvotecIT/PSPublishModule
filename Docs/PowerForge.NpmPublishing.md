@@ -36,6 +36,10 @@ and reserved versions, using the package manifest as a minimum, and atomically
 reserves an `npm-v` tag for the source commit. It never pushes to the default
 branch. Retrying the commit reuses that reservation. See the
 [action inputs and version rules](../.github/actions/npm-release-version/README.md).
+Serialize version selection, packaging and publication in the caller workflow
+with `cancel-in-progress: false` and `queue: max`. Pass `release-tag-prefix: npm-v`
+to the publisher. It rechecks reservations immediately before a new upload so a
+newer commit's pending reservation also prevents an older release becoming latest.
 The caller sets the selected package version, qualifies the archive, and calls
 the publisher. This supports normal checked PR merges without an administrator
 exception or a follow-up version-only PR.
@@ -44,8 +48,11 @@ Before uploading an ordinary OIDC release, the publisher checks whether that
 version is already public. Matching archive SHA512 and required provenance let
 a retry finish without another upload. Conflicting bytes or an unavailable
 registry stop the release.
-For public source repositories, npm receives the validated package source SHA
-even when a later merge has advanced the workflow definition's default-branch tip.
+For public source repositories, a new publication requires the validated package
+source SHA to match the workflow run's GitHub OIDC source identity. If a later
+merge advances that identity, the older upload stops; the newer commit's successful
+quality run qualifies its own archive. The workflow never changes `GITHUB_SHA` to make a
+provenance statement disagree with the identity GitHub actually signs.
 Registry readback checks the provenance dependency and archive digest, rather than
 accepting an attestation merely because one exists.
 

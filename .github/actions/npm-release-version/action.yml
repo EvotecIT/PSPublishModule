@@ -26,7 +26,7 @@ outputs:
     description: Tag binding the selected version to this source commit.
     value: ${{ steps.version.outputs.tag }}
   should-release:
-    description: False when this source is already included in a newer public release.
+    description: False when a newer source already owns a reserved or published release.
     value: ${{ steps.version.outputs.should-release }}
 runs:
   using: composite

@@ -16,6 +16,8 @@ Retries reuse the source commit's existing reservation. If a higher public relea
 overtakes an unpublished reservation, newer source receives a new higher version;
 the old tag remains as its original reservation. Source already included in the
 higher public release is skipped instead of making older code the latest package.
+A newer commit's reservation also suppresses older runs before that commit is
+published. Diverged or indirect tag identities stop version selection.
 A reservation is not a successful publication; only registry verification proves that.
 No reservation is created for a dry run. Network failures and tag collisions fail
 before publication instead of silently choosing another version.
@@ -29,6 +31,11 @@ reservations, and `DEFAULT_BRANCH` from the repository event. Inputs are
 optional `version`, `tag-prefix` (default `npm-v`) and `reserve` (default `false`).
 Outputs are `version`, `tag` and `should-release`. Skip package/publication jobs
 when `should-release` is `false`.
+Serialize the whole caller workflow, including version selection, build and
+publication, with `cancel-in-progress: false` and `queue: max`. Pass the same
+`release-tag-prefix` to the publisher so it rechecks source reservations immediately
+before upload. A newer reservation created during the build stops an older upload;
+rerunning version selection then skips that older source.
 
 The shared `powerforge-npm-publish.yml` accepts an explicit default-branch dispatch
 or the completed quality run's `workflow_run` event. Both paths require the same
@@ -36,3 +43,8 @@ successful push run and exact source commit. The protected environment still
 allows only the exact default branch. A repeated upload is skipped only when the
 existing public version has the qualified archive's SHA512 and required provenance.
 An existing version with different bytes is an error.
+For public source, a new upload also requires the qualified commit to match the
+workflow run's GitHub OIDC source identity. If a later merge changes that identity,
+wait for its successful quality run; changing an environment variable cannot
+change the signed identity. Private source disables unsupported npm provenance
+and keeps the qualified archive tied to its successful quality run.
