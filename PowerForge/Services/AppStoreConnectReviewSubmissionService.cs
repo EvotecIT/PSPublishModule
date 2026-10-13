@@ -3,7 +3,7 @@ namespace PowerForge;
 /// <summary>
 /// Submits prepared App Store Connect Distribution versions to App Review.
 /// </summary>
-public sealed class AppStoreConnectReviewSubmissionService
+public sealed partial class AppStoreConnectReviewSubmissionService
 {
     private readonly AppStoreConnectClient _client;
 
