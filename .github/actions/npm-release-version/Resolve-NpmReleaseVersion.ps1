@@ -80,6 +80,9 @@ if ($response.StatusCode -eq 200) {
 }
 $highestPublished = $publishedVersions | Sort-Object -Descending | Select-Object -First 1
 $publishedReservation = $reservations | Where-Object { $_.Version -eq $highestPublished } | Select-Object -First 1
+if ($highestPublished -and -not $publishedReservation) {
+    throw 'The highest public npm version has no source reservation. Verify its published source and seed the release tag before continuing.'
+}
 if ($publishedReservation -and $publishedReservation.Ref.object.sha -cne $sourceSha) {
     $comparison = Read-GitHubJson -Arguments @("repos/$env:GITHUB_REPOSITORY/compare/$sourceSha...$($publishedReservation.Ref.object.sha)")
     if ($comparison.status -ceq 'ahead') {

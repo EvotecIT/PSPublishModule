@@ -109,6 +109,7 @@ jobs:
               ($run.path -split '@', 2)[0] -ne ".github/workflows/$env:QUALITY_WORKFLOW") {
               throw 'The supplied quality run does not qualify this default-branch commit.'
           }
+          "QUALIFIED_SOURCE_SHA=$sourceSha" >> $env:GITHUB_ENV
 
       - name: Download the qualified archive
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -138,6 +139,7 @@ jobs:
               throw 'Source repository visibility is required before publication.'
           }
           $requireProvenance = $env:SOURCE_PRIVATE -eq 'false'
+          if ($env:QUALIFIED_SOURCE_SHA -notmatch '^[a-fA-F0-9]{40}$') { throw 'A validated package source commit is required.' }
           if ($env:NPM_SHA256 -notmatch '^[a-fA-F0-9]{64}$' -or
               $env:NPM_VERSION -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') {
               throw 'A three-part version and SHA256 are required.'
@@ -158,13 +160,34 @@ jobs:
           }
           $integrity = 'sha512-' + [Convert]::ToBase64String(
               [Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($archive)))
+          $archiveSha512 = [Convert]::ToHexString([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($archive))).ToLowerInvariant()
+          function Test-PublishedProvenance($Dist) {
+              if (-not $requireProvenance) { return $true }
+              if (-not $Dist.attestations.provenance) { return $false }
+              $url = 'https://registry.npmjs.org/-/npm/v1/attestations/' + [Uri]::EscapeDataString($env:NPM_PACKAGE) + '@' + $env:NPM_VERSION
+              $response = Invoke-WebRequest -Uri $url -SkipHttpErrorCheck
+              if ($response.StatusCode -ne 200) { return $false }
+              $attestations = $response.Content | ConvertFrom-Json
+              foreach ($attestation in $attestations.attestations) {
+                  if ($attestation.predicateType -cne 'https://slsa.dev/provenance/v1') { continue }
+                  $payload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($attestation.bundle.dsseEnvelope.payload)) | ConvertFrom-Json
+                  $dependency = @($payload.predicate.buildDefinition.resolvedDependencies | Where-Object {
+                      $_.uri -ceq "git+https://github.com/$env:GITHUB_REPOSITORY@$env:GITHUB_REF" -and
+                      $_.digest.gitCommit -ceq $env:QUALIFIED_SOURCE_SHA
+                  })
+                  $subject = @($payload.subject | Where-Object { $_.digest.sha512 -ceq $archiveSha512 })
+                  if ($dependency.Count -ne 1 -or $subject.Count -ne 1) { throw 'Published provenance does not identify the qualified source and archive.' }
+                  return $true
+              }
+              return $false
+          }
           if ($env:NPM_BOOTSTRAP -ne 'true') {
               $versionUrl = 'https://registry.npmjs.org/' + [Uri]::EscapeDataString($env:NPM_PACKAGE) + '/' + $env:NPM_VERSION
               $existingVersion = Invoke-WebRequest -Uri $versionUrl -SkipHttpErrorCheck
               if ($existingVersion.StatusCode -eq 200) {
                   $published = $existingVersion.Content | ConvertFrom-Json
                   if ($published.name -cne $env:NPM_PACKAGE -or $published.version -cne $env:NPM_VERSION -or
-                      $published.dist.integrity -cne $integrity -or ($requireProvenance -and -not $published.dist.attestations.provenance)) {
+                      $published.dist.integrity -cne $integrity -or -not (Test-PublishedProvenance $published.dist)) {
                       throw 'An existing npm version differs from the qualified archive or required provenance.'
                   }
                   "Already verified: $env:NPM_PACKAGE@$env:NPM_VERSION; no repeat upload." >> $env:GITHUB_STEP_SUMMARY
@@ -187,6 +210,9 @@ jobs:
           $publishArgs = @('publish', $archive, '--ignore-scripts', "--provenance=$($requireProvenance.ToString().ToLowerInvariant())", '--access', 'public',
               '--registry', 'https://registry.npmjs.org')
           if ($env:NPM_EXECUTE -ne 'true') { $publishArgs += '--dry-run' }
+          # The workflow definition may run at a newer default-branch tip than its checked-out source.
+          # npm uses this process variable for the provenance dependency, not for OIDC authorization.
+          $env:GITHUB_SHA = $env:QUALIFIED_SOURCE_SHA
           & npm @publishArgs
           if ($LASTEXITCODE -ne 0) { throw 'npm publication or dry run failed.' }
           if ($env:NPM_EXECUTE -eq 'true') {
@@ -196,7 +222,7 @@ jobs:
                   if ($LASTEXITCODE -eq 0) {
                       $dist = $distJson | ConvertFrom-Json
                       if ($dist.integrity -cne $integrity) { throw 'Published archive integrity does not match.' }
-                      if (-not $requireProvenance -or $dist.attestations.provenance) { $verified = $true; break }
+                      if (Test-PublishedProvenance $dist) { $verified = $true; break }
                   }
                   Start-Sleep -Seconds 4
               }

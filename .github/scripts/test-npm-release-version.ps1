@@ -17,7 +17,11 @@ function global:gh {
     if ($args[1] -like '*/compare/*') { return @{status=$global:npmVersionFixture.Comparison} | ConvertTo-Json -Compress }
     if ($args[1] -like '*/git/matching-refs/*') {
         if ('--paginate' -notin $args -or '--slurp' -notin $args) { throw 'Tag discovery must include every page.' }
-        return ConvertTo-Json -InputObject $global:npmVersionFixture.Pages -Depth 10 -Compress
+        $pages = @($global:npmVersionFixture.Pages)
+        if ($global:npmVersionFixture.PublicSourceKnown) {
+            $pages += ,@((New-Reservation $global:npmVersionFixture.SeedVersion 'dddddddddddddddddddddddddddddddddddddddd'))
+        }
+        return ConvertTo-Json -InputObject $pages -Depth 10 -Compress
     }
     if ($args[1] -like '*/git/refs') {
         $global:npmVersionFixture.Creates++
@@ -58,6 +62,7 @@ function Reset-Fixture {
     $global:npmVersionFixture = @{
         Quality=@{head_sha=$env:GITHUB_SHA;head_branch='main';event='push';status='completed';conclusion='success';path='.github/workflows/quality.yml'}
         Pages=@(@()); Creates=0; Collision=$false; CreatedRef=''; Status=200; Comparison='behind'; Checkout=$env:GITHUB_SHA
+        PublicSourceKnown=$true; SeedVersion='0.1.0'
         Registry='{"name":"@example/widget","versions":{"0.1.0":{}}}'
     }
 }
@@ -82,7 +87,7 @@ function Assert-Case([string] $Name, [scriptblock] $Arrange, [string] $Version, 
 }
 try {
     Assert-Case 'Initial release uses the manifest minimum' {} '0.1.1'
-    Assert-Case 'Published minimum advances the patch' { $global:npmVersionFixture.Registry='{"name":"@example/widget","versions":{"0.1.1":{}}}' } '0.1.2'
+    Assert-Case 'Published minimum advances the patch' { $global:npmVersionFixture.Registry='{"name":"@example/widget","versions":{"0.1.1":{}}}';$global:npmVersionFixture.SeedVersion='0.1.1' } '0.1.2'
     Assert-Case 'A higher manifest starts a new release line' {
         $m=Get-Content $env:PACKAGE_MANIFEST -Raw | ConvertFrom-Json; $m.version='0.2.0'; $m | ConvertTo-Json | Set-Content $env:PACKAGE_MANIFEST
     } '0.2.0'
@@ -122,6 +127,11 @@ try {
         $global:npmVersionFixture.Pages=@(@((New-Reservation '0.1.2' 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')))
         $global:npmVersionFixture.Registry='{"name":"@example/widget","versions":{"0.1.2":{}}}'
         $global:npmVersionFixture.Comparison='diverged'
+    } -Reject
+    Assert-Case 'Fresh source cannot bypass unknown public source ancestry' { $global:npmVersionFixture.PublicSourceKnown=$false } -Reject
+    Assert-Case 'Retry cannot bypass unknown public source ancestry' {
+        $global:npmVersionFixture.PublicSourceKnown=$false
+        $global:npmVersionFixture.Pages=@(@((New-Reservation '0.0.9' $env:GITHUB_SHA)))
     } -Reject
     if ($OutputPath) { $results | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $OutputPath }
     Write-Host "npm release version contracts passed: $($results.Count)."

@@ -110,6 +110,7 @@ jobs:
             '.github/workflows/powerforge-website-maintenance.yml'
             '.github/workflows/powerforge-website-run.yml'
             '.github/workflows/powerforge-catalog-update.yml'
+            '.github/workflows/powerforge-npm-publish.yml'
           )
 
           # GitHub added job.workflow_* identity fields after actionlint's current schema.
@@ -128,6 +129,11 @@ jobs:
             lint_workflow="$lint_root/$workflow"
             cp "$workflow" "$lint_workflow"
             sed --regexp-extended --in-place "s#$workflow_identity_expression#$replacement_expression#g" "$lint_workflow"
+            if [[ "$workflow" == '.github/workflows/powerforge-npm-publish.yml' ]]; then
+              # queue:max is supported by GitHub but newer than actionlint 1.7.12's schema.
+              [[ "$(grep --count --extended-regexp '^  queue: max\r?$' "$lint_workflow")" == 1 ]]
+              sed --regexp-extended --in-place '/^  queue: max\r?$/d' "$lint_workflow"
+            fi
             lint_workflows+=("$lint_workflow")
           done
 

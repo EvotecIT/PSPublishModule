@@ -44,6 +44,10 @@ Before uploading an ordinary OIDC release, the publisher checks whether that
 version is already public. Matching archive SHA512 and required provenance let
 a retry finish without another upload. Conflicting bytes or an unavailable
 registry stop the release.
+For public source repositories, npm receives the validated package source SHA
+even when a later merge has advanced the workflow definition's default-branch tip.
+Registry readback checks the provenance dependency and archive digest, rather than
+accepting an attestation merely because one exists.
 
 Configure the trusted publisher for the package on npm with the calling GitHub
 organization, repository, **calling workflow filename** and release environment.

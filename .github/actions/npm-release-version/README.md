@@ -19,6 +19,9 @@ higher public release is skipped instead of making older code the latest package
 A reservation is not a successful publication; only registry verification proves that.
 No reservation is created for a dry run. Network failures and tag collisions fail
 before publication instead of silently choosing another version.
+When adopting the action for an existing package, verify the source of its highest
+public version and seed the matching `npm-v` tag. Unknown public source history
+stops version selection instead of letting an older commit become the latest package.
 
 Provide `GH_TOKEN` with Actions read permission and Contents write permission for
 reservations, and `DEFAULT_BRANCH` from the repository event. Inputs are

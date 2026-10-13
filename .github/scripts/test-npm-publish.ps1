@@ -46,6 +46,8 @@ $env:SOURCE_PRIVATE = 'false'
 $env:RELEASE_ENVIRONMENT = 'npm-release'
 $env:RUNNER_TEMP = Join-Path $routeRoot 'fixture'
 $env:GITHUB_STEP_SUMMARY = Join-Path $routeRoot 'fixture-summary.md'
+$env:GITHUB_ENV=Join-Path $routeRoot 'job-env'
+$env:QUALIFIED_SOURCE_SHA=$env:GITHUB_SHA
 $fixtureArchives = Join-Path $env:RUNNER_TEMP 'npm-release'
 New-Item -ItemType Directory -Path $fixtureArchives -Force | Out-Null
 Copy-Item -LiteralPath $Archive -Destination $fixtureArchives
@@ -55,6 +57,8 @@ $global:npmQualification_integrity = 'sha512-' + [Convert]::ToBase64String([Secu
 $global:npmQualification_run = [ordered]@{head_sha=$env:GITHUB_SHA;head_branch='main';event='push';status='completed';conclusion='success';path='.github/workflows/quality.yml'}
 $global:npmQualification_environment = @{deployment_branch_policy=@{protected_branches=$false;custom_branch_policies=$true}}
 $global:npmQualification_policies = @{total_count=1;branch_policies=@(@{name='main';type='branch'})}
+$global:npmQualification_attestedSource=$env:QUALIFIED_SOURCE_SHA
+$global:npmQualification_attestedArchive=[Convert]::ToHexString([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($Archive))).ToLowerInvariant()
 $global:npmQualification_registryProvenance = $true
 $global:npmQualification_results = [Collections.Generic.List[object]]::new()
 foreach ($scriptFile in Get-ChildItem -LiteralPath $scriptsRoot -Filter '*.ps1') {
@@ -70,9 +74,19 @@ function global:gh {
     throw 'Unexpected GitHub metadata request.'
 }
 function global:Start-Sleep { param([int]$Seconds) }
+function global:Get-NpmProvenanceFixture {
+    $payload=@{
+        predicateType='https://slsa.dev/provenance/v1'
+        subject=@(@{digest=@{sha512=$global:npmQualification_attestedArchive}})
+        predicate=@{buildDefinition=@{resolvedDependencies=@(@{uri="git+https://github.com/$env:GITHUB_REPOSITORY@$env:GITHUB_REF";digest=@{gitCommit=$global:npmQualification_attestedSource}})}}
+    } | ConvertTo-Json -Depth 12 -Compress
+    $envelope=@{payload=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($payload))}
+    $content=@{attestations=@(@{predicateType='https://slsa.dev/provenance/v1';bundle=@{dsseEnvelope=$envelope}})} | ConvertTo-Json -Depth 12 -Compress
+    return [pscustomobject]@{StatusCode=200;Content=$content}
+}
 function global:npm {
     $global:LASTEXITCODE = 0
-    if ($args[0] -eq 'publish') { $global:npmQualification_publishCalls++; $global:npmQualification_publishArguments = @($args); return 'MOCK: no registry mutation' }
+    if ($args[0] -eq 'publish') { $global:npmQualification_npmSource=$env:GITHUB_SHA; $global:npmQualification_publishCalls++; $global:npmQualification_publishArguments = @($args); return 'MOCK: no registry mutation' }
     if ($args[0] -eq 'view') {
         $global:npmQualification_viewCalls++
         $dist = @{integrity=$global:npmQualification_registryIntegrity}
@@ -92,6 +106,7 @@ $gate = Join-Path $scriptsRoot 'quality.ps1'
 $publisher = Join-Path $scriptsRoot 'archive.ps1'
 function global:Invoke-WebRequest {
     param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck)
+    if ($Uri.AbsoluteUri -like 'https://registry.npmjs.org/-/npm/v1/attestations/*') { return Get-NpmProvenanceFixture }
     if ($Uri.AbsoluteUri -ne 'https://registry.npmjs.org/%40example%2Fwidget/0.1.0') { throw 'Unexpected registry check.' }
     return [pscustomobject]@{StatusCode=404}
 }
@@ -154,6 +169,7 @@ $env:NPM_EXECUTE='true'; $env:NODE_AUTH_TOKEN=''
 Invoke-Case 'Bootstrap missing credential rejected' { & $publisher } $true
 function global:Invoke-WebRequest {
     param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck)
+    if ($Uri.AbsoluteUri -like 'https://registry.npmjs.org/-/npm/v1/attestations/*') { return Get-NpmProvenanceFixture }
     $global:npmQualification_metadataAuthenticated = $Headers.Authorization -ceq "Bearer $env:NODE_AUTH_TOKEN"
     if ($Uri.AbsoluteUri -ne 'https://registry.npmjs.org/%40example%2Fwidget') { throw 'Unexpected metadata destination.' }
     if ($global:npmQualification_privatePackage) {
@@ -204,6 +220,7 @@ $global:npmQualification_existingStatus=200
 $global:npmQualification_existingIntegrity=$global:npmQualification_integrity
 function global:Invoke-WebRequest {
     param([Uri]$Uri, [hashtable]$Headers, [switch]$SkipHttpErrorCheck)
+    if ($Uri.AbsoluteUri -like 'https://registry.npmjs.org/-/npm/v1/attestations/*') { return Get-NpmProvenanceFixture }
     if ($Uri.AbsoluteUri -ne 'https://registry.npmjs.org/%40example%2Fwidget/0.1.0') { throw 'Unexpected registry check.' }
     return [pscustomobject]@{StatusCode=$global:npmQualification_existingStatus;Content=(@{name=$env:NPM_PACKAGE;version=$env:NPM_VERSION;dist=@{integrity=$global:npmQualification_existingIntegrity}} | ConvertTo-Json -Depth 5)}
 }
@@ -219,6 +236,24 @@ if ($global:npmQualification_publishCalls -ne 0) { throw 'Conflicting version re
 $global:npmQualification_existingStatus=503
 Invoke-Case 'Unknown registry state blocks without an upload' { & $publisher } $true
 if ($global:npmQualification_publishCalls -ne 0) { throw 'Unknown registry state reached upload.' }
+
+
+$global:npmQualification_existingStatus=404
+$global:npmQualification_registryIntegrity=$global:npmQualification_integrity
+$global:npmQualification_registryProvenance=$true
+$env:SOURCE_PRIVATE='false'; $env:NPM_EXECUTE='true'
+$env:GITHUB_SHA='b' * 40
+Invoke-Case 'Public-source npm process receives qualified checkout SHA, not newer workflow tip' { & $publisher; if ($global:npmQualification_npmSource -cne $env:QUALIFIED_SOURCE_SHA) { throw 'npm inherited the wrong provenance source.' } } $false
+$global:npmQualification_attestedSource='b' * 40
+Invoke-Case 'Wrong attested source rejected after one upload without repeating' { & $publisher } $true
+if ($global:npmQualification_publishCalls -ne 1) { throw 'Provenance source verification repeated publication.' }
+$global:npmQualification_attestedSource=$env:QUALIFIED_SOURCE_SHA
+$global:npmQualification_attestedArchive='0' * 128
+Invoke-Case 'Wrong attested archive rejected after one upload without repeating' { & $publisher } $true
+if ($global:npmQualification_publishCalls -ne 1) { throw 'Provenance artifact verification repeated publication.' }
+$env:QUALIFIED_SOURCE_SHA=''
+Invoke-Case 'Missing validated provenance source blocks before upload' { & $publisher } $true
+if ($global:npmQualification_publishCalls -ne 0) { throw 'Unbound source reached publication.' }
 
 $global:npmQualification_results | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $routeRoot 'workflow-contract-results.json')
 Write-Output "$($global:npmQualification_results.Count) release contracts passed; npm network mutations were replaced only at the process boundary."
