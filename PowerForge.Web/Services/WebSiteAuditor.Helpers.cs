@@ -243,7 +243,7 @@ public static partial class WebSiteAuditor
         foreach (var ext in DefaultHtmlExtensions)
         {
             var htmlCandidate = candidate + ext;
-            if (File.Exists(htmlCandidate))
+            if (IsPathWithinRoot(NormalizeRootPath(siteRoot), htmlCandidate) && File.Exists(htmlCandidate))
             {
                 resolvedPath = htmlCandidate;
                 return true;
@@ -303,7 +303,7 @@ public static partial class WebSiteAuditor
         foreach (var ext in DefaultHtmlExtensions)
         {
             var htmlCandidate = candidate + ext;
-            if (File.Exists(htmlCandidate))
+            if (IsPathWithinRoot(NormalizeRootPath(siteRoot), htmlCandidate) && File.Exists(htmlCandidate))
             {
                 resolvedPath = htmlCandidate;
                 return true;
