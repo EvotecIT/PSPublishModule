@@ -6,6 +6,92 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationBoundPipelineTests
 {
+    [WindowsOrLinuxX64Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public async Task AuthenticatedPackageRequiresOneExactSignedNuspecLayout()
+    {
+        var rid = OperatingSystem.IsWindows() ? "win-x64" : "linux-x64";
+        await PowerShellCompilationTestPrerequisites.AcquireRuntimePackAsync("net10.0", rid);
+        var version = PowerShellCompilationToolchainFingerprint.ResolveRuntimePackVersion("net10.0");
+        var id = "Microsoft.NETCore.App.Runtime." + rid;
+        var cacheRoot = Environment.GetEnvironmentVariable("NUGET_PACKAGES");
+        if (string.IsNullOrWhiteSpace(cacheRoot))
+            cacheRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages");
+        var package = PowerShellCompilationRuntimePackAuthority.AuthenticateMicrosoftPackage(
+            id, version, cacheRoot, CancellationToken.None);
+        package.VerifyInstalled(cacheRoot!);
+
+        byte[] signedNuspec;
+        string archiveName;
+        var archivePath = Path.Combine(cacheRoot!, id.ToLowerInvariant(), version,
+            id.ToLowerInvariant() + "." + version + ".nupkg");
+        using (var archive = ZipFile.OpenRead(archivePath))
+        {
+            var entry = Assert.Single(archive.Entries.Where(static entry => entry.FullName.IndexOf('/') < 0 &&
+                entry.FullName.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase)));
+            archiveName = entry.FullName;
+            using var stream = entry.Open();
+            using var payload = new MemoryStream();
+            stream.CopyTo(payload);
+            signedNuspec = payload.ToArray();
+        }
+        Assert.True(package.Matches(archiveName, Convert.ToHexString(SHA256.HashData(signedNuspec))),
+            "The metadata fixture must be the exact authenticated archive entry.");
+        var canonicalName = id.ToLowerInvariant() + ".nuspec";
+        Assert.NotEqual(canonicalName, archiveName);
+        using var workspace = PowerShellCompilationWorkspace.Create(keep: false);
+        var stageRoot = Path.Combine(workspace.Path, "authenticated-packages");
+        await package.InstallAsync(stageRoot, CancellationToken.None);
+        var directory = Path.Combine(stageRoot, id.ToLowerInvariant(), version);
+
+        string SetNuspecName(string name)
+        {
+            var existing = Assert.Single(Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
+                .Where(static path => path.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase)));
+            Assert.Equal(signedNuspec, File.ReadAllBytes(existing));
+            var transition = Path.Combine(workspace.Path, "nuspec-transition");
+            File.Move(existing, transition);
+            var selected = Path.Combine(directory, name);
+            File.Move(transition, selected);
+            Assert.Equal(name, Path.GetFileName(Assert.Single(Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
+                .Where(static path => path.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase)))));
+            Assert.Equal(signedNuspec, File.ReadAllBytes(selected));
+            package.VerifyInstalled(stageRoot);
+            return selected;
+        }
+
+        SetNuspecName(archiveName);
+        var canonicalPath = SetNuspecName(canonicalName);
+        var changedNuspec = (byte[])signedNuspec.Clone();
+        changedNuspec[changedNuspec.Length - 1] ^= 1;
+        try
+        {
+            File.WriteAllBytes(canonicalPath, changedNuspec);
+            Assert.Throws<InvalidOperationException>(() => package.VerifyInstalled(stageRoot));
+        }
+        finally { File.WriteAllBytes(canonicalPath, signedNuspec); }
+        package.VerifyInstalled(stageRoot);
+
+        var withdrawn = Path.Combine(workspace.Path, "withdrawn.nuspec");
+        try
+        {
+            File.Move(canonicalPath, withdrawn);
+            Assert.Throws<InvalidOperationException>(() => package.VerifyInstalled(stageRoot));
+        }
+        finally { File.Move(withdrawn, canonicalPath); }
+        package.VerifyInstalled(stageRoot);
+
+        var originalPath = Path.Combine(directory, archiveName);
+        // Distinct-case collisions are representable on case-sensitive validation volumes.
+        if (!File.Exists(originalPath))
+        {
+            File.Copy(canonicalPath, originalPath);
+            Assert.Equal(2, Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
+                .Count(static path => path.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase)));
+            Assert.Throws<InvalidOperationException>(() => package.VerifyInstalled(stageRoot));
+        }
+    }
+
     [Theory]
     [InlineData("10.0.11", false)]
     [InlineData("10.0.0-preview.7.25380.108", false)]

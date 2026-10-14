@@ -50,27 +50,41 @@ namespace PowerForge.Generated.Runtime
     /// <summary>Supplies native formatter dimensions without changing the terminal or exposing input operations.</summary>
     internal sealed class PowerShellPackagedConsoleRawUI : PSHostRawUserInterface
     {
-        private readonly Size _size = GetSize();
-        private static Size GetSize()
+        private static Size GetSize(bool buffer)
         {
-            // ConsoleHost's redirected default is 120 columns. Out-Default owns its margin and wrapping.
+            var windows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                System.Runtime.InteropServices.OSPlatform.Windows);
             try
             {
-                if (!Console.IsOutputRedirected && Console.WindowWidth > 0)
-                    return new Size(Console.WindowWidth, Math.Max(Console.WindowHeight, 1));
+                if (windows)
+                {
+                    // Preserve the qualified Windows redirected policy.
+                    if (!Console.IsOutputRedirected && Console.WindowWidth > 0)
+                        return new Size(Console.WindowWidth, Math.Max(Console.WindowHeight, 1));
+                }
+                else
+                {
+                    // Unix ConsoleHost uses valid console geometry even when output is a pipe.
+                    var width = buffer ? Console.BufferWidth : Console.WindowWidth;
+                    var height = buffer ? Console.BufferHeight : Console.WindowHeight;
+                    if (width > 0 && height > 0)
+                        return new Size(width, height);
+                }
             }
             catch (System.IO.IOException) { }
-            return new Size(120, 40);
+            // Unix ConsoleHost falls back to 80x40 only when console dimensions are unavailable.
+            // The standard formatter retains ownership of its final-column margin and wrapping.
+            return new Size(windows ? 120 : 80, 40);
         }
         public override ConsoleColor ForegroundColor { get; set; } = ConsoleColor.Gray;
         public override ConsoleColor BackgroundColor { get; set; } = ConsoleColor.Black;
         public override Coordinates CursorPosition { get => new Coordinates(0, 0); set => throw PowerShellPackagedConsoleHost.NonInteractive(); }
         public override Coordinates WindowPosition { get => new Coordinates(0, 0); set => throw PowerShellPackagedConsoleHost.NonInteractive(); }
         public override int CursorSize { get => 1; set => throw PowerShellPackagedConsoleHost.NonInteractive(); }
-        public override Size BufferSize { get => _size; set => throw PowerShellPackagedConsoleHost.NonInteractive(); }
-        public override Size WindowSize { get => _size; set => throw PowerShellPackagedConsoleHost.NonInteractive(); }
-        public override Size MaxWindowSize => _size;
-        public override Size MaxPhysicalWindowSize => _size;
+        public override Size BufferSize { get => GetSize(buffer: true); set => throw PowerShellPackagedConsoleHost.NonInteractive(); }
+        public override Size WindowSize { get => GetSize(buffer: false); set => throw PowerShellPackagedConsoleHost.NonInteractive(); }
+        public override Size MaxWindowSize => WindowSize;
+        public override Size MaxPhysicalWindowSize => WindowSize;
         public override bool KeyAvailable => false;
         public override string WindowTitle { get => "PowerForge"; set => throw PowerShellPackagedConsoleHost.NonInteractive(); }
         public override void FlushInputBuffer() => throw PowerShellPackagedConsoleHost.NonInteractive();

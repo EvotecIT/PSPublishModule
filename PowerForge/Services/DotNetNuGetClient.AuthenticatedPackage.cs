@@ -61,18 +61,26 @@ public sealed partial class DotNetNuGetClient
         internal void VerifyInstalled(string packageRoot)
         {
             var directory = Path.Combine(packageRoot, Id.ToLowerInvariant(), Version.ToLowerInvariant());
-            // NuGet owns extraction and intentionally omits OPC packaging metadata. Verify
-            // every extracted file against the signed entry, including its renamed nuspec.
+            // NuGet extraction can rename the root nuspec while SDK download extraction
+            // preserves its signed archive spelling. Only those exact names share authority.
             var entries = new Dictionary<string, string>(_entryHashes, StringComparer.Ordinal);
-            foreach (var entry in _entryHashes.Where(static entry => entry.Key.IndexOf('/') < 0 &&
-                         entry.Key.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase)))
+            var nuspecs = _entryHashes.Where(static entry => entry.Key.IndexOf('/') < 0 &&
+                entry.Key.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (nuspecs.Length != 1)
+                throw new InvalidOperationException($"Authenticated package '{Id}/{Version}' requires one signed root nuspec.");
+            var nuspec = nuspecs[0];
+            var normalizedNuspec = Id.ToLowerInvariant() + ".nuspec";
+            if (nuspec.Key != normalizedNuspec)
             {
-                entries.Remove(entry.Key);
-                entries.Add(Id.ToLowerInvariant() + ".nuspec", entry.Value);
+                if (entries.ContainsKey(normalizedNuspec))
+                    throw new InvalidOperationException($"Authenticated package '{Id}/{Version}' has conflicting signed nuspec paths.");
+                entries.Add(normalizedNuspec, nuspec.Value);
             }
+            var stagedNuspecCount = 0;
             foreach (var path in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories))
             {
                 var relative = FrameworkCompatibility.GetRelativePath(directory, path).Replace('\\', '/');
+                if (relative == nuspec.Key || relative == normalizedNuspec) stagedNuspecCount++;
                 if (relative == ".nupkg.metadata" ||
                     relative == Id.ToLowerInvariant() + "." + Version.ToLowerInvariant() + ".nupkg.sha512" ||
                     relative == Id.ToLowerInvariant() + "." + Version.ToLowerInvariant() + ".nupkg") continue;
@@ -82,6 +90,8 @@ public sealed partial class DotNetNuGetClient
                     !expected.Equals(BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", string.Empty), StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException($"Authenticated package '{Id}/{Version}' staged entry '{relative}' changed.");
             }
+            if (stagedNuspecCount != 1)
+                throw new InvalidOperationException($"Authenticated package '{Id}/{Version}' requires exactly one staged root nuspec; metadata is absent or ambiguous.");
             foreach (var entry in entries.Keys.Where(static path => path == ".signature.p7s" ||
                          path.StartsWith("runtimes/", StringComparison.Ordinal) || path.StartsWith("tools/", StringComparison.Ordinal) ||
                          path.StartsWith("build/", StringComparison.Ordinal) || path.StartsWith("Sdk/", StringComparison.Ordinal) ||

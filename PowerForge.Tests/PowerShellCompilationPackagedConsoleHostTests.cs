@@ -36,6 +36,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 [pscustomobject]@{MatchKind='missing';Count=2},[pscustomobject]@{MatchKind='root-to-blog';Count=1}|Format-Table -AutoSize|Out-Host
             }elseif($Case -eq 'List'){
                 [pscustomobject]@{Name='sample';LongValue=('long-value-'*25);Count=2;Status='good';More='last'}
+            }elseif($Case -eq 'WideTable'){
+                [pscustomobject]@{Name='sample';LongValue=('long-value-'*25);Count=2}|Format-Table -Wrap|Out-Host
+            }elseif($Case -eq 'ExplicitStringWidth'){
+                [pscustomobject]@{Name='sample';LongValue=('long-value-'*25);Count=2;Status='good';More='last'}|Format-List|Out-String -Width 52
             }elseif($Case -eq 'Streams'){
                 Write-Host 'host-' -NoNewline
                 Write-Output 'success'
@@ -89,8 +93,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var missingPath = Path.Combine(fixture.RootPath, "owned-absent.txt");
         Assert.False(File.Exists(missingPath));
         var scenarios = mode == PowerShellCompilationMode.Package
-            ? new[] { "Table", "List", "Streams", "NonTerm", "NonTermCommand", "Redirection", "Exit", "Throw", "Command" }
-            : new[] { "Table", "List", "Streams", "NonTerm", "NonTermCommand", "Throw", "Command" };
+            ? new[] { "Table", "List", "WideTable", "ExplicitStringWidth", "Streams", "NonTerm", "NonTermCommand", "Redirection", "Exit", "Throw", "Command" }
+            : new[] { "Table", "List", "WideTable", "ExplicitStringWidth", "Streams", "NonTerm", "NonTermCommand", "Throw", "Command" };
         foreach (var scenario in scenarios)
         {
             var arguments = new[] { "-Case", scenario, "-MissingPath", missingPath };
@@ -99,13 +103,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             var generated = RunProcess(built.ArtifactPath!, environment, arguments);
             var detail = $"Mode={mode}; Case={scenario}; Original stdout: {original.StandardOutput}; stderr: {original.StandardError}; Generated stdout: {generated.StandardOutput}; stderr: {generated.StandardError}";
             Assert.True(original.ExitCode == generated.ExitCode, detail);
-            if (scenario is "Table" or "List" or "Streams")
+            if (scenario is "Table" or "List" or "WideTable" or "ExplicitStringWidth" or "Streams")
             {
                 Assert.Equal(0, original.ExitCode);
                 Assert.True(original.StandardOutput == generated.StandardOutput, detail);
                 Assert.Empty(original.StandardError);
                 Assert.Empty(generated.StandardError);
-                Assert.Contains(scenario == "Table" ? "root-to-blog" : scenario == "List" ? "LongValue" : "host-success", generated.StandardOutput);
+                Assert.Contains(scenario == "Table" ? "root-to-blog" : scenario is "List" or "WideTable" or "ExplicitStringWidth" ? "LongValue" : "host-success", generated.StandardOutput);
             }
             else if (scenario is "NonTerm" or "NonTermCommand")
             {

@@ -44,6 +44,12 @@ $modules = @(
 $lanes = [Collections.Generic.List[object]]::new()
 $results = [Collections.Generic.List[object]]::new()
 $plannedLaneCount = $modules.Count * 2 + 1
+$activeLaneId = $null
+$failure = $null
+# A lane contains eight CLI stages and three observers, each independently bounded
+# at 900 seconds. Allow both 120-second fixture operations and 300 seconds for
+# staging and receipt work. The outer watchdog covers the composed finite workflow.
+$qualificationTimeoutSeconds = (11 * 900) + (2 * 120) + 300
 try {
 foreach ($module in $modules) {
     foreach ($framework in @('net10.0', 'net472')) {
@@ -66,6 +72,7 @@ foreach ($module in $modules) {
 }
 $lanes.Add(@{ id = 'sitemap-net10.0'; packet = (Join-Path $corpusRoot 'Workflows/CompareWebSitemaps/workflow.json'); source = (Join-Path $repositoryRoot 'Build'); packageSha256 = $null })
     foreach ($lane in $lanes) {
+        $activeLaneId = $lane.id
         $clock = [Diagnostics.Stopwatch]::StartNew()
         $laneEvidence = Join-Path $EvidencePath $lane.id
         $resultPath = Join-Path $laneEvidence 'qualification.json'
@@ -74,7 +81,8 @@ $lanes.Add(@{ id = 'sitemap-net10.0'; packet = (Join-Path $corpusRoot 'Workflows
             '-PacketPath', $lane.packet, '-SourceRoot', $lane.source, '-CliAssemblyPath', $CliAssemblyPath,
             '-WorkspacePath', $WorkspacePath, '-EvidencePath', $resultPath, '-DurableEvidencePath', $laneEvidence, '-AllowExternalExecution')
         if ($Offline) { $arguments += '-Offline' }
-        $qualification = Invoke-OwnedProcess -FileName $powerShellHost -Arguments $arguments -WorkingDirectory $repositoryRoot
+        $qualification = Invoke-OwnedProcess -FileName $powerShellHost -Arguments $arguments -WorkingDirectory $repositoryRoot `
+            -TimeoutSeconds $qualificationTimeoutSeconds
         Write-Utf8Json -Path (Join-Path $laneEvidence 'qualifier.process.json') -Value $qualification
         if ($qualification.ExitCode -ne 0) { throw "Whole-workflow lane failed: $($lane.id); exit $($qualification.ExitCode)." }
         $receipt = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
@@ -85,6 +93,15 @@ $lanes.Add(@{ id = 'sitemap-net10.0'; packet = (Join-Path $corpusRoot 'Workflows
         $results.Add([ordered]@{ id = $lane.id; packetSha256 = (Get-FileHash -LiteralPath $lane.packet).Hash.ToLowerInvariant();
             packageSha256 = $lane.packageSha256; declaredScenarios = $receipt.summary.declaredWorkflowScenarios; durationMilliseconds = $clock.ElapsedMilliseconds; passed = $true })
     }
+    $activeLaneId = $null
+} catch {
+    $failure = [ordered]@{
+        laneId = $activeLaneId
+        type = $_.Exception.GetType().FullName
+        message = $_.Exception.Message
+        ownedProcess = $_.Exception.Data['PowerForgeOwnedProcess']
+    }
+    throw
 } finally {
     $cliStable = @(Get-ChildItem -LiteralPath $closureRoot -Recurse -File).Count -eq $identity.Count
     foreach ($file in $identity) {
@@ -93,6 +110,7 @@ $lanes.Add(@{ id = 'sitemap-net10.0'; packet = (Join-Path $corpusRoot 'Workflows
     }
     Write-Utf8Json -Path (Join-Path $EvidencePath 'whole-workflow-gate.json') -Value ([ordered]@{
         schemaVersion = 1; passed = $results.Count -eq $plannedLaneCount -and $cliStable; compilerClosureUnchanged = $cliStable; plannedLanes = $plannedLaneCount; results = @($results)
+        failure = $failure; qualificationTimeoutSeconds = $qualificationTimeoutSeconds
         interpretation = 'Pinned comparison inputs; canonical original/built/installed scenario parity and required owned CLR bodies. Hybrid retains the PowerShell SDK and supported hosted command regions.'
     })
     if (-not $cliStable) { throw 'The compiler CLI closure changed during whole-workflow qualification.' }
