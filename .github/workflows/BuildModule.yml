@@ -279,6 +279,7 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
+          dotnet-version: 8.0.x
 
       - name: Cache NuGet packages
         uses: actions/cache@v6
@@ -305,6 +306,11 @@ jobs:
         shell: pwsh
         timeout-minutes: 10
         run: dotnet test .\PowerForge.Net472SmokeTests\PowerForge.Net472SmokeTests.csproj -c Release -f net472 --nologo
+
+      - name: Test web protocol contracts on Framework and modern .NET
+        shell: pwsh
+        timeout-minutes: 5
+        run: dotnet test .\PowerForge.Web.Protocols.Tests\PowerForge.Web.Protocols.Tests.csproj -c Release --nologo
 
       - name: Build Module
         shell: pwsh

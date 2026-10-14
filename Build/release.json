@@ -35,7 +35,7 @@
           "PowerForge.Cli",
           "PowerForge.Blazor",
           "PowerForge.Web",
-          "PowerForge.IndexNow",
+          "PowerForge.Web.Protocols",
           "PowerForge.Web.Cli"
         ]
       }
