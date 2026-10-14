@@ -292,6 +292,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var declarations = PowerShellSourceParser.GetTopLevelFunctions(
             Parser.ParseFile(fixture.ScriptPath, out _, out _), PowerShellCompilationCapabilities.HybridModule).ToArray();
         Assert.Equal(declarations.Length, methods.Length);
+        var manifest = new PowerShellCompilationArtifactManifest { FailureMap = map };
         Assert.All(methods, method =>
         {
             var declaration = Assert.Single(declarations,
@@ -308,9 +309,24 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 Assert.InRange(segment.SourceStartColumn, declaration.Body.Extent.StartColumnNumber, declaration.Body.Extent.EndColumnNumber);
                 Assert.InRange(segment.SourceEndColumn, segment.SourceStartColumn, declaration.Body.Extent.EndColumnNumber);
             });
+            var mapped = PowerShellCompilationFailureMapper.MapRuntimeFailure(manifest,
+                $"   at {shaped.NamespaceName}.{shaped.TypeName}.{method.GeneratedName}() in {method.DocumentId}:line {method.SourceLine}");
+            Assert.Equal(unit.UnitId, Assert.Single(mapped.Locations).UnitId);
         });
         Assert.Equal(methods.Length, map.Entries.Where(static segment => segment.GeneratedStartLine > 0)
             .Select(static segment => segment.UnitId).Distinct(StringComparer.Ordinal).Count());
+        var first = map.Entries.First(static segment => segment.GeneratedStartLine > 0);
+        var last = map.Entries.Last(static segment => segment.GeneratedStartLine > 0);
+        var insufficientIdentity = new[]
+        {
+            $"failure in {first.DocumentId}:line {first.SourceStartLine}",
+            $"   at {shaped.NamespaceName}.{shaped.TypeName}.MissingGeneratedMember() in {first.DocumentId}:line {first.SourceStartLine}",
+            $"   at {shaped.NamespaceName}.{shaped.TypeName}.{last.GeneratedMemberName}(){Environment.NewLine}" +
+                $"failure in {first.DocumentId}:line {first.SourceStartLine}",
+            $"{first.DocumentId}({first.SourceStartLine},{last.SourceStartColumn}): error CS0001: fixture diagnostic"
+        };
+        Assert.All(insufficientIdentity, failureText =>
+            Assert.Empty(PowerShellCompilationFailureMapper.MapRuntimeFailure(manifest, failureText).Locations));
     }
 
     [Theory]
@@ -318,18 +334,38 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         "[int] $value = 7; $value")]
     [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid,
         "[int] $value = 7; $value")]
-    [InlineData(PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Strict,
+    [InlineData(PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict,
         "[int]$script:Count = 1; function Get-Value { param() return $script:Count }")]
     [Trait("Category", "PowerShellCompilerGate")]
     public void FailureMapRetainsEmittedScriptAndModuleInitializerOwners(
         PowerShellCompilationArtifactKind kind, PowerShellCompilationMode mode, string source)
     {
-        using var fixture = ArtifactFixture.Create(source, kind == PowerShellCompilationArtifactKind.BinaryModule ? ".psm1" : ".ps1");
+        using var fixture = ArtifactFixture.Create(source, kind == PowerShellCompilationArtifactKind.Executable ? ".ps1" : ".psm1");
         var input = new PowerShellCompilationInputResolver().Resolve(new[] { fixture.ScriptPath }, kind, mode);
-        var plan = new PowerShellCompilationAnalyzer().AnalyzeFiles(mode, input.CompilationSourceFiles,
-            fixture.RootPath, "net10.0", PowerShellCompilationBuildSpec.GetCapabilities(kind, mode));
-        var shaped = PowerShellCompilationExplainShaper.Shape(input, plan, "net10.0", out var entry)!;
+        var target = kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Hybrid
+            ? PowerShellCompilationTargetContractService.Create(kind, mode, "net10.0", "win-x64", false, false,
+                PowerShellCompilationExecutableOptimization.None, true)
+            : null;
+        var analyzer = new PowerShellCompilationAnalyzer();
+        var plan = target is null
+            ? analyzer.AnalyzeFiles(mode, input.CompilationSourceFiles, fixture.RootPath, "net10.0",
+                PowerShellCompilationBuildSpec.GetCapabilities(kind, mode))
+            : analyzer.Analyze(input, mode, "net10.0", PowerShellCompilationResourceMode.Declared,
+                null, null, fixture.OutputPath, target);
+        Assert.True(plan.CanProceed);
+        var shaped = PowerShellCompilationExplainShaper.Shape(input, plan, "net10.0", out var entry);
+        Assert.NotNull(shaped);
         var methods = PowerShellCompilationExplainShaper.GetEmittedMethods(shaped, entry);
+        if (mode == PowerShellCompilationMode.Hybrid)
+        {
+            Assert.NotNull(entry);
+            Assert.NotNull(entry.EntryPointMethod.NativeFunctionBinding);
+        }
+        if (kind == PowerShellCompilationArtifactKind.Library)
+        {
+            Assert.NotNull(shaped.RuntimeFreeModule);
+            Assert.Single(methods, static method => method.IsModuleInitializer);
+        }
         var ledger = PowerShellCompilationUnitDispositionLedgerBuilder.Create(plan, kind, shaped,
             fixture.ScriptPath, emittedMethods: methods);
         var map = PowerShellCompilationDiagnosticsEvidenceBuilder.CreateFailureMap(plan, methods, ledger, shaped.PromotedRegions);

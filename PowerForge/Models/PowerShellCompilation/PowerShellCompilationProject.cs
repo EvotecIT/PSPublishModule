@@ -90,8 +90,8 @@ public sealed class PowerShellCompilationProjectArtifact
 /// <summary>Content-addressed isolated restore evidence for one project environment.</summary>
 public sealed class PowerShellCompilationProjectEnvironment
 {
-    /// <summary>Environment schema version.</summary>
-    public int SchemaVersion { get; set; } = 2;
+    /// <summary>Environment schema version, including authenticated SDK download packages.</summary>
+    public int SchemaVersion { get; set; } = 3;
 
     /// <summary>SHA-256 over the portable project manifest.</summary>
     public string ProjectSha256 { get; set; } = string.Empty;

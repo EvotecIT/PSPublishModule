@@ -369,11 +369,33 @@ function Invoke-OwnedProcess {
     $clock = [Diagnostics.Stopwatch]::StartNew()
     $process = [Diagnostics.Process]::Start($start)
     try {
+        # Optional diagnostics must not fail an otherwise successful child.
+        $processStartUtc = $null
+        $processStartError = $null
+        try { $processStartUtc = $process.StartTime.ToUniversalTime().ToString('o') } catch { $processStartError = $_.Exception.Message }
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
         if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
             try { $process.Kill($true) } catch { Write-Verbose "Failed to terminate timed-out process '$FileName': $($_.Exception.Message)" }
-            throw "Owned process '$FileName' exceeded $TimeoutSeconds seconds."
+            $exited = $false
+            $drained = $false
+            try {
+                $exited = $process.WaitForExit(5000)
+                $drained = [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]] @($stdout, $stderr), 2000)
+            } catch { Write-Verbose "Failed to drain timed-out process '$FileName': $($_.Exception.Message)" }
+            $clock.Stop()
+            $failure = [Management.Automation.RuntimeException]::new("Owned process '$FileName' exceeded $TimeoutSeconds seconds.")
+            $failure.Data['PowerForgeOwnedProcess'] = [pscustomobject]@{
+                FileName = $FileName; Arguments = $Arguments; WorkingDirectory = $WorkingDirectory
+                ProcessId = $process.Id; ProcessStartUtc = $processStartUtc; TimedOut = $true; TimeoutSeconds = $TimeoutSeconds
+                ProcessStartTimeAvailable = ($null -ne $processStartUtc); ProcessStartTimeError = $processStartError
+                ProcessExited = $exited; OutputDrained = $drained
+                ExitCode = if ($exited) { $process.ExitCode } else { $null }
+                StandardOutput = if ($stdout.Status -eq 'RanToCompletion') { $stdout.GetAwaiter().GetResult() } else { '' }
+                StandardError = if ($stderr.Status -eq 'RanToCompletion') { $stderr.GetAwaiter().GetResult() } else { '' }
+                DurationMilliseconds = $clock.ElapsedMilliseconds
+            }
+            throw $failure
         }
         $clock.Stop()
         return [pscustomobject]@{

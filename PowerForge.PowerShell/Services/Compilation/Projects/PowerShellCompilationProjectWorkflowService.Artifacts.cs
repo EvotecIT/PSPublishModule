@@ -211,8 +211,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         var path = context.Resolve(".powerforge/environment/environment.json");
         if (!File.Exists(path)) throw new FileNotFoundException("Run project restore before build.", path);
         var environment = ReadJson<PowerShellCompilationProjectEnvironment>(path);
-        if (environment.SchemaVersion != 2)
-            throw new InvalidDataException($"Unsupported isolated environment schema {environment.SchemaVersion}; run restore again.");
+        if (environment.SchemaVersion != 3)
+            throw new InvalidDataException($"Unsupported isolated environment schema {environment.SchemaVersion}; rerun project restore to refresh the acquired environment and its SDK download package inventory.");
         var projectSha = PowerShellCompilationProjectManifestService.ComputeSha256(context.ProjectPath);
         if (!environment.ProjectSha256.Equals(projectSha, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The isolated environment belongs to a different project-manifest revision; run restore again.");

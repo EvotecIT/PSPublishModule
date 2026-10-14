@@ -13,7 +13,7 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
         @"(?<file>[^\r\n\(]+)\((?<line>\d+),(?<column>\d+)\)\s*:\s*(?:fatal\s+)?(?:error|warning)\s+(?<code>[A-Za-z]+\d+)\s*:\s*(?<message>[^\r\n]+)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private static readonly Regex RuntimeLocation = new(
-        @"\bin\s+(?<file>[^\r\n]+?):line\s+(?<line>\d+)",
+        @"(?:\bat[ \t]+(?<member>[^\r\n(]+)\([^\r\n]*\)[ \t]+)?\bin[ \t]+(?<file>[^\r\n]+?):line[ \t]+(?<line>\d+)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
     private static readonly Regex SecretAssignment = new(
         "(?<name>password|passwd|pwd|token|api[_-]?key|secret)\\s*[:=]\\s*(?:\"[^\"]*\"|'[^']*'|[^\\s;,]+)",
@@ -227,7 +227,9 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
             }
             foreach (Match match in RuntimeLocation.Matches(output ?? string.Empty))
             {
-                var entry = MatchEntry(failureMap, match.Groups["file"].Value.Trim(), Parse(match.Groups["line"].Value));
+                var member = match.Groups["member"].Value.Trim();
+                var generatedMemberName = member.Length == 0 ? null : member.Substring(member.LastIndexOf('.') + 1);
+                var entry = MatchEntry(failureMap, match.Groups["file"].Value.Trim(), Parse(match.Groups["line"].Value), generatedMemberName);
                 if (entry is null) continue;
                 locations.Add(Location(entry, "RuntimeFailure", summary));
             }
@@ -277,25 +279,41 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
     internal static string ComputeAuditTrailSha256(PowerShellCompilationAuditTrail trail)
         => Hash(new { trail.SchemaVersion, trail.Events });
 
-    private static PowerShellCompilationFailureMapEntry? MatchEntry(PowerShellCompilationFailureMap map, string file, int line)
+    private static PowerShellCompilationFailureMapEntry? MatchEntry(
+        PowerShellCompilationFailureMap map, string file, int line, string? generatedMemberName = null)
     {
         var normalized = file.Replace('\\', '/');
-        return MostSpecific(map.Entries.Where(item => item.DocumentId.Equals(normalized, StringComparison.Ordinal)), line)
-               ?? MostSpecific(map.Entries.Where(item => item.RelativePath.Equals(normalized, StringComparison.OrdinalIgnoreCase)), line)
-               ?? MostSpecific(map.Entries.Where(item => normalized.EndsWith("/" + item.RelativePath, StringComparison.OrdinalIgnoreCase)), line)
-               ?? map.Entries.FirstOrDefault(item => item.GeneratedMemberName.Equals(normalized, StringComparison.Ordinal));
+        return MostSpecific(map.Entries.Where(item => item.DocumentId.Equals(normalized, StringComparison.Ordinal)), line, generatedMemberName)
+               ?? MostSpecific(map.Entries.Where(item => item.RelativePath.Equals(normalized, StringComparison.OrdinalIgnoreCase)), line, generatedMemberName)
+               ?? MostSpecific(map.Entries.Where(item => normalized.EndsWith("/" + item.RelativePath, StringComparison.OrdinalIgnoreCase)), line, generatedMemberName)
+               ?? MostSpecific(map.Entries.Where(item => item.GeneratedMemberName.Equals(normalized, StringComparison.Ordinal)), line, generatedMemberName);
     }
 
     private static PowerShellCompilationFailureMapEntry? MostSpecific(
         IEnumerable<PowerShellCompilationFailureMapEntry> entries,
-        int line)
-        => entries
-            .Where(item => line >= item.SourceStartLine && line <= Math.Max(item.SourceStartLine, item.SourceEndLine))
+        int line,
+        string? generatedMemberName)
+    {
+        var candidates = entries
+            .Where(item => line >= item.SourceStartLine && line <= Math.Max(item.SourceStartLine, item.SourceEndLine) &&
+                           (generatedMemberName is null || item.GeneratedMemberName.Equals(generatedMemberName, StringComparison.Ordinal)))
             .OrderBy(item => Math.Max(item.SourceStartLine, item.SourceEndLine) - item.SourceStartLine)
             .ThenByDescending(static item => item.GeneratedStartLine > 0)
             .ThenBy(static item => item.UnitName.Equals("<script>", StringComparison.Ordinal))
             .ThenBy(static item => item.SourceStartColumn)
-            .FirstOrDefault();
+            .ToArray();
+        if (candidates.Length == 0) return null;
+        var span = Math.Max(candidates[0].SourceStartLine, candidates[0].SourceEndLine) - candidates[0].SourceStartLine;
+        var generated = candidates[0].GeneratedStartLine > 0;
+        var script = candidates[0].UnitName.Equals("<script>", StringComparison.Ordinal);
+        // #line remaps lines only. A generated C# column cannot select an authored owner.
+        // Retain the established generated/function precedence over broader fallback owners.
+        if (candidates.Where(item => Math.Max(item.SourceStartLine, item.SourceEndLine) - item.SourceStartLine == span &&
+                                     (item.GeneratedStartLine > 0) == generated &&
+                                     item.UnitName.Equals("<script>", StringComparison.Ordinal) == script)
+            .Select(static item => item.UnitId).Distinct(StringComparer.Ordinal).Skip(1).Any()) return null;
+        return candidates[0];
+    }
 
     private static PowerShellCompilationFailureLocation Location(PowerShellCompilationFailureMapEntry entry, string code, string message)
         => new()

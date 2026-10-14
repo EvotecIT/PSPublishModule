@@ -58,6 +58,17 @@ function ConvertTo-ApplicationStderrObservation([string] $Text,[string] $Scenari
     return $Text.Replace($OutputRoot + [IO.Path]::DirectorySeparatorChar,
         '<scenario-output>' + [IO.Path]::DirectorySeparatorChar)
 }
+function Save-ApplicationTimeoutEvidence($ErrorRecord,[string] $ScenarioId,[string] $Phase){
+    $timeout = $ErrorRecord.Exception
+    while ($null -ne $timeout -and -not $timeout.Data.Contains('PowerForgeOwnedProcess')) { $timeout = $timeout.InnerException }
+    if ($null -eq $timeout) { return }
+    try {
+        [ordered]@{schemaVersion=1;surface=$Surface;scenarioId=$ScenarioId;phase=$Phase;
+            process=$timeout.Data['PowerForgeOwnedProcess'];fixtureIdentity=$identity;
+            requestLogPath=$requestsPath;requests=@(if(Test-Path -LiteralPath $requestsPath -PathType Leaf){Get-Content -LiteralPath $requestsPath})} |
+            ConvertTo-Json -Depth 8 | Set-Content -LiteralPath ([IO.Path]::ChangeExtension($ResultPath,'timeout.json')) -Encoding utf8NoBOM
+    } catch { Write-Verbose "Failed to retain timeout evidence beside '$ResultPath': $($_.Exception.Message)" }
+}
 function Invoke-ApplicationCase([string] $id,[string] $legacy,[string] $newSitemap,[string] $caseKind,[switch] $Amp,[switch] $PassThru,[switch] $NoAdditionalUrls){
     $caseRoot=Join-Path $surfaceRoot $id; $outputs=Join-Path $caseRoot 'outputs'
     New-Item -ItemType Directory -Path $outputs -Force | Out-Null
@@ -77,7 +88,12 @@ function Invoke-ApplicationCase([string] $id,[string] $legacy,[string] $newSitem
     $arguments=[Collections.Generic.List[string]]::new()
     if($Surface -eq 'Original'){foreach($token in @('-NoLogo','-NoProfile','-NonInteractive','-File',$ImportPath)){$arguments.Add($token)};$hostPath=$configuration.PowerShellHost}else{$hostPath=$ImportPath}
     foreach($pair in $parameters.GetEnumerator()){$arguments.Add('-'+$pair.Key);if($pair.Value -isnot [bool]){$arguments.Add([string]$pair.Value)}}
-    $run=Invoke-OwnedProcess -FileName $hostPath -Arguments $arguments.ToArray() -WorkingDirectory $ScenarioRoot -Environment @{NO_PROXY='127.0.0.1,localhost,::1';NO_COLOR='1'} -TimeoutSeconds 30
+    try {
+        $run=Invoke-OwnedProcess -FileName $hostPath -Arguments $arguments.ToArray() -WorkingDirectory $ScenarioRoot -Environment @{NO_PROXY='127.0.0.1,localhost,::1';NO_COLOR='1'} -TimeoutSeconds 30
+    } catch {
+        Save-ApplicationTimeoutEvidence $_ $id 'Application'
+        throw
+    }
     [IO.File]::WriteAllText((Join-Path $caseRoot 'stdout.txt'),$run.StandardOutput,[Text.UTF8Encoding]::new($false))
     [IO.File]::WriteAllText((Join-Path $caseRoot 'stderr.txt'),$run.StandardError,[Text.UTF8Encoding]::new($false))
     $rawProcess=[ordered]@{exitCode=$run.ExitCode;stdout=$run.StandardOutput;stderr=$run.StandardError;stdoutSha256=(Get-FileHash -LiteralPath (Join-Path $caseRoot 'stdout.txt')).Hash;stderrSha256=(Get-FileHash -LiteralPath (Join-Path $caseRoot 'stderr.txt')).Hash}
@@ -122,7 +138,12 @@ function Invoke-ApplicationCase([string] $id,[string] $legacy,[string] $newSitem
         foreach($key in @('OutputJsonPath','OutputCsvPath','OutputRedirectCsvPath','OutputReviewCsvPath')){$fullParameters[$key]=Join-Path $diagnostic ([IO.Path]::GetFileName($fullParameters[$key]))}
         $parameterPath=Join-Path $diagnostic 'parameters.json';$fullParameters | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $parameterPath -Encoding utf8NoBOM
         $tracePath=Join-Path $diagnostic 'helper-counts.json'
-        $trace=Invoke-OwnedProcess -FileName $configuration.PowerShellHost -Arguments @('-NoLogo','-NoProfile','-NonInteractive','-File',(Join-Path $taskRoot 'Trace-SitemapHelpers.ps1'),'-ImportPath',$ImportPath,'-ParametersPath',$parameterPath,'-InventoryPath',$selectedInventoryPath,'-ResultPath',$tracePath) -WorkingDirectory $ScenarioRoot -Environment @{NO_PROXY='127.0.0.1,localhost,::1';NO_COLOR='1'} -TimeoutSeconds 30
+        try {
+            $trace=Invoke-OwnedProcess -FileName $configuration.PowerShellHost -Arguments @('-NoLogo','-NoProfile','-NonInteractive','-File',(Join-Path $taskRoot 'Trace-SitemapHelpers.ps1'),'-ImportPath',$ImportPath,'-ParametersPath',$parameterPath,'-InventoryPath',$selectedInventoryPath,'-ResultPath',$tracePath) -WorkingDirectory $ScenarioRoot -Environment @{NO_PROXY='127.0.0.1,localhost,::1';NO_COLOR='1'} -TimeoutSeconds 30
+        } catch {
+            Save-ApplicationTimeoutEvidence $_ 'helper-diagnostic' 'OriginalHelperDiagnostic'
+            throw
+        }
         [IO.File]::WriteAllText((Join-Path $diagnostic 'stdout.txt'),$trace.StandardOutput);[IO.File]::WriteAllText((Join-Path $diagnostic 'stderr.txt'),$trace.StandardError)
         $coverage=Get-Content -LiteralPath $tracePath -Raw | ConvertFrom-Json
         if($trace.ExitCode -ne 0 -or -not $coverage.all19Observed){throw 'The separate original helper diagnostic did not observe all 19 helpers.'}

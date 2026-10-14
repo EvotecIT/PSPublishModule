@@ -8,6 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- VSTest runs from external artifacts; preserve the repository SDK policy there. -->
+    <None Include="..\global.json" Link="global.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
     <PackageReference Include="coverlet.collector" Version="10.1.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageReference Include="xunit" Version="2.9.3" />

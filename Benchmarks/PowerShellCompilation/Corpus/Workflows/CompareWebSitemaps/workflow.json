@@ -155,7 +155,7 @@
           "Compare-WebSitemaps.Helpers.ps1"
         ],
         "observerScript": "Observe-CompareWebSitemaps.ps1",
-        "observerSha256": "8DAE27C4737F89858DB4886D7EE91D95900A337CF44182C9A60E99464BF2E756",
+        "observerSha256": "E89210AF3A0954DDE810C6B307FA664CBD7890190B4DE64CB61B60F6C4F21FD1",
         "observerSupport": [
           {
             "path": "SourceIdentity.json",
