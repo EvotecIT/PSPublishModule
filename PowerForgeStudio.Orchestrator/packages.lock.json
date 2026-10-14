@@ -111,8 +111,8 @@
       },
       "System.Security.Cryptography.Pkcs": {
         "type": "Transitive",
-        "resolved": "10.0.12",
-        "contentHash": "W6BsawU2tB2qy6u4+3cBOSOmiTUgYWW365b5WMVA1bDxQwZZeNWD+qufKJkDQNKzAKq4b6Q04DDKhmr2SNJ1eg=="
+        "resolved": "10.0.13",
+        "contentHash": "a+EovgC1fBnwdlQ6cn3j4JFBfKqiFaFvoAhjisOoSvazLAcIznaBzPQP0oYnvccmeXfqUH1KebVZOxSeH6rMaw=="
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
@@ -130,7 +130,7 @@
       "dbaclientx.sqlite": {
         "type": "Project",
         "dependencies": {
-          "DBAClientX.Core": "[1.0.9, )",
+          "DBAClientX.Core": "[1.0.12, )",
           "Microsoft.Data.Sqlite": "[10.0.10, )",
           "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.5, )",
           "SQLitePCLRaw.core": "[3.0.5, )"
@@ -143,7 +143,7 @@
           "NuGet.Packaging": "[7.9.0, )",
           "System.IO.Packaging": "[10.0.12, )",
           "System.Reflection.MetadataLoadContext": "[10.0.12, )",
-          "System.Security.Cryptography.Pkcs": "[10.0.12, )",
+          "System.Security.Cryptography.Pkcs": "[10.0.13, )",
           "System.Security.Cryptography.ProtectedData": "[10.0.12, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
         }

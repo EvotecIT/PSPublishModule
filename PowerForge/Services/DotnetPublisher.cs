@@ -194,7 +194,7 @@ public sealed class DotnetPublisher
     {
         var normalizedSources = NormalizeRestoreSources(restoreSources);
         if (normalizedSources.Length > 0)
-            args.Add($"-p:RestoreAdditionalProjectSources={string.Join(";", normalizedSources)}");
+            args.Add($"-p:RestoreAdditionalProjectSources={DotNetPublishPipelineRunner.BuildMsBuildListPropertyValue(normalizedSources)}");
 
         if (useIsolatedArtifacts)
         {

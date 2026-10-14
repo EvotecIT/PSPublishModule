@@ -975,8 +975,8 @@
       },
       "System.Security.Cryptography.Pkcs": {
         "type": "Transitive",
-        "resolved": "10.0.12",
-        "contentHash": "W6BsawU2tB2qy6u4+3cBOSOmiTUgYWW365b5WMVA1bDxQwZZeNWD+qufKJkDQNKzAKq4b6Q04DDKhmr2SNJ1eg=="
+        "resolved": "10.0.13",
+        "contentHash": "a+EovgC1fBnwdlQ6cn3j4JFBfKqiFaFvoAhjisOoSvazLAcIznaBzPQP0oYnvccmeXfqUH1KebVZOxSeH6rMaw=="
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
@@ -985,10 +985,10 @@
       },
       "System.Security.Cryptography.Xml": {
         "type": "Transitive",
-        "resolved": "10.0.12",
-        "contentHash": "T3snzcc04R1JDj2XmzrLyk5fHT0YroBz5o2P+YdyJKYePSMqp8JsrxEJQPvUnK6oozQBvKLki9vnI7uMuWepKQ==",
+        "resolved": "10.0.13",
+        "contentHash": "v6/GHhLaHkuN/ISgbKzBeyC7TP7S6Qm/dVyKA+p0ay9nlJyLif+spozjAGclY/FRIv2TC+KNQCo7dSNmupvWtQ==",
         "dependencies": {
-          "System.Security.Cryptography.Pkcs": "10.0.12"
+          "System.Security.Cryptography.Pkcs": "10.0.13"
         }
       },
       "System.Security.Permissions": {
@@ -1118,7 +1118,8 @@
         "type": "Project",
         "dependencies": {
           "Generic.External.Binary.Dependency": "[3.2.1, )",
-          "Microsoft.PowerShell.SDK": "[7.6.6, )"
+          "Microsoft.PowerShell.SDK": "[7.6.6, )",
+          "System.Security.Cryptography.Xml": "[10.0.13, )"
         }
       },
       "Generic.Semantic.Provider": {
@@ -1140,7 +1141,7 @@
           "NuGet.Packaging": "[7.9.0, )",
           "System.IO.Packaging": "[10.0.12, )",
           "System.Reflection.MetadataLoadContext": "[10.0.12, )",
-          "System.Security.Cryptography.Pkcs": "[10.0.12, )",
+          "System.Security.Cryptography.Pkcs": "[10.0.13, )",
           "System.Security.Cryptography.ProtectedData": "[10.0.12, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
@@ -1150,7 +1151,7 @@
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.6.6, )",
           "PowerForge": "[3.0.169, )",
-          "System.Security.Cryptography.Xml": "[10.0.12, )"
+          "System.Security.Cryptography.Xml": "[10.0.13, )"
         }
       },
       "powerforge.powershell.provider.directory": {
@@ -1193,7 +1194,7 @@
           "Magick.NET-Q8-AnyCPU": "[14.17.2, )",
           "OfficeIMO.Markdown": "[3.4.4, )",
           "PowerForge": "[3.0.169, )",
-          "PowerForge.Web.Protocols": "[3.0.169, )",
+          "PowerForge.Web.Protocols": "[3.0.170, )",
           "Scriban": "[7.5.0, )",
           "YamlDotNet": "[18.1.0, )"
         }
@@ -1204,7 +1205,7 @@
           "DBAClientX.SQLite": "[1.0.10, )",
           "NuGet.Versioning": "[7.9.0, )",
           "PowerForge.Web": "[3.0.169, )",
-          "PowerForge.Web.Protocols": "[3.0.169, )"
+          "PowerForge.Web.Protocols": "[3.0.170, )"
         }
       },
       "powerforge.web.protocols": {
