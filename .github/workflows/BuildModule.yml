@@ -510,7 +510,7 @@ jobs:
           -c Release --no-build --no-restore --nologo
           --filter 'FullyQualifiedName~PowerShellCompilationArtifactBuilderTests.Project_ExecutablePackagePreservesQualifiedPermissionsAndRunsAfterInstall|FullyQualifiedName~PowerShellCompilationArtifactBuilderTests.Project_LinuxBundledSelfContainedRuntimeClosureRunsAfterInstall|FullyQualifiedName~PowerShellCompilationArtifactBuilderTests.Project_LinuxTrimmedRuntimeClosurePreservesAuthenticatedCallersAfterInstall|FullyQualifiedName~PowerShellCompilationSdkProcessEnvironmentTests'
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: Test browser search contracts
