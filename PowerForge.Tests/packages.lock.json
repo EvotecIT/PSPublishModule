@@ -1118,7 +1118,8 @@
         "type": "Project",
         "dependencies": {
           "Generic.External.Binary.Dependency": "[3.2.1, )",
-          "Microsoft.PowerShell.SDK": "[7.6.6, )"
+          "Microsoft.PowerShell.SDK": "[7.6.6, )",
+          "System.Security.Cryptography.Xml": "[10.0.13, )"
         }
       },
       "Generic.Semantic.Provider": {
