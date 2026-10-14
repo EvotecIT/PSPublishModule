@@ -58,7 +58,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 50
     environment: ${{ inputs.environment-name }}
     env:
       GH_TOKEN: ${{ github.token }}
@@ -166,12 +166,43 @@ jobs:
           $integrity = 'sha512-' + [Convert]::ToBase64String(
               [Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($archive)))
           $archiveSha512 = [Convert]::ToHexString([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($archive))).ToLowerInvariant()
+          $verificationDeadline = [DateTime]::MaxValue
+          function Invoke-NpmRegistryRequest([string] $Url, [double] $TimeoutSeconds) {
+              $client = [Net.Http.HttpClient]::new()
+              $response = $null
+              try {
+                  $client.Timeout = [TimeSpan]::FromSeconds($TimeoutSeconds)
+                  $client.DefaultRequestHeaders.Add('Cache-Control', 'no-cache')
+                  # Include the entire body in HttpClient's total request timeout.
+                  $response = $client.GetAsync($Url, [Net.Http.HttpCompletionOption]::ResponseContentRead).GetAwaiter().GetResult()
+                  return [pscustomobject]@{
+                      StatusCode = [int]$response.StatusCode
+                      Content = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+                  }
+              } finally {
+                  if ($response) { $response.Dispose() }
+                  $client.Dispose()
+              }
+          }
+          function Read-NpmRegistry([string] $Url) {
+              $remainingSeconds = ($verificationDeadline - (Get-Date).ToUniversalTime()).TotalSeconds
+              if ($remainingSeconds -le 0) { return $null }
+              try {
+                  $response = Invoke-NpmRegistryRequest -Url $Url -TimeoutSeconds ([Math]::Min([double]15, $remainingSeconds))
+              } catch {
+                  Write-Warning 'The registry read failed; publication verification will retry without uploading again.'
+                  return $null
+              }
+              if ($response.StatusCode -eq 200) { return $response }
+              if ($response.StatusCode -in @(404, 408, 429) -or $response.StatusCode -ge 500) { return $null }
+              throw "Registry verification failed with HTTP $($response.StatusCode). Inspect the accepted publication before retrying."
+          }
           function Test-PublishedProvenance($Dist) {
               if (-not $requireProvenance) { return $true }
               if (-not $Dist.attestations.provenance) { return $false }
               $url = 'https://registry.npmjs.org/-/npm/v1/attestations/' + [Uri]::EscapeDataString($env:NPM_PACKAGE) + '@' + $env:NPM_VERSION
-              $response = Invoke-WebRequest -Uri $url -SkipHttpErrorCheck
-              if ($response.StatusCode -ne 200) { return $false }
+              $response = Read-NpmRegistry $url
+              if (-not $response) { return $false }
               $attestations = $response.Content | ConvertFrom-Json
               foreach ($attestation in $attestations.attestations) {
                   if ($attestation.predicateType -cne 'https://slsa.dev/provenance/v1') { continue }
@@ -246,17 +277,27 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'npm publication or dry run failed.' }
           if ($env:NPM_EXECUTE -eq 'true') {
               $verified = $false
-              for ($attempt = 0; $attempt -lt 10; $attempt++) {
-                  $distJson = & npm view "$env:NPM_PACKAGE@$env:NPM_VERSION" dist --json --registry https://registry.npmjs.org
-                  if ($LASTEXITCODE -eq 0) {
-                      $dist = $distJson | ConvertFrom-Json
-                      if ($dist.integrity -cne $integrity) { throw 'Published archive integrity does not match.' }
-                      if (Test-PublishedProvenance $dist) { $verified = $true; break }
+              $verificationDeadline = (Get-Date).ToUniversalTime().AddMinutes(30)
+              $delaySeconds = 5
+              $versionUrl = 'https://registry.npmjs.org/' + [Uri]::EscapeDataString($env:NPM_PACKAGE) + '/' + $env:NPM_VERSION
+              Write-Output 'npm accepted the upload. Waiting up to 30 minutes for registry identity, integrity and required provenance; no further upload will be attempted.'
+              while ((Get-Date).ToUniversalTime() -lt $verificationDeadline) {
+                  $response = Read-NpmRegistry $versionUrl
+                  if ($response) {
+                      $published = $response.Content | ConvertFrom-Json
+                      if ($published.name -cne $env:NPM_PACKAGE -or $published.version -cne $env:NPM_VERSION) { throw 'Published package identity does not match.' }
+                      if ($published.dist.integrity -cne $integrity) { throw 'Published archive integrity does not match.' }
+                      if (Test-PublishedProvenance $published.dist) { $verified = $true; break }
                   }
-                  Start-Sleep -Seconds 4
+                  $remainingSeconds = [Math]::Floor(($verificationDeadline - (Get-Date).ToUniversalTime()).TotalSeconds)
+                  if ($remainingSeconds -le 0) { break }
+                  $sleepSeconds = [Math]::Min($delaySeconds, $remainingSeconds)
+                  Write-Output "Registry verification is pending; checking again in $sleepSeconds seconds without repeating publication."
+                  Start-Sleep -Seconds $sleepSeconds
+                  $delaySeconds = [Math]::Min(60, $delaySeconds * 2)
               }
               if (-not $verified) {
-                  throw 'npm accepted publication, but required registry verification is incomplete. Inspect the registry before retrying.'
+                  throw 'npm accepted publication, but registry verification did not complete within 30 minutes. Inspect the registry before retrying; an existing matching version can be reconciled without another upload.'
               }
           }
           "Package: $env:NPM_PACKAGE@$env:NPM_VERSION`nSHA256: $env:NPM_SHA256`nPublished: $env:NPM_EXECUTE`nProvenance required: $requireProvenance" >> $env:GITHUB_STEP_SUMMARY
