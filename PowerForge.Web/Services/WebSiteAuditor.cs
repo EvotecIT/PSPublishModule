@@ -249,7 +249,7 @@ public static partial class WebSiteAuditor
             var generatedRoutes = GetRouteFileSet();
             foreach (var requiredRoute in requiredRoutes)
             {
-                var candidates = ResolveRequiredRouteCandidates(requiredRoute);
+                var candidates = ResolveRequiredRouteCandidates(requiredRoute, siteRoot);
                 if (candidates.Length == 0)
                     continue;
 
@@ -276,7 +276,7 @@ public static partial class WebSiteAuditor
             var generatedRoutes = GetRouteFileSet();
             foreach (var forbiddenRoute in forbiddenRoutes)
             {
-                var candidates = ResolveRequiredRouteCandidates(forbiddenRoute);
+                var candidates = ResolveRequiredRouteCandidates(forbiddenRoute, siteRoot);
                 if (candidates.Length == 0)
                     continue;
 
@@ -494,7 +494,7 @@ public static partial class WebSiteAuditor
                 {
                     var href = link.GetAttribute("href") ?? string.Empty;
                     if (ShouldSkipLink(href)) continue;
-                    if (IsExternalLink(href)) continue;
+                    if (WebLinkClassifier.IsExternalLink(href)) continue;
 
                     if (TryResolveLocalTarget(siteRoot, baseDir, href, out var resolvedPath))
                     {
@@ -513,7 +513,7 @@ public static partial class WebSiteAuditor
                 foreach (var href in GetAssetHrefs(doc))
                 {
                     if (ShouldSkipLink(href)) continue;
-                    if (IsExternalLink(href)) continue;
+                    if (WebLinkClassifier.IsExternalLink(href)) continue;
                     if (!TryResolveLocalTarget(siteRoot, baseDir, href, out var resolvedPath)) continue;
 
                     assetCount++;
@@ -530,7 +530,7 @@ public static partial class WebSiteAuditor
                     foreach (var src in urls)
                     {
                         if (ShouldSkipLink(src)) continue;
-                        if (IsExternalLink(src)) continue;
+                        if (WebLinkClassifier.IsExternalLink(src)) continue;
                         if (!TryResolveLocalTarget(siteRoot, baseDir, src, out var resolvedPath)) continue;
 
                         assetCount++;

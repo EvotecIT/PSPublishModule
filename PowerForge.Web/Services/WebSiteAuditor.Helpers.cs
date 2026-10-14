@@ -177,14 +177,6 @@ public static partial class WebSiteAuditor
         return false;
     }
 
-    private static bool IsExternalLink(string href)
-    {
-        if (string.IsNullOrWhiteSpace(href)) return false;
-        if (href.StartsWith("//")) return true;
-        return href.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-               href.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
-    }
-
     private static string StripQueryAndFragment(string href)
     {
         var trimmed = href.Trim();
@@ -212,10 +204,10 @@ public static partial class WebSiteAuditor
 
         var candidateBase = isRooted ? siteRoot : baseDir;
         var candidate = Path.GetFullPath(Path.Combine(candidateBase, relative));
-        if (!candidate.StartsWith(siteRoot, StringComparison.OrdinalIgnoreCase))
+        if (!IsPathWithinRoot(NormalizeRootPath(siteRoot), candidate))
             return false;
 
-        if (isExplicitDir)
+        if (isExplicitDir || Directory.Exists(candidate))
         {
             var dir = candidate.TrimEnd(Path.DirectorySeparatorChar);
             var indexPath = Path.Combine(dir, "index.html");
@@ -235,7 +227,7 @@ public static partial class WebSiteAuditor
             return true;
         }
 
-        if (Path.HasExtension(candidate))
+        if (File.Exists(candidate) || Path.HasExtension(candidate))
         {
             if (!File.Exists(candidate) &&
                 TryResolveLocalizedAliasTarget(siteRoot, baseDir, relative, isDirectoryHint: false, out var localizedFilePath))
@@ -251,7 +243,7 @@ public static partial class WebSiteAuditor
         foreach (var ext in DefaultHtmlExtensions)
         {
             var htmlCandidate = candidate + ext;
-            if (File.Exists(htmlCandidate))
+            if (IsPathWithinRoot(NormalizeRootPath(siteRoot), htmlCandidate) && File.Exists(htmlCandidate))
             {
                 resolvedPath = htmlCandidate;
                 return true;
@@ -260,7 +252,7 @@ public static partial class WebSiteAuditor
 
         var indexCandidate = Path.Combine(candidate, "index.html");
         if (!File.Exists(indexCandidate) &&
-            TryResolveLocalizedAliasTarget(siteRoot, baseDir, relative, isDirectoryHint: true, out var localizedIndexFallback))
+            TryResolveLocalizedAliasTarget(siteRoot, baseDir, relative, isDirectoryHint: false, out var localizedIndexFallback))
         {
             resolvedPath = localizedIndexFallback;
             return true;
@@ -284,10 +276,10 @@ public static partial class WebSiteAuditor
 
         var combinedRelative = Path.Combine(languagePrefix, relative.TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         var candidate = Path.GetFullPath(Path.Combine(siteRoot, combinedRelative));
-        if (!candidate.StartsWith(siteRoot, StringComparison.OrdinalIgnoreCase))
+        if (!IsPathWithinRoot(NormalizeRootPath(siteRoot), candidate))
             return false;
 
-        if (isDirectoryHint)
+        if (isDirectoryHint || Directory.Exists(candidate))
         {
             var indexPath = Path.Combine(candidate.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), "index.html");
             if (File.Exists(indexPath))
@@ -311,7 +303,7 @@ public static partial class WebSiteAuditor
         foreach (var ext in DefaultHtmlExtensions)
         {
             var htmlCandidate = candidate + ext;
-            if (File.Exists(htmlCandidate))
+            if (IsPathWithinRoot(NormalizeRootPath(siteRoot), htmlCandidate) && File.Exists(htmlCandidate))
             {
                 resolvedPath = htmlCandidate;
                 return true;
@@ -356,7 +348,7 @@ public static partial class WebSiteAuditor
         if (baseElement is null) return null;
         var href = baseElement.GetAttribute("href");
         if (string.IsNullOrWhiteSpace(href)) return null;
-        if (IsExternalLink(href)) return null;
+        if (WebLinkClassifier.IsExternalLink(href)) return null;
         if (!href.StartsWith("/", StringComparison.OrdinalIgnoreCase))
         {
             return null;
@@ -1748,7 +1740,7 @@ public static partial class WebSiteAuditor
             if (requireIframeReferrerPolicy)
             {
                 var referrerPolicy = (iframe.GetAttribute("referrerpolicy") ?? string.Empty).Trim();
-                if (IsExternalLink(src) && string.IsNullOrWhiteSpace(referrerPolicy))
+                if (TryGetExternalOrigin(src, out _) && string.IsNullOrWhiteSpace(referrerPolicy))
                     iframeMissingReferrerPolicy.Add(src);
             }
 
@@ -2015,7 +2007,7 @@ public static partial class WebSiteAuditor
         var normalized = StripQueryAndFragment(href).Trim();
         if (string.IsNullOrWhiteSpace(normalized)) return string.Empty;
 
-        if (IsExternalLink(normalized))
+        if (WebLinkClassifier.IsExternalLink(normalized))
             return normalized;
 
         if (!normalized.StartsWith("/", StringComparison.Ordinal))
@@ -2027,12 +2019,12 @@ public static partial class WebSiteAuditor
         return normalized;
     }
 
-    private static string[] ResolveRequiredRouteCandidates(string route)
+    private static string[] ResolveRequiredRouteCandidates(string route, string siteRoot)
     {
         var normalized = StripQueryAndFragment(route).Trim();
         if (string.IsNullOrWhiteSpace(normalized))
             return Array.Empty<string>();
-        if (IsExternalLink(normalized))
+        if (WebLinkClassifier.IsExternalLink(normalized))
             return Array.Empty<string>();
 
         normalized = normalized.Replace('\\', '/');
@@ -2060,7 +2052,7 @@ public static partial class WebSiteAuditor
         {
             candidates.Add(normalized);
         }
-        else if (Path.HasExtension(normalized))
+        else if (Path.HasExtension(normalized) && !Directory.Exists(Path.Combine(siteRoot, normalized.Replace('/', Path.DirectorySeparatorChar))))
         {
             candidates.Add(normalized);
         }
