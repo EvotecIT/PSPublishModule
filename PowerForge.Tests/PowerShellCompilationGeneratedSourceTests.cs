@@ -129,7 +129,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Theory]
-    [InlineData("net10.0", "10.0.12")]
+    [InlineData("net10.0", "10.0.13")]
     public void Build_EmittedBinaryModulePinsServicedSecurityXmlDependency(string targetFramework, string expectedVersion)
     {
         using var fixture = ArtifactFixture.Create("function Get-SecurityDependencyProof { return 42 }");
@@ -167,7 +167,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var project = File.ReadAllText(Path.Combine(result.GeneratedSourcePath!, "GeneratedPackagedSecurityDependency.csproj"));
-        Assert.Contains("<PackageReference Include=\"System.Security.Cryptography.Xml\" Version=\"10.0.12\"", project, StringComparison.Ordinal);
+        Assert.Contains("<PackageReference Include=\"System.Security.Cryptography.Xml\" Version=\"10.0.13\"", project, StringComparison.Ordinal);
         var compilerPackages = result.Manifest!.DependencyGraph!.Nodes
             .Where(static node => node.Kind == PowerShellCompilationDependencyNodeKind.NuGetPackage)
             .ToArray();
@@ -178,7 +178,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             !string.IsNullOrWhiteSpace(node.Identity.ContentHash) &&
             node.Roles.HasFlag(PowerShellCompilationDependencyGraphRole.Build));
         Assert.Contains(compilerPackages, static node =>
-            node.Identity.Name == "System.Security.Cryptography.Xml" && node.Identity.Version == "10.0.12");
+            node.Identity.Name == "System.Security.Cryptography.Xml" && node.Identity.Version == "10.0.13");
         var provenance = result.Manifest.Files.Single(static file => file.Role == "BuildProvenance");
         using (var document = JsonDocument.Parse(File.ReadAllText(provenance.Path)))
         {

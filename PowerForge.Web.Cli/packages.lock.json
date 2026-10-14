@@ -331,8 +331,8 @@
       },
       "System.Security.Cryptography.Pkcs": {
         "type": "Transitive",
-        "resolved": "10.0.12",
-        "contentHash": "W6BsawU2tB2qy6u4+3cBOSOmiTUgYWW365b5WMVA1bDxQwZZeNWD+qufKJkDQNKzAKq4b6Q04DDKhmr2SNJ1eg=="
+        "resolved": "10.0.13",
+        "contentHash": "a+EovgC1fBnwdlQ6cn3j4JFBfKqiFaFvoAhjisOoSvazLAcIznaBzPQP0oYnvccmeXfqUH1KebVZOxSeH6rMaw=="
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
@@ -356,7 +356,7 @@
           "NuGet.Packaging": "[7.9.0, )",
           "System.IO.Packaging": "[10.0.12, )",
           "System.Reflection.MetadataLoadContext": "[10.0.12, )",
-          "System.Security.Cryptography.Pkcs": "[10.0.12, )",
+          "System.Security.Cryptography.Pkcs": "[10.0.13, )",
           "System.Security.Cryptography.ProtectedData": "[10.0.12, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
@@ -371,7 +371,7 @@
           "HtmlTinkerX": "[3.0.3, )",
           "Magick.NET-Q8-AnyCPU": "[14.17.2, )",
           "OfficeIMO.Markdown": "[3.4.4, )",
-          "PowerForge": "[3.0.159, )",
+          "PowerForge": "[3.0.169, )",
           "Scriban": "[7.5.0, )",
           "YamlDotNet": "[18.1.0, )"
         }
