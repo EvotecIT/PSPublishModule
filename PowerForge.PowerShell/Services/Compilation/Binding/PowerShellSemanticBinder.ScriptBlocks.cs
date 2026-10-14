@@ -40,15 +40,18 @@ internal sealed partial class PowerShellSemanticBinder
                 while (!names.Add(name)) name += "_";
                 var span = PowerShellSourceParser.GetSpan(document, nested.Extent);
                 var symbol = new PowerShellSymbolId(PowerShellSymbolKind.NativeScriptBlock, document.DocumentId, name, span);
-                var function = new FunctionDefinitionAst(nested.Extent, false, nested.IsFilter, name,
-                    nested.Parameters?.Select(static parameter => (ParameterAst)parameter.Copy()),
-                    (ScriptBlockAst)nested.Body.Copy());
+                var function = CreateNativeFunctionSyntax(nested, name);
                 _nativeScriptBlocks.Add(key, symbol);
                 all.Add(new FunctionDeclaration(document, function, symbol));
             }
         }
         return all.ToArray();
     }
+
+    private static FunctionDefinitionAst CreateNativeFunctionSyntax(FunctionDefinitionAst original, string name)
+        => new(original.Extent, false, original.IsFilter, name,
+            original.Parameters?.Select(static parameter => (ParameterAst)parameter.Copy()),
+            (ScriptBlockAst)original.Body.Copy());
 
     internal static bool IsAssignedScriptBlock(ScriptBlockExpressionAst expression)
     {

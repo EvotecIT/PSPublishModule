@@ -1,0 +1,402 @@
+{
+  "schemaVersion": 1,
+  "packetId": "powerforge-powershell-yaml-whole-module-net472-v1",
+  "semanticProfile": "PowerForge.Oracle.WindowsPowerShell/5.1",
+  "targetFramework": "net472",
+  "purpose": "Qualify the full pinned original module through canonical Hybrid project Build/Test/Pack/Install with all fourteen owned functions and public/private scenario parity.",
+  "workloads": [
+    {
+      "id": "powershell-yaml-whole-module",
+      "workloadKind": "Module",
+      "entryPoint": "powershell-yaml.psd1",
+      "sourceInputs": [
+        {
+          "path": "[Content_Types].xml",
+          "sha256": "d7fbc58010f1e4f7a281218dec909c74255a228c273684d420a6b8a80eb3e721"
+        },
+        {
+          "path": "build.ps1",
+          "sha256": "1b239ed96f566421b9ad8b49ef36b2586d3dad41d4555397b539c4691b729124"
+        },
+        {
+          "path": "LICENSE",
+          "sha256": "929f1557083885c9ea16be5ef9112b55c415e6b3867279b996ed4abc5d93b271"
+        },
+        {
+          "path": "powershell-yaml.nuspec",
+          "sha256": "bf4682ea15b32ad6a44dea8b37c6cae06b12329dcec30755a3118e7a099a362a"
+        },
+        {
+          "path": "powershell-yaml.psd1",
+          "sha256": "b17d30f63eee0fd5e5bb074043045c499e87b254c044ce5b1a5e71df2dd8c469"
+        },
+        {
+          "path": "powershell-yaml.psm1",
+          "sha256": "415b0de1b4d5af6980ec50316d3267fa19663b7dbf809d219783b41ed39b2e5d"
+        },
+        {
+          "path": "README.md",
+          "sha256": "d64f022a08cf7f406f38f6ce69f1dd0de2155ba393e39e1609772bbabd0831ef"
+        },
+        {
+          "path": "lib/net47/LICENSE.txt",
+          "sha256": "daea8b7f1b2bab48ea12ad50b0ce91634669d99d7dd0cb64aed8dffeeef69ed3"
+        },
+        {
+          "path": "lib/net47/PowerShellYamlSerializer.dll",
+          "sha256": "a5bdd33675629ca88cf05cd08150a19a69bc20b21cbe1d1e5e55fe63a332062a"
+        },
+        {
+          "path": "lib/net47/YamlDotNet.dll",
+          "sha256": "d35c770d92632bd94bba4203db05eee5ebce6e6ea6d92e7ebe8997a942b5321c"
+        },
+        {
+          "path": "lib/net47/YamlDotNet.xml",
+          "sha256": "9a39a8c9122b6c146ad39ccc373f596f277f4b4b998bc2d4dfc18c8368a2f555"
+        },
+        {
+          "path": "lib/netstandard2.1/LICENSE.txt",
+          "sha256": "daea8b7f1b2bab48ea12ad50b0ce91634669d99d7dd0cb64aed8dffeeef69ed3"
+        },
+        {
+          "path": "lib/netstandard2.1/PowerShellYamlSerializer.dll",
+          "sha256": "c9193f2fb5afa40af61d908589fdd0929ab58472be215fc2afb692194d53210d"
+        },
+        {
+          "path": "lib/netstandard2.1/YamlDotNet.dll",
+          "sha256": "d7543a03a69f14ca1e302aa2bbb09777200b72e0c6db0d0eb7614593f5c33e0f"
+        },
+        {
+          "path": "lib/netstandard2.1/YamlDotNet.xml",
+          "sha256": "9a39a8c9122b6c146ad39ccc373f596f277f4b4b998bc2d4dfc18c8368a2f555"
+        },
+        {
+          "path": "package/services/metadata/core-properties/3e307b8996374dc699debaba76cd8e5a.psmdcp",
+          "sha256": "51cf41807198a82a09090a8b73b0c56866283c12ea1657bc85612f9d8fa9c321"
+        },
+        {
+          "path": "Tests/powershell-yaml.Tests.ps1",
+          "sha256": "29602f1e025ea0986c5286718e4e5f090f3b813bfd81a7876aefafcf943deabd"
+        },
+        {
+          "path": "_rels/.rels",
+          "sha256": "9a324eb81a348626ff17c3a3b9bf05a2161b3ecf08e68f9a0b3eef3a1cef2a55"
+        }
+      ],
+      "origin": {
+        "name": "powershell-yaml",
+        "version": "0.4.12",
+        "packageUri": "https://www.powershellgallery.com/api/v2/package/powershell-yaml/0.4.12",
+        "packageSha256": "d4602bc7a4a093766520422d53ca8b09acde162286fae11e2ee6c8edfea07810",
+        "repositoryUrl": "https://github.com/cloudbase/powershell-yaml",
+        "sourceCommit": "ff33210a3edebda27cedcbab40d4524a11d5e199",
+        "tag": "v0.4.12",
+        "originalRootModuleSha256": "415b0de1b4d5af6980ec50316d3267fa19663b7dbf809d219783b41ed39b2e5d",
+        "license": "Apache-2.0",
+        "licensePath": "LICENSE",
+        "licenseUrl": "https://github.com/cloudbase/powershell-yaml/blob/ff33210a3edebda27cedcbab40d4524a11d5e199/LICENSE",
+        "bundledDependency": "YamlDotNet 16.0.0.0; both original host branches and MIT LICENSE.txt are pinned source inputs.",
+        "acquisition": "Acquire exact package with Corpus.Runner.Common.ps1 verified payload and bounded archive helpers; pass its unchanged expanded tree as SourceRoot."
+      },
+      "qualification": {
+        "kind": "HybridModuleWorkflow",
+        "artifactName": "powershell-yaml",
+        "requiredExports": [
+          "ConvertFrom-Yaml",
+          "ConvertTo-Yaml"
+        ],
+        "requiredAliases": [
+          {
+            "name": "cfy",
+            "definition": "ConvertFrom-Yaml"
+          },
+          {
+            "name": "cty",
+            "definition": "ConvertTo-Yaml"
+          }
+        ],
+        "requiredCompiledOwnedFunctions": [
+          {
+            "relativePath": "powershell-yaml.psm1",
+            "name": "Invoke-LoadFile",
+            "startLine": 32
+          },
+          {
+            "relativePath": "powershell-yaml.psm1",
+            "name": "Invoke-LoadAssembly",
+            "startLine": 74
+          },
+          {
+            "relativePath": "powershell-yaml.psm1",
+            "name": "Get-YamlDocuments",
+            "startLine": 96
+          },
+          {
+            "relativePath": "powershell-yaml.psm1",
+            "name": "Convert-ValueToProperType",
+            "startLine": 121
+          },
+          {
+            "relativePath": "powershell-yaml.psm1",
+            "name": "Convert-YamlMappingToHashtable",
+            "startLine": 245
+          },
+          {
+            "relativePath": "powershell-yaml.psm1",
+            "name": "Convert-YamlSequenceToArray",
+            "startLine": 261
+          },
+          {
+            "relativePath": "powershell-yaml.psm1",
+            "name": "Convert-YamlDocumentToPSObject",
+            "startLine": 277
+          },
+          {
+            "relativePath": "powershell-yaml.psm1",
+            "name": "Convert-HashtableToDictionary",
+            "startLine": 299
+          },
+          {
+            "relativePath": "powershell-yaml.psm1",
+            "name": "Convert-OrderedHashtableToDictionary",
+            "startLine": 310
+          },
+          {
+            "relativePath": "powershell-yaml.psm1",
+            "name": "Convert-ListToGenericList",
+            "startLine": 321
+          },
+          {
+            "relativePath": "powershell-yaml.psm1",
+            "name": "Convert-PSObjectToGenericObject",
+            "startLine": 333
+          },
+          {
+            "relativePath": "powershell-yaml.psm1",
+            "name": "ConvertFrom-Yaml",
+            "startLine": 354
+          },
+          {
+            "relativePath": "powershell-yaml.psm1",
+            "name": "Get-Serializer",
+            "startLine": 395
+          },
+          {
+            "relativePath": "powershell-yaml.psm1",
+            "name": "ConvertTo-Yaml",
+            "startLine": 433
+          }
+        ],
+        "requiredScenarioIds": [
+          "scalar-int32",
+          "scalar-int32-min",
+          "scalar-int64",
+          "scalar-int64-max",
+          "scalar-bigint",
+          "scalar-negative-bigint",
+          "scalar-decimal",
+          "scalar-scientific",
+          "scalar-bool",
+          "scalar-null",
+          "scalar-quoted",
+          "tagged-string",
+          "tagged-boolean",
+          "tagged-int-hex",
+          "tagged-int-octal",
+          "tagged-bigint",
+          "tagged-infinity",
+          "tagged-timestamp",
+          "invalid-tagged-bool",
+          "invalid-tagged-int",
+          "invalid-tagged-float",
+          "invalid-tagged-timestamp",
+          "all-documents",
+          "pipeline-yaml",
+          "parse-map",
+          "parse-ordered",
+          "parse-sequence",
+          "parse-nested",
+          "parse-alias",
+          "parse-multiple",
+          "parse-invalid",
+          "serialize-map",
+          "serialize-json",
+          "serialize-flags",
+          "serialize-flow",
+          "serialize-pipeline",
+          "invalid-option",
+          "outfile",
+          "outfile-exists",
+          "outfile-force",
+          "public-contract",
+          "alias-cfy",
+          "alias-cty",
+          "parse-no-input",
+          "parse-empty",
+          "parse-comments",
+          "parse-empty-sequence",
+          "parse-empty-map",
+          "parse-ordered-nested",
+          "parse-merge-enabled",
+          "parse-merge-disabled",
+          "parse-merge-duplicate",
+          "parse-ordered-all-documents",
+          "scalar-zero",
+          "scalar-int64-min",
+          "scalar-double",
+          "scalar-null-spellings",
+          "scalar-single-quoted",
+          "tagged-null",
+          "tagged-int-short",
+          "tagged-float-decimal",
+          "tagged-positive-infinity",
+          "serialize-no-input",
+          "serialize-null",
+          "serialize-empty-array",
+          "serialize-array-argument",
+          "serialize-single-pipeline",
+          "serialize-single-keep-array",
+          "serialize-hashtable",
+          "serialize-generic-dictionary",
+          "serialize-nested-ordered",
+          "serialize-nested-pscustomobject",
+          "serialize-quoted-primitives",
+          "serialize-input-mutation",
+          "serialize-conflicting-parameter-set",
+          "outfile-missing-parent",
+          "outfile-empty-input",
+          "serialize-error-recovery",
+          "serialize-getter-error",
+          "outfile-getter-error-close",
+          "private-load-file",
+          "private-load-assembly",
+          "private-documents",
+          "private-scalar",
+          "private-mapping",
+          "private-sequence",
+          "private-document-object",
+          "private-hashtable",
+          "private-ordered",
+          "private-list",
+          "private-object",
+          "private-serializer",
+          "module-reimport",
+          "module-dependencies",
+          "file-effects",
+          "serialize-option-None",
+          "serialize-option-Roundtrip",
+          "serialize-option-DisableAliases",
+          "serialize-option-EmitDefaults",
+          "serialize-option-JsonCompatible",
+          "serialize-option-DefaultToStaticType",
+          "serialize-option-WithIndentedSequences",
+          "serialize-option-OmitNullValues",
+          "serialize-option-UseFlowStyle",
+          "serialize-option-UseSequenceFlowStyle"
+        ],
+        "publicExportScenarios": {
+          "ConvertFrom-Yaml": [
+            "scalar-int32",
+            "scalar-int32-min",
+            "scalar-int64",
+            "scalar-int64-max",
+            "scalar-bigint",
+            "scalar-negative-bigint",
+            "scalar-decimal",
+            "scalar-scientific",
+            "scalar-bool",
+            "scalar-null",
+            "scalar-quoted",
+            "tagged-string",
+            "tagged-boolean",
+            "tagged-int-hex",
+            "tagged-int-octal",
+            "tagged-bigint",
+            "tagged-infinity",
+            "tagged-timestamp",
+            "invalid-tagged-bool",
+            "invalid-tagged-int",
+            "invalid-tagged-float",
+            "invalid-tagged-timestamp",
+            "all-documents",
+            "pipeline-yaml",
+            "parse-map",
+            "parse-ordered",
+            "parse-sequence",
+            "parse-nested",
+            "parse-alias",
+            "parse-multiple",
+            "parse-invalid",
+            "alias-cfy",
+            "parse-no-input",
+            "parse-empty",
+            "parse-comments",
+            "parse-empty-sequence",
+            "parse-empty-map",
+            "parse-ordered-nested",
+            "parse-merge-enabled",
+            "parse-merge-disabled",
+            "parse-merge-duplicate",
+            "parse-ordered-all-documents",
+            "scalar-zero",
+            "scalar-int64-min",
+            "scalar-double",
+            "scalar-null-spellings",
+            "scalar-single-quoted",
+            "tagged-null",
+            "tagged-int-short",
+            "tagged-float-decimal",
+            "tagged-positive-infinity",
+            "serialize-hashtable",
+            "serialize-generic-dictionary",
+            "module-reimport"
+          ],
+          "ConvertTo-Yaml": [
+            "serialize-map",
+            "serialize-json",
+            "serialize-flags",
+            "serialize-flow",
+            "serialize-pipeline",
+            "invalid-option",
+            "outfile",
+            "outfile-exists",
+            "outfile-force",
+            "alias-cty",
+            "serialize-no-input",
+            "serialize-null",
+            "serialize-empty-array",
+            "serialize-array-argument",
+            "serialize-single-pipeline",
+            "serialize-single-keep-array",
+            "serialize-hashtable",
+            "serialize-generic-dictionary",
+            "serialize-nested-ordered",
+            "serialize-nested-pscustomobject",
+            "serialize-quoted-primitives",
+            "serialize-input-mutation",
+            "serialize-conflicting-parameter-set",
+            "outfile-missing-parent",
+            "outfile-empty-input",
+            "serialize-error-recovery",
+            "serialize-getter-error",
+            "outfile-getter-error-close",
+            "module-reimport",
+            "serialize-option-None",
+            "serialize-option-Roundtrip",
+            "serialize-option-DisableAliases",
+            "serialize-option-EmitDefaults",
+            "serialize-option-JsonCompatible",
+            "serialize-option-DefaultToStaticType",
+            "serialize-option-WithIndentedSequences",
+            "serialize-option-OmitNullValues",
+            "serialize-option-UseFlowStyle",
+            "serialize-option-UseSequenceFlowStyle"
+          ]
+        },
+        "observerScript": "Invoke-YamlWholeModuleProbe.ps1",
+        "observerSha256": "177a153711980cae5d8be4a8f6ec4dc6df37018089ff9a8c36b553620d7a845b",
+        "observerSupport": []
+      }
+    }
+  ]
+}

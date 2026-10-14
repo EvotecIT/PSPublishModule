@@ -1,0 +1,1149 @@
+{
+  "schemaVersion": 1,
+  "module": "powershell-yaml",
+  "version": "0.4.12",
+  "observerSha256": "177a153711980cae5d8be4a8f6ec4dc6df37018089ff9a8c36b553620d7a845b",
+  "sourcePackageSha256": "d4602bc7a4a093766520422d53ca8b09acde162286fae11e2ee6c8edfea07810",
+  "scenarioCount": 105,
+  "reusedScenarioCount": 40,
+  "additionalScenarioCount": 65,
+  "directPrivateScenarioCount": 12,
+  "compiledOwnedFunctionCount": 14,
+  "scenarios": [
+    {
+      "scenarioId": "scalar-int32",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "scalar-int32-min",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "scalar-int64",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "scalar-int64-max",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "scalar-bigint",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "scalar-negative-bigint",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "scalar-decimal",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "scalar-scientific",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "scalar-bool",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "scalar-null",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "scalar-quoted",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "tagged-string",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "tagged-boolean",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "tagged-int-hex",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "tagged-int-octal",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "tagged-bigint",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "tagged-infinity",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "tagged-timestamp",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "invalid-tagged-bool",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "invalid-tagged-int",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "invalid-tagged-float",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "invalid-tagged-timestamp",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "all-documents",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "pipeline-yaml",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "parse-map",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "parse-ordered",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "parse-sequence",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "parse-nested",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "parse-alias",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "parse-multiple",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "parse-invalid",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-map",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-json",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-flags",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-flow",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-pipeline",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "invalid-option",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "outfile",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "outfile-exists",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "outfile-force",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "public-contract",
+      "kind": "public-api",
+      "entryExports": [],
+      "directOwnedCalls": [],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "alias-cfy",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "alias-cty",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "parse-no-input",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "parse-empty",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "parse-comments",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "parse-empty-sequence",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "parse-empty-map",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "parse-ordered-nested",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "parse-merge-enabled",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "parse-merge-disabled",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "parse-merge-duplicate",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "parse-ordered-all-documents",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "scalar-zero",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "scalar-int64-min",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "scalar-double",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "scalar-null-spellings",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "scalar-single-quoted",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "tagged-null",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "tagged-int-short",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "tagged-float-decimal",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "tagged-positive-infinity",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-no-input",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-null",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-empty-array",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-array-argument",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-single-pipeline",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-single-keep-array",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-hashtable",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml",
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml",
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-generic-dictionary",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertFrom-Yaml",
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "Convert-PSObjectToGenericObject",
+        "ConvertFrom-Yaml",
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-nested-ordered",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-nested-pscustomobject",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-quoted-primitives",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-input-mutation",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-conflicting-parameter-set",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "outfile-missing-parent",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "outfile-empty-input",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-error-recovery",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-getter-error",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "outfile-getter-error-close",
+      "kind": "public-api",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "private-load-file",
+      "kind": "direct-private-helper",
+      "entryExports": [],
+      "directOwnedCalls": [
+        "Invoke-LoadFile"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "private-load-assembly",
+      "kind": "direct-private-helper",
+      "entryExports": [],
+      "directOwnedCalls": [
+        "Invoke-LoadAssembly"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "private-documents",
+      "kind": "direct-private-helper",
+      "entryExports": [],
+      "directOwnedCalls": [
+        "Get-YamlDocuments"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "private-scalar",
+      "kind": "direct-private-helper",
+      "entryExports": [],
+      "directOwnedCalls": [
+        "Convert-ValueToProperType",
+        "Get-YamlDocuments"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "private-mapping",
+      "kind": "direct-private-helper",
+      "entryExports": [],
+      "directOwnedCalls": [
+        "Convert-YamlMappingToHashtable",
+        "Get-YamlDocuments"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "private-sequence",
+      "kind": "direct-private-helper",
+      "entryExports": [],
+      "directOwnedCalls": [
+        "Convert-YamlSequenceToArray",
+        "Get-YamlDocuments"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "private-document-object",
+      "kind": "direct-private-helper",
+      "entryExports": [],
+      "directOwnedCalls": [
+        "Convert-YamlDocumentToPSObject",
+        "Get-YamlDocuments"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "private-hashtable",
+      "kind": "direct-private-helper",
+      "entryExports": [],
+      "directOwnedCalls": [
+        "Convert-HashtableToDictionary"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "private-ordered",
+      "kind": "direct-private-helper",
+      "entryExports": [],
+      "directOwnedCalls": [
+        "Convert-OrderedHashtableToDictionary"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "private-list",
+      "kind": "direct-private-helper",
+      "entryExports": [],
+      "directOwnedCalls": [
+        "Convert-ListToGenericList"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "private-object",
+      "kind": "direct-private-helper",
+      "entryExports": [],
+      "directOwnedCalls": [
+        "Convert-PSObjectToGenericObject"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "private-serializer",
+      "kind": "direct-private-helper",
+      "entryExports": [],
+      "directOwnedCalls": [
+        "Get-Serializer"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "module-reimport",
+      "kind": "initialization-lifecycle",
+      "entryExports": [
+        "ConvertFrom-Yaml",
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertFrom-Yaml",
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "module-dependencies",
+      "kind": "public-api",
+      "entryExports": [],
+      "directOwnedCalls": [],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "file-effects",
+      "kind": "public-api",
+      "entryExports": [],
+      "directOwnedCalls": [],
+      "expected": "Original/Built/Installed ordered typed records, stream identity, errors and effects match within each supported host."
+    },
+    {
+      "scenarioId": "serialize-option-None",
+      "kind": "public-serializer-flag",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Exact original result or original error is preserved for this enum option; no upstream API repair inferred."
+    },
+    {
+      "scenarioId": "serialize-option-Roundtrip",
+      "kind": "public-serializer-flag",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Exact original result or original error is preserved for this enum option; no upstream API repair inferred."
+    },
+    {
+      "scenarioId": "serialize-option-DisableAliases",
+      "kind": "public-serializer-flag",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Exact original result or original error is preserved for this enum option; no upstream API repair inferred."
+    },
+    {
+      "scenarioId": "serialize-option-EmitDefaults",
+      "kind": "public-serializer-flag",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Exact original result or original error is preserved for this enum option; no upstream API repair inferred."
+    },
+    {
+      "scenarioId": "serialize-option-JsonCompatible",
+      "kind": "public-serializer-flag",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Exact original result or original error is preserved for this enum option; no upstream API repair inferred."
+    },
+    {
+      "scenarioId": "serialize-option-DefaultToStaticType",
+      "kind": "public-serializer-flag",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Exact original result or original error is preserved for this enum option; no upstream API repair inferred."
+    },
+    {
+      "scenarioId": "serialize-option-WithIndentedSequences",
+      "kind": "public-serializer-flag",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Exact original result or original error is preserved for this enum option; no upstream API repair inferred."
+    },
+    {
+      "scenarioId": "serialize-option-OmitNullValues",
+      "kind": "public-serializer-flag",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Exact original result or original error is preserved for this enum option; no upstream API repair inferred."
+    },
+    {
+      "scenarioId": "serialize-option-UseFlowStyle",
+      "kind": "public-serializer-flag",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Exact original result or original error is preserved for this enum option; no upstream API repair inferred."
+    },
+    {
+      "scenarioId": "serialize-option-UseSequenceFlowStyle",
+      "kind": "public-serializer-flag",
+      "entryExports": [
+        "ConvertTo-Yaml"
+      ],
+      "directOwnedCalls": [
+        "ConvertTo-Yaml"
+      ],
+      "expected": "Exact original result or original error is preserved for this enum option; no upstream API repair inferred."
+    }
+  ],
+  "comparisonPolicy": "Actual unordered Hashtable string-key contents compare as typed maps; raw enumeration is retained outside parity. Two unordered serializer cases assert semantic mapping plus normalized-input/output order relationship and retain raw YAML. OrderedDictionary, object-property and array order, ordered serializer text, file bytes and errors/streams remain exact.",
+  "fixtureLifecycle": "The same owned ScenarioRoot is reused for all surfaces. Before each probe, only known prior output.yaml/getter-error.yaml/empty-input.yaml files may be reset; unknown contents and links are rejected. Each preceding report retains file bytes and hashes.",
+  "boundaries": [
+    "All fourteen complete emitted methods, direct positive helper calls and the existing missing-delegate guard are required together; counts alone do not establish execution.",
+    "The native enum/module initializer, PowerShell binding/state and hosted command regions remain reported. This is Hybrid qualification, not PowerShell-free execution.",
+    "A separate old-YamlDotNet-preload cohort is outside this 105-scenario packet; no additional production or globally installed dependency is introduced.",
+    "The full package remains external pinned input; the observer does not extract five functions or replace upstream loaders/assemblies.",
+    "Compiler input source is withdrawn by the shared harness for Built/Installed probes, while the preserved external SourceRoot remains unchanged."
+  ]
+}

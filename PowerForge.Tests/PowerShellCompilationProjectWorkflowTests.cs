@@ -17,7 +17,7 @@ public sealed class PowerShellCompilationProjectWorkflowTests
     [Theory]
     [Trait("Category", "PowerShellCompilerGate")]
     [MemberData(nameof(ProjectModuleFrameworks))]
-    public void ProjectWorkflow_UsesReviewedLocksOfflineEnvironmentAndQualifiedPackage(string framework)
+    public async Task ProjectWorkflow_UsesReviewedLocksOfflineEnvironmentAndQualifiedPackage(string framework)
     {
         using var fixture = ProjectFixture.Create(specialPath: true);
         var manifestService = new PowerShellCompilationProjectManifestService();
@@ -31,6 +31,8 @@ public sealed class PowerShellCompilationProjectWorkflowTests
             PowerShellCompilationExecutableOptimization.None,
             explicitContract: true);
         var manifest = manifestService.Create(fixture.ProjectPath, fixture.ManifestPath, "GenericProject", target);
+        var artifact = Assert.Single(manifest.Artifacts);
+        artifact.ArtifactName = "Generic";
         manifestService.Save(fixture.ProjectPath, manifest);
         var workflow = new PowerShellCompilationProjectWorkflowService();
 
@@ -44,6 +46,7 @@ public sealed class PowerShellCompilationProjectWorkflowTests
         Assert.True(offline.Succeeded, string.Join(Environment.NewLine, offline.Targets.Select(static result => result.Message)));
         var build = workflow.Build(fixture.ProjectPath);
         Assert.True(build.Succeeded, string.Join(Environment.NewLine, build.Targets.Select(static result => result.Message)));
+        Assert.Equal("Generic.psd1", Path.GetFileName(Assert.Single(build.Targets).Path));
         var debugPlan = workflow.CreateDebugPlan(fixture.ProjectPath);
         Assert.Equal("BinaryModule", debugPlan.ArtifactKind);
         Assert.Equal(Assert.Single(build.Targets).Path, debugPlan.ArtifactPath);
@@ -57,7 +60,7 @@ public sealed class PowerShellCompilationProjectWorkflowTests
             File.ReadAllText(Path.Combine(
                 fixture.Root,
                 Assert.Single(manifest.Artifacts).OutputDirectory.Replace('/', Path.DirectorySeparatorChar),
-                "GenericProject." + Assert.Single(manifest.Artifacts).Name + ".powerforge-compilation.json")),
+                "Generic.powerforge-compilation.json")),
             PowerShellCompilationProjectManifestService.JsonOptions)!;
         Assert.Equal(Assert.Single(environmentAfterBuild.ResolvedLocks).Sha256, builtManifest.ResolvedPackageLockSha256);
         var prematurePack = workflow.Pack(fixture.ProjectPath);
@@ -70,6 +73,7 @@ public sealed class PowerShellCompilationProjectWorkflowTests
         var pack = workflow.Pack(fixture.ProjectPath);
         Assert.True(pack.Succeeded);
         var packagePath = Assert.Single(pack.Targets).Path!;
+        Assert.Equal("GenericProject." + artifact.Name + ".zip", Path.GetFileName(packagePath));
         var packageHash = PowerShellCompilationProjectManifestService.ComputeSha256(packagePath);
         var repeatedPack = workflow.Pack(fixture.ProjectPath);
         Assert.True(repeatedPack.Succeeded);
@@ -84,11 +88,34 @@ public sealed class PowerShellCompilationProjectWorkflowTests
             Assert.Equal(
                 PowerShellCompilationProjectWorkflowService.ComputeQualifiedInstallationIdentity(
                     Assert.Single(manifest.Artifacts).Target.ContractSha256,
-                    descriptor.RootElement.GetProperty("artifactSetSha256").GetString()!),
+                    descriptor.RootElement.GetProperty("artifactSetSha256").GetString()!,
+                    PowerShellCompilationProjectManifestService.ComputeSha256(Path.Combine(installRoot, "powerforge-package.json"))),
                 installDirectory.Name,
                 ignoreCase: true);
         var repeatedInstall = workflow.Install(fixture.ProjectPath);
         Assert.True(repeatedInstall.Succeeded, string.Join(Environment.NewLine, repeatedInstall.Targets.Select(static result => result.Message)));
+        var installedManifest = Path.Combine(installRoot, "artifact", Path.GetRelativePath(
+            Path.Combine(fixture.Root, artifact.OutputDirectory), Assert.Single(build.Targets).Path!));
+        var host = framework == "net472"
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe")
+            : "pwsh";
+        var import = await new ProcessRunner().RunAsync(new ProcessRunRequest(
+            host,
+            Path.GetDirectoryName(installedManifest)!,
+            new[]
+            {
+                "-NoProfile", "-NonInteractive", "-Command",
+                "$ErrorActionPreference='Stop'; $env:PSModulePath=[IO.Path]::Combine($PSHOME,'Modules'); $module=Import-Module -Name '" + installedManifest.Replace("'", "''") +
+                "' -Force -PassThru; @($module.Name,(Get-Command 'Generic\\Get-GenericValue').ModuleName,(& 'Generic\\Get-GenericValue')) | ConvertTo-Json -Compress"
+            },
+            TimeSpan.FromMinutes(2)));
+        Assert.True(import.Succeeded, import.StdOut + Environment.NewLine + import.StdErr);
+        using (var imported = JsonDocument.Parse(import.StdOut))
+        {
+            Assert.Equal("Generic", imported.RootElement[0].GetString());
+            Assert.Equal("Generic", imported.RootElement[1].GetString());
+            Assert.Equal(42, imported.RootElement[2].GetInt32());
+        }
 
         using (var archive = ZipFile.OpenRead(packagePath))
         {
@@ -333,6 +360,71 @@ public sealed class PowerShellCompilationProjectWorkflowTests
         Assert.Equal(3, migratedTarget.SchemaVersion);
         Assert.Equal(PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, migratedTarget.SemanticProfileId);
         Assert.Equal(PowerShellCompilationTargetContractService.ComputeSha256(migratedTarget), migratedTarget.ContractSha256);
+    }
+
+    [Fact]
+    public void ProjectManifest_ArtifactNamesPreserveDefaultsAndDistinctVariantPackages()
+    {
+        using var fixture = ProjectFixture.Create();
+        var service = new PowerShellCompilationProjectManifestService();
+        var target = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            "net10.0", null, false, false, PowerShellCompilationExecutableOptimization.None, explicitContract: true);
+        var manifest = service.Create(fixture.ProjectPath, fixture.ManifestPath, "Names", target);
+        var artifact = Assert.Single(manifest.Artifacts);
+        Assert.Null(artifact.ArtifactName);
+        service.Save(fixture.ProjectPath, manifest);
+        var loadedDefault = Assert.Single(service.Load(fixture.ProjectPath).Artifacts);
+        Assert.Null(loadedDefault.ArtifactName);
+        Assert.Equal("Names." + artifact.Name, PowerShellCompilationProjectWorkflowService.GetPackageName(manifest, loadedDefault));
+
+        artifact.ArtifactName = " Generic ";
+        manifest.Artifacts = new[]
+        {
+            artifact,
+            new PowerShellCompilationProjectArtifact
+            {
+                Name = "strict",
+                ArtifactName = "Generic",
+                Target = PowerShellCompilationTargetContractService.Create(
+                    PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Strict,
+                    "net10.0", null, false, false, PowerShellCompilationExecutableOptimization.None, explicitContract: true),
+                OutputDirectory = "artifacts/strict",
+                DependencyLock = ".powerforge/locks/strict.lock.json"
+            }
+        };
+        service.Save(fixture.ProjectPath, manifest);
+        var loaded = service.Load(fixture.ProjectPath);
+        Assert.All(loaded.Artifacts, static variant => Assert.Equal("Generic", variant.ArtifactName));
+        Assert.Equal(2, loaded.Artifacts.Select(variant =>
+            PowerShellCompilationProjectWorkflowService.GetPackageName(loaded, variant)).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal("Names.strict", PowerShellCompilationProjectWorkflowService.GetPackageName(loaded, loaded.Artifacts[1]));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData(".")]
+    [InlineData("..")]
+    [InlineData("../escape")]
+    [InlineData("nested/name")]
+    [InlineData("nested\\name")]
+    [InlineData("bad\0name")]
+    public void ProjectManifest_ArtifactNameRejectsInvalidPortableBasenames(string artifactName)
+    {
+        using var fixture = ProjectFixture.Create();
+        var service = new PowerShellCompilationProjectManifestService();
+        var target = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            "net10.0", null, false, false, PowerShellCompilationExecutableOptimization.None, explicitContract: true);
+        var manifest = service.Create(fixture.ProjectPath, fixture.ManifestPath, "Names", target);
+        Assert.Single(manifest.Artifacts).ArtifactName = artifactName;
+
+        var exception = Assert.Throws<InvalidDataException>(() => service.Save(fixture.ProjectPath, manifest));
+
+        Assert.Contains("artifact name", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("portable identifier", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(fixture.ProjectPath));
     }
 
     private sealed class ProjectFixture : IDisposable

@@ -24,7 +24,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             "PowerForge.Compiled",
             PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods",
             spec.TargetFramework,
-            capabilities);
+            capabilities,
+            guardedExecutableEntryPath: spec.SourcePath,
+            nativeScriptEntry: nativeEntry);
         typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, spec.TargetFramework, spec.SemanticProfileId, capabilities);
         typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions: null, targetFramework: spec.TargetFramework, semanticProfileId: spec.SemanticProfileId, capabilities: capabilities);
         WriteCompiledPowerShellSource(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode,
@@ -42,20 +44,28 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             PowerShellBinaryCmdletSourceGenerator.Generate(typed, exportedFunctions: null, targetFramework: spec.TargetFramework),
             new UTF8Encoding(false));
 
-        var packagedSources = PreparePackagedSources(workspace, spec.SourcePath, compilationSourcePaths, dependencyPlan, typed);
-        var parameterInitializers = PowerShellPackagedParameterBindingPolicy.Generate(spec.SourcePath, spec.TargetFramework);
+        var packagedSources = PreparePackagedSources(workspace, spec.SourcePath, compilationSourcePaths, dependencyPlan, typed,
+            nativeScriptEntry: nativeEntry);
+        var parameterInitializers = PowerShellPackagedParameterBindingPolicy.Generate(spec.SourcePath, spec.TargetFramework,
+            nativeScriptEntry: nativeEntry);
         // The native owner reparses exact authored text. Do not rewrite its variables,
         // insert registrations or replace its body before hashing/native script dispatch.
+        var sourceMapping = nativeEntry ? null : new PowerShellPackagedSourceMapping(spec.SourcePath);
         var packagedScript = nativeEntry ? File.ReadAllText(spec.SourcePath)
-            : GeneratePackagedScript(spec.SourcePath, packagedSources, typed);
+            : GeneratePackagedScript(spec.SourcePath, packagedSources, typed, sourceMapping);
         if (entry is not null && !nativeEntry)
-            packagedScript = PowerShellHybridExecutableEntryEmitter.ComposeScript(packagedScript, spec.SourcePath, entry);
+            packagedScript = PowerShellHybridExecutableEntryEmitter.ComposeScript(packagedScript, spec.SourcePath, entry, sourceMapping);
+        sourceMapping?.Write(workspace);
         var packagedScriptPath = Path.Combine(workspace, "Source.ps1");
-        File.WriteAllText(packagedScriptPath, packagedScript, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        if (nativeEntry)
+            File.Copy(spec.SourcePath, packagedScriptPath, overwrite: false);
+        else
+            File.WriteAllText(packagedScriptPath, packagedScript, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         File.WriteAllText(
             Path.Combine(workspace, "Program.cs"),
             ReadTemplate(PackagedProgramTemplate)
                 .Replace("{{ENTRY_INVOCATION}}", PowerShellPackagedEntryInvocationSource.Render(nativeEntry))
+                .Replace("{{PIPELINE_INVOCATION}}", PowerShellPackagedEntryInvocationSource.RenderInvoke(nativeEntry))
                 .Replace("{{PARAMETERS}}", parameterInitializers.Parameters)
                 .Replace("{{SWITCH_PARAMETERS}}", parameterInitializers.SwitchParameters)
                 .Replace("{{BOOLEAN_PARAMETERS}}", parameterInitializers.BooleanParameters)
@@ -82,7 +92,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             .Concat(entry is null ? Array.Empty<PowerShellCompiledMethod>() : new[] { entry.EntryPoint.Method })
             .ToArray();
         PowerShellCommandMetadataBuildSupport.Write(workspace, projectPath, typed, exportedFunctions: null);
-        return new HybridExecutableBuildPlan(projectPath, typed, compiledMethods, plan.TotalUnits);
+        return new HybridExecutableBuildPlan(projectPath, typed, compiledMethods, plan.TotalUnits, packagedSources.NativeMirroredResources);
     }
 
     private sealed class HybridExecutableBuildPlan
@@ -91,17 +101,20 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             string projectPath,
             PowerShellTypedCompilationResult typed,
             PowerShellCompiledMethod[] compiledMethods,
-            int totalUnits)
+            int totalUnits,
+            PowerShellCompilationDependency[] nativeMirroredResources)
         {
             ProjectPath = projectPath;
             Typed = typed;
             CompiledMethods = compiledMethods;
             TotalUnits = totalUnits;
+            NativeMirroredResources = nativeMirroredResources;
         }
 
         internal string ProjectPath { get; }
         internal PowerShellTypedCompilationResult Typed { get; }
         internal PowerShellCompiledMethod[] CompiledMethods { get; }
         internal int TotalUnits { get; }
+        internal PowerShellCompilationDependency[] NativeMirroredResources { get; }
     }
 }

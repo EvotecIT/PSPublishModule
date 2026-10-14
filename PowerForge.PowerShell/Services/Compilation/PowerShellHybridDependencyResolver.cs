@@ -1,6 +1,5 @@
 using System.Management.Automation;
 using System.Management.Automation.Language;
-using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
@@ -9,10 +8,6 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellHybridDependencyResolver
 {
-    private static readonly Regex ScriptRootPath = new(
-        @"^\$(?:\{)?PSScriptRoot(?:\})?(?<suffix>[\\/].+)$",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-
     internal static PowerShellHybridDependencyCopy[] CopyDependencies(
         string sourcePath,
         string moduleDirectory,
@@ -62,8 +57,9 @@ internal static class PowerShellHybridDependencyResolver
     internal static string[] DiscoverDependencies(
         string sourcePath,
         IEnumerable<string>? additionalEntryPaths = null,
-        IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders = null)
-        => DiscoverDependenciesCore(sourcePath, additionalEntryPaths, moduleScopeOnly: false, conventionalLoaders);
+        IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders = null,
+        bool allowDerivedPaths = false)
+        => DiscoverDependenciesCore(sourcePath, additionalEntryPaths, moduleScopeOnly: false, conventionalLoaders, allowDerivedPaths);
 
     internal static string[] DiscoverModuleScopeDependencies(string sourcePath)
         => DiscoverModuleScopeDependencies(sourcePath, null, null);
@@ -77,7 +73,8 @@ internal static class PowerShellHybridDependencyResolver
         string sourcePath,
         IEnumerable<string>? additionalEntryPaths,
         bool moduleScopeOnly,
-        IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders)
+        IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders,
+        bool allowDerivedPaths = false)
     {
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
         var discovered = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
@@ -123,7 +120,9 @@ internal static class PowerShellHybridDependencyResolver
                     continue;
                 if (IsAcceptedConventionalLoader(current, command, conventionalLoaders))
                     continue;
-                var relativePath = NormalizeRelativePath(ReadLiteralPath(expression, current, command.Extent.StartLineNumber));
+                if (!PowerShellCompilationSourcePathPlanner.TryPlan(ast, command, allowDerivedPaths, out var fact))
+                    throw new InvalidOperationException($"Dot-source expression at {current}:{command.Extent.StartLineNumber} must be a literal $PSScriptRoot path or a supported guarded script-root assignment for portable staging.");
+                var relativePath = NormalizeRelativePath(fact!.RelativePath);
                 if (Path.IsPathRooted(relativePath) || WildcardPattern.ContainsWildcardCharacters(relativePath))
                     throw new InvalidOperationException($"Dot-source path '{relativePath}' at {current}:{command.Extent.StartLineNumber} must be a contained literal path without wildcards.");
                 var dependency = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(current)!, relativePath));
@@ -146,21 +145,6 @@ internal static class PowerShellHybridDependencyResolver
         => conventionalLoaders?.Any(loader =>
             loader.StartOffset == command.Extent.StartOffset &&
             PowerShellCompilationPathSafety.PathEquals(loader.SourcePath, sourcePath)) == true;
-
-    private static string ReadLiteralPath(CommandElementAst expression, string sourcePath, int line)
-    {
-        if (expression is ExpandableStringExpressionAst expandable &&
-            expandable.NestedExpressions.Count == 1 &&
-            expandable.NestedExpressions[0] is VariableExpressionAst variable &&
-            variable.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase))
-        {
-            var match = ScriptRootPath.Match(expandable.Value);
-            if (match.Success)
-                return NormalizeRelativePath(match.Groups["suffix"].Value)
-                    .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar, '\\', '/');
-        }
-        throw new InvalidOperationException($"Dot-source expression at {sourcePath}:{line} must be a literal $PSScriptRoot path for portable hybrid staging.");
-    }
 
     private static string NormalizeRelativePath(string path)
         => path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);

@@ -696,7 +696,8 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         string repositoryRoot, string arguments, IReadOnlyDictionary<string, string>? environment = null,
         TimeSpan? timeout = null)
     {
-        var cli = Path.Combine(repositoryRoot, "PowerForge.Cli", "bin", "Release", "net10.0", "PowerForge.Cli.dll");
+        var cli = PowerForgeCliTestHost.ResolveAssemblyPath(repositoryRoot,
+            Environment.GetEnvironmentVariable(PowerForgeCliTestHost.AssemblyPathEnvironmentVariable));
         using var process = new Process
         {
             StartInfo = new ProcessStartInfo
@@ -753,17 +754,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         return (process.ExitCode, await stdoutTask, await stderrTask);
     }
 
-    private static string FindRepositoryRoot()
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        while (current is not null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "PowerForge.Cli", "PowerForge.Cli.csproj")))
-                return current.FullName;
-            current = current.Parent;
-        }
-        throw new DirectoryNotFoundException("Unable to locate the repository root for PowerForge CLI tests.");
-    }
+    private static string FindRepositoryRoot() => RepoRootLocator.Find();
 
     private static string FormatFailure(string operation, (int ExitCode, string StdOut, string StdErr) result)
         => $"CLI {operation} exit code {result.ExitCode}{Environment.NewLine}STDOUT:{Environment.NewLine}{result.StdOut}{Environment.NewLine}STDERR:{Environment.NewLine}{result.StdErr}";

@@ -47,7 +47,7 @@ internal static class PowerShellGeneratedTypePolicy
     /// <summary>Shares the target-qualified container boundary without admitting its element types.</summary>
     internal static bool IsSupportedContainerDefinition(Type definition, string? targetFramework)
         => (definition == typeof(Dictionary<,>) || definition == typeof(List<>) ||
-            definition == typeof(HashSet<>) || definition == typeof(Nullable<>)) &&
+            definition == typeof(HashSet<>) || definition == typeof(Queue<>) || definition == typeof(Nullable<>)) &&
            IsSupportedNonGeneric(definition, targetFramework);
 
     internal static bool IsSupportedDelegateSignature(Type type, string? targetFramework = null)

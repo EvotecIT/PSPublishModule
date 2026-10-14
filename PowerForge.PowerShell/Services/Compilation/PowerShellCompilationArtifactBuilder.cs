@@ -134,6 +134,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             bool usesPowerShellRuntimeFallback;
             int compiledMethods;
             IReadOnlyCollection<PowerShellCompiledMethod> compiledMethodDetails = Array.Empty<PowerShellCompiledMethod>();
+            var nativeMirroredResources = Array.Empty<PowerShellCompilationDependency>();
             var optimizationEvidence = new PowerShellCompilationOptimizationEvidence();
             PowerShellCompilationIrSnapshotBundle? irSnapshots = null;
             PowerShellRuntimeFreeArtifactContract? runtimeFreeContract = null;
@@ -193,6 +194,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 requiresPowerShellRuntime = true;
                 compiledMethodDetails = hybrid.CompiledMethods;
                 compiledMethods = hybrid.CompiledMethods.Length;
+                nativeMirroredResources = hybrid.NativeMirroredResources;
                 usesPowerShellRuntimeFallback = plan.TotalUnits > compiledMethods;
                 optimizationEvidence = typed.Optimization;
                 irSnapshots = typed.IrSnapshots;
@@ -294,7 +296,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             {
                 var packagedSources = PreparePackagedSources(workspace, spec.SourcePath, compilationSourcePaths, dependencyPlan);
                 var parameterInitializers = PowerShellPackagedParameterBindingPolicy.Generate(spec.SourcePath, spec.TargetFramework);
-                var packagedScript = GeneratePackagedScript(spec.SourcePath, packagedSources);
+                var sourceMapping = new PowerShellPackagedSourceMapping(spec.SourcePath);
+                var packagedScript = GeneratePackagedScript(spec.SourcePath, packagedSources, sourceMapping: sourceMapping);
+                sourceMapping.Write(workspace);
                 var packagedScriptPath = Path.Combine(workspace, "Source.ps1");
                 File.WriteAllText(
                     packagedScriptPath,
@@ -304,6 +308,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     Path.Combine(workspace, "Program.cs"),
                     ReadTemplate(PackagedProgramTemplate)
                         .Replace("{{ENTRY_INVOCATION}}", PowerShellPackagedEntryInvocationSource.Render(nativeEntry: false))
+                        .Replace("{{PIPELINE_INVOCATION}}", PowerShellPackagedEntryInvocationSource.RenderInvoke(nativeEntry: false))
                         .Replace("{{PARAMETERS}}", parameterInitializers.Parameters)
                         .Replace("{{SWITCH_PARAMETERS}}", parameterInitializers.SwitchParameters)
                         .Replace("{{BOOLEAN_PARAMETERS}}", parameterInitializers.BooleanParameters)
@@ -616,7 +621,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     SigningCertificateThumbprint = signing?.CertificateThumbprint,
                     AuthenticodeSignedFiles = signing?.SignedFiles ?? 0,
                     Files = PowerShellArtifactSetPublisher.RebaseFiles(stagedArtifact.Files, artifactStagingDirectory, spec.OutputDirectory),
-                    Dependencies = dependencyPlan,
+                    Dependencies = DescribeNativeSourceResourceDelivery(dependencyPlan, nativeMirroredResources),
                     DependencyGraph = dependencyGraph,
                     DependencyLockReviewed = spec.ExpectedDependencyLock is not null && spec.DevelopmentBaselineLockSha256 is null,
                     DevelopmentBaselineLockSha256 = spec.DevelopmentBaselineLockSha256,

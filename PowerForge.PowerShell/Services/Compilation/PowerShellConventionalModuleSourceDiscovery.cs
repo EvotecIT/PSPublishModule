@@ -1,6 +1,5 @@
 using System.Management.Automation;
 using System.Management.Automation.Language;
-using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
@@ -9,10 +8,6 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellConventionalModuleSourceDiscovery
 {
-    private static readonly Regex ScriptRootPath = new(
-        @"^\$(?:\{)?PSScriptRoot(?:\})?(?<suffix>[\\/].+)$",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-
     internal static PowerShellConventionalModuleSourceDiscoveryResult Analyze(string sourcePath)
     {
         var rootPath = Path.GetFullPath(sourcePath);
@@ -171,19 +166,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
     }
 
     private static bool TryReadScriptRootPattern(ExpressionAst? argument, out string relativePattern)
-    {
-        relativePattern = string.Empty;
-        if (argument is not ExpandableStringExpressionAst expandable ||
-            expandable.NestedExpressions.Count != 1 ||
-            expandable.NestedExpressions[0] is not VariableExpressionAst variable ||
-            !variable.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase))
-            return false;
-        var match = ScriptRootPath.Match(expandable.Value);
-        if (!match.Success)
-            return false;
-        relativePattern = match.Groups["suffix"].Value.TrimStart('\\', '/');
-        return true;
-    }
+        => PowerShellCompilationSourcePathPlanner.TryReadScriptRootLiteral(argument, out relativePattern);
 
     private static (bool Recurse, string[] Excludes) ReadLoaderOptions(CommandAst command, string sourcePath, int pathElementIndex)
     {

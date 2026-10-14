@@ -11,7 +11,8 @@ internal static class PowerShellHybridModuleComposer
     internal static string ComposeExecutableRoot(
         string source,
         string sourcePath,
-        PowerShellTypedCompilationResult typed)
+        PowerShellTypedCompilationResult typed,
+        PowerShellPackagedSourceMapping? sourceMapping = null)
     {
         var ast = Parser.ParseInput(source, out var tokens, out var errors);
         if (errors.Length > 0)
@@ -28,9 +29,10 @@ internal static class PowerShellHybridModuleComposer
                      .Where(function => compiledNames.Contains(function.Name))
                      .OrderByDescending(static function => function.Extent.StartOffset))
         {
+            var replacement = GetNativeFunctionRegistration(typed, sourcePath, function, tokens, executable: true);
+            sourceMapping?.Record(function.Extent.StartOffset, function.Extent.EndOffset - function.Extent.StartOffset, replacement);
             result.Remove(function.Extent.StartOffset, function.Extent.EndOffset - function.Extent.StartOffset);
-            result.Insert(function.Extent.StartOffset,
-                GetNativeFunctionRegistration(typed, sourcePath, function, tokens, executable: true));
+            result.Insert(function.Extent.StartOffset, replacement);
         }
         return result.ToString();
     }
@@ -74,7 +76,7 @@ internal static class PowerShellHybridModuleComposer
         var edits = new List<PowerShellHybridSourceEdit>();
         foreach (var function in functions)
         {
-            if (!wrapped.Contains(GetCompiledMethodKey(sourcePath, function.Name, function.Body.Extent.StartLineNumber)))
+            if (!wrapped.Contains(GetCompiledMethodKey(sourcePath, function)))
                 continue;
             if (function.Extent.StartOffset < prologueEndOffset)
                 throw new InvalidOperationException($"Compiled function '{function.Name}' overlaps the module prologue and cannot be composed safely.");
@@ -274,7 +276,7 @@ internal static class PowerShellHybridModuleComposer
             .Where(method => PowerShellCompilationPathSafety.PathEquals(
                 string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath,
                 sourcePath))
-            .Select(method => GetCompiledMethodKey(sourcePath, method.SourceName, method.SourceLine))
+            .Select(method => GetCompiledMethodKey(sourcePath, method.SourceName, method.SourceLine, method.ConditionalDeclarationOffset))
             .Where(wrappedCompiledMethods.Contains)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var hasPromotedRegions = typed.PromotedRegions.Any(region =>
@@ -291,7 +293,7 @@ internal static class PowerShellHybridModuleComposer
         var edits = new List<PowerShellHybridSourceEdit>();
         foreach (var function in ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
                      .Cast<FunctionDefinitionAst>()
-                     .Where(function => compiled.Contains(GetCompiledMethodKey(sourcePath, function.Name, function.Body.Extent.StartLineNumber)))
+                     .Where(function => compiled.Contains(GetCompiledMethodKey(sourcePath, function)))
                      .OrderByDescending(static function => function.Extent.StartOffset))
         {
             edits.Add(new PowerShellHybridSourceEdit(
@@ -353,7 +355,7 @@ internal static class PowerShellHybridModuleComposer
             .Select(method => GetCompiledMethodKey(
                 string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath,
                 method.SourceName,
-                method.SourceLine))
+                method.SourceLine, method.ConditionalDeclarationOffset))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
@@ -363,7 +365,7 @@ internal static class PowerShellHybridModuleComposer
             .Select(method => GetCompiledMethodKey(
                 string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath,
                 method.SourceName,
-                method.SourceLine))
+                method.SourceLine, method.ConditionalDeclarationOffset))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     private static IEnumerable<ModuleScopeFunction> ReadModuleScopeFunctions(IEnumerable<string> sourcePaths)
@@ -380,15 +382,22 @@ internal static class PowerShellHybridModuleComposer
         }
     }
 
-    internal static string GetCompiledMethodKey(string sourcePath, string name, int line)
-        => Path.GetFullPath(sourcePath) + "\0" + name + "\0" + line;
+    internal static string GetCompiledMethodKey(string sourcePath, string name, int line, int? conditionalDeclarationOffset = null)
+        => Path.GetFullPath(sourcePath) + "\0" + name + "\0" + line +
+           (conditionalDeclarationOffset is { } offset ? "\0" + offset.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty);
+
+    internal static string GetCompiledMethodKey(string sourcePath, FunctionDefinitionAst function)
+        => GetCompiledMethodKey(sourcePath, function.Name, function.Body.Extent.StartLineNumber,
+            function.Parent is NamedBlockAst ? null : function.Extent.StartOffset);
 
     private static string GetNativeFunctionRegistration(PowerShellTypedCompilationResult typed, string sourcePath,
         FunctionDefinitionAst function, Token[] tokens, bool executable = false, bool executableDependency = false)
     {
         var method = typed.Methods.SingleOrDefault(method => method.NativeFunctionBinding is not null &&
             method.SourceName.Equals(function.Name, StringComparison.OrdinalIgnoreCase) &&
-            (executable || method.SourceLine == function.Body.Extent.StartLineNumber) &&
+            (method.ConditionalDeclarationOffset is { } offset
+                ? offset == function.Extent.StartOffset
+                : executable || method.SourceLine == function.Body.Extent.StartLineNumber) &&
             PowerShellCompilationPathSafety.PathEquals(string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath, sourcePath));
         if (method is null) return string.Empty;
         // Preserve the authored keyword and escaped name token. Inline parameters are

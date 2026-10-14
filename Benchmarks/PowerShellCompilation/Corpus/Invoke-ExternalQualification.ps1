@@ -2,8 +2,10 @@
 param(
     [string] $PacketPath = (Join-Path $PSScriptRoot 'external-assessment.net10.json'),
     [string] $CliAssemblyPath,
+    [string] $SourceRoot,
     [string] $WorkspacePath,
     [string] $EvidencePath,
+    [string] $DurableEvidencePath,
     [string[]] $WorkloadId,
     [switch] $Offline,
     [switch] $AllowExternalExecution
@@ -12,21 +14,17 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'Corpus.Runner.Common.ps1')
+. (Join-Path $PSScriptRoot 'Corpus.Qualification.Workflow.ps1')
 
 if (-not $AllowExternalExecution) {
     throw 'External qualification imports and invokes reviewed third-party source. Pass -AllowExternalExecution to authorize this local execution lane.'
 }
 
 function Invoke-CliJson {
-    param([string[]] $Arguments, [string] $WorkingDirectory)
+    param([string[]] $Arguments, [string] $WorkingDirectory, [string] $ProcessEvidencePath)
 
     $run = Invoke-OwnedProcess -FileName 'dotnet' -Arguments (@($CliAssemblyPath) + $Arguments) -WorkingDirectory $WorkingDirectory
-    try { $json = $run.StandardOutput | ConvertFrom-Json }
-    catch { throw "PowerForge CLI did not return JSON. Exit=$($run.ExitCode); stderr=$($run.StandardError)" }
-    if ($run.ExitCode -ne 0 -or -not $json.success) {
-        $message = if ($json.error) { [string] $json.error } else { [string] $run.StandardError }
-        throw "PowerForge CLI failed with exit $($run.ExitCode): $message"
-    }
+    $json = ConvertFrom-CorpusCliProcess $run -ProcessEvidencePath $ProcessEvidencePath
     return $json.result
 }
 
@@ -60,6 +58,9 @@ if ($WorkloadId) { $qualified = @($qualified | Where-Object { $_.id -in $Workloa
 $unknown = @($WorkloadId | Where-Object { $_ -notin @($packet.workloads.id) } | Sort-Object -Unique)
 if ($unknown.Count -gt 0) { throw "Unknown assessment workload id(s): $($unknown -join ', ')" }
 if ($qualified.Count -eq 0) { throw 'No selected workload declares an external qualification contract.' }
+Assert-WorkflowNameSet @($qualified.id) @($qualified.id) 'Selected workload IDs'
+$selectedCommands = @($qualified | Where-Object { $_.qualification.kind -eq 'HybridModuleCommand' })
+$workflowEntries = @($qualified | Where-Object { $_.qualification.kind -in @('HybridModuleWorkflow', 'HybridScriptApplication') })
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 if (-not $CliAssemblyPath) { $CliAssemblyPath = Join-Path $repositoryRoot 'PowerForge.Cli/bin/Release/net10.0/PowerForge.Cli.dll' }
@@ -71,27 +72,53 @@ New-Item -ItemType Directory -Path $WorkspacePath -Force | Out-Null
 $runId = [DateTimeOffset]::UtcNow.ToString('yyyyMMddTHHmmssfffZ') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
 $runRoot = Join-Path $WorkspacePath ('runs/' + $runId)
 Assert-ContainedPath -Root $WorkspacePath -Path $runRoot -Label 'Qualification run' | Out-Null
-New-Item -ItemType Directory -Path $runRoot | Out-Null
 if (-not $EvidencePath) { $EvidencePath = Join-Path $WorkspacePath ('evidence/' + $runId + '.json') }
 $EvidencePath = [IO.Path]::GetFullPath($EvidencePath)
+Assert-WorkflowPathWithoutLinks $EvidencePath
+if (Test-Path -LiteralPath $EvidencePath) { throw 'Qualification summary already exists; existing evidence will not be overwritten.' }
+if ($EvidencePath.Equals($runRoot, (Get-PathComparison)) -or
+    $EvidencePath.StartsWith($runRoot + [IO.Path]::DirectorySeparatorChar, (Get-PathComparison))) {
+    throw 'Qualification summary must be outside the disposable run root.'
+}
+if ($workflowEntries.Count -gt 0) {
+    if (-not $DurableEvidencePath) {
+        $DurableEvidencePath = Join-Path (Split-Path $EvidencePath) ([IO.Path]::GetFileNameWithoutExtension($EvidencePath) + '.workflows-' + $runId)
+    }
+    $DurableEvidencePath = Initialize-WorkflowEvidenceRoot $DurableEvidencePath $runRoot
+}
 
 try {
-    $assessmentEvidence = Join-Path $runRoot 'assessment.json'
-    $assessmentArguments = @{
-        PacketPath = $PacketPath
-        CliAssemblyPath = $CliAssemblyPath
-        WorkspacePath = $WorkspacePath
-        EvidencePath = $assessmentEvidence
-        WorkloadId = @($qualified.id)
-        Offline = $Offline
+    New-Item -ItemType Directory -Path $runRoot | Out-Null
+    if ($selectedCommands.Count -gt 0) {
+        $assessmentEvidence = Join-Path $runRoot 'assessment.json'
+        $assessmentArguments = @{
+            PacketPath = $PacketPath
+            CliAssemblyPath = $CliAssemblyPath
+            WorkspacePath = $WorkspacePath
+            EvidencePath = $assessmentEvidence
+            WorkloadId = @($selectedCommands.id)
+            Offline = $Offline
+        }
+        & (Join-Path $PSScriptRoot 'Invoke-ExternalAssessment.ps1') @assessmentArguments | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "The non-executing assessment prerequisite exited with $LASTEXITCODE." }
     }
-    & (Join-Path $PSScriptRoot 'Invoke-ExternalAssessment.ps1') @assessmentArguments | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "The non-executing assessment prerequisite exited with $LASTEXITCODE." }
 
     $results = [Collections.Generic.List[object]]::new()
     foreach ($entry in $qualified) {
-        Write-Information "[$($entry.id)] build, import, and invoke reviewed Hybrid command" -InformationAction Continue
+        if ($entry.qualification.kind -in @('HybridModuleWorkflow', 'HybridScriptApplication')) {
+            Write-Information "[$($entry.id)] build, test, pack, install, and observe reviewed whole artifact workflow" -InformationAction Continue
+        } else {
+            Write-Information "[$($entry.id)] build, import, and invoke reviewed Hybrid command" -InformationAction Continue
+        }
+        $entryEvidenceRoot = $null
         try {
+            if ($entry.qualification.kind -in @('HybridModuleWorkflow', 'HybridScriptApplication')) {
+                if ($entry.id -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw 'Workflow id must be a portable filename component.' }
+                $entryEvidenceRoot = Assert-ContainedPath -Root $DurableEvidencePath -Path (Join-Path $DurableEvidencePath $entry.id) -Label 'Durable workflow evidence'
+                $results.Add((Invoke-WholeWorkflowQualification -Entry $entry -Packet $packet -PacketPath $PacketPath `
+                    -SourceRoot $SourceRoot -RunRoot $runRoot -EvidenceRoot $entryEvidenceRoot -Offline:$Offline))
+                continue
+            }
             if ($entry.qualification.kind -ne 'HybridModuleCommand') { throw "Unsupported qualification kind '$($entry.qualification.kind)'." }
             if ([string]::IsNullOrWhiteSpace($entry.qualification.unitName) -or [string]::IsNullOrWhiteSpace($entry.qualification.probeScript)) {
                 throw 'HybridModuleCommand qualification requires unitName and probeScript.'
@@ -123,13 +150,13 @@ try {
             } else {
                 ''
             }
-            $sourceRoot = Join-Path $WorkspacePath ('extract/' + $entry.acquisition.sha256)
+            $selectedSourceRoot = Join-Path $WorkspacePath ('extract/' + $entry.acquisition.sha256)
             $qualificationEntryPoint = if ($null -ne $entry.qualification.PSObject.Properties['entryPoint']) {
                 [string] $entry.qualification.entryPoint
             } else {
                 [string] $entry.entryPoint
             }
-            $sourcePath = Assert-ContainedPath -Root $sourceRoot -Path (Join-Path $sourceRoot $qualificationEntryPoint) -Label 'Qualification entry point'
+            $sourcePath = Assert-ContainedPath -Root $selectedSourceRoot -Path (Join-Path $selectedSourceRoot $qualificationEntryPoint) -Label 'Qualification entry point'
             if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) { throw "Qualification entry point does not exist: $sourcePath" }
             $analysis = Invoke-CliJson -Arguments @('powershell', 'analyze', $sourcePath, '--kind', 'dll', '--mode', 'Hybrid', '--framework', $packet.targetFramework, '--semantic-profile', $packet.semanticProfile, '--resource-mode', 'Declared', '--output', 'json') -WorkingDirectory $runRoot
             $lockPath = Join-Path $runRoot ($entry.id + '.lock.json')
@@ -174,10 +201,19 @@ try {
                 outputSha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($compiled.StandardOutput))).ToLowerInvariant()
                 invocationParity = $true
                 completeWorkloadExecution = $false
+                wholeArtifactWorkflowQualified = $false
+                scenarioCount = 1
                 succeeded = $true
             })
         } catch {
-            $results.Add([ordered]@{ id = $entry.id; succeeded = $false; error = $_.Exception.Message })
+            if ($entryEvidenceRoot -and (Test-Path -LiteralPath $entryEvidenceRoot -PathType Container)) {
+                Write-Utf8Json -Path (Join-Path $entryEvidenceRoot 'qualification-failure.json') -Value ([ordered]@{
+                    id=$entry.id;succeeded=$false;error=$_.Exception.Message;evidenceRoot=$entryEvidenceRoot
+                })
+            }
+            $results.Add([ordered]@{ id = $entry.id; succeeded = $false; emittedClrMethod = $false;
+                wholeArtifactWorkflowQualified = $false; scenarioCount = 0; error = $_.Exception.Message;
+                evidenceRoot = $entryEvidenceRoot; cliFailure = (Get-CorpusCliFailureEvidence $_.Exception) })
         }
     }
 
@@ -195,16 +231,38 @@ try {
             total = $results.Count
             emittedCommandsInvoked = @($results | Where-Object { $_.succeeded -and $_.emittedClrMethod }).Count
             completeWorkloadExecutions = 0
+            wholeArtifactWorkflowsQualified = @($results | Where-Object { $_.succeeded -and $_.wholeArtifactWorkflowQualified }).Count
+            declaredWorkflowScenarios = [int] (($results | Where-Object { $_.succeeded -and $_.wholeArtifactWorkflowQualified } |
+                ForEach-Object { $_.scenarioCount } | Measure-Object -Sum).Sum)
         }
-        interpretation = 'A qualification proves invocation parity for the named emitted command only. It is not proof that the complete external workload compiled or executed without PowerShell.'
+        retainedWorkflowRoot = if ($workflowEntries.Count) { $DurableEvidencePath } else { $null }
+        artifactPathsAreHistorical = $true
+        interpretation = 'HybridModuleCommand proves parity for the named emitted command. Whole-workflow lanes additionally enforce the declared public surface, required complete CLR bodies, observed scenario/export coverage and original/built/installed parity through the canonical project lifecycle. Reviewed observer reports are evidence, not exhaustive instruction or branch instrumentation. No lane implies execution without PowerShell.'
     }
     Write-Utf8Json -Path $EvidencePath -Value $evidence
     Write-Information "Evidence: $EvidencePath" -InformationAction Continue
-    Write-Information "Qualified emitted commands: $($evidence.summary.emittedCommandsInvoked)/$($evidence.summary.total)" -InformationAction Continue
+    if ($selectedCommands.Count -gt 0) {
+        Write-Information "Qualified emitted commands: $($evidence.summary.emittedCommandsInvoked)/$($selectedCommands.Count)" -InformationAction Continue
+    }
+    if ($workflowEntries.Count -gt 0) {
+        Write-Information "Qualified whole artifact workflows: $($evidence.summary.wholeArtifactWorkflowsQualified)/$($workflowEntries.Count); declared scenarios: $($evidence.summary.declaredWorkflowScenarios)" -InformationAction Continue
+    }
     if ($evidence.summary.passed -ne $evidence.summary.total) { exit 1 }
 } finally {
     if (Test-Path -LiteralPath $runRoot) {
         Assert-ContainedPath -Root $WorkspacePath -Path $runRoot -Label 'Qualification run cleanup' | Out-Null
-        Remove-Item -LiteralPath $runRoot -Recurse -Force
+        Assert-WorkflowPathWithoutLinks $runRoot
+        if (@(Get-ChildItem -LiteralPath $runRoot -Recurse -Force | Where-Object {
+            $_.Attributes -band [IO.FileAttributes]::ReparsePoint
+        }).Count) { throw 'Qualification run contains a link or junction; preserve it for scoped recovery.' }
+        $fixtureCleanupFailed = @($workflowEntries | Where-Object {
+            Test-Path -LiteralPath (Join-Path $DurableEvidencePath ($_.id + '/fixture-cleanup-failure.json')) -PathType Leaf
+        }).Count -gt 0
+        if ($fixtureCleanupFailed) {
+            Write-Utf8Json -Path (Join-Path $DurableEvidencePath 'cleanup-held.json') -Value ([ordered]@{
+                runRoot=$runRoot;removed=$false;reason='Fixture Stop failed; owned process release must be verified before removing its workspace.'
+            })
+            Write-Information "Fixture cleanup failed; retained owned workspace for exact-identity recovery: $runRoot" -InformationAction Continue
+        } else { Remove-Item -LiteralPath $runRoot -Recurse -ErrorAction Stop }
     }
 }

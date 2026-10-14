@@ -65,7 +65,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         _statementValueDiscardHelper = discardHelper;
         if (!initializer && function.Symbol.Kind != PowerShellSymbolKind.NativeScriptBlock)
             AppendPublicMethodDocumentation(builder, function);
-        builder.Append(initializer ? "    private " : function.Symbol.Kind == PowerShellSymbolKind.NativeScriptBlock ? "    private static " : managedInstance ? "    public " : "    public static ")
+        builder.Append(initializer ? "    private " : function.Symbol.Kind == PowerShellSymbolKind.NativeScriptBlock ? "    private static " :
+                function.Symbol.Kind == PowerShellSymbolKind.ConditionalFunction ? "    internal static " : managedInstance ? "    public " : "    public static ")
             .Append(PowerShellCSharpSymbolRenderer.TypeName(function.ReturnType))
             .Append(' ')
             .Append(function.GeneratedName)
@@ -320,13 +321,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 {
                     builder.Append(prefix).Append("while (").Append(EmitExpression(loop.Condition)).AppendLine(")");
                     EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
-                        loop.CheckHostInterrupts, successOutputSink, loop.Span);
+                        loop.CheckHostInterrupts, successOutputSink, loop.Span, loop.Label);
                 }
                 else
                 {
                     builder.Append(prefix).AppendLine("do");
                     EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
-                        loop.CheckHostInterrupts, successOutputSink, loop.Span);
+                        loop.CheckHostInterrupts, successOutputSink, loop.Span, loop.Label);
                     builder.Append(prefix).Append("while (");
                     if (loop.Kind == PowerShellLoweredLoopKind.DoUntil) builder.Append("!(");
                     builder.Append(EmitExpression(loop.Condition));
@@ -343,7 +344,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 var iterator = loop.Iterator is null ? string.Empty : EmitExpression(loop.Iterator);
                 builder.Append(prefix).Append("for (").Append(initializer).Append("; ").Append(condition).Append("; ").Append(iterator).AppendLine(")");
                 EmitBlock(builder, loop.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
-                    loop.CheckHostInterrupts, successOutputSink, loop.Span);
+                    loop.CheckHostInterrupts, successOutputSink, loop.Span, loop.Label);
                 EmitLoopTransferTarget(builder, loop.Span, prefix, isContinue: false);
                 return;
             case PowerShellLoweredForEachStatement loop:

@@ -8,7 +8,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     private static string GeneratePackagedScript(
         string sourcePath,
         PackagedSourceSet packagedSources,
-        PowerShellTypedCompilationResult? hybrid = null)
+        PowerShellTypedCompilationResult? hybrid = null,
+        PowerShellPackagedSourceMapping? sourceMapping = null)
     {
         var rewritten = PowerShellPackagedScriptRewriter.Rewrite(
             sourcePath,
@@ -22,8 +23,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             embeddedResourceRelativePaths: packagedSources.EmbeddedResourceRelativePaths,
             packagedScriptRootExpression: packagedSources.UsesExtractedRoot
                 ? "$([System.IO.Path]::GetDirectoryName([PowerForge.Compiled.PowerForgePackagedEntryPoint]::Path))"
-                : null);
-        return hybrid is null ? rewritten : PowerShellHybridModuleComposer.ComposeExecutableRoot(rewritten, sourcePath, hybrid);
+                : null,
+            guardDotSources: true,
+            sourceMapping: sourceMapping);
+        return hybrid is null ? rewritten : PowerShellHybridModuleComposer.ComposeExecutableRoot(rewritten, sourcePath, hybrid, sourceMapping);
     }
 
     private static PackagedSourceSet PreparePackagedSources(
@@ -31,8 +34,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string sourcePath,
         IEnumerable<string> compilationSourcePaths,
         IEnumerable<PowerShellCompilationDependency> dependencyPlan,
-        PowerShellTypedCompilationResult? hybrid = null)
+        PowerShellTypedCompilationResult? hybrid = null,
+        bool nativeScriptEntry = false)
     {
+        WritePackagedPathGuardSource(workspace);
+        WritePackagedConsoleHostSources(workspace);
         var fullSourcePath = Path.GetFullPath(sourcePath);
         var sourceRoot = Path.GetDirectoryName(fullSourcePath) ?? Directory.GetCurrentDirectory();
         var scriptDependencies = compilationSourcePaths
@@ -42,9 +48,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             .OrderBy(path => FrameworkCompatibility.GetRelativePath(sourceRoot, path), StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var resourceDependencies = dependencyPlan
-            .Where(static dependency => dependency.Exists &&
+            .Where(dependency => dependency.Exists &&
                 dependency.SourcePath is not null &&
-                dependency.Disposition == PowerShellCompilationDependencyDisposition.EmbeddedAndExtracted &&
+                (dependency.Disposition == PowerShellCompilationDependencyDisposition.EmbeddedAndExtracted ||
+                 nativeScriptEntry && dependency.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent) &&
                 (dependency.Selection is PowerShellCompilationDependencySelection.Required or
                     PowerShellCompilationDependencySelection.ExplicitInclude or
                     PowerShellCompilationDependencySelection.Inferred or
@@ -52,8 +59,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             .Select(static dependency => new
             {
                 Path = Path.GetFullPath(dependency.SourcePath!),
-                RelativePath = dependency.RelativePath,
-                dependency.Selection
+                RelativePath = dependency.RelativePath.Replace('\\', '/'),
+                dependency.Selection,
+                Metadata = dependency
             })
             .Where(dependency => !PowerShellCompilationPathSafety.PathEquals(dependency.Path, fullSourcePath) &&
                                  !scriptDependencies.Contains(dependency.Path, PowerShellCompilationPathSafety.PathComparer))
@@ -86,10 +94,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             var fileName = $"Dependency{index:D4}.ps1";
             var target = Path.Combine(dependencyDirectory, fileName);
             var composed = hybrid is null ? null : PowerShellHybridModuleComposer.ComposeDependency(dependency, hybrid, hybridCompiledMethods!, executable: true);
-            if (composed is null)
+            var retained = composed ?? Parser.ParseFile(dependency, out _, out _).Extent.Text;
+            var guarded = PowerShellPackagedScriptRewriter.RewriteDependencyDotSources(
+                retained, dependency, sourceRoot, scriptDependencies.Prepend(fullSourcePath).ToArray());
+            if (composed is null && guarded.Equals(retained, StringComparison.Ordinal))
                 File.Copy(dependency, target, overwrite: false);
             else
-                File.WriteAllText(target, composed, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                File.WriteAllText(target, guarded, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
             var logicalName = $"PowerForge.Compiled.{Path.GetFileNameWithoutExtension(fileName)}.ps1";
             var relativePath = FrameworkCompatibility.GetRelativePath(sourceRoot, dependency).Replace('\\', '/');
             projectResources.Add($"    <EmbeddedResource Include=\"EmbeddedDependencies/{fileName}\" LogicalName=\"{EscapeXml(logicalName)}\" />");
@@ -99,11 +110,15 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         {
             var dependency = resourceDependencies[index];
             PowerShellCompilationPathSafety.EnsureContained(sourceRoot, dependency.Path, $"Packaged resource '{dependency.RelativePath}' escapes the executable entrypoint root.");
+            if (nativeScriptEntry)
+                PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, dependency.Path,
+                    $"Native source-layout resource '{dependency.RelativePath}' cannot traverse a link.");
             var fileName = $"Resource{index:D4}.bin";
-            File.Copy(dependency.Path, Path.Combine(dependencyDirectory, fileName), overwrite: false);
+            var target = Path.Combine(dependencyDirectory, fileName);
+            File.Copy(dependency.Path, target, overwrite: false);
             var logicalName = $"PowerForge.Compiled.Resource{index:D4}";
             projectResources.Add($"    <EmbeddedResource Include=\"EmbeddedDependencies/{fileName}\" LogicalName=\"{EscapeXml(logicalName)}\" />");
-            dependencySpecs.Add($"        new EmbeddedDependency({PowerShellCSharpLiteral.QuoteString(logicalName)}, {PowerShellCSharpLiteral.QuoteString(dependency.RelativePath)}, {PowerShellCSharpLiteral.QuoteString(ComputeSha256(dependency.Path))}, {GetExecutableUnixMode(dependency.Path)}),");
+            dependencySpecs.Add($"        new EmbeddedDependency({PowerShellCSharpLiteral.QuoteString(logicalName)}, {PowerShellCSharpLiteral.QuoteString(dependency.RelativePath)}, {PowerShellCSharpLiteral.QuoteString(ComputeSha256(target))}, {GetExecutableUnixMode(target)}),");
         }
         var resourcePaths = scriptDependencies
             .Select(dependency => FrameworkCompatibility.GetRelativePath(sourceRoot, dependency).Replace('\\', '/'))
@@ -121,7 +136,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             hasDependencies: true,
             scriptDependencies,
             resourcePaths,
-            usesExtractedRoot);
+            usesExtractedRoot,
+            nativeMirroredResources: nativeScriptEntry
+                ? resourceDependencies.Where(static dependency => dependency.Metadata.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent)
+                    .Select(static dependency => dependency.Metadata).ToArray()
+                : Array.Empty<PowerShellCompilationDependency>());
     }
 
     private static int GetExecutableUnixMode(string path)
@@ -138,5 +157,5 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     }
 
     private static void ValidatePackagedDependency(string dependencyPath, IReadOnlyCollection<string> embeddedScriptPaths)
-        => PowerShellPackagedScriptRewriter.ValidateDependency(dependencyPath, embeddedScriptPaths);
+        => PowerShellPackagedScriptRewriter.ValidateDependency(dependencyPath, embeddedScriptPaths, allowDerivedPaths: true);
 }

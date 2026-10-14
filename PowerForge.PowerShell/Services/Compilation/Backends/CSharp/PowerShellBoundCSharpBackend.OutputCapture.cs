@@ -96,7 +96,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (completedCapture is not null)
             builder.Append(completedCapture).Append(" = ");
         else if (value is not null)
-            builder.Append("object? ").Append(value).Append(" = ");
+            builder.Append(kind == PowerShellOutputCaptureKind.NativeObjectArray ? "object?[] " : "object? ")
+                .Append(value).Append(" = ");
         else
             builder.Append(RenderStorage(target!)).Append(" = ");
         if (kind == PowerShellOutputCaptureKind.NativeObjectArray)

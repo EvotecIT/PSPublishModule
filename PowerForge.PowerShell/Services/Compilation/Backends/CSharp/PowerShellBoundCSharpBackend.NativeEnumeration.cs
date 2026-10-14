@@ -21,10 +21,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 binding.Target.SourcePath, binding.VariableSourceText)).AppendLine(")");
         builder.Append(prefix).AppendLine("    {");
         builder.Append(prefix).AppendLine("        __checkLoopInterrupts();");
-        builder.Append(prefix).Append("        ").Append(EmitNativeAssignmentStart(binding.Target, PowerShellBoundMutationOperator.Assign))
+        builder.Append(prefix).AppendLine("        try");
+        builder.Append(prefix).AppendLine("        {");
+        builder.Append(prefix).Append("            ").Append(EmitNativeAssignmentStart(binding.Target, PowerShellBoundMutationOperator.Assign))
             .Append("() => ").Append(scope).Append(".Cursor.Current").Append(EmitNativeAssignmentLocation(binding.Target)).AppendLine(";");
         foreach (var statement in loop.Statements)
-            EmitStatement(builder, statement, indent + 2, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+            EmitStatement(builder, statement, indent + 3, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+        builder.Append(prefix).AppendLine("        }");
+        EmitNativeLoopTransferCatches(builder, prefix + "        ", loop.Label, getTemporaryIdentifier);
         EmitLoopTransferTarget(builder, loop.Span, prefix + "        ", isContinue: true);
         builder.Append(prefix).AppendLine("    }");
         builder.Append(prefix).AppendLine("}");

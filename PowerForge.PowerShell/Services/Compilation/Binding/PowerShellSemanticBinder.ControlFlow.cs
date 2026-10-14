@@ -109,7 +109,7 @@ internal sealed partial class PowerShellSemanticBinder
             MergeSymbolValueStates(symbols, loopSymbols);
         PrepareLoopFlowState(symbols, functions, capabilities, statement.Condition, statement.Body);
         return new PowerShellBoundWhileStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), kind, condition, body,
-            PowerShellLoopInterruptContract.IsAvailable(capabilities));
+            PowerShellLoopInterruptContract.IsAvailable(capabilities), statement.Label);
     }
 
     private static bool HasPostTestFlowTransfer(StatementBlockAst body)
@@ -151,7 +151,7 @@ internal sealed partial class PowerShellSemanticBinder
         MergeSymbolValueStates(symbols, baselineSymbols, loopSymbols);
         PrepareLoopFlowState(symbols, functions, capabilities, statement.Condition, statement.Body, statement.Iterator);
         return new PowerShellBoundForStatement(PowerShellSourceParser.GetSpan(document, statement.Extent), initializer, condition, iterator, body,
-            PowerShellLoopInterruptContract.IsAvailable(capabilities));
+            PowerShellLoopInterruptContract.IsAvailable(capabilities), statement.Label);
     }
 
     private PowerShellBoundStatement? BindForEachStatement(
@@ -218,6 +218,7 @@ internal sealed partial class PowerShellSemanticBinder
                     variableSpan, statement.Variable.Extent.StartOffset, statement.Variable.Extent.EndOffset),
                 PowerShellSourceParser.GetSpan(document, statement.Condition.Extent),
                 PowerShellSourceParser.GetSourceLines(document, PowerShellSourceParser.GetSpan(document, statement.Condition.Extent)),
-                PowerShellSourceParser.GetSourceLines(document, variableSpan)) : null);
+                PowerShellSourceParser.GetSourceLines(document, variableSpan)) : null,
+            label: statement.Label);
     }
 }

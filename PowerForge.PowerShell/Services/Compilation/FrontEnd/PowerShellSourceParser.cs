@@ -41,12 +41,29 @@ internal static class PowerShellSourceParser
             extent.EndLineNumber,
             extent.EndColumnNumber);
 
-    /// <summary>Finds source-ordered function declarations directly owned by this compilation document.</summary>
-    internal static IEnumerable<FunctionDefinitionAst> GetTopLevelFunctions(ScriptBlockAst syntax)
+    /// <summary>Finds source-ordered declaration bodies admitted by the selected compilation host.</summary>
+    internal static IEnumerable<FunctionDefinitionAst> GetTopLevelFunctions(ScriptBlockAst syntax,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
+        => GetRootFunctionDeclarations(syntax)
+            .Where(declaration => !declaration.IsConditional || declaration.UsesConditionalNativeBinding(capabilities))
+            .Select(static declaration => declaration.Syntax);
+
+    internal static PowerShellRootFunctionDeclaration[] GetRootFunctionDeclarations(ScriptBlockAst syntax)
         => syntax.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
             .OfType<FunctionDefinitionAst>()
-            .Where(function => function.Parent is NamedBlockAst && ReferenceEquals(function.Parent.Parent, syntax))
-            .OrderBy(static function => function.Extent.StartOffset);
+            .Where(function => IsOwnedByRoot(function, syntax))
+            .OrderBy(static function => function.Extent.StartOffset)
+            .Select(function => new PowerShellRootFunctionDeclaration(function, syntax)).ToArray();
+
+    private static bool IsOwnedByRoot(FunctionDefinitionAst function, ScriptBlockAst root)
+    {
+        for (var parent = function.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent is FunctionDefinitionAst or FunctionMemberAst or TypeDefinitionAst) return false;
+            if (parent is ScriptBlockAst block) return ReferenceEquals(block, root);
+        }
+        return false;
+    }
 
     internal static string GetParameterBlockSource(ParamBlockAst? parameterBlock)
     {

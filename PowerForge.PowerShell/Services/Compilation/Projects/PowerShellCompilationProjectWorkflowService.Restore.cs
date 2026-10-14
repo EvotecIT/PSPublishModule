@@ -61,8 +61,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                     arguments.Add("--runtime");
                     arguments.Add(artifact.Target.RuntimeIdentifier);
                 }
-                var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
-                    "dotnet",
+                var run = new ProcessRunner().RunAsync(PowerShellCompilationSdkProcessEnvironment.CreateInheritedRequest(
                     restoreRoot,
                     arguments,
                     TimeSpan.FromMinutes(10),
@@ -322,7 +321,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 node.Identity.RuntimeIdentifier,
                 segments.Length == 5 ? "native" : "lib",
                 segments.Length == 5 ? segments[4] : Path.Combine(node.Identity.TargetFramework, segments[3]));
-            if (!File.Exists(path)) throw new FileNotFoundException("A reviewed runtime-pack asset is absent from the isolated environment.", path);
+            if (!File.Exists(path)) throw new FileNotFoundException(
+                $"A reviewed runtime-pack asset is absent from the isolated environment. Asset: '{node.Identity.Source}'.", path);
             using var stream = File.OpenRead(path);
             using var algorithm = SHA256.Create();
             var actual = PowerShellCompilationProjectManifestService.ToHex(algorithm.ComputeHash(stream));

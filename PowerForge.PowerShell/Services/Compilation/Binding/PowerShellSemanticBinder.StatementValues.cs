@@ -24,6 +24,14 @@ internal sealed partial class PowerShellSemanticBinder
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics, string? targetFramework,
         PowerShellCompilationCapability capabilities)
+        => BindNativeCollectedStatements(document, syntax, syntax.SubExpression, symbols, functions, diagnostics,
+            targetFramework, capabilities, preserveRecords: false);
+
+    private PowerShellBoundExpression? BindNativeCollectedStatements(ParsedSourceDocument document, Ast syntax,
+        StatementBlockAst statements, IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics, string? targetFramework,
+        PowerShellCompilationCapability capabilities, bool preserveRecords)
     {
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
         if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) ||
@@ -35,10 +43,11 @@ internal sealed partial class PowerShellSemanticBinder
                 "Native statement subexpressions require the success-stream host and a closed enclosing-transfer boundary without traps.", span));
             return null;
         }
-        var body = BindBlock(document, syntax.SubExpression, symbols, functions, diagnostics, targetFramework,
+        var body = BindBlock(document, statements, symbols, functions, diagnostics, targetFramework,
             capabilities, allowNonTerminalSuccessOutput: true);
         return body is null ? null : new PowerShellBoundNativeStatementValueExpression(span,
-            PowerShellImplicitOutputPass.NormalizeNativeCapture(body, document.Path, document.Text));
+            PowerShellImplicitOutputPass.NormalizeNativeCapture(body, document.Path, document.Text), preserveRecords,
+            shareEmptyResult: _semanticProfile.Family != PowerShellCompilationSemanticHostFamily.WindowsPowerShell51);
     }
 
     /// <summary>Binds an if-valued RHS without losing PowerShell's zero-versus-null success cardinality.</summary>

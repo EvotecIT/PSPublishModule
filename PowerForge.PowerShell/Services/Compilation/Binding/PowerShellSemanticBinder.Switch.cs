@@ -26,7 +26,8 @@ internal sealed partial class PowerShellSemanticBinder
             ? PowerShellBoundSwitchMatchMode.Regex
             : PowerShellBoundSwitchMatchMode.Exact;
         var observesSwitch = PowerShellAutomaticVariableObservationPolicy.ObservesSwitchState(statement);
-        if (matchMode == PowerShellBoundSwitchMatchMode.Regex &&
+        if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+            matchMode == PowerShellBoundSwitchMatchMode.Regex &&
             PowerShellAutomaticVariableObservationPolicy.Observes(statement, "Matches"))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
@@ -86,11 +87,12 @@ internal sealed partial class PowerShellSemanticBinder
         // separately qualified nativeCommandResults path owns that contract.
         var hasPredicates = statement.Clauses.Any(clause => clause.Item1 is ScriptBlockExpressionAst);
         var nativeRuntimeValues = value is not PowerShellBoundNativeCommandExpression &&
-            (value.Type.ClrType == typeof(object) || hasPredicates) &&
-            matchMode == PowerShellBoundSwitchMatchMode.Exact && string.IsNullOrEmpty(statement.Label) &&
+            (value.Type.ClrType == typeof(object) || hasPredicates || matchMode == PowerShellBoundSwitchMatchMode.Regex) &&
+            string.IsNullOrEmpty(statement.Label) &&
             capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
             PowerShellLoopInterruptContract.IsAvailable(capabilities) &&
-            statement.Clauses.All(clause => clause.Item1 is StringConstantExpressionAst or ScriptBlockExpressionAst);
+            statement.Clauses.All(clause => clause.Item1 is StringConstantExpressionAst ||
+                matchMode == PowerShellBoundSwitchMatchMode.Exact && clause.Item1 is ScriptBlockExpressionAst);
         if (observesSwitch && !nativeRuntimeValues)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2304",
@@ -153,7 +155,8 @@ internal sealed partial class PowerShellSemanticBinder
 
             var body = BindBlock(document, clause.Item2, clauseSymbols, functions, diagnostics, targetFramework, capabilities);
             if (body is null) return null;
-            clauses.Add(new PowerShellBoundSwitchClause(clauseValue, body));
+            clauses.Add(new PowerShellBoundSwitchClause(clauseValue, body,
+                PowerShellSourceParser.GetSourceLines(document, clauseValue.Span)));
             pathSymbols.Add(clauseSymbols);
         }
 

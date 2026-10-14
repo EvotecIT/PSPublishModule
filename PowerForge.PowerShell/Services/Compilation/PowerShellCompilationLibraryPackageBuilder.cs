@@ -136,8 +136,7 @@ public sealed partial class PowerShellCompilationLibraryPackageBuilder
                 {
                     ["NUGET_PACKAGES"] = Path.GetFullPath(request.NuGetPackageRoot!.Trim().Trim('"'))
                 };
-            var run = _processRunner.RunAsync(new ProcessRunRequest(
-                    "dotnet",
+            var run = _processRunner.RunAsync(PowerShellCompilationSdkProcessEnvironment.CreateInheritedRequest(
                     sourceDirectory,
                     new[]
                     {

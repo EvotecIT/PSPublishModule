@@ -10,7 +10,9 @@ internal enum PowerShellSymbolKind
     GeneratedCommand,
     ModuleState,
     ModuleInitializer,
-    NativeScriptBlock
+    NativeScriptBlock,
+    // A root declaration installed by retained module control flow, with an assembly-local factory caller.
+    ConditionalFunction
 }
 
 /// <summary>

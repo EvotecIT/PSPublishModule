@@ -114,7 +114,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             try
             {
                 var validated = ValidateBuildReceipt(context, artifact);
-                TestArtifact(artifact, validated.ArtifactPath);
+                EnsureArtifactPayloadPaths(artifact, validated.OutputRoot, validated.Files);
+                TestArtifact(context, artifact, validated.ArtifactPath);
                 var testEvidence = CreateTestEvidence(context, artifact, validated);
                 WriteJson(context.Resolve($".powerforge/test/{artifact.Name}.json"), testEvidence);
                 results.Add(Pass(artifact, "Integrity-validated artifact passed its direct execution, clean import, or CLR metadata test.", validated.ArtifactPath, validated.Manifest.DependencyGraph?.LockSha256, validated.Manifest.ArtifactSha256));
@@ -140,7 +141,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 var testEvidence = ReadTestEvidence(context, artifact, validated);
                 var packageRoot = context.Resolve(".powerforge/packages");
                 Directory.CreateDirectory(packageRoot);
-                var packagePath = Path.Combine(packageRoot, GetArtifactName(context.Manifest, artifact) + ".zip");
+                var packagePath = Path.Combine(packageRoot, GetPackageName(context.Manifest, artifact) + ".zip");
                 WriteDeterministicPackage(packagePath, context, artifact, validated, testEvidence);
                 results.Add(Pass(artifact, "Qualified tested artifact archive includes exact inventory, target, lock, SBOM, provenance, and test evidence.", packagePath, validated.Manifest.DependencyGraph?.LockSha256, validated.Manifest.ArtifactSha256));
             }
@@ -166,19 +167,21 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 var manifest = validated.Manifest;
                 var artifactSha256 = manifest.ArtifactSha256;
                 if (string.IsNullOrWhiteSpace(artifactSha256)) throw new InvalidDataException("Build receipt has no artifact identity.");
-                var packagePath = context.Resolve($".powerforge/packages/{GetArtifactName(context.Manifest, artifact)}.zip");
+                var packagePath = context.Resolve($".powerforge/packages/{GetPackageName(context.Manifest, artifact)}.zip");
                 if (!File.Exists(packagePath)) throw new FileNotFoundException("Run project pack before install.", packagePath);
-                ValidateQualifiedPackage(packagePath, context, artifact, validated, testEvidence);
+                var qualifiedDescriptorSha256 = ValidateQualifiedPackage(packagePath, context, artifact, validated, testEvidence);
                 var installIdentity = ComputeQualifiedInstallationIdentity(
                     artifact.Target.ContractSha256,
-                    validated.ArtifactSetSha256);
+                    validated.ArtifactSetSha256,
+                    qualifiedDescriptorSha256);
                 var installRoot = context.Resolve($".powerforge/i/{installIdentity}");
                 var primaryRelative = FrameworkCompatibility.GetRelativePath(
                     validated.OutputRoot,
                     validated.ArtifactPath).Replace('\\', '/');
                 var installedPrimary = Path.GetFullPath(Path.Combine(installRoot, "artifact", primaryRelative.Replace('/', Path.DirectorySeparatorChar)));
                 PowerShellCompilationPathSafety.EnsureContained(installRoot, installedPrimary, "Installed primary artifact escapes its qualified installation root.");
-                EnsureArtifactLaunchPaths(artifact, installedPrimary);
+                EnsureArtifactPayloadPaths(artifact, Path.Combine(installRoot, "artifact"), validated.Files);
+                EnsureArtifactLaunchPaths(context, artifact, installedPrimary);
                 if (Directory.Exists(installRoot))
                     EnsureInstalledPackageMatches(packagePath, installRoot, validated.Files);
                 else
@@ -187,8 +190,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 var actualHash = PowerShellCompilationProjectManifestService.ComputeSha256(installedPrimary);
                 if (!actualHash.Equals(artifactSha256, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("Installed primary artifact differs from its compiler identity.");
-                TestArtifact(artifact, installedPrimary);
-                results.Add(Pass(artifact, "Qualified package was installed by its complete target and authenticated artifact-set identities and passed its declared surface test.", installRoot, manifest.DependencyGraph?.LockSha256, actualHash));
+                TestArtifact(context, artifact, installedPrimary);
+                results.Add(Pass(artifact, "Qualified package was installed by its complete target, authenticated artifact-set, and qualification descriptor identities and passed its declared surface test.", installRoot, manifest.DependencyGraph?.LockSha256, actualHash));
             }
             catch (Exception exception)
             {
@@ -263,15 +266,20 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
     }
 
     private static string GetArtifactName(PowerShellCompilationProjectManifest manifest, PowerShellCompilationProjectArtifact artifact)
+        => artifact.ArtifactName ?? GetPackageName(manifest, artifact);
+
+    /// <summary>Keeps project-target package paths distinct when variants share a shipped artifact basename.</summary>
+    internal static string GetPackageName(PowerShellCompilationProjectManifest manifest, PowerShellCompilationProjectArtifact artifact)
         => manifest.Name + "." + artifact.Name;
 
-    private static void TestArtifact(PowerShellCompilationProjectArtifact artifact, string path)
+    private static void TestArtifact(PowerShellCompilationProjectManifestService.ProjectContext context,
+        PowerShellCompilationProjectArtifact artifact, string path)
     {
         switch (artifact.Target.ArtifactKind)
         {
             case PowerShellCompilationArtifactKind.Executable:
                 EnsureCurrentTargetHost(artifact.Target);
-                RunExecutable(path);
+                RunExecutable(path, artifact.TestArguments, ResolveTestWorkingDirectory(context, artifact, path));
                 break;
             case PowerShellCompilationArtifactKind.BinaryModule:
                 ImportModule(path, artifact.Target.TargetFramework);
@@ -284,13 +292,24 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         }
     }
 
-    private static void RunExecutable(string path)
+    private static string ResolveTestWorkingDirectory(PowerShellCompilationProjectManifestService.ProjectContext context,
+        PowerShellCompilationProjectArtifact artifact, string path)
     {
-        PowerShellCompilationPathSafety.EnsureProcessLaunchPaths(path, Path.GetDirectoryName(path)!);
+        if (artifact.TestWorkingDirectory is null) return Path.GetDirectoryName(path)!;
+        var directory = artifact.TestWorkingDirectory == "." ? context.Root : context.Resolve(artifact.TestWorkingDirectory);
+        PowerShellCompilationPathSafety.EnsureNoLinksInExistingAncestors(directory,
+            "Project test working directory traverses a symbolic link or junction.");
+        if (!Directory.Exists(directory)) throw new DirectoryNotFoundException($"Project test working directory was not found: {directory}");
+        return directory;
+    }
+
+    private static void RunExecutable(string path, string[] arguments, string workingDirectory)
+    {
+        PowerShellCompilationPathSafety.EnsureProcessLaunchPaths(path, workingDirectory);
         var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
             path,
-            Path.GetDirectoryName(path)!,
-            Array.Empty<string>(),
+            workingDirectory,
+            arguments,
             TimeSpan.FromMinutes(2))).GetAwaiter().GetResult();
         if (!run.Succeeded)
             throw new InvalidOperationException($"Executable test failed with exit {run.ExitCode}: {run.StdOut}{Environment.NewLine}{run.StdErr}".Trim());
@@ -318,7 +337,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             throw new PlatformNotSupportedException("Testing a net472 binary module requires Windows PowerShell 5.1 on Windows.");
         var host = GetModuleTestHost(targetFramework);
         PowerShellCompilationPathSafety.EnsureProcessLaunchPaths(host, Path.GetDirectoryName(manifestPath)!);
-        const string script = "$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules'); " +
+        const string script = "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; " +
+                              "$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules'); " +
                               "Import-Module -Name $env:POWERFORGE_MODULE_TEST_PATH -Force -ErrorAction Stop; 'ok'";
         var encodedCommand = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
@@ -331,14 +351,33 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 ["POWERSHELL_TELEMETRY_OPTOUT"] = "1",
                 ["POWERFORGE_MODULE_TEST_PATH"] = manifestPath
             })).GetAwaiter().GetResult();
-        if (!run.Succeeded || !run.StdOut.Trim().Equals("ok", StringComparison.Ordinal))
+        if (!run.Succeeded || !run.StdOut.Trim().Equals("ok", StringComparison.Ordinal) || !string.IsNullOrWhiteSpace(run.StdErr))
             throw new InvalidOperationException($"Clean module import failed with exit {run.ExitCode}: {run.StdOut}{Environment.NewLine}{run.StdErr}".Trim());
     }
 
-    private static void EnsureArtifactLaunchPaths(PowerShellCompilationProjectArtifact artifact, string path)
+    private static void EnsureArtifactPayloadPaths(PowerShellCompilationProjectArtifact artifact,
+        string payloadRoot, QualifiedProjectFile[] files)
+    {
+        if (artifact.Target.ArtifactKind != PowerShellCompilationArtifactKind.BinaryModule ||
+            !artifact.Target.TargetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase)) return;
+        foreach (var file in files)
+        {
+            var extension = Path.GetExtension(file.Path);
+            if (!extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) &&
+                !extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase) &&
+                !extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase) &&
+                !extension.Equals(".dll", StringComparison.OrdinalIgnoreCase)) continue;
+            var path = Path.GetFullPath(Path.Combine(payloadRoot, file.Path.Replace('/', Path.DirectorySeparatorChar)));
+            PowerShellCompilationPathSafety.EnsureContained(payloadRoot, path, "Module payload path escapes its qualified root.");
+            PowerShellCompilationPathSafety.EnsureWindowsPowerShellPayloadPath(path);
+        }
+    }
+
+    private static void EnsureArtifactLaunchPaths(PowerShellCompilationProjectManifestService.ProjectContext context,
+        PowerShellCompilationProjectArtifact artifact, string path)
     {
         if (artifact.Target.ArtifactKind == PowerShellCompilationArtifactKind.Executable)
-            PowerShellCompilationPathSafety.EnsureProcessLaunchPaths(path, Path.GetDirectoryName(path)!);
+            PowerShellCompilationPathSafety.EnsureProcessLaunchPaths(path, ResolveTestWorkingDirectory(context, artifact, path));
         else if (artifact.Target.ArtifactKind == PowerShellCompilationArtifactKind.BinaryModule)
             PowerShellCompilationPathSafety.EnsureProcessLaunchPaths(
                 GetModuleTestHost(artifact.Target.TargetFramework), Path.GetDirectoryName(path)!);

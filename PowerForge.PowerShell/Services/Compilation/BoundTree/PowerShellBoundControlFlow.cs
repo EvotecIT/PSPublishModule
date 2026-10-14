@@ -38,7 +38,7 @@ internal enum PowerShellBoundLoopKind
 internal sealed class PowerShellBoundWhileStatement : PowerShellBoundStatement
 {
     internal PowerShellBoundWhileStatement(SourceSpan span, PowerShellBoundLoopKind kind, PowerShellBoundExpression condition, PowerShellBoundBlock body,
-        bool checkHostInterrupts = false)
+        bool checkHostInterrupts = false, string? label = null)
         : base(span, condition.Effects | body.Effects | PowerShellLoopInterruptContract.Effects(checkHostInterrupts),
             condition.Capabilities | body.Capabilities | PowerShellLoopInterruptContract.Capabilities(checkHostInterrupts))
     {
@@ -46,12 +46,14 @@ internal sealed class PowerShellBoundWhileStatement : PowerShellBoundStatement
         Condition = condition;
         Body = body;
         CheckHostInterrupts = checkHostInterrupts;
+        Label = label ?? string.Empty;
     }
 
     internal PowerShellBoundLoopKind Kind { get; }
     internal PowerShellBoundExpression Condition { get; }
     internal PowerShellBoundBlock Body { get; }
     internal bool CheckHostInterrupts { get; }
+    internal string Label { get; }
 }
 
 internal sealed class PowerShellBoundForStatement : PowerShellBoundStatement
@@ -62,7 +64,7 @@ internal sealed class PowerShellBoundForStatement : PowerShellBoundStatement
         PowerShellBoundExpression? condition,
         PowerShellBoundMutationExpression? iterator,
         PowerShellBoundBlock body,
-        bool checkHostInterrupts = false)
+        bool checkHostInterrupts = false, string? label = null)
         : base(
             span,
             PowerShellSemanticEffect.Mutation |
@@ -80,6 +82,7 @@ internal sealed class PowerShellBoundForStatement : PowerShellBoundStatement
         Iterator = iterator;
         Body = body;
         CheckHostInterrupts = checkHostInterrupts;
+        Label = label ?? string.Empty;
     }
 
     internal PowerShellBoundMutationExpression? Initializer { get; }
@@ -87,6 +90,7 @@ internal sealed class PowerShellBoundForStatement : PowerShellBoundStatement
     internal PowerShellBoundMutationExpression? Iterator { get; }
     internal PowerShellBoundBlock Body { get; }
     internal bool CheckHostInterrupts { get; }
+    internal string Label { get; }
 }
 
 internal sealed class PowerShellBoundForEachStatement : PowerShellBoundStatement
@@ -101,7 +105,7 @@ internal sealed class PowerShellBoundForEachStatement : PowerShellBoundStatement
         bool declareVariable = false,
         PowerShellBoundExpression? nullCollectionElement = null,
         bool checkHostInterrupts = false,
-        PowerShellNativeForEachBinding? nativeBinding = null)
+        PowerShellNativeForEachBinding? nativeBinding = null, string? label = null)
         : base(
             span,
             PowerShellSemanticEffect.Mutation | collection.Effects | body.Effects | (nullCollectionElement?.Effects ?? PowerShellSemanticEffect.None) |
@@ -125,6 +129,7 @@ internal sealed class PowerShellBoundForEachStatement : PowerShellBoundStatement
         NullCollectionElement = nullCollectionElement;
         CheckHostInterrupts = checkHostInterrupts || enumerationKind is PowerShellForEachEnumerationKind.PowerShellEnumerable or PowerShellForEachEnumerationKind.NativeInvocation;
         NativeBinding = nativeBinding;
+        Label = label ?? string.Empty;
     }
 
     internal PowerShellSymbolId Variable { get; }
@@ -136,18 +141,21 @@ internal sealed class PowerShellBoundForEachStatement : PowerShellBoundStatement
     internal PowerShellBoundExpression? NullCollectionElement { get; }
     internal bool CheckHostInterrupts { get; }
     internal PowerShellNativeForEachBinding? NativeBinding { get; }
+    internal string Label { get; }
 }
 
 internal sealed class PowerShellBoundSwitchClause
 {
-    internal PowerShellBoundSwitchClause(PowerShellBoundExpression value, PowerShellBoundBlock body)
+    internal PowerShellBoundSwitchClause(PowerShellBoundExpression value, PowerShellBoundBlock body, string nativeSourceText = "")
     {
         Value = value;
         Body = body;
+        NativeSourceText = nativeSourceText;
     }
 
     internal PowerShellBoundExpression Value { get; }
     internal PowerShellBoundBlock Body { get; }
+    internal string NativeSourceText { get; }
 }
 
 internal enum PowerShellBoundSwitchMatchMode

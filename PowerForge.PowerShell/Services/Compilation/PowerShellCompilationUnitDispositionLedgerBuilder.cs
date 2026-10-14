@@ -44,16 +44,20 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                          .ThenBy(static item => item.Unit.Name, StringComparer.Ordinal))
             {
                 var unit = indexedUnit.Unit;
+                var declaration = FindFunctionDeclaration(file.Units, indexedUnit.Index, unit, functionExtents);
+                var extent = declaration?.Extent;
                 var matchingMethods = methods
-                    .Where(candidate => MethodMatches(candidate, shapedCompilation, file.FullPath, unit))
+                    .Where(candidate => MethodMatches(candidate, shapedCompilation, file.FullPath, unit, declaration))
                     .ToArray();
                 var method = matchingMethods.FirstOrDefault(static candidate => candidate.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline);
                 var lifecycleMethod = matchingMethods.FirstOrDefault(static candidate => candidate.Lifecycle?.Execution == PowerShellCompilationLifecycleExecution.HostedSteppablePipeline);
                 var dispositionMethod = method ?? lifecycleMethod;
                 var promotedRegions = shapedCompilation?.PromotedRegions
-                    .Where(candidate => RegionMatches(candidate, file.FullPath, unit))
+                    .Where(candidate => RegionMatches(candidate, file.FullPath, unit, declaration))
                     .ToArray() ?? Array.Empty<PowerShellCompiledRegion>();
-                var unitKey = PowerShellHybridModuleComposer.GetCompiledMethodKey(file.FullPath, unit.Name, unit.StartLine);
+                var unitKey = declaration is null
+                    ? PowerShellHybridModuleComposer.GetCompiledMethodKey(file.FullPath, unit.Name, unit.StartLine)
+                    : PowerShellHybridModuleComposer.GetCompiledMethodKey(file.FullPath, declaration);
                 var emitted = method is not null ||
                               plan.Mode == PowerShellCompilationMode.Strict &&
                               artifactKind == PowerShellCompilationArtifactKind.Executable &&
@@ -86,7 +90,6 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                                (plan.Mode == PowerShellCompilationMode.Strict ||
                                 artifactKind == PowerShellCompilationArtifactKind.Library);
                 var omitted = artifactKind == PowerShellCompilationArtifactKind.Library && !emitted;
-                var extent = FindFunctionExtent(file.Units, indexedUnit.Index, unit, functionExtents);
                 var shapedDiagnostics = shapedCompilation?.Diagnostics.Where(diagnostic =>
                         PowerShellCompilationPathSafety.PathEquals(diagnostic.FilePath, file.FullPath) &&
                         (extent is null
@@ -168,10 +171,11 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
     private static FunctionDefinitionAst[] GetFunctionExtents(string sourcePath)
     {
         if (!File.Exists(sourcePath)) return Array.Empty<FunctionDefinitionAst>();
-        return PowerShellSourceParser.GetTopLevelFunctions(Parser.ParseFile(sourcePath, out _, out _)).ToArray();
+        return PowerShellSourceParser.GetRootFunctionDeclarations(Parser.ParseFile(sourcePath, out _, out _))
+            .Select(static declaration => declaration.Syntax).ToArray();
     }
 
-    private static IScriptExtent? FindFunctionExtent(
+    private static FunctionDefinitionAst? FindFunctionDeclaration(
         IReadOnlyList<PowerShellCompilationUnitPlan> units,
         int unitIndex,
         PowerShellCompilationUnitPlan unit,
@@ -186,7 +190,6 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
             .Where(function => function.Body.Extent.StartLineNumber == unit.StartLine &&
                                function.Name.Equals(unit.Name, StringComparison.OrdinalIgnoreCase))
             .Skip(occurrence)
-            .Select(static function => function.Extent)
             .FirstOrDefault();
     }
 
@@ -258,24 +261,30 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
         PowerShellCompiledMethod method,
         PowerShellTypedCompilationResult? shapedCompilation,
         string fullPath,
-        PowerShellCompilationUnitPlan unit)
+        PowerShellCompilationUnitPlan unit,
+        FunctionDefinitionAst? declaration)
     {
         var methodPath = string.IsNullOrWhiteSpace(method.SourcePath)
             ? shapedCompilation?.SourcePath ?? string.Empty
             : method.SourcePath;
         return PowerShellCompilationPathSafety.PathEquals(methodPath, fullPath) &&
                method.SourceName.Equals(unit.Name, StringComparison.OrdinalIgnoreCase) &&
-               (unit.Kind == PowerShellCompilationUnitKind.Script || method.SourceLine == unit.StartLine);
+               (unit.Kind == PowerShellCompilationUnitKind.Script || method.SourceLine == unit.StartLine) &&
+               (method.ConditionalDeclarationOffset is null || method.ConditionalDeclarationOffset == declaration?.Extent.StartOffset);
     }
 
     private static bool RegionMatches(
         PowerShellCompiledRegion region,
         string fullPath,
-        PowerShellCompilationUnitPlan unit)
+        PowerShellCompilationUnitPlan unit,
+        FunctionDefinitionAst? declaration)
         => unit.Kind == PowerShellCompilationUnitKind.Function &&
+           declaration is not null &&
            PowerShellCompilationPathSafety.PathEquals(region.SourcePath, fullPath) &&
            region.SourceName.Equals(unit.Name, StringComparison.OrdinalIgnoreCase) &&
-           region.SourceLine == unit.StartLine;
+           region.SourceLine == unit.StartLine &&
+           declaration.Body.Extent.StartOffset <= region.StartOffset &&
+           declaration.Body.Extent.EndOffset >= region.EndOffset;
 
     private static string[] GetBoundaryCauses(
         PowerShellCompiledMethod? method,

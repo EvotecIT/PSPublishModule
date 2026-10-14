@@ -63,7 +63,8 @@ internal static class PowerShellHybridExecutableEntryEmitter
         return source.ToString();
     }
 
-    internal static string ComposeScript(string packagedSource, string authoredSourcePath, PowerShellTypedExecutableCompilation compiled)
+    internal static string ComposeScript(string packagedSource, string authoredSourcePath, PowerShellTypedExecutableCompilation compiled,
+        PowerShellPackagedSourceMapping? sourceMapping = null)
     {
         var authored = Parser.ParseFile(authoredSourcePath, out _, out var authoredErrors);
         var packaged = Parser.ParseInput(packagedSource, out _, out var packagedErrors);
@@ -89,7 +90,11 @@ internal static class PowerShellHybridExecutableEntryEmitter
                          string.Join(", ", values) + "))";
         var source = new StringBuilder(packagedSource);
         for (var index = selected.Length - 1; index > 0; index--)
+        {
+            sourceMapping?.Record(selected[index].StartOffset, selected[index].EndOffset - selected[index].StartOffset, string.Empty);
             source.Remove(selected[index].StartOffset, selected[index].EndOffset - selected[index].StartOffset);
+        }
+        sourceMapping?.Record(selected[0].StartOffset, selected[0].EndOffset - selected[0].StartOffset, invocation);
         source.Remove(selected[0].StartOffset, selected[0].EndOffset - selected[0].StartOffset);
         source.Insert(selected[0].StartOffset, invocation);
         return source.ToString();

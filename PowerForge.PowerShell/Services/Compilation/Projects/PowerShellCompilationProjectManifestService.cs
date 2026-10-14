@@ -126,6 +126,8 @@ public sealed partial class PowerShellCompilationProjectManifestService
         {
             onStage?.Invoke(PowerShellCompilationDiagnosticStage.Target, artifact.Name);
             artifact.Name = NormalizeName(artifact.Name, "artifact target name");
+            if (artifact.ArtifactName is not null)
+                artifact.ArtifactName = NormalizeName(artifact.ArtifactName, "artifact name");
             if (!names.Add(artifact.Name)) throw new InvalidDataException($"Duplicate project target name '{artifact.Name}'.");
             var target = artifact.Target ?? throw new InvalidDataException($"Project target '{artifact.Name}' has no target contract.");
             artifact.Target = PowerShellCompilationTargetContractService.Normalize(
@@ -142,6 +144,19 @@ public sealed partial class PowerShellCompilationProjectManifestService
                 artifact.ProviderLock = NormalizeRelativePath(root, artifact.ProviderLock!, requireExists: false, "provider lock");
             if (!string.IsNullOrWhiteSpace(artifact.ExpectedAbiSha256) && !IsSha256(artifact.ExpectedAbiSha256!))
                 throw new InvalidDataException($"Project target '{artifact.Name}' has an invalid ABI SHA-256.");
+            if (artifact.TestArguments is null || artifact.TestArguments.Any(static argument => argument is null || argument.IndexOf('\0') >= 0))
+                throw new InvalidDataException($"Project target '{artifact.Name}' test arguments cannot be null or contain NUL.");
+            if (!string.IsNullOrWhiteSpace(artifact.TestWorkingDirectory))
+            {
+                artifact.TestWorkingDirectory = NormalizeRelativePath(root, artifact.TestWorkingDirectory!,
+                    requireInputs, "test working directory", allowRoot: true);
+                if (requireInputs && !Directory.Exists(Path.Combine(root, artifact.TestWorkingDirectory)))
+                    throw new DirectoryNotFoundException($"Project test working directory was not found: {artifact.TestWorkingDirectory}");
+            }
+            else artifact.TestWorkingDirectory = null;
+            if (artifact.Target.ArtifactKind != PowerShellCompilationArtifactKind.Executable &&
+                (artifact.TestArguments.Length != 0 || artifact.TestWorkingDirectory is not null))
+                throw new InvalidDataException($"Project target '{artifact.Name}' test arguments and working directory require an executable target.");
         }
         return manifest;
     }
@@ -153,14 +168,15 @@ public sealed partial class PowerShellCompilationProjectManifestService
             .Distinct(PowerShellCompilationPathSafety.PathComparer)
             .ToArray();
 
-    private static string NormalizeRelativePath(string root, string value, bool requireExists, string label)
+    private static string NormalizeRelativePath(string root, string value, bool requireExists, string label, bool allowRoot = false)
     {
         if (string.IsNullOrWhiteSpace(value)) throw new InvalidDataException($"Project {label} path is required.");
         var trimmed = value.Trim().Trim('"');
         if (Path.IsPathRooted(trimmed) || LooksLikeWindowsRootedPath(trimmed))
             throw new InvalidDataException($"Project {label} path '{value}' must be relative.");
         var full = Path.GetFullPath(Path.Combine(root, trimmed.Replace('/', Path.DirectorySeparatorChar)));
-        PowerShellCompilationPathSafety.EnsureContained(root, full, $"Project {label} path '{value}' escapes the project root.");
+        if (!allowRoot || !PowerShellCompilationPathSafety.PathEquals(root, full))
+            PowerShellCompilationPathSafety.EnsureContained(root, full, $"Project {label} path '{value}' escapes the project root.");
         PowerShellCompilationPathSafety.EnsureNoLinksInExistingAncestors(full, $"Project {label} path '{value}' traverses a symbolic link or junction.");
         if (requireExists && !File.Exists(full) && !Directory.Exists(full))
             throw new FileNotFoundException($"Project {label} path was not found.", full);

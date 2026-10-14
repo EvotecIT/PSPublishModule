@@ -8,18 +8,19 @@ internal static class PowerShellLocalFunctionDiscovery
     internal static HashSet<string> DiscoverNames(IEnumerable<string> files)
     {
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var conditionalNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in files)
         {
             var ast = Parser.ParseFile(file, out _, out ParseError[] errors);
             if (errors.Length > 0)
                 continue;
-            foreach (var function in ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
-                         .Cast<FunctionDefinitionAst>()
-                         .Where(function => function.Parent is NamedBlockAst && ReferenceEquals(function.Parent.Parent, ast)))
+            foreach (var declaration in PowerShellSourceParser.GetRootFunctionDeclarations(ast))
             {
-                names.Add(function.Name);
+                if (declaration.IsConditional) conditionalNames.Add(declaration.Syntax.Name);
+                else names.Add(declaration.Syntax.Name);
             }
         }
+        names.ExceptWith(conditionalNames);
         return names;
     }
 }

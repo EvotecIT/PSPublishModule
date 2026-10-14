@@ -21,16 +21,7 @@ function Invoke-PowerForgeJson {
     param([string[]] $Arguments, [string] $WorkingDirectory, [int] $TimeoutSeconds = 900)
 
     $result = Invoke-OwnedProcess -FileName 'dotnet' -Arguments (@($CliAssemblyPath) + $Arguments + @('--output', 'json')) -WorkingDirectory $WorkingDirectory -Environment @{} -TimeoutSeconds $TimeoutSeconds
-    try {
-        $json = $result.StandardOutput | ConvertFrom-Json
-    } catch {
-        $tail = if ($result.StandardOutput.Length -gt 4000) { $result.StandardOutput.Substring($result.StandardOutput.Length - 4000) } else { $result.StandardOutput }
-        throw "PowerForge did not return JSON. Exit=$($result.ExitCode). stdout tail: $tail stderr: $($result.StandardError)"
-    }
-    if ($result.ExitCode -ne 0 -or -not $json.success) {
-        $message = if ($json.error) { [string] $json.error } else { [string] $result.StandardError }
-        throw "PowerForge command failed with exit $($result.ExitCode): $message"
-    }
+    $json = ConvertFrom-CorpusCliProcess $result -Label 'PowerForge command'
     return [pscustomobject]@{ Json = $json; DurationMilliseconds = $result.DurationMilliseconds }
 }
 
@@ -433,7 +424,8 @@ try {
                     succeeded = $true
                 })
             } catch {
-                $moduleResults.Add([ordered]@{ id = $entry.id; version = $entry.version; scenarioFamily = $entry.scenarioFamily; succeeded = $false; error = $_.Exception.Message })
+                $moduleResults.Add([ordered]@{ id = $entry.id; version = $entry.version; scenarioFamily = $entry.scenarioFamily;
+                    succeeded = $false; error = $_.Exception.Message; cliFailure = (Get-CorpusCliFailureEvidence $_.Exception) })
             }
         }
     }
@@ -581,7 +573,8 @@ try {
                     succeeded = $true
                 })
             } catch {
-                $strictResults.Add([ordered]@{ id = $program.id; scenarioFamily = $program.scenarioFamily; runtimeIdentifier = $RuntimeIdentifier; succeeded = $false; error = $_.Exception.Message })
+                $strictResults.Add([ordered]@{ id = $program.id; scenarioFamily = $program.scenarioFamily; runtimeIdentifier = $RuntimeIdentifier;
+                    succeeded = $false; error = $_.Exception.Message; cliFailure = (Get-CorpusCliFailureEvidence $_.Exception) })
             }
         }
     }

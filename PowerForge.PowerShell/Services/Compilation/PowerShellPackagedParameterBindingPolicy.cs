@@ -7,7 +7,8 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellPackagedParameterBindingPolicy
 {
-    internal static PowerShellPackagedParameterInitializers Generate(string sourcePath, string targetFramework)
+    internal static PowerShellPackagedParameterInitializers Generate(string sourcePath, string targetFramework,
+        bool nativeScriptEntry = false)
     {
         var ast = Parser.ParseFile(sourcePath, out _, out var errors);
         if (errors.Length > 0)
@@ -26,7 +27,10 @@ internal static class PowerShellPackagedParameterBindingPolicy
                 $"Packaged parameter '${readOnlyParameter.Name.VariablePath.UserPath}' collides with a read-only automatic variable on target '{targetFramework}'.");
         }
         var mandatoryParameter = authoredParameters.FirstOrDefault(IsMandatory);
-        if (mandatoryParameter is not null)
+        // The native script dispatcher binds the original declaration. Its SDK host refuses
+        // missing mandatory arguments before the compiled callback, without interactive input.
+        // Retained AddScript execution keeps its separately bounded parameter contract.
+        if (mandatoryParameter is not null && !nativeScriptEntry)
         {
             throw new InvalidOperationException(
                 $"Packaged parameter '${mandatoryParameter.Name.VariablePath.UserPath}' is mandatory and may require interactive prompting when omitted; the embedded runspace has no console-backed PSHost. Use an optional parameter or a Strict executable contract.");

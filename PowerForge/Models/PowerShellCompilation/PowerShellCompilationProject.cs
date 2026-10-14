@@ -56,6 +56,9 @@ public sealed class PowerShellCompilationProjectArtifact
     /// <summary>Stable project-local target name.</summary>
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>Optional shipped artifact basename, such as an authored module name. Defaults to the project and target names.</summary>
+    public string? ArtifactName { get; set; }
+
     /// <summary>Exact semantic, runtime, architecture, and deployment target.</summary>
     public PowerShellCompilationTargetContract Target { get; set; } = new();
 
@@ -70,6 +73,12 @@ public sealed class PowerShellCompilationProjectArtifact
 
     /// <summary>Optional public ABI SHA-256 baseline.</summary>
     public string? ExpectedAbiSha256 { get; set; }
+
+    /// <summary>Executable arguments passed directly, without a shell, during project test and install.</summary>
+    public string[] TestArguments { get; set; } = Array.Empty<string>();
+
+    /// <summary>Optional contained project-relative executable test directory; '.' selects the project root. Defaults to the artifact directory.</summary>
+    public string? TestWorkingDirectory { get; set; }
 
     /// <summary>Whether the independently buildable generated project is included.</summary>
     public bool EmitSource { get; set; }

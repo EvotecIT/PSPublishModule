@@ -33,13 +33,8 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
         {
             var file = plan.Files.FirstOrDefault(item => PowerShellCompilationPathSafety.PathEquals(item.FullPath, method.SourcePath));
             if (file is null) continue;
-            var unit = file.Units.FirstOrDefault(item => item.Kind == PowerShellCompilationUnitKind.Function &&
-                item.Name.Equals(method.SourceName, StringComparison.OrdinalIgnoreCase) && item.StartLine == method.SourceLine)
-                ?? file.Units.FirstOrDefault(item => item.Name.Equals(method.SourceName, StringComparison.OrdinalIgnoreCase));
-            if (unit is null) continue;
-            var unitId = PowerShellCompilationExplanationService.ComputeUnitId(
-                PowerShellCompilationExplanationService.NormalizeRelativePath(file.RelativePath, Path.GetFileName(file.FullPath)), unit);
-            var ledgerEntry = ledger.Entries.FirstOrDefault(item => item.UnitId.Equals(unitId, StringComparison.Ordinal));
+            var ledgerEntry = FindGeneratedDisposition(ledger, file, method.GeneratedName, promotedRegion: false);
+            var unitId = ledgerEntry.UnitId;
             var boundary = DescribeBoundary(ledgerEntry);
             var maps = method.SourceMap.Length == 0
                 ? new[] { new PowerShellCompilationSourceMapEntry(method.SourceLine, method.SourceColumn, method.SourceEndLine, method.SourceEndColumn, 1, 1, 1, 1) }
@@ -49,7 +44,7 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
                 DocumentId = method.DocumentId,
                 RelativePath = NormalizeRelative(file.RelativePath, Path.GetFileName(file.FullPath)),
                 UnitId = unitId,
-                UnitName = unit.Name,
+                UnitName = ledgerEntry.Name,
                 GeneratedMemberName = method.GeneratedName,
                 SourceStartLine = map.SourceStartLine,
                 SourceStartColumn = map.SourceStartColumn,
@@ -67,12 +62,8 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
         {
             var file = plan.Files.FirstOrDefault(item => PowerShellCompilationPathSafety.PathEquals(item.FullPath, region.SourcePath));
             if (file is null) continue;
-            var unit = file.Units.FirstOrDefault(item => item.Kind == PowerShellCompilationUnitKind.Function &&
-                item.Name.Equals(region.SourceName, StringComparison.OrdinalIgnoreCase) && item.StartLine == region.SourceLine);
-            if (unit is null) continue;
-            var unitId = PowerShellCompilationExplanationService.ComputeUnitId(
-                PowerShellCompilationExplanationService.NormalizeRelativePath(file.RelativePath, Path.GetFileName(file.FullPath)), unit);
-            var disposition = ledger.Entries.FirstOrDefault(item => item.UnitId.Equals(unitId, StringComparison.Ordinal));
+            var disposition = FindGeneratedDisposition(ledger, file, region.GeneratedName, promotedRegion: true);
+            var unitId = disposition.UnitId;
             var maps = region.SourceMap.Count == 0
                 ? new[] { new PowerShellCompilationSourceMapEntry(region.StartLine, region.StartColumn, region.EndLine, region.EndColumn, 1, 1, 1, 1) }
                 : region.SourceMap;
@@ -81,7 +72,7 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
                 DocumentId = region.DocumentId,
                 RelativePath = NormalizeRelative(file.RelativePath, Path.GetFileName(file.FullPath)),
                 UnitId = unitId,
-                UnitName = unit.Name,
+                UnitName = disposition.Name,
                 GeneratedMemberName = region.GeneratedName,
                 SourceStartLine = map.SourceStartLine,
                 SourceStartColumn = map.SourceStartColumn,
@@ -319,6 +310,21 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
             BoundaryContract = entry.BoundaryContract
         };
 
+    /// <summary>Uses final emitter ownership so same-name, same-line declarations keep their authored identity.</summary>
+    private static PowerShellCompilationUnitDisposition FindGeneratedDisposition(
+        PowerShellCompilationUnitDispositionLedger ledger,
+        PowerShellCompilationFilePlan file,
+        string generatedMemberName,
+        bool promotedRegion)
+    {
+        var relativePath = NormalizeRelative(file.RelativePath, Path.GetFileName(file.FullPath));
+        return ledger.Entries.SingleOrDefault(entry =>
+            entry.RelativePath.Equals(relativePath, StringComparison.Ordinal) &&
+            (promotedRegion
+                ? entry.GeneratedRegionMemberNames.Contains(generatedMemberName, StringComparer.Ordinal)
+                : entry.GeneratedMemberName.Equals(generatedMemberName, StringComparison.Ordinal)))
+            ?? throw new InvalidOperationException($"Generated member '{generatedMemberName}' has no final unit-disposition owner in '{relativePath}'.");
+    }
     private static string DescribeBoundary(PowerShellCompilationUnitDisposition? entry)
         => entry is null ? string.Empty
             : entry.Emitted && entry.RuntimeRouted ? "TypedClr+PowerShellRuntime"
@@ -342,7 +348,7 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
             IScriptExtent extent = ast.Extent;
             if (unit.Kind == PowerShellCompilationUnitKind.Function)
             {
-                var function = PowerShellSourceParser.GetTopLevelFunctions(ast)
+                var function = PowerShellSourceParser.GetRootFunctionDeclarations(ast).Select(static declaration => declaration.Syntax)
                     // Unit identities retain authored spelling. Match that spelling before
                     // selecting its occurrence so case-variant declarations keep their own extent.
                     .Where(candidate =>

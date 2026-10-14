@@ -9,6 +9,9 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
     [Trait("Category", "PowerShellCompilerGate")]
     public async Task ProjectRunCli_PreservesBinaryStdinStdoutArgumentsStderrAndExitCode()
     {
+        var repositoryRoot = FindRepositoryRoot();
+        var cli = PowerForgeCliTestHost.ResolveAssemblyPath(repositoryRoot,
+            Environment.GetEnvironmentVariable(PowerForgeCliTestHost.AssemblyPathEnvironmentVariable));
         var root = Path.Combine(Path.GetTempPath(), "PFC", Guid.NewGuid().ToString("N")[..12], "source space ż");
         Directory.CreateDirectory(root);
         try
@@ -38,12 +41,12 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
             {
                 StartInfo = new ProcessStartInfo
                 {
-                    FileName = "dotnet", WorkingDirectory = FindRepositoryRoot(), UseShellExecute = false,
+                    FileName = "dotnet", WorkingDirectory = repositoryRoot, UseShellExecute = false,
                     RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
                     StandardErrorEncoding = Encoding.UTF8, CreateNoWindow = true
                 }
             };
-            foreach (var argument in new[] { Path.Combine(FindRepositoryRoot(), "PowerForge.Cli", "bin", "Release", "net10.0", "PowerForge.Cli.dll"),
+            foreach (var argument in new[] { cli,
                          "powershell", "project", "run", project, "--" }.Concat(appArguments))
                 process.StartInfo.ArgumentList.Add(argument);
             process.Start();

@@ -24,7 +24,7 @@ internal sealed partial class PowerShellSemanticBinder
         if (_runtimeFreeModule is null) capabilities &= ~PowerShellCompilationCapability.RuntimeFreeModuleState;
         var regionCandidates = new Dictionary<string, PowerShellBoundRegionCandidate>(StringComparer.Ordinal);
         var regionOpportunities = new Dictionary<string, PowerShellBoundRegionOpportunity>(StringComparer.Ordinal);
-        var declarations = DeclareFunctions(orderedDocuments, diagnostics);
+        var declarations = DeclareFunctions(orderedDocuments, diagnostics, capabilities);
         declarations = DeclareNativeScriptBlocks(declarations, capabilities, targetFramework);
         if (_runtimeFreeModule is not null)
             declarations = declarations.Append(new FunctionDeclaration(_runtimeFreeModule.Document, _runtimeFreeModule.Initializer,
@@ -35,7 +35,11 @@ internal sealed partial class PowerShellSemanticBinder
             declarations.Select(static declaration => declaration.Syntax), capabilities, targetFramework,
             orderedDocuments.FirstOrDefault()?.NativeDependencyTypes);
         var numericErrorObservedCallees = PowerShellRuntimeExceptionCatchPolicy.FindNumericErrorObservedCallees(orderedDocuments);
+        var conditionalNames = orderedDocuments.SelectMany(static document => document.RootFunctionDeclarations)
+            .Where(declaration => declaration.UsesConditionalNativeBinding(capabilities))
+            .Select(static declaration => declaration.Syntax.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var functionsByName = declarations
+            .Where(declaration => !conditionalNames.Contains(declaration.Syntax.Name))
             .GroupBy(static declaration => declaration.Syntax.Name, StringComparer.OrdinalIgnoreCase)
             .Where(static group => group.Count() == 1)
             .Where(group => HasTypedFunctionShape(group.Single().Syntax.Body, capabilities))
@@ -96,7 +100,9 @@ internal sealed partial class PowerShellSemanticBinder
                     capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions)
                         ? regionOpportunities
                         : null,
-                    declaration.Symbol.Kind == PowerShellSymbolKind.NativeScriptBlock || nativeInvocationClosure.Contains(declaration.Syntax.Name));
+                    declaration.Symbol.Kind is PowerShellSymbolKind.NativeScriptBlock or PowerShellSymbolKind.ConditionalFunction ||
+                    nativeInvocationClosure.Contains(declaration.Syntax.Name) ||
+                    declaration.Document.PreserveFunctionDeclarationTiming);
                 // An unresolved authored parameter keeps the function hosted. Its native
                 // binding may still yield safe prefix regions, while an ordinary hosted
                 // binding can independently prove a detached terminal region. Evaluate

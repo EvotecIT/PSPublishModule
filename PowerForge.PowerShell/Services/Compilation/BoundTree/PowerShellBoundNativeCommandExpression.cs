@@ -4,7 +4,8 @@ namespace PowerForge;
 internal sealed class PowerShellBoundNativeCommandExpression : PowerShellBoundExpression
 {
     internal PowerShellBoundNativeCommandExpression(SourceSpan span, string source, string sourcePath, string sourceDocument,
-        bool preservePartialOutput, PowerShellBoundCommandStage[] stages, bool preserveReturnRecords = false)
+        bool preservePartialOutput, PowerShellBoundCommandStage[] stages, bool preserveReturnRecords = false,
+        int[]? guardedPathOperands = null)
         : base(span, PowerShellTypeFact.Unknown, PowerShellValueState.Unknown,
             PowerShellSemanticEffect.Host | PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.NonSuccessStream |
             PowerShellSemanticEffect.TerminatingError,
@@ -17,6 +18,7 @@ internal sealed class PowerShellBoundNativeCommandExpression : PowerShellBoundEx
         PreservePartialOutput = preservePartialOutput;
         Stages = stages;
         PreserveReturnRecords = preserveReturnRecords;
+        GuardedPathOperands = guardedPathOperands ?? Array.Empty<int>();
     }
 
     internal string Source { get; }
@@ -25,5 +27,6 @@ internal sealed class PowerShellBoundNativeCommandExpression : PowerShellBoundEx
     internal bool PreservePartialOutput { get; }
     /// <summary>A direct return pipeline transfers records without expression scalarization or a second enumeration.</summary>
     internal bool PreserveReturnRecords { get; }
+    internal PowerShellImmutableArray<int> GuardedPathOperands { get; }
     internal PowerShellImmutableArray<PowerShellBoundCommandStage> Stages { get; }
 }

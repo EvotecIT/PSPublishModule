@@ -47,7 +47,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(System.IO.File.ReadAllText(fixture.ScriptPath), generatedSource);
         Assert.Contains("CompiledNativeScriptEntry", System.IO.File.ReadAllText(
             System.IO.Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShellEntry.cs")));
-        Assert.Contains("CompiledNativeScriptEntry]::Create", System.IO.File.ReadAllText(
+        Assert.Contains("CompiledNativeScriptEntry.Create", System.IO.File.ReadAllText(
             System.IO.Path.Combine(result.GeneratedSourcePath!, "Program.cs")));
         foreach (var arguments in new[] { System.Array.Empty<string>(), new[] { "-Count", "0" },
                      new[] { "-Count", "4", "tail" } })
@@ -76,39 +76,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     [Theory]
     [InlineData("$MyInvocation.MyCommand.Name", "win-x64")]
-    [InlineData("Get-Variable -Scope 1", "win-x64")]
     [InlineData("param([int]$Count = $(Get-Variable Count -Scope 1)) $Count", "win-x64")]
-    [InlineData("Get-ChildItem", "win-x64")]
     [InlineData("& 'Write-Output' 'x'", "win-x64")]
     [InlineData("Write-Output 'x' > output.txt", "win-x64")]
     [InlineData("Write-Host 'x' 6>&1", "win-x64")]
-    [InlineData("1..3 | ForEach-Object -Parallel { $_ }", "win-x64")]
-    [InlineData("1..3 | ForEach-Object -Begin { 'before' } -Process { $_ }", "win-x64")]
-    [InlineData("1..3 | ForEach-Object { return $_ }", "win-x64")]
-    [InlineData("1..3 | ForEach-Object { break }", "win-x64")]
-    [InlineData("1..3 | ForEach-Object { throw 'stopped' }", "win-x64")]
-    [InlineData("1..3 | ForEach-Object { $_ } | Write-Output", "win-x64")]
-    [InlineData("1..3 | ForEach-Object -MemberName ToString", "win-x64")]
-    [InlineData("function ForEach-Object { param($Action) 'shadow' }; 1..3 | ForEach-Object { $_ }", "win-x64")]
-    [InlineData("function script:ForEach-Object { param($Action) 'shadow' }; 1..3 | ForEach-Object { $_ }", "win-x64")]
-    [InlineData("if ($true) { function ForEach-Object { param($Action) 'shadow' } }; 1..3 | ForEach-Object { $_ }", "win-x64")]
-    [InlineData("if ($true) { function script:ForEach-Object { param($Action) 'shadow' } }; 1..3 | ForEach-Object { $_ }", "win-x64")]
-    [InlineData("1..3 | Where-Object -Property IsEven | ForEach-Object { $_ }", "win-x64")]
-    [InlineData("1..3 | Where-Object { return $_ } | ForEach-Object { $_ }", "win-x64")]
-    [InlineData("1..3 | Where-Object { $_ } | ForEach-Object { break }", "win-x64")]
-    [InlineData("1..3 | ForEach-Object { $_ } | Where-Object { $_ }", "win-x64")]
-    [InlineData("function script:Where-Object { param($Filter) 'shadow' }; 1..3 | Where-Object { $_ } | ForEach-Object { $_ }", "win-x64")]
-    [InlineData("if ($true) { function Where-Object { param($Filter) 'shadow' } }; 1..3 | Where-Object { $_ } | ForEach-Object { $_ }", "win-x64")]
-    [InlineData("1..3 | Select-Object -First 1 -OutVariable selected", "win-x64")]
-    [InlineData("1..3 | Select-Object -Property @{Name='Value';Expression={ return $_ }}", "win-x64")]
-    [InlineData("1..3 | Select-Object -Property @{Name='Value';Expression={ $_.ToString() }}", "win-x64")]
-    [InlineData("$outer = 3; 1..3 | Select-Object -Property @{Name='Value';Expression={ $outer }}", "win-x64")]
-    [InlineData("1..3 | Select-Object -Property @{Name='Value';Expression={ $script:count++ }}", "win-x64")]
-    [InlineData("1..3 | Select-Object @options", "win-x64")]
-    [InlineData("function Select-Object { param($First) 'shadow' }; 1..3 | Select-Object -First 1", "win-x64")]
-    [InlineData("1..3 | Sort-Object -Culture en-US", "win-x64")]
-    [InlineData("1..3 | Group-Object -AsHashTable", "win-x64")]
-    [InlineData("1..3 | Select-Object -First 1 | ForEach-Object { $_ }", "win-x64")]
     [InlineData("param([int]$Count = 3) $Count + 1", "linux-x64")]
     public void Explain_HybridNativeScriptRootRetainsUnqualifiedOwners(string source, string runtimeIdentifier)
     {
@@ -128,7 +99,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Theory]
-    [InlineData("Write-Output 1; function Get-Later { 2 }; Get-Later")]
     [InlineData("function Get-Blocked { exit 1 }; Get-Blocked")]
     [InlineData("function Foo { 1 }; $function:Foo = { 2 }; Foo")]
     public void Explain_HybridNativeScriptRootRetainsUnsupportedDeclarations(string source)
@@ -182,7 +152,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             System.IO.Path.Combine(result.GeneratedSourcePath!, "Source.ps1")));
         Assert.Contains("CompiledNativeScriptEntry", System.IO.File.ReadAllText(
             System.IO.Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShellEntry.cs")));
-        Assert.Contains("CompiledNativeScriptEntry]::Create", System.IO.File.ReadAllText(
+        Assert.Contains("CompiledNativeScriptEntry.Create", System.IO.File.ReadAllText(
             System.IO.Path.Combine(result.GeneratedSourcePath!, "Program.cs")));
         var original = RunProcess("pwsh", "-NoProfile", "-NonInteractive", "-File", sourcePath);
         var generated = RunProcess(result.ArtifactPath!);
@@ -227,7 +197,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             System.IO.Path.Combine(result.GeneratedSourcePath!, "Source.ps1")));
         Assert.Contains("CompiledNativeScriptEntry", System.IO.File.ReadAllText(
             System.IO.Path.Combine(result.GeneratedSourcePath!, "CompiledPowerShellEntry.cs")));
-        Assert.Contains("CompiledNativeScriptEntry]::Create", System.IO.File.ReadAllText(
+        Assert.Contains("CompiledNativeScriptEntry.Create", System.IO.File.ReadAllText(
             System.IO.Path.Combine(result.GeneratedSourcePath!, "Program.cs")));
         var original = RunProcess("pwsh", "-NoProfile", "-NonInteractive", "-File", sourcePath);
         var generated = RunProcess(result.ArtifactPath!);

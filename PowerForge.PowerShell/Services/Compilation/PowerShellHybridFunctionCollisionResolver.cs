@@ -5,7 +5,7 @@ namespace PowerForge;
 /// <summary>
 /// Keeps PowerShell's function replacement semantics when a hybrid module defines one command name more than once.
 /// </summary>
-internal static class PowerShellHybridFunctionCollisionResolver
+internal static partial class PowerShellHybridFunctionCollisionResolver
 {
     internal static PowerShellTypedCompilationResult RouteNameCollisionsToFallback(
         PowerShellTypedCompilationResult typed,
@@ -34,8 +34,12 @@ internal static class PowerShellHybridFunctionCollisionResolver
             .Where(static group => group.Count() > 1)
             .Select(static group => group.Key)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var loadBoundPaths = typed.NativeDeclarationTimingSourcePaths.ToHashSet(PowerShellCompilationPathSafety.PathComparer);
+        var loadBoundNames = typed.Methods.Where(method => method.NativeFunctionBinding is not null &&
+                loadBoundPaths.Contains(Path.GetFullPath(string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath)))
+            .Select(static method => method.SourceName).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var earlyAvailabilityNames = definitions
-            .Where(definition => sources.Any(source => source.Root.FindAll(
+            .Where(definition => !loadBoundNames.Contains(definition.Function.Name) && sources.Any(source => source.Root.FindAll(
                     node => IsCommandReferenceCandidate(node, source.InvokeCommandAliases) &&
                             (!PowerShellCompilationPathSafety.PathEquals(source.Path, definition.Path) ||
                              node.Extent.StartOffset < definition.Function.Extent.StartOffset) &&
@@ -48,8 +52,11 @@ internal static class PowerShellHybridFunctionCollisionResolver
             .Concat(earlyAvailabilityNames)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var excludedMethods = typed.Methods
-            .Where(method => fallbackNames.Contains(method.SourceName))
-            .Select(method => Path.GetFullPath(string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath) + "\0" + method.SourceName + "\0" + method.SourceLine)
+            .Where(method => fallbackNames.Contains(method.SourceName) &&
+                             !(method.ConditionalDeclarationOffset is not null && method.NativeFunctionBinding is not null))
+            .Select(method => PowerShellHybridModuleComposer.GetCompiledMethodKey(
+                string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath,
+                method.SourceName, method.SourceLine, method.ConditionalDeclarationOffset))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (excludedMethods.Count == 0)
             return typed;
@@ -61,8 +68,16 @@ internal static class PowerShellHybridFunctionCollisionResolver
             typed.TypeName,
             targetFramework,
             excludedMethods,
-            capabilities);
-        var diagnostics = definitions.Where(definition => fallbackNames.Contains(definition.Function.Name)).Select(definition =>
+            capabilities,
+            nativeDeclarationTimingSourcePaths: typed.NativeDeclarationTimingSourcePaths,
+            guardedExecutableEntryPath: typed.GuardedExecutableEntryPath);
+        var conditionalKeys = typed.Methods.Where(static method => method.ConditionalDeclarationOffset is not null && method.NativeFunctionBinding is not null)
+            .Select(method => PowerShellHybridModuleComposer.GetCompiledMethodKey(
+                string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath,
+                method.SourceName, method.SourceLine, method.ConditionalDeclarationOffset)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var diagnostics = definitions.Where(definition => fallbackNames.Contains(definition.Function.Name) &&
+            !conditionalKeys.Contains(PowerShellHybridModuleComposer.GetCompiledMethodKey(definition.Path,
+                definition.Function.Name, definition.Function.Body.Extent.StartLineNumber, definition.Function.Extent.StartOffset))).Select(definition =>
         {
             var name = definition.Function.Name;
             var message = duplicateNames.Contains(name)
@@ -92,6 +107,7 @@ internal static class PowerShellHybridFunctionCollisionResolver
         result.PromotedRegions = filtered.PromotedRegions;
         result.RegionCandidates = filtered.RegionCandidates;
         result.RegionOpportunities = filtered.RegionOpportunities;
+        result.CopySourceContextFrom(filtered);
         return result;
     }
 

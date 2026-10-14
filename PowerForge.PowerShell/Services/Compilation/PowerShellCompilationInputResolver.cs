@@ -144,7 +144,8 @@ public sealed class PowerShellCompilationInputResolver
             if (!requestedPaths.Contains(entryPoint, PowerShellCompilationPathSafety.PathComparer))
                 throw new InvalidOperationException("The executable entrypoint must also be present in the requested path set.");
             var sourceRoot = Path.GetDirectoryName(entryPoint) ?? Directory.GetCurrentDirectory();
-            var closure = PowerShellHybridDependencyResolver.DiscoverDependencies(entryPoint);
+            var closure = PowerShellHybridDependencyResolver.DiscoverDependencies(entryPoint,
+                allowDerivedPaths: (mode ?? PowerShellCompilationMode.Package) != PowerShellCompilationMode.Strict);
             var unreachable = requestedPaths.Where(path => !closure.Contains(path, PowerShellCompilationPathSafety.PathComparer)).ToArray();
             if (unreachable.Length > 0)
                 throw new InvalidOperationException($"Executable path set contains source file(s) unreachable from the entrypoint: {string.Join(", ", unreachable.Select(Path.GetFileName))}.");
@@ -266,7 +267,8 @@ public sealed class PowerShellCompilationInputResolver
         var recursiveSourceDirectories = Array.Empty<string>();
         if (resolvedKind == PowerShellCompilationArtifactKind.Executable)
         {
-            compilationSourceFiles = PowerShellHybridDependencyResolver.DiscoverDependencies(sourcePath);
+            compilationSourceFiles = PowerShellHybridDependencyResolver.DiscoverDependencies(sourcePath,
+                allowDerivedPaths: resolvedMode != PowerShellCompilationMode.Strict);
             sourceFiles = compilationSourceFiles;
         }
         else

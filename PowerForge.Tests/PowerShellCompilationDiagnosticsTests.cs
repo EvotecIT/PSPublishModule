@@ -1,3 +1,4 @@
+using System.Management.Automation.Language;
 using System.Text.Json;
 using PowerForge;
 using Xunit;
@@ -202,6 +203,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("Get-Duplicate", false)]
     [InlineData("get-duplicate", false)]
     [InlineData("Get-Duplicate", true)]
+    [InlineData("get-duplicate", true)]
     [Trait("Category", "PowerShellCompilerGate")]
     public void HybridFailureMapPreservesSameLineDuplicateDefinitionExtents(string secondName, bool conditionalDeclaration)
     {
@@ -215,26 +217,130 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        var entries = result.Manifest!.FailureMap!.Entries
-            .Where(static entry => entry.UnitName.Equals("Get-Duplicate", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(static entry => entry.SourceStartColumn).ToArray();
-        Assert.Equal(2, entries.Length);
-        Assert.NotEqual(entries[0].UnitId, entries[1].UnitId);
-        Assert.Equal(1, entries[0].SourceEndLine);
-        Assert.Equal(3, entries[1].SourceEndLine);
-        Assert.True(entries[1].SourceStartColumn > entries[0].SourceEndColumn);
-        var failure = PowerShellCompilationFailureMapper.MapRuntimeFailure(
-            result.Manifest, $"failure in {entries[1].DocumentId}:line 2");
-        Assert.Equal(entries[1].UnitId, Assert.Single(failure.Locations).UnitId);
-        var units = result.Manifest.UnitDispositionLedger!.Entries
-            .Where(static entry => entry.Name.Equals("Get-Duplicate", StringComparison.OrdinalIgnoreCase)).ToArray();
-        Assert.Equal(2, units.Length);
-        var source = File.ReadAllText(fixture.ScriptPath);
-        var declarationColumns = new[] { 1, source.LastIndexOf("function " + secondName, StringComparison.Ordinal) + 1 };
+        var manifest = result.Manifest!;
+        var plan = new PowerShellCompilationAnalyzer().AnalyzeFiles(PowerShellCompilationMode.Hybrid,
+            new[] { fixture.ScriptPath }, fixture.RootPath, manifest.TargetFramework,
+            PowerShellCompilationCapabilities.HybridModule);
+        var file = Assert.Single(plan.Files);
+        var units = file.Units.Where(static unit => unit.Kind == PowerShellCompilationUnitKind.Function).ToArray();
+        var declarations = PowerShellSourceParser.GetTopLevelFunctions(
+            Parser.ParseFile(fixture.ScriptPath, out _, out _), PowerShellCompilationCapabilities.HybridModule).ToArray();
+        Assert.Equal(conditionalDeclaration ? 3 : 2, declarations.Length);
+        Assert.Equal(declarations.Length, units.Length);
+        var relativePath = PowerShellCompilationExplanationService.NormalizeRelativePath(file.RelativePath, Path.GetFileName(file.FullPath));
+        var unitIds = units.Select(unit => PowerShellCompilationExplanationService.ComputeUnitId(relativePath, unit)).ToArray();
+        Assert.Equal(units.Length, unitIds.Distinct(StringComparer.Ordinal).Count());
+
         for (var index = 0; index < units.Length; index++)
-            Assert.Contains(units[index].DiagnosticChain, cause =>
+        {
+            var declaration = declarations[index];
+            var disposition = Assert.Single(manifest.UnitDispositionLedger!.Entries, entry => entry.UnitId == unitIds[index]);
+            var entries = manifest.FailureMap!.Entries.Where(entry => entry.UnitId == unitIds[index]).ToArray();
+            Assert.NotEmpty(entries);
+            if (conditionalDeclaration && index == 1)
+            {
+                Assert.True(disposition.EmittedClrMethod);
+                Assert.False(disposition.RetainedHostedSource);
+                Assert.All(entries, entry =>
+                {
+                    Assert.Equal(disposition.GeneratedMemberName, entry.GeneratedMemberName);
+                    Assert.True(entry.GeneratedStartLine > 0);
+                    Assert.Equal("TypedClr+PowerShellRuntime", entry.BoundaryContract);
+                    Assert.Equal(1, entry.SourceStartLine);
+                    Assert.Equal(1, entry.SourceEndLine);
+                    Assert.InRange(entry.SourceStartColumn, declaration.Body.Extent.StartColumnNumber, declaration.Body.Extent.EndColumnNumber);
+                    Assert.InRange(entry.SourceEndColumn, entry.SourceStartColumn, declaration.Body.Extent.EndColumnNumber);
+                });
+                continue;
+            }
+
+            Assert.False(disposition.EmittedClrMethod);
+            Assert.True(disposition.RetainedHostedSource);
+            var fallback = Assert.Single(entries);
+            Assert.Equal(0, fallback.GeneratedStartLine);
+            Assert.Equal("PowerShellRuntime", fallback.BoundaryContract);
+            Assert.Equal(declaration.Body.Extent.StartLineNumber, fallback.SourceStartLine);
+            Assert.Equal(declaration.Body.Extent.StartColumnNumber, fallback.SourceStartColumn);
+            Assert.Equal(declaration.Body.Extent.EndLineNumber, fallback.SourceEndLine);
+            Assert.Equal(declaration.Body.Extent.EndColumnNumber, fallback.SourceEndColumn);
+            Assert.Contains(disposition.DiagnosticChain, cause =>
                 cause.Code == PowerShellCompilationDiagnosticCode.UnsupportedSyntax &&
-                cause.Line == 1 && cause.Column == declarationColumns[index]);
+                cause.Line == declaration.Extent.StartLineNumber && cause.Column == declaration.Extent.StartColumnNumber);
+        }
+
+        var lastEntry = manifest.FailureMap!.Entries.First(entry => entry.UnitId == unitIds[unitIds.Length - 1]);
+        var failure = PowerShellCompilationFailureMapper.MapRuntimeFailure(
+            manifest, $"failure in {lastEntry.DocumentId}:line 2");
+        Assert.Equal(unitIds[unitIds.Length - 1], Assert.Single(failure.Locations).UnitId);
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void HybridFailureMapAssignsEachSameLineConditionalMethodToItsOwnUnit()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "if ($false) { function Get-Duplicate { return 1 } }; if ($true) { function Get-Duplicate { return 2 } }", ".psm1");
+        var input = new PowerShellCompilationInputResolver().Resolve(new[] { fixture.ScriptPath },
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
+        var plan = new PowerShellCompilationAnalyzer().AnalyzeFiles(PowerShellCompilationMode.Hybrid,
+            input.CompilationSourceFiles, fixture.RootPath, "net10.0", PowerShellCompilationCapabilities.HybridModule);
+        var shaped = PowerShellCompilationExplainShaper.Shape(input, plan, "net10.0", out var entry)!;
+        var methods = PowerShellCompilationExplainShaper.GetEmittedMethods(shaped, entry);
+        var ledger = PowerShellCompilationUnitDispositionLedgerBuilder.Create(plan, input.Kind, shaped,
+            fixture.ScriptPath, emittedMethods: methods);
+        var map = PowerShellCompilationDiagnosticsEvidenceBuilder.CreateFailureMap(plan, methods, ledger, shaped.PromotedRegions);
+        var declarations = PowerShellSourceParser.GetTopLevelFunctions(
+            Parser.ParseFile(fixture.ScriptPath, out _, out _), PowerShellCompilationCapabilities.HybridModule).ToArray();
+        Assert.Equal(declarations.Length, methods.Length);
+        Assert.All(methods, method =>
+        {
+            var declaration = Assert.Single(declarations,
+                candidate => candidate.Extent.StartOffset == method.ConditionalDeclarationOffset);
+            var unit = Assert.Single(ledger.Entries, candidate => candidate.GeneratedMemberName == method.GeneratedName);
+            var segments = map.Entries.Where(candidate => candidate.GeneratedMemberName == method.GeneratedName).ToArray();
+            Assert.Equal(method.SourceMap.Length, segments.Length);
+            Assert.NotEmpty(segments);
+            Assert.All(segments, segment =>
+            {
+                Assert.Equal(unit.UnitId, segment.UnitId);
+                Assert.Equal("TypedClr+PowerShellRuntime", segment.BoundaryContract);
+                Assert.True(segment.GeneratedStartLine > 0);
+                Assert.InRange(segment.SourceStartColumn, declaration.Body.Extent.StartColumnNumber, declaration.Body.Extent.EndColumnNumber);
+                Assert.InRange(segment.SourceEndColumn, segment.SourceStartColumn, declaration.Body.Extent.EndColumnNumber);
+            });
+        });
+        Assert.Equal(methods.Length, map.Entries.Where(static segment => segment.GeneratedStartLine > 0)
+            .Select(static segment => segment.UnitId).Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Theory]
+    [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Strict,
+        "[int] $value = 7; $value")]
+    [InlineData(PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid,
+        "[int] $value = 7; $value")]
+    [InlineData(PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Strict,
+        "[int]$script:Count = 1; function Get-Value { param() return $script:Count }")]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void FailureMapRetainsEmittedScriptAndModuleInitializerOwners(
+        PowerShellCompilationArtifactKind kind, PowerShellCompilationMode mode, string source)
+    {
+        using var fixture = ArtifactFixture.Create(source, kind == PowerShellCompilationArtifactKind.BinaryModule ? ".psm1" : ".ps1");
+        var input = new PowerShellCompilationInputResolver().Resolve(new[] { fixture.ScriptPath }, kind, mode);
+        var plan = new PowerShellCompilationAnalyzer().AnalyzeFiles(mode, input.CompilationSourceFiles,
+            fixture.RootPath, "net10.0", PowerShellCompilationBuildSpec.GetCapabilities(kind, mode));
+        var shaped = PowerShellCompilationExplainShaper.Shape(input, plan, "net10.0", out var entry)!;
+        var methods = PowerShellCompilationExplainShaper.GetEmittedMethods(shaped, entry);
+        var ledger = PowerShellCompilationUnitDispositionLedgerBuilder.Create(plan, kind, shaped,
+            fixture.ScriptPath, emittedMethods: methods);
+        var map = PowerShellCompilationDiagnosticsEvidenceBuilder.CreateFailureMap(plan, methods, ledger, shaped.PromotedRegions);
+        Assert.Contains(methods, static method => method.SourceName == "<script>");
+        Assert.All(methods, method =>
+        {
+            var owner = Assert.Single(ledger.Entries, unit => unit.GeneratedMemberName == method.GeneratedName);
+            var segments = map.Entries.Where(segment => segment.GeneratedMemberName == method.GeneratedName && segment.GeneratedStartLine > 0).ToArray();
+            Assert.NotEmpty(segments);
+            Assert.All(segments, segment => Assert.Equal(owner.UnitId, segment.UnitId));
+        });
     }
 
     [Fact]
