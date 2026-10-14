@@ -384,7 +384,7 @@ public static partial class WebSeoDoctor
                          .Where(static href => !string.IsNullOrWhiteSpace(href))
                          .Select(static href => href!.Trim()))
             {
-                if (ShouldSkipLink(href) || IsExternalLink(href))
+                if (ShouldSkipLink(href) || WebLinkClassifier.IsExternalLink(href))
                     continue;
                 if (!TryResolveLocalTarget(siteRoot, baseDir, href, out var resolvedPath))
                     continue;
@@ -2282,16 +2282,6 @@ public static partial class WebSeoDoctor
         return false;
     }
 
-    private static bool IsExternalLink(string href)
-    {
-        if (string.IsNullOrWhiteSpace(href))
-            return false;
-        if (href.StartsWith("//", StringComparison.Ordinal))
-            return true;
-        return href.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-               href.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
-    }
-
     private static string StripQueryAndFragment(string href)
     {
         var trimmed = href.Trim();
@@ -2319,7 +2309,7 @@ public static partial class WebSeoDoctor
         if (baseElement is null) return null;
         var href = baseElement.GetAttribute("href");
         if (string.IsNullOrWhiteSpace(href)) return null;
-        if (IsExternalLink(href)) return null;
+        if (WebLinkClassifier.IsExternalLink(href)) return null;
         if (!href.StartsWith("/", StringComparison.Ordinal))
             return null;
         return href.TrimEnd('/');
@@ -2334,7 +2324,8 @@ public static partial class WebSeoDoctor
     private static bool IsPathWithinRoot(string normalizedRoot, string candidatePath)
     {
         var full = Path.GetFullPath(candidatePath);
-        return full.StartsWith(normalizedRoot, FileSystemPathComparison);
+        return full.Equals(normalizedRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), FileSystemPathComparison)
+            || full.StartsWith(normalizedRoot, FileSystemPathComparison);
     }
 
     private static bool TryResolveLocalTarget(string siteRoot, string baseDir, string href, out string resolvedPath)
@@ -2355,7 +2346,7 @@ public static partial class WebSeoDoctor
         if (!IsPathWithinRoot(NormalizeRootPath(siteRoot), candidate))
             return false;
 
-        if (isExplicitDir)
+        if (isExplicitDir || Directory.Exists(candidate))
         {
             var dir = candidate.TrimEnd(Path.DirectorySeparatorChar);
             var indexPath = Path.Combine(dir, "index.html");
@@ -2363,7 +2354,7 @@ public static partial class WebSeoDoctor
             return true;
         }
 
-        if (Path.HasExtension(candidate))
+        if (File.Exists(candidate) || Path.HasExtension(candidate))
         {
             resolvedPath = candidate;
             return true;
@@ -2372,7 +2363,7 @@ public static partial class WebSeoDoctor
         foreach (var ext in DefaultHtmlExtensions)
         {
             var htmlCandidate = candidate + ext;
-            if (File.Exists(htmlCandidate))
+            if (IsPathWithinRoot(NormalizeRootPath(siteRoot), htmlCandidate) && File.Exists(htmlCandidate))
             {
                 resolvedPath = htmlCandidate;
                 return true;

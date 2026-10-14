@@ -1,0 +1,176 @@
+using PowerForge.Web;
+
+namespace PowerForge.Tests;
+
+public sealed class WebSiteAuditLinkTargetsTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "pf-web-link-targets-" + Guid.NewGuid().ToString("N"));
+
+    public WebSiteAuditLinkTargetsTests() => Directory.CreateDirectory(_root);
+
+    [Theory]
+    [InlineData("vscode:mcp/install?%7B%22name%22%3A%22officeimo%22%7D")]
+    [InlineData("cursor://anysphere.cursor-deeplink/mcp/install?name=officeimo&config=e30%3D")]
+    [InlineData("VSCODE:mcp/install?name=officeimo")]
+    public void Audit_DoesNotResolveApplicationUrisAsLocalFiles(string href)
+    {
+        WritePage(href);
+
+        var result = Audit();
+
+        Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
+        Assert.Equal(0, result.BrokenLinkCount);
+        Assert.Equal(0, result.LinkCount);
+    }
+
+    [Theory]
+    [InlineData("/.well-known/api-catalog")]
+    [InlineData("/.well-known/api-catalog?format=json")]
+    [InlineData("/.well-known/api-catalog#apis")]
+    public void Audit_ResolvesExistingExtensionlessFiles(string href)
+    {
+        Directory.CreateDirectory(Path.Combine(_root, ".well-known"));
+        File.WriteAllText(Path.Combine(_root, ".well-known", "api-catalog"), "{\"apis\":[]}");
+        WritePage(href);
+
+        var result = Audit();
+
+        Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
+        Assert.Equal(1, result.LinkCount);
+        Assert.Equal(0, result.BrokenLinkCount);
+    }
+
+    [Fact]
+    public void Audit_StillRejectsMissingExtensionlessTargets()
+    {
+        WritePage("/.well-known/missing");
+
+        var result = Audit();
+
+        Assert.False(result.Success);
+        Assert.Equal(1, result.BrokenLinkCount);
+        Assert.Contains(result.Errors, error => error.Contains("broken link", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("catalog")]
+    [InlineData("catalog.html")]
+    public void Audit_RejectsExistingFilesInASiblingWithTheSameRootPrefix(string fileName)
+    {
+        string sibling = _root + "-backup";
+        Directory.CreateDirectory(sibling);
+        try
+        {
+            File.WriteAllText(Path.Combine(sibling, fileName), "outside the generated site");
+            WritePage("../" + Path.GetFileName(sibling) + "/" + fileName);
+            var result = Audit();
+            // Unresolvable external paths are excluded, as in SEO; they must never count as resolved site links.
+            Assert.Equal(0, result.LinkCount);
+        }
+        finally { Directory.Delete(sibling, true); }
+    }
+
+    [Fact]
+    public void Audit_ResolvesTheSiteRootToItsIndex()
+    {
+        WritePage("/");
+        var result = Audit();
+        Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
+        Assert.Equal(1, result.LinkCount);
+        Assert.Equal(0, result.BrokenLinkCount);
+    }
+
+    [Theory]
+    [InlineData(".")]
+    [InlineData("nested/..")]
+    public void Audit_DoesNotUseASiblingHtmlFileForTheRootDirectory(string href)
+    {
+        string sibling = _root + ".html";
+        File.WriteAllText(sibling, "outside the generated site");
+        try
+        {
+            File.WriteAllText(Path.Combine(_root, "page.html"), "<html><body><a href=\"" + href + "\">Home</a></body></html>");
+            var result = Audit();
+            Assert.False(result.Success);
+            Assert.Equal(1, result.BrokenLinkCount);
+        }
+        finally { File.Delete(sibling); }
+    }
+
+    [Theory]
+    [InlineData("data:text/html,Hello", false)]
+    [InlineData("https://example.test/frame", true)]
+    [InlineData("//example.test/frame", true)]
+    public void Audit_ReferrerPolicyAppliesOnlyToNetworkFrames(string source, bool expectedWarning)
+    {
+        File.WriteAllText(Path.Combine(_root, "index.html"),
+            "<!doctype html><html><head><title>Embed</title></head><body><iframe title=\"Example\" loading=\"lazy\" src=\"" +
+            source + "\"></iframe></body></html>");
+
+        var result = Audit();
+
+        Assert.Equal(expectedWarning, result.Warnings.Any(warning => warning.Contains("missing referrerpolicy", StringComparison.Ordinal)));
+    }
+
+    [Theory]
+    [InlineData(".", "site.v1")]
+    [InlineData("nested/..", "site.v1")]
+    [InlineData("guide.v2", "site")]
+    [InlineData("guide.v2/", "site")]
+    public void Audit_ResolvesExistingDirectoriesRegardlessOfPeriods(string href, string rootName)
+    {
+        string site = Path.Combine(_root, rootName);
+        Directory.CreateDirectory(Path.Combine(site, "guide.v2"));
+        File.WriteAllText(Path.Combine(site, "guide.v2", "index.html"), "<html><head><title>Guide</title></head><body>Guide</body></html>");
+        File.WriteAllText(Path.Combine(site, "index.html"), "<html><head><title>Home</title></head><body><a href=\"" + href + "\">Page</a></body></html>");
+        var result = WebSiteAuditor.Audit(new WebAuditOptions { SiteRoot = site, CheckAssets = false, NavRequired = false });
+        Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
+        Assert.Equal(1, result.LinkCount);
+        Assert.Equal(0, result.BrokenLinkCount);
+    }
+
+    private void WritePage(string href) => File.WriteAllText(Path.Combine(_root, "index.html"),
+        "<!doctype html><html><head><title>Install</title></head><body><a href=\"" +
+        System.Net.WebUtility.HtmlEncode(href) + "\">Install</a></body></html>");
+
+    [Fact]
+    public void Audit_AppliesRouteAssertionsToDottedHtmlDirectories()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "guide.v2"));
+        File.WriteAllText(Path.Combine(_root, "guide.v2", "index.html"), "<html><head><title>Guide</title></head><body>Guide</body></html>");
+        var required = WebSiteAuditor.Audit(new WebAuditOptions {
+            SiteRoot = _root, CheckLinks = false, CheckAssets = false, NavRequired = false, RequiredRoutes = ["/guide.v2"]
+        });
+        Assert.Equal(0, required.MissingRequiredRouteCount);
+        var forbidden = WebSiteAuditor.Audit(new WebAuditOptions {
+            SiteRoot = _root, CheckLinks = false, CheckAssets = false, NavRequired = false, ForbiddenRoutes = ["/guide.v2"]
+        });
+        Assert.Equal(1, forbidden.PresentForbiddenRouteCount);
+    }
+
+    [Theory]
+    [InlineData("guide.html", "/guide")]
+    [InlineData("guide.htm", "/guide")]
+    [InlineData("catalog", "/catalog")]
+    public void Audit_ResolvesLocalizedFlatFilesWithoutForcingDirectoryMode(string target, string href)
+    {
+        string page = Path.Combine(_root, "pl", "page");
+        Directory.CreateDirectory(page);
+        File.WriteAllText(Path.Combine(_root, "pl", target), "<html><head><title>Target</title></head><body>Target</body></html>");
+        File.WriteAllText(Path.Combine(page, "index.html"), "<html><head><title>Page</title></head><body><a href=\"" + href + "\">Target</a></body></html>");
+        var result = Audit();
+        Assert.True(result.Success, string.Join(Environment.NewLine, result.Errors));
+        Assert.Equal(0, result.BrokenLinkCount);
+        Assert.Equal(1, result.LinkCount);
+    }
+
+    private WebAuditResult Audit() => WebSiteAuditor.Audit(new WebAuditOptions
+    {
+        SiteRoot = _root,
+        CheckAssets = false,
+        NavRequired = false,
+        MediaProfiles = new[] { new WebAuditMediaProfile { Match = "**", RequireIframeReferrerPolicy = true } }
+    });
+
+    public void Dispose() => Directory.Delete(_root, true);
+}
