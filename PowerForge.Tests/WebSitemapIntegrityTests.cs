@@ -141,6 +141,37 @@ public sealed class WebSitemapIntegrityTests
         });
     }
 
+    [Fact]
+    public void EmptyOptionalSelectionsRemoveStaleOutputsAndIndexReferences()
+    {
+        WithSite(root =>
+        {
+            var entry = new WebSitemapEntry { Path = "/news/story/", PublicationDate = DateTimeOffset.UtcNow.AddHours(-1).ToString("O"),
+                ImageUrls = new[] { "/image.png" }, VideoUrls = new[] { "/video.mp4" } };
+            var options = new WebSitemapOptions { SiteRoot = root, BaseUrl = "https://example.test", IncludeHtmlFiles = false, IncludeTextFiles = false,
+                Entries = new[] { entry }, NewsSitemap = new WebSitemapNewsOptions(), ImageSitemap = new WebSitemapImageOptions(),
+                VideoSitemap = new WebSitemapVideoOptions(), SitemapIndexPath = string.Empty };
+            var first = WebSitemapGenerator.Generate(options);
+            var optional = new[] { first.NewsOutputPath!, first.ImageOutputPath!, first.VideoOutputPath! };
+            Assert.All(optional, path => Assert.True(File.Exists(path)));
+            entry.PublicationDate = DateTimeOffset.UtcNow.AddDays(-3).ToString("O");
+            entry.ImageUrls = Array.Empty<string>();
+            entry.VideoUrls = Array.Empty<string>();
+            var empty = WebSitemapGenerator.Generate(options);
+            Assert.Null(empty.NewsOutputPath);
+            Assert.Null(empty.ImageOutputPath);
+            Assert.Null(empty.VideoOutputPath);
+            Assert.All(optional, path => { Assert.False(File.Exists(path)); Assert.DoesNotContain(path, empty.XmlOutputPaths); });
+            Assert.Single(XDocument.Load(empty.IndexOutputPath!).Root!.Elements());
+            Assert.True(File.Exists(empty.OutputPath));
+            options.Entries = Array.Empty<WebSitemapEntry>();
+            var none = WebSitemapGenerator.Generate(options);
+            Assert.Empty(none.XmlOutputPaths);
+            Assert.Null(none.IndexOutputPath);
+            Assert.False(File.Exists(empty.OutputPath));
+        });
+    }
+
     private static void WithSite(Action<string> action)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-sitemap-integrity-" + Guid.NewGuid().ToString("N"));

@@ -30,7 +30,7 @@ public class WebSitemapProtocolSchemasTests
             Assert.True(File.Exists(result.SitemapIndexSchemaPath));
             Assert.Equal(root, result.OutputDirectory);
             Assert.Contains(result.Notes, note => note.Contains("published sitemaps.org XSDs", StringComparison.Ordinal));
-            Assert.Contains(result.Notes, note => note.Contains("XHTML language alternate", StringComparison.Ordinal));
+            Assert.Contains(result.Notes, note => note.Contains("require their corresponding schemas", StringComparison.Ordinal));
             Assert.Contains("XML Schema for Sitemap files", File.ReadAllText(result.SitemapSchemaPath), StringComparison.Ordinal);
             Assert.Contains("XML Schema for Sitemap index files", File.ReadAllText(result.SitemapIndexSchemaPath), StringComparison.Ordinal);
         }
