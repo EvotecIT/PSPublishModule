@@ -11,27 +11,12 @@ public static class WebSitemapProtocolSchemas
     /// <summary>Default file name for the bundled sitemap index schema.</summary>
     public const string SitemapIndexSchemaFileName = "siteindex.xsd";
 
-    private const string SitemapSchemaResourceName = "PowerForge.Web.Assets.SitemapProtocol.sitemap.xsd";
-    private const string SitemapIndexSchemaResourceName = "PowerForge.Web.Assets.SitemapProtocol.siteindex.xsd";
-
-    private static readonly string[] SchemaNotes =
-    {
-        "These files mirror the published sitemaps.org XSDs for strict offline schema validation.",
-        "They do not allow PowerForge-generated XHTML language alternate links or Google extension elements.",
-        "Pair them with content checks for protocol rules that the published XSDs do not fully encode."
-    };
-
     /// <summary>Gets the bundled sitemap.xsd content.</summary>
-    public static string GetSitemapSchema()
-        => ReadResourceText(SitemapSchemaResourceName);
-
+    public static string GetSitemapSchema() => Protocols.Sitemaps.SitemapSchemas.GetSitemapSchema();
     /// <summary>Gets the bundled siteindex.xsd content.</summary>
-    public static string GetSitemapIndexSchema()
-        => ReadResourceText(SitemapIndexSchemaResourceName);
-
-    /// <summary>Gets compatibility notes for consumers using the bundled schemas.</summary>
-    public static string[] GetCompatibilityNotes()
-        => (string[])SchemaNotes.Clone();
+    public static string GetSitemapIndexSchema() => Protocols.Sitemaps.SitemapSchemas.GetSitemapIndexSchema();
+    /// <summary>Gets validation compatibility notes.</summary>
+    public static string[] GetCompatibilityNotes() => Protocols.Sitemaps.SitemapSchemas.GetCompatibilityNotes();
 
     /// <summary>Writes the bundled schemas to <paramref name="outputDirectory"/>.</summary>
     public static WebSitemapProtocolSchemaExportResult ExportToDirectory(string outputDirectory, bool overwrite = true)
@@ -64,12 +49,4 @@ public static class WebSitemapProtocolSchemas
         File.WriteAllText(path, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
 
-    private static string ReadResourceText(string resourceName)
-    {
-        var assembly = typeof(WebSitemapProtocolSchemas).Assembly;
-        using var stream = assembly.GetManifestResourceStream(resourceName)
-            ?? throw new InvalidOperationException($"Embedded sitemap schema resource not found: {resourceName}");
-        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-        return reader.ReadToEnd();
-    }
 }

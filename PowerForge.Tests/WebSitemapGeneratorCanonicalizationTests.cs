@@ -850,6 +850,7 @@ public class WebSitemapGeneratorCanonicalizationTests
                     {
                         Path = "/news/release/",
                         Title = "Release",
+                        PublicationDate = DateTimeOffset.UtcNow.AddHours(-1).ToString("O"),
                         ImageUrls = new[] { "/assets/release.png" },
                         VideoUrls = new[] { "/media/release.mp4" }
                     }

@@ -187,7 +187,7 @@ public class WebPipelineRunnerSitemapTests
                         {
                           "path": "/news/launch/",
                           "title": "Launch",
-                          "lastmod": "2026-02-18"
+                          "lastmod": "2026-02-18", "publicationDate": "__RECENT_PUBLICATION__"
                         }
                       ],
                       "newsOut": "./site/sitemap-news.xml",
@@ -200,7 +200,7 @@ public class WebPipelineRunnerSitemapTests
                     }
                   ]
                 }
-                """);
+                """.Replace("__RECENT_PUBLICATION__", DateTimeOffset.UtcNow.AddHours(-1).ToString("O")));
 
             var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
             Assert.Single(result.Steps);

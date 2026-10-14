@@ -1145,9 +1145,6 @@
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
       },
-      "powerforge.indexnow": {
-        "type": "Project"
-      },
       "powerforge.powershell": {
         "type": "Project",
         "dependencies": {
@@ -1196,6 +1193,7 @@
           "Magick.NET-Q8-AnyCPU": "[14.17.2, )",
           "OfficeIMO.Markdown": "[3.4.4, )",
           "PowerForge": "[3.0.169, )",
+          "PowerForge.Web.Protocols": "[3.0.170, )",
           "Scriban": "[7.5.0, )",
           "YamlDotNet": "[18.1.0, )"
         }
@@ -1205,9 +1203,12 @@
         "dependencies": {
           "DBAClientX.SQLite": "[1.0.10, )",
           "NuGet.Versioning": "[7.9.0, )",
-          "PowerForge.IndexNow": "[3.0.169, )",
-          "PowerForge.Web": "[3.0.169, )"
+          "PowerForge.Web": "[3.0.169, )",
+          "PowerForge.Web.Protocols": "[3.0.170, )"
         }
+      },
+      "powerforge.web.protocols": {
+        "type": "Project"
       },
       "powerforgestudio.domain": {
         "type": "Project"
