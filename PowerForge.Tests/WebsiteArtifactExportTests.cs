@@ -170,6 +170,16 @@ public sealed class WebsiteArtifactExportTests
                 Path.Combine(Root, "Build", "Export-WebsiteArtifacts.ps1"), arguments, TimeSpan.FromMinutes(1), workingDirectory: Root));
         }
 
-        public void Dispose() => Directory.Delete(Root, recursive: true);
+        public void Dispose()
+        {
+            // Windows may briefly retain the imported binary mapping after the child exits.
+            // Retry actual deletion, but still fail if the fixture cannot be removed.
+            for (var attempt = 0; ; attempt++)
+            {
+                try { Directory.Delete(Root, recursive: true); return; }
+                catch (IOException) when (OperatingSystem.IsWindows() && attempt < 20) { Thread.Sleep(100); }
+                catch (UnauthorizedAccessException) when (OperatingSystem.IsWindows() && attempt < 20) { Thread.Sleep(100); }
+            }
+        }
     }
 }

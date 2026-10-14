@@ -36,6 +36,7 @@ public static partial class WebApiDocsGenerator
     private static ApiDocModel ParseXmlDocuments(
         IReadOnlyList<string> xmlPaths,
         IReadOnlyDictionary<string, Assembly> assemblies,
+        IReadOnlyDictionary<string, string> assemblyPaths,
         WebApiDocsOptions options,
         List<string> warnings)
     {
@@ -47,8 +48,12 @@ public static partial class WebApiDocsGenerator
         foreach (var source in documents)
             foreach (var member in source.Document.Root!.Element("members")!.Elements("member"))
                 if (member.Attribute("name")?.Value is { Length: > 0 } name) members.TryAdd(name, member);
+        var frameworkFallbacks = new Dictionary<string, XElement>(StringComparer.Ordinal);
         foreach (var assembly in assemblies.Values)
-            ResolveImplicitInheritDoc(assembly, members, options, warnings);
+            ResolveImplicitInheritDoc(assembly, members, assemblyPaths[assembly.GetName().Name!], frameworkFallbacks, warnings);
+        // A later assembly may supply real framework XML. Synthetic records must not shadow it.
+        foreach (var fallback in frameworkFallbacks)
+            members.TryAdd(fallback.Key, fallback.Value);
         foreach (var source in documents)
         {
             var xmlPath = source.Path;

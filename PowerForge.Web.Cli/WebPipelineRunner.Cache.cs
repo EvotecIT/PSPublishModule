@@ -270,8 +270,14 @@ internal static partial class WebPipelineRunner
 
         if (GetString(step, "task") is null || string.Equals(GetString(step, "task"), "apidocs", StringComparison.OrdinalIgnoreCase))
         {
-            var assembly = ResolvePath(baseDir, GetString(step, "assembly"));
-            if (!string.IsNullOrWhiteSpace(assembly) && File.Exists(assembly))
+            var assemblies = (GetArrayOfStrings(step, "assemblies") ?? GetArrayOfStrings(step, "assemblyPaths") ?? Array.Empty<string>())
+                .Append(GetString(step, "assembly"))
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => ResolvePath(baseDir, path))
+                .OfType<string>()
+                .Where(File.Exists)
+                .Distinct(WebCliHelpers.FileSystemPathComparer);
+            foreach (var assembly in assemblies)
                 foreach (var input in WebApiDocumentationInputs.Discover(assembly)) yield return input;
         }
 
