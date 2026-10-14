@@ -1,12 +1,86 @@
 using System;
 using System.IO;
 using System.Reflection;
+using System.Security;
+using System.Text.Json;
 using Xunit;
 
 namespace PowerForge.Tests;
 
 public sealed class DotnetPublisherTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public void Publish_RestoresFromNormalAndMultipleAdditionalFeeds(bool isolatedArtifacts)
+    {
+        using var temporary = new TemporaryDirectory();
+        var root = temporary.Path;
+        var feeds = new[]
+        {
+            Path.Combine(root, "Normal feed"),
+            Path.Combine(root, "Additional feed A, local"),
+            Path.Combine(root, "Additional feed B")
+        };
+        var packageIds = new[] { "Publish.Normal", "Publish.AdditionalA", "Publish.AdditionalB" };
+        for (var index = 0; index < feeds.Length; index++)
+            TestPackageFactory.Create(Path.Combine(feeds[index], packageIds[index] + ".1.0.0.nupkg"), packageIds[index], "1.0.0");
+
+        File.WriteAllText(Path.Combine(root, "NuGet.Config"),
+            $"<configuration><packageSources><clear/><add key=\"normal\" value=\"{SecurityElement.Escape(feeds[0])}\"/></packageSources></configuration>");
+        var packageCache = Path.Combine(root, "packages");
+        var project = Path.Combine(root, "Module.csproj");
+        File.WriteAllText(project, $"""
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>net10.0</TargetFramework>
+                <RestorePackagesPath>{SecurityElement.Escape(packageCache)}</RestorePackagesPath>
+                <NuGetAudit>false</NuGetAudit>
+              </PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="Publish.Normal" Version="1.0.0" />
+                <PackageReference Include="Publish.AdditionalA" Version="1.0.0" />
+                <PackageReference Include="Publish.AdditionalB" Version="1.0.0" />
+              </ItemGroup>
+            </Project>
+            """);
+        File.WriteAllText(Path.Combine(root, "Value.cs"), "public sealed class Value { public int Number => 42; }");
+
+        var logger = new PublishLogger();
+        var publisher = new DotnetPublisher(logger);
+        string published;
+        try
+        {
+            published = publisher.Publish(project, "Release", new[] { "net10.0" }, "1.2.3",
+                isolatedArtifacts ? Path.Combine(root, "artifacts") : null,
+                new[] { feeds[1], feeds[2], feeds[1] })["net10.0"];
+        }
+        catch (InvalidOperationException error)
+        {
+            throw new Xunit.Sdk.XunitException(error.Message + Environment.NewLine + logger.ErrorMessage);
+        }
+
+        Assert.True(File.Exists(Path.Combine(published, "Module.dll")));
+        for (var index = 0; index < feeds.Length; index++)
+        {
+            var metadataPath = Path.Combine(packageCache, packageIds[index].ToLowerInvariant(), "1.0.0", ".nupkg.metadata");
+            using var metadata = JsonDocument.Parse(File.ReadAllText(metadataPath));
+            Assert.Equal(feeds[index], metadata.RootElement.GetProperty("source").GetString());
+        }
+    }
+
+    private sealed class PublishLogger : ILogger
+    {
+        public bool IsVerbose => false;
+        public string? ErrorMessage { get; private set; }
+        public void Error(string message) => ErrorMessage = message;
+        public void Info(string message) { }
+        public void Success(string message) { }
+        public void Warn(string message) { }
+        public void Verbose(string message) { }
+    }
+
     [Fact]
     public void BuildPublishArguments_AppendsAdditionalRestoreSources()
     {
@@ -27,7 +101,7 @@ public sealed class DotnetPublisherTests
 
         Assert.Contains(args, arg => string.Equals(
             arg,
-            $"-p:RestoreAdditionalProjectSources={sourceA};{sourceB}",
+            $"-p:RestoreAdditionalProjectSources=\"{sourceA};{sourceB}\"",
             StringComparison.Ordinal));
         Assert.Single(args, arg => arg.StartsWith("-p:RestoreAdditionalProjectSources=", StringComparison.Ordinal));
         Assert.Contains(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "Module.csproj"), args);
