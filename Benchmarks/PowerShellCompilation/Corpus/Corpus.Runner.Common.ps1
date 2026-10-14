@@ -53,6 +53,14 @@ function Get-CorpusCliFailureEvidence {
     return $null
 }
 
+function Get-CorpusOwnedProcessFailureEvidence {
+    param([Exception] $Exception)
+    if ($Exception.Data.Contains('PowerForgeOwnedProcess')) {
+        return $Exception.Data['PowerForgeOwnedProcess']
+    }
+    return $null
+}
+
 function ConvertFrom-CorpusCliProcess {
     param($Process, [string] $Label = 'PowerForge CLI', [string] $ProcessEvidencePath)
     # Keep exact streams before parsing so malformed/empty output cannot erase the failure.

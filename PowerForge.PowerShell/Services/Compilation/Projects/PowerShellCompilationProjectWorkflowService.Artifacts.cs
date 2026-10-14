@@ -205,8 +205,10 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
     public PowerShellCompilationProjectResult Diagnose(string projectPath, IEnumerable<string>? targetNames = null)
         => InspectDiagnostics(projectPath, targetNames, verifyArtifact: true);
 
+    /// <summary>Authenticates acquired bytes and locks; artifact consumers also require the current project revision.</summary>
     private static PowerShellCompilationProjectEnvironment ReadEnvironment(
-        PowerShellCompilationProjectManifestService.ProjectContext context)
+        PowerShellCompilationProjectManifestService.ProjectContext context,
+        bool requireCurrentProjectRevision = true)
     {
         var path = context.Resolve(".powerforge/environment/environment.json");
         if (!File.Exists(path)) throw new FileNotFoundException("Run project restore before build.", path);
@@ -214,7 +216,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         if (environment.SchemaVersion != 3)
             throw new InvalidDataException($"Unsupported isolated environment schema {environment.SchemaVersion}; rerun project restore to refresh the acquired environment and its SDK download package inventory.");
         var projectSha = PowerShellCompilationProjectManifestService.ComputeSha256(context.ProjectPath);
-        if (!environment.ProjectSha256.Equals(projectSha, StringComparison.OrdinalIgnoreCase))
+        if (requireCurrentProjectRevision && !environment.ProjectSha256.Equals(projectSha, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The isolated environment belongs to a different project-manifest revision; run restore again.");
         var expectedPackageRoot = context.Resolve(".powerforge/environment/packages");
         if (!PowerShellCompilationPathSafety.PathEquals(environment.PackageRoot, expectedPackageRoot))

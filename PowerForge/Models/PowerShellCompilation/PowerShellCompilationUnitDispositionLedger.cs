@@ -363,6 +363,8 @@ public sealed class PowerShellCompilationUnitDisposition
 /// </summary>
 public sealed class PowerShellCompilationUnitDispositionLedger
 {
+    private readonly Dictionary<PowerShellCompiledMethod, PowerShellCompilationUnitDisposition> _emittedMethodOwners = new();
+
     /// <summary>Creates a final ledger.</summary>
     [JsonConstructor]
     public PowerShellCompilationUnitDispositionLedger(
@@ -372,6 +374,25 @@ public sealed class PowerShellCompilationUnitDispositionLedger
         Entries = Array.AsReadOnly((entries ?? Array.Empty<PowerShellCompilationUnitDisposition>()).ToArray());
         DeliveryRuntimeCauses = Array.AsReadOnly((deliveryRuntimeCauses ?? Array.Empty<string>()).ToArray());
     }
+
+    /// <summary>Keeps final emitter-instance ownership alongside the immutable authored-unit records.</summary>
+    internal PowerShellCompilationUnitDispositionLedger(
+        IReadOnlyList<PowerShellCompilationUnitDisposition> entries,
+        IReadOnlyList<string> deliveryRuntimeCauses,
+        IEnumerable<KeyValuePair<PowerShellCompiledMethod, PowerShellCompilationUnitDisposition>> emittedMethodOwners)
+        : this(entries, deliveryRuntimeCauses)
+    {
+        foreach (var binding in emittedMethodOwners)
+        {
+            if (!Entries.Contains(binding.Value))
+                throw new InvalidOperationException("An emitted method owner is outside the final authored-unit ledger.");
+            _emittedMethodOwners.Add(binding.Key, binding.Value);
+        }
+    }
+
+    /// <summary>Returns only the exact emitter instance's owner; serialized ledgers do not recreate build-time bindings.</summary>
+    internal PowerShellCompilationUnitDisposition? GetEmittedMethodOwner(PowerShellCompiledMethod method)
+        => _emittedMethodOwners.TryGetValue(method, out var owner) ? owner : null;
 
     /// <summary>Ledger schema version.</summary>
     public int SchemaVersion => 5;

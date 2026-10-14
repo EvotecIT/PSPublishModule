@@ -379,6 +379,91 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         });
     }
 
+    [Theory]
+    [InlineData("empty", 0, true)]
+    [InlineData("comment-only", 0, true)]
+    [InlineData("declaration-only", 1, true)]
+    [InlineData("parameter-only", 1, false)]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void FailureMapPreservesEmptyAndParameterOwnedExecutableRoots(
+        string caseName, int authoredUnits, bool syntheticNoOp)
+    {
+        var source = caseName switch
+        {
+            "empty" => string.Empty,
+            "comment-only" => "  \n# Empty entrypoint\n",
+            "declaration-only" => "# Empty entrypoint\nfunction Get-Answer { return 42 }",
+            "parameter-only" => "param([int] $Count = 4)",
+            _ => throw new ArgumentOutOfRangeException(nameof(caseName))
+        };
+        using var fixture = ArtifactFixture.Create(source);
+        var input = new PowerShellCompilationInputResolver().Resolve(new[] { fixture.ScriptPath },
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Strict);
+        var plan = new PowerShellCompilationAnalyzer().AnalyzeFiles(input.Mode, input.CompilationSourceFiles,
+            fixture.RootPath, "net10.0", PowerShellCompilationCapabilities.TypedExecutable);
+        var shaped = PowerShellCompilationExplainShaper.Shape(input, plan, "net10.0", out var entry)!;
+        var methods = PowerShellCompilationExplainShaper.GetEmittedMethods(shaped, entry);
+        var root = Assert.Single(methods, method => method.SourceName == "<script>");
+        Assert.Equal(syntheticNoOp, root.IsSyntheticNoOpExecutableEntry);
+        var ledger = PowerShellCompilationUnitDispositionLedgerBuilder.Create(plan, input.Kind, shaped,
+            fixture.ScriptPath, emittedMethods: methods);
+        var map = PowerShellCompilationDiagnosticsEvidenceBuilder.CreateFailureMap(plan, methods, ledger);
+        Assert.Equal(authoredUnits, plan.TotalUnits);
+        Assert.Equal(authoredUnits, ledger.AnalyzedUnits);
+        Assert.Equal(authoredUnits, ledger.EmittedUnits);
+        Assert.Equal(syntheticNoOp ? 0 : 1, ledger.Entries.Count(unit => unit.Kind == PowerShellCompilationUnitKind.Script));
+        Assert.All(map.Entries, segment => Assert.Contains(ledger.Entries, unit => unit.UnitId == segment.UnitId));
+        Assert.All(methods.Where(method => !method.IsSyntheticNoOpExecutableEntry),
+            method => Assert.Contains(map.Entries, segment => segment.GeneratedMemberName == method.GeneratedName));
+        if (syntheticNoOp)
+        {
+            Assert.DoesNotContain(map.Entries, segment => segment.GeneratedMemberName == root.GeneratedName);
+        }
+        else
+        {
+            var unboundCopy = new PowerShellCompiledMethod(root.SourceName, root.GeneratedName,
+                root.ReturnType, root.Parameters, root.SourceLine, root.SourcePath);
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                PowerShellCompilationDiagnosticsEvidenceBuilder.CreateFailureMap(plan, new[] { unboundCopy }, ledger));
+            Assert.Contains("has no final unit-disposition owner", error.Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void FailureMapBindsSameNamedExecutableAndFunctionMethodsToDistinctFinalOwners()
+    {
+        using var fixture = ArtifactFixture.Create(
+            "param([int] $Count = 4)\nfunction Invoke { param([int] $Value) return $Value * 2 }\nInvoke $Count");
+        var input = new PowerShellCompilationInputResolver().Resolve(new[] { fixture.ScriptPath },
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
+        var target = PowerShellCompilationTargetContractService.Create(input.Kind, input.Mode,
+            "net10.0", "win-x64", false, false, PowerShellCompilationExecutableOptimization.None, true);
+        var plan = new PowerShellCompilationAnalyzer().Analyze(input, input.Mode, "net10.0",
+            PowerShellCompilationResourceMode.Declared, null, null, fixture.OutputPath, target);
+        var shaped = PowerShellCompilationExplainShaper.Shape(input, plan, "net10.0", out var entry)!;
+        Assert.NotNull(entry);
+        Assert.NotNull(entry.EntryPointMethod.NativeFunctionBinding);
+        var methods = PowerShellCompilationExplainShaper.GetEmittedMethods(shaped, entry);
+        var function = Assert.Single(methods, method => method.SourceName == "Invoke");
+        Assert.NotSame(function, entry.EntryPoint.Method);
+        Assert.Equal(function.GeneratedName, entry.EntryPoint.Method.GeneratedName);
+        Assert.Equal(function.SourcePath, entry.EntryPoint.Method.SourcePath);
+        var ledger = PowerShellCompilationUnitDispositionLedgerBuilder.Create(plan, input.Kind, shaped,
+            fixture.ScriptPath, emittedMethods: methods);
+        var map = PowerShellCompilationDiagnosticsEvidenceBuilder.CreateFailureMap(plan, methods, ledger);
+        var rootOwner = Assert.Single(ledger.Entries, unit => unit.Kind == PowerShellCompilationUnitKind.Script);
+        var functionOwner = Assert.Single(ledger.Entries, unit => unit.Kind == PowerShellCompilationUnitKind.Function);
+        Assert.NotEqual(rootOwner.UnitId, functionOwner.UnitId);
+        foreach (var pair in new[] { (Method: entry.EntryPoint.Method, Owner: rootOwner), (Method: function, Owner: functionOwner) })
+        {
+            var segments = map.Entries.Where(segment => segment.UnitId == pair.Owner.UnitId).ToArray();
+            Assert.Equal(pair.Method.SourceMap.Length, segments.Length);
+            Assert.NotEmpty(segments);
+            Assert.All(segments, segment => Assert.Equal(pair.Method.GeneratedName, segment.GeneratedMemberName));
+        }
+    }
+
     [Fact]
     [Trait("Category", "PowerShellCompilation")]
     public void DiagnosticsRedactPathsAndSecretAssignments()

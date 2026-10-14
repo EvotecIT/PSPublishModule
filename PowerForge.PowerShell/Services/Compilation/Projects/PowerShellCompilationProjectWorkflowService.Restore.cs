@@ -14,10 +14,11 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
     {
         var context = PowerShellCompilationProjectManifestService.Open(projectPath);
         var artifacts = SelectArtifacts(context, targetNames);
-        // Offline verification must reject stale or altered acquired inputs before any SDK consumer.
+        // Authenticate the previous acquisition before offline SDK work. A successful restore
+        // then binds those verified inputs to the current revision; stale test evidence stays invalid.
         if (offline)
         {
-            try { _ = ReadEnvironment(context); }
+            try { _ = ReadEnvironment(context, requireCurrentProjectRevision: false); }
             catch (Exception exception)
             {
                 return Complete("restore", context.ProjectPath, artifacts.Select(artifact => Fail(artifact, exception)));

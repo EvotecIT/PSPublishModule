@@ -113,6 +113,50 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         }
     }
 
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Project_OfflineRestoreRejectsTamperedHistoricalEnvironmentAfterInvocationEdit()
+    {
+        using var fixture = ArtifactFixture.Create("return 7", compactPath: true);
+        var project = Path.Combine(fixture.RootPath, "p.json");
+        var service = new PowerShellCompilationProjectManifestService();
+        var manifest = CreateInvocationManifest(service, project, fixture);
+        var workflow = new PowerShellCompilationProjectWorkflowService();
+        service.Save(project, manifest);
+        AssertProjectSuccess(workflow.Lock(project));
+        AssertProjectSuccess(workflow.Restore(project));
+        var artifact = Assert.Single(manifest.Artifacts);
+        var environmentPath = Path.Combine(fixture.RootPath, ".powerforge", "environment", "environment.json");
+        var environment = JsonSerializer.Deserialize<PowerShellCompilationProjectEnvironment>(
+            File.ReadAllText(environmentPath), PowerShellCompilationProjectManifestService.JsonOptions)!;
+        var package = environment.Packages.First();
+        var archivePath = Path.Combine(environment.PackageRoot, package.Id.ToLowerInvariant(),
+            package.Version.ToLowerInvariant(), package.Id.ToLowerInvariant() + "." + package.Version.ToLowerInvariant() + ".nupkg");
+        var archiveSha = PowerShellCompilationProjectManifestService.ComputeSha256(archivePath);
+        var lockPath = Path.Combine(fixture.RootPath, Assert.Single(environment.ResolvedLocks).Path);
+        var lockBytes = File.ReadAllBytes(lockPath);
+
+        Directory.CreateDirectory(Path.Combine(fixture.RootPath, "requalified"));
+        artifact.TestWorkingDirectory = "requalified";
+        service.Save(project, manifest);
+        var projectBytes = File.ReadAllBytes(project);
+        Assert.NotEqual(environment.ProjectSha256, PowerShellCompilationProjectManifestService.ComputeSha256(project));
+        environment.EnvironmentSha256 = new string('0', 64);
+        File.WriteAllText(environmentPath, JsonSerializer.Serialize(environment, PowerShellCompilationProjectManifestService.JsonOptions));
+        var tamperedEnvironmentBytes = File.ReadAllBytes(environmentPath);
+
+        var restored = workflow.Restore(project, offline: true);
+
+        Assert.False(restored.Succeeded);
+        Assert.Contains("environment evidence differs from its recorded content identity", Assert.Single(restored.Targets).Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(tamperedEnvironmentBytes, File.ReadAllBytes(environmentPath));
+        Assert.Equal(projectBytes, File.ReadAllBytes(project));
+        Assert.Equal(lockBytes, File.ReadAllBytes(lockPath));
+        Assert.Equal(archiveSha, PowerShellCompilationProjectManifestService.ComputeSha256(archivePath));
+        Assert.False(Directory.Exists(Path.Combine(fixture.RootPath, ".powerforge", "build")));
+        Assert.False(Directory.Exists(Path.Combine(fixture.RootPath, ".powerforge", "i")));
+    }
+
     [Theory]
     [InlineData("../outside", "escapes the project root")]
     [InlineData("absolute", "must be relative")]

@@ -63,7 +63,7 @@ function Invoke-WorkflowCliOperation {
         return $result
     } catch {
         Write-Utf8Json -Path $EvidencePath -Value ([ordered]@{succeeded=$false;error=$_.Exception.Message;
-            cliFailure=(Get-CorpusCliFailureEvidence $_.Exception)})
+            cliFailure=(Get-CorpusCliFailureEvidence $_.Exception);ownedProcess=(Get-CorpusOwnedProcessFailureEvidence $_.Exception)})
         throw
     }
 }
@@ -495,7 +495,7 @@ function Invoke-WholeWorkflowQualification {
     }
     } catch {
         Write-Utf8Json -Path (Join-Path $evidenceRoot 'qualification-failure.json') -Value ([ordered]@{
-            id=$Entry.id;succeeded=$false;error=$_.Exception.Message;evidenceRoot=$evidenceRoot
+            id=$Entry.id;succeeded=$false;error=$_.Exception.Message;evidenceRoot=$evidenceRoot;ownedProcess=(Get-CorpusOwnedProcessFailureEvidence $_.Exception)
         })
         throw
     } finally {
@@ -509,7 +509,7 @@ function Invoke-WholeWorkflowQualification {
                     $qualificationResult['fixtureStop'] = $fixtureStop
                 }
             } catch {
-                Write-Utf8Json -Path (Join-Path $evidenceRoot 'fixture-cleanup-failure.json') -Value ([ordered]@{succeeded=$false;error=$_.Exception.Message})
+                Write-Utf8Json -Path (Join-Path $evidenceRoot 'fixture-cleanup-failure.json') -Value ([ordered]@{succeeded=$false;error=$_.Exception.Message;ownedProcess=(Get-CorpusOwnedProcessFailureEvidence $_.Exception)})
                 throw
             }
         }

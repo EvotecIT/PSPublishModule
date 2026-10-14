@@ -208,12 +208,12 @@ try {
         } catch {
             if ($entryEvidenceRoot -and (Test-Path -LiteralPath $entryEvidenceRoot -PathType Container)) {
                 Write-Utf8Json -Path (Join-Path $entryEvidenceRoot 'qualification-failure.json') -Value ([ordered]@{
-                    id=$entry.id;succeeded=$false;error=$_.Exception.Message;evidenceRoot=$entryEvidenceRoot
+                    id=$entry.id;succeeded=$false;error=$_.Exception.Message;evidenceRoot=$entryEvidenceRoot;ownedProcess=(Get-CorpusOwnedProcessFailureEvidence $_.Exception)
                 })
             }
             $results.Add([ordered]@{ id = $entry.id; succeeded = $false; emittedClrMethod = $false;
                 wholeArtifactWorkflowQualified = $false; scenarioCount = 0; error = $_.Exception.Message;
-                evidenceRoot = $entryEvidenceRoot; cliFailure = (Get-CorpusCliFailureEvidence $_.Exception) })
+                evidenceRoot = $entryEvidenceRoot; cliFailure = (Get-CorpusCliFailureEvidence $_.Exception); ownedProcess = (Get-CorpusOwnedProcessFailureEvidence $_.Exception) })
         }
     }
 

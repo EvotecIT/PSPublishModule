@@ -110,14 +110,18 @@ test('compiler gate derives an omitted RID from a supported host before reaching
   assert.equal(result.dotnetInvoked, true);
   assert.equal(result.capabilities.runtimeIdentifier, result.hostPlatform === 'Windows' ? 'win-x64' : 'linux-x64');
   assert.equal(result.capabilities.hostPlatform, result.hostPlatform);
-  for (const family of ['conditional declaration execution', 'retained executable console presentation']) {
+  assert.equal(result.capabilities.performancePolicy, 'Enforce');
+  for (const family of ['empty executable entry', 'corpus performance disposition', 'final emitted unit ownership', 'conditional declaration execution', 'retained executable console presentation']) {
     assert.ok(result.capabilities.requiredFamilies.includes(family), family);
   }
   for (const method of ['Build_PackageConsolePreservesFormattingStreamsAndAuthoredErrors']) {
     assert.ok(result.filter.split('|').includes('FullyQualifiedName~PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.' + method), method);
   }
+  for (const method of ['Build_EmptyExecutableEntryPointExitsWithoutOutput', 'PublicCorpusPerformancePolicyRecordsOnlyKnownTimingBudgets']) {
+    assert.ok(result.filter.split('|').includes('FullyQualifiedName~PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.' + method), method);
+  }
   if (result.hostPlatform === 'Windows') {
-    for (const family of ['project Windows launch path', 'project declared test invocation', 'project legacy payload path', 'native source load timing', 'native command region execution', 'native Hybrid executable console presentation']) {
+    for (const family of ['project Windows launch path', 'project declared test invocation', 'project offline recovery integrity', 'native owned declarations', 'project legacy payload path', 'native source load timing', 'native command region execution', 'native Hybrid executable console presentation']) {
       assert.ok(result.capabilities.requiredFamilies.includes(family), family);
     }
     assert.ok(result.filter.split('|').includes('FullyQualifiedName~PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_NativeHybridConsolePreservesFormattingStreamsAndAuthoredErrors'));

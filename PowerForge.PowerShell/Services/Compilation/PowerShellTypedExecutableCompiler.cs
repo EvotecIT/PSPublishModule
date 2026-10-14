@@ -150,6 +150,7 @@ internal static class PowerShellTypedExecutableCompiler
 
         var entryUnit = plan.Files.First(file => PowerShellCompilationPathSafety.PathEquals(file.FullPath, entryPoint))
             .Units.SingleOrDefault(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
+        var syntheticNoOpEntry = entryUnit is null;
         if (entryUnit is null)
         {
             if (statements.Length != 0)
@@ -161,6 +162,7 @@ internal static class PowerShellTypedExecutableCompiler
                 Array.Empty<PowerShellCompilationDiagnostic>());
         }
         var entryDescription = CreateMethodDescription(entryUnit, entry.Function, entry.Emission, entryPoint);
+        entryDescription.IsSyntheticNoOpExecutableEntry = syntheticNoOpEntry;
         descriptions.Add(entryDescription);
         var reachableCommandProviders = CollectReachableCommandProviders(semantic, entry.Function.Symbol);
         return new PowerShellTypedExecutableCompilation(

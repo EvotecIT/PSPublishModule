@@ -4,6 +4,7 @@ param([Parameter(Mandatory)] [string] $WorkspacePath, [string] $EvidencePath)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Corpus.Runner.Common.ps1')
 . (Join-Path $PSScriptRoot 'Corpus.Qualification.Workflow.ps1')
+$realOwnedProcess=${function:Invoke-OwnedProcess}
 $root=Join-Path ([IO.Path]::GetFullPath($WorkspacePath)) ('cli-diagnostics-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $root|Out-Null
 $checks=[Collections.Generic.List[string]]::new()
@@ -87,7 +88,59 @@ catch {
     $checks.Add('canonical-workflow-retains-actionable-error-and-exact-raw-process')
 }
 if($checks.Count -ne 13){throw 'Expected diagnostic control did not reach its failure assertion.'}
+# Preserve the actual timeout payload through the real CLI adapter and workflow catch.
+# Only the process launch boundary substitutes this test-owned pwsh for dotnet.
+$script:ownedTimeoutException=$null
+$script:ownedTimeoutInvocation=$realOwnedProcess
+$script:ownedTimeoutStdout="owned timeout stdout π 中文`n"
+$script:ownedTimeoutStderr="owned timeout stderr café Ω`n"
+$script:ownedTimeoutCommand='[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); [Console]::Out.Write('+
+    "'"+$script:ownedTimeoutStdout.Replace("'","''")+"'"+'); [Console]::Error.Write('+
+    "'"+$script:ownedTimeoutStderr.Replace("'","''")+"'"+'); [Console]::Out.Flush(); [Console]::Error.Flush(); Start-Sleep -Seconds 60'
+function Invoke-OwnedProcess {
+    param($FileName,$Arguments,$WorkingDirectory,$Environment,$TimeoutSeconds)
+    try {
+        & $script:ownedTimeoutInvocation -FileName ([Environment]::ProcessPath) -Arguments @('-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',
+            [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script:ownedTimeoutCommand))) -WorkingDirectory $WorkingDirectory -TimeoutSeconds 10
+    } catch { $script:ownedTimeoutException=$_.Exception; throw }
+}
+$timeoutStep=Join-Path $root 'owned-timeout-step.json'
+$caughtTimeout=$false
+try {Invoke-WorkflowCliOperation @('powershell','project','build') $root $timeoutStep|Out-Null}
+catch {
+    $caughtTimeout=$true
+    $raw=$_.Exception.Data['PowerForgeOwnedProcess']
+    if(-not [object]::ReferenceEquals($_.Exception,$script:ownedTimeoutException) -or
+        $_.Exception.GetType().FullName -cne 'System.Management.Automation.RuntimeException' -or
+        $_.Exception.Message -cne "Owned process '$([Environment]::ProcessPath)' exceeded 10 seconds."){throw 'Timeout rethrow contract changed.'}
+    if($null -eq $raw -or -not $raw.TimedOut -or -not $raw.ProcessExited -or -not $raw.OutputDrained -or
+        $raw.TimeoutSeconds -ne 10 -or -not $raw.ProcessStartTimeAvailable -or -not $raw.ProcessStartUtc -or
+        $raw.StandardOutput -cne $script:ownedTimeoutStdout -or $raw.StandardError -cne $script:ownedTimeoutStderr){throw 'Real owned timeout lost exact streams or process identity.'}
+    if(Get-Process -Id $raw.ProcessId -ErrorAction SilentlyContinue){throw 'Timed-out owned child is still present.'}
+    Write-Utf8Json -Path (Join-Path $root 'owned-timeout-raw.json') -Value $raw
+    $stepNode=[Text.Json.Nodes.JsonNode]::Parse([IO.File]::ReadAllText($timeoutStep))
+    $expectedNode=[Text.Json.Nodes.JsonNode]::Parse((ConvertTo-Json -InputObject $raw -Depth 30 -Compress))
+    if($null -eq $stepNode['ownedProcess'] -or -not [Text.Json.Nodes.JsonNode]::DeepEquals($stepNode['ownedProcess'],$expectedNode)){
+        throw 'Canonical workflow catch lost the real owned timeout payload.'
+    }
+    $checks.Add('canonical-workflow-retains-real-owned-timeout-and-rethrow')
+}
+if(-not $caughtTimeout){throw 'Real owned timeout control did not reach the workflow catch.'}
+${function:Invoke-OwnedProcess}=$realOwnedProcess
+$normalIdentity=Join-Path $root 'normal-child-identity.json'
+$normalCommand='[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); [Console]::Out.Write(''normal stdout π''); [Console]::Error.Write(''normal stderr Ω''); '+
+    '[IO.File]::WriteAllText('+("'"+$normalIdentity.Replace("'","''")+"'")+',(@{pid=$PID;startUtc=(Get-Process -Id $PID).StartTime.ToUniversalTime().ToString(''o'')}|ConvertTo-Json),[Text.UTF8Encoding]::new($false)); exit 0'
+$normal=Invoke-OwnedProcess -FileName ([Environment]::ProcessPath) -Arguments @('-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',
+    [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($normalCommand))) -WorkingDirectory $root -TimeoutSeconds 10
+if((@($normal.PSObject.Properties.Name|Sort-Object) -join ',') -cne 'DurationMilliseconds,ExitCode,StandardError,StandardOutput' -or
+    $normal.ExitCode -ne 0 -or $normal.StandardOutput -cne 'normal stdout π' -or $normal.StandardError -cne 'normal stderr Ω'){throw 'Normal owned-process four-property contract changed.'}
+$normalChild=Get-Content -LiteralPath $normalIdentity -Raw|ConvertFrom-Json
+if(Get-Process -Id $normalChild.pid -ErrorAction SilentlyContinue){throw 'Normal owned child is still present.'}
+Write-Utf8Json -Path (Join-Path $root 'normal-process.json') -Value $normal
+$checks.Add('normal-owned-child-preserves-four-properties-and-unicode-streams')
+if($checks.Count -ne 15){throw 'Expected original13 plus two real process contract controls.'}
+
 $result=[ordered]@{schemaVersion=1;passed=$true;checkCount=$checks.Count;checks=@($checks);retainedProofRoot=$root
-    scope='Pure process-envelope fixtures and real adapter bodies with only process launch mocked; no SDK/build/workload/fixture process executed.'}
+    scope='Process-envelope fixtures, actual adapter bodies, one real owned-child timeout and one normal child; no SDK/build/workload/fixture process executed.'}
 if($EvidencePath){Write-Utf8Json -Path $EvidencePath -Value $result}
 $result|ConvertTo-Json -Depth 8

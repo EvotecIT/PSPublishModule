@@ -33,6 +33,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
             .ToArray();
 
         var entries = new List<PowerShellCompilationUnitDisposition>();
+        var emittedMethodOwners = new List<KeyValuePair<PowerShellCompiledMethod, PowerShellCompilationUnitDisposition>>();
         foreach (var file in plan.Files.OrderBy(static file => NormalizePath(file.RelativePath), StringComparer.Ordinal))
         {
             var relativePath = NormalizeRelativePath(file.RelativePath, Path.GetFileName(file.FullPath));
@@ -47,6 +48,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                 var declaration = FindFunctionDeclaration(file.Units, indexedUnit.Index, unit, functionExtents);
                 var extent = declaration?.Extent;
                 var matchingMethods = methods
+                    .Where(static candidate => !candidate.IsSyntheticNoOpExecutableEntry)
                     .Where(candidate => MethodMatches(candidate, shapedCompilation, file.FullPath, unit, declaration))
                     .ToArray();
                 var method = matchingMethods.FirstOrDefault(static candidate => candidate.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline);
@@ -123,7 +125,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                         1));
                 }
 
-                entries.Add(new PowerShellCompilationUnitDisposition(
+                var disposition = new PowerShellCompilationUnitDisposition(
                     PowerShellCompilationExplanationService.ComputeUnitId(relativePath, unit),
                     relativePath,
                     unit.Name,
@@ -153,7 +155,10 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                     dispositionMethod?.RegionGraph ?? promotedRegions.FirstOrDefault()?.RegionGraph,
                     promotedRegions.Length,
                     promotedRegions.Select(static region => region.GeneratedName).ToArray(),
-                    nativeFunctionBinding));
+                    nativeFunctionBinding);
+                entries.Add(disposition);
+                foreach (var candidate in matchingMethods)
+                    emittedMethodOwners.Add(new KeyValuePair<PowerShellCompiledMethod, PowerShellCompilationUnitDisposition>(candidate, disposition));
             }
         }
 
@@ -165,7 +170,8 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                 .Select(static cause => cause.Trim())
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(static cause => cause, StringComparer.Ordinal)
-                .ToArray());
+                .ToArray(),
+            emittedMethodOwners);
     }
 
     private static FunctionDefinitionAst[] GetFunctionExtents(string sourcePath)

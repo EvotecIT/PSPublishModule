@@ -5,6 +5,7 @@ param(
     [ValidateSet('win-x64', 'linux-x64')] [string] $RuntimeIdentifier,
     [ValidateRange(1, 32)] [int] $MaxParallelThreads = 4,
     [ValidateSet('Fast', 'Full')] [string] $Lane = 'Fast',
+    [ValidateSet('Enforce', 'RecordOnly')] [string] $PerformancePolicy = 'Enforce',
     [string] $ArtifactsPath,
     [switch] $NoBuild
 )
@@ -42,6 +43,9 @@ if (($NoBuild -and $ArtifactsPath) -or (-not $ArtifactsPath -and $previousCliPat
 $EvidencePath = [IO.Path]::GetFullPath($EvidencePath)
 New-Item -ItemType Directory -Path $EvidencePath -Force | Out-Null
 $requiredFamilies = @{
+    'empty executable entry' = 'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.Build_EmptyExecutableEntryPointExitsWithoutOutput*'
+    'corpus performance disposition' = 'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.PublicCorpusPerformancePolicyRecordsOnlyKnownTimingBudgets*'
+    'final emitted unit ownership' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.FailureMap*'
     'bound semantics' = 'PowerForge.Tests.PowerShellCompilationBoundPipelineTests.*'
     'census disposition' = 'PowerForge.Tests.PowerShellCompilationCensusTests.*'
     'supported arithmetic fuzz' = 'PowerForge.Tests.PowerShellCompilationFuzzTests.*'
@@ -71,6 +75,8 @@ $windowsRequiredFamilies = @{
     'project CLI streams' = 'PowerForge.Tests.PowerForgeCliPowerShellCompilationTests.ProjectRunCli_*'
     'project NuGet consumption' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_NuGetPackRebuildsLockedLibraryAndRunsOrdinaryConsumer*'
     'project runtime-pack diagnostics CLI' = 'PowerForge.Tests.PowerForgeCliPowerShellCompilationTests.ProjectDiagnosticsCli_UsesAcquiredRuntimePackWithEmptyGlobalCache*'
+    'native owned declarations' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridNativeScriptRootPreservesOwnedFunctionDeclarations*'
+    'project offline recovery integrity' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_OfflineRestoreRejectsTamperedHistoricalEnvironmentAfterInvocationEdit*'
     'project declared test invocation' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_TestAndInstallUseDeclaredArgumentsAndWorkingDirectoryWithRevisionBoundEvidence*'
     'project clean legacy import errors' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_CleanLegacyModuleImportCannotAcceptDeepPayloadErrors*'
     'project legacy payload path' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_LegacyModuleInstallRejectsDeepPayloadBeforeCreatingInstallation*'
@@ -102,6 +108,7 @@ if ($IsWindows) {
     windowsPowerShell51 = if ($IsWindows) { 'selected by numeric artifact tests' } else { 'unavailable; Windows workflow fixtures are excluded or explicitly skipped' }
     maxParallelThreads = $MaxParallelThreads
     lane = $Lane
+    performancePolicy = $PerformancePolicy
     requiredFamilies = @($requiredFamilies.Keys | Sort-Object)
     excludedRequirements = $excludedRequirements
 } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $EvidencePath 'host-capabilities.json') -Encoding utf8
@@ -140,7 +147,7 @@ try {
         throw 'The compiler gate is missing a passing generated module workflow.'
     }
     & (Join-Path $repositoryRoot 'Benchmarks/PowerShellCompilation/Corpus/Invoke-PublicCorpus.ps1') `
-        -SkipModules -RuntimeIdentifier $RuntimeIdentifier -CliAssemblyPath $cliAssemblyPath `
+        -SkipModules -RuntimeIdentifier $RuntimeIdentifier -CliAssemblyPath $cliAssemblyPath -PerformancePolicy $PerformancePolicy `
         -WorkspacePath (Join-Path $EvidencePath 'corpus-workspace') `
         -EvidencePath (Join-Path $EvidencePath 'strict-corpus.json')
     if ($LASTEXITCODE -ne 0) { throw "Strict compiler corpus failed with exit $LASTEXITCODE." }

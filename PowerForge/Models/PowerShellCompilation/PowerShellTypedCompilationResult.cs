@@ -186,6 +186,9 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Generated C# method name.</summary>
     public string GeneratedName { get; }
 
+    /// <summary>Compiler-owned no-op process entry with no authored script unit to count or map.</summary>
+    internal bool IsSyntheticNoOpExecutableEntry { get; set; }
+
     /// <summary>Exact authored identity of a native conditional module declaration; never a startup command identity.</summary>
     internal int? ConditionalDeclarationOffset { get; set; }
 
