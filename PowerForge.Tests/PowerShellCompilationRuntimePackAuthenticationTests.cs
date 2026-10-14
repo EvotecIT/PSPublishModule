@@ -27,8 +27,8 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             id.ToLowerInvariant() + "." + version + ".nupkg");
         using (var archive = ZipFile.OpenRead(archivePath))
         {
-            var entry = Assert.Single(archive.Entries.Where(static entry => entry.FullName.IndexOf('/') < 0 &&
-                entry.FullName.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase)));
+            var entry = Assert.Single(archive.Entries, static entry => entry.FullName.IndexOf('/') < 0 &&
+                entry.FullName.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase));
             archiveName = entry.FullName;
             using var stream = entry.Open();
             using var payload = new MemoryStream();
@@ -46,15 +46,15 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
 
         string SetNuspecName(string name)
         {
-            var existing = Assert.Single(Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
-                .Where(static path => path.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase)));
+            var existing = Assert.Single(Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly),
+                static path => path.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase));
             Assert.Equal(signedNuspec, File.ReadAllBytes(existing));
             var transition = Path.Combine(workspace.Path, "nuspec-transition");
             File.Move(existing, transition);
             var selected = Path.Combine(directory, name);
             File.Move(transition, selected);
-            Assert.Equal(name, Path.GetFileName(Assert.Single(Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
-                .Where(static path => path.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase)))));
+            Assert.Equal(name, Path.GetFileName(Assert.Single(Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly),
+                static path => path.EndsWith(".nuspec", StringComparison.OrdinalIgnoreCase))));
             Assert.Equal(signedNuspec, File.ReadAllBytes(selected));
             package.VerifyInstalled(stageRoot);
             return selected;
