@@ -14,6 +14,15 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
     {
         var context = PowerShellCompilationProjectManifestService.Open(projectPath);
         var artifacts = SelectArtifacts(context, targetNames);
+        // Offline verification must reject stale or altered acquired inputs before any SDK consumer.
+        if (offline)
+        {
+            try { _ = ReadEnvironment(context); }
+            catch (Exception exception)
+            {
+                return Complete("restore", context.ProjectPath, artifacts.Select(artifact => Fail(artifact, exception)));
+            }
+        }
         var environmentRoot = context.Resolve(".powerforge/environment");
         var packageRoot = Path.Combine(environmentRoot, "packages");
         var httpCacheRoot = Path.Combine(environmentRoot, "http-cache");
@@ -37,7 +46,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 using var workspace = PowerShellCompilationWorkspace.Create(keep: false, offlineRestore: offline);
                 PowerShellCompilationArtifactBuilder.WriteSdkSelection(
                     workspace.Path, PowerShellCompilationToolchainFingerprint.ResolveSelectedSdk().Version);
-                var restoreProject = WriteRestoreProject(workspace.Path, artifact, packages, offline);
+                var restoreProject = WriteRestoreProject(workspace.Path, artifact, packages);
                 var restoreRoot = Path.GetDirectoryName(restoreProject)!;
                 var resolvedLockPath = Path.Combine(restoreRoot, "packages.lock.json");
                 var retainedLockPath = Path.Combine(environmentRoot, "restore", artifact.Name, "packages.lock.json");
@@ -76,12 +85,17 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                     throw new FileNotFoundException("NuGet restore did not produce the required complete closure lock.", resolvedLockPath);
                 var resolvedPackages = ReadResolvedPackages(resolvedLockPath);
                 EnsureDeclaredPackagesAreLocked(packages, resolvedPackages, artifact.Name);
-                VerifyAssetsClosure(Path.Combine(restoreRoot, "obj", "project.assets.json"), resolvedPackages, artifact.Name);
+                var assetsPath = Path.Combine(restoreRoot, "obj", "project.assets.json");
+                VerifyAssetsClosure(assetsPath, resolvedPackages, artifact.Name);
                 foreach (var package in resolvedPackages)
                 {
                     var verified = PowerShellCompilationNuGetPackageVerifier.Verify(packageRoot, package);
                     verifiedPackages[verified.Id + "/" + verified.Version] = verified;
                 }
+                // SDK downloads are not NuGet lock libraries. Record their authenticated packages
+                // in the same acquired environment consumed by Build, Run, Watch and diagnostics.
+                foreach (var package in ReadSdkDownloadPackages(assetsPath, packageRoot, artifact))
+                    verifiedPackages[package.Id + "/" + package.Version] = package;
                 VerifyRuntimeAssets(packageRoot, graph);
                 PublishRestoreLock(resolvedLockPath, retainedLockPath);
                 resolvedLocks.Add(new PowerShellCompilationProjectResolvedLock
@@ -169,8 +183,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
     private static string WriteRestoreProject(
         string root,
         PowerShellCompilationProjectArtifact artifact,
-        IEnumerable<PowerShellCompilationProjectPackage> packages,
-        bool offline)
+        IEnumerable<PowerShellCompilationProjectPackage> packages)
     {
         Directory.CreateDirectory(root);
         var packageItems = string.Join(Environment.NewLine, packages.Select(package =>
@@ -193,13 +206,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             """;
         var projectPath = Path.Combine(root, "Restore.csproj");
         File.WriteAllText(projectPath, project + Environment.NewLine, new UTF8Encoding(false));
-        var sources = offline
-            ? "<clear />"
-            : "<clear /><add key=\"nuget.org\" value=\"https://api.nuget.org/v3/index.json\" protocolVersion=\"3\" />";
-        File.WriteAllText(
-            Path.Combine(root, "NuGet.Config"),
-            $"<?xml version=\"1.0\" encoding=\"utf-8\"?><configuration><packageSources>{sources}</packageSources></configuration>" + Environment.NewLine,
-            new UTF8Encoding(false));
+        // The compiler workspace already owns online/offline sources and clears fallback folders.
         return projectPath;
     }
 

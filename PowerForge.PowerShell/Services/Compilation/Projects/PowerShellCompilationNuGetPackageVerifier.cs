@@ -3,18 +3,60 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using NuGet.Packaging;
+using NuGet.Versioning;
 
 namespace PowerForge;
 
 /// <summary>Authenticates an isolated NuGet package and its extracted payload against a reviewed closure identity.</summary>
 internal static class PowerShellCompilationNuGetPackageVerifier
 {
+    /// <summary>
+    /// Authenticates the SDK-selected archive through the existing Microsoft author policy,
+    /// then binds its acquired archive/content evidence and extracted payload to that immutable
+    /// signed entry snapshot. NuGet cache metadata alone does not establish publisher identity.
+    /// Only the explicitly acquired private package root is consulted.
+    /// </summary>
+    internal static PowerShellCompilationProjectPackage ReadPackage(string packageRoot, string id, string version)
+    {
+        if (!PowerShellCompilationPackageIdentity.IsValidId(id) ||
+            !NuGetVersion.TryParse(version, out var selectedVersion) ||
+            !version.Equals(selectedVersion.ToNormalizedString(), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"SDK download package '{id}/{version}' has an invalid canonical NuGet identity.");
+        var versionRoot = Path.Combine(packageRoot, id.ToLowerInvariant(), version.ToLowerInvariant());
+        PowerShellCompilationPathSafety.EnsureContained(packageRoot, versionRoot, "SDK download package escapes the isolated environment.");
+        PowerShellCompilationPathSafety.EnsureNoLinks(packageRoot, versionRoot, "SDK download package traverses a symbolic link or junction.");
+        var metadataPath = Path.Combine(versionRoot, ".nupkg.metadata");
+        if (!File.Exists(metadataPath))
+            throw new FileNotFoundException($"SDK download package '{id}/{version}' is absent from the isolated environment.", metadataPath);
+        // SDK downloads use NuGet's normalized version identity, including supported previews.
+        // Compiler-owned stable package publication policy does not apply to SDK selection.
+        var packagePath = Path.Combine(versionRoot, id.ToLowerInvariant() + "." + version.ToLowerInvariant() + ".nupkg");
+        foreach (var controlPath in new[] { packagePath, packagePath + ".sha512", metadataPath })
+            PowerShellCompilationPathSafety.EnsureNoLinks(packageRoot, controlPath,
+                $"SDK download package '{id}/{version}' control file traverses a symbolic link or junction.");
+        using var archiveLease = new FileStream(packagePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var authenticated = PowerShellCompilationRuntimePackAuthority.AuthenticateMicrosoftPackage(
+            id, version.ToLowerInvariant(), packageRoot, CancellationToken.None);
+        authenticated.VerifyInstalled(packageRoot);
+        using var metadata = JsonDocument.Parse(File.ReadAllText(metadataPath));
+        if (!metadata.RootElement.TryGetProperty("contentHash", out var contentHash) || contentHash.ValueKind != JsonValueKind.String)
+            throw new InvalidDataException($"SDK download package '{id}/{version}' has no NuGet content identity.");
+        var verified = Verify(packageRoot, new PowerShellCompilationProjectPackage
+        {
+            Id = id,
+            Version = version,
+            ContentHash = NormalizeContentHash(contentHash.GetString() ?? string.Empty)
+        });
+        authenticated.VerifyInstalled(packageRoot);
+        return verified;
+    }
+
     internal static PowerShellCompilationProjectPackage Verify(
         string packageRoot,
         PowerShellCompilationProjectPackage package)
     {
-        if (string.IsNullOrWhiteSpace(package.Id) ||
-            string.IsNullOrWhiteSpace(package.Version) ||
+        if (!PowerShellCompilationPackageIdentity.IsValidId(package.Id) ||
+            !NuGetVersion.TryParse(package.Version, out var expectedVersion) ||
             string.IsNullOrWhiteSpace(package.ContentHash))
         {
             throw new InvalidDataException("A project dependency lock contains an incomplete package identity.");
@@ -31,6 +73,9 @@ internal static class PowerShellCompilationNuGetPackageVerifier
             packageRoot,
             versionRoot,
             $"Restored package '{package.Id}/{package.Version}' traverses a symbolic link or junction.");
+        foreach (var controlPath in new[] { packagePath, hashPath, metadataPath })
+            PowerShellCompilationPathSafety.EnsureNoLinks(packageRoot, controlPath,
+                $"Restored package '{package.Id}/{package.Version}' control file traverses a symbolic link or junction.");
 
         string rawArchiveHash;
         using (var stream = File.OpenRead(packagePath))
@@ -49,6 +94,9 @@ internal static class PowerShellCompilationNuGetPackageVerifier
         using (var reader = new PackageArchiveReader(stream, leaveStreamOpen: false))
         {
             reader.ValidatePackageEntriesAsync(CancellationToken.None).GetAwaiter().GetResult();
+            var identity = reader.GetIdentity();
+            if (!identity.Id.Equals(package.Id, StringComparison.OrdinalIgnoreCase) || !identity.Version.Equals(expectedVersion))
+                throw new InvalidDataException($"Restored package archive '{package.Id}/{package.Version}' has a different NuGet package identity.");
             canonicalContentHash = NormalizeContentHash(
                 reader.GetContentHash(CancellationToken.None, () => rawArchiveHash));
         }

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 
 namespace PowerForge.Tests;
 
@@ -34,6 +35,39 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
             var restored = workflow.Restore(project);
             Assert.True(restored.Succeeded, string.Join("\n", restored.Targets.Select(item => item.Message)));
 
+            var environmentPath = Path.Combine(root, ".powerforge", "environment", "environment.json");
+            var environmentText = File.ReadAllText(environmentPath);
+            var environment = JsonSerializer.Deserialize<PowerShellCompilationProjectEnvironment>(
+                environmentText, PowerShellCompilationProjectManifestService.JsonOptions)!;
+            Assert.Equal(3, environment.SchemaVersion);
+            // Inspect the real SDK runtime downloads acquired for this RID, using their selected
+            // versions rather than assuming the SDK patch installed on the validation machine.
+            var sdkDownloads = Directory.EnumerateDirectories(environment.PackageRoot)
+                .Where(path => Path.GetFileName(path).EndsWith(".app.runtime." + target.RuntimeIdentifier, StringComparison.OrdinalIgnoreCase))
+                .SelectMany(path => Directory.EnumerateDirectories(path).Select(version => new
+                {
+                    Id = Path.GetFileName(path), Version = Path.GetFileName(version), Root = version
+                })).ToArray();
+            Assert.NotEmpty(sdkDownloads);
+            foreach (var download in sdkDownloads)
+            {
+                var recorded = Assert.Single(environment.Packages, package =>
+                    package.Id.Equals(download.Id, StringComparison.OrdinalIgnoreCase) && package.Version == download.Version);
+                Assert.False(string.IsNullOrWhiteSpace(recorded.ArchiveSha512));
+                Assert.False(string.IsNullOrWhiteSpace(recorded.ExtractedFilesSha256));
+                _ = PowerShellCompilationNuGetPackageVerifier.Verify(environment.PackageRoot, recorded);
+            }
+            environment.SchemaVersion = 2;
+            File.WriteAllText(environmentPath, JsonSerializer.Serialize(environment, PowerShellCompilationProjectManifestService.JsonOptions));
+            try
+            {
+                Assert.Contains("project restore", Assert.Throws<InvalidDataException>(() => workflow.Build(project)).Message);
+                var staleRestore = workflow.Restore(project, offline: true);
+                Assert.False(staleRestore.Succeeded);
+                Assert.Contains("project restore", Assert.Single(staleRestore.Targets).Message);
+            }
+            finally { File.WriteAllText(environmentPath, environmentText); }
+
             // The first separator belongs to the CLI; the second is the packaged EXE's
             // documented positional-only delimiter, so dash-prefixed strings enter $args.
             var appArguments = new[] { "--", "", "two words", "embedded\"quote", "trailing\\", "żółć", "--help", "--json", "--verbose", "--view", "application-value" };
@@ -67,6 +101,16 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
                 Assert.Equal(string.Concat(appArguments.Skip(1).Select(argument => "<" + argument + ">")), errorOutput);
             }
             finally { if (!process.HasExited) { process.Kill(entireProcessTree: true); await process.WaitForExitAsync(); } }
+
+            // Both entrypoints share the pre-SDK environment gate. A recorded SDK download
+            // cannot disappear while the environment still claims an intact acquired closure.
+            var removed = sdkDownloads[0];
+            File.Delete(Path.Combine(removed.Root, ".nupkg.metadata"));
+            var missing = Assert.Throws<FileNotFoundException>(() => workflow.Build(project));
+            Assert.Contains(removed.Id + "/" + removed.Version, missing.Message, StringComparison.OrdinalIgnoreCase);
+            var missingRestore = workflow.Restore(project, offline: true);
+            Assert.False(missingRestore.Succeeded);
+            Assert.Contains(removed.Id + "/" + removed.Version, Assert.Single(missingRestore.Targets).Message, StringComparison.OrdinalIgnoreCase);
         }
         finally { Directory.Delete(Directory.GetParent(root)!.FullName, recursive: true); }
     }
