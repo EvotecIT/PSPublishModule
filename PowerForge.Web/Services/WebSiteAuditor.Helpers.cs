@@ -1285,7 +1285,7 @@ public static partial class WebSiteAuditor
             if (string.IsNullOrWhiteSpace(label))
                 continue;
 
-            var destination = NormalizeLinkPurposeDestination(href, redirectMap, languagePrefix);
+            var destination = NormalizeLinkPurposeDestination(ResolvePageRelativeHref(href, relativePath), redirectMap, languagePrefix);
             if (string.IsNullOrWhiteSpace(destination))
                 continue;
 
@@ -1367,6 +1367,25 @@ public static partial class WebSiteAuditor
             return Regex.Replace(title, "\\s+", " ").Trim();
 
         return string.Empty;
+    }
+
+    // Resolves "./page/" or "../other/" against the audited page so it compares equal to the same root-relative link.
+    private static string ResolvePageRelativeHref(string href, string relativePath)
+    {
+        var trimmed = href.Trim();
+        if (trimmed.Length == 0 ||
+            trimmed.StartsWith("/", StringComparison.Ordinal) ||
+            trimmed.StartsWith("#", StringComparison.Ordinal) ||
+            trimmed.StartsWith("?", StringComparison.Ordinal) ||
+            Uri.TryCreate(trimmed, UriKind.Absolute, out _))
+        {
+            return href;
+        }
+
+        var pagePath = "/" + (relativePath ?? string.Empty).Replace('\\', '/').TrimStart('/');
+        var directory = pagePath.Substring(0, pagePath.LastIndexOf('/') + 1);
+        var resolved = new Uri(new Uri("http://audit.invalid" + directory), trimmed);
+        return resolved.PathAndQuery + resolved.Fragment;
     }
 
     private static string NormalizeLinkPurposeDestination(string href, IReadOnlyDictionary<string, string[]> redirectMap, string languagePrefix)
