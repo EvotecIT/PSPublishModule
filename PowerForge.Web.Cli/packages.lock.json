@@ -361,9 +361,6 @@
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
       },
-      "powerforge.indexnow": {
-        "type": "Project"
-      },
       "powerforge.web": {
         "type": "Project",
         "dependencies": {
@@ -371,10 +368,14 @@
           "HtmlTinkerX": "[3.0.3, )",
           "Magick.NET-Q8-AnyCPU": "[14.17.2, )",
           "OfficeIMO.Markdown": "[3.4.4, )",
-          "PowerForge": "[3.0.159, )",
+          "PowerForge": "[3.0.169, )",
+          "PowerForge.Web.Protocols": "[3.0.169, )",
           "Scriban": "[7.5.0, )",
           "YamlDotNet": "[18.1.0, )"
         }
+      },
+      "powerforge.web.protocols": {
+        "type": "Project"
       }
     }
   }

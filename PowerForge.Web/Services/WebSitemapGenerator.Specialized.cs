@@ -80,6 +80,12 @@ public static partial class WebSitemapGenerator
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
+        if (normalizedPaths.Length == 0)
+        {
+            File.Delete(outputPath);
+            return;
+        }
+
         var sitemapNs = SitemapNs;
         var doc = CreateSitemapDocument(
             browserStylesheetHref,

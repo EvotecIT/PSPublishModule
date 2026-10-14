@@ -295,6 +295,9 @@
           "System.Security.Cryptography.ProtectedData": "[10.0.12, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
+      },
+      "powerforge.web.protocols": {
+        "type": "Project"
       }
     },
     "net8.0": {
@@ -619,6 +622,9 @@
           "System.Security.Cryptography.ProtectedData": "[10.0.12, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
+      },
+      "powerforge.web.protocols": {
+        "type": "Project"
       }
     }
   }
