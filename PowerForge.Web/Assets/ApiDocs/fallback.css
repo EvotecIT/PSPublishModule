@@ -237,6 +237,9 @@ body.pf-api-docs .type-icon-glyph,body.pf-api-docs .chip-icon-glyph{display:bloc
 .member-source a,.type-meta-source a{color:#a78bfa}
 .member-summary{margin:0;color:#e2e8f0}
 .type-usage,.type-related-content,.type-parameters,.type-examples,.type-see-also{margin:12px 0}
+.type-parameters-list,.type-outputs{margin:12px 0}
+.param-list--command dt{scroll-margin-top:96px}
+.example-code__prompt{opacity:.6;user-select:none;-webkit-user-select:none}
 .type-usage-summary{margin:0 0 .85rem;color:#94a3b8;line-height:1.6}
 .usage-group{background:#0f172a;border:1px solid rgba(148,163,184,.18);border-radius:12px;padding:12px 14px;margin-top:10px}
 .usage-group h3{margin:0 0 .65rem;font-size:.9rem;letter-spacing:.02em}

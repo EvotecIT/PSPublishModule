@@ -755,7 +755,7 @@
     if (countLabel) {
       var visibleCount = items.filter(function(item) { return item.style.display !== 'none'; }).length;
       var total = totalTypes || items.length;
-      countLabel.textContent = 'Showing ' + formatCount(visibleCount) + ' of ' + formatCount(total) + ' types';
+      countLabel.textContent = 'Showing ' + formatCount(visibleCount) + ' of ' + formatCount(total) + ' ' + (countLabel.getAttribute('data-unit') || 'types');
     }
     saveState();
   }

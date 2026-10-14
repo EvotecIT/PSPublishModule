@@ -63,7 +63,8 @@ public static partial class WebApiDocsGenerator
             ["BODY_CLASS"] = bodyClass,
             ["TYPE_COUNT"] = types.Count.ToString(),
             ["TYPE_LINKS"] = BuildSimpleTypeLinks(types),
-            ["SEARCH_SCRIPT"] = searchScript
+            ["SEARCH_SCRIPT"] = searchScript,
+            ["SECTION_LABEL"] = System.Web.HttpUtility.HtmlEncode(ResolveApiSectionLabel(options))
         });
 
         File.WriteAllText(Path.Combine(outputPath, "index.html"), indexHtml.ToString(), Encoding.UTF8);
@@ -91,7 +92,8 @@ public static partial class WebApiDocsGenerator
                 ["TYPE_SUMMARY"] = BuildSimpleTypeSummaryHtml(type),
                 ["TYPE_REMARKS"] = BuildSimpleTypeRemarksHtml(type),
                 ["MEMBERS"] = BuildSimpleTypeMemberSections(type, codeLanguage),
-                ["TYPE_SCRIPT"] = prismScripts
+                ["TYPE_SCRIPT"] = prismScripts,
+                ["SECTION_LABEL"] = System.Web.HttpUtility.HtmlEncode(ResolveApiSectionLabel(options))
             });
 
             File.WriteAllText(Path.Combine(typesDir, $"{type.Slug}.html"), typeHtml, Encoding.UTF8);
@@ -131,6 +133,8 @@ public static partial class WebApiDocsGenerator
         var legacyAliasMode = ResolveLegacyAliasMode(options.LegacyAliasMode);
         var social = ResolveApiSocialProfile(options);
         var typeDisplayNames = BuildTypeDisplayNameMap(types, options, warnings);
+        var labels = ApiDocsChromeLabels.From(options);
+        var sectionLabelToken = System.Web.HttpUtility.HtmlEncode(labels.SectionLabel);
         var sidebarHtml = BuildDocsSidebar(options, types, baseUrl, string.Empty, docsHomeUrl, typeDisplayNames, suite);
         var mainSidebarTypes = GetMainTypes(types, options);
         var sidebarClass = BuildSidebarClass(options.SidebarPosition);
@@ -155,7 +159,8 @@ public static partial class WebApiDocsGenerator
             ["SIDEBAR"] = sidebarHtml,
             ["SIDEBAR_CLASS"] = sidebarClass,
             ["MAIN"] = overviewHtml,
-            ["DOCS_SCRIPT"] = docsScript
+            ["DOCS_SCRIPT"] = docsScript,
+            ["SECTION_LABEL"] = sectionLabelToken
         });
         File.WriteAllText(Path.Combine(outputPath, "index.html"), indexHtml.ToString(), Encoding.UTF8);
 
@@ -167,7 +172,7 @@ public static partial class WebApiDocsGenerator
             var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
             typeUsageMap.TryGetValue(type.FullName, out var usage);
             typeRelatedContentMap.TryGetValue(type.FullName, out var relatedContent);
-            var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap, usage, relatedContent, codeLanguage, displayName);
+            var typeMain = BuildDocsTypeDetail(type, baseUrl, slugMap, typeIndex, derivedMap, usage, relatedContent, codeLanguage, displayName, labels);
             var typeTemplate = LoadTemplate(options, "docs-type.html", options.DocsTypeTemplatePath);
             var pageTitle = $"{displayName} - {options.Title}";
             var typeDescription = BuildApiTypeSeoDescription(options, type, displayName);
@@ -186,7 +191,8 @@ public static partial class WebApiDocsGenerator
                 ["SIDEBAR"] = sidebar,
                 ["SIDEBAR_CLASS"] = sidebarClassForType,
                 ["MAIN"] = typeMain,
-                ["DOCS_SCRIPT"] = docsScript
+                ["DOCS_SCRIPT"] = docsScript,
+                ["SECTION_LABEL"] = sectionLabelToken
             });
 
             var typeDir = Path.Combine(outputPath, type.Slug);
@@ -1049,6 +1055,7 @@ body.pf-api-docs .api-suite-search-filter{
     {
         var indexUrl = EnsureTrailingSlash(baseUrl);
         var html = new HtmlFragmentBuilder(initialIndent: 4);
+        var labels = ApiDocsChromeLabels.From(options);
         var primaryKindPluralLabel = ResolvePrimaryKindPluralLabel(types);
         var primaryKindFilterLabel = ResolvePrimaryKindFilterLabel(types);
         var totalTypes = types.Count;
@@ -1097,7 +1104,7 @@ body.pf-api-docs .api-suite-search-filter{
                         html.Line("<path d=\"M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z\"/>");
                     }
                     html.Line("</svg>");
-                    html.Line("<span>API Reference</span>");
+                    html.Line($"<span>{System.Web.HttpUtility.HtmlEncode(labels.SectionLabel)}</span>");
                 }
                 html.Line("</a>");
             }
@@ -1127,32 +1134,39 @@ body.pf-api-docs .api-suite-search-filter{
                 html.Line("</button>");
             }
             html.Line("</div>");
-            if (kindFilters.Count > 0)
+            // A PowerShell reference usually holds one module and one command kind; filters that cannot narrow anything are noise.
+            var showKindFilters = kindFilters.Count > (labels.IsPowerShell ? 1 : 0);
+            var showGroupFilter = namespaceGroups.Count > (labels.IsPowerShell ? 1 : 0);
+            if (kindFilters.Count > 0 && (showKindFilters || showGroupFilter))
             {
                 html.Line("<div class=\"sidebar-filters\">");
                 using (html.Indent())
                 {
-                    html.Line($"<div class=\"filter-label\">{System.Web.HttpUtility.HtmlEncode(primaryKindFilterLabel)} filters</div>");
-                    html.Line("<div class=\"filter-buttons\">");
-                    using (html.Indent())
+                    if (showKindFilters)
                     {
-                        html.Line("<button class=\"filter-button active\" type=\"button\" data-kind=\"\">All</button>");
-                        foreach (var kind in kindFilters)
+                        var kindFilterLabel = labels.IsPowerShell ? "Command type" : $"{primaryKindFilterLabel} filters";
+                        html.Line($"<div class=\"filter-label\">{System.Web.HttpUtility.HtmlEncode(kindFilterLabel)}</div>");
+                        html.Line("<div class=\"filter-buttons\">");
+                        using (html.Indent())
                         {
-                            html.Line($"<button class=\"filter-button\" type=\"button\" data-kind=\"{kind.Kind}\">{GetKindLabel(kind.Kind, kind.Count)}</button>");
+                            html.Line("<button class=\"filter-button active\" type=\"button\" data-kind=\"\">All</button>");
+                            foreach (var kind in kindFilters)
+                            {
+                                html.Line($"<button class=\"filter-button\" type=\"button\" data-kind=\"{kind.Kind}\">{GetKindLabel(kind.Kind, kind.Count)}</button>");
+                            }
                         }
+                        html.Line("</div>");
                     }
-                    html.Line("</div>");
-                    if (namespaceGroups.Count > 0)
+                    if (showGroupFilter)
                     {
                         html.Line("<div class=\"filter-row\">");
                         using (html.Indent())
                         {
-                            html.Line("<label for=\"api-namespace\" class=\"filter-label\">Namespace</label>");
+                            html.Line($"<label for=\"api-namespace\" class=\"filter-label\">{labels.GroupLabel}</label>");
                             html.Line("<select id=\"api-namespace\" class=\"namespace-select\">");
                             using (html.Indent())
                             {
-                                html.Line("<option value=\"\">All namespaces</option>");
+                                html.Line($"<option value=\"\">All {labels.GroupPluralLabel}</option>");
                                 foreach (var group in namespaceGroups)
                                 {
                                     var encoded = System.Web.HttpUtility.HtmlEncode(group.Key);
@@ -1172,7 +1186,7 @@ body.pf-api-docs .api-suite-search-filter{
                 }
                 html.Line("</div>");
             }
-            html.Line($"<div class=\"sidebar-count\" data-total=\"{totalTypes}\">Showing {totalTypes} of {totalTypes} {primaryKindPluralLabel}</div>");
+            html.Line($"<div class=\"sidebar-count\" data-total=\"{totalTypes}\" data-unit=\"{primaryKindPluralLabel}\">Showing {totalTypes} of {totalTypes} {primaryKindPluralLabel}</div>");
             if (lazyCatalog)
                 html.Line($"<a class=\"sidebar-browse-all\" href=\"{indexUrl}\">Browse all {totalTypes} types</a>");
             html.Line("<div class=\"sidebar-tools\">");
@@ -1237,7 +1251,9 @@ body.pf-api-docs .api-suite-search-filter{
                                 html.Line("<path d=\"M9 18l6-6-6-6\"/>");
                             }
                             html.Line("</svg>");
-                            html.Line($"<span>{System.Web.HttpUtility.HtmlEncode(GetShortNamespace(group.Key))}</span>");
+                            // Module names are identifiers in their own right; only .NET namespaces are shortened.
+                            var groupHeading = labels.IsPowerShell ? group.Key : GetShortNamespace(group.Key);
+                            html.Line($"<span>{System.Web.HttpUtility.HtmlEncode(groupHeading)}</span>");
                             html.Line($"<span class=\"type-count\">{group.Count()}</span>");
                         }
                         html.Line("</div>");
@@ -1290,7 +1306,8 @@ body.pf-api-docs .api-suite-search-filter{
         ApiSuiteContext? suite)
     {
         var html = new HtmlFragmentBuilder(initialIndent: 4);
-        var overviewTitle = string.IsNullOrWhiteSpace(options.Title) ? "API Reference" : options.Title.Trim();
+        var labels = ApiDocsChromeLabels.From(options);
+        var overviewTitle = string.IsNullOrWhiteSpace(options.Title) ? labels.SectionLabel : options.Title.Trim();
         var namespaceGroups = types
             .GroupBy(static t => string.IsNullOrWhiteSpace(t.Namespace) ? "(global)" : t.Namespace)
             .OrderBy(static g => g.Key, StringComparer.OrdinalIgnoreCase)
@@ -1305,7 +1322,7 @@ body.pf-api-docs .api-suite-search-filter{
             html.Line("<header class=\"ev-docs-header api-overview-header\">");
             using (html.Indent())
             {
-                html.Line("<p class=\"ev-eyebrow\">API Reference</p>");
+                html.Line($"<p class=\"ev-eyebrow\">{System.Web.HttpUtility.HtmlEncode(labels.SectionLabel)}</p>");
                 html.Line($"<h1>{System.Web.HttpUtility.HtmlEncode(overviewTitle)}</h1>");
                 // The package's own description says what it is for; the generic line is the fallback.
                 var lead = (options.Type == ApiDocsType.PowerShell
@@ -1327,7 +1344,9 @@ body.pf-api-docs .api-suite-search-filter{
                     using (html.Indent())
                     {
                         html.Line("<h2>Quick Start</h2>");
-                        html.Line("<p class=\"section-desc\">Frequently used types and entry points.</p>");
+                        html.Line(labels.IsPowerShell
+                            ? "<p class=\"section-desc\">Frequently used commands.</p>"
+                            : "<p class=\"section-desc\">Frequently used types and entry points.</p>");
                         html.Line("<div class=\"quick-grid\">");
                         using (html.Indent())
                         {
@@ -1365,8 +1384,20 @@ body.pf-api-docs .api-suite-search-filter{
                 html.Line("<section class=\"all-namespaces\">");
                 using (html.Indent())
                 {
-                    html.Line("<h2>All Namespaces</h2>");
-                    html.Line($"<p class=\"section-desc\">Browse all {types.Count} {primaryKindPluralLabel} organized by namespace.</p>");
+                    if (labels.IsPowerShell)
+                    {
+                        // Commands are grouped by module; a single-module reference names the module instead of "organized by".
+                        html.Line("<h2>All Commands</h2>");
+                        var scope = namespaceGroups.Count == 1
+                            ? $"in {namespaceGroups[0].Key}"
+                            : "organized by module";
+                        html.Line($"<p class=\"section-desc\">Browse all {types.Count} {primaryKindPluralLabel} {System.Web.HttpUtility.HtmlEncode(scope)}.</p>");
+                    }
+                    else
+                    {
+                        html.Line("<h2>All Namespaces</h2>");
+                        html.Line($"<p class=\"section-desc\">Browse all {types.Count} {primaryKindPluralLabel} organized by namespace.</p>");
+                    }
                     foreach (var group in namespaceGroups)
                     {
                         AppendOverviewNamespaceGroup(html, group, namespaceAnchors[group.Key], baseUrl, typeDisplayNames);

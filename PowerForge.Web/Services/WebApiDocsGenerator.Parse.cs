@@ -105,8 +105,9 @@ public static partial class WebApiDocsGenerator
             moduleName = moduleName[..^5];
         if (moduleName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
             moduleName = moduleName[..^4];
-        apiDoc.AssemblyName = moduleName;
         var manifestPath = ResolvePowerShellModuleManifestPath(resolved, moduleName, options.PowerShellModuleManifestPath);
+        moduleName = ResolvePowerShellModuleDisplayName(moduleName, manifestPath, options);
+        apiDoc.AssemblyName = moduleName;
         var commandMetadataPath = ResolvePowerShellCommandMetadataPath(resolved, options.PowerShellCommandMetadataPath);
         var kindHints = LoadPowerShellCommandKindHints(manifestPath, commandMetadataPath, warnings);
 
@@ -816,6 +817,9 @@ public static partial class WebApiDocsGenerator
             var token = "-" + name;
             if (!IsPowerShellSwitchParameter(parameter.Type))
             {
+                // Match Get-Help: a positional parameter name is optional to type, so it is bracketed on its own.
+                if (IsPowerShellPositionalParameter(parameter.Position))
+                    token = "[" + token + "]";
                 var displayType = GetPowerShellSyntaxParameterPlaceholder(parameter);
                 token += $" <{displayType}>";
             }
@@ -849,7 +853,9 @@ public static partial class WebApiDocsGenerator
                         return inline;
                 }
 
-                return values[0];
+                // Too many values to list inline: show the parameter type rather than one arbitrary value.
+                if (string.IsNullOrWhiteSpace(parameter.Type))
+                    return values[0];
             }
         }
 
@@ -888,6 +894,9 @@ public static partial class WebApiDocsGenerator
 
             foreach (var introduction in ExtractPowerShellParagraphs(example.Element(mamlNs + "introduction"), mamlNs))
             {
+                // A bare prompt ("PS>", "PS C:\>") is console decoration, not prose; it must not render or be copied.
+                if (IsPowerShellPromptOnly(introduction))
+                    continue;
                 type.Examples.Add(new ApiExampleModel
                 {
                     Kind = "text",
@@ -899,7 +908,7 @@ public static partial class WebApiDocsGenerator
             var code = example.Element(devNs + "code")?.Value;
             if (string.IsNullOrWhiteSpace(code))
                 code = example.Element(commandNs + "code")?.Value;
-            code = code?.Trim();
+            code = NormalizePowerShellExampleCode(code);
 
             if (!string.IsNullOrWhiteSpace(code))
             {
