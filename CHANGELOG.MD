@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### What's Changed
+- PowerForge.Web PowerShell command references now read like Get-Help: syntax first, each parameter listed once with set-aware chips, Get-Help positional syntax, `Module` instead of `Namespace`, no stray `PS>` example lines, dedented example code, and new `sectionLabel` / `moduleName` apidocs options (with a `{{SECTION_LABEL}}` template token). Example code blocks no longer render a blank first line or an indented closing line.
 - Made generated module-scoped AssemblyLoadContext loaders deterministic and removed machine-specific temporary build paths from their embedded debug metadata.
 - Added side-by-side portable modern binary payloads for PowerShell modules, allowing a .NET 8 baseline and newer targets such as .NET 10 to be packaged together, checked for a consistent command surface, and selected from packaged target metadata at runtime with a safe Standard fallback.
 - Preserved aliases declared by module scripts when binary cmdlet and alias exports are discovered during packaging.
