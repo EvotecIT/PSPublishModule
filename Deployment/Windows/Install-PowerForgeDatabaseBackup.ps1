@@ -61,24 +61,25 @@ if (Test-Path -LiteralPath $InstallRoot) {
     }
 }
 if ($existing -and $existing.State -eq 'Running') { throw 'This backup task is running; installation is held.' }
-$sqlSid = (New-Object Security.Principal.NTAccount($SqlServiceIdentity)).Translate([Security.Principal.SecurityIdentifier]).Value
+$stagingPrincipal = Get-DatabaseBackupStagingPrincipal -Databases $config.databases -SqlServiceIdentity $SqlServiceIdentity
+$stagingSids = @()
+if ($stagingPrincipal) { $stagingSids = @($stagingPrincipal.sid) }
+$stagingOwners = $trustedOwners + $stagingSids
+$stagingWriters = $trustedWriters + $stagingSids
+$stagingSecurity = @{ Path = $config.workRoot; TrustedOwners = $stagingOwners; TrustedWriters = $stagingWriters }
+if ($stagingPrincipal) { $stagingSecurity.AdditionalFullControl = $stagingPrincipal.sid }
 Assert-DatabaseBackupNamespaceTrusted -Path $InstallRoot -TrustedOwners $trustedOwners -TrustedWriters $trustedWriters
 Assert-DatabaseBackupNamespaceTrusted -Path $config.workRoot -TrustedOwners $trustedOwners -TrustedWriters $trustedWriters
 Assert-DatabaseBackupTreeTrusted -Path $InstallRoot -TrustedOwners $trustedOwners -TrustedWriters $trustedWriters
-Assert-DatabaseBackupTreeTrusted -Path $config.workRoot -TrustedOwners ($trustedOwners + $sqlSid) -TrustedWriters ($trustedWriters + $sqlSid)
-$wasEnabled = -not $existing -or $existing.State -ne 'Disabled'
-if ($existing) { Disable-ScheduledTask -TaskName $TaskName | Out-Null }
-if (-not (Test-Path -LiteralPath $config.workRoot)) {
-    Set-DatabaseBackupTreeSecurity -Path $config.workRoot -TrustedOwners ($trustedOwners + $sqlSid) -TrustedWriters ($trustedWriters + $sqlSid) -AdditionalFullControl $SqlServiceIdentity
-}
-try { $workerGuard = [IO.File]::Open((Join-Path $config.workRoot '.run.lock'), 'OpenOrCreate', 'ReadWrite', 'None') }
-catch {
-    if ($existing -and $wasEnabled) { Enable-ScheduledTask -TaskName $TaskName | Out-Null }
-    throw 'A backup or restore worker is active; installation is held.'
-}
-try {
-Set-DatabaseBackupTreeSecurity -Path $InstallRoot -TrustedOwners $trustedOwners -TrustedWriters $trustedWriters -RootReadIdentity $MonitorIdentity
-Set-DatabaseBackupTreeSecurity -Path $config.workRoot -TrustedOwners ($trustedOwners + $sqlSid) -TrustedWriters ($trustedWriters + $sqlSid) -AdditionalFullControl $SqlServiceIdentity
+Assert-DatabaseBackupTreeTrusted -Path $config.workRoot -TrustedOwners $stagingOwners -TrustedWriters $stagingWriters
+Invoke-DatabaseBackupInstallationUpdate -TaskName $TaskName -ExistingTask $existing -MonitorIdentity $MonitorIdentity -Prepare {
+    if (-not (Test-Path -LiteralPath $config.workRoot)) { Set-DatabaseBackupTreeSecurity @stagingSecurity }
+    try { [IO.File]::Open((Join-Path $config.workRoot '.run.lock'), 'OpenOrCreate', 'ReadWrite', 'None') }
+    catch { throw 'A backup or restore worker is active; installation is held.' }
+} -Install {
+param($monitorSid)
+Set-DatabaseBackupTreeSecurity -Path $InstallRoot -TrustedOwners $trustedOwners -TrustedWriters $trustedWriters -RootReadIdentity $monitorSid.Value
+Set-DatabaseBackupTreeSecurity @stagingSecurity
 Set-Content -LiteralPath (Join-Path $InstallRoot '.powerforge-database-backup-install') -Value 'powerforge-database-backup-v1'
 foreach ($name in @('app','access','tools','status')) { New-Item -ItemType Directory -Path (Join-Path $InstallRoot $name) -Force | Out-Null }
 Get-ChildItem -LiteralPath $BuildSource -Force | Copy-Item -Destination (Join-Path $InstallRoot 'app') -Recurse -Force
@@ -89,7 +90,7 @@ Assert-DatabaseBackupTransferInputsTrusted -Destination $config.destination -Tru
 if ($LASTEXITCODE -ne 0) { throw 'Installed transfer inputs are unavailable; task remains disabled.' }
 $statusPath = Join-Path $InstallRoot 'status'
 $statusAcl = Get-Acl -LiteralPath $statusPath
-$statusAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($MonitorIdentity, 'ReadAndExecute', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
+$statusAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($monitorSid, 'ReadAndExecute', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
 Set-Acl -LiteralPath $statusPath -AclObject $statusAcl
 $plan | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $statusPath 'installation.json') -Encoding UTF8
 if ($sql) {
@@ -105,19 +106,9 @@ $scheduler = New-Object -ComObject 'Schedule.Service'
 $scheduler.Connect()
 $registered = $scheduler.GetFolder('\').GetTask($TaskName)
 $descriptor = New-Object Security.AccessControl.RawSecurityDescriptor($registered.GetSecurityDescriptor(4))
-$monitorSid = (New-Object Security.Principal.NTAccount($MonitorIdentity)).Translate([Security.Principal.SecurityIdentifier])
 # Task Scheduler uses file access masks; FileGenericRead excludes task execution and changes.
 $readAce = New-Object Security.AccessControl.CommonAce('None', 'AccessAllowed', 0x120089, $monitorSid, $false, $null)
 $descriptor.DiscretionaryAcl.InsertAce($descriptor.DiscretionaryAcl.Count, $readAce)
 $registered.SetSecurityDescriptor($descriptor.GetSddlForm([Security.AccessControl.AccessControlSections]::Access), 0)
-$workerGuard.Dispose()
-$workerGuard = $null
-if ($wasEnabled) { Enable-ScheduledTask -TaskName $TaskName | Out-Null }
+}
 Get-ScheduledTask -TaskName $TaskName | Select-Object TaskName,State
-}
-catch {
-    # Keep a failed update disabled; never launch a partially replaced installation.
-    if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) { Disable-ScheduledTask -TaskName $TaskName | Out-Null }
-    throw
-}
-finally { if ($null -ne $workerGuard) { $workerGuard.Dispose() } }

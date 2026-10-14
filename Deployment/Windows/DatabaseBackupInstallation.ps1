@@ -52,6 +52,46 @@ END CATCH;
 "@
 }
 
+function Get-DatabaseBackupStagingPrincipal {
+    param($Databases, [string] $SqlServiceIdentity)
+    if (@($Databases | Where-Object { $_.provider -eq 'sqlserver' }).Count -eq 0) { return }
+    [pscustomobject]@{
+        identity = $SqlServiceIdentity
+        sid = (New-Object Security.Principal.NTAccount($SqlServiceIdentity)).Translate([Security.Principal.SecurityIdentifier]).Value
+    }
+}
+
+function Invoke-DatabaseBackupInstallationUpdate {
+    param([string] $TaskName, $ExistingTask, [Parameter(Mandatory)][string] $MonitorIdentity,
+          [scriptblock] $Prepare, [scriptblock] $Install)
+    # Resolve accounts before changing task state, and pass only the resolved SID to installation.
+    $monitorSid = if ($MonitorIdentity -match '^S-1-') { New-Object Security.Principal.SecurityIdentifier($MonitorIdentity) }
+        else { (New-Object Security.Principal.NTAccount($MonitorIdentity)).Translate([Security.Principal.SecurityIdentifier]) }
+    $wasEnabled = -not $ExistingTask -or $ExistingTask.State -ne 'Disabled'
+    $workerGuard = $null
+    $installationStarted = $false
+    try {
+        if ($ExistingTask) { Disable-ScheduledTask -TaskName $TaskName | Out-Null }
+        # Staging preparation and worker contention must preserve the untouched installation's schedule.
+        $workerGuard = & $Prepare
+        $installationStarted = $true
+        & $Install $monitorSid
+        $workerGuard.Dispose()
+        $workerGuard = $null
+        if ($wasEnabled) { Enable-ScheduledTask -TaskName $TaskName | Out-Null }
+    } catch {
+        if ($installationStarted) {
+            # A partially replaced runtime must remain disabled rather than run incomplete files.
+            if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) { Disable-ScheduledTask -TaskName $TaskName | Out-Null }
+        } elseif ($ExistingTask -and $wasEnabled) {
+            Enable-ScheduledTask -TaskName $TaskName | Out-Null
+        }
+        throw
+    } finally {
+        if ($null -ne $workerGuard) { $workerGuard.Dispose() }
+    }
+}
+
 function Assert-DatabaseBackupNamespaceAclTrusted {
     param([Security.AccessControl.DirectorySecurity] $Security, [string[]] $TrustedOwners, [string[]] $TrustedWriters)
     if ($Security.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin $TrustedOwners) {
@@ -143,7 +183,9 @@ function Set-DatabaseBackupTreeSecurity {
         $security.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($identity, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
     }
     if ($RootReadIdentity) {
-        $security.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($RootReadIdentity, 'ReadAndExecute', 'None', 'None', 'Allow')))
+        $readIdentity = if ($RootReadIdentity -match '^S-1-') { New-Object Security.Principal.SecurityIdentifier($RootReadIdentity) }
+            else { New-Object Security.Principal.NTAccount($RootReadIdentity) }
+        $security.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($readIdentity, 'ReadAndExecute', 'None', 'None', 'Allow')))
     }
     if ($existed) {
         Set-Acl -LiteralPath $Path -AclObject $security

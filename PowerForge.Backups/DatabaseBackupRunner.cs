@@ -13,8 +13,7 @@ public sealed class DatabaseBackupRunner
         options.Validate();
         log ??= _ => { };
         Safety.DemandPhysical(options.WorkRoot);
-        Directory.CreateDirectory(options.WorkRoot);
-        using var runLock = new FileStream(Path.Combine(options.WorkRoot, ".run.lock"), FileMode.OpenOrCreate, FileAccess.Write, FileShare.None);
+        FileStream? runLock = null;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(options.TimeoutMinutes));
         var token = timeout.Token;
@@ -25,12 +24,14 @@ public sealed class DatabaseBackupRunner
         try
         {
             Stage("preflight");
+            Directory.CreateDirectory(options.WorkRoot);
+            runLock = new FileStream(Path.Combine(options.WorkRoot, ".run.lock"), FileMode.OpenOrCreate, FileAccess.Write, FileShare.None);
             var held = new List<string>();
             foreach (var stale in Directory.EnumerateDirectories(options.WorkRoot))
             {
-                if (Regex.IsMatch(Path.GetFileName(stale), "\\A[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8}\\z") &&
-                    File.Exists(Path.Combine(stale, ".powerforge-backup-run")))
+                if (Regex.IsMatch(Path.GetFileName(stale), "\\A[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8}\\z"))
                 {
+                    if (!File.Exists(Path.Combine(stale, ".powerforge-backup-run"))) { held.Add(stale); continue; }
                     try { state.CleanupLogicalBytes += Safety.RemoveOwnedRun(options.WorkRoot, stale); }
                     catch (Exception error) when (error is IOException or UnauthorizedAccessException) { held.Add(stale); }
                 }
@@ -103,13 +104,17 @@ public sealed class DatabaseBackupRunner
         }
         finally
         {
-            if (Directory.Exists(run))
+            try
             {
-                try { state.CleanupLogicalBytes += Safety.RemoveOwnedRun(options.WorkRoot, run); }
-                catch (Exception exception) { state.CleanupErrorType = exception.GetType().Name; }
+                if (Directory.Exists(run))
+                {
+                    try { state.CleanupLogicalBytes += Safety.RemoveOwnedRun(options.WorkRoot, run); }
+                    catch (Exception exception) { state.CleanupErrorType = exception.GetType().Name; }
+                }
+                Safety.WriteJson(options.StatePath, state);
+                if (state.Status == "success") Safety.WriteJson(Path.Combine(Path.GetDirectoryName(options.StatePath)!, "last-success.json"), state);
             }
-            Safety.WriteJson(options.StatePath, state);
-            if (state.Status == "success") Safety.WriteJson(Path.Combine(Path.GetDirectoryName(options.StatePath)!, "last-success.json"), state);
+            finally { runLock?.Dispose(); }
         }
         return state;
     }

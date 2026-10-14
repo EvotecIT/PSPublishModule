@@ -15,17 +15,18 @@ public sealed class RestoreDrill
         options.DemandSeparatedStorage([Path.GetFullPath(selectedFolder)]);
         log ??= _ => { };
         Safety.DemandPhysical(options.WorkRoot);
-        Directory.CreateDirectory(options.WorkRoot);
-        using var runLock = new FileStream(Path.Combine(options.WorkRoot, ".run.lock"), FileMode.OpenOrCreate, FileAccess.Write, FileShare.None);
+        FileStream? runLock = null;
         var run = Path.Combine(options.WorkRoot, "restore-" + Guid.NewGuid().ToString("N"));
         var statusPath = Path.Combine(Path.GetDirectoryName(options.StatePath)!, "restore-drill.json");
         var state = new RestoreDrillState { StartedAtUtc = DateTimeOffset.UtcNow, Status = "running", CaptureSha256 = expectedCaptureSha256 };
-        Safety.WriteJson(statusPath, state);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(options.TimeoutMinutes));
         var token = timeout.Token;
         try
         {
+            Directory.CreateDirectory(options.WorkRoot);
+            Safety.WriteJson(statusPath, state);
+            runLock = new FileStream(Path.Combine(options.WorkRoot, ".run.lock"), FileMode.OpenOrCreate, FileAccess.Write, FileShare.None);
             Safety.DemandPhysical(selectedFolder);
             var capturePath = Path.Combine(selectedFolder, "capture.json");
             if (!Regex.IsMatch(expectedCaptureSha256, "\\A[a-f0-9]{64}\\z") || await Safety.HashAsync(capturePath, token) != expectedCaptureSha256)
@@ -83,15 +84,19 @@ public sealed class RestoreDrill
         catch (Exception error) { state.Status = "failed"; state.ErrorType = error.GetType().Name; throw; }
         finally
         {
-            if (Directory.Exists(run))
+            try
             {
-                try { state.CleanupLogicalBytes = Safety.RemoveOwnedRun(options.WorkRoot, run); }
-                catch (Exception error) { state.CleanupErrorType = error.GetType().Name; state.Status = "failed"; }
+                if (Directory.Exists(run))
+                {
+                    try { state.CleanupLogicalBytes = Safety.RemoveOwnedRun(options.WorkRoot, run); }
+                    catch (Exception error) { state.CleanupErrorType = error.GetType().Name; state.Status = "failed"; }
+                }
+                state.Healthy = state.Status == "success";
+                state.CompletedAtUtc = DateTimeOffset.UtcNow;
+                Safety.WriteJson(statusPath, state);
+                if (state.Healthy) Safety.WriteJson(Path.Combine(Path.GetDirectoryName(statusPath)!, "restore-drill-success.json"), state);
             }
-            state.Healthy = state.Status == "success";
-            state.CompletedAtUtc = DateTimeOffset.UtcNow;
-            Safety.WriteJson(statusPath, state);
-            if (state.Healthy) Safety.WriteJson(Path.Combine(Path.GetDirectoryName(statusPath)!, "restore-drill-success.json"), state);
+            finally { runLock?.Dispose(); }
         }
         if (!state.Healthy) throw new IOException("Restore drill cleanup failed.");
     }

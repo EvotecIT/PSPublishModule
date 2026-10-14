@@ -2,6 +2,51 @@
 param([Parameter(Mandatory)][string] $TemporaryRoot, [switch] $IncludePrivilegedCreation)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'DatabaseBackupInstallation.ps1')
+# Task Scheduler is an external boundary. Exercise the real update lifecycle with scoped in-memory tasks.
+function Get-ScheduledTask { param($TaskName, $ErrorAction); $script:fixtureTask }
+function Disable-ScheduledTask { param($TaskName); $script:fixtureTask.State = 'Disabled' }
+function Enable-ScheduledTask { param($TaskName); $script:fixtureTask.State = 'Ready' }
+$fixtureMonitorSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+foreach ($initialState in @('Ready', 'Disabled')) {
+    foreach ($phase in @('prepare', 'install')) {
+        $script:fixtureTask = [pscustomobject]@{ State = $initialState }
+        $script:fixtureGuard = $null
+        $script:fixturePhase = $phase
+        $failed = $false
+        try {
+            Invoke-DatabaseBackupInstallationUpdate -TaskName 'Synthetic backup task' -ExistingTask $script:fixtureTask -MonitorIdentity $fixtureMonitorSid -Prepare {
+                if ($script:fixturePhase -eq 'prepare') { throw 'Synthetic staging setup failure' }
+                $script:fixtureGuard = New-Object IO.MemoryStream
+                $script:fixtureGuard
+            } -Install { throw 'Synthetic runtime deployment failure' }
+        } catch { $failed = $_.Exception.Message -like 'Synthetic * failure' }
+        $expectedState = if ($phase -eq 'prepare') { $initialState } else { 'Disabled' }
+        if (-not $failed -or $script:fixtureTask.State -ne $expectedState) { throw 'Failed installation did not preserve the correct task state.' }
+        if ($script:fixtureGuard -and $script:fixtureGuard.CanRead) { throw 'Failed installation retained its worker guard.' }
+    }
+    $script:fixtureTask = [pscustomobject]@{ State = $initialState }
+    Invoke-DatabaseBackupInstallationUpdate -TaskName 'Synthetic backup task' -ExistingTask $script:fixtureTask -MonitorIdentity $fixtureMonitorSid -Prepare {
+        $script:fixtureGuard = New-Object IO.MemoryStream
+        $script:fixtureGuard
+    } -Install { param($resolvedMonitor); if ($resolvedMonitor.Value -ne $fixtureMonitorSid) { throw 'Resolved monitor identity was not reused.' } }
+    if ($script:fixtureTask.State -ne $initialState -or $script:fixtureGuard.CanRead) { throw 'Successful update changed enabled policy or retained its guard.' }
+}
+$script:fixtureTask = [pscustomobject]@{ State = 'Ready' }
+$script:fixtureMutation = $false
+$rejected = $false
+try {
+    Invoke-DatabaseBackupInstallationUpdate -TaskName 'Synthetic backup task' -ExistingTask $script:fixtureTask `
+        -MonitorIdentity 'PowerForgeMissingIdentity-01234567' -Prepare { $script:fixtureMutation = $true } -Install { $script:fixtureMutation = $true }
+} catch { $rejected = $true }
+if (-not $rejected -or $script:fixtureTask.State -ne 'Ready' -or $script:fixtureMutation) {
+    throw 'Unresolved monitor identity changed the task or reached runtime preparation.'
+}
+$sqlitePrincipal = Get-DatabaseBackupStagingPrincipal -Databases @([pscustomobject]@{ provider = 'sqlite' }) -SqlServiceIdentity 'PowerForgeMissingIdentity-01234567'
+if ($null -ne $sqlitePrincipal) { throw 'SQLite-only installation resolved a SQL Server principal.' }
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$sqlPrincipal = Get-DatabaseBackupStagingPrincipal -Databases @([pscustomobject]@{ provider = 'sqlserver' }) -SqlServiceIdentity $identity.Name
+if ($sqlPrincipal.sid -ne $identity.User.Value) { throw 'SQL staging principal differs.' }
+'INSTALLATION_LIFECYCLE_CONTRACTS_PASSED'
 $plan = Get-DatabaseBackupInstallationPlan -InstallRoot 'D:\Custom Backup' -TaskName "Custom 'backup" -DailyAt '04:35' -TimeoutMinutes 600
 if ($plan.taskLimitMinutes -ne 660 -or $plan.dailyAt -ne '04:35' -or $plan.installRoot -ne 'D:\Custom Backup') { throw 'Custom installation plan differs.' }
 $defaultPlan = Get-DatabaseBackupInstallationPlan -InstallRoot 'D:\Backup' -TaskName 'Backup' -DailyAt '03:00'
