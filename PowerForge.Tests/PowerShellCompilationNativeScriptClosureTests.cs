@@ -157,14 +157,18 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(originalHelper, File.ReadAllBytes(helper));
     }
 
-    private static void AssertNativeClosureDiagnostic(string expected, string stderr)
+    private static void AssertNativeClosureDiagnostic(
+        string expected, string stderr, string? scenario = null, bool expectedPresent = true)
     {
         // PowerShell may continue its formatted error on a new gutter-prefixed line.
         // Keep every diagnostic word and its order while allowing that presentation.
         const string separator = @"(?:[ \t]+|\r?\n[ \t]*\|[ \t]*)";
         var pattern = string.Join(separator, expected.Split(' ')
             .Select(System.Text.RegularExpressions.Regex.Escape));
-        Assert.Matches(pattern, stderr);
+        var matched = System.Text.RegularExpressions.Regex.IsMatch(stderr, pattern);
+        var presence = expectedPresent ? "present" : "absent";
+        Assert.True(matched == expectedPresent,
+            $"Case={scenario ?? "native-closure"}; expected diagnostic {presence}: {expected}{Environment.NewLine}stderr={stderr}");
     }
 
     private static PowerShellCompilationTargetContract CreateNativeClosureTarget()

@@ -78,14 +78,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             var run = RunProcess(result.ArtifactPath!, "--Case=" + scenario, "--OutsidePath=" + outside, "--Marker=" + marker);
             Assert.True(run.ExitCode != 0,
                 $"Case={scenario}; exit={run.ExitCode}; stdout={run.StandardOutput}; stderr={run.StandardError}");
-            Assert.Contains("Packaged dot-source", run.StandardError, StringComparison.Ordinal);
+            AssertNativeClosureDiagnostic("Packaged dot-source", run.StandardError, scenario);
             Assert.DoesNotContain("UNREVIEWED", run.StandardOutput, StringComparison.Ordinal);
             Assert.False(File.Exists(marker), scenario + " executed source before its guard passed.");
         }
         File.Delete(marker);
         var continuing = RunProcess(result.ArtifactPath!, "--Case=continue-shadow", "--OutsidePath=" + outside, "--Marker=" + marker);
         Assert.Equal(0, continuing.ExitCode);
-        Assert.Contains("Packaged dot-source", continuing.StandardError, StringComparison.Ordinal);
+        AssertNativeClosureDiagnostic("Packaged dot-source", continuing.StandardError, "continue-shadow");
         Assert.DoesNotContain("UNREVIEWED", continuing.StandardOutput, StringComparison.Ordinal);
         Assert.False(File.Exists(marker), "Continue must not turn a rejected operand into an executed source load.");
         foreach (var scenario in new[] { "join-throw", "test-throw" })
@@ -94,7 +94,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             var run = RunProcess(result.ArtifactPath!, "--Case=" + scenario, "--OutsidePath=" + outside, "--Marker=" + marker);
             Assert.NotEqual(0, run.ExitCode);
             Assert.Contains(scenario == "join-throw" ? "AUTHORED-JOIN-ERROR" : "AUTHORED-TEST-ERROR", run.StandardError, StringComparison.Ordinal);
-            Assert.DoesNotContain("Packaged dot-source", run.StandardError, StringComparison.Ordinal);
+            AssertNativeClosureDiagnostic("Packaged dot-source", run.StandardError, scenario, expectedPresent: false);
             Assert.False(File.Exists(marker));
         }
     }
