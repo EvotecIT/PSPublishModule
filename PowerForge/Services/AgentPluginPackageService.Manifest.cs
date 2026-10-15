@@ -102,7 +102,8 @@ public sealed partial class AgentPluginPackageService
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true })) write(writer);
         stream.WriteByte((byte)'\n');
-        return stream.ToArray();
+        // Compatibility manifests are committed and compared byte for byte on every host.
+        return Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(stream.ToArray()).Replace("\r\n", "\n"));
     }
 
     private static string RequiredString(JsonElement element, string field)

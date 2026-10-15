@@ -44,6 +44,22 @@ public sealed class AgentPluginPackageServiceTests : IDisposable
     }
 
     [Fact]
+    public void CompatibilityFilesRemainValidAfterGitLfNormalization()
+    {
+        var service = new AgentPluginPackageService();
+        service.SyncCompatibility(Source);
+        foreach (var name in new[] { ".mcp.json", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json", ".codex-plugin/mcp.json" })
+        {
+            var path = Path.Combine(Source, name);
+            var content = File.ReadAllText(path);
+            Assert.Contains("\n", content);
+            Assert.DoesNotContain("\r", content);
+            File.WriteAllText(path, content.Replace("\r\n", "\n"));
+        }
+        service.Validate(Source);
+    }
+
+    [Fact]
     public void CompatibilityTranslatesHttpAndPluginRootForEachClient()
     {
         File.WriteAllText(Path.Combine(Source, "mcp.json"), """
