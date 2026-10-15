@@ -223,7 +223,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationResourceMode.Declared, null, null, fixture.OutputPath, target);
         var shaped = PowerShellCompilationExplainShaper.Shape(input, plan, "net10.0", out var entry)!;
         Assert.NotNull(entry);
-        var root = entry.EntryPointMethod;
+        var root = entry.EntryPoint.Method;
         var child = Assert.Single(root.NestedBodies, body => body.DeclarationName == "Child");
         var grandchild = Assert.Single(root.NestedBodies, body => body.DeclarationName == "Grandchild");
         var methods = PowerShellCompilationExplainShaper.GetEmittedMethods(shaped, entry);
