@@ -1,0 +1,45 @@
+name: Publish Agent Plugin
+description: Publish a verified PowerForge plugin archive to a small generated Git distribution branch.
+inputs:
+  archive:
+    description: Qualified plugin ZIP, or a directory containing exactly one ZIP.
+    required: true
+  checksum:
+    description: SHA-256 sidecar; defaults to the archive path plus .sha256.
+    required: false
+  branch:
+    description: Dedicated generated branch, never the product source branch.
+    default: agent-plugin
+  github-token:
+    description: Token with contents write permission in the caller repository.
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+      with:
+        global-json-file: ${{ github.action_path }}/../../../global.json
+    - name: Build shared plugin validation
+      shell: pwsh
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        dotnet build PowerForge.Cli/PowerForge.Cli.csproj -c Release -f net10.0 --nologo
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    - name: Publish verified plugin payload
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PLUGIN_ARCHIVE: ${{ inputs.archive }}
+        PLUGIN_CHECKSUM: ${{ inputs.checksum }}
+        PLUGIN_BRANCH: ${{ inputs.branch }}
+      run: |
+        $arguments = @{
+          ArchivePath = $env:PLUGIN_ARCHIVE
+          ChecksumPath = $env:PLUGIN_CHECKSUM
+          Repository = $env:GITHUB_REPOSITORY
+          Branch = $env:PLUGIN_BRANCH
+          SourceRevision = $env:GITHUB_SHA
+          PowerForgePath = Join-Path $env:GITHUB_ACTION_PATH '../../../PowerForge.Cli/bin/Release/net10.0/PowerForge.Cli.dll'
+          ScratchRoot = $env:RUNNER_TEMP
+        }
+        & (Join-Path $env:GITHUB_ACTION_PATH 'Publish-AgentPlugin.ps1') @arguments

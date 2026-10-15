@@ -81,7 +81,7 @@ public sealed partial class AgentPluginPackageService
             if (manifest.TryGetProperty("extensions", out var extensions) && extensions.TryGetProperty("com.openai", out var openai))
                 foreach (var property in openai.EnumerateObject()) property.WriteTo(writer);
             writer.WriteString("skills", "./skills/");
-            if (mcp.HasValue) writer.WriteString("mcpServers", "./.codex-plugin/mcp.json");
+            if (mcp.HasValue) writer.WriteString("mcpServers", "./.mcp.json");
             writer.WriteEndObject();
         });
         if (mcp.HasValue)
@@ -102,7 +102,8 @@ public sealed partial class AgentPluginPackageService
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true })) write(writer);
         stream.WriteByte((byte)'\n');
-        return stream.ToArray();
+        // Compatibility manifests are committed and compared byte for byte on every host.
+        return Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(stream.ToArray()).Replace("\r\n", "\n"));
     }
 
     private static string RequiredString(JsonElement element, string field)

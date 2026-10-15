@@ -93,7 +93,7 @@ internal static class CsprojVersionEditor
         var updated = content;
         foreach (var tag in FullVersionTags)
         {
-            updated = ReplaceValues(updated, tag, escapedVersion);
+            updated = ReplaceValues(updated, tag, escapedVersion, preserveExpressions: tag == "InformationalVersion");
         }
         foreach (var tag in NumericVersionTags)
         {
@@ -140,17 +140,27 @@ internal static class CsprojVersionEditor
         span.Element.Parent?.Parent == span.Element.Document?.Root && !span.Element.AncestorsAndSelf().Any(element =>
             element.Attributes().Any(attribute => attribute.Name.LocalName.Equals("Condition", StringComparison.OrdinalIgnoreCase)));
 
-    private static string ReplaceValues(string content, string tag, string value, bool includeEmpty = false)
+    private static string ReplaceValues(string content, string tag, string value, bool includeEmpty = false, bool preserveExpressions = false)
     {
         var result = new StringBuilder(content.Length);
         var offset = 0;
         foreach (var span in FindValues(content, tag, includeEmpty))
         {
+            var replacement = value;
+            if (preserveExpressions)
+            {
+                var declared = span.Element.Value.Trim();
+                if (declared.StartsWith("$(", StringComparison.Ordinal)) continue;
+                var metadata = declared.IndexOf('+');
+                if (metadata > 0 && declared.IndexOf("$(", metadata, StringComparison.Ordinal) >= 0 &&
+                    PackageVersionUtility.TryNormalizeExact(declared.Substring(0, metadata), out _) && !value.Contains('+'))
+                    replacement += SecurityElement.Escape(declared.Substring(metadata));
+            }
             result.Append(content, offset, span.Index - offset);
             if (span.IsEmpty)
-                result.Append(content, span.Index, span.Length - 2).Append('>').Append(value).Append("</").Append(span.QualifiedName).Append('>');
+                result.Append(content, span.Index, span.Length - 2).Append('>').Append(replacement).Append("</").Append(span.QualifiedName).Append('>');
             else
-                result.Append(content, span.Index, span.OpeningEnd - span.Index).Append(value)
+                result.Append(content, span.Index, span.OpeningEnd - span.Index).Append(replacement)
                     .Append(content, span.ClosingStart, span.Index + span.Length - span.ClosingStart);
             offset = span.Index + span.Length;
         }
