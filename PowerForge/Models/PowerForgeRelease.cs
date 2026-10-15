@@ -606,6 +606,9 @@ internal sealed class PowerForgeAppleReleasePlan
 
     public string? RequestedMarketingVersion { get; set; }
 
+    /// <summary>Explicit version to observe for read-only Status or Doctor, separate from the versioning pattern.</summary>
+    public string? ObservedMarketingVersion { get; set; }
+
     public string? SourceCommit { get; set; }
 
     public bool RequireImmutableSourceSnapshot { get; set; }

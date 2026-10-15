@@ -111,7 +111,8 @@ public sealed partial class AppStoreConnectClient
                 ? required.GetBoolean()
                 : null,
             DemoAccountName = GetString(attributes, "demoAccountName"),
-            DemoAccountPassword = GetString(attributes, "demoAccountPassword")
+            DemoAccountPassword = GetString(attributes, "demoAccountPassword"),
+            Notes = GetString(attributes, "notes")
         };
     }
 

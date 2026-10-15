@@ -332,12 +332,15 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeAppleAppReleaseTargetPlan app)
     {
         var version = ResolveAppleDistributionValues(app, versionUpdate: null);
+        var observedVersion = string.IsNullOrWhiteSpace(plan.ObservedMarketingVersion) ? null : plan.ObservedMarketingVersion;
+        var observesOtherVersion = !string.IsNullOrWhiteSpace(observedVersion) &&
+            !string.Equals(observedVersion, version.MarketingVersion, StringComparison.Ordinal);
         return _getAppleReleaseState(new AppStoreConnectReleaseStateRequest
         {
             Credential = CreateAppStoreConnectCredential(plan),
             AppId = app.AppStoreConnectAppId!,
-            VersionString = version.MarketingVersion,
-            BuildNumber = version.BuildNumber,
+            VersionString = observedVersion ?? version.MarketingVersion,
+            BuildNumber = observesOtherVersion ? null : version.BuildNumber,
             Platforms = new[] { app.Platform },
             BetaGroupIds = plan.TestFlightBetaGroupIds,
             BetaGroupNames = plan.TestFlightBetaGroupNames,
@@ -559,6 +562,9 @@ internal sealed partial class PowerForgeReleaseService
                     }
                 }
             }
+            var observesExplicitVersion = !string.IsNullOrWhiteSpace(plan.ObservedMarketingVersion);
+            if (observesExplicitVersion)
+                values = (state?.VersionString ?? plan.ObservedMarketingVersion, build?.Version);
             (string? Path, string? Sha256) uploadExport = (null, null);
             try { uploadExport = CaptureAppleUploadExportEvidence(plan, app, result); }
             catch (Exception exception)
@@ -629,7 +635,7 @@ internal sealed partial class PowerForgeReleaseService
                 AppId = app.AppStoreConnectAppId,
                 AppIdDiscovered = app.AppStoreConnectAppIdDiscovered,
                 Version = state?.VersionString ?? values.MarketingVersion,
-                Build = state?.BuildNumber ?? values.BuildNumber,
+                Build = observesExplicitVersion ? build?.Version : state?.BuildNumber ?? values.BuildNumber,
                 BuildId = build?.Id,
                 BuildProcessingState = build?.ProcessingState,
                 BuildUploadId = result?.Upload?.BuildUploadId ?? result?.ResumedUploadAttestation?.BuildUploadId ?? delivery.Id,

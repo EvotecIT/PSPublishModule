@@ -884,6 +884,7 @@ public sealed partial class AppStoreConnectClient : IDisposable
     private static AppStoreConnectScreenshotInfo ParseScreenshot(JsonElement item)
     {
         var attrs = GetAttributes(item);
+        var hasImage = attrs.TryGetProperty("imageAsset", out var image) && image.ValueKind == JsonValueKind.Object;
         return new AppStoreConnectScreenshotInfo
         {
             Id = GetString(item, "id") ?? string.Empty,
@@ -892,6 +893,9 @@ public sealed partial class AppStoreConnectClient : IDisposable
             SourceFileChecksum = GetString(attrs, "sourceFileChecksum"),
             AssetToken = GetString(attrs, "assetToken"),
             AssetDeliveryState = GetNestedString(attrs, "assetDeliveryState", "state"),
+            ImageAssetUrlTemplate = hasImage ? GetString(image, "templateUrl") : null,
+            ImageAssetWidth = hasImage ? GetInt64(image, "width") : null,
+            ImageAssetHeight = hasImage ? GetInt64(image, "height") : null,
             UploadOperations = GetUploadOperations(attrs, "uploadOperations")
         };
     }

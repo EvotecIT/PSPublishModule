@@ -1886,6 +1886,10 @@ internal sealed partial class PowerForgeReleaseService
         var requestedMarketingVersion = FirstNonEmpty(
             request.AppleMarketingVersion,
             automation.MarketingVersionPattern);
+        var observedMarketingVersion = request.AppleAction is PowerForgeAppleReleaseAction.Status or PowerForgeAppleReleaseAction.Doctor &&
+            !string.IsNullOrWhiteSpace(request.AppleMarketingVersion) ? request.AppleMarketingVersion!.Trim() : null;
+        if (observedMarketingVersion is not null)
+            AppleReleaseMarketingVersionResolver.ValidateExactVersion(observedMarketingVersion, "Observed Apple version");
         if (directDistribution.TimeoutSeconds <= 0)
             throw new InvalidOperationException("AppleApps.DirectDistribution.TimeoutSeconds must be greater than zero.");
         var receiptPath = ResolveOutputPath(projectRoot, automation.ReceiptPath);
@@ -2170,6 +2174,7 @@ internal sealed partial class PowerForgeReleaseService
             LockPath = lockPath,
             VersionSourcePath = versionSourcePath,
             RequestedMarketingVersion = requestedMarketingVersion,
+            ObservedMarketingVersion = observedMarketingVersion,
             SourceCommit = appleSourceCommit.Length == 0 ? null : appleSourceCommit,
             RequireImmutableSourceSnapshot = requireImmutableSourceSnapshot,
             ApprovedPlanSha256 = request.AppleExpectedPlanSha256?.Trim(),

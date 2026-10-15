@@ -5,7 +5,7 @@ using PowerForge.Cli;
 internal static partial class Program
 {
     private const string AppleReviewDetailsUsage =
-        "Usage: powerforge apple-review-details <validate|plan|apply> --config <review-details.json> " +
+        "Usage: powerforge apple-review-details <validate|plan|apply|notes-validate|notes-plan|notes-apply> --config <review-details.json> " +
         "[--key-path <AuthKey.p8> --key-id <id> --issuer-id <id>] [--receipt <path>] " +
         "[--reviewed-plan <path> --confirm] [--output json]";
 
@@ -24,11 +24,13 @@ internal static partial class Program
         try
         {
             ValidateAppleReviewDetailsArguments(argv.Skip(1).ToArray());
-            if (operation is not ("validate" or "plan" or "apply"))
+            if (operation is not ("validate" or "plan" or "apply" or "notes-validate" or "notes-plan" or "notes-apply"))
                 throw new ArgumentException($"Unknown apple-review-details operation '{operation}'.");
 
             var configPath = TryGetOptionValue(argv, "--config") ?? throw new ArgumentException("--config is required.");
             var fullConfigPath = ResolveExistingFilePath(configPath);
+            if (operation.StartsWith("notes-", StringComparison.Ordinal))
+                return CommandAppleReviewNotes(operation, argv, fullConfigPath, outputJson, logger);
             var spec = CliJson.DeserializeOrThrow(
                 File.ReadAllText(fullConfigPath),
                 CliJson.Context.AppStoreConnectReviewDetailsCopySpec,
