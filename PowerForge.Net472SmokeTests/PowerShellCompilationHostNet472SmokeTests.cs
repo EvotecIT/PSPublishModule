@@ -60,9 +60,32 @@ foreach ($path in [IO.Directory]::EnumerateFiles($sdkRoot, '*', [IO.SearchOption
 }
 Write-Checkpoint ('SDK inventory: ' + $fileCount + ' files, ' + $totalBytes + ' bytes')
 if ($null -ne $largest) {
+    $defaultSha = [Security.Cryptography.SHA256]::Create()
+    try { Write-Checkpoint ('Default SHA-256 provider: ' + $defaultSha.GetType().FullName) }
+    finally { $defaultSha.Dispose() }
     Write-Checkpoint ('Hash SDK sample: ' + $largest.Name + ', ' + $largest.Length + ' bytes')
-    [void]$fingerprint.GetMethod('ComputeFileSha256', $flags).Invoke($null, @($largest.FullName))
+    $sampleHash = $fingerprint.GetMethod('ComputeFileSha256', $flags).Invoke($null, @($largest.FullName))
     Write-Checkpoint 'SDK sample hash complete'
+    Write-Checkpoint 'Hash same SDK sample with Windows CNG SHA-256'
+    $nativeSha = [Security.Cryptography.SHA256Cng]::new()
+    $sampleStream = [IO.File]::OpenRead($largest.FullName)
+    try { $nativeHash = [BitConverter]::ToString($nativeSha.ComputeHash($sampleStream)).Replace('-', '').ToLowerInvariant() }
+    finally { $sampleStream.Dispose(); $nativeSha.Dispose() }
+    if ($sampleHash -ne $nativeHash) { throw 'SDK sample hash providers disagree.' }
+    Write-Checkpoint 'Windows CNG SDK sample hash complete; bytes agree'
+}
+$dotnetRoot = [IO.Directory]::GetParent([IO.Directory]::GetParent($sdkRoot).FullName).FullName
+$packsRoot = Join-Path $dotnetRoot 'packs'
+if ([IO.Directory]::Exists($packsRoot)) {
+    foreach ($pattern in @('Microsoft.NETCore.App.Ref', 'NETStandard.Library.Ref', 'Microsoft.NETCore.App.Host.*')) {
+        foreach ($packRoot in [IO.Directory]::EnumerateDirectories($packsRoot, $pattern, [IO.SearchOption]::TopDirectoryOnly)) {
+            $count = 0; $bytes = [long]0
+            foreach ($path in [IO.Directory]::EnumerateFiles($packRoot, '*', [IO.SearchOption]::AllDirectories)) {
+                $count++; $bytes += [IO.FileInfo]::new($path).Length
+            }
+            Write-Checkpoint ('Reference pack inventory: ' + [IO.Path]::GetFileName($packRoot) + ', ' + $count + ' files, ' + $bytes + ' bytes')
+        }
+    }
 }
 Write-Checkpoint 'Compute selected SDK and reference-pack fingerprint'
 [void]$fingerprint.GetMethod('ComputeSdkSha256', $flags).Invoke($null, @($sdkVersion, $false))
