@@ -2536,6 +2536,7 @@
         "coverageReport": { "type": "string" },
         "coverage-report": { "type": "string" },
         "coverageReportPath": { "type": "string" },
+        "sourceMemberCoverageScope": { "type": "string", "enum": ["all", "assembly"], "default": "all", "description": "Source-link coverage denominator: all members, or members declared by the documented assemblies. Inherited external members remain visible in API output." },
         "coverage-report-path": { "type": "string" },
         "generateXrefMap": { "type": "boolean" },
         "generate-xref-map": { "type": "boolean" },

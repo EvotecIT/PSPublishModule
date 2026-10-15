@@ -373,6 +373,7 @@ internal static partial class WebPipelineRunner
                 SourceUrlPattern = sourceUrl,
                 GenerateCoverageReport = generateCoverageReport,
                 CoverageReportPath = coverageReportPath,
+                SourceMemberCoverageScope = GetString(step, "sourceMemberCoverageScope") ?? "all",
                 GenerateXrefMap = generateXrefMap,
                 GenerateMemberXrefs = generateMemberXrefs,
                 MemberXrefMaxPerType = memberXrefMaxPerType <= 0 ? 0 : memberXrefMaxPerType,

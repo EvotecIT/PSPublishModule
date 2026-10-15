@@ -89,6 +89,7 @@ public static partial class WebApiDocsGenerator
             Signature = source.Signature,
             ReturnType = source.ReturnType,
             DeclaringType = source.DeclaringType,
+            DeclaringAssemblyName = source.DeclaringAssemblyName,
             IsInherited = source.IsInherited,
             IsStatic = source.IsStatic,
             Access = source.Access,

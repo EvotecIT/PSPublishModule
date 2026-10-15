@@ -215,6 +215,9 @@ public sealed class WebApiDocsOptions
     /// Defaults to <c>coverage.json</c> when not set.
     /// </summary>
     public string? CoverageReportPath { get; set; }
+
+    /// <summary>Source-link member coverage scope: all (default), or assembly to exclude inherited members from undocumented assemblies.</summary>
+    public string SourceMemberCoverageScope { get; set; } = "all";
     /// <summary>
     /// Generates a DocFX-compatible xref map for API symbols.
     /// </summary>
@@ -388,6 +391,10 @@ public static partial class WebApiDocsGenerator
     public static WebApiDocsResult Generate(WebApiDocsOptions options)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
+        if (options.SourceMemberCoverageScope is null ||
+            !(options.SourceMemberCoverageScope.Trim().Equals("all", StringComparison.OrdinalIgnoreCase) ||
+              options.SourceMemberCoverageScope.Trim().Equals("assembly", StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException("SourceMemberCoverageScope must be 'all' or 'assembly'.", nameof(options));
         var xmlPaths = options.Type == ApiDocsType.CSharp
             ? ResolveCSharpXmlPaths(options)
             : Array.Empty<string>();

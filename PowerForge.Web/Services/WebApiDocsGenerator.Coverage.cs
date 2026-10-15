@@ -182,7 +182,15 @@ public static partial class WebApiDocsGenerator
             !string.IsNullOrWhiteSpace(ex.Text)));
         var membersWithRelatedContent = allMembers.Count(member => MemberHasRelatedContent(member, typeRelatedContentMap));
         var typeSourceCoverage = AnalyzeSourceCoverage(safeTypes.Select(static t => t.Source));
-        var memberSourceCoverage = AnalyzeSourceCoverage(allMembers.Select(static m => m.Source));
+        var sourceScope = options.SourceMemberCoverageScope.Trim().ToLowerInvariant();
+        var documentedAssemblies = safeTypes.Select(static t => t.Assembly).Where(static name => name is not null).ToHashSet(StringComparer.Ordinal);
+        var sourceMembers = sourceScope == "assembly"
+            ? allMembers.Where(member => member.DeclaringAssemblyName is null || documentedAssemblies.Contains(member.DeclaringAssemblyName)).ToArray()
+            : allMembers;
+        var memberSourceCoverage = AnalyzeSourceCoverage(sourceMembers.Select(static m => m.Source));
+        var memberSourcePayload = BuildSourceCoveragePayload(sourceMembers.Length, memberSourceCoverage);
+        memberSourcePayload["scope"] = sourceScope;
+        memberSourcePayload["excludedExternalMembers"] = allMembers.Length - sourceMembers.Length;
 
         var kinds = safeTypes
             .GroupBy(static t => string.IsNullOrWhiteSpace(t.Kind) ? "Unknown" : t.Kind, StringComparer.OrdinalIgnoreCase)
@@ -330,7 +338,7 @@ public static partial class WebApiDocsGenerator
             ["source"] = new Dictionary<string, object?>
             {
                 ["types"] = BuildSourceCoveragePayload(typeCount, typeSourceCoverage),
-                ["members"] = BuildSourceCoveragePayload(totalMembers, memberSourceCoverage),
+                ["members"] = memberSourcePayload,
                 ["powershell"] = BuildSourceCoveragePayload(commandCount, commandSourceCoverage)
             },
             ["powershell"] = new Dictionary<string, object?>
