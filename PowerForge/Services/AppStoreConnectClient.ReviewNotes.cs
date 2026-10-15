@@ -23,9 +23,9 @@ public sealed partial class AppStoreConnectClient
         return ParseReviewDetails(data);
     }
 
-    internal static void ValidateReviewNotes(string notes)
+    internal static void ValidateReviewNotes(string? notes)
     {
-        if (string.IsNullOrWhiteSpace(notes) || Encoding.UTF8.GetByteCount(notes) > 4000)
-            throw new ArgumentException("Review notes must contain text and fit Apple's 4000-byte UTF-8 limit.", nameof(notes));
+        if (notes is null || Encoding.UTF8.GetByteCount(notes) > 4000)
+            throw new ArgumentException("Review notes must be supplied and fit Apple's 4000-byte UTF-8 limit. Use an empty string to clear them.", nameof(notes));
     }
 }

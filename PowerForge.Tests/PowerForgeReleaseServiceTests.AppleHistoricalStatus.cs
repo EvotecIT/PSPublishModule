@@ -3,6 +3,35 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Theory]
+    [InlineData(PowerForgeAppleReleaseAction.Status)]
+    [InlineData(PowerForgeAppleReleaseAction.Doctor)]
+    public void Execute_AppleExplicitObservation_FailureRetainsRequestedVersionWithoutBuildClaims(PowerForgeAppleReleaseAction action)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var (spec, source) = CreateAppleStatusDeliveryFixture(root);
+            var result = CreateAppleAutomationService(_ => throw new InvalidOperationException("Synthetic observation failure."))
+                .Execute(spec, new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"), AppleAction = action,
+                    AppleSourceCommit = source, AppleMarketingVersion = "1.1"
+                });
+            Assert.False(result.Success);
+            var target = Assert.Single(result.AppleReceipt!.Targets);
+            Assert.Equal("1.1", target.Version);
+            Assert.Null(target.Build);
+            Assert.Null(target.BuildId);
+            Assert.Null(target.BuildProcessingState);
+            Assert.Null(target.BuildSelected);
+            Assert.Null(target.TestFlightInternalState);
+            Assert.Null(target.TestFlightExternalState);
+            Assert.Contains("Synthetic observation failure", target.ErrorMessage);
+        }
+        finally { TryDelete(root); }
+    }
+
+    [Theory]
     [InlineData(PowerForgeAppleReleaseAction.Status, false)]
     [InlineData(PowerForgeAppleReleaseAction.Doctor, false)]
     [InlineData(PowerForgeAppleReleaseAction.Status, true)]
@@ -178,6 +207,55 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal("1.1", target.Version);
             Assert.Null(target.Build);
             Assert.Null(target.BuildSelected);
+        }
+        finally { TryDelete(root); }
+    }
+
+    [Theory]
+    [InlineData(PowerForgeAppleReleaseAction.Status, false)]
+    [InlineData(PowerForgeAppleReleaseAction.Doctor, false)]
+    [InlineData(PowerForgeAppleReleaseAction.Status, true)]
+    [InlineData(PowerForgeAppleReleaseAction.Doctor, true)]
+    public void Execute_AppleExplicitObservation_DoesNotRequireLocalProjectOrPublishConfig(
+        PowerForgeAppleReleaseAction action, bool dotNet)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var (spec, _) = CreateAppleStatusDeliveryFixture(root);
+            var app = Assert.Single(spec.AppleApps!.Apps);
+            app.ProjectPath = dotNet ? "missing-publish.json" : "Missing.xcodeproj";
+            app.GenerateProjectIfMissing = false;
+            app.RegenerateProject = false;
+            app.MarketingVersion = null;
+            app.BuildNumber = null;
+            app.BuildNumberPolicy = AppleBuildNumberPolicy.KeepExisting;
+            app.UseResolvedVersion = false;
+            if (dotNet)
+            {
+                app.Platform = ApplePlatform.macOS;
+                app.DotNetPublishInstallerId = "store";
+            }
+            var calls = 0;
+            var service = CreateAppleAutomationService(request =>
+            {
+                calls++;
+                Assert.Equal("1.1", request.VersionString);
+                Assert.Null(request.BuildNumber);
+                return CreateReleaseState(request, null);
+            }, generateAppleProject: _ => throw new InvalidOperationException("Observation must not generate a project."));
+            var result = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"), AppleAction = action,
+                AppleSourceCommit = EnsureTestSourceCommit(root), AppleMarketingVersion = "1.1"
+            });
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(1, calls);
+            Assert.False(File.Exists(Path.Combine(root, app.ProjectPath)));
+            Assert.False(Directory.Exists(Path.Combine(root, app.ProjectPath)));
+            var target = Assert.Single(result.AppleReceipt!.Targets);
+            Assert.Equal("1.1", target.Version);
+            Assert.Null(target.Build);
         }
         finally { TryDelete(root); }
     }

@@ -809,6 +809,10 @@ powerforge apple-review-details notes-plan --config scripts/review-notes.json --
 powerforge apple-review-details notes-apply --config scripts/review-notes.json --reviewed-plan build/review-notes-plan.json --confirm
 ```
 
+To clear stale instructions, set `notes` to an explicit empty string and review
+the resulting plan. An omitted or null `notes` value is rejected so an incomplete
+configuration cannot erase existing instructions.
+
 The plan hashes the existing and replacement notes without exposing their text
 or contact details. Apply refuses changed inputs, updates only the notes field,
 and verifies exact readback. It preserves review contacts, demo credentials,

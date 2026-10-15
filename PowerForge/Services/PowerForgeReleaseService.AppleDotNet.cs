@@ -23,6 +23,8 @@ internal sealed partial class PowerForgeReleaseService
 
     private static IEnumerable<string> EnumerateDotNetAppleInputs(PowerForgeAppleReleasePlan plan)
     {
+        if (IsExplicitAppleVersionObservation(plan))
+            yield break;
         foreach (var app in plan.Apps.Where(app => !string.IsNullOrWhiteSpace(app.DotNetPublishInstallerId)))
         {
             var configured = DotNetPublishReleaseArtifactVerifier.ReadConfiguredPublishSpecWithInputs(app.ProjectPath);

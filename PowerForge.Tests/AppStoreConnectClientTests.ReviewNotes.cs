@@ -25,7 +25,7 @@ public sealed partial class AppStoreConnectClientTests
         var serialized = JsonSerializer.Serialize(new { plan, result });
         Assert.DoesNotContain("Existing private review instructions", serialized);
         Assert.DoesNotContain("private-contact@example.test", serialized);
-        Assert.DoesNotContain(spec.Notes, serialized);
+        Assert.DoesNotContain(spec.Notes!, serialized);
     }
 
     [Theory]
@@ -104,6 +104,33 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Fact]
+    public async Task ReviewNotes_ExplicitEmptyReplacementClearsNotesAndConvergesOnNullReadback()
+    {
+        var handler = new ReviewNotesHandler { ClearAsNull = true };
+        using var http = new HttpClient(handler);
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectReviewNotesService(client);
+        var spec = ReviewNotesSpec();
+        spec.Notes = string.Empty;
+        var result = await service.ApplyAsync(spec, await service.PlanAsync(spec), true);
+        Assert.True(result.IsConverged);
+        Assert.Null(handler.Notes);
+        using var patch = JsonDocument.Parse(Assert.Single(handler.Patches));
+        var attrs = patch.RootElement.GetProperty("data").GetProperty("attributes");
+        Assert.Equal("notes", Assert.Single(attrs.EnumerateObject()).Name);
+        Assert.Equal(string.Empty, attrs.GetProperty("notes").GetString());
+    }
+
+    [Theory]
+    [InlineData("{\"Target\":{\"AppId\":\"app-1\",\"VersionString\":\"2.2\"}}")]
+    [InlineData("{\"Target\":{\"AppId\":\"app-1\",\"VersionString\":\"2.2\"},\"Notes\":null}")]
+    public void ReviewNotes_MissingOrNullReplacementCannotClearNotesAccidentally(string json)
+    {
+        var spec = JsonSerializer.Deserialize<AppStoreConnectReviewNotesSpec>(json)!;
+        Assert.Throws<ArgumentException>(() => AppStoreConnectReviewNotesService.ValidateSpec(spec));
+    }
+
+    [Fact]
     public async Task ReviewNotes_RequiresConfirmationAndSuppressesProviderPrivateResponse()
     {
         var handler = new ReviewNotesHandler { FailReads = true };
@@ -125,7 +152,8 @@ public sealed partial class AppStoreConnectClientTests
 
     private sealed class ReviewNotesHandler : HttpMessageHandler
     {
-        public string Notes { get; set; } = "Existing private review instructions";
+        public string? Notes { get; set; } = "Existing private review instructions";
+        public bool ClearAsNull { get; set; }
         public bool FailAfterPatch { get; set; }
         public bool TimeoutAfterPatch { get; set; }
         public Action? CancelAfterPatch { get; set; }
@@ -142,6 +170,7 @@ public sealed partial class AppStoreConnectClientTests
                 Patches.Add(body);
                 using var parsed = JsonDocument.Parse(body);
                 Notes = parsed.RootElement.GetProperty("data").GetProperty("attributes").GetProperty("notes").GetString()!;
+                if (ClearAsNull && Notes.Length == 0) Notes = null;
                 if (CancelAfterPatch is not null)
                 {
                     CancelAfterPatch();

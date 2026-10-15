@@ -47,7 +47,7 @@ public sealed class AppStoreConnectReviewNotesService
         {
             AppId = spec.Target.AppId.Trim(), VersionString = version.VersionString!, Platform = spec.Target.Platform,
             VersionId = version.Id, ReviewDetailsId = details.Id,
-            DesiredSha256 = Hash(spec.Notes), ObservedSha256 = Hash(details.Notes ?? string.Empty)
+            DesiredSha256 = Hash(spec.Notes!), ObservedSha256 = Hash(details.Notes ?? string.Empty)
         };
         plan.IsConverged = plan.DesiredSha256 == plan.ObservedSha256;
         plan.BindingSha256 = Hash(JsonSerializer.Serialize(new[] { plan.AppId, plan.VersionString, plan.Platform.ToString(),
@@ -69,7 +69,7 @@ public sealed class AppStoreConnectReviewNotesService
         if (current.BindingSha256 != reviewedPlan.BindingSha256)
             throw new InvalidOperationException("Review notes or target changed after review. Generate and review a new plan.");
         if (current.IsConverged) return current;
-        try { await _client.UpdateReviewNotesAsync(current.ReviewDetailsId, desired.Notes, cancellationToken).ConfigureAwait(false); }
+        try { await _client.UpdateReviewNotesAsync(current.ReviewDetailsId, desired.Notes!, cancellationToken).ConfigureAwait(false); }
         catch (Exception error) when (error is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             // An ambiguous response may have applied. Observe once; never repeat the patch blindly.

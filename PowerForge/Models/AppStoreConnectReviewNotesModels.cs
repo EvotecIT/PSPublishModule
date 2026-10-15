@@ -7,8 +7,8 @@ public sealed class AppStoreConnectReviewNotesSpec
     public int SchemaVersion { get; set; } = 1;
     /// <summary>Exact existing version receiving the notes.</summary>
     public AppStoreConnectReviewDetailsVersionRef Target { get; set; } = new();
-    /// <summary>Complete replacement notes. Keep secrets outside checked-in configurations.</summary>
-    public string Notes { get; set; } = string.Empty;
+    /// <summary>Complete replacement notes; an explicit empty string clears them. Keep secrets outside checked-in configurations.</summary>
+    public string? Notes { get; set; }
 }
 
 /// <summary>Hash-bound review of the desired notes and the exact remote notes being replaced.</summary>

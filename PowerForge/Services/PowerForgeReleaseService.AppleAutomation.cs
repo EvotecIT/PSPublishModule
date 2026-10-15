@@ -529,7 +529,7 @@ internal sealed partial class PowerForgeReleaseService
                 "independentRelease",
                 StringComparer.OrdinalIgnoreCase) == true;
             var observesExplicitVersion = IsExplicitAppleVersionObservation(plan, app) &&
-                                          !skippedIndependentRelease && state is not null;
+                                          !skippedIndependentRelease && result is not null;
             var build = platform?.MatchedBuild ??
                         (string.IsNullOrWhiteSpace(state?.BuildNumber) ? platform?.SelectedBuild : null) ??
                         result?.Distribution?.Build;

@@ -2289,12 +2289,12 @@ internal sealed partial class PowerForgeReleaseService
         var requestedProjectPath = ResolveOutputPath(projectRoot, app.ProjectPath);
         EnsurePathWithinProjectRoot(projectRoot, requestedProjectPath, $"Apple app '{name}' ProjectPath");
         var projectExists = File.Exists(requestedProjectPath) || Directory.Exists(requestedProjectPath);
-        if (!projectExists && !app.GenerateProjectIfMissing && !allowMissingProject)
+        if (!projectExists && !app.GenerateProjectIfMissing && !allowMissingProject && !explicitObservation)
             throw new FileNotFoundException($"Apple app project or workspace was not found: {requestedProjectPath}", requestedProjectPath);
         if (app.ProjectGenerationTimeoutSeconds <= 0)
             throw new InvalidOperationException($"Apple app '{name}' ProjectGenerationTimeoutSeconds must be greater than zero.");
         bool dotNet = !string.IsNullOrWhiteSpace(app.DotNetPublishInstallerId);
-        if (dotNet)
+        if (dotNet && !explicitObservation)
             ValidateDotNetAppleTarget(app, requestedProjectPath, options.TeamId);
         var projectPath = dotNet ? requestedProjectPath : projectExists
             ? NormalizeAppleArchiveProjectPath(requestedProjectPath, name)
