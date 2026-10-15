@@ -26,8 +26,15 @@ inherited documentation with the inputs for contracts outside the local build.
 Assembly-backed generation also discovers adjacent dependency XML and the
 matching installed .NET reference-pack XML. Those records supply inherited
 summaries without adding dependency or framework types to the reference.
-Pipeline caches account for their bytes and additional `xmls`/`xmlPaths` inputs.
-Unresolved implicit inheritance produces a warning. An explicit `cref` remains supported.
+This discovery uses each supplied assembly's path, including references built
+with only the plural `assemblies` input. If framework XML is unavailable,
+`System.Object` and `System.ValueType` overrides of `Equals`, `GetHashCode`, and
+`ToString`, and implementations of `IEquatable<T>.Equals`, receive built-in
+summary and return documentation. Available XML documentation takes precedence.
+Pipeline caches account for its bytes and additional `xmls`/`xmlPaths` inputs.
+Unresolved implicit inheritance on library contracts still produces a warning
+and fails pipeline steps with `failOnWarnings` enabled (the CI default).
+An explicit `cref` remains supported.
 
 Assembly inspection reads a fresh snapshot on each generation and releases its
 collectible load context afterward. Rebuilding a DLL at the same path updates
