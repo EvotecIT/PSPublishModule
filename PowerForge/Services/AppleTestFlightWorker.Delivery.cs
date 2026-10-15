@@ -14,6 +14,11 @@ internal sealed partial class AppleTestFlightWorker
             return (policy.BetaGroupIsInternal ? AppleTestFlightJobStage.ReadyInHome : AppleTestFlightJobStage.ReadyInTestFlight, null);
 
         var selected = SelectedDeliveryTargets(receipt, policy).ToArray();
+        var failed = selected.FirstOrDefault(value => !string.IsNullOrEmpty(value.BuildProcessingState) &&
+            value.BuildProcessingState is not ("VALID" or "PROCESSING" or "PROCESSING_PENDING"));
+        if (failed is not null)
+            return (AppleTestFlightJobStage.NeedsOperator, $"{failed.Name}: {failed.ErrorMessage ?? "Apple build processing ended in " + failed.BuildProcessingState}. Preserve and reconcile this delivery before requesting another build.");
+
         if (!policy.BetaGroupIsInternal && selected.Any(value => value.BuildProcessingState == "VALID" &&
                 value.TestFlightExternalState is "READY_FOR_BETA_SUBMISSION" or "BETA_REJECTED" or "MISSING_EXPORT_COMPLIANCE"))
             return (AppleTestFlightJobStage.NeedsOperator,

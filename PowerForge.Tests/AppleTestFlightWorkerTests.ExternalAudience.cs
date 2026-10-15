@@ -44,6 +44,29 @@ public sealed partial class AppleTestFlightWorkerTests
         Assert.Contains("operator action", outcome.Diagnostic);
     }
 
+    [Theory]
+    [InlineData("INVALID")]
+    [InlineData("FAILED")]
+    public void ExternalDelivery_DoesNotHideProcessingFailureBehindAnotherPlatformsReview(string processingState)
+    {
+        var policy = new AppleTestFlightWorkerPolicy
+        {
+            BetaGroupIsInternal = false, Targets = [new() { Name = "iOS" }, new() { Name = "Mac" }]
+        };
+        var receipt = new PowerForgeAppleReleaseReceipt
+        {
+            Success = false, ShipPhase = PowerForgeAppleShipPhase.Release,
+            Targets =
+            [
+                new() { Name = "iOS", BuildProcessingState = "VALID", TestFlightExternalState = "IN_BETA_REVIEW" },
+                new() { Name = "Mac", BuildProcessingState = processingState, ErrorMessage = "Apple rejected the uploaded Mac binary" }
+            ]
+        };
+        var outcome = AppleTestFlightWorker.DeliveryOutcome(receipt, policy);
+        Assert.Equal(AppleTestFlightJobStage.NeedsOperator, outcome.Stage);
+        Assert.Contains("Mac: Apple rejected the uploaded Mac binary", outcome.Diagnostic);
+    }
+
     [Fact]
     public void ExternalPlan_RequiresMatchingLocalAudienceAndStillRejectsAppStoreReview()
     {
