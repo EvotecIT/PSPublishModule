@@ -42,19 +42,25 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Theory]
-    [InlineData(PowerForgeAppleReleaseAction.Status)]
-    [InlineData(PowerForgeAppleReleaseAction.Doctor)]
-    public void Execute_AppleExplicitObservation_DoesNotRequireLocalWorkspaceVersion(PowerForgeAppleReleaseAction action)
+    [InlineData(PowerForgeAppleReleaseAction.Status, true)]
+    [InlineData(PowerForgeAppleReleaseAction.Doctor, true)]
+    [InlineData(PowerForgeAppleReleaseAction.Status, false)]
+    [InlineData(PowerForgeAppleReleaseAction.Doctor, false)]
+    public void Execute_AppleExplicitObservation_DoesNotRequireLocalVersionEvenWithPublisherDefaults(PowerForgeAppleReleaseAction action, bool workspace)
     {
         var root = CreateSandbox();
         try
         {
             var (spec, _) = CreateAppleStatusDeliveryFixture(root);
             var app = Assert.Single(spec.AppleApps!.Apps);
-            app.ProjectPath = "Versionless.xcworkspace";
+            app.ProjectPath = workspace ? "Versionless.xcworkspace" : "CasaRay.xcodeproj";
+            app.UseResolvedVersion = workspace;
+            app.BuildNumberPolicy = AppleBuildNumberPolicy.IncrementExisting;
             app.MarketingVersion = null;
             app.BuildNumber = null;
             Directory.CreateDirectory(Path.Combine(root, app.ProjectPath));
+            if (!workspace)
+                File.WriteAllText(Path.Combine(root, app.ProjectPath, "project.pbxproj"), "// no local version fields");
             var source = EnsureTestSourceCommit(root);
             var calls = 0;
             var service = CreateAppleAutomationService(request =>

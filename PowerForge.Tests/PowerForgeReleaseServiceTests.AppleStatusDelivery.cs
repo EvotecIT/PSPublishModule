@@ -73,6 +73,44 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Fact]
+    public void Execute_AppleStatus_ObservesCurrentDeliveryWhenAnOlderAppStoreBuildIsSelected()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var (spec, source) = CreateAppleStatusDeliveryFixture(root);
+            var reads = 0;
+            var service = CreateAppleAutomationService(request =>
+            {
+                var state = CreateReleaseState(request, null);
+                state.Platforms[0].SelectedBuild = new()
+                {
+                    Id = "older-selected-build", Version = "8", MarketingVersion = "1.1", ProcessingState = "VALID"
+                };
+                return state;
+            }, getAppleBuildUpload: (_, id) =>
+            {
+                reads++;
+                return new() { Id = id, MarketingVersion = "1.2.0", BuildNumber = "9", Platform = "IOS", State = "FAILED" };
+            });
+            var plan = CreateAppleStatusDeliveryPlan(service, spec, root, source);
+            WriteAppleStatusDelivery(plan, "current-upload");
+            var result = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"), AppleAction = PowerForgeAppleReleaseAction.Status,
+                AppleSourceCommit = source
+            });
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(1, reads);
+            var target = Assert.Single(result.AppleReceipt!.Targets);
+            Assert.Equal("9", target.Build);
+            Assert.Equal("current-upload", target.BuildUploadId);
+            Assert.Contains(target.Diagnostics, value => value.Code == "APPLE_BUILD_UPLOAD_REJECTED");
+        }
+        finally { TryDelete(root); }
+    }
+
     [Theory]
     [InlineData("source")]
     [InlineData("app")]
