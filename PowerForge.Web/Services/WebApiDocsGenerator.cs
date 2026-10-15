@@ -886,7 +886,8 @@ public static partial class WebApiDocsGenerator
         AppendSourceCoverageWarnings(types, warnings);
         AppendRelatedContentCoverageWarnings(types, options, typeRelatedContentMap, warnings);
         AppendPowerShellExampleQualityWarnings(types, warnings);
-        var coveragePath = WriteCoverageReport(outputPath, options, types, typeRelatedContentMap, assemblyName, assemblyVersion, warnings);
+        var documentedAssemblies = assemblies.Select(static input => input.GetName().Name!).ToHashSet(StringComparer.Ordinal);
+        var coveragePath = WriteCoverageReport(outputPath, options, types, typeRelatedContentMap, assemblyName, assemblyVersion, documentedAssemblies, warnings);
         var xrefPath = WriteXrefMap(outputPath, options, types, assemblyName, assemblyVersion, warnings);
         var powerShellExampleMediaManifestPath = WritePowerShellExampleMediaManifest(outputPath, options, types, warnings);
 

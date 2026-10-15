@@ -2,11 +2,58 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using PowerForge.Web;
 using Xunit;
 
 public class WebApiDocsGeneratorSourceCoverageTests
 {
+    [Fact]
+    public void SourceScopeRetainsMembersFromSuppliedBaseAssemblyWhenItsTypesAreFilteredOut()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-source-multi-scope-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string Compile(string name, string source, string? dependency = null)
+            {
+                var references = new[] { typeof(object).Assembly.Location, dependency }.Where(path => path is not null)
+                    .Select(path => MetadataReference.CreateFromFile(path!));
+                var compilation = CSharpCompilation.Create(name, new[] { CSharpSyntaxTree.ParseText(source) }, references,
+                    new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+                var dll = Path.Combine(root, name + ".dll");
+                var emitted = compilation.Emit(dll);
+                Assert.True(emitted.Success, string.Join(Environment.NewLine, emitted.Diagnostics));
+                return dll;
+            }
+            var core = Compile("OwnedCore", "namespace Owned.Core { public class Base { public int Owned() => 1; } }");
+            var api = Compile("OwnedApi", "namespace Owned.Api { public class Derived : Owned.Core.Base { } }", core);
+            string Xml(string assembly, string type)
+            {
+                var path = Path.Combine(root, assembly + ".xml");
+                File.WriteAllText(path, $"<doc><assembly><name>{assembly}</name></assembly><members><member name=\"T:{type}\"><summary>Owned.</summary></member></members></doc>");
+                return path;
+            }
+            var options = new WebApiDocsOptions
+            {
+                AssemblyPaths = new[] { api, core },
+                XmlPaths = new[] { Xml("OwnedApi", "Owned.Api.Derived"), Xml("OwnedCore", "Owned.Core.Base") },
+                OutputPath = Path.Combine(root, "api"), Format = "json", IncludeUndocumentedTypes = false,
+                SourceMemberCoverageScope = "assembly"
+            };
+            options.IncludeTypeNames.Add("Owned.Api.Derived");
+            var result = WebApiDocsGenerator.Generate(options);
+            Assert.Equal(1, result.TypeCount);
+            using var report = JsonDocument.Parse(File.ReadAllText(result.CoveragePath!));
+            var coverage = report.RootElement.GetProperty("source").GetProperty("members");
+            Assert.Equal(2, coverage.GetProperty("count").GetInt32()); // Derived constructor and Base.Owned.
+            Assert.Equal(0, coverage.GetProperty("url").GetProperty("covered").GetInt32());
+            Assert.Equal(4, coverage.GetProperty("excludedExternalMembers").GetInt32()); // System.Object only.
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Theory]
     [InlineData("all")]
     [InlineData("assembly")]

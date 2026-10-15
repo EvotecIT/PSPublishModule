@@ -9,6 +9,7 @@ public static partial class WebApiDocsGenerator
         IReadOnlyDictionary<string, ApiTypeRelatedContentModel> typeRelatedContentMap,
         string? assemblyName,
         string? assemblyVersion,
+        IReadOnlySet<string> documentedAssemblies,
         List<string> warnings)
     {
         if (options is null || !options.GenerateCoverageReport)
@@ -23,7 +24,7 @@ public static partial class WebApiDocsGenerator
 
         try
         {
-            var payload = BuildCoveragePayload(types, options, typeRelatedContentMap, assemblyName, assemblyVersion);
+            var payload = BuildCoveragePayload(types, options, typeRelatedContentMap, assemblyName, assemblyVersion, documentedAssemblies);
             var parent = Path.GetDirectoryName(reportPath);
             if (!string.IsNullOrWhiteSpace(parent))
                 Directory.CreateDirectory(parent);
@@ -156,7 +157,8 @@ public static partial class WebApiDocsGenerator
         WebApiDocsOptions options,
         IReadOnlyDictionary<string, ApiTypeRelatedContentModel> typeRelatedContentMap,
         string? assemblyName,
-        string? assemblyVersion)
+        string? assemblyVersion,
+        IReadOnlySet<string> documentedAssemblies)
     {
         var safeTypes = types ?? Array.Empty<ApiTypeModel>();
         var typeCount = safeTypes.Count;
@@ -183,7 +185,6 @@ public static partial class WebApiDocsGenerator
         var membersWithRelatedContent = allMembers.Count(member => MemberHasRelatedContent(member, typeRelatedContentMap));
         var typeSourceCoverage = AnalyzeSourceCoverage(safeTypes.Select(static t => t.Source));
         var sourceScope = options.SourceMemberCoverageScope.Trim().ToLowerInvariant();
-        var documentedAssemblies = safeTypes.Select(static t => t.Assembly).Where(static name => name is not null).ToHashSet(StringComparer.Ordinal);
         var sourceMembers = sourceScope == "assembly"
             ? allMembers.Where(member => member.DeclaringAssemblyName is null || documentedAssemblies.Contains(member.DeclaringAssemblyName)).ToArray()
             : allMembers;
