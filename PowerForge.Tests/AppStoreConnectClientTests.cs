@@ -2207,6 +2207,11 @@ public sealed partial class AppStoreConnectClientTests
     [InlineData("WAITING_FOR_BETA_REVIEW", "WAITING_FOR_REVIEW")]
     [InlineData("READY_FOR_BETA_SUBMISSION", "WAITING_FOR_REVIEW")]
     [InlineData("READY_FOR_BETA_SUBMISSION", "IN_REVIEW")]
+    [InlineData("waiting_for_beta_review", "")]
+    [InlineData("in_beta_review", "APPROVED")]
+    [InlineData("READY_FOR_BETA_SUBMISSION", "waiting_for_review")]
+    [InlineData("READY_FOR_BETA_SUBMISSION", "in_review")]
+    [InlineData(" READY_FOR_BETA_SUBMISSION ", " in_review ")]
     public async Task ReleaseStateService_SummarizesAppStoreTestFlightAndBetaGroups(string externalState, string reviewState)
     {
         var handler = new SequenceHandler(

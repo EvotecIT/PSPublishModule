@@ -279,8 +279,9 @@ public sealed class AppStoreConnectReleaseStateService
             return;
         }
 
-        var externalState = NormalizeOptional(betaDetail?.ExternalBuildState);
-        if (betaSubmission?.BetaReviewState is "WAITING_FOR_REVIEW" or "IN_REVIEW" ||
+        var externalState = NormalizeOptional(betaDetail?.ExternalBuildState)?.ToUpperInvariant();
+        var reviewState = NormalizeOptional(betaSubmission?.BetaReviewState)?.ToUpperInvariant();
+        if (reviewState is "WAITING_FOR_REVIEW" or "IN_REVIEW" ||
             externalState is "WAITING_FOR_BETA_REVIEW" or "IN_BETA_REVIEW")
         {
             nextActions.Add("Wait for Beta App Review.");
