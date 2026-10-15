@@ -47,9 +47,23 @@ public sealed partial class AppleTestFlightWorkerTests
         var receipt = new PowerForgeAppleReleaseReceipt
         {
             Success = false, ShipPhase = PowerForgeAppleShipPhase.Release, ErrorMessage = "Timed out waiting for processing",
-            Targets = [new() { Name = "iOS", BuildProcessingState = "PROCESSING", ErrorMessage = "Timed out waiting for processing" }]
+            Targets = [new() { Name = "iOS", BuildProcessingState = "PROCESSING", ErrorMessage = "Timed out waiting for processing", WaitingForAppleBuildProcessing = true }]
         };
         Assert.Equal(AppleTestFlightJobStage.AppleProcessingPending, AppleTestFlightWorker.DeliveryOutcome(receipt, policy).Stage);
+    }
+
+    [Theory]
+    [InlineData("App Store upload is ambiguous")]
+    [InlineData("Private upload input changed")]
+    public void ExternalDelivery_DoesNotRetryUnqualifiedFailureWhenAppleBuildIsProcessing(string error)
+    {
+        var policy = new AppleTestFlightWorkerPolicy { BetaGroupIsInternal = false, Targets = [new() { Name = "iOS" }] };
+        var receipt = new PowerForgeAppleReleaseReceipt
+        {
+            Success = false, ShipPhase = PowerForgeAppleShipPhase.Release, ErrorMessage = error,
+            Targets = [new() { Name = "iOS", BuildProcessingState = "PROCESSING", ErrorMessage = error }]
+        };
+        Assert.Equal(AppleTestFlightJobStage.NeedsOperator, AppleTestFlightWorker.DeliveryOutcome(receipt, policy).Stage);
     }
 
     [Theory]

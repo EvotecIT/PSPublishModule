@@ -18,11 +18,11 @@ internal sealed partial class AppleTestFlightWorker
 
         var selected = SelectedDeliveryTargets(receipt, policy).ToArray();
         var deliveryFailure = selected.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value.ErrorMessage) &&
-            value.BuildProcessingState is not ("PROCESSING" or "PROCESSING_PENDING"));
+            !value.WaitingForAppleBuildProcessing);
         if (deliveryFailure is not null)
             return (AppleTestFlightJobStage.NeedsOperator,
                 $"{deliveryFailure.Name}: {deliveryFailure.ErrorMessage}. Preserve and reconcile this delivery before requesting another build.");
-        if (!receipt.Success && !selected.Any(value => value.BuildProcessingState is "PROCESSING" or "PROCESSING_PENDING"))
+        if (!receipt.Success && !selected.Any(value => value.WaitingForAppleBuildProcessing))
             return (AppleTestFlightJobStage.NeedsOperator, receipt.ErrorMessage ?? "TestFlight delivery failed; inspect the per-platform outcomes before resuming.");
 
         var failed = selected.FirstOrDefault(value => !string.IsNullOrEmpty(value.BuildProcessingState) &&
@@ -40,7 +40,7 @@ internal sealed partial class AppleTestFlightWorker
             return (AppleTestFlightJobStage.AppleProcessingPending, "Apple Beta App Review is in progress; observe its outcome and verify the enrolled group access before assigning a build.");
 
         if (receipt.ShipPhase == PowerForgeAppleShipPhase.Release &&
-            (receipt.Success || receipt.Targets.Any(value => value.BuildProcessingState is "PROCESSING" or "PROCESSING_PENDING")) &&
+            (receipt.Success || selected.Any(value => value.WaitingForAppleBuildProcessing)) &&
             receipt.Targets.All(value => string.IsNullOrEmpty(value.BuildProcessingState) || value.BuildProcessingState is "VALID" or "PROCESSING" or "PROCESSING_PENDING"))
             return (AppleTestFlightJobStage.AppleProcessingPending, receipt.ErrorMessage);
 

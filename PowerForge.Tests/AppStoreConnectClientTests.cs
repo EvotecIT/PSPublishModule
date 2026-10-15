@@ -2203,8 +2203,11 @@ public sealed partial class AppStoreConnectClientTests
         Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
     }
 
-    [Fact]
-    public async Task ReleaseStateService_SummarizesAppStoreTestFlightAndBetaGroups()
+    [Theory]
+    [InlineData("WAITING_FOR_BETA_REVIEW", "WAITING_FOR_REVIEW")]
+    [InlineData("READY_FOR_BETA_SUBMISSION", "WAITING_FOR_REVIEW")]
+    [InlineData("READY_FOR_BETA_SUBMISSION", "IN_REVIEW")]
+    public async Task ReleaseStateService_SummarizesAppStoreTestFlightAndBetaGroups(string externalState, string reviewState)
     {
         var handler = new SequenceHandler(
             new SequenceResponse(HttpStatusCode.OK,
@@ -2291,7 +2294,7 @@ public sealed partial class AppStoreConnectClientTests
                     "attributes": { "internalBuildState": "IN_BETA_TESTING", "externalBuildState": "WAITING_FOR_BETA_REVIEW", "autoNotifyEnabled": true }
                   }
                 }
-                """),
+                """.Replace("WAITING_FOR_BETA_REVIEW", externalState, StringComparison.Ordinal)),
             new SequenceResponse(HttpStatusCode.OK,
                 """
                 {
@@ -2302,7 +2305,7 @@ public sealed partial class AppStoreConnectClientTests
                     "relationships": { "build": { "data": { "type": "builds", "id": "build-6" } } }
                   }
                 }
-                """),
+                """.Replace("WAITING_FOR_REVIEW", reviewState, StringComparison.Ordinal)),
             new SequenceResponse(HttpStatusCode.OK,
                 """
                 {
@@ -2346,8 +2349,10 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal("build-6", platform.SelectedBuild?.Id);
         Assert.True(platform.MatchedBuildSelected);
         Assert.Equal("WAITING_FOR_REVIEW", Assert.Single(platform.ReviewSubmissions).State);
-        Assert.Equal("WAITING_FOR_BETA_REVIEW", platform.BetaDetail?.ExternalBuildState);
-        Assert.Equal("WAITING_FOR_REVIEW", platform.BetaReviewSubmission?.BetaReviewState);
+        Assert.Equal(externalState, platform.BetaDetail?.ExternalBuildState);
+        Assert.Equal(reviewState, platform.BetaReviewSubmission?.BetaReviewState);
+        Assert.Contains("Wait for Beta App Review.", platform.NextActions);
+        Assert.DoesNotContain("Submit the TestFlight build to Beta App Review.", platform.NextActions);
         Assert.Contains("iOS: Wait for App Review.", result.NextActions);
         Assert.Contains("iOS: Wait for Beta App Review.", result.NextActions);
 

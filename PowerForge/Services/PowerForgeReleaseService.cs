@@ -2614,7 +2614,10 @@ internal sealed partial class PowerForgeReleaseService
                     {
                         targetResult.ErrorMessage = exception.Message;
                         if (exception is AppleBuildProcessingException processing)
+                        {
                             targetResult.RemoteState = processing.State;
+                            targetResult.WaitingForAppleBuildProcessing = processing.WaitingForProcessing;
+                        }
                     }
                 }
 
@@ -3026,7 +3029,10 @@ internal sealed partial class PowerForgeReleaseService
                 result.Success = false;
                 result.ErrorMessage = exception.Message;
                 if (exception is AppleBuildProcessingException processing)
+                {
                     result.RemoteState = processing.State;
+                    result.WaitingForAppleBuildProcessing = processing.WaitingForProcessing;
+                }
                 return CompleteAppleExecutionFailure(plan, resultsByApp, app);
             }
         }
