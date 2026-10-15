@@ -194,7 +194,7 @@ internal sealed partial class AppleTestFlightWorker
 
     private void RecordIncludedPullRequests(AppleTestFlightJob job, string source)
     {
-        var previous = _state.Jobs.LastOrDefault(value => value.Stage == AppleTestFlightJobStage.ReadyInHome && value.Source is not null)?.Source ?? _policy.BaselineSourceCommit;
+        var previous = _state.Jobs.LastOrDefault(value => (value.Stage is AppleTestFlightJobStage.ReadyInHome or AppleTestFlightJobStage.ReadyInTestFlight) && value.Source is not null)?.Source ?? _policy.BaselineSourceCommit;
         Git("merge-base", "--is-ancestor", previous, source);
         var commits = Git("rev-list", "--first-parent", previous + ".." + source).Split('\n', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
         foreach (var pull in Pages("pulls?state=closed&sort=updated&direction=desc"))
@@ -219,7 +219,7 @@ internal sealed partial class AppleTestFlightWorker
 
     internal static string StatusFor(AppleTestFlightJobStage stage) => stage switch
     {
-        AppleTestFlightJobStage.ReadyInHome => "success",
+        AppleTestFlightJobStage.ReadyInHome or AppleTestFlightJobStage.ReadyInTestFlight => "success",
         AppleTestFlightJobStage.NeedsOperator => "failure",
         AppleTestFlightJobStage.Excluded => "error",
         _ => "pending"

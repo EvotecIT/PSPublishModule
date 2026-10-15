@@ -43,12 +43,13 @@ internal sealed partial class AppleTestFlightWorker
         if (!apple.Automation.WriteReceipt || !apple.Automation.Resume || !apple.Automation.WaitForProcessing ||
             !apple.TestFlightBetaGroupIds.SequenceEqual(new[] { _policy.BetaGroupId }) ||
             apple.TestFlightBetaGroupNames.Any(value => value != _policy.BetaGroupName) || apple.TestFlightTesterEmails.Length != 0)
-            throw new InvalidOperationException("Worker requires durable resumable receipts, processing waits, one enrolled Home group id, and no tester creation.");
+            throw new InvalidOperationException("Worker requires durable resumable receipts, processing waits, one enrolled beta group id, and no tester creation.");
         foreach (var target in _policy.Targets)
         {
             var app = apple.Apps.SingleOrDefault(value => value.Name == target.Name);
-            if (app is null || app.BundleId != target.BundleId || app.AppStoreConnectAppId != target.AppId || app.Platform != target.Platform || app.TestFlightPolicy != AppleTestFlightPolicy.Internal)
-                throw new InvalidOperationException("Configured target differs from the standing internal-beta policy.");
+            var audience = _policy.BetaGroupIsInternal ? AppleTestFlightPolicy.Internal : AppleTestFlightPolicy.External;
+            if (app is null || app.BundleId != target.BundleId || app.AppStoreConnectAppId != target.AppId || app.Platform != target.Platform || app.TestFlightPolicy != audience)
+                throw new InvalidOperationException("Configured target differs from the enrolled beta audience or target identity.");
         }
         if (!_policy.PublisherPaths.Contains(apple.Automation.VersionSourcePath))
             throw new InvalidOperationException("Version source must be one of the explicitly enrolled publisher paths.");
@@ -96,11 +97,13 @@ internal sealed partial class AppleTestFlightWorker
             SetStage(AppleTestFlightJobStage.Releasing);
             var result = InvokeShip(plan: false);
             job.Outcomes = result.Targets;
-            if (IsReady(result, _policy)) SetStage(AppleTestFlightJobStage.ReadyInHome);
+            if (IsReady(result, _policy)) SetStage(_policy.BetaGroupIsInternal ? AppleTestFlightJobStage.ReadyInHome : AppleTestFlightJobStage.ReadyInTestFlight);
             else if (result.ShipPhase == PowerForgeAppleShipPhase.Release && (result.Success || result.Targets.Any(value => value.BuildProcessingState is "PROCESSING" or "PROCESSING_PENDING")) &&
                      result.Targets.All(value => string.IsNullOrEmpty(value.BuildProcessingState) || value.BuildProcessingState is "VALID" or "PROCESSING" or "PROCESSING_PENDING"))
                 SetStage(AppleTestFlightJobStage.AppleProcessingPending, result.ErrorMessage);
-            else SetStage(AppleTestFlightJobStage.NeedsOperator, SafeDiagnostic(result.ErrorMessage ?? "Both platform builds are not yet verified ready in Home; inspect the per-platform outcomes."));
+            else SetStage(AppleTestFlightJobStage.NeedsOperator, SafeDiagnostic(result.ErrorMessage ??
+                (_policy.BetaGroupIsInternal ? "Selected builds are not yet verified ready in the enrolled internal group." :
+                    "Selected builds are not yet verified available to external testers. Inspect Beta App Review and group access; submit beta review only after separate operator approval.")));
             return;
         }
         AssertClean();
@@ -140,11 +143,12 @@ internal sealed partial class AppleTestFlightWorker
 
     internal static void ValidatePlan(PowerForgeAppleReleaseReceipt plan, AppleTestFlightJob job, AppleTestFlightWorkerPolicy? policy = null)
     {
+        var audience = policy?.BetaGroupIsInternal == false ? AppleTestFlightPolicy.External : AppleTestFlightPolicy.Internal;
         if (!plan.Success) throw new AppleTestFlightToolException("Ship preview did not succeed; retain this nonmutating stage and retry inventory observation.");
         if (!plan.PlanOnly || plan.Action != PowerForgeAppleReleaseAction.Ship || plan.SourceCommit != job.Source ||
             plan.PlanSha256?.Length != 64 || plan.Versioning is null || plan.Targets.Length == 0 ||
-            plan.Targets.Any(value => value.ShipToAppStoreReview || (value.ShipToTestFlight && value.TestFlightPolicy != AppleTestFlightPolicy.Internal)))
-            throw new InvalidOperationException("Ship plan exceeds the standing internal-beta policy or has stale source identity.");
+            plan.Targets.Any(value => value.ShipToAppStoreReview || (value.ShipToTestFlight && value.TestFlightPolicy != audience)))
+            throw new InvalidOperationException("Ship plan exceeds the enrolled beta policy or has stale source identity.");
         if (policy is not null && !plan.Targets.Where(value => value.ShipToTestFlight).Select(value => value.Name).Order().SequenceEqual(policy.Targets.Select(value => value.Name).Order()))
             throw new InvalidOperationException("Ship plan target set differs from enrolled targets.");
     }
@@ -154,8 +158,9 @@ internal sealed partial class AppleTestFlightWorker
     internal static bool IsReady(PowerForgeAppleReleaseReceipt receipt, AppleTestFlightWorkerPolicy policy) => receipt.Success && receipt.Versioning is not null && policy.Targets.All(target =>
         receipt.Targets.Any(value => value.Name == target.Name && value.Platform == target.Platform && value.AppId == target.AppId &&
             value.Version == receipt.Versioning.MarketingVersion && value.Build == receipt.Versioning.BuildNumber &&
-            !string.IsNullOrEmpty(value.BuildId) && value.BuildProcessingState == "VALID" && value.TestFlightInternalState == "IN_BETA_TESTING" &&
-            value.DistributedTestFlightBetaGroups.Any(group => group.Id == policy.BetaGroupId && group.Name == policy.BetaGroupName && group.IsInternalGroup == true)));
+            !string.IsNullOrEmpty(value.BuildId) && value.BuildProcessingState == "VALID" &&
+            (policy.BetaGroupIsInternal ? value.TestFlightInternalState : value.TestFlightExternalState) == "IN_BETA_TESTING" &&
+            value.DistributedTestFlightBetaGroups.Any(group => group.Id == policy.BetaGroupId && group.Name == policy.BetaGroupName && group.IsInternalGroup == policy.BetaGroupIsInternal)));
 
     private void AssertClean()
     {

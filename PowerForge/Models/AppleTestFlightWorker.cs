@@ -20,6 +20,8 @@ internal sealed class AppleTestFlightWorkerPolicy
     public string[] PublisherPaths { get; set; } = Array.Empty<string>();
     public string BetaGroupId { get; set; } = "";
     public string BetaGroupName { get; set; } = "Home";
+    /// <summary>The enrolled group's audience. Existing internal-only policies retain their behavior.</summary>
+    public bool BetaGroupIsInternal { get; set; } = true;
 }
 
 internal sealed class AppleTestFlightWorkerTarget
@@ -32,7 +34,7 @@ internal sealed class AppleTestFlightWorkerTarget
 
 internal enum AppleTestFlightAutomaticMode { Off, SelectedPRs, EveryMergedPR }
 
-internal enum AppleTestFlightJobStage { Queued, WaitingForChecks, Planning, CheckpointExecuting, CheckpointReady, PublishingCheckpoint, ReleaseReady, Releasing, AppleProcessingPending, ReadyInHome, NeedsOperator, Excluded }
+internal enum AppleTestFlightJobStage { Queued, WaitingForChecks, Planning, CheckpointExecuting, CheckpointReady, PublishingCheckpoint, ReleaseReady, Releasing, AppleProcessingPending, ReadyInHome, NeedsOperator, Excluded, ReadyInTestFlight }
 
 internal sealed class AppleTestFlightWorkerState
 {

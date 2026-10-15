@@ -357,7 +357,7 @@ Use the same entry point for each transition:
 | `Screenshots` | Validates and syncs configured screenshot sets as a separate, deliberate transition. |
 | `TestFlight` | Assigns the processed build to configured groups and testers. |
 | `Advance` | Resumes versioning, archive, upload, preparation, metadata, readiness, configured TestFlight distribution, and screenshots only when `SyncScreenshots` is explicitly enabled; then stops before any review or public-release action. |
-| `Ship` | Runs one resumable intent across versioning, upload, internal TestFlight, preparation, and App Review for explicitly selected targets. It reuses remote screenshots by default and stops at a reviewed source-version checkpoint when needed. |
+| `Ship` | Runs one resumable intent across versioning, upload, explicit internal or external TestFlight, preparation, and App Review for explicitly selected targets. It reuses remote screenshots by default and stops at a reviewed source-version checkpoint when needed. |
 | `SubmitTestFlightReview` | Submits external TestFlight distribution for Beta App Review. |
 | `SubmitAppReview` | Submits a ready App Store version for App Review. |
 | `Release` | Publishes a version waiting for developer release. |
