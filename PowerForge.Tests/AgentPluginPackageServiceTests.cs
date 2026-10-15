@@ -35,7 +35,7 @@ public sealed class AgentPluginPackageServiceTests : IDisposable
         using var codex = ReadEntry(archive, ".codex-plugin/plugin.json");
         Assert.False(claude.RootElement.TryGetProperty("extensions", out _));
         Assert.Equal("Documents", codex.RootElement.GetProperty("interface").GetProperty("displayName").GetString());
-        Assert.Equal("./.codex-plugin/mcp.json", codex.RootElement.GetProperty("mcpServers").GetString());
+        Assert.Equal("./.mcp.json", codex.RootElement.GetProperty("mcpServers").GetString());
         Assert.Equal(archive.Entries.Count, result.FileCount);
         var hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(result.ArchivePath!))).ToLowerInvariant();
         Assert.Equal(hash, result.Sha256);
