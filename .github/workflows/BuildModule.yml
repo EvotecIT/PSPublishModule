@@ -446,6 +446,7 @@ jobs:
           path: |
             ${{ runner.temp }}/powerforge-compiler-gate/evidence/*.trx
             ${{ runner.temp }}/powerforge-compiler-gate/evidence/*.json
+            ${{ runner.temp }}/powerforge-compiler-gate/evidence/**/*.xml
           if-no-files-found: ignore
           retention-days: 7
 

@@ -86,9 +86,11 @@ $filter = if ($Lane -eq 'Full') {
 } else {
     ($fastPatterns | ForEach-Object { "FullyQualifiedName~$_" }) -join '|'
 }
+# Keep the running-test sequence when a subprocess stalls, without retaining large dumps.
 $testArguments = @('test', (Join-Path $repositoryRoot 'PowerForge.Tests/PowerForge.Tests.csproj'),
     '-c', 'Release', '--filter', $filter, '--logger', 'console;verbosity=normal',
-    '--logger', 'trx;LogFileName=compiler-gate.trx', '--results-directory', $EvidencePath)
+    '--logger', 'trx;LogFileName=compiler-gate.trx', '--results-directory', $EvidencePath,
+    '--blame-hang-timeout', '20min', '--blame-hang-dump-type', 'none')
 if ($NoBuild) { $testArguments += @('--no-build', '--no-restore') }
 $testArguments += @('--', "xUnit.MaxParallelThreads=$MaxParallelThreads")
 Push-Location $repositoryRoot
