@@ -153,7 +153,7 @@ public sealed partial class AgentPluginPackageService
         GenerateCompatibility(manifest.RootElement, mcp?.RootElement, generated);
         foreach (var pair in allFiles)
         {
-            if (CompatibilityFiles.Contains(pair.Key, StringComparer.Ordinal)) continue;
+            if (CompatibilityFiles.Contains(pair.Key, StringComparer.Ordinal) || pair.Key == ".claude-plugin/icon.png") continue;
             var top = pair.Key.Split('/')[0];
             if (!(new[] { "plugin.json", "mcp.json", "README.md", "LICENSE", "LICENSE.md", "CHANGELOG.md", "skills", "scripts", "assets", "resources", "references" }.Contains(top, StringComparer.Ordinal)
                 || (Directory.Exists(Path.Combine(root, top)) && Regex.IsMatch(top, @"^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$"))))

@@ -44,6 +44,37 @@ public sealed class AgentPluginPackageServiceTests : IDisposable
     }
 
     [Fact]
+    public void ClaudeDirectoryIconSurvivesSyncAndIsIncludedUnchangedInArchive()
+    {
+        var service = new AgentPluginPackageService();
+        var directory = Path.Combine(Source, ".claude-plugin");
+        Directory.CreateDirectory(directory);
+        var icon = new byte[] { 137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3 };
+        var iconPath = Path.Combine(directory, "icon.png");
+        File.WriteAllBytes(iconPath, icon);
+
+        service.SyncCompatibility(Source);
+        Assert.Equal(icon, File.ReadAllBytes(iconPath));
+        service.Validate(Source);
+        var result = service.Pack(Source, Path.Combine(_sandbox, "out"));
+        using var archive = ZipFile.OpenRead(result.ArchivePath!);
+        using var input = archive.GetEntry(".claude-plugin/icon.png")!.Open();
+        using var output = new MemoryStream();
+        input.CopyTo(output);
+        Assert.Equal(icon, output.ToArray());
+    }
+
+    [Fact]
+    public void ClaudeMetadataDirectoryDoesNotPermitUnrecognizedPayloads()
+    {
+        var directory = Path.Combine(Source, ".claude-plugin");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "server.exe"), "unsupported payload");
+        Assert.Throws<InvalidDataException>(() => new AgentPluginPackageService().Pack(Source, Path.Combine(_sandbox, "out")));
+        Assert.False(Directory.Exists(Path.Combine(_sandbox, "out")));
+    }
+
+    [Fact]
     public void CompatibilityFilesRemainValidAfterGitLfNormalization()
     {
         var service = new AgentPluginPackageService();
