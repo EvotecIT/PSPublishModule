@@ -191,8 +191,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             "PowerForge.class", "static", "net10.0");
         var method = Assert.Single(typed.Methods);
         Assert.Equal("PowerForge.@class", typed.NamespaceName);
-        Assert.Equal("@static", typed.TypeName);
-        Assert.Equal("PowerForge.class.static", method.GeneratedDeclaringTypeName);
+        Assert.Equal("__static", typed.TypeName);
+        Assert.Equal("PowerForge.class.__static", method.GeneratedDeclaringTypeName);
     }
 
     [WindowsX64Fact]
@@ -206,7 +206,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 return [int]::Parse($Text)
             }
             try { Invoke -Text $Value -ErrorAction Stop }
-            catch { $_.Exception.ToString(); exit 9 }
+            catch { $_.Exception.ToString(); throw }
             """);
         var spec = new PowerShellCompilationBuildSpec(fixture.ScriptPath, fixture.OutputPath,
             "PowerForge.NativeFailureMap", PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid)
@@ -226,7 +226,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(function.EmittedClrMethod);
         Assert.False(function.RetainedHostedSource);
         var run = RunProcess(result.ArtifactPath!);
-        Assert.Equal(9, run.ExitCode);
+        Assert.Equal(1, run.ExitCode);
         var actualFailure = run.StandardOutput + Environment.NewLine + run.StandardError;
         Assert.Contains("FormatException", actualFailure, StringComparison.Ordinal);
         var rootType = Assert.Single(manifest.FailureMap!.Entries.Where(segment => segment.UnitId == root.UnitId)
