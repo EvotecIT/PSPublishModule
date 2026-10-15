@@ -18,7 +18,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
     [InlineData("powershell explain missing.ps1 --resource-mode 999 --output json", "powershell.explain", "999")]
     public async Task Commands_RejectInvalidOptions(string arguments, string command, string errorFragment)
     {
-        var result = await RunCliAsync(FindRepositoryRoot(), arguments);
+        var result = await RunCliAsync(FindRepositoryRoot(), arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries));
 
         Assert.Equal(2, result.ExitCode);
         Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
@@ -44,7 +44,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         {
             var result = await RunCliAsync(
                 FindRepositoryRoot(),
-                $"powershell analyze \"{source}\" --kind {kind} --mode {mode} --output json");
+                new[] { "powershell", "analyze", source, "--kind", kind, "--mode", mode, "--output", "json" });
 
             Assert.Equal(1, result.ExitCode);
             Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
@@ -69,7 +69,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         {
             var result = await RunCliAsync(
                 FindRepositoryRoot(),
-                $"powershell analyze \"{source}\" --kind exe --mode Hybrid --output json");
+                new[] { "powershell", "analyze", source, "--kind", "exe", "--mode", "Hybrid", "--output", "json" });
 
             Assert.Equal(0, result.ExitCode);
             Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
@@ -95,7 +95,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         {
             var result = await RunCliAsync(
                 FindRepositoryRoot(),
-                $"powershell explain \"{source}\" --kind exe --mode {mode} --output json");
+                new[] { "powershell", "explain", source, "--kind", "exe", "--mode", mode, "--output", "json" });
 
             Assert.Equal(exitCode, result.ExitCode);
             Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
@@ -131,7 +131,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         {
             var result = await RunCliAsync(
                 FindRepositoryRoot(),
-                $"powershell explain \"{source}\" --kind exe --mode Strict --framework net10.0 --output json");
+                new[] { "powershell", "explain", source, "--kind", "exe", "--mode", "Strict", "--framework", "net10.0", "--output", "json" });
 
             Assert.Equal(0, result.ExitCode);
             Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
@@ -184,7 +184,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
 
             var result = await RunCliAsync(
                 FindRepositoryRoot(),
-                $"powershell diagnose \"{build.ManifestPath}\" --failure \"{failurePath}\" --output json");
+                new[] { "powershell", "diagnose", build.ManifestPath!, "--failure", failurePath, "--output", "json" });
 
             Assert.Equal(0, result.ExitCode);
             Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
@@ -213,7 +213,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         {
             var result = await RunCliAsync(
                 FindRepositoryRoot(),
-                $"powershell explain \"{source}\" --kind dll --mode Hybrid --framework net10.0 --output json");
+                new[] { "powershell", "explain", source, "--kind", "dll", "--mode", "Hybrid", "--framework", "net10.0", "--output", "json" });
 
             Assert.Equal(0, result.ExitCode);
             Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
@@ -256,7 +256,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         {
             var build = await RunCliAsync(
                 repositoryRoot,
-                $"powershell build \"{source}\" --kind exe --mode Strict --framework net10.0 --allow-unreviewed-dependencies --out \"{output}\" --name TypedCliProof --output json");
+                new[] { "powershell", "build", source, "--kind", "exe", "--mode", "Strict", "--framework", "net10.0", "--allow-unreviewed-dependencies", "--out", output, "--name", "TypedCliProof", "--output", "json" });
             Assert.True(build.ExitCode == 0, FormatFailure("typed executable build", build));
             string artifactPath;
             using (var document = JsonDocument.Parse(build.StdOut))
@@ -311,7 +311,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         {
             var build = await RunCliAsync(
                 repositoryRoot,
-                $"powershell build \"{entryPoint}\" --path \"{helper}\" --entry-point \"{entryPoint}\" --kind exe --mode Strict --framework net10.0 --allow-unreviewed-dependencies --out \"{output}\" --name TypedMultiCliProof --output json");
+                new[] { "powershell", "build", entryPoint, "--path", helper, "--entry-point", entryPoint, "--kind", "exe", "--mode", "Strict", "--framework", "net10.0", "--allow-unreviewed-dependencies", "--out", output, "--name", "TypedMultiCliProof", "--output", "json" });
             Assert.True(build.ExitCode == 0, FormatFailure("multi-file typed executable build", build));
             string artifactPath;
             using (var document = JsonDocument.Parse(build.StdOut))
@@ -364,7 +364,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
 
         try
         {
-            var analyze = await RunCliAsync(repositoryRoot, $"powershell analyze \"{source}\" --kind library --mode Strict --output json");
+            var analyze = await RunCliAsync(repositoryRoot, new[] { "powershell", "analyze", source, "--kind", "library", "--mode", "Strict", "--output", "json" });
             Assert.True(analyze.ExitCode == 0, FormatFailure("analyze", analyze));
             using (var document = JsonDocument.Parse(analyze.StdOut))
             {
@@ -383,7 +383,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
 
             var build = await RunCliAsync(
                 repositoryRoot,
-                $"powershell build \"{source}\" --kind library --mode Strict --framework net10.0 --allow-unreviewed-dependencies --include-resource \"Resources/**\" --out \"{output}\" --name CliProof --output json");
+                new[] { "powershell", "build", source, "--kind", "library", "--mode", "Strict", "--framework", "net10.0", "--allow-unreviewed-dependencies", "--include-resource", "Resources/**", "--out", output, "--name", "CliProof", "--output", "json" });
             Assert.True(build.ExitCode == 0, FormatFailure("build", build));
             using (var document = JsonDocument.Parse(build.StdOut))
             {
@@ -425,7 +425,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         {
             var analyze = await RunCliAsync(
                 repositoryRoot,
-                $"powershell analyze \"{source}\" --kind library --mode Strict --framework net10.0 --out \"{output}\" --output json");
+                new[] { "powershell", "analyze", source, "--kind", "library", "--mode", "Strict", "--framework", "net10.0", "--out", output, "--output", "json" });
             Assert.True(analyze.ExitCode == 0, FormatFailure("dependency-lock analyze", analyze));
             using (var document = JsonDocument.Parse(analyze.StdOut))
             {
@@ -436,7 +436,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
 
             var build = await RunCliAsync(
                 repositoryRoot,
-                $"powershell build \"{source}\" --kind library --mode Strict --framework net10.0 --out \"{output}\" --dependency-lock \"{lockPath}\" --output json");
+                new[] { "powershell", "build", source, "--kind", "library", "--mode", "Strict", "--framework", "net10.0", "--out", output, "--dependency-lock", lockPath, "--output", "json" });
             Assert.True(build.ExitCode == 0, FormatFailure("reviewed dependency-lock build", build));
             using var buildDocument = JsonDocument.Parse(build.StdOut);
             var manifest = buildDocument.RootElement.GetProperty("result").GetProperty("manifest");
@@ -475,7 +475,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         {
             var analyze = await RunCliAsync(
                 repositoryRoot,
-                $"powershell analyze \"{source}\" --target-contract \"{targetPath}\" --output json");
+                new[] { "powershell", "analyze", source, "--target-contract", targetPath, "--output", "json" });
             Assert.True(analyze.ExitCode == 0, FormatFailure("target-contract analyze", analyze));
             using (var document = JsonDocument.Parse(analyze.StdOut))
             {
@@ -488,12 +488,12 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
 
             var explain = await RunCliAsync(
                 repositoryRoot,
-                $"powershell explain \"{source}\" --target-contract \"{targetPath}\" --output json");
+                new[] { "powershell", "explain", source, "--target-contract", targetPath, "--output", "json" });
             Assert.True(explain.ExitCode == 0, FormatFailure("target-contract explain", explain));
 
             var build = await RunCliAsync(
                 repositoryRoot,
-                $"powershell build \"{source}\" --target-contract \"{targetPath}\" --dependency-lock \"{lockPath}\" --out \"{output}\" --output json");
+                new[] { "powershell", "build", source, "--target-contract", targetPath, "--dependency-lock", lockPath, "--out", output, "--output", "json" });
             Assert.True(build.ExitCode == 0, FormatFailure("target-contract reviewed build", build));
             using var buildDocument = JsonDocument.Parse(build.StdOut);
             var manifest = buildDocument.RootElement.GetProperty("result").GetProperty("manifest");
@@ -517,7 +517,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         {
             var analyze = await RunCliAsync(
                 FindRepositoryRoot(),
-                $"powershell analyze \"{source}\" --kind exe --mode Strict --framework net10.0 --output json");
+                new[] { "powershell", "analyze", source, "--kind", "exe", "--mode", "Strict", "--framework", "net10.0", "--output", "json" });
 
             Assert.True(analyze.ExitCode == 0, FormatFailure("strict executable analyze", analyze));
             using var document = JsonDocument.Parse(analyze.StdOut);
@@ -544,22 +544,22 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         {
             var defaultAnalyze = await RunCliAsync(
                 repositoryRoot,
-                $"powershell analyze \"{source}\" --output json");
+                new[] { "powershell", "analyze", source, "--output", "json" });
             Assert.True(defaultAnalyze.ExitCode == 0, FormatFailure("default analyze", defaultAnalyze));
 
             var analyze = await RunCliAsync(
                 repositoryRoot,
-                $"powershell analyze --mode Strict \"{source}\" --framework net10.0 --output json");
+                new[] { "powershell", "analyze", "--mode", "Strict", source, "--framework", "net10.0", "--output", "json" });
             Assert.True(analyze.ExitCode == 0, FormatFailure("option-first analyze", analyze));
 
             var census = await RunCliAsync(
                 repositoryRoot,
-                $"powershell census --framework net10.0 \"{source}\" --output json");
+                new[] { "powershell", "census", "--framework", "net10.0", source, "--output", "json" });
             Assert.True(census.ExitCode == 0, FormatFailure("option-first census", census));
 
             var build = await RunCliAsync(
                 repositoryRoot,
-                $"powershell build --mode Strict --kind exe \"{source}\" --framework net10.0 --allow-unreviewed-dependencies --out \"{output}\" --name PositionalProof --output json");
+                new[] { "powershell", "build", "--mode", "Strict", "--kind", "exe", source, "--framework", "net10.0", "--allow-unreviewed-dependencies", "--out", output, "--name", "PositionalProof", "--output", "json" });
             Assert.True(build.ExitCode == 0, FormatFailure("option-first build", build));
         }
         finally
@@ -583,7 +583,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         {
             var capture = await RunCliAsync(
                 repositoryRoot,
-                $"powershell census \"{product}\" --framework net10.0 --write-baseline \"{baseline}\" --output json");
+                new[] { "powershell", "census", product, "--framework", "net10.0", "--write-baseline", baseline, "--output", "json" });
             Assert.True(capture.ExitCode == 0, FormatFailure("census capture", capture));
             Assert.True(File.Exists(baseline));
             using (var document = JsonDocument.Parse(capture.StdOut))
@@ -599,7 +599,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
             File.WriteAllText(source, "function Add-TypedValue { [CmdletBinding()] param([string] $Value) return ($Value -as [string]) }");
             var regression = await RunCliAsync(
                 repositoryRoot,
-                $"powershell census \"{product}\" --framework net10.0 --baseline \"{baseline}\" --output json");
+                new[] { "powershell", "census", product, "--framework", "net10.0", "--baseline", baseline, "--output", "json" });
             Assert.Equal(1, regression.ExitCode);
             using var regressionDocument = JsonDocument.Parse(regression.StdOut);
             var regressionResult = regressionDocument.RootElement.GetProperty("result");
@@ -627,13 +627,13 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         {
             var retired = await RunCliAsync(
                 repositoryRoot,
-                $"powershell analyze \"{source}\" --mode Strict --framework net8.0 --output json");
+                new[] { "powershell", "analyze", source, "--mode", "Strict", "--framework", "net8.0", "--output", "json" });
             Assert.Equal(2, retired.ExitCode);
             Assert.Contains("net472 or net10.0", retired.StdErr + retired.StdOut, StringComparison.OrdinalIgnoreCase);
 
             var defaultTarget = await RunCliAsync(
                 repositoryRoot,
-                $"powershell analyze \"{source}\" --mode Strict --output json");
+                new[] { "powershell", "analyze", source, "--mode", "Strict", "--output", "json" });
             Assert.Equal(0, defaultTarget.ExitCode);
             using (var document = JsonDocument.Parse(defaultTarget.StdOut))
             {
@@ -644,7 +644,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
 
             var net10 = await RunCliAsync(
                 repositoryRoot,
-                $"powershell analyze \"{source}\" --mode Strict --framework net10.0 --output json");
+                new[] { "powershell", "analyze", source, "--mode", "Strict", "--framework", "net10.0", "--output", "json" });
             Assert.Equal(0, net10.ExitCode);
             using var net10Document = JsonDocument.Parse(net10.StdOut);
             var net10Result = net10Document.RootElement.GetProperty("result");
@@ -677,7 +677,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         {
             var analyze = await RunCliAsync(
                 repositoryRoot,
-                $"powershell analyze \"{manifest}\" --mode Hybrid --output json");
+                new[] { "powershell", "analyze", manifest, "--mode", "Hybrid", "--output", "json" });
             Assert.Equal(0, analyze.ExitCode);
             using var document = JsonDocument.Parse(analyze.StdOut);
             var files = document.RootElement.GetProperty("result").GetProperty("files").EnumerateArray().ToArray();
@@ -690,67 +690,6 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         {
             try { Directory.Delete(root, recursive: true); } catch { }
         }
-    }
-
-    private static async Task<(int ExitCode, string StdOut, string StdErr)> RunCliAsync(
-        string repositoryRoot, string arguments, IReadOnlyDictionary<string, string>? environment = null,
-        TimeSpan? timeout = null)
-    {
-        var cli = Path.Combine(repositoryRoot, "PowerForge.Cli", "bin", "Release", "net10.0", "PowerForge.Cli.dll");
-        using var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = "dotnet",
-                Arguments = $"\"{cli}\" {arguments}",
-                WorkingDirectory = repositoryRoot,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
-        };
-        if (environment is not null)
-            foreach (var variable in environment) process.StartInfo.Environment[variable.Key] = variable.Value;
-        process.Start();
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
-        var exitTask = process.WaitForExitAsync();
-        // Artifact builds have a five-minute child budget; the observer must let the
-        // owning workflow report its own failure before enforcing an outer deadline.
-        var deadline = timeout ?? TimeSpan.FromMinutes(6);
-        if (await Task.WhenAny(exitTask, Task.Delay(deadline)) != exitTask)
-        {
-            try { process.Kill(entireProcessTree: true); } catch { }
-            throw new TimeoutException($"PowerShell compilation CLI test timed out after {deadline}: {arguments}");
-        }
-        return (process.ExitCode, await stdoutTask, await stderrTask);
-    }
-
-    private static async Task<(int ExitCode, string StdOut, string StdErr)> RunProcessAsync(
-        string fileName,
-        string workingDirectory,
-        params string[] arguments)
-    {
-        using var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = fileName,
-                WorkingDirectory = workingDirectory,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
-        };
-        foreach (var argument in arguments)
-            process.StartInfo.ArgumentList.Add(argument);
-        process.Start();
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-        return (process.ExitCode, await stdoutTask, await stderrTask);
     }
 
     private static string FindRepositoryRoot()

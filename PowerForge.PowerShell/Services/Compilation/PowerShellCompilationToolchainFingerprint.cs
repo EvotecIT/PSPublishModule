@@ -8,13 +8,21 @@ namespace PowerForge;
 internal static class PowerShellCompilationToolchainFingerprint
 {
     private static readonly ConcurrentDictionary<string, string> SdkHashes = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly object SdkHashGate = new();
 
     internal static string ComputeSdkSha256(string sdkVersion, bool forceRefresh = false)
     {
         var selection = ResolveSelectedSdk();
         if (!selection.Version.Equals(sdkVersion, StringComparison.Ordinal))
             throw new InvalidOperationException($"Selected dotnet SDK '{selection.Version}' does not match requested provenance version '{sdkVersion}'.");
-        return forceRefresh ? ComputeToolchainSha256(selection.RootPath) : SdkHashes.GetOrAdd(selection.RootPath, ComputeToolchainSha256);
+        if (forceRefresh)
+            return ComputeToolchainSha256(selection.RootPath);
+        if (SdkHashes.TryGetValue(selection.RootPath, out var cached))
+            return cached;
+        // GetOrAdd may run the expensive factory for every concurrent first caller.
+        // Serialize initial inventories while keeping cached reads lock-free and failures retryable.
+        lock (SdkHashGate)
+            return SdkHashes.GetOrAdd(selection.RootPath, ComputeToolchainSha256);
     }
 
     internal static PowerShellCompilationSdkSelection ResolveSelectedSdk()

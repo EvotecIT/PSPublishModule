@@ -1886,6 +1886,10 @@ internal sealed partial class PowerForgeReleaseService
         var requestedMarketingVersion = FirstNonEmpty(
             request.AppleMarketingVersion,
             automation.MarketingVersionPattern);
+        var observedMarketingVersion = request.AppleAction is PowerForgeAppleReleaseAction.Status or PowerForgeAppleReleaseAction.Doctor &&
+            !string.IsNullOrWhiteSpace(request.AppleMarketingVersion) ? request.AppleMarketingVersion!.Trim() : null;
+        if (observedMarketingVersion is not null)
+            AppleReleaseMarketingVersionResolver.ValidateExactVersion(observedMarketingVersion, "Observed Apple version");
         if (directDistribution.TimeoutSeconds <= 0)
             throw new InvalidOperationException("AppleApps.DirectDistribution.TimeoutSeconds must be greater than zero.");
         var receiptPath = ResolveOutputPath(projectRoot, automation.ReceiptPath);
@@ -1933,7 +1937,8 @@ internal sealed partial class PowerForgeReleaseService
                 configuration,
                 sharedReleaseVersion,
                 allowUnresolvedResolvedVersion,
-                allowMissingProject: request.AppleAction == PowerForgeAppleReleaseAction.Cleanup))
+                allowMissingProject: request.AppleAction == PowerForgeAppleReleaseAction.Cleanup,
+                explicitObservation: observedMarketingVersion is not null))
             .ToArray();
 
         foreach (var app in apps)
@@ -2170,6 +2175,7 @@ internal sealed partial class PowerForgeReleaseService
             LockPath = lockPath,
             VersionSourcePath = versionSourcePath,
             RequestedMarketingVersion = requestedMarketingVersion,
+            ObservedMarketingVersion = observedMarketingVersion,
             SourceCommit = appleSourceCommit.Length == 0 ? null : appleSourceCommit,
             RequireImmutableSourceSnapshot = requireImmutableSourceSnapshot,
             ApprovedPlanSha256 = request.AppleExpectedPlanSha256?.Trim(),
@@ -2271,7 +2277,8 @@ internal sealed partial class PowerForgeReleaseService
         string configuration,
         string? sharedReleaseVersion,
         bool allowUnresolvedResolvedVersion,
-        bool allowMissingProject)
+        bool allowMissingProject,
+        bool explicitObservation = false)
     {
         if (string.IsNullOrWhiteSpace(app.ProjectPath))
             throw new InvalidOperationException("Apple app ProjectPath is required.");
@@ -2282,17 +2289,17 @@ internal sealed partial class PowerForgeReleaseService
         var requestedProjectPath = ResolveOutputPath(projectRoot, app.ProjectPath);
         EnsurePathWithinProjectRoot(projectRoot, requestedProjectPath, $"Apple app '{name}' ProjectPath");
         var projectExists = File.Exists(requestedProjectPath) || Directory.Exists(requestedProjectPath);
-        if (!projectExists && !app.GenerateProjectIfMissing && !allowMissingProject)
+        if (!projectExists && !app.GenerateProjectIfMissing && !allowMissingProject && !explicitObservation)
             throw new FileNotFoundException($"Apple app project or workspace was not found: {requestedProjectPath}", requestedProjectPath);
         if (app.ProjectGenerationTimeoutSeconds <= 0)
             throw new InvalidOperationException($"Apple app '{name}' ProjectGenerationTimeoutSeconds must be greater than zero.");
         bool dotNet = !string.IsNullOrWhiteSpace(app.DotNetPublishInstallerId);
-        if (dotNet)
+        if (dotNet && !explicitObservation)
             ValidateDotNetAppleTarget(app, requestedProjectPath, options.TeamId);
-        var projectPath = dotNet ? requestedProjectPath : projectExists
+        var projectPath = dotNet || explicitObservation ? requestedProjectPath : projectExists
             ? NormalizeAppleArchiveProjectPath(requestedProjectPath, name)
             : ValidateGeneratedAppleProjectPath(requestedProjectPath, name);
-        if (!allowMissingProject &&
+        if (!allowMissingProject && !explicitObservation &&
             (!projectExists || app.RegenerateProject) &&
             !File.Exists(Path.Combine(Path.GetDirectoryName(projectPath) ?? projectRoot, "project.yml")))
         {
@@ -2309,13 +2316,13 @@ internal sealed partial class PowerForgeReleaseService
         var destination = AppleAppArchiveService.GetGenericDestination(platform, archiveVariant);
         var archivePath = Path.Combine(archiveRoot, platform.ToString(), $"{safeName}.xcarchive");
         var exportPath = Path.Combine(exportRoot, platform.ToString(), safeName);
-        var workspaceVersionMutationRequested = !allowMissingProject &&
+        var workspaceVersionMutationRequested = !allowMissingProject && !explicitObservation &&
                                                 isWorkspace &&
                                                 (app.UseResolvedVersion ||
                                                  app.BuildNumberPolicy != AppleBuildNumberPolicy.KeepExisting);
         if (workspaceVersionMutationRequested)
             throw new InvalidOperationException($"Apple app '{name}' uses a .xcworkspace ProjectPath. Use explicit MarketingVersion and BuildNumber as read-only release identities, or point version mutation at the owning .xcodeproj/project.pbxproj.");
-        var versionUpdateRequested = !allowMissingProject &&
+        var versionUpdateRequested = !allowMissingProject && !explicitObservation &&
                                      !dotNet && !isWorkspace &&
                                      (app.UseResolvedVersion ||
                                       !string.IsNullOrWhiteSpace(app.MarketingVersion) ||

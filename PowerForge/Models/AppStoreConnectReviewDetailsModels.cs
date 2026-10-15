@@ -26,6 +26,9 @@ public sealed class AppStoreConnectReviewDetailsInfo
 
     /// <summary>Demo-account password when one is required.</summary>
     public string? DemoAccountPassword { get; set; }
+
+    /// <summary>Private instructions for App Review. Contact-copy operations preserve this field.</summary>
+    public string? Notes { get; set; }
 }
 
 /// <summary>Non-sensitive declaration for copying App Review contact settings between exact app versions.</summary>
