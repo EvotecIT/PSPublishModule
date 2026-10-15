@@ -54,7 +54,9 @@ An explicit `cref` remains supported.
 
 Assembly inspection reads a fresh snapshot on each generation and releases its
 collectible load context afterward. Rebuilding a DLL at the same path updates
-the reference without holding the build output open.
+the reference without holding the build output open. Dependency types resolve
+in the inspected assembly's own context, even when the documentation host loads
+another copy of the same library.
 
 Malformed C# XML or PowerShell help stops generation before replacing existing
 reference files. Correct the input and rerun the generator; an empty reference
