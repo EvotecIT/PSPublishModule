@@ -189,6 +189,9 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Exact CLR declaring type selected by the source emitter, independent of authored name or line.</summary>
     internal string? GeneratedDeclaringTypeName { get; set; }
 
+    /// <summary>Private compiled child bodies with their exact authored identities; these do not add public or authored methods.</summary>
+    internal PowerShellCompiledBodyIdentity[] NestedBodies { get; set; } = Array.Empty<PowerShellCompiledBodyIdentity>();
+
     /// <summary>Compiler-owned no-op process entry with no authored script unit to count or map.</summary>
     internal bool IsSyntheticNoOpExecutableEntry { get; set; }
 

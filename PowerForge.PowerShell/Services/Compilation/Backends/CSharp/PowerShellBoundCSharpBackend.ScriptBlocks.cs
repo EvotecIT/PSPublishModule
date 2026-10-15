@@ -8,7 +8,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         => "__Create_" + PowerShellCSharpSymbolRenderer.Identifier(target.Name).TrimStart('@');
 
     private void AppendNativeScriptBlocks(StringBuilder builder, PowerShellLoweredFunction function,
-        PowerShellCompilationCapability capabilities, ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
+        PowerShellCompilationCapability capabilities, ICollection<PowerShellCompilationSourceMapEntry> sourceMap,
+        ICollection<PowerShellCompiledBodyIdentity> nestedBodies)
     {
         var blocks = PowerShellLoweredScriptBlockClosure.DirectBlocks(function);
         foreach (var block in blocks)
@@ -19,10 +20,34 @@ internal sealed partial class PowerShellBoundCSharpBackend
             builder.AppendLine();
             var lineOffset = PowerShellGeneratedSourcePosition.Get(builder).Line - 1;
             builder.AppendLine(emitted.Source);
-            foreach (var entry in emitted.SourceMap)
-                sourceMap.Add(new PowerShellCompilationSourceMapEntry(entry.SourceStartLine, entry.SourceStartColumn,
+            // The public source map remains flattened. Retain the same shifted entry
+            // instances in each private body's sidecar so owner selection cannot credit
+            // a descendant statement to the containing root or another child body.
+            var shiftedMaps = emitted.SourceMap.ToDictionary(static entry => entry, entry =>
+                new PowerShellCompilationSourceMapEntry(entry.SourceStartLine, entry.SourceStartColumn,
                     entry.SourceEndLine, entry.SourceEndColumn, entry.GeneratedStartLine + lineOffset, entry.GeneratedStartColumn,
                     entry.GeneratedEndLine + lineOffset, entry.GeneratedEndColumn));
+            foreach (var entry in emitted.SourceMap) sourceMap.Add(shiftedMaps[entry]);
+            var descendantMaps = emitted.NestedBodies.SelectMany(static body => body.SourceMap).ToHashSet();
+            var span = block.Span;
+            nestedBodies.Add(new PowerShellCompiledBodyIdentity(emitted.GeneratedName, block.DeclarationName,
+                span.DocumentId, child.SourcePath, span.StartOffset, span.EndOffset,
+                span.StartLine, span.StartColumn, span.EndLine, span.EndColumn,
+                emitted.SourceMap.Where(entry => !descendantMaps.Contains(entry)).Select(entry => shiftedMaps[entry]).ToArray())
+            {
+                NativeFunctionBinding = binding,
+                RegionGraph = emitted.RegionGraph,
+                RequiresPowerShellCommandRegions = emitted.RequiresPowerShellCommandRegions,
+                RequiresPowerShellRuntimeState = emitted.RequiresPowerShellRuntimeState,
+                RequiresPowerShellStatementErrors = emitted.RequiresPowerShellStatementErrors,
+                RequiresPowerShellStopping = emitted.RequiresPowerShellStopping,
+                RequiresPowerShellModuleStateRead = emitted.RequiresPowerShellModuleStateRead,
+                RequiresPowerShellModuleStateWrite = emitted.RequiresPowerShellModuleStateWrite,
+                RequiredPowerShellModuleVariables = emitted.ModuleStateVariableNames,
+                WrittenPowerShellModuleVariables = emitted.WrittenModuleStateVariableNames
+            });
+            foreach (var body in emitted.NestedBodies)
+                nestedBodies.Add(body.WithSourceMap(body.SourceMap.Select(entry => shiftedMaps[entry]).ToArray()));
             builder.Append("    private static global::System.Management.Automation.ScriptBlock ")
                 .Append(NativeScriptBlockFactoryName(block.Target))
                 .AppendLine("(global::PowerForge.Generated.Runtime.PowerShellNativeFunctionContext creationContext)")

@@ -43,8 +43,15 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(shaped.NamespaceName + "." + shaped.TypeName, function.GeneratedDeclaringTypeName);
         Assert.All(map.Entries.Where(segment => segment.UnitId == rootOwner.UnitId),
             segment => Assert.Equal(root.GeneratedDeclaringTypeName, segment.GeneratedDeclaringTypeName));
-        Assert.All(map.Entries.Where(segment => segment.UnitId == functionOwner.UnitId),
+        Assert.All(map.Entries.Where(segment => segment.UnitId == functionOwner.UnitId && segment.GeneratedMemberName == function.GeneratedName),
             segment => Assert.Equal(function.GeneratedDeclaringTypeName, segment.GeneratedDeclaringTypeName));
+        var nested = Assert.Single(root.NestedBodies, body => body.DeclarationName == functionName);
+        Assert.Same(functionOwner, ledger.GetEmittedBodyOwner(nested));
+        Assert.All(map.Entries.Where(segment => segment.GeneratedMemberName == nested.GeneratedMemberName), segment =>
+        {
+            Assert.Equal(functionOwner.UnitId, segment.UnitId);
+            Assert.Equal(root.GeneratedDeclaringTypeName, segment.GeneratedDeclaringTypeName);
+        });
         // These selector inputs are synthetic frames over the actual shaped map.
         // The separate artifact test below requires real exception output.
         Assert.Equal(rootOwner.UnitId, Assert.Single(PowerShellCompilationFailureMapper.MapRuntimeFailure(manifest,
@@ -195,17 +202,125 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal("PowerForge.class.__static", method.GeneratedDeclaringTypeName);
     }
 
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void FailureMapBindsRecursiveNativeBodiesWithoutDuplicatingParentSegments()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            param([int] $Value = 3)
+            function Child {
+                param([int] $Number)
+                function Grandchild { param([int] $Nested) return $Nested + 1 }
+                return Grandchild $Number
+            }
+            Child $Value
+            """);
+        var input = new PowerShellCompilationInputResolver().Resolve(fixture.ScriptPath,
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
+        var target = PowerShellCompilationTargetContractService.Create(input.Kind, input.Mode,
+            "net10.0", "win-x64", false, false, PowerShellCompilationExecutableOptimization.None, true);
+        var plan = new PowerShellCompilationAnalyzer().Analyze(input, input.Mode, "net10.0",
+            PowerShellCompilationResourceMode.Declared, null, null, fixture.OutputPath, target);
+        var shaped = PowerShellCompilationExplainShaper.Shape(input, plan, "net10.0", out var entry)!;
+        Assert.NotNull(entry);
+        var root = entry.EntryPointMethod;
+        var child = Assert.Single(root.NestedBodies, body => body.DeclarationName == "Child");
+        var grandchild = Assert.Single(root.NestedBodies, body => body.DeclarationName == "Grandchild");
+        var methods = PowerShellCompilationExplainShaper.GetEmittedMethods(shaped, entry);
+        var ledger = PowerShellCompilationUnitDispositionLedgerBuilder.Create(plan, input.Kind, shaped,
+            fixture.ScriptPath, emittedMethods: methods);
+        Assert.Equal(2, ledger.AnalyzedUnits);
+        Assert.Equal(2, ledger.EmittedUnits);
+        var owner = Assert.Single(ledger.Entries, unit => unit.Name == "Child");
+        Assert.Same(owner, ledger.GetEmittedBodyOwner(child));
+        Assert.Same(owner, ledger.GetEmittedBodyOwner(grandchild));
+        var sharedEntries = new HashSet<PowerShellCompilationSourceMapEntry>();
+        foreach (var body in root.NestedBodies)
+            foreach (var segment in body.SourceMap)
+            {
+                Assert.Contains(root.SourceMap, candidate => ReferenceEquals(candidate, segment));
+                Assert.True(sharedEntries.Add(segment), "Subordinate bodies must have disjoint own-map references.");
+            }
+        var map = PowerShellCompilationDiagnosticsEvidenceBuilder.CreateFailureMap(plan, methods, ledger);
+        var manifest = new PowerShellCompilationArtifactManifest { FailureMap = map };
+        foreach (var body in new[] { child, grandchild })
+        {
+            var ownEntries = map.Entries.Where(segment => segment.GeneratedMemberName == body.GeneratedMemberName &&
+                segment.GeneratedDeclaringTypeName == body.GeneratedDeclaringTypeName).ToArray();
+            Assert.Equal(body.SourceMap.Length, ownEntries.Length);
+            Assert.NotEmpty(ownEntries);
+            Assert.All(ownEntries, segment => Assert.Equal(owner.UnitId, segment.UnitId));
+            // Synthetic selector evidence complements the actual artifact test below.
+            var segment = ownEntries[0];
+            Assert.Equal(owner.UnitId, Assert.Single(PowerShellCompilationFailureMapper.MapRuntimeFailure(manifest,
+                $"at {body.GeneratedDeclaringTypeName}.{body.GeneratedMemberName}() in {body.DocumentId}:line {segment.SourceStartLine}").Locations).UnitId);
+        }
+        Assert.Equal(root.SourceMap.Length - sharedEntries.Count,
+            map.Entries.Count(segment => segment.GeneratedMemberName == root.GeneratedName &&
+                segment.GeneratedDeclaringTypeName == root.GeneratedDeclaringTypeName));
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void FailureMapRecordsNativeDeclarationsWhenStandaloneClrNamesCollide()
+    {
+        using var fixture = ArtifactFixture.Create("function Foo-Bar { param([int] $Value) return $Value + 1 }; function Foo_Bar { param([int] $Value) return $Value + 2 }; Foo-Bar 3; Foo_Bar 4");
+        var input = new PowerShellCompilationInputResolver().Resolve(fixture.ScriptPath,
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
+        var target = PowerShellCompilationTargetContractService.Create(input.Kind, input.Mode,
+            "net10.0", "win-x64", false, false, PowerShellCompilationExecutableOptimization.None, true);
+        var plan = new PowerShellCompilationAnalyzer().Analyze(input, input.Mode, "net10.0",
+            PowerShellCompilationResourceMode.Declared, null, null, fixture.OutputPath, target);
+        Assert.True(plan.CanProceed);
+        var shaped = PowerShellCompilationExplainShaper.Shape(input, plan, "net10.0", out var entry)!;
+        Assert.NotNull(entry);
+        Assert.Empty(shaped.Methods);
+        Assert.NotNull(entry.EntryPointMethod.NativeFunctionBinding);
+        Assert.Equal(2, entry.EntryPointMethod.NestedBodies.Length);
+        var methods = PowerShellCompilationExplainShaper.GetEmittedMethods(shaped, entry);
+        var ledger = PowerShellCompilationUnitDispositionLedgerBuilder.Create(plan, input.Kind, shaped,
+            fixture.ScriptPath, emittedMethods: methods);
+        Assert.Equal(3, ledger.AnalyzedUnits);
+        Assert.Equal(3, ledger.EmittedUnits);
+        Assert.All(ledger.Entries, owner =>
+        {
+            Assert.True(owner.EmittedClrMethod);
+            Assert.True(owner.UsesNativeFunctionBinding);
+            Assert.False(owner.RetainedHostedSource);
+        });
+        var map = PowerShellCompilationDiagnosticsEvidenceBuilder.CreateFailureMap(plan, methods, ledger);
+        foreach (var functionName in new[] { "Foo-Bar", "Foo_Bar" })
+        {
+            var owner = Assert.Single(ledger.Entries, unit => unit.Name == functionName);
+            var body = Assert.Single(entry.EntryPointMethod.NestedBodies, body => body.DeclarationName == functionName);
+            Assert.Same(owner, ledger.GetEmittedBodyOwner(body));
+            Assert.Equal(body.GeneratedMemberName, owner.GeneratedMemberName);
+            Assert.Contains(owner.BoundaryCauses, cause => cause.Contains("private emitted native body", StringComparison.Ordinal));
+            var segments = map.Entries.Where(segment => segment.GeneratedMemberName == body.GeneratedMemberName &&
+                segment.GeneratedDeclaringTypeName == body.GeneratedDeclaringTypeName).ToArray();
+            Assert.NotEmpty(segments);
+            Assert.All(segments, segment =>
+            {
+                Assert.Equal(owner.UnitId, segment.UnitId);
+                Assert.Equal("TypedClr+PowerShellRuntime", segment.BoundaryContract);
+            });
+        }
+    }
+
     [WindowsX64Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void FailureMapMapsActualNativeRootAndCompiledFunctionErrorFrames()
     {
         using var fixture = ArtifactFixture.Create("""
-            param([string] $Value = 'invalid-integer')
+            param([string] $Value = 'invalid-integer', [switch] $FailRoot)
             function Invoke {
                 [CmdletBinding()] param([string] $Text)
                 return [int]::Parse($Text)
             }
-            try { Invoke -Text $Value -ErrorAction Stop }
+            try {
+                if ($FailRoot) { [int]::Parse($Value) }
+                else { Invoke -Text $Value -ErrorAction Stop }
+            }
             catch { $_.Exception.ToString(); throw }
             """);
         var spec = new PowerShellCompilationBuildSpec(fixture.ScriptPath, fixture.OutputPath,
@@ -225,23 +340,32 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.False(root.RetainedHostedSource);
         Assert.True(function.EmittedClrMethod);
         Assert.False(function.RetainedHostedSource);
-        var run = RunProcess(result.ArtifactPath!);
-        Assert.Equal(1, run.ExitCode);
-        var actualFailure = run.StandardOutput + Environment.NewLine + run.StandardError;
-        Assert.Contains("FormatException", actualFailure, StringComparison.Ordinal);
         var rootType = Assert.Single(manifest.FailureMap!.Entries.Where(segment => segment.UnitId == root.UnitId)
             .Select(segment => segment.GeneratedDeclaringTypeName).Distinct(StringComparer.Ordinal));
-        var functionType = Assert.Single(manifest.FailureMap.Entries.Where(segment => segment.UnitId == function.UnitId)
-            .Select(segment => segment.GeneratedDeclaringTypeName).Distinct(StringComparer.Ordinal));
-        Assert.False(string.IsNullOrWhiteSpace(rootType));
-        Assert.False(string.IsNullOrWhiteSpace(functionType));
-        Assert.NotEqual(rootType, functionType);
-        Assert.Contains(rootType + ".Invoke", actualFailure, StringComparison.Ordinal);
-        Assert.Contains(functionType + ".Invoke", actualFailure, StringComparison.Ordinal);
-        var mapped = PowerShellCompilationFailureMapper.MapRuntimeFailure(manifest, actualFailure);
-        Assert.Contains(mapped.Locations, location => location.UnitId == root.UnitId);
-        Assert.Contains(mapped.Locations, location => location.UnitId == function.UnitId);
-        Assert.All(mapped.Locations, location => Assert.Contains(manifest.UnitDispositionLedger.Entries, owner => owner.UnitId == location.UnitId));
+        Assert.Equal("PowerForge.Compiled.CompiledNativeScriptEntry", rootType);
+        Assert.Contains(manifest.FailureMap.Entries, segment => segment.UnitId == function.UnitId &&
+            segment.GeneratedDeclaringTypeName == rootType && segment.GeneratedMemberName != root.GeneratedMemberName);
+        var observedOwners = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var failRoot in new[] { true, false })
+        {
+            // One saved artifact exercises both real authored owners. A helper error
+            // crosses SMA and need not retain its caller's root CLR frame.
+            var run = failRoot ? RunProcess(result.ArtifactPath!, "-FailRoot") : RunProcess(result.ArtifactPath!);
+            var actualFailure = run.StandardOutput + Environment.NewLine + run.StandardError;
+            Assert.True(run.ExitCode == 1, "Expected exit1. Actual stdout/stderr: " + actualFailure);
+            Assert.True(actualFailure.Contains("FormatException", StringComparison.Ordinal), actualFailure);
+            var expectedOwner = failRoot ? root : function;
+            Assert.True(manifest.FailureMap.Entries.Where(segment => segment.UnitId == expectedOwner.UnitId)
+                .Any(segment => actualFailure.Contains(segment.GeneratedDeclaringTypeName + "." + segment.GeneratedMemberName + "(", StringComparison.Ordinal)),
+                "The real exception must contain this authored owner's recorded CLR identity. Actual stdout/stderr: " + actualFailure);
+            var mapped = PowerShellCompilationFailureMapper.MapRuntimeFailure(manifest, actualFailure);
+            Assert.True(mapped.Locations.Any(location => location.UnitId == expectedOwner.UnitId),
+                "The real exception must map to its exact authored owner. Actual stdout/stderr: " + actualFailure);
+            Assert.All(mapped.Locations, location => Assert.Contains(manifest.UnitDispositionLedger.Entries, owner => owner.UnitId == location.UnitId));
+            observedOwners.Add(expectedOwner.UnitId);
+        }
+        Assert.Equal(new[] { function.UnitId, root.UnitId }.OrderBy(static id => id, StringComparer.Ordinal),
+            observedOwners.OrderBy(static id => id, StringComparer.Ordinal));
 
         PowerShellCompilationReproductionEvidenceBuilder.Validate(manifest);
         var entry = manifest.FailureMap!.Entries.First(segment => segment.GeneratedDeclaringTypeName is not null);

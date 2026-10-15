@@ -18,6 +18,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
             throw new ArgumentOutOfRangeException(nameof(artifactKind));
 
         var methods = (emittedMethods ?? shapedCompilation?.Methods ?? Array.Empty<PowerShellCompiledMethod>()).ToArray();
+        var nestedBodies = methods.SelectMany(static method => method.NestedBodies).ToArray();
         var wrappedMethodKeys = GetWrappedMethodKeys(plan.Mode, artifactKind, rootSourcePath, shapedCompilation);
         var plannedSourcePaths = plan.Files
             .Select(static file => Path.GetFullPath(file.FullPath))
@@ -34,6 +35,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
 
         var entries = new List<PowerShellCompilationUnitDisposition>();
         var emittedMethodOwners = new List<KeyValuePair<PowerShellCompiledMethod, PowerShellCompilationUnitDisposition>>();
+        var authoredOwners = new List<(string SourcePath, FunctionDefinitionAst? Declaration, PowerShellCompilationUnitDisposition Owner)>();
         foreach (var file in plan.Files.OrderBy(static file => NormalizePath(file.RelativePath), StringComparer.Ordinal))
         {
             var relativePath = NormalizeRelativePath(file.RelativePath, Path.GetFileName(file.FullPath));
@@ -54,13 +56,17 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                 var method = matchingMethods.FirstOrDefault(static candidate => candidate.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline);
                 var lifecycleMethod = matchingMethods.FirstOrDefault(static candidate => candidate.Lifecycle?.Execution == PowerShellCompilationLifecycleExecution.HostedSteppablePipeline);
                 var dispositionMethod = method ?? lifecycleMethod;
+                var ownedBodies = declaration is null ? Array.Empty<PowerShellCompiledBodyIdentity>() : nestedBodies.Where(body =>
+                    PowerShellCompilationPathSafety.PathEquals(body.SourcePath, file.FullPath) &&
+                    body.StartOffset == declaration.Extent.StartOffset && body.EndOffset == declaration.Extent.EndOffset &&
+                    string.Equals(body.DeclarationName, declaration.Name, StringComparison.Ordinal)).ToArray();
                 var promotedRegions = shapedCompilation?.PromotedRegions
                     .Where(candidate => RegionMatches(candidate, file.FullPath, unit, declaration))
                     .ToArray() ?? Array.Empty<PowerShellCompiledRegion>();
                 var unitKey = declaration is null
                     ? PowerShellHybridModuleComposer.GetCompiledMethodKey(file.FullPath, unit.Name, unit.StartLine)
                     : PowerShellHybridModuleComposer.GetCompiledMethodKey(file.FullPath, declaration);
-                var emitted = method is not null ||
+                var emitted = method is not null || ownedBodies.Length > 0 ||
                               plan.Mode == PowerShellCompilationMode.Strict &&
                               artifactKind == PowerShellCompilationArtifactKind.Executable &&
                               methods.Length > 0 &&
@@ -76,17 +82,21 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                     emitted,
                     wrappedMethodKeys.Contains(unitKey),
                     lifecycleMethod is not null);
-                var runtimeCommandRegions = dispositionMethod?.RequiresPowerShellCommandRegions == true
+                var runtimeCommandRegions = Math.Max(dispositionMethod?.RequiresPowerShellCommandRegions == true
                     ? Math.Max(1, dispositionMethod.HostedRegionSiteCount)
-                    : 0;
-                var moduleStateReadBoundaryCrossings = dispositionMethod?.RequiresPowerShellModuleStateRead == true
+                    : 0, ownedBodies.Where(static body => body.RequiresPowerShellCommandRegions)
+                        .Select(static body => Math.Max(1, body.HostedRegionSiteCount)).DefaultIfEmpty(0).Max());
+                var moduleStateReadBoundaryCrossings = Math.Max(dispositionMethod?.RequiresPowerShellModuleStateRead == true
                     ? Math.Max(1, dispositionMethod.PowerShellModuleStateReadSiteCount)
-                    : 0;
-                var moduleStateWriteBoundaryCrossings = dispositionMethod?.RequiresPowerShellModuleStateWrite == true
+                    : 0, ownedBodies.Where(static body => body.RequiresPowerShellModuleStateRead)
+                        .Select(static body => Math.Max(1, body.PowerShellModuleStateReadSiteCount)).DefaultIfEmpty(0).Max());
+                var moduleStateWriteBoundaryCrossings = Math.Max(dispositionMethod?.RequiresPowerShellModuleStateWrite == true
                     ? Math.Max(1, dispositionMethod.PowerShellModuleStateWriteSiteCount)
-                    : 0;
+                    : 0, ownedBodies.Where(static body => body.RequiresPowerShellModuleStateWrite)
+                        .Select(static body => Math.Max(1, body.PowerShellModuleStateWriteSiteCount)).DefaultIfEmpty(0).Max());
                 var moduleStateBoundaryCrossings = moduleStateReadBoundaryCrossings + moduleStateWriteBoundaryCrossings;
-                var nativeFunctionBinding = dispositionMethod?.NativeFunctionBinding is not null;
+                var nativeFunctionBinding = dispositionMethod?.NativeFunctionBinding is not null ||
+                                            ownedBodies.Any(static body => body.NativeFunctionBinding is not null);
                 var runtimeRouted = nativeFunctionBinding || retainedHostedSource || runtimeCommandRegions > 0 || moduleStateBoundaryCrossings > 0;
                 var rejected = !emitted &&
                                (plan.Mode == PowerShellCompilationMode.Strict ||
@@ -144,23 +154,30 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                     shapingFallback: retainedHostedSource && (unit.IsCompilable || lifecycleMethod is not null),
                     omitted,
                     rejected,
-                    emitted || emittedBinaryCmdlet ? dispositionMethod?.GeneratedName ?? string.Empty : string.Empty,
+                    emitted || emittedBinaryCmdlet ? dispositionMethod?.GeneratedName ??
+                        (ownedBodies.Length == 1 ? ownedBodies[0].GeneratedMemberName : string.Empty) : string.Empty,
                     dependencyCauses: runtimeRouted
                         ? GetUnitDependencyCauses(plan.Dependencies, file.FullPath, relativePath)
                         : Array.Empty<string>(),
-                    boundaryCauses: GetBoundaryCauses(dispositionMethod, retainedHostedSource, promotedRegions),
+                    boundaryCauses: GetBoundaryCauses(dispositionMethod, ownedBodies, retainedHostedSource, promotedRegions),
                     diagnosticChain,
                     moduleStateReadBoundaryCrossings,
                     moduleStateWriteBoundaryCrossings,
-                    dispositionMethod?.RegionGraph ?? promotedRegions.FirstOrDefault()?.RegionGraph,
+                    dispositionMethod?.RegionGraph ?? (ownedBodies.Length == 1 ? ownedBodies[0].RegionGraph : null) ??
+                        promotedRegions.FirstOrDefault()?.RegionGraph,
                     promotedRegions.Length,
                     promotedRegions.Select(static region => region.GeneratedName).ToArray(),
                     nativeFunctionBinding);
                 entries.Add(disposition);
+                authoredOwners.Add((file.FullPath, declaration, disposition));
                 foreach (var candidate in matchingMethods)
                     emittedMethodOwners.Add(new KeyValuePair<PowerShellCompiledMethod, PowerShellCompilationUnitDisposition>(candidate, disposition));
             }
         }
+
+        var emittedBodyOwners = emittedMethodOwners.SelectMany(binding => binding.Key.NestedBodies.Select(body =>
+            new KeyValuePair<PowerShellCompiledBodyIdentity, PowerShellCompilationUnitDisposition>(body,
+                FindEmittedBodyOwner(body, authoredOwners)))).ToArray();
 
         return new PowerShellCompilationUnitDispositionLedger(
             entries.ToArray(),
@@ -171,7 +188,45 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(static cause => cause, StringComparer.Ordinal)
                 .ToArray(),
-            emittedMethodOwners);
+            emittedMethodOwners,
+            emittedBodyOwners);
+    }
+
+    /// <summary>Uses authored declaration offsets and containment; generated method names never choose an owner.</summary>
+    private static PowerShellCompilationUnitDisposition FindEmittedBodyOwner(
+        PowerShellCompiledBodyIdentity body,
+        IReadOnlyList<(string SourcePath, FunctionDefinitionAst? Declaration, PowerShellCompilationUnitDisposition Owner)> authoredOwners)
+    {
+        if (string.IsNullOrWhiteSpace(body.SourcePath) || body.StartOffset < 0 || body.EndOffset < body.StartOffset)
+            throw new InvalidOperationException("An emitted native body has no valid authored source identity.");
+        var fileOwners = authoredOwners.Where(item => PowerShellCompilationPathSafety.PathEquals(item.SourcePath, body.SourcePath)).ToArray();
+        if (fileOwners.Length == 0)
+            throw new InvalidOperationException("An emitted native body is outside the final authored source inventory.");
+        if (body.DeclarationName is not null)
+        {
+            var exact = fileOwners.Where(item => item.Declaration?.Extent.StartOffset == body.StartOffset).ToArray();
+            if (exact.Length > 0)
+            {
+                if (exact.Length != 1 || exact[0].Declaration!.Extent.EndOffset != body.EndOffset ||
+                    !exact[0].Declaration!.Name.Equals(body.DeclarationName, StringComparison.Ordinal) ||
+                    !exact[0].Owner.Name.Equals(body.DeclarationName, StringComparison.Ordinal))
+                    throw new InvalidOperationException("An emitted native declaration does not have one exact authored-unit identity.");
+                return exact[0].Owner;
+            }
+        }
+        var enclosing = fileOwners.Where(item => item.Declaration is not null &&
+                item.Declaration.Extent.StartOffset <= body.StartOffset && item.Declaration.Extent.EndOffset >= body.EndOffset)
+            .OrderBy(item => item.Declaration!.Extent.EndOffset - item.Declaration.Extent.StartOffset).ToArray();
+        if (enclosing.Length > 0)
+        {
+            var width = enclosing[0].Declaration!.Extent.EndOffset - enclosing[0].Declaration.Extent.StartOffset;
+            if (enclosing.Skip(1).Any(item => item.Declaration!.Extent.EndOffset - item.Declaration.Extent.StartOffset == width))
+                throw new InvalidOperationException("An emitted native body has ambiguous enclosing authored-unit ownership.");
+            return enclosing[0].Owner;
+        }
+        var scripts = fileOwners.Where(static item => item.Owner.Kind == PowerShellCompilationUnitKind.Script).ToArray();
+        return scripts.Length == 1 ? scripts[0].Owner
+            : throw new InvalidOperationException("An emitted native body has no unique authored script or enclosing function owner.");
     }
 
     private static FunctionDefinitionAst[] GetFunctionExtents(string sourcePath)
@@ -294,26 +349,38 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
 
     private static string[] GetBoundaryCauses(
         PowerShellCompiledMethod? method,
+        IReadOnlyList<PowerShellCompiledBodyIdentity> bodies,
         bool retainedHostedSource,
         IReadOnlyList<PowerShellCompiledRegion> promotedRegions)
     {
         var causes = new List<string>();
-        if (method?.NativeFunctionBinding is not null)
+        if (method is null && bodies.Count > 0)
+            causes.Add("The authored declaration is implemented by a private emitted native body.");
+        if (method?.NativeFunctionBinding is not null || bodies.Any(static body => body.NativeFunctionBinding is not null))
             causes.Add("The emitted CLR body uses native PowerShell parameter binding and invocation-owned variable storage.");
         if (retainedHostedSource) causes.Add("Authored source remains on the hosted PowerShell path after artifact shaping.");
-        if (method?.RequiresPowerShellCommandRegions == true) causes.Add("The emitted CLR method contains hosted PowerShell command regions.");
-        if (method?.RequiresPowerShellRuntimeState == true) causes.Add("The emitted CLR method captures PowerShell runtime state.");
-        if (method?.RequiresPowerShellStatementErrors == true) causes.Add("The emitted CLR method uses the PowerShell statement-error host for error identity and continuation.");
-        if (method?.RequiresPowerShellStopping == true) causes.Add("The emitted CLR method requires the invocation's native PowerShell loop-stopping callback.");
-        if (method?.RequiredPowerShellModuleVariables.Length > 0)
+        if (method?.RequiresPowerShellCommandRegions == true || bodies.Any(static body => body.RequiresPowerShellCommandRegions))
+            causes.Add("The emitted CLR method contains hosted PowerShell command regions.");
+        if (method?.RequiresPowerShellRuntimeState == true || bodies.Any(static body => body.RequiresPowerShellRuntimeState))
+            causes.Add("The emitted CLR method captures PowerShell runtime state.");
+        if (method?.RequiresPowerShellStatementErrors == true || bodies.Any(static body => body.RequiresPowerShellStatementErrors))
+            causes.Add("The emitted CLR method uses the PowerShell statement-error host for error identity and continuation.");
+        if (method?.RequiresPowerShellStopping == true || bodies.Any(static body => body.RequiresPowerShellStopping))
+            causes.Add("The emitted CLR method requires the invocation's native PowerShell loop-stopping callback.");
+        var reads = (method?.RequiredPowerShellModuleVariables ?? Array.Empty<string>())
+            .Concat(bodies.SelectMany(static body => body.RequiredPowerShellModuleVariables))
+            .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(static name => name, StringComparer.Ordinal).ToArray();
+        var writes = (method?.WrittenPowerShellModuleVariables ?? Array.Empty<string>())
+            .Concat(bodies.SelectMany(static body => body.WrittenPowerShellModuleVariables))
+            .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(static name => name, StringComparer.Ordinal).ToArray();
+        if (reads.Length > 0)
             causes.Add("The emitted CLR method reads live parent Hybrid script-module state: " +
-                       string.Join(", ", method.RequiredPowerShellModuleVariables.Select(static name => "$script:" + name)) + ".");
-        if (method?.WrittenPowerShellModuleVariables.Length > 0)
+                       string.Join(", ", reads.Select(static name => "$script:" + name)) + ".");
+        if (writes.Length > 0)
             causes.Add("The emitted CLR method writes live parent Hybrid script-module state: " +
-                       string.Join(", ", method.WrittenPowerShellModuleVariables.Select(static name => "$script:" + name)) + ".");
-        if (method?.RequiresPowerShellModuleState == true &&
-            method.RequiredPowerShellModuleVariables.Length == 0 &&
-            method.WrittenPowerShellModuleVariables.Length == 0)
+                       string.Join(", ", writes.Select(static name => "$script:" + name)) + ".");
+        if ((method?.RequiresPowerShellModuleState == true || bodies.Any(static body => body.RequiresPowerShellModuleState)) &&
+            reads.Length == 0 && writes.Length == 0)
             causes.Add("The emitted CLR method depends on live parent Hybrid script-module state through a compiled local call.");
         if (method?.Lifecycle?.Execution == PowerShellCompilationLifecycleExecution.HostedSteppablePipeline) causes.Add("The emitted cmdlet uses a hosted advanced-function lifecycle.");
         if (promotedRegions.Count > 0)

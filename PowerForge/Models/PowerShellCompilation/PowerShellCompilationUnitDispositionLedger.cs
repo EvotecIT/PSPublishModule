@@ -364,6 +364,7 @@ public sealed class PowerShellCompilationUnitDisposition
 public sealed class PowerShellCompilationUnitDispositionLedger
 {
     private readonly Dictionary<PowerShellCompiledMethod, PowerShellCompilationUnitDisposition> _emittedMethodOwners = new();
+    private readonly Dictionary<PowerShellCompiledBodyIdentity, PowerShellCompilationUnitDisposition> _emittedBodyOwners = new();
 
     /// <summary>Creates a final ledger.</summary>
     [JsonConstructor]
@@ -379,7 +380,8 @@ public sealed class PowerShellCompilationUnitDispositionLedger
     internal PowerShellCompilationUnitDispositionLedger(
         IReadOnlyList<PowerShellCompilationUnitDisposition> entries,
         IReadOnlyList<string> deliveryRuntimeCauses,
-        IEnumerable<KeyValuePair<PowerShellCompiledMethod, PowerShellCompilationUnitDisposition>> emittedMethodOwners)
+        IEnumerable<KeyValuePair<PowerShellCompiledMethod, PowerShellCompilationUnitDisposition>> emittedMethodOwners,
+        IEnumerable<KeyValuePair<PowerShellCompiledBodyIdentity, PowerShellCompilationUnitDisposition>>? emittedBodyOwners = null)
         : this(entries, deliveryRuntimeCauses)
     {
         foreach (var binding in emittedMethodOwners)
@@ -388,11 +390,21 @@ public sealed class PowerShellCompilationUnitDispositionLedger
                 throw new InvalidOperationException("An emitted method owner is outside the final authored-unit ledger.");
             _emittedMethodOwners.Add(binding.Key, binding.Value);
         }
+        foreach (var binding in emittedBodyOwners ?? Array.Empty<KeyValuePair<PowerShellCompiledBodyIdentity, PowerShellCompilationUnitDisposition>>())
+        {
+            if (!Entries.Contains(binding.Value))
+                throw new InvalidOperationException("An emitted native body owner is outside the final authored-unit ledger.");
+            _emittedBodyOwners.Add(binding.Key, binding.Value);
+        }
     }
 
     /// <summary>Returns only the exact emitter instance's owner; serialized ledgers do not recreate build-time bindings.</summary>
     internal PowerShellCompilationUnitDisposition? GetEmittedMethodOwner(PowerShellCompiledMethod method)
         => _emittedMethodOwners.TryGetValue(method, out var owner) ? owner : null;
+
+    /// <summary>Returns the canonical authored owner bound to this exact subordinate emitted body.</summary>
+    internal PowerShellCompilationUnitDisposition? GetEmittedBodyOwner(PowerShellCompiledBodyIdentity body)
+        => _emittedBodyOwners.TryGetValue(body, out var owner) ? owner : null;
 
     /// <summary>Ledger schema version.</summary>
     public int SchemaVersion => 5;

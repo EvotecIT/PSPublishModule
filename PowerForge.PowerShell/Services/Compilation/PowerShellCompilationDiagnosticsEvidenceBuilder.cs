@@ -37,9 +37,14 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
             var ledgerEntry = FindGeneratedDisposition(ledger, file, method);
             var unitId = ledgerEntry.UnitId;
             var boundary = DescribeBoundary(ledgerEntry);
+            var nestedMaps = new HashSet<PowerShellCompilationSourceMapEntry>();
+            foreach (var body in method.NestedBodies)
+                foreach (var map in body.SourceMap)
+                    if (!method.SourceMap.Contains(map) || !nestedMaps.Add(map))
+                        throw new InvalidOperationException("A native source-map segment has more than one emitted body identity.");
             var maps = method.SourceMap.Length == 0
                 ? new[] { new PowerShellCompilationSourceMapEntry(method.SourceLine, method.SourceColumn, method.SourceEndLine, method.SourceEndColumn, 1, 1, 1, 1) }
-                : method.SourceMap;
+                : method.SourceMap.Where(map => !nestedMaps.Contains(map));
             entries.AddRange(maps.Select(map => new PowerShellCompilationFailureMapEntry
             {
                 DocumentId = method.DocumentId,
@@ -57,6 +62,38 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
                 GeneratedEndLine = map.GeneratedEndLine,
                 BoundaryContract = boundary
             }));
+            foreach (var body in method.NestedBodies.OrderBy(static body => body.DocumentId, StringComparer.Ordinal)
+                         .ThenBy(static body => body.StartOffset).ThenBy(static body => body.GeneratedMemberName, StringComparer.Ordinal))
+            {
+                var bodyFile = plan.Files.FirstOrDefault(item => PowerShellCompilationPathSafety.PathEquals(item.FullPath, body.SourcePath))
+                    ?? throw new InvalidOperationException("An emitted native body is outside the failure-map source inventory.");
+                var owner = ledger.GetEmittedBodyOwner(body)
+                    ?? throw new InvalidOperationException("An emitted native body has no final unit-disposition owner.");
+                if (!owner.RelativePath.Equals(NormalizeRelative(bodyFile.RelativePath, Path.GetFileName(bodyFile.FullPath)), StringComparison.Ordinal) ||
+                    string.IsNullOrWhiteSpace(body.GeneratedMemberName) || string.IsNullOrWhiteSpace(body.GeneratedDeclaringTypeName))
+                    throw new InvalidOperationException("An emitted native body has inconsistent source or CLR ownership.");
+                var bodyMaps = body.SourceMap.Length == 0
+                    ? new[] { new PowerShellCompilationSourceMapEntry(body.SourceStartLine, body.SourceStartColumn,
+                        body.SourceEndLine, body.SourceEndColumn, 1, 1, 1, 1) }
+                    : body.SourceMap;
+                entries.AddRange(bodyMaps.Select(map => new PowerShellCompilationFailureMapEntry
+                {
+                    DocumentId = body.DocumentId,
+                    RelativePath = owner.RelativePath,
+                    UnitId = owner.UnitId,
+                    UnitName = owner.Name,
+                    GeneratedMemberName = body.GeneratedMemberName,
+                    GeneratedDeclaringTypeName = body.GeneratedDeclaringTypeName,
+                    SourcePathCaseSensitive = PowerShellCompilationPathSafety.GetPathComparison(bodyFile.FullPath) == StringComparison.Ordinal,
+                    SourceStartLine = map.SourceStartLine,
+                    SourceStartColumn = map.SourceStartColumn,
+                    SourceEndLine = map.SourceEndLine,
+                    SourceEndColumn = map.SourceEndColumn,
+                    GeneratedStartLine = map.GeneratedStartLine,
+                    GeneratedEndLine = map.GeneratedEndLine,
+                    BoundaryContract = DescribeBoundary(owner)
+                }));
+            }
         }
         foreach (var region in (promotedRegions ?? Array.Empty<PowerShellCompiledRegion>())
                      .OrderBy(static item => item.DocumentId, StringComparer.Ordinal)

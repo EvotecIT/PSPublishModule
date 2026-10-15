@@ -39,6 +39,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var bodyIndent = managedInstance ? 5 : 3;
         var builder = new StringBuilder();
         var sourceMap = new List<PowerShellCompilationSourceMapEntry>();
+        var nestedBodies = new List<PowerShellCompiledBodyIdentity>();
         var parameterParts = function.Parameters.Select(parameter =>
             $"{PowerShellCSharpSymbolRenderer.TypeName(parameter.ClrType)} {PowerShellCSharpSymbolRenderer.Identifier(parameter.Symbol.Name)}").ToList();
         if (function.NativeFunctionBinding is not null)
@@ -130,7 +131,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .AppendLine("            finally { this.__moduleActiveCalls--; }")
             .AppendLine("        }");
         builder.Append("    }");
-        AppendNativeScriptBlocks(builder, function, targetCapabilities, sourceMap);
+        AppendNativeScriptBlocks(builder, function, targetCapabilities, sourceMap, nestedBodies);
         var regionGraph = PowerShellLoweredRegionGraphBuilder.Create(function, _functions);
         var closureStatements = PowerShellLoweredScriptBlockClosure.Enumerate(function, _functions).SelectMany(static body => body.Statements).ToArray();
         var commandProviders = PowerShellLoweredCommandProviderCollector.Collect(closureStatements);
@@ -188,7 +189,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
             regionGraph: regionGraph,
             nativeFunctionBinding: function.NativeFunctionBinding,
             successOutputType: function.SuccessOutputType,
-            outputTypeDeclarations: function.OutputTypeDeclarations);
+            outputTypeDeclarations: function.OutputTypeDeclarations)
+        {
+            NestedBodies = nestedBodies.ToArray()
+        };
     }
 
     private void EmitStatement(

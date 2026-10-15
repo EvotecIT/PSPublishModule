@@ -91,11 +91,16 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .Append(") when (").Append(StatementErrorContextType).Append(".IsOperationFailure(")
             .Append(boundary.ExceptionTemporary).AppendLine("))");
         builder.Append(prefix).AppendLine("{");
+        // Child statement emission restores #line default. Error dispatch can itself
+        // throw, so its frame must restore this boundary's authored sequence point.
+        builder.Append(prefix).Append("#line ").Append(boundary.Span.StartLine)
+            .Append(" \"").Append(boundary.Span.DocumentId).AppendLine("\"");
         builder.Append(prefix).Append("    __statementErrors.Handle(").Append(boundary.ExceptionTemporary)
             .Append(", ").Append(QuotePortableSourcePath(boundary.SourcePath))
             .Append(", ").Append(boundary.Span.StartLine).Append(", ").Append(boundary.Span.StartColumn)
             .Append(", ").Append(boundary.Span.EndLine).Append(", ").Append(boundary.Span.EndColumn)
             .Append(", ").Append(PowerShellCSharpLiteral.QuoteString(boundary.SourceText)).AppendLine(");");
+        builder.Append(prefix).AppendLine("#line default");
         builder.Append(prefix).AppendLine("}");
     }
 

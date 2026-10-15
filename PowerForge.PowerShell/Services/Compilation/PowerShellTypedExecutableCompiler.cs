@@ -167,7 +167,12 @@ internal static class PowerShellTypedExecutableCompiler
         var declaringType = nativeScriptEntry ? PowerShellHybridNativeEntryEmitter.DeclaringTypeName :
             parametersAlreadyBound ? PowerShellHybridExecutableEntryEmitter.DeclaringTypeName :
             PowerShellTypedExecutableEmitter.DeclaringTypeName;
-        foreach (var description in descriptions) description.GeneratedDeclaringTypeName = declaringType;
+        foreach (var description in descriptions)
+        {
+            description.GeneratedDeclaringTypeName = declaringType;
+            foreach (var body in description.NestedBodies)
+                body.GeneratedDeclaringTypeName = declaringType;
+        }
         var reachableCommandProviders = CollectReachableCommandProviders(semantic, entry.Function.Symbol);
         return new PowerShellTypedExecutableCompilation(
             new PowerShellTypedExecutableContract(entryDescription, entry.Function.Parameters
@@ -349,6 +354,7 @@ internal static class PowerShellTypedExecutableCompiler
             hostedRegionSiteCount: method.HostedRegionSiteCount,
             requiresProviderCancellation: method.RequiresProviderCancellation);
         description.DocumentId = method.SourceSpan.DocumentId;
+        description.NestedBodies = method.NestedBodies;
         description.NativeFunctionBinding = method.NativeFunctionBinding;
         description.DeclaredOutputTypeIsSemanticContract = method.DeclaredOutputType is not null;
         description.SuccessOutputType = method.SuccessOutputType?.FullName ?? string.Empty;

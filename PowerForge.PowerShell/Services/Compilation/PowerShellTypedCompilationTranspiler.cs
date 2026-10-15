@@ -474,6 +474,7 @@ public sealed partial class PowerShellTypedCompilationTranspiler
             emitted.HostedRegionSiteCount,
             emitted.RequiresProviderCancellation);
         method.RegionGraph = emitted.RegionGraph;
+        method.NestedBodies = emitted.NestedBodies;
         method.ConditionalDeclarationOffset = source.ConditionalDeclarationOffset;
         method.NativeFunctionBinding = emitted.NativeFunctionBinding;
         if (emitted.NativeFunctionBinding is { } native && (native.HasBegin || native.HasProcess || native.HasClean))
@@ -589,7 +590,11 @@ public sealed partial class PowerShellTypedCompilationTranspiler
         // C# identifier escapes are source syntax and do not appear in CLR stack frames.
         var declaringTypeName = (result.NamespaceName + "." + result.TypeName).Replace("@", string.Empty);
         foreach (var method in result.Methods)
+        {
             method.GeneratedDeclaringTypeName = declaringTypeName;
+            foreach (var body in method.NestedBodies)
+                body.GeneratedDeclaringTypeName = declaringTypeName;
+        }
         if (runtimeFreeModule is not null && initializer is not null)
             result.RuntimeFreeModule = new PowerShellRuntimeFreeModuleContract
             {
@@ -769,6 +774,7 @@ internal sealed class PowerShellCSharpMethodEmission
     internal string[] Aliases { get; }
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
     internal PowerShellCompilationSourceMapEntry[] SourceMap { get; set; }
+    internal PowerShellCompiledBodyIdentity[] NestedBodies { get; set; } = Array.Empty<PowerShellCompiledBodyIdentity>();
     internal PowerShellCompilationCommandProviderContract[] CommandProviders { get; }
     internal string OutputCardinality { get; }
     internal string[] OutputValueStates { get; }

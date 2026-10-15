@@ -24,7 +24,9 @@ internal static class PowerShellTypedExecutableEntrySourceMapper
         if (remapped.Contains('"' + synthetic.DocumentId + '"', StringComparison.Ordinal))
             throw new InvalidDataException("Executable entry source retained an unmapped synthetic document.");
         emission.Source = remapped;
-        emission.SourceMap = emission.SourceMap.Select(entry =>
+        // Private body sidecars share entries with the flattened method map. Remap
+        // each instance once so descendant ownership survives this authored projection.
+        var remappedMaps = emission.SourceMap.ToDictionary(static entry => entry, entry =>
         {
             var start = MapPosition(synthetic.Text, authored.Text, mappings,
                 entry.SourceStartLine, entry.SourceStartColumn);
@@ -34,6 +36,24 @@ internal static class PowerShellTypedExecutableEntrySourceMapper
                 start.Line, start.Column, end.Line, end.Column,
                 entry.GeneratedStartLine, entry.GeneratedStartColumn,
                 entry.GeneratedEndLine, entry.GeneratedEndColumn);
+        });
+        emission.SourceMap = emission.SourceMap.Select(entry => remappedMaps[entry]).ToArray();
+        emission.NestedBodies = emission.NestedBodies.Select(body =>
+        {
+            var bodyMaps = body.SourceMap.Select(entry => remappedMaps[entry]).ToArray();
+            if (!body.DocumentId.Equals(synthetic.DocumentId, StringComparison.Ordinal))
+                return body.WithSourceMap(bodyMaps);
+            var start = MapPosition(synthetic.Text, authored.Text, mappings,
+                body.SourceStartLine, body.SourceStartColumn);
+            var end = MapPosition(synthetic.Text, authored.Text, mappings,
+                body.SourceEndLine, body.SourceEndColumn);
+            var remappedBody = body.WithAuthoredSource(authored.DocumentId, authored.Path,
+                GetOffset(authored.Text, start.Line, start.Column), GetOffset(authored.Text, end.Line, end.Column),
+                start.Line, start.Column, end.Line, end.Column, bodyMaps);
+            if (body.RegionGraph is not null)
+                remappedBody.RegionGraph = PowerShellLoweredRegionGraphBuilder.Remap(
+                    body.RegionGraph, authored.DocumentId, authored.Text, mappings);
+            return remappedBody;
         }).ToArray();
         var end = GetLineColumn(authored.Text, authored.Text.Length);
         emission.SourceSpan = new SourceSpan(authored.DocumentId, 0, authored.Text.Length,
