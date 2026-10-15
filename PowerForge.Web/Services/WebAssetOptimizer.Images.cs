@@ -322,6 +322,18 @@ public static partial class WebAssetOptimizer
                 return selfClosing ? $"<img{attrsUpdated} />" : $"<img{attrsUpdated}>";
             });
 
+            if (options.ImagePreferNextGen)
+            {
+                rewritten = SourceTagRegex.Replace(rewritten, match =>
+                {
+                    var updated = RewritePictureSourceTag(siteRoot, htmlFile, match.Groups["attrs"].Value, rewritePlans);
+                    if (updated is null)
+                        return match.Value;
+                    fileChanged = true;
+                    return updated;
+                });
+            }
+
             if (!fileChanged || string.Equals(rewritten, html, StringComparison.Ordinal))
                 continue;
 
@@ -330,6 +342,53 @@ public static partial class WebAssetOptimizer
             result.ImageHintedCount += hintedInFile;
             onUpdated?.Invoke(htmlFile);
         }
+    }
+
+    /// <summary>
+    /// Points a <c>&lt;picture&gt;</c> <c>&lt;source&gt;</c> with a single image URL at the same
+    /// next-generation and responsive variants as an <c>&lt;img&gt;</c>, so art-directed or
+    /// theme-specific sources do not keep downloading the original file. Sources that declare a
+    /// <c>type</c> or already list descriptors are left as authored.
+    /// </summary>
+    private static string? RewritePictureSourceTag(
+        string siteRoot,
+        string htmlFile,
+        string attrs,
+        Dictionary<string, ImageRewritePlan> rewritePlans)
+    {
+        var trimmedAttrs = attrs.TrimEnd();
+        var selfClosing = HasHtmlSelfClosingMarker(trimmedAttrs);
+        if (selfClosing)
+            attrs = trimmedAttrs[..^1].TrimEnd();
+        if (SourceTypeAttrRegex.IsMatch(attrs))
+            return null;
+        var srcsetMatch = ImgSrcSetAttrRegex.Match(attrs);
+        if (!srcsetMatch.Success)
+            return null;
+        var srcValue = srcsetMatch.Groups["value"].Value.Trim();
+        if (srcValue.Length == 0 || srcValue.Contains(',') || srcValue.Any(char.IsWhiteSpace))
+            return null;
+        if (!TryResolveImageReference(siteRoot, htmlFile, srcValue, out var resolvedRelative) ||
+            !rewritePlans.TryGetValue(resolvedRelative, out var plan))
+            return null;
+
+        var entries = plan.ResponsiveVariants
+            .OrderBy(variant => variant.Width ?? int.MaxValue)
+            .Where(variant => variant.Width.HasValue)
+            .Select(variant => $"{BuildUrlForReference(siteRoot, htmlFile, srcValue, variant.RelativePath)} {variant.Width}w")
+            .ToList();
+        var preferred = BuildUrlForReference(siteRoot, htmlFile, srcValue, plan.PreferredRelativePath);
+        if (entries.Count > 0 && plan.OriginalWidth > 0)
+            entries.Add($"{preferred} {plan.OriginalWidth}w");
+        var srcset = entries.Count > 0 ? string.Join(", ", entries) : preferred;
+        if (string.Equals(srcset, srcValue, StringComparison.Ordinal))
+            return null;
+
+        var quote = srcsetMatch.Groups["quote"].Value;
+        var updated = ImgSrcSetAttrRegex.Replace(attrs, _ => $"srcset={quote}{srcset}{quote}", 1);
+        if (entries.Count > 0 && !ImgSizesAttrRegex.IsMatch(updated))
+            updated += " sizes=\"100vw\"";
+        return selfClosing ? $"<source{updated} />" : $"<source{updated}>";
     }
 
     private static HashSet<string> FindVisualStoryArtifactPaths(string siteRoot)
