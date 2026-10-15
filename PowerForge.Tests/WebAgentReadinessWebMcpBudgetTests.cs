@@ -265,7 +265,8 @@ public partial class WebAgentReadinessTests
         Assert.Contains("var visibleResponse = JSON.parse(JSON.stringify(response));", runtime, StringComparison.Ordinal);
         Assert.Contains("throwIfAborted(request.signal);", runtime, StringComparison.Ordinal);
         Assert.Contains("return renderVisibleResults(visibleResponse, { signal: request.signal });", runtime, StringComparison.Ordinal);
-        Assert.Contains("var entries = await awaitWithSignal(loadQueryEntries(request), request.signal);", runtime, StringComparison.Ordinal);
+        Assert.Contains("var payload = await awaitWithSignal(loadQueryEntries(request), request.signal);", runtime, StringComparison.Ordinal);
+        Assert.Contains("return awaitWithSignal(rankWithWorker(payload, request), request.signal);", runtime, StringComparison.Ordinal);
         Assert.Contains("if (entries.length > MAX_INDEX_ENTRIES)", runtime, StringComparison.Ordinal);
         Assert.Contains("if (total > MAX_INDEX_BYTES)", runtime, StringComparison.Ordinal);
         Assert.Contains("if (response.returned >= request.limit) return;", runtime, StringComparison.Ordinal);

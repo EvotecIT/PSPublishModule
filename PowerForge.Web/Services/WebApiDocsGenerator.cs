@@ -449,7 +449,8 @@ public static partial class WebApiDocsGenerator
                     throw new FileNotFoundException(
                         $"Configured API documentation assembly was not found: {additionalPath}",
                         additionalPath);
-                var additional = assemblyContext!.LoadFromAssemblyPath(additionalPath);
+                using var additionalStream = new MemoryStream(File.ReadAllBytes(additionalPath), writable: false);
+                var additional = assemblyContext.LoadFromStream(additionalStream);
                 if (!assembliesByName.TryAdd(additional.GetName().Name!, additional))
                     throw new InvalidOperationException($"Duplicate API documentation assembly: {additional.GetName().Name}");
                 assemblies.Add(additional);
@@ -459,7 +460,7 @@ public static partial class WebApiDocsGenerator
 
         var apiDoc = options.Type == ApiDocsType.PowerShell
             ? ParsePowerShellHelp(helpPath, warnings, options)
-            : ParseXmlDocuments(xmlPaths, assembliesByName, options, warnings);
+            : ParseXmlDocuments(xmlPaths, assembliesByName, assemblyPathsByName, options, warnings);
         if (options.Type == ApiDocsType.CSharp && assembly is null)
             warnings.Add("XML-only API documentation does not verify public accessibility. Supply AssemblyPath or AssemblyPaths to restrict the reference to the public assembly surface.");
         var usedReflectionFallback = false;

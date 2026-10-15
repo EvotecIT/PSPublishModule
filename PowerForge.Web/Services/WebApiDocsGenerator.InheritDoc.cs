@@ -8,7 +8,8 @@ public static partial class WebApiDocsGenerator
     private static bool SameReflectedMember(MemberInfo left, MemberInfo right) =>
         left.Module == right.Module && left.MetadataToken == right.MetadataToken;
 
-    private static void ResolveImplicitInheritDoc(Assembly assembly, Dictionary<string, XElement> members, WebApiDocsOptions options, List<string> warnings)
+    private static void ResolveImplicitInheritDoc(Assembly assembly, Dictionary<string, XElement> members, string assemblyPath,
+        Dictionary<string, XElement> frameworkFallbacks, List<string> warnings)
     {
         var reflected = new Dictionary<string, MemberInfo>(StringComparer.Ordinal);
         const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
@@ -39,13 +40,13 @@ public static partial class WebApiDocsGenerator
             var targets = implicitTarget ? candidates.Select(DocumentationId).ToArray() : new[] { explicitTarget! };
             foreach (var candidateId in targets)
             {
-                if (!members.ContainsKey(candidateId) && !string.IsNullOrWhiteSpace(options.AssemblyPath))
+                if (!members.ContainsKey(candidateId))
                 {
-                    referenceInputs ??= WebApiDocumentationInputs.Discover(options.AssemblyPath);
+                    referenceInputs ??= WebApiDocumentationInputs.Discover(assemblyPath);
                     var candidate = candidates.FirstOrDefault(candidate => DocumentationId(candidate) == candidateId) ?? candidates.FirstOrDefault();
                     var declaring = candidate as Type ?? candidate?.DeclaringType;
                     var ownerName = declaring?.Assembly.GetName().Name;
-                    var assemblyDirectory = Path.GetDirectoryName(Path.GetFullPath(options.AssemblyPath));
+                    var assemblyDirectory = Path.GetDirectoryName(Path.GetFullPath(assemblyPath));
                     var candidateInputs = referenceInputs.Where(path =>
                         !string.Equals(Path.GetDirectoryName(path), assemblyDirectory, StringComparison.OrdinalIgnoreCase) ||
                         inheritedOwnerNames.Contains(Path.GetFileNameWithoutExtension(path)));
@@ -61,6 +62,14 @@ public static partial class WebApiDocsGenerator
                 if (!members.ContainsKey(candidateId)) continue;
                 target = candidateId;
                 break;
+            }
+            // Prefer real XML documentation. Only synthesize the nearest well-known framework contract;
+            // a missing library contract must retain the unresolved-inheritdoc diagnostic.
+            if (implicitTarget && target is null && candidates.FirstOrDefault() is { } nearest &&
+                CreateFrameworkInheritDoc(nearest) is { } frameworkDocumentation)
+            {
+                target = DocumentationId(nearest);
+                frameworkFallbacks.TryAdd(target, frameworkDocumentation);
             }
             if (implicitTarget && target is not null) inheritDoc.SetAttributeValue("cref", target);
             else if (implicitTarget) warnings.Add($"Implicit inheritdoc could not be resolved for {pair.Key}; supply the inherited XML documentation or an explicit cref.");
