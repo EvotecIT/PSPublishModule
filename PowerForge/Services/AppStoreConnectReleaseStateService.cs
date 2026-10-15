@@ -140,7 +140,7 @@ public sealed class AppStoreConnectReleaseStateService
             version?.Id,
             cancellationToken).ConfigureAwait(false);
 
-        var testFlightBuild = matchedBuild ?? selectedBuild;
+        var testFlightBuild = matchedBuild ?? (buildNumber is null ? selectedBuild : null);
         AppStoreConnectBuildBetaDetailInfo? betaDetail = null;
         AppStoreConnectBetaAppReviewSubmissionInfo? betaSubmission = null;
         if (testFlightBuild is not null)

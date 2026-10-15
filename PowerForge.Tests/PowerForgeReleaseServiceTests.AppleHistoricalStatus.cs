@@ -3,6 +3,47 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Theory]
+    [InlineData(PowerForgeAppleReleaseAction.Status, false)]
+    [InlineData(PowerForgeAppleReleaseAction.Doctor, false)]
+    [InlineData(PowerForgeAppleReleaseAction.Status, true)]
+    [InlineData(PowerForgeAppleReleaseAction.Doctor, true)]
+    public void Execute_AppleHistoricalPlan_BindsRequestedVersionWithoutObservingBuild(PowerForgeAppleReleaseAction action, bool workspace)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var (spec, source) = CreateAppleStatusDeliveryFixture(root);
+            if (workspace)
+            {
+                var app = Assert.Single(spec.AppleApps!.Apps);
+                app.ProjectPath = "CasaRay.xcworkspace";
+                app.MarketingVersion = "2.3";
+                app.BuildNumber = "30";
+                Directory.CreateDirectory(Path.Combine(root, app.ProjectPath));
+                source = EnsureTestSourceCommit(root);
+            }
+            var service = CreateAppleAutomationService(_ => throw new InvalidOperationException("Observation plan must not read Apple."));
+            var request = new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"), AppleAction = action,
+                AppleSourceCommit = source, AppleMarketingVersion = "1.1", PlanOnly = true
+            };
+            var first = service.Execute(spec, request);
+            Assert.True(first.Success, first.ErrorMessage);
+            var target = Assert.Single(first.AppleReceipt!.Targets);
+            Assert.Equal("1.1", target.Version);
+            Assert.Null(target.Build);
+            Assert.Null(target.BuildId);
+            Assert.Null(target.BuildProcessingState);
+            request.AppleMarketingVersion = "1.2";
+            var second = service.Execute(spec, request);
+            Assert.True(second.Success, second.ErrorMessage);
+            Assert.NotEqual(first.AppleReceipt.PlanSha256, second.AppleReceipt!.PlanSha256);
+        }
+        finally { TryDelete(root); }
+    }
+
+    [Theory]
     [InlineData(PowerForgeAppleReleaseAction.Status)]
     [InlineData(PowerForgeAppleReleaseAction.Doctor)]
     public void Execute_AppleExplicitObservation_DoesNotStampSkippedTargets(PowerForgeAppleReleaseAction action)

@@ -234,8 +234,8 @@ internal sealed partial class PowerForgeReleaseService
             ShipToAppStoreReview = app.ShipToAppStoreReview,
             AppId = app.AppStoreConnectAppId,
             AppIdDiscovered = app.AppStoreConnectAppIdDiscovered,
-            Version = versioning?.MarketingVersion ?? app.MarketingVersion,
-            Build = versioning?.BuildNumber ?? app.BuildNumber,
+            Version = IsExplicitAppleVersionObservation(plan, app) ? plan.ObservedMarketingVersion : versioning?.MarketingVersion ?? app.MarketingVersion,
+            Build = IsExplicitAppleVersionObservation(plan, app) ? null : versioning?.BuildNumber ?? app.BuildNumber,
             ArchivePath = string.IsNullOrWhiteSpace(app.ExpectedArchiveSha256)
                 ? null
                 : FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/'),

@@ -88,6 +88,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     Id = "older-selected-build", Version = "8", MarketingVersion = "1.1", ProcessingState = "VALID"
                 };
+                state.Platforms[0].BetaDetail = new() { InternalBuildState = "IN_BETA_TESTING", ExternalBuildState = "IN_BETA_REVIEW" };
+                state.Platforms[0].BetaReviewSubmission = new() { BetaReviewState = "IN_REVIEW" };
                 return state;
             }, getAppleBuildUpload: (_, id) =>
             {
@@ -105,6 +107,11 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal(1, reads);
             var target = Assert.Single(result.AppleReceipt!.Targets);
             Assert.Equal("9", target.Build);
+            Assert.Null(target.BuildId);
+            Assert.Null(target.BuildProcessingState);
+            Assert.Null(target.TestFlightInternalState);
+            Assert.Null(target.TestFlightExternalState);
+            Assert.Null(target.TestFlightReviewState);
             Assert.Equal("current-upload", target.BuildUploadId);
             Assert.Contains(target.Diagnostics, value => value.Code == "APPLE_BUILD_UPLOAD_REJECTED");
         }

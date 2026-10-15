@@ -246,9 +246,11 @@ internal sealed partial class PowerForgeReleaseService
            plan.SubmitForReview ||
            plan.ReleaseApprovedVersion);
 
-    private static bool IsExplicitAppleVersionObservation(PowerForgeAppleReleasePlan plan)
+    internal static bool IsExplicitAppleVersionObservation(
+        PowerForgeAppleReleasePlan plan, PowerForgeAppleAppReleaseTargetPlan? app = null)
         => plan.Action is PowerForgeAppleReleaseAction.Status or PowerForgeAppleReleaseAction.Doctor &&
-           !string.IsNullOrWhiteSpace(plan.ObservedMarketingVersion);
+           !string.IsNullOrWhiteSpace(plan.ObservedMarketingVersion) &&
+           (app is null || ShouldExecuteAppleTarget(plan.Action, app));
 
     private static void ValidateAppleAutomation(PowerForgeAppleReleaseAutomationOptions automation)
     {
@@ -520,13 +522,20 @@ internal sealed partial class PowerForgeReleaseService
             var platform = state?.Platforms.SingleOrDefault(value => value.Platform == app.Platform);
             var preparedVersion = result?.Distribution?.Version;
             var receiptVersion = platform?.Version ?? preparedVersion;
-            var build = platform?.MatchedBuild ?? platform?.SelectedBuild ?? result?.Distribution?.Build;
             var review = platform?.ReviewSubmissions.FirstOrDefault(static value => value.IsSubmitted == true) ??
                          platform?.ReviewSubmissions.FirstOrDefault();
             (string? MarketingVersion, string? BuildNumber) values = (null, null);
             var skippedIndependentRelease = result?.SkippedSteps.Contains(
                 "independentRelease",
                 StringComparer.OrdinalIgnoreCase) == true;
+            var observesExplicitVersion = IsExplicitAppleVersionObservation(plan, app) &&
+                                          !skippedIndependentRelease && state is not null;
+            var build = platform?.MatchedBuild ??
+                        (string.IsNullOrWhiteSpace(state?.BuildNumber) ? platform?.SelectedBuild : null) ??
+                        result?.Distribution?.Build;
+            var hasTestFlightBuild = build is not null &&
+                                     (platform?.MatchedBuild?.Id == build.Id || platform?.TestFlightBuild?.Id == build.Id ||
+                                      observesExplicitVersion && platform?.SelectedBuild?.Id == build.Id);
             if (!skippedIndependentRelease &&
                 plan.Action is PowerForgeAppleReleaseAction.Archive or PowerForgeAppleReleaseAction.Rehearse)
             {
@@ -566,8 +575,6 @@ internal sealed partial class PowerForgeReleaseService
                     }
                 }
             }
-            var observesExplicitVersion = IsExplicitAppleVersionObservation(plan) &&
-                                          !skippedIndependentRelease && state is not null;
             if (observesExplicitVersion)
                 values = (state?.VersionString ?? plan.ObservedMarketingVersion, build?.Version);
             (string? Path, string? Sha256) uploadExport = (null, null);
@@ -640,7 +647,7 @@ internal sealed partial class PowerForgeReleaseService
                 AppId = app.AppStoreConnectAppId,
                 AppIdDiscovered = app.AppStoreConnectAppIdDiscovered,
                 Version = state?.VersionString ?? values.MarketingVersion,
-                Build = observesExplicitVersion ? build?.Version : state?.BuildNumber ?? values.BuildNumber,
+                Build = state?.BuildNumber ?? build?.Version ?? values.BuildNumber,
                 BuildId = build?.Id,
                 BuildProcessingState = build?.ProcessingState,
                 BuildUploadId = result?.Upload?.BuildUploadId ?? result?.ResumedUploadAttestation?.BuildUploadId ?? delivery.Id,
@@ -650,9 +657,9 @@ internal sealed partial class PowerForgeReleaseService
                 BuildSelected = platform?.MatchedBuildSelected ??
                                 (observesExplicitVersion && platform?.SelectedBuild is not null ? (bool?)true : null) ??
                                 (result?.Distribution?.Build is not null && plan.SelectBuildForDistribution ? true : null),
-                TestFlightInternalState = platform?.BetaDetail?.InternalBuildState,
-                TestFlightExternalState = platform?.BetaDetail?.ExternalBuildState,
-                TestFlightReviewState = platform?.BetaReviewSubmission?.BetaReviewState,
+                TestFlightInternalState = hasTestFlightBuild ? platform?.BetaDetail?.InternalBuildState : null,
+                TestFlightExternalState = hasTestFlightBuild ? platform?.BetaDetail?.ExternalBuildState : null,
+                TestFlightReviewState = hasTestFlightBuild ? platform?.BetaReviewSubmission?.BetaReviewState : null,
                 AppReviewSubmissionId = review?.Id,
                 AppReviewState = review?.State,
                 ReadinessChecked = readiness is not null,
