@@ -93,7 +93,7 @@ internal static class CsprojVersionEditor
         var updated = content;
         foreach (var tag in FullVersionTags)
         {
-            updated = ReplaceValues(updated, tag, escapedVersion);
+            updated = ReplaceValues(updated, tag, escapedVersion, preserveExpressions: tag == "InformationalVersion");
         }
         foreach (var tag in NumericVersionTags)
         {
@@ -140,12 +140,14 @@ internal static class CsprojVersionEditor
         span.Element.Parent?.Parent == span.Element.Document?.Root && !span.Element.AncestorsAndSelf().Any(element =>
             element.Attributes().Any(attribute => attribute.Name.LocalName.Equals("Condition", StringComparison.OrdinalIgnoreCase)));
 
-    private static string ReplaceValues(string content, string tag, string value, bool includeEmpty = false)
+    private static string ReplaceValues(string content, string tag, string value, bool includeEmpty = false, bool preserveExpressions = false)
     {
         var result = new StringBuilder(content.Length);
         var offset = 0;
         foreach (var span in FindValues(content, tag, includeEmpty))
         {
+            if (preserveExpressions && span.Element.Value.Contains("$(", StringComparison.Ordinal))
+                continue;
             result.Append(content, offset, span.Index - offset);
             if (span.IsEmpty)
                 result.Append(content, span.Index, span.Length - 2).Append('>').Append(value).Append("</").Append(span.QualifiedName).Append('>');
