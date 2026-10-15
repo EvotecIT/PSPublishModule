@@ -2,6 +2,48 @@ namespace PowerForge.Tests;
 
 public sealed partial class AppleTestFlightWorkerTests
 {
+    [Theory]
+    [InlineData("READY_FOR_BETA_SUBMISSION", (int)AppleTestFlightJobStage.NeedsOperator, false)]
+    [InlineData("BETA_REJECTED", (int)AppleTestFlightJobStage.NeedsOperator, false)]
+    [InlineData("MISSING_EXPORT_COMPLIANCE", (int)AppleTestFlightJobStage.NeedsOperator, false)]
+    [InlineData("IN_BETA_REVIEW", (int)AppleTestFlightJobStage.AppleProcessingPending, true)]
+    [InlineData("WAITING_FOR_BETA_REVIEW", (int)AppleTestFlightJobStage.AppleProcessingPending, true)]
+    public void ExternalDelivery_DistinguishesOperatorActionFromAppleReview(string state, int expectedStage, bool reviewPending)
+    {
+        var policy = new AppleTestFlightWorkerPolicy { BetaGroupIsInternal = false, Targets = [new() { Name = "iOS" }] };
+        var receipt = new PowerForgeAppleReleaseReceipt
+        {
+            Success = true, ShipPhase = PowerForgeAppleShipPhase.Release,
+            Targets = [new() { Name = "iOS", BuildProcessingState = "VALID", TestFlightExternalState = state }]
+        };
+        var outcome = AppleTestFlightWorker.DeliveryOutcome(receipt, policy);
+        Assert.Equal((AppleTestFlightJobStage)expectedStage, outcome.Stage);
+        Assert.False(string.IsNullOrWhiteSpace(outcome.Diagnostic));
+        Assert.Equal(reviewPending, AppleTestFlightWorker.IsExternalReviewPending(receipt, policy));
+    }
+
+    [Fact]
+    public void ExternalDelivery_ReportsHumanActionEvenWhenAnotherPlatformIsInReview()
+    {
+        var policy = new AppleTestFlightWorkerPolicy
+        {
+            BetaGroupIsInternal = false, Targets = [new() { Name = "iOS" }, new() { Name = "Mac" }]
+        };
+        var receipt = new PowerForgeAppleReleaseReceipt
+        {
+            Success = true, ShipPhase = PowerForgeAppleShipPhase.Release,
+            Targets =
+            [
+                new() { Name = "iOS", BuildProcessingState = "VALID", TestFlightExternalState = "IN_BETA_REVIEW" },
+                new() { Name = "Mac", BuildProcessingState = "VALID", TestFlightExternalState = "READY_FOR_BETA_SUBMISSION" }
+            ]
+        };
+        Assert.True(AppleTestFlightWorker.IsExternalReviewPending(receipt, policy));
+        var outcome = AppleTestFlightWorker.DeliveryOutcome(receipt, policy);
+        Assert.Equal(AppleTestFlightJobStage.NeedsOperator, outcome.Stage);
+        Assert.Contains("operator action", outcome.Diagnostic);
+    }
+
     [Fact]
     public void ExternalPlan_RequiresMatchingLocalAudienceAndStillRejectsAppStoreReview()
     {

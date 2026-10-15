@@ -456,11 +456,15 @@ powerforge apple-release Ship --config powerforge.release.json --apple-version 1
   --confirm-apple-action --summary --output json
 ```
 
-The same command supports iOS-only, Mac-only, or both platforms in internal
-TestFlight. PowerForge never adds groups or testers that are not already configured,
-requires each selected target to declare `TestFlightPolicy: Internal`, and an
-internal-TestFlight-only target does not receive an App Store version or review
-submission.
+The same command supports iOS-only, Mac-only, or both platforms in TestFlight.
+PowerForge never adds groups or testers that are not already configured. A worker
+defaults to an internal group; an operator may explicitly enroll an existing
+external group with `BetaGroupIsInternal: false`. Each selected target must declare
+the matching `TestFlightPolicy: Internal` or `External`. The worker rejects App
+Store review and does not submit Beta App Review. An external build that needs
+review or export compliance is held for the operator; a review already in progress
+is observed without repeating build assignment. Public App Store distribution
+remains a separate local release decision.
 
 Remote App Store screenshots are reused by default. Add
 `--apple-sync-screenshots` only when reviewed local screenshot inputs should replace

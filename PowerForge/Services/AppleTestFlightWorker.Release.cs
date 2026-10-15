@@ -88,6 +88,12 @@ internal sealed partial class AppleTestFlightWorker
             ReadSpec();
             var plan = InvokeShip(plan: true);
             ValidatePlan(plan, job);
+            if (IsExternalReviewPending(plan, _policy))
+            {
+                var observation = DeliveryOutcome(plan, _policy);
+                SetStage(observation.Stage, observation.Diagnostic is null ? null : SafeDiagnostic(observation.Diagnostic));
+                return;
+            }
             if (plan.ShipPhase != PowerForgeAppleShipPhase.Release)
                 throw new InvalidOperationException("Another operation consumed this build identity. Preserve the checkpoint and requalify a new candidate before reserving another build.");
             if (job.Stage == AppleTestFlightJobStage.AppleProcessingPending && (plan.Versioning?.BuildNumber != job.Build || plan.Versioning?.MarketingVersion != job.Version))
@@ -97,13 +103,8 @@ internal sealed partial class AppleTestFlightWorker
             SetStage(AppleTestFlightJobStage.Releasing);
             var result = InvokeShip(plan: false);
             job.Outcomes = result.Targets;
-            if (IsReady(result, _policy)) SetStage(_policy.BetaGroupIsInternal ? AppleTestFlightJobStage.ReadyInHome : AppleTestFlightJobStage.ReadyInTestFlight);
-            else if (result.ShipPhase == PowerForgeAppleShipPhase.Release && (result.Success || result.Targets.Any(value => value.BuildProcessingState is "PROCESSING" or "PROCESSING_PENDING")) &&
-                     result.Targets.All(value => string.IsNullOrEmpty(value.BuildProcessingState) || value.BuildProcessingState is "VALID" or "PROCESSING" or "PROCESSING_PENDING"))
-                SetStage(AppleTestFlightJobStage.AppleProcessingPending, result.ErrorMessage);
-            else SetStage(AppleTestFlightJobStage.NeedsOperator, SafeDiagnostic(result.ErrorMessage ??
-                (_policy.BetaGroupIsInternal ? "Selected builds are not yet verified ready in the enrolled internal group." :
-                    "Selected builds are not yet verified available to external testers. Inspect Beta App Review and group access; submit beta review only after separate operator approval.")));
+            var outcome = DeliveryOutcome(result, _policy);
+            SetStage(outcome.Stage, outcome.Diagnostic is null ? null : SafeDiagnostic(outcome.Diagnostic));
             return;
         }
         AssertClean();
