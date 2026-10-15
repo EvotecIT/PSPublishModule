@@ -250,6 +250,11 @@ namespace {identity.Namespace}
             if (assemblyName == null || string.IsNullOrWhiteSpace(assemblyName.Name))
                 return null;
 
+            // Cmdlet and attribute types must come from the PowerShell host. Development
+            // outputs can include SDK runtime copies that have a different ALC identity.
+            if (string.Equals(assemblyName.Name, ""System.Management.Automation"", StringComparison.OrdinalIgnoreCase))
+                return null;
+
             var loaderAssembly = typeof(ModuleAssemblyLoadContext).Assembly.GetName();
             if (AssemblyName.ReferenceMatchesDefinition(loaderAssembly, assemblyName))
                 return typeof(ModuleAssemblyLoadContext).Assembly;
