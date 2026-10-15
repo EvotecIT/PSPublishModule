@@ -2296,7 +2296,7 @@ internal sealed partial class PowerForgeReleaseService
         bool dotNet = !string.IsNullOrWhiteSpace(app.DotNetPublishInstallerId);
         if (dotNet && !explicitObservation)
             ValidateDotNetAppleTarget(app, requestedProjectPath, options.TeamId);
-        var projectPath = dotNet ? requestedProjectPath : projectExists
+        var projectPath = dotNet || explicitObservation ? requestedProjectPath : projectExists
             ? NormalizeAppleArchiveProjectPath(requestedProjectPath, name)
             : ValidateGeneratedAppleProjectPath(requestedProjectPath, name);
         if (!allowMissingProject && !explicitObservation &&

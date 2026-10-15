@@ -598,8 +598,10 @@ internal sealed partial class PowerForgeReleaseService
                     build?.ProcessingState,
                     result?.Upload?.ProcessResult.StdOut,
                     result?.Upload?.ProcessResult.StdErr)
-                .Concat(plan.Action == PowerForgeAppleReleaseAction.Doctor
-                    ? AppleReleaseDoctor.Evaluate(plan, app, result?.RemoteState?.ControlPlane)
+                .Concat(plan.Action == PowerForgeAppleReleaseAction.Doctor &&
+                        (!IsExplicitAppleVersionObservation(plan) || !skippedIndependentRelease)
+                    ? AppleReleaseDoctor.Evaluate(plan, app, result?.RemoteState?.ControlPlane,
+                        inspectLocalProject: !IsExplicitAppleVersionObservation(plan))
                     : Array.Empty<PowerForgeAppleReleaseDiagnostic>())
                 .Concat(CreateGovernanceDiagnostics(result?.Governance))
                 .Concat(CreateAdoptedBuildDiagnostics(result))

@@ -2,6 +2,37 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeReleaseServiceTests
 {
+    [Fact]
+    public void Execute_AppleDefaultDoctor_StillValidatesLocalDirectTargets()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var (spec, _) = CreateAppleStatusDeliveryFixture(root);
+            var app = Assert.Single(spec.AppleApps!.Apps);
+            spec.AppleApps.TeamId = null;
+            spec.AppleApps.Apps = new[]
+            {
+                app,
+                new AppleAppConfiguration
+                {
+                    Name = "Direct Mac", BundleId = "com.example.direct", Platform = ApplePlatform.macOS,
+                    ProjectPath = app.ProjectPath, Scheme = "DirectMac", DistributionRoute = AppleDistributionRoute.DirectNotarized
+                }
+            };
+            var result = CreateAppleAutomationService(request => CreateReleaseState(request, null))
+                .Execute(spec, new PowerForgeReleaseRequest
+                {
+                    ConfigPath = Path.Combine(root, "powerforge.release.json"), AppleAction = PowerForgeAppleReleaseAction.Doctor,
+                    AppleSourceCommit = EnsureTestSourceCommit(root)
+                });
+            Assert.False(result.Success);
+            var direct = Assert.Single(result.AppleReceipt!.Targets, target => target.Name == "Direct Mac");
+            Assert.Contains(direct.Diagnostics, diagnostic => diagnostic.Code == "APPLE_TEAM_ID_MISSING");
+        }
+        finally { TryDelete(root); }
+    }
+
     [Theory]
     [InlineData(PowerForgeAppleReleaseAction.Status)]
     [InlineData(PowerForgeAppleReleaseAction.Doctor)]
@@ -73,17 +104,23 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Theory]
-    [InlineData(PowerForgeAppleReleaseAction.Status)]
-    [InlineData(PowerForgeAppleReleaseAction.Doctor)]
-    public void Execute_AppleExplicitObservation_DoesNotStampSkippedTargets(PowerForgeAppleReleaseAction action)
+    [InlineData(PowerForgeAppleReleaseAction.Status, false)]
+    [InlineData(PowerForgeAppleReleaseAction.Doctor, false)]
+    [InlineData(PowerForgeAppleReleaseAction.Status, true)]
+    [InlineData(PowerForgeAppleReleaseAction.Doctor, true)]
+    public void Execute_AppleExplicitObservation_DoesNotStampSkippedTargets(PowerForgeAppleReleaseAction action, bool planOnly)
     {
         var root = CreateSandbox();
         try
         {
             var (spec, source) = CreateAppleStatusDeliveryFixture(root);
             var app = Assert.Single(spec.AppleApps!.Apps);
-            spec.AppleApps.TeamId = "TESTTEAM";
-            spec.AppleApps.DirectDistribution.KeychainProfile = "synthetic-notary-profile";
+            spec.AppleApps.TeamId = null;
+            spec.AppleApps.DirectDistribution.KeychainProfile = null;
+            app.ProjectPath = "CasaRay.xcworkspace";
+            app.MarketingVersion = "2.3";
+            app.BuildNumber = "30";
+            Directory.CreateDirectory(Path.Combine(root, app.ProjectPath));
             spec.AppleApps.Apps = new[]
             {
                 app,
@@ -104,6 +141,11 @@ public sealed partial class PowerForgeReleaseServiceTests
                     ProjectPath = app.ProjectPath, Scheme = "Development", DistributionRoute = AppleDistributionRoute.DevelopmentOnly
                 }
             };
+            foreach (var target in spec.AppleApps.Apps)
+            {
+                target.MarketingVersion = "2.3";
+                target.BuildNumber = "30";
+            }
             var calls = 0;
             var result = CreateAppleAutomationService(request =>
             {
@@ -113,17 +155,63 @@ public sealed partial class PowerForgeReleaseServiceTests
             }).Execute(spec, new PowerForgeReleaseRequest
             {
                 ConfigPath = Path.Combine(root, "powerforge.release.json"), AppleAction = action,
-                AppleSourceCommit = source, AppleMarketingVersion = "1.1"
+                AppleSourceCommit = EnsureTestSourceCommit(root), AppleMarketingVersion = "1.1", PlanOnly = planOnly
             });
             Assert.True(result.Success, result.ErrorMessage);
-            Assert.Equal(1, calls);
+            Assert.Equal(planOnly ? 0 : 1, calls);
             Assert.Equal("1.1", Assert.Single(result.AppleReceipt!.Targets, target => target.Name == app.Name).Version);
             Assert.All(result.AppleReceipt.Targets.Where(target => target.Name != app.Name), target =>
             {
                 Assert.Null(target.Version);
                 Assert.Null(target.Build);
                 Assert.Null(target.BuildId);
+                Assert.Contains("independentRelease", target.SkippedSteps);
+                Assert.DoesNotContain(target.Diagnostics, diagnostic => diagnostic.Severity == "error");
             });
+        }
+        finally { TryDelete(root); }
+    }
+
+    [Theory]
+    [InlineData(PowerForgeAppleReleaseAction.Status, false, "Missing.xcodeproj/project.pbxproj")]
+    [InlineData(PowerForgeAppleReleaseAction.Doctor, false, "Missing.xcodeproj/project.pbxproj")]
+    [InlineData(PowerForgeAppleReleaseAction.Status, true, "Missing.xcodeproj/project.pbxproj")]
+    [InlineData(PowerForgeAppleReleaseAction.Doctor, true, "Missing.xcodeproj/project.pbxproj")]
+    [InlineData(PowerForgeAppleReleaseAction.Status, false, "Missing.xcodeproj")]
+    [InlineData(PowerForgeAppleReleaseAction.Doctor, false, "Missing.xcodeproj")]
+    [InlineData(PowerForgeAppleReleaseAction.Status, true, "Missing.xcodeproj")]
+    [InlineData(PowerForgeAppleReleaseAction.Doctor, true, "Missing.xcodeproj")]
+    public void Execute_AppleExplicitObservation_AllowsMissingPbxprojAndUnobservedLocalCapabilities(
+        PowerForgeAppleReleaseAction action, bool planOnly, string projectPath)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var (spec, _) = CreateAppleStatusDeliveryFixture(root);
+            var app = Assert.Single(spec.AppleApps!.Apps);
+            app.ProjectPath = projectPath;
+            app.GenerateProjectIfMissing = false;
+            app.RegenerateProject = false;
+            app.RequiredEmbeddedBundleIds = new[] { "com.example.watch" };
+            app.Capabilities = new[] { "CarPlay" };
+            var calls = 0;
+            var result = CreateAppleAutomationService(request =>
+            {
+                calls++;
+                return CreateReleaseState(request, null);
+            }).Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"), AppleAction = action,
+                AppleSourceCommit = EnsureTestSourceCommit(root), AppleMarketingVersion = "1.1", PlanOnly = planOnly
+            });
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(planOnly ? 0 : 1, calls);
+            var target = Assert.Single(result.AppleReceipt!.Targets);
+            Assert.Equal("1.1", target.Version);
+            Assert.Null(target.Build);
+            Assert.DoesNotContain(target.Diagnostics, diagnostic => diagnostic.Code is "APPLE_EMBEDDED_BUNDLE_MISSING" or "APPLE_CARPLAY_ENTITLEMENT_MISSING");
+            if (action == PowerForgeAppleReleaseAction.Doctor && !planOnly)
+                Assert.Contains(target.Diagnostics, diagnostic => diagnostic.Code == "APPLE_LOCAL_PROJECT_NOT_EVALUATED");
         }
         finally { TryDelete(root); }
     }
