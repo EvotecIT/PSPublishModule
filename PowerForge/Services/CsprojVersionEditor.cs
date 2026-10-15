@@ -146,13 +146,21 @@ internal static class CsprojVersionEditor
         var offset = 0;
         foreach (var span in FindValues(content, tag, includeEmpty))
         {
-            if (preserveExpressions && span.Element.Value.Contains("$(", StringComparison.Ordinal))
-                continue;
+            var replacement = value;
+            if (preserveExpressions)
+            {
+                var declared = span.Element.Value.Trim();
+                if (declared.StartsWith("$(", StringComparison.Ordinal)) continue;
+                var metadata = declared.IndexOf('+');
+                if (metadata > 0 && declared.IndexOf("$(", metadata, StringComparison.Ordinal) >= 0 &&
+                    PackageVersionUtility.TryNormalizeExact(declared.Substring(0, metadata), out _) && !value.Contains('+'))
+                    replacement += SecurityElement.Escape(declared.Substring(metadata));
+            }
             result.Append(content, offset, span.Index - offset);
             if (span.IsEmpty)
-                result.Append(content, span.Index, span.Length - 2).Append('>').Append(value).Append("</").Append(span.QualifiedName).Append('>');
+                result.Append(content, span.Index, span.Length - 2).Append('>').Append(replacement).Append("</").Append(span.QualifiedName).Append('>');
             else
-                result.Append(content, span.Index, span.OpeningEnd - span.Index).Append(value)
+                result.Append(content, span.Index, span.OpeningEnd - span.Index).Append(replacement)
                     .Append(content, span.ClosingStart, span.Index + span.Length - span.ClosingStart);
             offset = span.Index + span.Length;
         }

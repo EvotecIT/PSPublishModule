@@ -38,18 +38,18 @@ try {
     [IO.Compression.ZipFile]::ExtractToDirectory($archive, $temporary)
     & dotnet $packer agent-plugin validate --source $temporary
     if ($LASTEXITCODE -ne 0) { throw 'Plugin package validation failed.' }
-    if (-not [OperatingSystem]::IsWindows()) {
-        $zip = [IO.Compression.ZipFile]::OpenRead($archive)
-        try {
-            foreach ($entry in $zip.Entries) {
-                if ($entry.FullName.EndsWith('/')) { continue }
-                $mode = ($entry.ExternalAttributes -shr 16) -band 511
-                if ($mode -ne 0) {
-                    [IO.File]::SetUnixFileMode((Join-Path $temporary $entry.FullName), [IO.UnixFileMode]$mode)
-                }
+    $executablePaths = @()
+    $zip = [IO.Compression.ZipFile]::OpenRead($archive)
+    try {
+        foreach ($entry in $zip.Entries) {
+            if ($entry.FullName.EndsWith('/')) { continue }
+            $mode = ($entry.ExternalAttributes -shr 16) -band 511
+            if (-not [OperatingSystem]::IsWindows() -and $mode -ne 0) {
+                [IO.File]::SetUnixFileMode((Join-Path $temporary $entry.FullName), [IO.UnixFileMode]$mode)
             }
-        } finally { $zip.Dispose() }
-    }
+            if (($mode -band 73) -ne 0) { $executablePaths += $entry.FullName }
+        }
+    } finally { $zip.Dispose() }
     $plugin = Get-Content -LiteralPath (Join-Path $temporary 'plugin.json') -Raw | ConvertFrom-Json
     if ($plugin.version -notmatch '^\d+\.\d+\.\d+$') { throw 'Distribution branches require a stable three-part plugin version.' }
     function Invoke-PublicationGit {
@@ -75,6 +75,9 @@ try {
         if ([version]$previous.version -gt [version]$plugin.version) { throw 'Cannot replace a newer published plugin version.' }
     }
     Invoke-PublicationGit -Arguments @('-c', 'core.autocrlf=false', 'add', '--force', '--all')
+    foreach ($path in $executablePaths) {
+        Invoke-PublicationGit -Arguments @('add', '--force', '--chmod=+x', '--', $path) | Out-Null
+    }
     $tree = Invoke-PublicationGit -Arguments @('write-tree')
     if ($parent -and $previous.version -eq $plugin.version) {
         $previousTree = Invoke-PublicationGit -Arguments @('rev-parse', "${parent}^{tree}")

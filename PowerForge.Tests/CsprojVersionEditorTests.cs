@@ -164,6 +164,21 @@ public sealed partial class CsprojVersionEditorTests
         Assert.Contains("<InformationalVersion Condition=\"'$(PackageVersion)' != ''\">$(PackageVersion)</InformationalVersion>", updated, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("1.0.0+$(SourceRevisionId)")]
+    [InlineData("1.0.0-preview.1+$(SourceRevisionId)")]
+    public void UpdateVersionText_UpdatesLiteralInformationalIdentityWithDerivedMetadata(string informationalVersion)
+    {
+        var content = "<Project><PropertyGroup><Version>1.0.0</Version>" +
+            "<InformationalVersion>" + informationalVersion + "</InformationalVersion>" +
+            "</PropertyGroup></Project>";
+
+        var updated = CsprojVersionEditor.UpdateVersionText(content, "2.0.0-rc.1", out _);
+
+        Assert.Contains("<Version>2.0.0-rc.1</Version>", updated, StringComparison.Ordinal);
+        Assert.Contains("<InformationalVersion>2.0.0-rc.1+$(SourceRevisionId)</InformationalVersion>", updated, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void UpdateVersionText_InsertsPackageVersionWhenOnlyInformationalVersionExists()
     {
