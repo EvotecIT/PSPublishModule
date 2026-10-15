@@ -333,14 +333,12 @@ internal sealed partial class PowerForgeReleaseService
     {
         var version = ResolveAppleDistributionValues(app, versionUpdate: null);
         var observedVersion = string.IsNullOrWhiteSpace(plan.ObservedMarketingVersion) ? null : plan.ObservedMarketingVersion;
-        var observesOtherVersion = !string.IsNullOrWhiteSpace(observedVersion) &&
-            !string.Equals(observedVersion, version.MarketingVersion, StringComparison.Ordinal);
         return _getAppleReleaseState(new AppStoreConnectReleaseStateRequest
         {
             Credential = CreateAppStoreConnectCredential(plan),
             AppId = app.AppStoreConnectAppId!,
             VersionString = observedVersion ?? version.MarketingVersion,
-            BuildNumber = observesOtherVersion ? null : version.BuildNumber,
+            BuildNumber = observedVersion is not null ? null : version.BuildNumber,
             Platforms = new[] { app.Platform },
             BetaGroupIds = plan.TestFlightBetaGroupIds,
             BetaGroupNames = plan.TestFlightBetaGroupNames,

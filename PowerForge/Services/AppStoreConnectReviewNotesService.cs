@@ -70,7 +70,7 @@ public sealed class AppStoreConnectReviewNotesService
             throw new InvalidOperationException("Review notes or target changed after review. Generate and review a new plan.");
         if (current.IsConverged) return current;
         try { await _client.UpdateReviewNotesAsync(current.ReviewDetailsId, desired.Notes, cancellationToken).ConfigureAwait(false); }
-        catch (Exception error) when (error is not OperationCanceledException)
+        catch (Exception error) when (error is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             // An ambiguous response may have applied. Observe once; never repeat the patch blindly.
             var observed = await PlanAsync(desired, cancellationToken).ConfigureAwait(false);
