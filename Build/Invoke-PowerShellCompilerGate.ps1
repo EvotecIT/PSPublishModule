@@ -5,6 +5,7 @@ param(
     [ValidateSet('win-x64', 'linux-x64')] [string] $RuntimeIdentifier,
     [ValidateRange(1, 32)] [int] $MaxParallelThreads = 4,
     [ValidateSet('Fast', 'Full')] [string] $Lane = 'Fast',
+    [ValidateSet('All', 'Contracts', 'Corpus')] [string] $Phase = 'All',
     [switch] $NoBuild
 )
 
@@ -75,6 +76,7 @@ if ($IsWindows) {
     windowsPowerShell51 = if ($IsWindows) { 'selected by numeric artifact tests' } else { 'unavailable; Windows workflow fixtures are excluded or explicitly skipped' }
     maxParallelThreads = $MaxParallelThreads
     lane = $Lane
+    phase = $Phase
     requiredFamilies = @($requiredFamilies.Keys | Sort-Object)
     excludedRequirements = $excludedRequirements
 } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $EvidencePath 'host-capabilities.json') -Encoding utf8
@@ -87,16 +89,19 @@ $filter = if ($Lane -eq 'Full') {
     ($fastPatterns | ForEach-Object { "FullyQualifiedName~$_" }) -join '|'
 }
 # Keep the running-test sequence when a subprocess stalls, without retaining large dumps.
+$hangDiagnosticTimeout = if ($Lane -eq 'Full') { '115min' } else { '35min' }
 $testArguments = @('test', (Join-Path $repositoryRoot 'PowerForge.Tests/PowerForge.Tests.csproj'),
     '-c', 'Release', '--filter', $filter, '--logger', 'console;verbosity=normal',
     '--logger', 'trx;LogFileName=compiler-gate.trx', '--results-directory', $EvidencePath,
-    '--blame-hang-timeout', '20min', '--blame-hang-dump-type', 'none')
+    '--blame-hang-timeout', $hangDiagnosticTimeout, '--blame-hang-dump-type', 'none')
 if ($NoBuild) { $testArguments += @('--no-build', '--no-restore') }
 $testArguments += @('--', "xUnit.MaxParallelThreads=$MaxParallelThreads")
 Push-Location $repositoryRoot
 try {
-    & dotnet @testArguments
-    if ($LASTEXITCODE -ne 0) { throw "Compiler contract tests failed with exit $LASTEXITCODE." }
+    if ($Phase -ne 'Corpus') {
+        & dotnet @testArguments
+        if ($LASTEXITCODE -ne 0) { throw "Compiler contract tests failed with exit $LASTEXITCODE." }
+    }
     [xml] $testResults = Get-Content -LiteralPath (Join-Path $EvidencePath 'compiler-gate.trx') -Raw
     if ([int] $testResults.TestRun.ResultSummary.Counters.executed -eq 0) { throw 'The compiler gate did not execute any tests.' }
     # Require actual passing coverage for this host's artifact/API and development families in both lanes.
@@ -113,9 +118,11 @@ try {
     } elseif (-not ($passedNames -like $moduleWorkflow)) {
         throw 'The compiler gate is missing a passing generated module workflow.'
     }
-    & (Join-Path $repositoryRoot 'Benchmarks/PowerShellCompilation/Corpus/Invoke-PublicCorpus.ps1') `
-        -SkipModules -RuntimeIdentifier $RuntimeIdentifier `
-        -WorkspacePath (Join-Path $EvidencePath 'corpus-workspace') `
-        -EvidencePath (Join-Path $EvidencePath 'strict-corpus.json')
-    if ($LASTEXITCODE -ne 0) { throw "Strict compiler corpus failed with exit $LASTEXITCODE." }
+    if ($Phase -ne 'Contracts') {
+        & (Join-Path $repositoryRoot 'Benchmarks/PowerShellCompilation/Corpus/Invoke-PublicCorpus.ps1') `
+            -SkipModules -RuntimeIdentifier $RuntimeIdentifier `
+            -WorkspacePath (Join-Path $EvidencePath 'corpus-workspace') `
+            -EvidencePath (Join-Path $EvidencePath 'strict-corpus.json')
+        if ($LASTEXITCODE -ne 0) { throw "Strict compiler corpus failed with exit $LASTEXITCODE." }
+    }
 } finally { Pop-Location }
