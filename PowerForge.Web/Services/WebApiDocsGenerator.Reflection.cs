@@ -567,6 +567,7 @@ public static partial class WebApiDocsGenerator
         member.Signature = BuildMethodSignature(method, nullability);
         member.IsStatic = method.IsStatic;
         member.DeclaringType = method.DeclaringType?.FullName?.Replace('+', '.');
+        member.DeclaringAssemblyName = method.DeclaringType?.Assembly.GetName().Name;
         member.IsInherited = method.DeclaringType != declaring;
         member.Access = GetAccessModifier(method);
         member.Modifiers.Clear();
@@ -597,6 +598,7 @@ public static partial class WebApiDocsGenerator
         member.Signature = BuildConstructorSignature(ctor, declaring, nullability);
         member.IsStatic = ctor.IsStatic;
         member.DeclaringType = ctor.DeclaringType?.FullName?.Replace('+', '.');
+        member.DeclaringAssemblyName = ctor.DeclaringType?.Assembly.GetName().Name;
         member.IsInherited = false;
         member.Access = GetAccessModifier(ctor);
         member.Modifiers.Clear();
@@ -627,6 +629,7 @@ public static partial class WebApiDocsGenerator
         member.Signature = BuildPropertySignature(property, nullability);
         member.IsStatic = (property.GetMethod ?? property.SetMethod)?.IsStatic == true;
         member.DeclaringType = property.DeclaringType?.FullName?.Replace('+', '.');
+        member.DeclaringAssemblyName = property.DeclaringType?.Assembly.GetName().Name;
         member.IsInherited = property.DeclaringType != declaring;
         var accessor = GetMostVisibleAccessor(property.GetMethod, property.SetMethod);
         if (accessor is not null)
@@ -658,6 +661,7 @@ public static partial class WebApiDocsGenerator
         member.Signature = BuildFieldSignature(field, nullability);
         member.IsStatic = field.IsStatic;
         member.DeclaringType = field.DeclaringType?.FullName?.Replace('+', '.');
+        member.DeclaringAssemblyName = field.DeclaringType?.Assembly.GetName().Name;
         member.IsInherited = field.DeclaringType != declaring;
         member.Access = GetAccessModifier(field);
         member.Modifiers.Clear();
@@ -675,6 +679,7 @@ public static partial class WebApiDocsGenerator
         member.Signature = BuildEventSignature(evt, nullability);
         member.IsStatic = evt.AddMethod?.IsStatic == true;
         member.DeclaringType = evt.DeclaringType?.FullName?.Replace('+', '.');
+        member.DeclaringAssemblyName = evt.DeclaringType?.Assembly.GetName().Name;
         member.IsInherited = evt.DeclaringType != declaring;
         var accessor = evt.AddMethod ?? evt.RemoveMethod;
         if (accessor is not null)
