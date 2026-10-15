@@ -219,7 +219,8 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
             .OrderBy(item => item.Declaration!.Extent.EndOffset - item.Declaration.Extent.StartOffset).ToArray();
         if (enclosing.Length > 0)
         {
-            var width = enclosing[0].Declaration!.Extent.EndOffset - enclosing[0].Declaration.Extent.StartOffset;
+            var declaration = enclosing[0].Declaration!;
+            var width = declaration.Extent.EndOffset - declaration.Extent.StartOffset;
             if (enclosing.Skip(1).Any(item => item.Declaration!.Extent.EndOffset - item.Declaration.Extent.StartOffset == width))
                 throw new InvalidOperationException("An emitted native body has ambiguous enclosing authored-unit ownership.");
             return enclosing[0].Owner;

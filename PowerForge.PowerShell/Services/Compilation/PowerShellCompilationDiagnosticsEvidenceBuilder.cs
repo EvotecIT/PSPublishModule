@@ -39,8 +39,8 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
             var boundary = DescribeBoundary(ledgerEntry);
             var nestedMaps = new HashSet<PowerShellCompilationSourceMapEntry>();
             foreach (var body in method.NestedBodies)
-                foreach (var map in body.SourceMap)
-                    if (!method.SourceMap.Contains(map) || !nestedMaps.Add(map))
+                foreach (var nestedMap in body.SourceMap)
+                    if (!method.SourceMap.Contains(nestedMap) || !nestedMaps.Add(nestedMap))
                         throw new InvalidOperationException("A native source-map segment has more than one emitted body identity.");
             var maps = method.SourceMap.Length == 0
                 ? new[] { new PowerShellCompilationSourceMapEntry(method.SourceLine, method.SourceColumn, method.SourceEndLine, method.SourceEndColumn, 1, 1, 1, 1) }
