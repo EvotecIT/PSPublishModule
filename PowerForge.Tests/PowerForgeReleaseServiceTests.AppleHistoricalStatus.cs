@@ -3,6 +3,62 @@ namespace PowerForge.Tests;
 public sealed partial class PowerForgeReleaseServiceTests
 {
     [Theory]
+    [InlineData(PowerForgeAppleReleaseAction.Status)]
+    [InlineData(PowerForgeAppleReleaseAction.Doctor)]
+    public void Execute_AppleExplicitObservation_DoesNotStampSkippedTargets(PowerForgeAppleReleaseAction action)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var (spec, source) = CreateAppleStatusDeliveryFixture(root);
+            var app = Assert.Single(spec.AppleApps!.Apps);
+            spec.AppleApps.TeamId = "TESTTEAM";
+            spec.AppleApps.DirectDistribution.KeychainProfile = "synthetic-notary-profile";
+            spec.AppleApps.Apps = new[]
+            {
+                app,
+                new AppleAppConfiguration
+                {
+                    Name = "Direct Mac", BundleId = "com.example.direct", Platform = ApplePlatform.macOS,
+                    ProjectPath = app.ProjectPath, Scheme = "DirectMac", DistributionRoute = AppleDistributionRoute.DirectNotarized
+                },
+                new AppleAppConfiguration
+                {
+                    Name = "Companion", BundleId = "com.example.companion", Platform = ApplePlatform.watchOS,
+                    ProjectPath = app.ProjectPath, Scheme = "Companion", DistributionRoute = AppleDistributionRoute.EmbeddedCompanion,
+                    ProductRole = AppleProductRole.CompanionApp, ParentTarget = app.Name
+                },
+                new AppleAppConfiguration
+                {
+                    Name = "Development", BundleId = "com.example.development", Platform = ApplePlatform.iOS,
+                    ProjectPath = app.ProjectPath, Scheme = "Development", DistributionRoute = AppleDistributionRoute.DevelopmentOnly
+                }
+            };
+            var calls = 0;
+            var result = CreateAppleAutomationService(request =>
+            {
+                calls++;
+                Assert.Equal(app.AppStoreConnectAppId, request.AppId);
+                return CreateReleaseState(request, null);
+            }).Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"), AppleAction = action,
+                AppleSourceCommit = source, AppleMarketingVersion = "1.1"
+            });
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(1, calls);
+            Assert.Equal("1.1", Assert.Single(result.AppleReceipt!.Targets, target => target.Name == app.Name).Version);
+            Assert.All(result.AppleReceipt.Targets.Where(target => target.Name != app.Name), target =>
+            {
+                Assert.Null(target.Version);
+                Assert.Null(target.Build);
+                Assert.Null(target.BuildId);
+            });
+        }
+        finally { TryDelete(root); }
+    }
+
+    [Theory]
     [InlineData(PowerForgeAppleReleaseAction.Status, "1.1")]
     [InlineData(PowerForgeAppleReleaseAction.Doctor, "1.1")]
     [InlineData(PowerForgeAppleReleaseAction.Status, "1.2.0")]

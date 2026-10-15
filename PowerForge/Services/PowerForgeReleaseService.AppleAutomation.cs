@@ -566,7 +566,8 @@ internal sealed partial class PowerForgeReleaseService
                     }
                 }
             }
-            var observesExplicitVersion = !string.IsNullOrWhiteSpace(plan.ObservedMarketingVersion);
+            var observesExplicitVersion = IsExplicitAppleVersionObservation(plan) &&
+                                          !skippedIndependentRelease && state is not null;
             if (observesExplicitVersion)
                 values = (state?.VersionString ?? plan.ObservedMarketingVersion, build?.Version);
             (string? Path, string? Sha256) uploadExport = (null, null);
