@@ -129,6 +129,25 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeAppleAppReleaseTargetPlan app)
         => plan.Action != PowerForgeAppleReleaseAction.Ship || app.ShipToTestFlight;
 
+    private bool DeferAppleTestFlightWhileInReview(
+        PowerForgeAppleReleasePlan plan,
+        PowerForgeAppleAppReleaseTargetPlan app,
+        PowerForgeAppleAppReleaseResult result)
+    {
+        if (app.TestFlightPolicy != AppleTestFlightPolicy.External)
+            return false;
+
+        // Review is per build/platform. Preserve its observation while allowing
+        // another approved platform in this release to reach the enrolled group.
+        result.RemoteState = ReadAppleReleaseState(plan, app);
+        var platform = AssertSinglePlatformState(result.RemoteState, app);
+        if (platform.BetaDetail?.ExternalBuildState is not ("IN_BETA_REVIEW" or "WAITING_FOR_BETA_REVIEW"))
+            return false;
+
+        result.SkippedSteps = MergeAppleSkippedSteps(result.SkippedSteps, new[] { "testFlightBetaReviewPending" });
+        return true;
+    }
+
     private PowerForgeAppleVersionReceipt? ResolveApprovedAppleShipVersion(
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleVersionReceipt current,

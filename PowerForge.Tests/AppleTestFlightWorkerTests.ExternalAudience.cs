@@ -91,6 +91,22 @@ public sealed partial class AppleTestFlightWorkerTests
         Assert.Throws<InvalidOperationException>(() => AppleTestFlightWorker.ValidatePlan(plan, job, policy));
     }
 
+    [Theory]
+    [InlineData((int)PowerForgeAppleShipPhase.VersionCheckpoint, "2.3", "30")]
+    [InlineData((int)PowerForgeAppleShipPhase.Release, "2.4", "30")]
+    [InlineData((int)PowerForgeAppleShipPhase.Release, "2.3", "31")]
+    public void ExternalReview_DoesNotPermitRecoveryToRebindTheCheckpoint(int phase, string version, string build)
+    {
+        var job = new AppleTestFlightJob { Stage = AppleTestFlightJobStage.AppleProcessingPending, Version = "2.3", Build = "30" };
+        var plan = new PowerForgeAppleReleaseReceipt
+        {
+            ShipPhase = (PowerForgeAppleShipPhase)phase,
+            Versioning = new() { MarketingVersion = version, BuildNumber = build },
+            Targets = [new() { Name = "iOS", BuildProcessingState = "VALID", TestFlightExternalState = "IN_BETA_REVIEW" }]
+        };
+        Assert.Throws<InvalidOperationException>(() => AppleTestFlightWorker.ValidateReleaseRecoveryPlan(plan, job));
+    }
+
     [Fact]
     public void DeliveredExternalJob_DoesNotBlockTheNextSelectedBuild()
     {

@@ -88,16 +88,7 @@ internal sealed partial class AppleTestFlightWorker
             ReadSpec();
             var plan = InvokeShip(plan: true);
             ValidatePlan(plan, job);
-            if (IsExternalReviewPending(plan, _policy))
-            {
-                var observation = DeliveryOutcome(plan, _policy);
-                SetStage(observation.Stage, observation.Diagnostic is null ? null : SafeDiagnostic(observation.Diagnostic));
-                return;
-            }
-            if (plan.ShipPhase != PowerForgeAppleShipPhase.Release)
-                throw new InvalidOperationException("Another operation consumed this build identity. Preserve the checkpoint and requalify a new candidate before reserving another build.");
-            if (job.Stage == AppleTestFlightJobStage.AppleProcessingPending && (plan.Versioning?.BuildNumber != job.Build || plan.Versioning?.MarketingVersion != job.Version))
-                throw new InvalidOperationException("Processing recovery attempted to allocate a different build.");
+            ValidateReleaseRecoveryPlan(plan, job);
             job.PlanSha256 = plan.PlanSha256;
             _releasingFrom = job.Stage;
             SetStage(AppleTestFlightJobStage.Releasing);
@@ -155,6 +146,15 @@ internal sealed partial class AppleTestFlightWorker
     }
 
     private void ValidatePlan(PowerForgeAppleReleaseReceipt plan, AppleTestFlightJob job) => ValidatePlan(plan, job, _policy);
+
+    internal static void ValidateReleaseRecoveryPlan(PowerForgeAppleReleaseReceipt plan, AppleTestFlightJob job)
+    {
+        if (plan.ShipPhase != PowerForgeAppleShipPhase.Release)
+            throw new InvalidOperationException("Another operation consumed this build identity. Preserve the checkpoint and requalify a new candidate before reserving another build.");
+        if (job.Stage == AppleTestFlightJobStage.AppleProcessingPending &&
+            (plan.Versioning?.BuildNumber != job.Build || plan.Versioning?.MarketingVersion != job.Version))
+            throw new InvalidOperationException("Processing recovery attempted to allocate a different build.");
+    }
 
     internal static bool IsReady(PowerForgeAppleReleaseReceipt receipt, AppleTestFlightWorkerPolicy policy) => receipt.Success && receipt.Versioning is not null && policy.Targets.All(target =>
         receipt.Targets.Any(value => value.Name == target.Name && value.Platform == target.Platform && value.AppId == target.AppId &&

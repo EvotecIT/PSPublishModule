@@ -2938,7 +2938,8 @@ internal sealed partial class PowerForgeReleaseService
             if (plan.DistributeTestFlight &&
                 result.Success &&
                 UsesTestFlight(app) &&
-                ShouldRunAppleShipTestFlightDistribution(plan, app))
+                ShouldRunAppleShipTestFlightDistribution(plan, app) &&
+                !DeferAppleTestFlightWhileInReview(plan, app, result))
             {
                 var testFlightValues = valuesByApp[app];
                 AppleReleaseAppState.AssertMutationAllowed(plan, _appleAppStateRoot);
