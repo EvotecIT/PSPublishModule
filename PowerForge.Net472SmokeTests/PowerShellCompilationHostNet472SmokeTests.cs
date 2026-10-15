@@ -36,7 +36,16 @@ $spec = [PowerForge.PowerShellCompilationBuildSpec]::new($Source, $Output, 'Exam
 $spec.TargetFramework = 'net472'
 $spec.ResourceMode = [PowerForge.PowerShellCompilationResourceMode]::None
 $spec.KeepBuildWorkspace = $true
-Write-Checkpoint 'Build hybrid module: SDK fingerprint, analysis, generated dotnet build'
+# Observe the same SDK owner before Build. The in-process hash cache avoids
+# hashing twice while preserving the real legacy-host fingerprint operation.
+$flags = [Reflection.BindingFlags]'Static,NonPublic'
+$fingerprint = [PowerForge.PowerShellCompilationArtifactBuilder].Assembly.GetType('PowerForge.PowerShellCompilationToolchainFingerprint', $true)
+Write-Checkpoint 'Resolve selected dotnet SDK'
+$sdk = $fingerprint.GetMethod('ResolveSelectedSdk', $flags).Invoke($null, @())
+$sdkVersion = $sdk.GetType().GetProperty('Version', [Reflection.BindingFlags]'Instance,NonPublic').GetValue($sdk)
+Write-Checkpoint 'Compute selected SDK and reference-pack fingerprint'
+[void]$fingerprint.GetMethod('ComputeSdkSha256', $flags).Invoke($null, @($sdkVersion, $false))
+Write-Checkpoint 'SDK fingerprint complete; build hybrid module'
 $result = [PowerForge.PowerShellCompilationArtifactBuilder]::new().Build($spec)
 Write-Checkpoint 'Hybrid build returned'
 if (-not $result.Succeeded -and $null -ne $result.Failure) { Write-Checkpoint ('Failure stage: ' + $result.Failure.Stage) }
