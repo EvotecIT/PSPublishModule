@@ -43,6 +43,27 @@ $fingerprint = [PowerForge.PowerShellCompilationArtifactBuilder].Assembly.GetTyp
 Write-Checkpoint 'Resolve selected dotnet SDK'
 $sdk = $fingerprint.GetMethod('ResolveSelectedSdk', $flags).Invoke($null, @())
 $sdkVersion = $sdk.GetType().GetProperty('Version', [Reflection.BindingFlags]'Instance,NonPublic').GetValue($sdk)
+$sdkRoot = $sdk.GetType().GetProperty('RootPath', [Reflection.BindingFlags]'Instance,NonPublic').GetValue($sdk)
+Write-Checkpoint ('Selected SDK: ' + $sdkVersion + ' at ' + $sdkRoot)
+# Distinguish repeated discovery from content hashing on the legacy host.
+Write-Checkpoint 'Repeat SDK discovery'
+[void]$fingerprint.GetMethod('ResolveSelectedSdk', $flags).Invoke($null, @())
+Write-Checkpoint 'Repeated SDK discovery complete; inventory selected SDK'
+$fileCount = 0
+$totalBytes = [long]0
+$largest = $null
+foreach ($path in [IO.Directory]::EnumerateFiles($sdkRoot, '*', [IO.SearchOption]::AllDirectories)) {
+    $file = [IO.FileInfo]::new($path)
+    $fileCount++
+    $totalBytes += $file.Length
+    if ($null -eq $largest -or $file.Length -gt $largest.Length) { $largest = $file }
+}
+Write-Checkpoint ('SDK inventory: ' + $fileCount + ' files, ' + $totalBytes + ' bytes')
+if ($null -ne $largest) {
+    Write-Checkpoint ('Hash SDK sample: ' + $largest.Name + ', ' + $largest.Length + ' bytes')
+    [void]$fingerprint.GetMethod('ComputeFileSha256', $flags).Invoke($null, @($largest.FullName))
+    Write-Checkpoint 'SDK sample hash complete'
+}
 Write-Checkpoint 'Compute selected SDK and reference-pack fingerprint'
 [void]$fingerprint.GetMethod('ComputeSdkSha256', $flags).Invoke($null, @($sdkVersion, $false))
 Write-Checkpoint 'SDK fingerprint complete; build hybrid module'
